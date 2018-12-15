@@ -236,6 +236,16 @@ public abstract class PanelView extends FrameLayout {
         mUnlockFalsingThreshold = res.getDimensionPixelSize(R.dimen.unlock_falsing_threshold);
     }
 
+    private void addMovement(MotionEvent event) {
+        // Add movement to velocity tracker using raw screen X and Y coordinates instead
+        // of window coordinates because the window frame may be moving at the same time.
+        float deltaX = event.getRawX() - event.getX();
+        float deltaY = event.getRawY() - event.getY();
+        event.offsetLocation(deltaX, deltaY);
+        mVelocityTracker.addMovement(event);
+        event.offsetLocation(-deltaX, -deltaY);
+    }
+
     public void setTouchAndAnimationDisabled(boolean disabled) {
         mTouchDisabled = disabled;
         if (mTouchDisabled) {
@@ -316,7 +326,7 @@ public abstract class PanelView extends FrameLayout {
                 mTouchAboveFalsingThreshold = false;
                 mCollapsedAndHeadsUpOnDown = isFullyCollapsed()
                         && mHeadsUpManager.hasPinnedHeadsUp();
-                mVelocityTracker.addMovement(event);
+                addMovement(event);
                 if (!mGestureWaitForTouchSlop || (mHeightAnimator != null && !mHintAnimationRunning)
                         || mPeekAnimator != null) {
                     mTouchSlopExceeded = (mHeightAnimator != null && !mHintAnimationRunning)
@@ -350,7 +360,7 @@ public abstract class PanelView extends FrameLayout {
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
-                mVelocityTracker.addMovement(event);
+                addMovement(event);
                 float h = y - mInitialTouchY;
 
                 // If the panel was collapsed when touching, we only need to check for the
@@ -395,7 +405,7 @@ public abstract class PanelView extends FrameLayout {
 
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                mVelocityTracker.addMovement(event);
+                addMovement(event);
                 endMotionEvent(event, x, y, false /* forceCancel */);
                 break;
         }
@@ -582,7 +592,7 @@ public abstract class PanelView extends FrameLayout {
                 mHasLayoutedSinceDown = false;
                 mUpdateFlingOnLayout = false;
                 mTouchAboveFalsingThreshold = false;
-                mVelocityTracker.addMovement(event);
+                addMovement(event);
                 break;
             case MotionEvent.ACTION_POINTER_UP:
                 final int upPointer = event.getPointerId(event.getActionIndex());
@@ -602,7 +612,7 @@ public abstract class PanelView extends FrameLayout {
                 break;
             case MotionEvent.ACTION_MOVE:
                 final float h = y - mInitialTouchY;
-                mVelocityTracker.addMovement(event);
+                addMovement(event);
                 if (scrolledToBottom || mTouchStartedInEmptyArea || mAnimatingOnDown) {
                     float hAbs = Math.abs(h);
                     if ((h < -mTouchSlop || (mAnimatingOnDown && hAbs > mTouchSlop))
@@ -669,6 +679,10 @@ public abstract class PanelView extends FrameLayout {
      * @return whether a fling should expands the panel; contracts otherwise
      */
     protected boolean flingExpands(float vel, float vectorVel, float x, float y) {
+        if (mFalsingManager.isUnlockingDisabled()) {
+            return true;
+        }
+
         if (isFalseTouch(x, y)) {
             return true;
         }

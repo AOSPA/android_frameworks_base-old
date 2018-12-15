@@ -17,13 +17,12 @@
 package com.android.server.am;
 
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM;
 import static android.app.ActivityTaskManager.RESIZE_MODE_USER;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
-
-import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
@@ -2106,8 +2105,13 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         FeatureInfo[] features = pm.getSystemAvailableFeatures();
-        Arrays.sort(features, (o1, o2) ->
-                (o1.name == o2.name ? 0 : (o1.name == null ? -1 : o1.name.compareTo(o2.name))));
+        Arrays.sort(features, (o1, o2) -> {
+            if (o1.name == o2.name) return 0;
+            if (o1.name == null) return -1;
+            if (o2.name == null) return 1;
+            return o1.name.compareTo(o2.name);
+        });
+
         for (int i = 0; i < features.length; i++) {
             if (features[i].name != null) {
                 if (protoOutputStream != null) {
@@ -2737,7 +2741,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     int runWrite(PrintWriter pw) {
         mInternal.enforceCallingPermission(android.Manifest.permission.SET_ACTIVITY_WATCHER,
                 "registerUidObserver()");
-        mInternal.mActivityTaskManager.getRecentTasks().flush();
+        mInternal.mAtmInternal.flushRecentTasks();
         pw.println("All tasks persisted.");
         return 0;
     }
@@ -2902,6 +2906,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --receiver-permission <PERMISSION>: Require receiver to hold permission.");
             pw.println("  instrument [-r] [-e <NAME> <VALUE>] [-p <FILE>] [-w]");
             pw.println("          [--user <USER_ID> | current] [--no-hidden-api-checks]");
+            pw.println("          [--no-isolated-storage]");
             pw.println("          [--no-window-animation] [--abi <ABI>] <COMPONENT>");
             pw.println("      Start an Instrumentation.  Typically this target <COMPONENT> is in the");
             pw.println("      form <TEST_PACKAGE>/<RUNNER_CLASS> or only <TEST_PACKAGE> if there");
@@ -2920,6 +2925,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --user <USER_ID> | current: Specify user instrumentation runs in;");
             pw.println("          current user if not specified.");
             pw.println("      --no-hidden-api-checks: disable restrictions on use of hidden API.");
+            pw.println("      --no-isolated-storage: don't use isolated storage sandbox and ");
+            pw.println("          mount full external storage");
             pw.println("      --no-window-animation: turn off window animations while running.");
             pw.println("      --abi <ABI>: Launch the instrumented process with the selected ABI.");
             pw.println("          This assumes that the process supports the selected ABI.");

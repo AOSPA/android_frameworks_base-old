@@ -1269,29 +1269,53 @@ public abstract class Layout {
      * scrolling on the specified line.
      */
     public float getLineLeft(int line) {
-        int dir = getParagraphDirection(line);
+        final int dir = getParagraphDirection(line);
         Alignment align = getParagraphAlignment(line);
+        // Before Q, StaticLayout.Builder.setAlignment didn't check whether the input alignment
+        // is null. And when it is null, the old behavior is the same as ALIGN_CENTER.
+        // To keep consistency, we convert a null alignment to ALIGN_CENTER.
+        if (align == null) {
+            align = Alignment.ALIGN_CENTER;
+        }
 
-        if (align == Alignment.ALIGN_LEFT) {
-            return 0;
-        } else if (align == Alignment.ALIGN_NORMAL) {
-            if (dir == DIR_RIGHT_TO_LEFT)
-                return getParagraphRight(line) - getLineMax(line);
-            else
-                return 0;
-        } else if (align == Alignment.ALIGN_RIGHT) {
-            return mWidth - getLineMax(line);
-        } else if (align == Alignment.ALIGN_OPPOSITE) {
-            if (dir == DIR_RIGHT_TO_LEFT)
-                return 0;
-            else
+        // First convert combinations of alignment and direction settings to
+        // three basic cases: ALIGN_LEFT, ALIGN_RIGHT and ALIGN_CENTER.
+        // For unexpected cases, it will fallback to ALIGN_LEFT.
+        final Alignment resultAlign;
+        switch(align) {
+            case ALIGN_NORMAL:
+                resultAlign =
+                        dir == DIR_RIGHT_TO_LEFT ? Alignment.ALIGN_RIGHT : Alignment.ALIGN_LEFT;
+                break;
+            case ALIGN_OPPOSITE:
+                resultAlign =
+                        dir == DIR_RIGHT_TO_LEFT ? Alignment.ALIGN_LEFT : Alignment.ALIGN_RIGHT;
+                break;
+            case ALIGN_CENTER:
+                resultAlign = Alignment.ALIGN_CENTER;
+                break;
+            case ALIGN_RIGHT:
+                resultAlign = Alignment.ALIGN_RIGHT;
+                break;
+            default: /* align == Alignment.ALIGN_LEFT */
+                resultAlign = Alignment.ALIGN_LEFT;
+        }
+
+        // Here we must use getLineMax() to do the computation, because it maybe overridden by
+        // derived class. And also note that line max equals the width of the text in that line
+        // plus the leading margin.
+        switch (resultAlign) {
+            case ALIGN_CENTER:
+                final int left = getParagraphLeft(line);
+                final float max = getLineMax(line);
+                // This computation only works when mWidth equals leadingMargin plus
+                // the width of text in this line. If this condition doesn't meet anymore,
+                // please change here too.
+                return (float) Math.floor(left + (mWidth - max) / 2);
+            case ALIGN_RIGHT:
                 return mWidth - getLineMax(line);
-        } else { /* align == Alignment.ALIGN_CENTER */
-            int left = getParagraphLeft(line);
-            int right = getParagraphRight(line);
-            int max = ((int) getLineMax(line)) & ~1;
-
-            return left + ((right - left) - max) / 2;
+            default: /* resultAlign == Alignment.ALIGN_LEFT */
+                return 0;
         }
     }
 
@@ -1300,29 +1324,46 @@ public abstract class Layout {
      * scrolling on the specified line.
      */
     public float getLineRight(int line) {
-        int dir = getParagraphDirection(line);
+        final int dir = getParagraphDirection(line);
         Alignment align = getParagraphAlignment(line);
+        // Before Q, StaticLayout.Builder.setAlignment didn't check whether the input alignment
+        // is null. And when it is null, the old behavior is the same as ALIGN_CENTER.
+        // To keep consistency, we convert a null alignment to ALIGN_CENTER.
+        if (align == null) {
+            align = Alignment.ALIGN_CENTER;
+        }
 
-        if (align == Alignment.ALIGN_LEFT) {
-            return getParagraphLeft(line) + getLineMax(line);
-        } else if (align == Alignment.ALIGN_NORMAL) {
-            if (dir == DIR_RIGHT_TO_LEFT)
+        final Alignment resultAlign;
+        switch(align) {
+            case ALIGN_NORMAL:
+                resultAlign =
+                        dir == DIR_RIGHT_TO_LEFT ? Alignment.ALIGN_RIGHT : Alignment.ALIGN_LEFT;
+                break;
+            case ALIGN_OPPOSITE:
+                resultAlign =
+                        dir == DIR_RIGHT_TO_LEFT ? Alignment.ALIGN_LEFT : Alignment.ALIGN_RIGHT;
+                break;
+            case ALIGN_CENTER:
+                resultAlign = Alignment.ALIGN_CENTER;
+                break;
+            case ALIGN_RIGHT:
+                resultAlign = Alignment.ALIGN_RIGHT;
+                break;
+            default: /* align == Alignment.ALIGN_LEFT */
+                resultAlign = Alignment.ALIGN_LEFT;
+        }
+
+        switch (resultAlign) {
+            case ALIGN_CENTER:
+                final int right = getParagraphRight(line);
+                final float max = getLineMax(line);
+                // This computation only works when mWidth equals leadingMargin plus width of the
+                // text in this line. If this condition doesn't meet anymore, please change here.
+                return (float) Math.ceil(right - (mWidth - max) / 2);
+            case ALIGN_RIGHT:
                 return mWidth;
-            else
-                return getParagraphLeft(line) + getLineMax(line);
-        } else if (align == Alignment.ALIGN_RIGHT) {
-            return mWidth;
-        } else if (align == Alignment.ALIGN_OPPOSITE) {
-            if (dir == DIR_RIGHT_TO_LEFT)
+            default: /* resultAlign == Alignment.ALIGN_LEFT */
                 return getLineMax(line);
-            else
-                return mWidth;
-        } else { /* align == Alignment.ALIGN_CENTER */
-            int left = getParagraphLeft(line);
-            int right = getParagraphRight(line);
-            int max = ((int) getLineMax(line)) & ~1;
-
-            return right - ((right - left) - max) / 2;
         }
     }
 
@@ -1671,7 +1712,7 @@ public abstract class Layout {
      * Return the vertical position of the baseline of the specified line.
      */
     public final int getLineBaseline(int line) {
-        // getLineTop(line+1) == getLineTop(line)
+        // getLineTop(line+1) == getLineBottom(line)
         return getLineTop(line+1) - getLineDescent(line);
     }
 
@@ -1806,6 +1847,7 @@ public abstract class Layout {
         }
 
     }
+
     /**
      * Fills in the specified Path with a representation of a cursor
      * at the specified offset.  This will often be a vertical line
@@ -1821,7 +1863,6 @@ public abstract class Layout {
 
         boolean clamped = shouldClampCursor(line);
         float h1 = getPrimaryHorizontal(point, clamped) - 0.5f;
-        float h2 = isLevelBoundary(point) ? getSecondaryHorizontal(point, clamped) - 0.5f : h1;
 
         int caps = TextKeyListener.getMetaState(editingBuffer, TextKeyListener.META_SHIFT_ON) |
                    TextKeyListener.getMetaState(editingBuffer, TextKeyListener.META_SELECTING);
@@ -1839,34 +1880,24 @@ public abstract class Layout {
 
         if (h1 < 0.5f)
             h1 = 0.5f;
-        if (h2 < 0.5f)
-            h2 = 0.5f;
 
-        if (Float.compare(h1, h2) == 0) {
-            dest.moveTo(h1, top);
-            dest.lineTo(h1, bottom);
-        } else {
-            dest.moveTo(h1, top);
-            dest.lineTo(h1, (top + bottom) >> 1);
-
-            dest.moveTo(h2, (top + bottom) >> 1);
-            dest.lineTo(h2, bottom);
-        }
+        dest.moveTo(h1, top);
+        dest.lineTo(h1, bottom);
 
         if (caps == 2) {
-            dest.moveTo(h2, bottom);
-            dest.lineTo(h2 - dist, bottom + dist);
-            dest.lineTo(h2, bottom);
-            dest.lineTo(h2 + dist, bottom + dist);
+            dest.moveTo(h1, bottom);
+            dest.lineTo(h1 - dist, bottom + dist);
+            dest.lineTo(h1, bottom);
+            dest.lineTo(h1 + dist, bottom + dist);
         } else if (caps == 1) {
-            dest.moveTo(h2, bottom);
-            dest.lineTo(h2 - dist, bottom + dist);
+            dest.moveTo(h1, bottom);
+            dest.lineTo(h1 - dist, bottom + dist);
 
-            dest.moveTo(h2 - dist, bottom + dist - 0.5f);
-            dest.lineTo(h2 + dist, bottom + dist - 0.5f);
+            dest.moveTo(h1 - dist, bottom + dist - 0.5f);
+            dest.lineTo(h1 + dist, bottom + dist - 0.5f);
 
-            dest.moveTo(h2 + dist, bottom + dist);
-            dest.lineTo(h2, bottom);
+            dest.moveTo(h1 + dist, bottom + dist);
+            dest.lineTo(h1, bottom);
         }
 
         if (fn == 2) {
@@ -2340,6 +2371,52 @@ public abstract class Layout {
         @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
         public Directions(int[] dirs) {
             mDirections = dirs;
+        }
+
+        /**
+         * Returns number of BiDi runs.
+         *
+         * @hide
+         */
+        public @IntRange(from = 0) int getRunCount() {
+            return mDirections.length / 2;
+        }
+
+        /**
+         * Returns the start offset of the BiDi run.
+         *
+         * @param runIndex the index of the BiDi run
+         * @return the start offset of the BiDi run.
+         * @hide
+         */
+        public @IntRange(from = 0) int getRunStart(@IntRange(from = 0) int runIndex) {
+            return mDirections[runIndex * 2];
+        }
+
+        /**
+         * Returns the length of the BiDi run.
+         *
+         * Note that this method may return too large number due to reducing the number of object
+         * allocations. The too large number means the remaining part is assigned to this run. The
+         * caller must clamp the returned value.
+         *
+         * @param runIndex the index of the BiDi run
+         * @return the length of the BiDi run.
+         * @hide
+         */
+        public @IntRange(from = 0) int getRunLength(@IntRange(from = 0) int runIndex) {
+            return mDirections[runIndex * 2 + 1] & RUN_LENGTH_MASK;
+        }
+
+        /**
+         * Returns true if the BiDi run is RTL.
+         *
+         * @param runIndex the index of the BiDi run
+         * @return true if the BiDi run is RTL.
+         * @hide
+         */
+        public boolean isRunRtl(int runIndex) {
+            return (mDirections[runIndex * 2 + 1] & RUN_RTL_FLAG) != 0;
         }
     }
 

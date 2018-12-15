@@ -19,6 +19,7 @@ package android.view.textclassifier;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -307,6 +308,51 @@ public class TextClassificationManagerTest {
     }
 
     @Test
+    public void testDetectLanguage() {
+        if (isTextClassifierDisabled()) return;
+        String text = "This is English text";
+        TextLanguage.Request request = new TextLanguage.Request.Builder(text).build();
+        TextLanguage textLanguage = mClassifier.detectLanguage(request);
+        assertThat(textLanguage, isTextLanguage("en"));
+    }
+
+    @Test
+    public void testDetectLanguage_japanese() {
+        if (isTextClassifierDisabled()) return;
+        String text = "これは日本語のテキストです";
+        TextLanguage.Request request = new TextLanguage.Request.Builder(text).build();
+        TextLanguage textLanguage = mClassifier.detectLanguage(request);
+        assertThat(textLanguage, isTextLanguage("ja"));
+    }
+
+    @Test
+    public void testSuggestConversationActions_textReplyOnly_maxThree() {
+        if (isTextClassifierDisabled()) return;
+        ConversationActions.Message message =
+                new ConversationActions.Message.Builder().setText("Hello").build();
+        ConversationActions.TypeConfig typeConfig =
+                new ConversationActions.TypeConfig.Builder().includeTypesFromTextClassifier(false)
+                        .setIncludedTypes(
+                                Collections.singletonList(ConversationActions.TYPE_TEXT_REPLY))
+                        .build();
+        ConversationActions.Request request =
+                new ConversationActions.Request.Builder(Collections.singletonList(message))
+                        .setMaxSuggestions(1)
+                        .setTypeConfig(typeConfig)
+                        .build();
+
+        ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
+        assertTrue(conversationActions.getConversationActions().size() <= 1);
+        for (ConversationActions.ConversationAction conversationAction :
+                conversationActions.getConversationActions()) {
+            assertEquals(conversationAction.getType(), ConversationActions.TYPE_TEXT_REPLY);
+            assertNotNull(conversationAction.getTextReply());
+            assertTrue(conversationAction.getConfidenceScore() > 0);
+            assertTrue(conversationAction.getConfidenceScore() <= 1);
+        }
+    }
+
+    @Test
     public void testSetTextClassifier() {
         TextClassifier classifier = mock(TextClassifier.class);
         mTcm.setTextClassifier(classifier);
@@ -441,6 +487,25 @@ public class TextClassificationManagerTest {
             public void describeTo(Description description) {
                 description.appendText("text=").appendValue(text)
                         .appendText(", type=").appendValue(type);
+            }
+        };
+    }
+
+    private static Matcher<TextLanguage> isTextLanguage(final String languageTag) {
+        return new BaseMatcher<TextLanguage>() {
+            @Override
+            public boolean matches(Object o) {
+                if (o instanceof TextLanguage) {
+                    TextLanguage result = (TextLanguage) o;
+                    return result.getLocaleHypothesisCount() > 0
+                            && languageTag.equals(result.getLocale(0).toLanguageTag());
+                }
+                return false;
+            }
+
+            @Override
+            public void describeTo(Description description) {
+                description.appendText("locale=").appendValue(languageTag);
             }
         };
     }

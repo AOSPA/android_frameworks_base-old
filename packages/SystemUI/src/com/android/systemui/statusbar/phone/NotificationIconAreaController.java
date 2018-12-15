@@ -1,29 +1,33 @@
 package com.android.systemui.statusbar.phone;
 
+import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInOffset;
+
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.Rect;
-import androidx.annotation.NonNull;
-import androidx.collection.ArrayMap;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import androidx.annotation.NonNull;
+import androidx.collection.ArrayMap;
+
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.util.ContrastColorUtil;
+import com.android.internal.widget.ViewClippingUtil;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
-import com.android.systemui.statusbar.notification.NotificationData;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.StatusBarIconView;
+import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.policy.DarkIconDispatcher;
 import com.android.systemui.statusbar.policy.DarkIconDispatcher.DarkReceiver;
-import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.tuner.TunerService;
 
 import java.util.ArrayList;
 import java.util.function.Function;
@@ -33,9 +37,24 @@ import java.util.function.Function;
  * normally reserved for notifications.
  */
 public class NotificationIconAreaController implements DarkReceiver {
+
+    public static final String LOW_PRIORITY = "low_priority";
+
     private final ContrastColorUtil mContrastColorUtil;
     private final NotificationEntryManager mEntryManager;
     private final Runnable mUpdateStatusBarIcons = this::updateStatusBarIcons;
+    private final TunerService.Tunable mTunable = new TunerService.Tunable() {
+        @Override
+        public void onTuningChanged(String key, String newValue) {
+            if (key.equals(LOW_PRIORITY)) {
+                mShowLowPriority = "1".equals(newValue)
+                        || !NotificationUtils.useNewInterruptionModel(mContext);
+                if (mNotificationScrollLayout != null) {
+                    updateStatusBarIcons();
+                }
+            }
+        }
+    };
 
     private int mIconSize;
     private int mIconHPadding;
@@ -49,13 +68,31 @@ public class NotificationIconAreaController implements DarkReceiver {
     private ViewGroup mNotificationScrollLayout;
     private Context mContext;
     private boolean mFullyDark;
-    private boolean mHasShelfIconsWhenFullyDark;
+    private boolean mShowLowPriority;
+
+    /**
+     * Ratio representing being awake or in ambient mode, where 1 is dark and 0 awake.
+     */
+    private float mDarkAmount;
+    /**
+     * Maximum translation to avoid burn in.
+     */
+    private int mBurnInOffset;
+    /**
+     * Height of the keyguard status bar (not the one after unlocking.)
+     */
+    private int mKeyguardStatusBarHeight;
+
+    private final ViewClippingUtil.ClippingParameters mClippingParameters =
+            view -> view instanceof StatusBarWindowView;
 
     public NotificationIconAreaController(Context context, StatusBar statusBar) {
         mStatusBar = statusBar;
         mContrastColorUtil = ContrastColorUtil.getInstance(context);
         mContext = context;
         mEntryManager = Dependency.get(NotificationEntryManager.class);
+
+        Dependency.get(TunerService.class).addTunable(mTunable, LOW_PRIORITY);
 
         initializeNotificationAreaViews(context);
     }
@@ -105,6 +142,9 @@ public class NotificationIconAreaController implements DarkReceiver {
         Resources res = context.getResources();
         mIconSize = res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_icon_size);
         mIconHPadding = res.getDimensionPixelSize(R.dimen.status_bar_icon_padding);
+        mBurnInOffset = res.getDimensionPixelSize(R.dimen.default_burn_in_prevention_offset);
+        mKeyguardStatusBarHeight = res
+                .getDimensionPixelSize(R.dimen.status_bar_header_height_keyguard);
     }
 
     /**
@@ -143,8 +183,13 @@ public class NotificationIconAreaController implements DarkReceiver {
     }
 
     protected boolean shouldShowNotificationIcon(NotificationData.Entry entry,
-            boolean showAmbient, boolean hideDismissed, boolean hideRepliedMessages) {
+            boolean showAmbient, boolean showLowPriority, boolean hideDismissed,
+            boolean hideRepliedMessages) {
         if (mEntryManager.getNotificationData().isAmbient(entry.key) && !showAmbient) {
+            return false;
+        }
+        if (!showLowPriority
+                && !mEntryManager.getNotificationData().isHighPriority(entry.notification)) {
             return false;
         }
         if (!StatusBar.isTopLevelChild(entry)) {
@@ -176,42 +221,21 @@ public class NotificationIconAreaController implements DarkReceiver {
 
         updateStatusBarIcons();
         updateShelfIcons();
-        updateHasShelfIconsWhenFullyDark();
 
         applyNotificationIconsTint();
     }
 
-    private void updateHasShelfIconsWhenFullyDark() {
-        boolean hasIconsWhenFullyDark = false;
-        for (int i = 0; i < mNotificationScrollLayout.getChildCount(); i++) {
-            View view = mNotificationScrollLayout.getChildAt(i);
-            if (view instanceof ExpandableNotificationRow) {
-                NotificationData.Entry ent = ((ExpandableNotificationRow) view).getEntry();
-                if (shouldShowNotificationIcon(ent,
-                        NotificationShelf.SHOW_AMBIENT_ICONS /* showAmbient */,
-                        false /* hideDismissed */,
-                        true /* hideReplied */)) {
-                    hasIconsWhenFullyDark = true;
-                    break;
-                }
-            }
-        }
-        mHasShelfIconsWhenFullyDark = hasIconsWhenFullyDark;
-    }
-
-    public boolean hasShelfIconsWhenFullyDark() {
-        return mHasShelfIconsWhenFullyDark;
-    }
-
     private void updateShelfIcons() {
         updateIconsForLayout(entry -> entry.expandedIcon, mShelfIcons,
-                NotificationShelf.SHOW_AMBIENT_ICONS, false /* hideDismissed */,
-                mFullyDark /* hideRepliedMessages */);
+                true /* showAmbient */, !mFullyDark /* showLowPriority */,
+                false /* hideDismissed */, mFullyDark /* hideRepliedMessages */);
     }
 
     public void updateStatusBarIcons() {
         updateIconsForLayout(entry -> entry.icon, mNotificationIcons,
-                false /* showAmbient */, true /* hideDismissed */, true /* hideRepliedMessages */);
+                false /* showAmbient */, mShowLowPriority /* showLowPriority */,
+                true /* hideDismissed */,
+                true /* hideRepliedMessages */);
     }
 
     /**
@@ -224,8 +248,8 @@ public class NotificationIconAreaController implements DarkReceiver {
      * @param hideRepliedMessages should messages that have been replied to be hidden
      */
     private void updateIconsForLayout(Function<NotificationData.Entry, StatusBarIconView> function,
-            NotificationIconContainer hostLayout, boolean showAmbient, boolean hideDismissed,
-            boolean hideRepliedMessages) {
+            NotificationIconContainer hostLayout, boolean showAmbient, boolean showLowPriority,
+            boolean hideDismissed, boolean hideRepliedMessages) {
         ArrayList<StatusBarIconView> toShow = new ArrayList<>(
                 mNotificationScrollLayout.getChildCount());
 
@@ -234,7 +258,7 @@ public class NotificationIconAreaController implements DarkReceiver {
             View view = mNotificationScrollLayout.getChildAt(i);
             if (view instanceof ExpandableNotificationRow) {
                 NotificationData.Entry ent = ((ExpandableNotificationRow) view).getEntry();
-                if (shouldShowNotificationIcon(ent, showAmbient, hideDismissed,
+                if (shouldShowNotificationIcon(ent, showAmbient, showLowPriority, hideDismissed,
                         hideRepliedMessages)) {
                     toShow.add(function.apply(ent));
                 }
@@ -349,9 +373,22 @@ public class NotificationIconAreaController implements DarkReceiver {
         v.setDecorColor(mIconTint);
     }
 
-    public void setFullyDark(boolean fullyDark) {
-        mFullyDark = fullyDark;
-        updateShelfIcons();
+    /**
+     * Dark amount, from 0 to 1, representing being awake or in AOD.
+     */
+    public void setDarkAmount(float darkAmount) {
+        mDarkAmount = darkAmount;
+        if (darkAmount == 0 || darkAmount == 1) {
+            ViewClippingUtil.setClippingDeactivated(mNotificationIcons, darkAmount != 0,
+                    mClippingParameters);
+        }
+        dozeTimeTick();
+
+        boolean fullyDark = darkAmount == 1f;
+        if (mFullyDark != fullyDark) {
+            mFullyDark = fullyDark;
+            updateShelfIcons();
+        }
     }
 
     public void setDark(boolean dark) {
@@ -365,5 +402,16 @@ public class NotificationIconAreaController implements DarkReceiver {
 
     public void setIsolatedIconLocation(Rect iconDrawingRect, boolean requireStateUpdate) {
         mNotificationIcons.setIsolatedIconLocation(iconDrawingRect, requireStateUpdate);
+    }
+
+    /**
+     * Moves icons whenever the device wakes up in AOD, to avoid burn in.
+     */
+    public void dozeTimeTick() {
+        int yOffset = (mKeyguardStatusBarHeight - getHeight()) / 2;
+        int translationX = getBurnInOffset(mBurnInOffset, true /* xAxis */);
+        int translationY = getBurnInOffset(mBurnInOffset, false /* xAxis */) + yOffset;
+        mNotificationIcons.setTranslationX(translationX * mDarkAmount);
+        mNotificationIcons.setTranslationY(translationY * mDarkAmount);
     }
 }

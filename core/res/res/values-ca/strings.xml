@@ -136,6 +136,14 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"Wi‑Fi (<xliff:g id="SPN">%s</xliff:g>)"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"Trucades per Wi‑Fi | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"VoWifi (<xliff:g id="SPN">%s</xliff:g>)"</string>
+    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
+    <skip />
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Desactivat"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Preferència per la Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"Preferència per dades mòbils"</string>
@@ -292,6 +300,9 @@
     <string name="permgrouplab_microphone" msgid="171539900250043464">"Micròfon"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"gravar àudio"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"Vols permetre que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; gravi àudio?"</string>
+    <string name="permgrouplab_activityRecognition" msgid="2838596644535616493">"Reconeixement de l\'activitat"</string>
+    <string name="permgroupdesc_activityRecognition" msgid="7672248027571522602">"reconèixer l\'activitat"</string>
+    <string name="permgrouprequest_activityRecognition" msgid="8121253142311250055">"Vols permetre que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; reconegui la teva activitat física?"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Càmera"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"fer fotos i vídeos"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"Vols permetre que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; faci fotos i vídeos?"</string>
@@ -414,18 +425,20 @@
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"Permet que l\'aplicació accedeixi a ordres addicionals del proveïdor d\'ubicacions; per tant, és possible que l\'aplicació pugui interferir en el funcionament del GPS o d\'altres fonts d\'ubicacions."</string>
     <string name="permlab_accessFineLocation" msgid="6265109654698562427">"accedeix a la ubicació exacta només en primer pla"</string>
     <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"Aquesta aplicació pot obtenir la teva ubicació exacta només quan està en primer pla. Aquests serveis d\'ubicació han d\'estar activats i disponibles al telèfon perquè l\'aplicació els pugui utilitzar, i això pot fer que el consum de bateria augmenti."</string>
-    <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"accedir a la ubicació aproximada (basada en la xarxa)"</string>
-    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"Aquesta aplicació pot obtenir la teva ubicació a partir de fonts de xarxa, com ara torres de telefonia mòbil i xarxes Wi-Fi. Aquests serveis d\'ubicació han d\'estar activats i disponibles a la tauleta perquè l\'aplicació els pugui utilitzar."</string>
-    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"Aquesta aplicació pot obtenir la teva ubicació a partir de fonts de xarxa, com ara torres de telefonia mòbil i xarxes Wi-Fi. Aquests serveis d\'ubicació han d\'estar activats i disponibles al televisor perquè l\'aplicació els pugui utilitzar."</string>
-    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"Aquesta aplicació pot obtenir la teva ubicació a partir de fonts de xarxa, com ara torres de telefonia mòbil i xarxes Wi-Fi. Aquests serveis d\'ubicació han d\'estar activats i disponibles al telèfon perquè l\'aplicació els pugui utilitzar."</string>
-    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"accedeix a la ubicació exacta en segon pla"</string>
-    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"Aquesta aplicació pot obtenir la teva ubicació exacta sempre que estigui en segon pla. Aquests serveis d\'ubicació han d\'estar activats i disponibles al telèfon perquè l\'aplicació els pugui utilitzar, i això pot fer que el consum de bateria augmenti."</string>
+    <string name="permlab_accessCoarseLocation" msgid="3707180371693213469">"accedeix a la ubicació aproximada (basada en xarxa) només en primer pla"</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="8594719010575779120">"Aquesta aplicació pot obtenir la teva ubicació a partir de fonts de xarxa, com ara torres de telefonia mòbil i xarxes Wi‑Fi, però només quan està en primer pla. Aquests serveis d\'ubicació han d\'estar activats i disponibles a la tauleta perquè l\'aplicació els pugui utilitzar."</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="3027871910200890806">"Aquesta aplicació pot obtenir la teva ubicació a partir de fonts de xarxa, com ara torres de telefonia mòbil i xarxes Wi‑Fi, però només quan està en primer pla. Aquests serveis d\'ubicació han d\'estar activats i disponibles al televisor perquè l\'aplicació els pugui utilitzar."</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="854896049371048754">"Aquesta aplicació pot obtenir la teva ubicació a partir de fonts de xarxa, com ara torres de telefonia mòbil i xarxes Wi‑Fi, però només quan està en primer pla. Aquests serveis d\'ubicació han d\'estar activats i disponibles al telèfon perquè l\'aplicació els pugui utilitzar."</string>
+    <string name="permlab_accessBackgroundLocation" msgid="3965397804300661062">"accedir a la ubicació en segon pla"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="1096394429579210251">"Si es concedeix aquest permís, a més de l\'accés a la ubicació aproximada o exacta, l\'aplicació pot accedir a la ubicació mentre s\'executa en segon pla."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"canviar la configuració d\'àudio"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"Permet que l\'aplicació modifiqui la configuració d\'àudio general, com ara el volum i l\'altaveu de sortida que es fa servir."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"gravar àudio"</string>
     <string name="permdesc_recordAudio" msgid="4245930455135321433">"Aquesta aplicació pot gravar àudio amb el micròfon en qualsevol moment."</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"enviar ordres a la SIM"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"Permet que l\'aplicació enviï ordres a la SIM. Això és molt perillós."</string>
+    <string name="permlab_activityRecognition" msgid="3634590230567608356">"reconèixer l\'activitat física"</string>
+    <string name="permdesc_activityRecognition" msgid="3143453925156552894">"Aquesta aplicació pot reconèixer la teva activitat física."</string>
     <string name="permlab_camera" msgid="3616391919559751192">"fer fotos i vídeos"</string>
     <string name="permdesc_camera" msgid="5392231870049240670">"Aquesta aplicació pot fer fotos i gravar vídeos amb la càmera en qualsevol moment."</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"controlar la vibració"</string>
@@ -518,6 +531,7 @@
     <string name="permdesc_imagesWrite" msgid="7073662756617474375">"Permet que l\'aplicació modifiqui la teva col·lecció de fotos."</string>
     <string name="permlab_mediaLocation" msgid="8675148183726247864">"llegir les ubicacions de les teves col·leccions multimèdia"</string>
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Permet que l\'aplicació llegeixi les ubicacions de les teves col·leccions multimèdia."</string>
+    <string name="biometric_dialog_default_title" msgid="4229778503907743328">"L\'aplicació <xliff:g id="APP">%s</xliff:g> vol que t\'autentiquis."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Maquinari biomètric no disponible"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"S\'ha detectat una empremta digital parcial. Torna-ho a provar."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"No s\'ha pogut processar l\'empremta digital. Torna-ho a provar."</string>
@@ -1819,6 +1833,8 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"La sol·licitud SS s\'ha canviat per una sol·licitud USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"S\'ha canviat a una nova sol·licitud SS"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Perfil professional"</string>
+    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
+    <skip />
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"Desplega"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"Replega"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"desplega o replega"</string>
@@ -1897,14 +1913,14 @@
       <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> suggeriments d\'emplenament automàtic</item>
       <item quantity="one">Un suggeriment d\'emplenament automàtic</item>
     </plurals>
-    <string name="autofill_save_title" msgid="3345527308992082601">"Vols desar-ho a <xliff:g id="LABEL">%1$s</xliff:g>?"</string>
-    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"Vols desar <xliff:g id="TYPE">%1$s</xliff:g> a <xliff:g id="LABEL">%2$s</xliff:g>?"</string>
-    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"Vols desar <xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> a <xliff:g id="LABEL">%3$s</xliff:g>?"</string>
-    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"Vols desar <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> i <xliff:g id="TYPE_2">%3$s</xliff:g> a <xliff:g id="LABEL">%4$s</xliff:g>?"</string>
-    <string name="autofill_update_title" msgid="4879673117448810818">"Vols actualitzar les dades a &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_type" msgid="339733442087186755">"Vols actualitzar <xliff:g id="TYPE">%1$s</xliff:g> a &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"Vols actualitzar <xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> a &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"Vols actualitzar <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> i <xliff:g id="TYPE_2">%3$s</xliff:g> a &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title" msgid="327541108460384555">"Vols desar-ho a "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_type" msgid="2339135393607143594">"Vols desar <xliff:g id="TYPE">%1$s</xliff:g> a "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_2types" msgid="87616102361154432">"Vols desar <xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> a "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_3types" msgid="4108978552969604555">"Vols desar <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> i <xliff:g id="TYPE_2">%3$s</xliff:g> a "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title" msgid="5305781141104585279">"Vols actualitzar-ho a "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_type" msgid="4624181147422762233">"Vols actualitzar <xliff:g id="TYPE">%1$s</xliff:g> a "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_2types" msgid="2300113827053626484">"Vols actualitzar <xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> a "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_3types" msgid="9089824354296211922">"Vols actualitzar <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> i <xliff:g id="TYPE_2">%3$s</xliff:g> a "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"?"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"Desa"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"No, gràcies"</string>
     <string name="autofill_update_yes" msgid="310358413273276958">"Actualitza"</string>

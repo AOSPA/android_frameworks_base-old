@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.notification.row;
 
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_AMBIENT;
+import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_CONTRACTED;
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_HEADSUP;
 
 import android.annotation.IntDef;
@@ -35,17 +36,14 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.statusbar.InflationTask;
 import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.MediaNotificationProcessor;
-import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.Assert;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
@@ -102,6 +100,8 @@ public class NotificationInflater {
 
     public static final int FLAG_CONTENT_VIEW_ALL = ~0;
 
+    // TODO: Heads up and ambient are always inflated as a temporary workaround.
+    // See http://b/117933032 and http://b/117894786
     /**
      * Content views that must be inflated at all times.
      */
@@ -109,7 +109,8 @@ public class NotificationInflater {
     private static final int REQUIRED_INFLATION_FLAGS =
             FLAG_CONTENT_VIEW_CONTRACTED
             | FLAG_CONTENT_VIEW_EXPANDED
-            | FLAG_CONTENT_VIEW_PUBLIC;
+            | FLAG_CONTENT_VIEW_HEADS_UP
+            | FLAG_CONTENT_VIEW_AMBIENT;
 
     /**
      * The set of content views to inflate.
@@ -127,7 +128,6 @@ public class NotificationInflater {
     private boolean mIsChildInGroup;
     private InflationCallback mCallback;
     private boolean mRedactAmbient;
-    private List<Notification.Action> mSmartActions;
     private final ArrayMap<Integer, RemoteViews> mCachedContentViews = new ArrayMap<>();
 
     public NotificationInflater(ExpandableNotificationRow row) {
@@ -157,10 +157,6 @@ public class NotificationInflater {
         mUsesIncreasedHeight = usesIncreasedHeight;
     }
 
-    public void setSmartActions(List<Notification.Action> smartActions) {
-        mSmartActions = smartActions;
-    }
-
     public void setUsesIncreasedHeadsUpHeight(boolean usesIncreasedHeight) {
         mUsesIncreasedHeadsUpHeight = usesIncreasedHeight;
     }
@@ -169,14 +165,23 @@ public class NotificationInflater {
         mRemoteViewClickHandler = remoteViewClickHandler;
     }
 
-    public void setRedactAmbient(boolean redactAmbient) {
-        if (mRedactAmbient != redactAmbient) {
-            mRedactAmbient = redactAmbient;
-            if (mRow.getEntry() == null) {
-                return;
-            }
-            inflateNotificationViews(FLAG_CONTENT_VIEW_AMBIENT);
+    /**
+     * Update whether or not the notification is redacted on the lock screen.  If the notification
+     * is now redacted, we should inflate the public contracted view and public ambient view to
+     * now show on the lock screen.
+     *
+     * @param needsRedaction true if the notification should now be redacted on the lock screen
+     */
+    public void updateNeedsRedaction(boolean needsRedaction) {
+        mRedactAmbient = needsRedaction;
+        if (mRow.getEntry() == null) {
+            return;
         }
+        int flags = FLAG_CONTENT_VIEW_AMBIENT;
+        if (needsRedaction) {
+            flags |= FLAG_CONTENT_VIEW_PUBLIC;
+        }
+        inflateNotificationViews(flags);
     }
 
     /**
@@ -206,6 +211,17 @@ public class NotificationInflater {
     }
 
     /**
+     * Whether or not the view corresponding to the flag is set to be inflated currently.
+     *
+     * @param flag the {@link InflationFlag} corresponding to the view
+     * @return true if the flag is set and view will be inflated, false o/w
+     */
+    @VisibleForTesting
+    public boolean isInflationFlagSet(@InflationFlag int flag) {
+        return ((mInflationFlags & flag) != 0);
+    }
+
+    /**
      * Inflate all views of this notification on a background thread. This is asynchronous and will
      * notify the callback once it's finished.
      */
@@ -230,12 +246,11 @@ public class NotificationInflater {
             return;
         }
         // Only inflate the ones that are set.
-        reInflateFlags |= mInflationFlags;
+        reInflateFlags &= mInflationFlags;
         StatusBarNotification sbn = mRow.getEntry().notification;
         AsyncInflationTask task = new AsyncInflationTask(sbn, reInflateFlags, mCachedContentViews,
                 mRow, mIsLowPriority, mIsChildInGroup, mUsesIncreasedHeight,
-                mUsesIncreasedHeadsUpHeight, mRedactAmbient, mCallback, mRemoteViewClickHandler,
-                mSmartActions);
+                mUsesIncreasedHeadsUpHeight, mRedactAmbient, mCallback, mRemoteViewClickHandler);
         if (mCallback != null && mCallback.doInflateSynchronous()) {
             task.onPostExecute(task.doInBackground());
         } else {
@@ -287,9 +302,14 @@ public class NotificationInflater {
                     mCachedContentViews.remove(FLAG_CONTENT_VIEW_AMBIENT);
                 }
                 break;
+            case FLAG_CONTENT_VIEW_PUBLIC:
+                if (mRow.getPublicLayout().isContentViewInactive(VISIBLE_TYPE_CONTRACTED)) {
+                    mRow.getPublicLayout().setContractedChild(null);
+                    mCachedContentViews.remove(FLAG_CONTENT_VIEW_PUBLIC);
+                }
+                break;
             case FLAG_CONTENT_VIEW_CONTRACTED:
             case FLAG_CONTENT_VIEW_EXPANDED:
-            case FLAG_CONTENT_VIEW_PUBLIC:
             default:
                 break;
         }
@@ -736,15 +756,13 @@ public class NotificationInflater {
         private Exception mError;
         private RemoteViews.OnClickHandler mRemoteViewClickHandler;
         private CancellationSignal mCancellationSignal;
-        private List<Notification.Action> mSmartActions;
 
         private AsyncInflationTask(StatusBarNotification notification,
                 @InflationFlag int reInflateFlags,
                 ArrayMap<Integer, RemoteViews> cachedContentViews, ExpandableNotificationRow row,
                 boolean isLowPriority, boolean isChildInGroup, boolean usesIncreasedHeight,
                 boolean usesIncreasedHeadsUpHeight, boolean redactAmbient,
-                InflationCallback callback, RemoteViews.OnClickHandler remoteViewClickHandler,
-                List<Notification.Action> smartActions) {
+                InflationCallback callback, RemoteViews.OnClickHandler remoteViewClickHandler) {
             mRow = row;
             mSbn = notification;
             mReInflateFlags = reInflateFlags;
@@ -757,9 +775,6 @@ public class NotificationInflater {
             mRedactAmbient = redactAmbient;
             mRemoteViewClickHandler = remoteViewClickHandler;
             mCallback = callback;
-            mSmartActions = smartActions == null
-                    ? Collections.emptyList()
-                    : new ArrayList<>(smartActions);
             NotificationData.Entry entry = row.getEntry();
             entry.setInflationTask(this);
         }
@@ -776,8 +791,6 @@ public class NotificationInflater {
                 final Notification.Builder recoveredBuilder
                         = Notification.Builder.recoverBuilder(mContext,
                         mSbn.getNotification());
-
-                applyChanges(recoveredBuilder);
 
                 Context packageContext = mSbn.getPackageContext(mContext);
                 Notification notification = mSbn.getNotification();
@@ -802,18 +815,6 @@ public class NotificationInflater {
                         mRedactAmbient, mRemoteViewClickHandler, this);
             } else {
                 handleError(mError);
-            }
-        }
-
-        /**
-         * Apply changes to the given notification builder, like adding smart actions suggested by
-         * a {@link android.service.notification.NotificationAssistantService}.
-         */
-        private void applyChanges(Notification.Builder builder) {
-            if (mSmartActions != null) {
-                for (Notification.Action smartAction : mSmartActions) {
-                    builder.addAction(smartAction);
-                }
             }
         }
 

@@ -27,7 +27,6 @@ import static junit.framework.Assert.fail;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -98,7 +97,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     private static final UserHandle USER = UserHandle.of(0);
     private static final int UID_O = 1111;
     private static final String SYSTEM_PKG = "android";
-    private static final int SYSTEM_UID= 1000;
+    private static final int SYSTEM_UID = 1000;
     private static final UserHandle USER2 = UserHandle.of(10);
     private static final String TEST_CHANNEL_ID = "test_channel_id";
     private static final String TEST_AUTHORITY = "test";
@@ -280,7 +279,8 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         assertTrue(mHelper.canShowBadge(PKG_N_MR1, UID_N_MR1));
         assertTrue(mHelper.getIsAppImportanceLocked(PKG_N_MR1, UID_N_MR1));
-        assertEquals(channel1, mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false));
+        assertEquals(channel1,
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false));
         compareChannels(channel2,
                 mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel2.getId(), false));
 
@@ -348,7 +348,8 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         assertEquals(IMPORTANCE_NONE, mHelper.getImportance(PKG_O, UID_O));
         assertTrue(mHelper.canShowBadge(PKG_N_MR1, UID_N_MR1));
-        assertEquals(channel1, mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false));
+        assertEquals(channel1,
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false));
         compareChannels(channel2,
                 mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel2.getId(), false));
         compareChannels(channel3,
@@ -487,7 +488,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         NotificationChannel channel1 =
                 new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
         NotificationChannel channel2 =
-                new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
+                new NotificationChannel("id2", "name2", IMPORTANCE_HIGH);
         NotificationChannel channel3 =
                 new NotificationChannel("id3", "name3", IMPORTANCE_LOW);
         channel3.setGroup(ncg.getId());
@@ -500,7 +501,8 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         mHelper.deleteNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId());
         mHelper.deleteNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg.getId());
-        assertEquals(channel2, mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel2.getId(), false));
+        assertEquals(channel2,
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel2.getId(), false));
 
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_N_MR1, UID_N_MR1, true, channel1.getId(),
                 channel2.getId(), channel3.getId(), NotificationChannel.DEFAULT_CHANNEL_ID);
@@ -516,8 +518,8 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertNull(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false));
         assertNull(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel3.getId(), false));
         assertNull(mHelper.getNotificationChannelGroup(ncg.getId(), PKG_N_MR1, UID_N_MR1));
-        //assertEquals(ncg2, mHelper.getNotificationChannelGroup(ncg2.getId(), PKG_N_MR1, UID_N_MR1));
-        assertEquals(channel2, mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel2.getId(), false));
+        assertEquals(channel2,
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel2.getId(), false));
     }
 
     @Test
@@ -799,14 +801,15 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testCreateChannel_CannotChangeHiddenFields() throws Exception {
+    public void testCreateChannel_CannotChangeHiddenFields() {
         final NotificationChannel channel =
-                new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
+                new NotificationChannel("id2", "name2", IMPORTANCE_HIGH);
         channel.setSound(new Uri.Builder().scheme("test").build(), mAudioAttributes);
         channel.enableLights(true);
         channel.setBypassDnd(true);
         channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
         channel.setShowBadge(true);
+        channel.setAllowAppOverlay(false);
         int lockMask = 0;
         for (int i = 0; i < NotificationChannel.LOCKABLE_FIELDS.length; i++) {
             lockMask |= NotificationChannel.LOCKABLE_FIELDS[i];
@@ -823,19 +826,21 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertFalse(savedChannel.canBypassDnd());
         assertFalse(Notification.VISIBILITY_SECRET == savedChannel.getLockscreenVisibility());
         assertEquals(channel.canShowBadge(), savedChannel.canShowBadge());
+        assertEquals(channel.canOverlayApps(), savedChannel.canOverlayApps());
 
         verify(mHandler, never()).requestSort();
     }
 
     @Test
-    public void testCreateChannel_CannotChangeHiddenFieldsAssistant() throws Exception {
+    public void testCreateChannel_CannotChangeHiddenFieldsAssistant() {
         final NotificationChannel channel =
-                new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
+                new NotificationChannel("id2", "name2", IMPORTANCE_HIGH);
         channel.setSound(new Uri.Builder().scheme("test").build(), mAudioAttributes);
         channel.enableLights(true);
         channel.setBypassDnd(true);
         channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
         channel.setShowBadge(true);
+        channel.setAllowAppOverlay(false);
         int lockMask = 0;
         for (int i = 0; i < NotificationChannel.LOCKABLE_FIELDS.length; i++) {
             lockMask |= NotificationChannel.LOCKABLE_FIELDS[i];
@@ -852,10 +857,11 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertFalse(savedChannel.canBypassDnd());
         assertFalse(Notification.VISIBILITY_SECRET == savedChannel.getLockscreenVisibility());
         assertEquals(channel.canShowBadge(), savedChannel.canShowBadge());
+        assertEquals(channel.canOverlayApps(), savedChannel.canOverlayApps());
     }
 
     @Test
-    public void testClearLockedFields() throws Exception {
+    public void testClearLockedFields() {
         final NotificationChannel channel = getChannel();
         mHelper.clearLockedFields(channel);
         assertEquals(0, channel.getUserLockedFields());
@@ -867,7 +873,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testLockFields_soundAndVibration() throws Exception {
+    public void testLockFields_soundAndVibration() {
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, getChannel(), true, false);
 
         final NotificationChannel update1 = getChannel();
@@ -891,7 +897,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testLockFields_vibrationAndLights() throws Exception {
+    public void testLockFields_vibrationAndLights() {
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, getChannel(), true, false);
 
         final NotificationChannel update1 = getChannel();
@@ -911,7 +917,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testLockFields_lightsAndImportance() throws Exception {
+    public void testLockFields_lightsAndImportance() {
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, getChannel(), true, false);
 
         final NotificationChannel update1 = getChannel();
@@ -931,7 +937,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testLockFields_visibilityAndDndAndBadge() throws Exception {
+    public void testLockFields_visibilityAndDndAndBadge() {
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, getChannel(), true, false);
         assertEquals(0,
                 mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, getChannel().getId(), false)
@@ -959,6 +965,21 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                         | NotificationChannel.USER_LOCKED_VISIBILITY
                         | NotificationChannel.USER_LOCKED_SHOW_BADGE,
                 mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, update3.getId(), false)
+                        .getUserLockedFields());
+    }
+
+    @Test
+    public void testLockFields_appOverlay() {
+        mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, getChannel(), true, false);
+        assertEquals(0,
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, getChannel().getId(), false)
+                        .getUserLockedFields());
+
+        final NotificationChannel update = getChannel();
+        update.setAllowAppOverlay(false);
+        mHelper.updateNotificationChannel(PKG_N_MR1, UID_N_MR1, update, true);
+        assertEquals(NotificationChannel.USER_LOCKED_ALLOW_APP_OVERLAY,
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, update.getId(), false)
                         .getUserLockedFields());
     }
 
@@ -1066,6 +1087,158 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         assertEquals(1, mHelper.getBlockedChannelCount(PKG_N_MR1, UID_N_MR1));
         assertEquals(0, mHelper.getBlockedChannelCount("pkg2", UID_O));
+    }
+
+    @Test
+    public void testGetChannelsBypassingDndCount_noChannelsBypassing() throws Exception {
+        assertEquals(0, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                USER.getIdentifier()).getList().size());
+    }
+
+    @Test
+    public void testGetChannelsBypassingDnd_noChannelsForUserIdBypassing()
+            throws Exception {
+        int user = 9;
+        NotificationChannel channel = new NotificationChannel("id", "name",
+                NotificationManager.IMPORTANCE_MAX);
+        channel.setBypassDnd(true);
+        mHelper.createNotificationChannel(PKG_N_MR1, 111, channel, true, true);
+
+        assertEquals(0, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+    }
+
+    @Test
+    public void testGetChannelsBypassingDndCount_oneChannelBypassing_groupBlocked() {
+        int user = USER.getIdentifier();
+        NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
+        NotificationChannel channel1 = new NotificationChannel("id1", "name1",
+                NotificationManager.IMPORTANCE_MAX);
+        channel1.setBypassDnd(true);
+        channel1.setGroup(ncg.getId());
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, user, ncg,  /* fromTargetApp */ true);
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel1, true, /*has DND access*/ true);
+
+        assertEquals(1, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+
+        // disable group
+        ncg.setBlocked(true);
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, user, ncg,  /* fromTargetApp */ false);
+        assertEquals(0, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+    }
+
+    @Test
+    public void testGetChannelsBypassingDndCount_multipleChannelsBypassing() {
+        int user = USER.getIdentifier();
+        NotificationChannel channel1 = new NotificationChannel("id1", "name1",
+                NotificationManager.IMPORTANCE_MAX);
+        NotificationChannel channel2 = new NotificationChannel("id2", "name2",
+                NotificationManager.IMPORTANCE_MAX);
+        NotificationChannel channel3 = new NotificationChannel("id3", "name3",
+                NotificationManager.IMPORTANCE_MAX);
+        channel1.setBypassDnd(true);
+        channel2.setBypassDnd(true);
+        channel3.setBypassDnd(true);
+        // has DND access, so can set bypassDnd attribute
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel1, true, /*has DND access*/ true);
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel2, true, true);
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel3, true, true);
+        assertEquals(3, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+
+        // block notifications from this app
+        mHelper.setEnabled(PKG_N_MR1, user, false);
+        assertEquals(0, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+
+        // re-enable notifications from this app
+        mHelper.setEnabled(PKG_N_MR1, user, true);
+        assertEquals(3, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+
+        // setBypassDnd false for some channels
+        channel1.setBypassDnd(false);
+        channel2.setBypassDnd(false);
+        assertEquals(1, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+
+        // setBypassDnd false for rest of the channels
+        channel3.setBypassDnd(false);
+        assertEquals(0, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
+                user).getList().size());
+    }
+
+    @Test
+    public void testGetAppsBypassingDndCount_noAppsBypassing() throws Exception {
+        assertEquals(0, mHelper.getAppsBypassingDndCount(USER.getIdentifier()));
+    }
+
+    @Test
+    public void testGetAppsBypassingDndCount_noAppsForUserIdBypassing() throws Exception {
+        int user = 9;
+        NotificationChannel channel = new NotificationChannel("id", "name",
+                NotificationManager.IMPORTANCE_MAX);
+        channel.setBypassDnd(true);
+        mHelper.createNotificationChannel(PKG_N_MR1, 111, channel, true, true);
+
+        assertEquals(0, mHelper.getAppsBypassingDndCount(user));
+    }
+
+    @Test
+    public void testGetAppsBypassingDndCount_oneChannelBypassing_groupBlocked() {
+        int user = USER.getIdentifier();
+        NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
+        NotificationChannel channel1 = new NotificationChannel("id1", "name1",
+                NotificationManager.IMPORTANCE_MAX);
+        channel1.setBypassDnd(true);
+        channel1.setGroup(ncg.getId());
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, user, ncg,  /* fromTargetApp */ true);
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel1, true, /*has DND access*/ true);
+
+        assertEquals(1, mHelper.getAppsBypassingDndCount(user));
+
+        // disable group
+        ncg.setBlocked(true);
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, user, ncg,  /* fromTargetApp */ false);
+        assertEquals(0, mHelper.getAppsBypassingDndCount(user));
+    }
+
+    @Test
+    public void testGetAppsBypassingDndCount_oneAppBypassing() {
+        int user = USER.getIdentifier();
+        NotificationChannel channel1 = new NotificationChannel("id1", "name1",
+                NotificationManager.IMPORTANCE_MAX);
+        NotificationChannel channel2 = new NotificationChannel("id2", "name2",
+                NotificationManager.IMPORTANCE_MAX);
+        NotificationChannel channel3 = new NotificationChannel("id3", "name3",
+                NotificationManager.IMPORTANCE_MAX);
+        channel1.setBypassDnd(true);
+        channel2.setBypassDnd(true);
+        channel3.setBypassDnd(true);
+        // has DND access, so can set bypassDnd attribute
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel1, true, /*has DND access*/ true);
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel2, true, true);
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel3, true, true);
+        assertEquals(1, mHelper.getAppsBypassingDndCount(user));
+
+        // block notifications from this app
+        mHelper.setEnabled(PKG_N_MR1, user, false);
+        assertEquals(0, mHelper.getAppsBypassingDndCount(user)); // no apps can bypass dnd
+
+        // re-enable notifications from this app
+        mHelper.setEnabled(PKG_N_MR1, user, true);
+        assertEquals(1, mHelper.getAppsBypassingDndCount(user));
+
+        // setBypassDnd false for some channels
+        channel1.setBypassDnd(false);
+        channel2.setBypassDnd(false);
+        assertEquals(1, mHelper.getAppsBypassingDndCount(user));
+
+        // setBypassDnd false for rest of the channels
+        channel3.setBypassDnd(false);
+        assertEquals(0, mHelper.getAppsBypassingDndCount(user));
     }
 
     @Test
@@ -1255,21 +1428,24 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, notDeleted, true);
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, deleted, true);
-        mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, nonGroupedNonDeletedChannel, true, false);
+        mHelper.createNotificationChannel(
+                PKG_N_MR1, UID_N_MR1, nonGroupedNonDeletedChannel, true, false);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, groupedAndDeleted, true, false);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, groupedButNotDeleted, true, false);
 
         mHelper.deleteNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, deleted.getId());
 
         assertNull(mHelper.getNotificationChannelGroup(deleted.getId(), PKG_N_MR1, UID_N_MR1));
-        assertNotNull(mHelper.getNotificationChannelGroup(notDeleted.getId(), PKG_N_MR1, UID_N_MR1));
+        assertNotNull(
+                mHelper.getNotificationChannelGroup(notDeleted.getId(), PKG_N_MR1, UID_N_MR1));
 
-        assertNull(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, groupedAndDeleted.getId(), false));
-        compareChannels(groupedAndDeleted,
-                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, groupedAndDeleted.getId(), true));
+        assertNull(mHelper.getNotificationChannel(
+                PKG_N_MR1, UID_N_MR1, groupedAndDeleted.getId(), false));
+        compareChannels(groupedAndDeleted, mHelper.getNotificationChannel(
+                PKG_N_MR1, UID_N_MR1, groupedAndDeleted.getId(), true));
 
-        compareChannels(groupedButNotDeleted,
-                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, groupedButNotDeleted.getId(), false));
+        compareChannels(groupedButNotDeleted, mHelper.getNotificationChannel(
+                PKG_N_MR1, UID_N_MR1, groupedButNotDeleted.getId(), false));
         compareChannels(nonGroupedNonDeletedChannel, mHelper.getNotificationChannel(
                 PKG_N_MR1, UID_N_MR1, nonGroupedNonDeletedChannel.getId(), false));
 
@@ -1381,15 +1557,49 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testCreateGroup() throws Exception {
+    public void testCreateGroup() {
         NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
-        assertEquals(ncg, mHelper.getNotificationChannelGroups(PKG_N_MR1, UID_N_MR1).iterator().next());
+        assertEquals(ncg,
+                mHelper.getNotificationChannelGroups(PKG_N_MR1, UID_N_MR1).iterator().next());
         verify(mHandler, never()).requestSort();
     }
 
     @Test
-    public void testCannotCreateChannel_badGroup() throws Exception {
+    public void testUpdateGroup_fromSystem_appOverlay() {
+        NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
+
+        // from system, allowed
+        NotificationChannelGroup update = ncg.clone();
+        update.setAllowAppOverlay(false);
+
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, update, false);
+        NotificationChannelGroup updated =
+                mHelper.getNotificationChannelGroup("group1", PKG_N_MR1, UID_N_MR1);
+        assertFalse(updated.canOverlayApps());
+        assertEquals(NotificationChannelGroup.USER_LOCKED_ALLOW_APP_OVERLAY,
+                updated.getUserLockedFields());
+    }
+
+    @Test
+    public void testUpdateGroup_fromApp_appOverlay() {
+        NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
+
+        // from app, not allowed
+        NotificationChannelGroup update = new NotificationChannelGroup("group1", "name1");
+        update.setAllowAppOverlay(false);
+
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
+        NotificationChannelGroup updated =
+                mHelper.getNotificationChannelGroup("group1", PKG_N_MR1, UID_N_MR1);
+        assertTrue(updated.canOverlayApps());
+        assertEquals(0, updated.getUserLockedFields());
+    }
+
+    @Test
+    public void testCannotCreateChannel_badGroup() {
         NotificationChannel channel1 =
                 new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
         channel1.setGroup("garbage");
@@ -1401,7 +1611,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testCannotCreateChannel_goodGroup() throws Exception {
+    public void testCannotCreateChannel_goodGroup() {
         NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
         NotificationChannel channel1 =
@@ -1409,12 +1619,12 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         channel1.setGroup(ncg.getId());
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1, true, false);
 
-        assertEquals(ncg.getId(),
-                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false).getGroup());
+        assertEquals(ncg.getId(), mHelper.getNotificationChannel(
+                PKG_N_MR1, UID_N_MR1, channel1.getId(), false).getGroup());
     }
 
     @Test
-    public void testGetChannelGroups() throws Exception {
+    public void testGetChannelGroups() {
         NotificationChannelGroup unused = new NotificationChannelGroup("unused", "s");
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, unused, true);
         NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
@@ -1465,7 +1675,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testGetChannelGroups_noSideEffects() throws Exception {
+    public void testGetChannelGroups_noSideEffects() {
         NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
 
@@ -1516,10 +1726,11 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testCreateChannel_updateName() throws Exception {
+    public void testCreateChannel_updateName() {
         NotificationChannel nc = new NotificationChannel("id", "hello", IMPORTANCE_DEFAULT);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, nc, true, false);
-        NotificationChannel actual = mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, "id", false);
+        NotificationChannel actual =
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, "id", false);
         assertEquals("hello", actual.getName());
 
         nc = new NotificationChannel("id", "goodbye", IMPORTANCE_HIGH);
@@ -1533,12 +1744,13 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testCreateChannel_addToGroup() throws Exception {
+    public void testCreateChannel_addToGroup() {
         NotificationChannelGroup group = new NotificationChannelGroup("group", "");
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, group, true);
         NotificationChannel nc = new NotificationChannel("id", "hello", IMPORTANCE_DEFAULT);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, nc, true, false);
-        NotificationChannel actual = mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, "id", false);
+        NotificationChannel actual =
+                mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, "id", false);
         assertNull(actual.getGroup());
 
         nc = new NotificationChannel("id", "hello", IMPORTANCE_HIGH);

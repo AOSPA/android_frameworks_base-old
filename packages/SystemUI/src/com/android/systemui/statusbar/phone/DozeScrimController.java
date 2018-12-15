@@ -17,23 +17,25 @@
 package com.android.systemui.statusbar.phone;
 
 import android.annotation.NonNull;
-import android.content.Context;
 import android.os.Handler;
 import android.util.Log;
 
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.Dependency;
 import com.android.systemui.doze.DozeHost;
 import com.android.systemui.doze.DozeLog;
+import com.android.systemui.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.StatusBarStateController.StateListener;
 
 /**
  * Controller which handles all the doze animations of the scrims.
  */
-public class DozeScrimController {
+public class DozeScrimController implements StateListener {
     private static final String TAG = "DozeScrimController";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private final DozeParameters mDozeParameters;
     private final Handler mHandler = new Handler();
-    private final ScrimController mScrimController;
 
     private boolean mDozing;
     private DozeHost.PulseCallback mPulseCallback;
@@ -83,12 +85,13 @@ public class DozeScrimController {
         }
     };
 
-    public DozeScrimController(ScrimController scrimController, Context context,
-            DozeParameters dozeParameters) {
-        mScrimController = scrimController;
+    public DozeScrimController(DozeParameters dozeParameters) {
         mDozeParameters = dozeParameters;
+        //Never expected to be destroyed
+        Dependency.get(StatusBarStateController.class).addListener(this);
     }
 
+    @VisibleForTesting
     public void setDozing(boolean dozing) {
         if (mDozing == dozing) return;
         mDozing = dozing;
@@ -117,8 +120,6 @@ public class DozeScrimController {
         // be invoked when we're done so that the caller can drop the pulse wakelock.
         mPulseCallback = callback;
         mPulseReason = reason;
-
-        mScrimController.transitionTo(ScrimState.PULSING, mScrimCallback);
     }
 
     public void pulseOutNow() {
@@ -180,13 +181,21 @@ public class DozeScrimController {
             mHandler.removeCallbacks(mPulseOutExtended);
             if (DEBUG) Log.d(TAG, "Pulse out, mDozing=" + mDozing);
             if (!mDozing) return;
-            mScrimController.transitionTo(ScrimState.AOD,
-                    new ScrimController.Callback() {
-                        @Override
-                        public void onDisplayBlanked() {
-                            pulseFinished();
-                        }
-                    });
+            pulseFinished();
         }
     };
+
+    public ScrimController.Callback getScrimCallback() {
+        return mScrimCallback;
+    }
+
+    @Override
+    public void onStateChanged(int newState) {
+        // don't care
+    }
+
+    @Override
+    public void onDozingChanged(boolean isDozing) {
+        setDozing(isDozing);
+    }
 }

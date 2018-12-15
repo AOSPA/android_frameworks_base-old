@@ -268,6 +268,10 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         return mConnService;
     }
 
+    public NetworkMisc netMisc() {
+        return networkMisc;
+    }
+
     public Handler handler() {
         return mHandler;
     }

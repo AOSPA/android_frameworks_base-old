@@ -161,13 +161,6 @@ public abstract class ActivityManagerInternal {
     public abstract List<ProcessMemoryState> getMemoryStateForProcesses();
 
     /**
-     * Returns a list that contains the memory stats for monitored native processes.
-     *
-     * The list of the monitored processes is defined in MemoryStatUtil class.
-     */
-    public abstract List<ProcessMemoryState> getMemoryStateForNativeProcesses();
-
-    /**
      * Checks to see if the calling pid is allowed to handle the user. Returns adjusted user id as
      * needed.
      */
@@ -277,7 +270,15 @@ public abstract class ActivityManagerInternal {
     public abstract void startProcess(String processName, ApplicationInfo info,
             boolean knownToBeDead, String hostingType, ComponentName hostingName);
 
-    /** Starts up the starting activity process for debugging if needed. */
+    /** Starts up the starting activity process for debugging if needed.
+     * This function needs to be called synchronously from WindowManager context so the caller
+     * passes a lock {@code wmLock} and waits to be notified.
+     *
+     * @param wmLock calls {@code notify} on the object to wake up the caller.
+    */
     public abstract void setDebugFlagsForStartingActivity(ActivityInfo aInfo, int startFlags,
-            ProfilerInfo profilerInfo);
+            ProfilerInfo profilerInfo, Object wmLock);
+
+    /** Checks if process running with given pid has access to full external storage or not */
+    public abstract boolean isAppStorageSandboxed(int pid, int uid);
 }

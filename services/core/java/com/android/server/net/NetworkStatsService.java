@@ -105,6 +105,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.INetworkManagementService;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.PowerManager;
@@ -323,6 +324,12 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 Clock.systemUTC());
     }
 
+    private static final class NetworkStatsHandler extends Handler {
+        NetworkStatsHandler(Looper looper, Handler.Callback callback) {
+            super(looper, callback);
+        }
+    }
+
     public static NetworkStatsService create(Context context,
                 INetworkManagementService networkManager) {
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
@@ -339,7 +346,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         HandlerThread handlerThread = new HandlerThread(TAG);
         Handler.Callback callback = new HandlerCallback(service);
         handlerThread.start();
-        Handler handler = new Handler(handlerThread.getLooper(), callback);
+        Handler handler = new NetworkStatsHandler(handlerThread.getLooper(), callback);
         service.setHandler(handler, callback);
         return service;
     }
@@ -1620,7 +1627,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         // fold tethering stats and operations into uid snapshot
         final NetworkStats tetherSnapshot = getNetworkStatsTethering(STATS_PER_UID);
         tetherSnapshot.filter(UID_ALL, ifaces, TAG_ALL);
-        NetworkStatsFactory.apply464xlatAdjustments(uidSnapshot, tetherSnapshot);
+        NetworkStatsFactory.apply464xlatAdjustments(uidSnapshot, tetherSnapshot,
+                mUseBpfTrafficStats);
         uidSnapshot.combineAllValues(tetherSnapshot);
 
         final TelephonyManager telephonyManager = (TelephonyManager) mContext.getSystemService(
@@ -1630,7 +1638,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final NetworkStats vtStats = telephonyManager.getVtDataUsage(STATS_PER_UID);
         if (vtStats != null) {
             vtStats.filter(UID_ALL, ifaces, TAG_ALL);
-            NetworkStatsFactory.apply464xlatAdjustments(uidSnapshot, vtStats);
+            NetworkStatsFactory.apply464xlatAdjustments(uidSnapshot, vtStats,
+                    mUseBpfTrafficStats);
             uidSnapshot.combineAllValues(vtStats);
         }
 

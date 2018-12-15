@@ -11,12 +11,19 @@ LOCAL_MODULE_TAGS := tests
 # Include all test java files.
 LOCAL_SRC_FILES := \
     $(call all-java-files-under, src) \
-    $(call all-java-files-under, ../servicestests/utils)
+    $(call all-java-files-under, ../servicestests/utils) \
 
 LOCAL_STATIC_JAVA_LIBRARIES := \
-    androidx-test \
+    frameworks-base-testutils \
+    services.core \
+    androidx.test.runner \
+    androidx.test.rules \
     mockito-target-minus-junit4 \
     platform-test-annotations \
+    truth-prebuilt \
+    testables \
+    ub-uiautomator \
+    hamcrest-library
 
 LOCAL_JAVA_LIBRARIES := \
     android.test.mock \

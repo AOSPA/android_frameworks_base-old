@@ -855,6 +855,14 @@ public abstract class PackageManager {
      */
     public static final int INSTALL_VIRTUAL_PRELOAD = 0x00010000;
 
+    /**
+     * Flag parameter for {@link #installPackage} to indicate that this package
+     * is an APEX package
+     *
+     * @hide
+     */
+    public static final int INSTALL_APEX = 0x00020000;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "DONT_KILL_APP" }, value = {
             DONT_KILL_APP
@@ -905,6 +913,11 @@ public abstract class PackageManager {
      * Code indicating that the package installation was initiated by the user.
      */
     public static final int INSTALL_REASON_USER = 4;
+
+    /**
+     * @hide
+     */
+    public static final int INSTALL_UNKNOWN = 0;
 
     /**
      * Installation return code: this is passed in the {@link PackageInstaller#EXTRA_LEGACY_STATUS}
@@ -2935,6 +2948,15 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_REVIEW_REQUIRED =  1 << 6;
 
     /**
+     * Permission flag: The permission has not been explicitly requested by
+     * the app but has been added automatically by the system. Revoke once
+     * the app does explicitly request it.
+     *
+     * @hide
+     */
+    public static final int FLAG_PERMISSION_REVOKE_WHEN_REQUESTED =  1 << 7;
+
+    /**
      * Mask for all permission flags.
      *
      * @hide
@@ -3585,7 +3607,10 @@ public abstract class PackageManager {
             FLAG_PERMISSION_POLICY_FIXED,
             FLAG_PERMISSION_REVOKE_ON_UPGRADE,
             FLAG_PERMISSION_SYSTEM_FIXED,
-            FLAG_PERMISSION_GRANTED_BY_DEFAULT
+            FLAG_PERMISSION_GRANTED_BY_DEFAULT,
+            /*
+            FLAG_PERMISSION_REVOKE_WHEN_REQUESED
+            */
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PermissionFlags {}
@@ -5439,6 +5464,28 @@ public abstract class PackageManager {
             ComponentName[] set, ComponentName activity);
 
     /**
+     * Replaces an existing preferred activity mapping to the system, and if that were not present
+     * adds a new preferred activity.  This will be used to automatically select the given activity
+     * component when {@link Context#startActivity(Intent) Context.startActivity()} finds multiple
+     * matching activities and also matches the given filter.
+     *
+     * @param filter The set of intents under which this activity will be made preferred.
+     * @param match The IntentFilter match category that this preference applies to. Should be a
+     *              combination of {@link IntentFilter#MATCH_CATEGORY_MASK} and
+     *              {@link IntentFilter#MATCH_ADJUSTMENT_MASK}).
+     * @param set The set of activities that the user was picking from when this preference was
+     *            made.
+     * @param activity The component name of the activity that is to be preferred.
+     *
+     * @hide
+     */
+    @SystemApi
+    public void replacePreferredActivity(@NonNull IntentFilter filter, int match,
+            @NonNull List<ComponentName> set, @NonNull ComponentName activity) {
+        replacePreferredActivity(filter, match, set.toArray(new ComponentName[0]), activity);
+    }
+
+    /**
      * @hide
      */
     @Deprecated
@@ -5750,6 +5797,30 @@ public abstract class PackageManager {
     }
 
     /**
+     * Returns whether or not a given package can be suspended via a call to {@link
+     * #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle,
+     * SuspendDialogInfo) setPackagesSuspended}. The platform prevents suspending certain critical
+     * packages to keep the device in a functioning state, e.g. the default dialer.
+     * Apps need to hold {@link Manifest.permission#SUSPEND_APPS SUSPEND_APPS} to call this api.
+     *
+     * <p>
+     * Note that this set of critical packages can change with time, so <em>a value of {@code true}
+     * returned by this api does not guarantee that a following call to {@link
+     * #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle,
+     * SuspendDialogInfo) setPackagesSuspended} for the same package will succeed</em>, especially
+     * if considerable time elapsed between the two calls.
+     *
+     * @param packageName The package to check.
+     * @return {@code true} if the given package can be suspended, {@code false} otherwise.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.SUSPEND_APPS)
+    public boolean canSuspendPackage(@NonNull String packageName) {
+        throw new UnsupportedOperationException("canSuspendPackage not implemented");
+    }
+
+    /**
      * @see #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle, String)
      * @param packageName The name of the package to get the suspended status of.
      * @param userId The user id.
@@ -5778,16 +5849,16 @@ public abstract class PackageManager {
      * {@code android.permission.SUSPEND_APPS} can put any app on the device into a suspended state.
      *
      * <p>While in this state, the application's notifications will be hidden, any of its started
-     * activities will be stopped and it will not be able to show toasts or dialogs or ring the
-     * device. When the user tries to launch a suspended app, the system will, instead, show a
+     * activities will be stopped and it will not be able to show toasts or dialogs or play audio.
+     * When the user tries to launch a suspended app, the system will, instead, show a
      * dialog to the user informing them that they cannot use this app while it is suspended.
      *
      * <p>When an app is put into this state, the broadcast action
      * {@link Intent#ACTION_MY_PACKAGE_SUSPENDED} will be delivered to any of its broadcast
      * receivers that included this action in their intent-filters, <em>including manifest
      * receivers.</em> Similarly, a broadcast action {@link Intent#ACTION_MY_PACKAGE_UNSUSPENDED}
-     * is delivered when a previously suspended app is taken out of this state.
-     * </p>
+     * is delivered when a previously suspended app is taken out of this state. Apps are expected to
+     * use these to gracefully deal with transitions to and from this state.
      *
      * @return {@code true} if the calling package has been suspended, {@code false} otherwise.
      *
@@ -6103,6 +6174,7 @@ public abstract class PackageManager {
             case FLAG_PERMISSION_REVOKE_ON_UPGRADE: return "REVOKE_ON_UPGRADE";
             case FLAG_PERMISSION_USER_FIXED: return "USER_FIXED";
             case FLAG_PERMISSION_REVIEW_REQUIRED: return "REVIEW_REQUIRED";
+            case FLAG_PERMISSION_REVOKE_WHEN_REQUESTED: return "REVOKE_WHEN_REQUESTED";
             default: return Integer.toString(flag);
         }
     }

@@ -814,13 +814,19 @@ public class KeyEvent extends InputEvent implements Parcelable {
     public static final int KEYCODE_ALL_APPS = 284;
     /** Key code constant: Refresh key. */
     public static final int KEYCODE_REFRESH = 285;
+    /** Key code constant: Thumbs up key. Apps can use this to let user upvote content. */
+    public static final int KEYCODE_THUMBS_UP = 286;
+    /** Key code constant: Thumbs down key. Apps can use this to let user downvote content. */
+    public static final int KEYCODE_THUMBS_DOWN = 287;
+    /** Key code constant: Consumed by system to switch current viewer profile. */
+    public static final int KEYCODE_PROFILE_SWITCH = 288;
 
     /**
      * Integer value of the last KEYCODE. Increases as new keycodes are added to KeyEvent.
      * @hide
      */
     @TestApi
-    public static final int LAST_KEYCODE = KEYCODE_REFRESH;
+    public static final int LAST_KEYCODE = KEYCODE_PROFILE_SWITCH;
 
     // NOTE: If you add a new keycode here you must also add it to:
     //  isSystem()
@@ -1972,6 +1978,7 @@ public class KeyEvent extends InputEvent implements Parcelable {
     }
 
     /** @hide */
+    @TestApi
     @Override
     public final void setDisplayId(int displayId) {
         mDisplayId = displayId;
@@ -2033,6 +2040,16 @@ public class KeyEvent extends InputEvent implements Parcelable {
      */
     public final int getModifiers() {
         return normalizeMetaState(mMetaState) & META_MODIFIER_MASK;
+    }
+
+    /**
+     * Modifies the flags of the event.
+     *
+     * @param newFlags New flags for the event, replacing the entire value.
+     * @hide
+     */
+    public final void setFlags(int newFlags) {
+        mFlags = newFlags;
     }
 
     /**
@@ -2523,15 +2540,30 @@ public class KeyEvent extends InputEvent implements Parcelable {
     }
 
     /**
-     * Retrieve the repeat count of the event.  For both key up and key down
-     * events, this is the number of times the key has repeated with the first
-     * down starting at 0 and counting up from there.  For multiple key
-     * events, this is the number of down/up pairs that have occurred.
+     * Retrieve the repeat count of the event.  For key down events,
+     * this is the number of times the key has repeated with the first
+     * down starting at 0 and counting up from there.  For key up events,
+     * this is always equal to zero. For multiple key events,
+     * this is the number of down/up pairs that have occurred.
      *
      * @return The number of times the key has repeated.
      */
     public final int getRepeatCount() {
         return mRepeatCount;
+    }
+
+    /**
+     * Modifies the down time and the event time of the event.
+     *
+     * @param downTime The new down time (in {@link android.os.SystemClock#uptimeMillis}) of the
+     *                 event.
+     * @param eventTime The new event time (in {@link android.os.SystemClock#uptimeMillis}) of the
+     *                  event.
+     * @hide
+     */
+    public final void setTime(long downTime, long eventTime) {
+        mDownTime = downTime;
+        mEventTime = eventTime;
     }
 
     /**

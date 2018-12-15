@@ -16,6 +16,8 @@ import com.android.systemui.plugins.ClockPlugin;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.shared.plugins.PluginManager;
 
+import java.util.Objects;
+
 /**
  * Switch to show plugin clock when plugin is connected, otherwise it will show default clock.
  */
@@ -35,6 +37,10 @@ public class KeyguardClockSwitch extends FrameLayout {
                 public void onPluginConnected(ClockPlugin plugin, Context pluginContext) {
                     View view = plugin.getView();
                     if (view != null) {
+                        disconnectPlugin();
+                        // For now, assume that the most recently connected plugin is the
+                        // selected clock face. In the future, the user should be able to
+                        // pick a clock face from the available plugins.
                         mClockPlugin = plugin;
                         addView(view, -1,
                                 new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -46,10 +52,8 @@ public class KeyguardClockSwitch extends FrameLayout {
 
                 @Override
                 public void onPluginDisconnected(ClockPlugin plugin) {
-                    View view = plugin.getView();
-                    if (view != null) {
-                        mClockPlugin = null;
-                        removeView(view);
+                    if (Objects.equals(plugin, mClockPlugin)) {
+                        disconnectPlugin();
                         mClockView.setVisibility(View.VISIBLE);
                     }
                 }
@@ -122,6 +126,16 @@ public class KeyguardClockSwitch extends FrameLayout {
         mClockView.setFormat24Hour(format);
     }
 
+    /**
+     * Set the amount (ratio) that the device has transitioned to doze.
+     * @param darkAmount Amount of transition to doze: 1f for doze and 0f for awake.
+     */
+    public void setDarkAmount(float darkAmount) {
+        if (mClockPlugin != null) {
+            mClockPlugin.setDarkAmount(darkAmount);
+        }
+    }
+
     public Paint getPaint() {
         return mClockView.getPaint();
     }
@@ -139,12 +153,31 @@ public class KeyguardClockSwitch extends FrameLayout {
     }
 
     /**
+     * Notifies that time tick alarm from doze service fired.
+     */
+    public void dozeTimeTick() {
+        if (mClockPlugin != null) {
+            mClockPlugin.dozeTimeTick();
+        }
+    }
+
+    /**
      * When plugin changes, set all kept parameters into newer plugin.
      */
     private void initPluginParams() {
         if (mClockPlugin != null) {
             mClockPlugin.setStyle(getPaint().getStyle());
             mClockPlugin.setTextColor(getCurrentTextColor());
+        }
+    }
+
+    private void disconnectPlugin() {
+        if (mClockPlugin != null) {
+            View view = mClockPlugin.getView();
+            if (view != null) {
+                removeView(view);
+            }
+            mClockPlugin = null;
         }
     }
 

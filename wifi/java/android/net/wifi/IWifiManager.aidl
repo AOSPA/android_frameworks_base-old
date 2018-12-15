@@ -25,6 +25,7 @@ import android.net.wifi.hotspot2.IProvisioningCallback;
 
 import android.net.DhcpInfo;
 import android.net.Network;
+import android.net.wifi.INetworkRequestMatchCallback;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.PasspointManagementObjectDefinition;
@@ -33,6 +34,7 @@ import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiDppConfig;
+import android.net.wifi.WifiNetworkSuggestion;
 
 import android.os.Messenger;
 import android.os.ResultReceiver;
@@ -61,11 +63,9 @@ interface IWifiManager
 
     ParceledListSlice getPrivilegedConfiguredNetworks();
 
-    WifiConfiguration getMatchingWifiConfig(in ScanResult scanResult);
+    List<WifiConfiguration> getAllMatchingWifiConfigs(in List<ScanResult> scanResult);
 
-    List<WifiConfiguration> getAllMatchingWifiConfigs(in ScanResult scanResult);
-
-    List<OsuProvider> getMatchingOsuProviders(in ScanResult scanResult);
+    List<OsuProvider> getMatchingOsuProviders(in List<ScanResult> scanResult);
 
     int addOrUpdateNetwork(in WifiConfiguration config, String packageName);
 
@@ -214,5 +214,13 @@ interface IWifiManager
     boolean isWifiCoverageExtendFeatureEnabled();
 
     void enableWifiCoverageExtendFeature(boolean enable);
+
+    void registerNetworkRequestMatchCallback(in IBinder binder, in INetworkRequestMatchCallback callback, int callbackIdentifier);
+
+    void unregisterNetworkRequestMatchCallback(int callbackIdentifier);
+
+    boolean addNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
+
+    boolean removeNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
 }
 

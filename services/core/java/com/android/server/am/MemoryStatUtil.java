@@ -16,13 +16,15 @@
 
 package com.android.server.am;
 
-import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_METRICS;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_METRICS;
 
 import android.annotation.Nullable;
 import android.os.FileUtils;
 import android.os.SystemProperties;
+import android.system.Os;
+import android.system.OsConstants;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -36,14 +38,14 @@ import java.util.regex.Pattern;
 /**
  * Static utility methods related to {@link MemoryStat}.
  */
-final class MemoryStatUtil {
+public final class MemoryStatUtil {
     /**
      * Which native processes to create {@link MemoryStat} for.
      *
      * <p>Processes are matched by their cmdline in procfs. Example: cat /proc/pid/cmdline returns
      * /system/bin/statsd for the stats daemon.
      */
-    static final String[] MEMORY_STAT_INTERESTING_NATIVE_PROCESSES = new String[]{
+    public static final String[] MEMORY_STAT_INTERESTING_NATIVE_PROCESSES = new String[]{
             "/system/bin/statsd",  // Stats daemon.
             "/system/bin/surfaceflinger",
             "/system/bin/apexd",  // APEX daemon.
@@ -71,6 +73,7 @@ final class MemoryStatUtil {
 
     static final int BYTES_IN_KILOBYTE = 1024;
     static final int PAGE_SIZE = 4096;
+    static final long JIFFY_NANOS = 1_000_000_000 / Os.sysconf(OsConstants._SC_CLK_TCK);
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "MemoryStatUtil" : TAG_AM;
 
@@ -103,6 +106,7 @@ final class MemoryStatUtil {
 
     private static final int PGFAULT_INDEX = 9;
     private static final int PGMAJFAULT_INDEX = 11;
+    private static final int START_TIME_INDEX = 21;
     private static final int RSS_IN_PAGES_INDEX = 23;
 
     private MemoryStatUtil() {}
@@ -114,7 +118,7 @@ final class MemoryStatUtil {
      * Returns null if no stats can be read.
      */
     @Nullable
-    static MemoryStat readMemoryStatFromFilesystem(int uid, int pid) {
+    public static MemoryStat readMemoryStatFromFilesystem(int uid, int pid) {
         return hasMemcg() ? readMemoryStatFromMemcg(uid, pid) : readMemoryStatFromProcfs(pid);
     }
 
@@ -142,7 +146,7 @@ final class MemoryStatUtil {
      * Returns null if file is not found in procfs or if file has unrecognized contents.
      */
     @Nullable
-    static MemoryStat readMemoryStatFromProcfs(int pid) {
+    public static MemoryStat readMemoryStatFromProcfs(int pid) {
         final String statPath = String.format(Locale.US, PROC_STAT_FILE_FMT, pid);
         MemoryStat stat = parseMemoryStatFromProcfs(readFileContents(statPath));
         if (stat == null) {
@@ -159,7 +163,7 @@ final class MemoryStatUtil {
      * Returns content of /proc/pid/cmdline (e.g. /system/bin/statsd) or an empty string
      * if the file is not available.
      */
-    static String readCmdlineFromProcfs(int pid) {
+    public static String readCmdlineFromProcfs(int pid) {
         String path = String.format(Locale.US, PROC_CMDLINE_FILE_FMT, pid);
         String cmdline = readFileContents(path);
         return cmdline != null ? cmdline : "";
@@ -238,6 +242,7 @@ final class MemoryStatUtil {
             memoryStat.pgfault = Long.parseLong(splits[PGFAULT_INDEX]);
             memoryStat.pgmajfault = Long.parseLong(splits[PGMAJFAULT_INDEX]);
             memoryStat.rssInBytes = Long.parseLong(splits[RSS_IN_PAGES_INDEX]) * PAGE_SIZE;
+            memoryStat.startTimeNanos = Long.parseLong(splits[START_TIME_INDEX]) * JIFFY_NANOS;
             return memoryStat;
         } catch (NumberFormatException e) {
             Slog.e(TAG, "Failed to parse value", e);
@@ -266,18 +271,20 @@ final class MemoryStatUtil {
         return DEVICE_HAS_PER_APP_MEMCG;
     }
 
-    static final class MemoryStat {
+    public static final class MemoryStat {
         /** Number of page faults */
-        long pgfault;
+        public long pgfault;
         /** Number of major page faults */
-        long pgmajfault;
+        public long pgmajfault;
         /** Number of bytes of anonymous and swap cache memory */
-        long rssInBytes;
+        public long rssInBytes;
         /** Number of bytes of page cache memory */
-        long cacheInBytes;
+        public long cacheInBytes;
         /** Number of bytes of swap usage */
-        long swapInBytes;
+        public long swapInBytes;
         /** Number of bytes of peak anonymous and swap cache memory */
-        long rssHighWatermarkInBytes;
+        public long rssHighWatermarkInBytes;
+        /** Device time when the processes started. */
+        public long startTimeNanos;
     }
 }

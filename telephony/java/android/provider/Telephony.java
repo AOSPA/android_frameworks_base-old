@@ -16,6 +16,7 @@
 
 package android.provider;
 
+import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
@@ -1278,6 +1279,58 @@ public final class Telephony {
             @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
             public static final String ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL =
                     "android.provider.action.DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL";
+
+            /**
+             * Broadcast action: When SMS-MMS db is being created. If file-based encryption is
+             * supported, this broadcast indicates creation of the db in credential-encrypted
+             * storage. A boolean is specified in {@link #EXTRA_IS_INITIAL_CREATE} to indicate if
+             * this is the initial create of the db. Requires
+             * {@link android.Manifest.permission#READ_SMS} to receive.
+             *
+             * @see #EXTRA_IS_INITIAL_CREATE
+             *
+             * @hide
+             */
+            @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+            public static final String ACTION_SMS_MMS_DB_CREATED =
+                    "android.provider.action.SMS_MMS_DB_CREATED";
+
+            /**
+             * Boolean flag passed as an extra with {@link #ACTION_SMS_MMS_DB_CREATED} to indicate
+             * whether the DB creation is the initial creation on the device, that is it is after a
+             * factory-data reset or a new device. Any subsequent creations of the DB (which
+             * happens only in error scenarios) will have this flag set to false.
+             *
+             * @see #ACTION_SMS_MMS_DB_CREATED
+             *
+             * @hide
+             */
+            public static final String EXTRA_IS_INITIAL_CREATE =
+                    "android.provider.extra.IS_INITIAL_CREATE";
+
+            /**
+             * Broadcast intent action indicating that the telephony provider SMS MMS database is
+             * corrupted. A boolean is specified in {@link #EXTRA_IS_CORRUPTED} to indicate if the
+             * database is corrupted. Requires the
+             * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE permission.
+             *
+             * @hide
+             */
+            @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+            @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+            public static final String ACTION_SMS_MMS_DB_LOST =
+                    "android.provider.action.SMS_MMS_DB_LOST";
+
+            /**
+             * Boolean flag passed as an extra with {@link #ACTION_SMS_MMS_DB_LOST} to indicate
+             * whether the DB got corrupted or not.
+             *
+             * @see #ACTION_SMS_MMS_DB_LOST
+             *
+             * @hide
+             */
+            public static final String EXTRA_IS_CORRUPTED =
+                    "android.provider.extra.IS_CORRUPTED";
 
             /**
              * Read the PDUs out of an {@link #SMS_RECEIVED_ACTION} or a
@@ -2754,6 +2807,13 @@ public final class Telephony {
                 "content://telephony/carriers/enforce_managed");
 
         /**
+         * The {@code content://} style URL to be called from Telephony to query current APNs.
+         * @hide
+         */
+        public static final Uri SIM_APN_LIST = Uri.parse(
+                "content://telephony/carriers/sim_apn_list");
+
+        /**
          * The column name for ENFORCE_MANAGED_URI, indicates whether DPC-owned APNs are enforced.
          * @hide
          */
@@ -3109,6 +3169,13 @@ public final class Telephony {
          */
         @SystemApi
         public static final int NO_SET_SET = 0;
+
+        /**
+         * A unique carrier id associated with this APN
+         * {@see TelephonyManager#getSimCarrierId()}
+         * <p>Type: STRING</p>
+         */
+        public static final String CARRIER_ID = "carrier_id";
 
     }
 
@@ -3597,6 +3664,27 @@ public final class Telephony {
         }
 
         /**
+         * Generates a content {@link Uri} used to receive updates on precise carrier identity
+         * change on the given subscriptionId
+         * {@link TelephonyManager#ACTION_SUBSCRIPTION_PRECISE_CARRIER_IDENTITY_CHANGED}.
+         * <p>
+         * Use this {@link Uri} with a {@link ContentObserver} to be notified of changes to the
+         * precise carrier identity {@link TelephonyManager#getSimPreciseCarrierId()}
+         * while your app is running. You can also use a {@link JobService} to ensure your app
+         * is notified of changes to the {@link Uri} even when it is not running.
+         * Note, however, that using a {@link JobService} does not guarantee timely delivery of
+         * updates to the {@link Uri}.
+         *
+         * @param subscriptionId the subscriptionId to receive updates on
+         * @return the Uri used to observe precise carrier identity changes
+         * @hide
+         */
+        public static Uri getPreciseCarrierIdUriForSubscriptionId(int subscriptionId) {
+            return Uri.withAppendedPath(Uri.withAppendedPath(CONTENT_URI, "precise"),
+                    String.valueOf(subscriptionId));
+        }
+
+        /**
          * A user facing carrier name.
          * @see TelephonyManager#getSimCarrierIdName()
          * <P>Type: TEXT </P>
@@ -3609,6 +3697,35 @@ public final class Telephony {
          * <P>Type: INTEGER </P>
          */
         public static final String CARRIER_ID = "carrier_id";
+
+        /**
+         * A user facing carrier name for precise carrier id.
+         * @see TelephonyManager#getSimPreciseCarrierIdName()
+         * This is not a database column, only used to notify content observers for
+         * {@link #getPreciseCarrierIdUriForSubscriptionId(int)}
+         * @hide
+         */
+        public static final String PRECISE_CARRIER_ID_NAME = "precise_carrier_id_name";
+
+        /**
+         * A fine-grained carrier id.
+         * @see TelephonyManager#getSimPreciseCarrierId()
+         * This is not a database column, only used to notify content observers for
+         * {@link #getPreciseCarrierIdUriForSubscriptionId(int)}
+         * @hide
+         */
+        public static final String PRECISE_CARRIER_ID = "precise_carrier_id";
+
+        /**
+         * A unique parent carrier id. The parent-child
+         * relationship can be used to further differentiate a single carrier by different networks,
+         * by prepaid v.s. postpaid or even by 4G v.s. 3G plan. It's an optional field.
+         * A carrier id with a valid parent_carrier_id is considered fine-grained carrier id, will
+         * not be returned as {@link #CARRIER_ID} but {@link #PRECISE_CARRIER_ID}.
+         * <P>Type: INTEGER </P>
+         * @hide
+         */
+        public static final String PARENT_CARRIER_ID = "parent_carrier_id";
 
         /**
          * A unique mno carrier id. mno carrier shares the same {@link All#MCCMNC} as carrier id

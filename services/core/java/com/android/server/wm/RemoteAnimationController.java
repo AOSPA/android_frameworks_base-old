@@ -182,7 +182,7 @@ class RemoteAnimationController implements DeathRecipient {
         if (DEBUG_REMOTE_ANIMATIONS) Slog.d(TAG, "onAnimationFinished(): mPendingAnimations="
                 + mPendingAnimations.size());
         mHandler.removeCallbacks(mTimeoutRunnable);
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             unlinkToDeathOfRunner();
             releaseFinishedCallback();
             mService.openSurfaceTransaction();
@@ -317,7 +317,7 @@ class RemoteAnimationController implements DeathRecipient {
         }
 
         private int getMode() {
-            if (mService.mOpeningApps.contains(mAppWindowToken)) {
+            if (mAppWindowToken.getDisplayContent().mOpeningApps.contains(mAppWindowToken)) {
                 return RemoteAnimationTarget.MODE_OPENING;
             } else {
                 return RemoteAnimationTarget.MODE_CLOSING;

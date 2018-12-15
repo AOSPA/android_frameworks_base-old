@@ -137,6 +137,17 @@ public class ActivityManager {
     private static final int FIRST_START_NON_FATAL_ERROR_CODE = 100;
     private static final int LAST_START_NON_FATAL_ERROR_CODE = 199;
 
+    /**
+     * Disable hidden API checks for the newly started instrumentation.
+     * @hide
+     */
+    public static final int INSTR_FLAG_DISABLE_HIDDEN_API_CHECKS = 1 << 0;
+    /**
+     * Mount full external storage for the newly started instrumentation.
+     * @hide
+     */
+    public static final int INSTR_FLAG_MOUNT_EXTERNAL_STORAGE_FULL = 1 << 1;
+
     static final class UidObserver extends IUidObserver.Stub {
         final OnUidImportanceListener mListener;
         final Context mContext;
@@ -1740,6 +1751,8 @@ public class ActivityManager {
      */
     public static class TaskSnapshot implements Parcelable {
 
+        // Top activity in task when snapshot was taken
+        private final ComponentName mTopActivityComponent;
         private final GraphicBuffer mSnapshot;
         private final int mOrientation;
         private final Rect mContentInsets;
@@ -1754,9 +1767,11 @@ public class ActivityManager {
         private final int mSystemUiVisibility;
         private final boolean mIsTranslucent;
 
-        public TaskSnapshot(GraphicBuffer snapshot, int orientation, Rect contentInsets,
-                boolean reducedResolution, float scale, boolean isRealSnapshot, int windowingMode,
-                int systemUiVisibility, boolean isTranslucent) {
+        public TaskSnapshot(@NonNull ComponentName topActivityComponent, GraphicBuffer snapshot,
+                int orientation, Rect contentInsets, boolean reducedResolution, float scale,
+                boolean isRealSnapshot, int windowingMode, int systemUiVisibility,
+                boolean isTranslucent) {
+            mTopActivityComponent = topActivityComponent;
             mSnapshot = snapshot;
             mOrientation = orientation;
             mContentInsets = new Rect(contentInsets);
@@ -1769,6 +1784,7 @@ public class ActivityManager {
         }
 
         private TaskSnapshot(Parcel source) {
+            mTopActivityComponent = ComponentName.readFromParcel(source);
             mSnapshot = source.readParcelable(null /* classLoader */);
             mOrientation = source.readInt();
             mContentInsets = source.readParcelable(null /* classLoader */);
@@ -1778,6 +1794,13 @@ public class ActivityManager {
             mWindowingMode = source.readInt();
             mSystemUiVisibility = source.readInt();
             mIsTranslucent = source.readBoolean();
+        }
+
+        /**
+         * @return The top activity component for the task at the point this snapshot was taken.
+         */
+        public ComponentName getTopActivityComponent() {
+            return mTopActivityComponent;
         }
 
         /**
@@ -1860,6 +1883,7 @@ public class ActivityManager {
 
         @Override
         public void writeToParcel(Parcel dest, int flags) {
+            ComponentName.writeToParcel(mTopActivityComponent, dest);
             dest.writeParcelable(mSnapshot, 0);
             dest.writeInt(mOrientation);
             dest.writeParcelable(mContentInsets, 0);
@@ -1875,7 +1899,9 @@ public class ActivityManager {
         public String toString() {
             final int width = mSnapshot != null ? mSnapshot.getWidth() : 0;
             final int height = mSnapshot != null ? mSnapshot.getHeight() : 0;
-            return "TaskSnapshot{mSnapshot=" + mSnapshot + " (" + width + "x" + height + ")"
+            return "TaskSnapshot{"
+                    + " mTopActivityComponent=" + mTopActivityComponent.flattenToShortString()
+                    + " mSnapshot=" + mSnapshot + " (" + width + "x" + height + ")"
                     + " mOrientation=" + mOrientation
                     + " mContentInsets=" + mContentInsets.toShortString()
                     + " mReducedResolution=" + mReducedResolution + " mScale=" + mScale

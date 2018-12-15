@@ -22,6 +22,7 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Process;
 import android.os.ServiceManager;
+import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.view.IWindowManager;
@@ -33,31 +34,40 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.Preconditions;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
+import com.android.systemui.appops.AppOpsController;
+import com.android.systemui.appops.AppOpsControllerImpl;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.ActivityStarter;
-import com.android.systemui.plugins.PluginInitializerImpl;
 import com.android.systemui.plugins.PluginDependencyProvider;
-import com.android.systemui.shared.plugins.PluginManager;
-import com.android.systemui.shared.plugins.PluginManagerImpl;
+import com.android.systemui.plugins.PluginInitializerImpl;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
 import com.android.systemui.power.PowerNotificationWarnings;
 import com.android.systemui.power.PowerUI;
-import com.android.systemui.statusbar.notification.AppOpsListener;
+import com.android.systemui.recents.OverviewProxyService;
+import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.shared.plugins.PluginManagerImpl;
+import com.android.systemui.statusbar.DisplayNavigationBarController;
+import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.VibratorHelper;
+import com.android.systemui.statusbar.notification.NotificationData.KeyguardEnvironment;
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
 import com.android.systemui.statusbar.phone.DarkIconDispatcherImpl;
+import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.ManagedProfileControllerImpl;
+import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarIconControllerImpl;
+import com.android.systemui.statusbar.phone.StatusBarRemoteInputCallback;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.AccessibilityController;
 import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
@@ -286,7 +296,7 @@ public class Dependency extends SystemUI {
                 new WakefulnessLifecycle());
 
         mProviders.put(FragmentService.class, () ->
-                new FragmentService(mContext));
+                new FragmentService());
 
         mProviders.put(ExtensionController.class, () ->
                 new ExtensionControllerImpl(mContext));
@@ -295,7 +305,8 @@ public class Dependency extends SystemUI {
                 new PluginDependencyProvider(get(PluginManager.class)));
 
         mProviders.put(LocalBluetoothManager.class, () ->
-                LocalBluetoothManager.create(mContext, getDependency(BG_HANDLER)));
+                LocalBluetoothManager.create(mContext, getDependency(BG_HANDLER),
+                        UserHandle.ALL));
 
         mProviders.put(VolumeDialogController.class, () ->
                 new VolumeDialogControllerImpl(mContext));
@@ -330,8 +341,6 @@ public class Dependency extends SystemUI {
 
         mProviders.put(EnhancedEstimates.class, () -> new EnhancedEstimatesImpl());
 
-        mProviders.put(AppOpsListener.class, () -> new AppOpsListener(mContext));
-
         mProviders.put(VibratorHelper.class, () -> new VibratorHelper(mContext));
 
         mProviders.put(IStatusBarService.class, () -> IStatusBarService.Stub.asInterface(
@@ -342,6 +351,20 @@ public class Dependency extends SystemUI {
         mProviders.put(DisplayMetrics.class, () -> new DisplayMetrics());
 
         mProviders.put(LockscreenGestureLogger.class, () -> new LockscreenGestureLogger());
+
+        mProviders.put(KeyguardEnvironment.class, () -> new KeyguardEnvironmentImpl());
+        mProviders.put(ShadeController.class, () ->
+                SysUiServiceProvider.getComponent(mContext, StatusBar.class));
+        mProviders.put(NotificationRemoteInputManager.Callback.class,
+                () -> new StatusBarRemoteInputCallback(mContext));
+
+        mProviders.put(InitController.class, InitController::new);
+
+        mProviders.put(AppOpsController.class, () ->
+                new AppOpsControllerImpl(mContext, getDependency(BG_LOOPER)));
+
+        mProviders.put(DisplayNavigationBarController.class, () ->
+                new DisplayNavigationBarController(mContext, getDependency(MAIN_HANDLER)));
 
         // Put all dependencies above here so the factory can override them if it wants.
         SystemUIFactory.getInstance().injectDependencies(mProviders, mContext);

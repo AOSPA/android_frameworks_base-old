@@ -30,6 +30,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager.TaskSnapshot;
+import android.content.ComponentName;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.GraphicBuffer;
@@ -39,21 +40,19 @@ import android.platform.test.annotations.Presubmit;
 import android.view.Surface;
 
 import androidx.test.filters.SmallTest;
-import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.wm.TaskSnapshotSurface.Window;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
 /**
  * Test class for {@link TaskSnapshotSurface}.
  *
- * runtest frameworks-services -c com.android.server.wm.TaskSnapshotSurfaceTest
+ * Build/Install/Run:
+ *  atest FrameworksServicesTests:TaskSnapshotSurfaceTest
  */
 @SmallTest
 @Presubmit
-@RunWith(AndroidJUnit4.class)
 public class TaskSnapshotSurfaceTest extends WindowTestsBase {
 
     private TaskSnapshotSurface mSurface;
@@ -62,10 +61,10 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
             int windowFlags, Rect taskBounds) {
         final GraphicBuffer buffer = GraphicBuffer.create(width, height, PixelFormat.RGBA_8888,
                 GraphicBuffer.USAGE_SW_READ_RARELY | GraphicBuffer.USAGE_SW_WRITE_NEVER);
-        final TaskSnapshot snapshot = new TaskSnapshot(buffer,
+        final TaskSnapshot snapshot = new TaskSnapshot(new ComponentName("", ""), buffer,
                 ORIENTATION_PORTRAIT, contentInsets, false, 1.0f, true /* isRealSnapshot */,
                 WINDOWING_MODE_FULLSCREEN, 0 /* systemUiVisibility */, false /* isTranslucent */);
-        mSurface = new TaskSnapshotSurface(sWm, new Window(), new Surface(), snapshot, "Test",
+        mSurface = new TaskSnapshotSurface(mWm, new Window(), new Surface(), snapshot, "Test",
                 Color.WHITE, Color.RED, Color.BLUE, sysuiVis, windowFlags, 0, taskBounds,
                 ORIENTATION_PORTRAIT);
     }
@@ -76,7 +75,7 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
     }
 
     @Test
-    public void fillEmptyBackground_fillHorizontally() throws Exception {
+    public void fillEmptyBackground_fillHorizontally() {
         setupSurface(200, 100);
         final Canvas mockCanvas = mock(Canvas.class);
         when(mockCanvas.getWidth()).thenReturn(200);
@@ -86,7 +85,7 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
     }
 
     @Test
-    public void fillEmptyBackground_fillVertically() throws Exception {
+    public void fillEmptyBackground_fillVertically() {
         setupSurface(100, 200);
         final Canvas mockCanvas = mock(Canvas.class);
         when(mockCanvas.getWidth()).thenReturn(100);
@@ -96,7 +95,7 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
     }
 
     @Test
-    public void fillEmptyBackground_fillBoth() throws Exception {
+    public void fillEmptyBackground_fillBoth() {
         setupSurface(200, 200);
         final Canvas mockCanvas = mock(Canvas.class);
         when(mockCanvas.getWidth()).thenReturn(200);
@@ -107,7 +106,7 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
     }
 
     @Test
-    public void fillEmptyBackground_dontFill_sameSize() throws Exception {
+    public void fillEmptyBackground_dontFill_sameSize() {
         setupSurface(100, 100);
         final Canvas mockCanvas = mock(Canvas.class);
         when(mockCanvas.getWidth()).thenReturn(100);
@@ -117,7 +116,7 @@ public class TaskSnapshotSurfaceTest extends WindowTestsBase {
     }
 
     @Test
-    public void fillEmptyBackground_dontFill_bitmapLarger() throws Exception {
+    public void fillEmptyBackground_dontFill_bitmapLarger() {
         setupSurface(100, 100);
         final Canvas mockCanvas = mock(Canvas.class);
         when(mockCanvas.getWidth()).thenReturn(100);

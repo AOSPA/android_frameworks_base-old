@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License
+ * limitations under the License.
  */
 
 package com.android.server.wm;
@@ -40,6 +40,7 @@ import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doNothing;
@@ -53,7 +54,6 @@ import android.graphics.Rect;
 import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
 import android.util.DisplayMetrics;
-import android.util.SparseIntArray;
 import android.view.DisplayCutout;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -61,12 +61,10 @@ import android.view.Surface;
 
 import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
-import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,16 +76,15 @@ import java.util.List;
  * Tests for the {@link DisplayContent} class.
  *
  * Build/Install/Run:
- *  atest com.android.server.wm.DisplayContentTests
+ *  atest FrameworksServicesTests:DisplayContentTests
  */
 @SmallTest
 @Presubmit
-@RunWith(AndroidJUnit4.class)
 public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     @FlakyTest(bugId = 77772044)
-    public void testForAllWindows() throws Exception {
+    public void testForAllWindows() {
         final WindowState exitingAppWindow = createWindow(null, TYPE_BASE_APPLICATION,
                 mDisplayContent, "exiting app");
         final AppWindowToken exitingAppToken = exitingAppWindow.mAppToken;
@@ -108,11 +105,11 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testForAllWindows_WithAppImeTarget() throws Exception {
+    public void testForAllWindows_WithAppImeTarget() {
         final WindowState imeAppTarget =
                 createWindow(null, TYPE_BASE_APPLICATION, mDisplayContent, "imeAppTarget");
 
-        sWm.mInputMethodTarget = imeAppTarget;
+        mDisplayContent.mInputMethodTarget = imeAppTarget;
 
         assertForAllWindowsOrder(Arrays.asList(
                 mWallpaperWindow,
@@ -129,7 +126,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testForAllWindows_WithChildWindowImeTarget() throws Exception {
-        sWm.mInputMethodTarget = mChildAppWindowAbove;
+        mDisplayContent.mInputMethodTarget = mChildAppWindowAbove;
 
         assertForAllWindowsOrder(Arrays.asList(
                 mWallpaperWindow,
@@ -145,7 +142,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testForAllWindows_WithStatusBarImeTarget() throws Exception {
-        sWm.mInputMethodTarget = mStatusBarWindow;
+        mDisplayContent.mInputMethodTarget = mStatusBarWindow;
 
         assertForAllWindowsOrder(Arrays.asList(
                 mWallpaperWindow,
@@ -160,7 +157,7 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testForAllWindows_WithInBetweenWindowToken() throws Exception {
+    public void testForAllWindows_WithInBetweenWindowToken() {
         // This window is set-up to be z-ordered between some windows that go in the same token like
         // the nav bar and status bar.
         final WindowState voiceInteractionWindow = createWindow(null, TYPE_VOICE_INTERACTION,
@@ -180,7 +177,7 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testComputeImeTarget() throws Exception {
+    public void testComputeImeTarget() {
         // Verify that an app window can be an ime target.
         final WindowState appWin = createWindow(null, TYPE_APPLICATION, mDisplayContent, "appWin");
         appWin.setHasSurface(true);
@@ -203,7 +200,7 @@ public class DisplayContentTests extends WindowTestsBase {
      * container references updates.
      */
     @Test
-    public void testMoveStackBetweenDisplays() throws Exception {
+    public void testMoveStackBetweenDisplays() {
         // Create a second display.
         final DisplayContent dc = createNewDisplay();
 
@@ -233,8 +230,7 @@ public class DisplayContentTests extends WindowTestsBase {
      * This tests override configuration updates for display content.
      */
     @Test
-    public void testDisplayOverrideConfigUpdate() throws Exception {
-        final int displayId = mDisplayContent.getDisplayId();
+    public void testDisplayOverrideConfigUpdate() {
         final Configuration currentOverrideConfig = mDisplayContent.getOverrideConfiguration();
 
         // Create new, slightly changed override configuration and apply it to the display.
@@ -242,7 +238,7 @@ public class DisplayContentTests extends WindowTestsBase {
         newOverrideConfig.densityDpi += 120;
         newOverrideConfig.fontScale += 0.3;
 
-        sWm.setNewDisplayOverrideConfiguration(newOverrideConfig, displayId);
+        mWm.setNewDisplayOverrideConfiguration(newOverrideConfig, mDisplayContent);
 
         // Check that override config is applied.
         assertEquals(newOverrideConfig, mDisplayContent.getOverrideConfiguration());
@@ -252,24 +248,25 @@ public class DisplayContentTests extends WindowTestsBase {
      * This tests global configuration updates when default display config is updated.
      */
     @Test
-    public void testDefaultDisplayOverrideConfigUpdate() throws Exception {
-        final Configuration currentConfig = mDisplayContent.getConfiguration();
+    public void testDefaultDisplayOverrideConfigUpdate() {
+        DisplayContent defaultDisplay = mWm.mRoot.getDisplayContent(DEFAULT_DISPLAY);
+        final Configuration currentConfig = defaultDisplay.getConfiguration();
 
         // Create new, slightly changed override configuration and apply it to the display.
         final Configuration newOverrideConfig = new Configuration(currentConfig);
         newOverrideConfig.densityDpi += 120;
         newOverrideConfig.fontScale += 0.3;
 
-        sWm.setNewDisplayOverrideConfiguration(newOverrideConfig, DEFAULT_DISPLAY);
+        mWm.setNewDisplayOverrideConfiguration(newOverrideConfig, defaultDisplay);
 
         // Check that global configuration is updated, as we've updated default display's config.
-        Configuration globalConfig = sWm.mRoot.getConfiguration();
+        Configuration globalConfig = mWm.mRoot.getConfiguration();
         assertEquals(newOverrideConfig.densityDpi, globalConfig.densityDpi);
         assertEquals(newOverrideConfig.fontScale, globalConfig.fontScale, 0.1 /* delta */);
 
         // Return back to original values.
-        sWm.setNewDisplayOverrideConfiguration(currentConfig, DEFAULT_DISPLAY);
-        globalConfig = sWm.mRoot.getConfiguration();
+        mWm.setNewDisplayOverrideConfiguration(currentConfig, defaultDisplay);
+        globalConfig = mWm.mRoot.getConfiguration();
         assertEquals(currentConfig.densityDpi, globalConfig.densityDpi);
         assertEquals(currentConfig.fontScale, globalConfig.fontScale, 0.1 /* delta */);
     }
@@ -278,8 +275,8 @@ public class DisplayContentTests extends WindowTestsBase {
      * Tests tapping on a stack in different display results in window gaining focus.
      */
     @Test
-    public void testInputEventBringsCorrectDisplayInFocus() throws Exception {
-        DisplayContent dc0 = sWm.getDefaultDisplayContentLocked();
+    public void testInputEventBringsCorrectDisplayInFocus() {
+        DisplayContent dc0 = mWm.getDefaultDisplayContentLocked();
         // Create a second display
         final DisplayContent dc1 = createNewDisplay();
 
@@ -303,51 +300,51 @@ public class DisplayContentTests extends WindowTestsBase {
         // tap on primary display.
         tapOnDisplay(dc0);
         // Check focus is on primary display.
-        assertEquals(sWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus,
+        assertEquals(mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus,
                 dc0.findFocusedWindow());
 
         // Tap on secondary display.
         tapOnDisplay(dc1);
         // Check focus is on secondary.
-        assertEquals(sWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus,
+        assertEquals(mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus,
                 dc1.findFocusedWindow());
     }
 
     @Test
-    public void testFocusedWindowMultipleDisplays() throws Exception {
+    public void testFocusedWindowMultipleDisplays() {
         // Create a focusable window and check that focus is calculated correctly
         final WindowState window1 =
                 createWindow(null, TYPE_BASE_APPLICATION, mDisplayContent, "window1");
         updateFocusedWindow();
         assertTrue(window1.isFocused());
-        assertEquals(window1, sWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
+        assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
 
         // Check that a new display doesn't affect focus
         final DisplayContent dc = createNewDisplay();
         updateFocusedWindow();
         assertTrue(window1.isFocused());
-        assertEquals(window1, sWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
+        assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
 
         // Add a window to the second display, and it should be focused
         final WindowState window2 = createWindow(null, TYPE_BASE_APPLICATION, dc, "window2");
         updateFocusedWindow();
         assertTrue(window1.isFocused());
         assertTrue(window2.isFocused());
-        assertEquals(window2, sWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
+        assertEquals(window2, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
 
         // Move the first window to the to including parents, and make sure focus is updated
         window1.getParent().positionChildAt(POSITION_TOP, window1, true);
         updateFocusedWindow();
         assertTrue(window1.isFocused());
         assertTrue(window2.isFocused());
-        assertEquals(window1, sWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
+        assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
     }
 
     /**
      * This tests setting the maximum ui width on a display.
      */
     @Test
-    public void testMaxUiWidth() throws Exception {
+    public void testMaxUiWidth() {
         // Prevent base display metrics for test from being updated to the value of real display.
         final DisplayContent displayContent = createDisplayNoUpdateDisplayInfo();
         final int baseWidth = 1440;
@@ -439,8 +436,8 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testDisplayCutout_rot0() throws Exception {
-        synchronized (sWm.getWindowManagerLock()) {
+    public void testDisplayCutout_rot0() {
+        synchronized (mWm.getWindowManagerLock()) {
             final DisplayContent dc = createNewDisplay();
             dc.mInitialDisplayWidth = 200;
             dc.mInitialDisplayHeight = 400;
@@ -458,8 +455,8 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testDisplayCutout_rot90() throws Exception {
-        synchronized (sWm.getWindowManagerLock()) {
+    public void testDisplayCutout_rot90() {
+        synchronized (mWm.getWindowManagerLock()) {
             // Prevent mInitialDisplayCutout from being updated from real display (e.g. null
             // if the device has no cutout).
             final DisplayContent dc = createDisplayNoUpdateDisplayInfo();
@@ -476,7 +473,8 @@ public class DisplayContentTests extends WindowTestsBase {
 
             final Rect r1 = new Rect(left, top, right, bottom);
             final DisplayCutout cutout = new WmDisplayCutout(
-                    fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom, BOUNDS_POSITION_TOP), null)
+                    fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom, BOUNDS_POSITION_TOP),
+                    null)
                     .computeSafeInsets(displayWidth, displayHeight).getDisplayCutout();
 
             dc.mInitialDisplayCutout = cutout;
@@ -500,8 +498,8 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testLayoutSeq_assignedDuringLayout() throws Exception {
-        synchronized (sWm.getWindowManagerLock()) {
+    public void testLayoutSeq_assignedDuringLayout() {
+        synchronized (mWm.getWindowManagerLock()) {
 
             final DisplayContent dc = createNewDisplay();
             final WindowState win = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
@@ -533,7 +531,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals("Visible keyguard must influence device orientation",
                 SCREEN_ORIENTATION_PORTRAIT, dc.getOrientation());
 
-        sWm.setKeyguardGoingAway(true);
+        mWm.setKeyguardGoingAway(true);
         assertEquals("Keyguard that is going away must not influence device orientation",
                 SCREEN_ORIENTATION_LANDSCAPE, dc.getOrientation());
     }
@@ -543,10 +541,10 @@ public class DisplayContentTests extends WindowTestsBase {
         final DisplayContent dc = createNewDisplay();
 
         assertTrue(dc.mShouldOverrideDisplayConfiguration);
-        sWm.dontOverrideDisplayInfo(dc.getDisplayId());
+        mWm.dontOverrideDisplayInfo(dc.getDisplayId());
 
         assertFalse(dc.mShouldOverrideDisplayConfiguration);
-        verify(sWm.mDisplayManagerInternal, times(1))
+        verify(mWm.mDisplayManagerInternal, times(1))
                 .setDisplayInfoOverrideFromWindowManager(dc.getDisplayId(), null);
     }
 
@@ -571,8 +569,34 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(isOptionsPanelAtRight(landscapeDisplay.getDisplayId()));
     }
 
+    @Test
+    public void testInputMethodTargetUpdateWhenSwitchingOnDisplays() {
+        final DisplayContent newDisplay = createNewDisplay();
+
+        final WindowState appWin = createWindow(null, TYPE_APPLICATION, mDisplayContent, "appWin");
+        final WindowState appWin1 = createWindow(null, TYPE_APPLICATION, newDisplay, "appWin1");
+        appWin.setHasSurface(true);
+        appWin1.setHasSurface(true);
+
+        // Set current input method window on default display, make sure the input method target
+        // is appWin & null on the other display.
+        mDisplayContent.setInputMethodWindowLocked(mImeWindow);
+        newDisplay.setInputMethodWindowLocked(null);
+        assertTrue("appWin should be IME target window",
+                appWin.equals(mDisplayContent.mInputMethodTarget));
+        assertNull("newDisplay Ime target: ", newDisplay.mInputMethodTarget);
+
+        // Switch input method window on new display & make sure the input method target also
+        // switched as expected.
+        newDisplay.setInputMethodWindowLocked(mImeWindow);
+        mDisplayContent.setInputMethodWindowLocked(null);
+        assertTrue("appWin1 should be IME target window",
+                appWin1.equals(newDisplay.mInputMethodTarget));
+        assertNull("default display Ime target: ", mDisplayContent.mInputMethodTarget);
+    }
+
     private boolean isOptionsPanelAtRight(int displayId) {
-        return (sWm.getPreferredOptionsPanelGravity(displayId) & Gravity.RIGHT) == Gravity.RIGHT;
+        return (mWm.getPreferredOptionsPanelGravity(displayId) & Gravity.RIGHT) == Gravity.RIGHT;
     }
 
     private static void verifySizes(DisplayContent displayContent, int expectedBaseWidth,
@@ -583,8 +607,8 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     private void updateFocusedWindow() {
-        synchronized (sWm.mWindowMap) {
-            sWm.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false);
+        synchronized (mWm.mGlobalLock) {
+            mWm.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false);
         }
     }
 

@@ -29,13 +29,13 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.GraphicBuffer;
 import android.graphics.PixelFormat;
+import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
+import android.graphics.RenderNode;
 import android.os.Environment;
 import android.os.Handler;
 import android.util.ArraySet;
 import android.util.Slog;
-import android.view.DisplayListCanvas;
-import android.view.RenderNode;
 import android.view.SurfaceControl;
 import android.view.ThreadedRenderer;
 import android.view.WindowManager.LayoutParams;
@@ -129,8 +129,8 @@ class TaskSnapshotController {
         mPersister.start();
     }
 
-    void onTransitionStarting() {
-        handleClosingApps(mService.mClosingApps);
+    void onTransitionStarting(DisplayContent displayContent) {
+        handleClosingApps(displayContent.mClosingApps);
     }
 
     /**
@@ -290,9 +290,10 @@ class TaskSnapshotController {
             return null;
         }
         final boolean isWindowTranslucent = mainWindow.getAttrs().format != PixelFormat.OPAQUE;
-        return new TaskSnapshot(buffer, appWindowToken.getConfiguration().orientation,
-                getInsets(mainWindow), isLowRamDevice /* reduced */, scaleFraction /* scale */,
-                true /* isRealSnapshot */, task.getWindowingMode(), getSystemUiVisibility(task),
+        return new TaskSnapshot(appWindowToken.mActivityComponent, buffer,
+                appWindowToken.getConfiguration().orientation, getInsets(mainWindow),
+                isLowRamDevice /* reduced */, scaleFraction /* scale */, true /* isRealSnapshot */,
+                task.getWindowingMode(), getSystemUiVisibility(task),
                 !appWindowToken.fillsParent() || isWindowTranslucent);
     }
 
@@ -371,7 +372,7 @@ class TaskSnapshotController {
         final RenderNode node = RenderNode.create("TaskSnapshotController", null);
         node.setLeftTopRightBottom(0, 0, width, height);
         node.setClipToBounds(false);
-        final DisplayListCanvas c = node.start(width, height);
+        final RecordingCanvas c = node.start(width, height);
         c.drawColor(color);
         decorPainter.setInsets(mainWindow.getContentInsets(), mainWindow.getStableInsets());
         decorPainter.drawDecors(c, null /* statusBarExcludeFrame */);
@@ -382,7 +383,7 @@ class TaskSnapshotController {
         }
         // Note, the app theme snapshot is never translucent because we enforce a non-translucent
         // color above
-        return new TaskSnapshot(hwBitmap.createGraphicBufferHandle(),
+        return new TaskSnapshot(topChild.mActivityComponent, hwBitmap.createGraphicBufferHandle(),
                 topChild.getConfiguration().orientation, mainWindow.getStableInsets(),
                 ActivityManager.isLowRamDeviceStatic() /* reduced */, 1.0f /* scale */,
                 false /* isRealSnapshot */, task.getWindowingMode(), getSystemUiVisibility(task),
@@ -436,7 +437,7 @@ class TaskSnapshotController {
         // We can't take a snapshot when screen is off, so take a snapshot now!
         mHandler.post(() -> {
             try {
-                synchronized (mService.mWindowMap) {
+                synchronized (mService.mGlobalLock) {
                     mTmpTasks.clear();
                     mService.mRoot.forAllTasks(task -> {
                         if (task.isVisible()) {

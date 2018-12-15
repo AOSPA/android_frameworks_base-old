@@ -66,6 +66,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.WindowConfiguration;
 import android.content.Context;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
@@ -82,7 +83,6 @@ import android.view.IApplicationToken;
 import android.view.IWindowManager;
 import android.view.InputEventReceiver;
 import android.view.KeyEvent;
-import android.view.Surface;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.WindowManagerPolicyConstants;
@@ -436,6 +436,14 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
 
         /** @return the current windowing mode of this window. */
         int getWindowingMode();
+
+        /**
+         * Returns the {@link WindowConfiguration.ActivityType} associated with the configuration
+         * of this window.
+         */
+        default int getActivityType() {
+            return WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+        }
 
         /**
          * Returns true if the window is current in multi-windowing mode. i.e. it shares the
@@ -1481,26 +1489,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * requesting this is no longer visible.
      */
     public void keepScreenOnStoppedLw();
-
-    /**
-     * Gets the current user rotation mode.
-     *
-     * @return The rotation mode.
-     *
-     * @see #USER_ROTATION_LOCKED
-     * @see #USER_ROTATION_FREE
-     */
-    @UserRotationMode
-    public int getUserRotationMode();
-
-    /**
-     * Inform the policy that the user has chosen a preferred orientation ("rotation lock").
-     *
-     * @param mode One of {@link #USER_ROTATION_LOCKED} or {@link #USER_ROTATION_FREE}.
-     * @param rotation One of {@link Surface#ROTATION_0}, {@link Surface#ROTATION_90},
-     *                 {@link Surface#ROTATION_180}, {@link Surface#ROTATION_270}.
-     */
-    public void setUserRotationMode(@UserRotationMode int mode, @Surface.Rotation int rotation);
 
     /**
      * Called when a new system UI visibility is being reported, allowing

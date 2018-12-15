@@ -23,6 +23,7 @@ import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
 import android.app.job.IJobScheduler;
 import android.app.job.JobScheduler;
+import android.app.role.RoleManager;
 import android.app.slice.SliceManager;
 import android.app.timedetector.TimeDetector;
 import android.app.timezone.RulesManager;
@@ -48,6 +49,8 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
+import android.debug.AdbManager;
+import android.debug.IAdbManager;
 import android.hardware.ConsumerIrManager;
 import android.hardware.ISerialManager;
 import android.hardware.SensorManager;
@@ -64,6 +67,8 @@ import android.hardware.fingerprint.IFingerprintService;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.IHdmiControlService;
 import android.hardware.input.InputManager;
+import android.hardware.iris.IIrisService;
+import android.hardware.iris.IrisManager;
 import android.hardware.location.ContextHubManager;
 import android.hardware.radio.RadioManager;
 import android.hardware.usb.IUsbManager;
@@ -148,6 +153,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.euicc.EuiccCardManager;
 import android.telephony.euicc.EuiccManager;
+import android.telephony.rcs.RcsManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -159,6 +165,8 @@ import android.view.accessibility.CaptioningManager;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.IAutoFillManager;
 import android.view.inputmethod.InputMethodManager;
+import android.view.intelligence.IIntelligenceManager;
+import android.view.intelligence.IntelligenceManager;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textservice.TextServicesManager;
 
@@ -540,6 +548,14 @@ final class SystemServiceRegistry {
                 return new SubscriptionManager(ctx.getOuterContext());
             }});
 
+        registerService(Context.TELEPHONY_RCS_SERVICE, RcsManager.class,
+                new CachedServiceFetcher<RcsManager>() {
+                    @Override
+                    public RcsManager createService(ContextImpl ctx) {
+                        return new RcsManager();
+                    }
+                });
+
         registerService(Context.CARRIER_CONFIG_SERVICE, CarrierConfigManager.class,
                 new CachedServiceFetcher<CarrierConfigManager>() {
             @Override
@@ -582,6 +598,15 @@ final class SystemServiceRegistry {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.USB_SERVICE);
                 return new UsbManager(ctx, IUsbManager.Stub.asInterface(b));
             }});
+
+        registerService(Context.ADB_SERVICE, AdbManager.class,
+                new CachedServiceFetcher<AdbManager>() {
+                    @Override
+                    public AdbManager createService(ContextImpl ctx)
+                                throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(Context.ADB_SERVICE);
+                        return new AdbManager(ctx, IAdbManager.Stub.asInterface(b));
+                    }});
 
         registerService(Context.SERIAL_SERVICE, SerialManager.class,
                 new CachedServiceFetcher<SerialManager>() {
@@ -825,16 +850,34 @@ final class SystemServiceRegistry {
                     }
                 });
 
+        registerService(Context.IRIS_SERVICE, IrisManager.class,
+                new CachedServiceFetcher<IrisManager>() {
+                    @Override
+                    public IrisManager createService(ContextImpl ctx)
+                        throws ServiceNotFoundException {
+                        final IBinder binder =
+                                ServiceManager.getServiceOrThrow(Context.IRIS_SERVICE);
+                        IIrisService service = IIrisService.Stub.asInterface(binder);
+                        return new IrisManager(ctx.getOuterContext(), service);
+                    }
+                });
+
         registerService(Context.BIOMETRIC_SERVICE, BiometricManager.class,
                 new CachedServiceFetcher<BiometricManager>() {
                     @Override
                     public BiometricManager createService(ContextImpl ctx)
                             throws ServiceNotFoundException {
-                        final IBinder binder =
-                                ServiceManager.getServiceOrThrow(Context.BIOMETRIC_SERVICE);
-                        final IBiometricService service =
-                                IBiometricService.Stub.asInterface(binder);
-                        return new BiometricManager(ctx.getOuterContext(), service);
+                        if (BiometricManager.hasBiometrics(ctx)) {
+                            final IBinder binder =
+                                    ServiceManager.getServiceOrThrow(Context.BIOMETRIC_SERVICE);
+                            final IBiometricService service =
+                                    IBiometricService.Stub.asInterface(binder);
+                            return new BiometricManager(ctx.getOuterContext(), service);
+                        } else {
+                            // Allow access to the manager when service is null. This saves memory
+                            // on devices without biometric hardware.
+                            return new BiometricManager(ctx.getOuterContext(), null);
+                        }
                     }
                 });
 
@@ -1007,6 +1050,17 @@ final class SystemServiceRegistry {
                 return new AutofillManager(ctx.getOuterContext(), service);
             }});
 
+        registerService(Context.INTELLIGENCE_MANAGER_SERVICE, IntelligenceManager.class,
+                new CachedServiceFetcher<IntelligenceManager>() {
+            @Override
+            public IntelligenceManager createService(ContextImpl ctx)
+                    throws ServiceNotFoundException {
+                // Get the services without throwing as this is an optional feature
+                IBinder b = ServiceManager.getService(Context.INTELLIGENCE_MANAGER_SERVICE);
+                IIntelligenceManager service = IIntelligenceManager.Stub.asInterface(b);
+                return new IntelligenceManager(ctx.getOuterContext(), service);
+            }});
+
         registerService(Context.VR_SERVICE, VrManager.class, new CachedServiceFetcher<VrManager>() {
             @Override
             public VrManager createService(ContextImpl ctx) throws ServiceNotFoundException {
@@ -1075,6 +1129,14 @@ final class SystemServiceRegistry {
                     @Override
                     public PermissionManager createService(ContextImpl ctx) {
                         return new PermissionManager(ctx.getOuterContext());
+                    }});
+
+        registerService(Context.ROLE_SERVICE, RoleManager.class,
+                new CachedServiceFetcher<RoleManager>() {
+                    @Override
+                    public RoleManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new RoleManager(ctx.getOuterContext());
                     }});
     }
 

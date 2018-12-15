@@ -20,10 +20,10 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.util.TypedValue.COMPLEX_UNIT_DIP;
 
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.PinnedStackControllerProto.DEFAULT_BOUNDS;
 import static com.android.server.wm.PinnedStackControllerProto.MOVEMENT_BOUNDS;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.app.RemoteAction;
 import android.content.pm.ParceledListSlice;
@@ -142,7 +142,7 @@ class PinnedStackController {
 
         @Override
         public int getDisplayRotation() {
-            synchronized (mService.mWindowMap) {
+            synchronized (mService.mGlobalLock) {
                 return mDisplayInfo.rotation;
             }
         }
@@ -288,7 +288,7 @@ class PinnedStackController {
      * will apply the default bounds to the provided snap fraction.
      */
     Rect getDefaultBounds(float snapFraction) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             final Rect insetBounds = new Rect();
             getInsetBounds(insetBounds);
 
@@ -314,8 +314,8 @@ class PinnedStackController {
      * onTaskStackBoundsChanged() to be called.  But we still should update our known display info
      * with the new state so that we can update SystemUI.
      */
-    synchronized void onDisplayInfoChanged() {
-        mDisplayInfo.copyFrom(mDisplayContent.getDisplayInfo());
+    synchronized void onDisplayInfoChanged(DisplayInfo displayInfo) {
+        mDisplayInfo.copyFrom(displayInfo);
         notifyMovementBoundsChanged(false /* fromImeAdjustment */, false /* fromShelfAdjustment */);
     }
 
@@ -324,7 +324,7 @@ class PinnedStackController {
      * new orientation of the device if necessary.
      */
     boolean onTaskStackBoundsChanged(Rect targetBounds, Rect outBounds) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             final DisplayInfo displayInfo = mDisplayContent.getDisplayInfo();
             if (mDisplayInfo.equals(displayInfo)) {
                 // We are already in the right orientation, ignore
@@ -481,7 +481,7 @@ class PinnedStackController {
      */
     private void notifyMovementBoundsChanged(boolean fromImeAdjustment,
             boolean fromShelfAdjustment) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             if (mPinnedStackListener == null) {
                 return;
             }
@@ -513,7 +513,7 @@ class PinnedStackController {
      * @return the bounds on the screen that the PIP can be visible in.
      */
     private void getInsetBounds(Rect outRect) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             mService.mPolicy.getStableInsetsLw(mDisplayInfo.rotation, mDisplayInfo.logicalWidth,
                     mDisplayInfo.logicalHeight, mDisplayInfo.displayCutout, mTmpInsets);
             outRect.set(mTmpInsets.left + mScreenEdgeInsets.x, mTmpInsets.top + mScreenEdgeInsets.y,
@@ -527,7 +527,7 @@ class PinnedStackController {
      *         controller.
      */
     private Rect getMovementBounds(Rect stackBounds) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             return getMovementBounds(stackBounds, true /* adjustForIme */,
                     true /* adjustForShelf */);
         }
@@ -538,7 +538,7 @@ class PinnedStackController {
      *         controller.
      */
     private Rect getMovementBounds(Rect stackBounds, boolean adjustForIme, boolean adjustForShelf) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             final Rect movementBounds = new Rect();
             getInsetBounds(movementBounds);
 
@@ -554,7 +554,7 @@ class PinnedStackController {
      * Applies the minimized offsets to the given stack bounds.
      */
     private void applyMinimizedOffset(Rect stackBounds, Rect movementBounds) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             mTmpDisplaySize.set(mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight);
             mService.getStableInsetsLocked(mDisplayContent.getDisplayId(), mStableInsets);
             mSnapAlgorithm.applyMinimizedOffset(stackBounds, movementBounds, mTmpDisplaySize,

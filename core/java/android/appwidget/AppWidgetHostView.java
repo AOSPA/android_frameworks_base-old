@@ -17,9 +17,15 @@
 package android.appwidget;
 
 import android.annotation.UnsupportedAppUsage;
+import android.app.Activity;
+import android.app.ActivityOptions;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.LauncherActivityInfo;
+import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -30,6 +36,7 @@ import android.os.CancellationSignal;
 import android.os.Parcelable;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.Pair;
 import android.util.SparseArray;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -44,6 +51,8 @@ import android.widget.RemoteViews.OnClickHandler;
 import android.widget.RemoteViewsAdapter.RemoteAdapterConnectionCallback;
 import android.widget.TextView;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
@@ -615,6 +624,7 @@ public class AppWidgetHostView extends FrameLayout {
                     }
                 }
                 defaultView = inflater.inflate(layoutId, this, false);
+                defaultView.setOnClickListener(this::onDefaultViewClicked);
             } else {
                 Log.w(TAG, "can't inflate defaultView because mInfo is missing");
             }
@@ -634,6 +644,19 @@ public class AppWidgetHostView extends FrameLayout {
         return defaultView;
     }
 
+    private void onDefaultViewClicked(View view) {
+        if (mInfo != null) {
+            LauncherApps launcherApps = getContext().getSystemService(LauncherApps.class);
+            List<LauncherActivityInfo> activities = launcherApps.getActivityList(
+                    mInfo.provider.getPackageName(), mInfo.getProfile());
+            if (!activities.isEmpty()) {
+                LauncherActivityInfo ai = activities.get(0);
+                launcherApps.startMainActivity(ai.getComponentName(), ai.getUser(),
+                        RemoteViews.getSourceBounds(view), null);
+            }
+        }
+    }
+
     /**
      * Inflate and return a view that represents an error state.
      */
@@ -650,5 +673,40 @@ public class AppWidgetHostView extends FrameLayout {
     public void onInitializeAccessibilityNodeInfoInternal(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfoInternal(info);
         info.setClassName(AppWidgetHostView.class.getName());
+    }
+
+    /** @hide */
+    public ActivityOptions createSharedElementActivityOptions(
+            int[] sharedViewIds, String[] sharedViewNames, Intent fillInIntent) {
+        Context parentContext = getContext();
+        while ((parentContext instanceof ContextWrapper)
+                && !(parentContext instanceof Activity)) {
+            parentContext = ((ContextWrapper) parentContext).getBaseContext();
+        }
+        if (!(parentContext instanceof Activity)) {
+            return null;
+        }
+
+        List<Pair<View, String>> sharedElements = new ArrayList<>();
+        Bundle extras = new Bundle();
+
+        for (int i = 0; i < sharedViewIds.length; i++) {
+            View view = findViewById(sharedViewIds[i]);
+            if (view != null) {
+                sharedElements.add(Pair.create(view, sharedViewNames[i]));
+
+                extras.putParcelable(sharedViewNames[i], RemoteViews.getSourceBounds(view));
+            }
+        }
+
+        if (!sharedElements.isEmpty()) {
+            fillInIntent.putExtra(RemoteViews.EXTRA_SHARED_ELEMENT_BOUNDS, extras);
+            final ActivityOptions opts = ActivityOptions.makeSceneTransitionAnimation(
+                    (Activity) parentContext,
+                    sharedElements.toArray(new Pair[sharedElements.size()]));
+            opts.setPendingIntentLaunchFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            return opts;
+        }
+        return null;
     }
 }

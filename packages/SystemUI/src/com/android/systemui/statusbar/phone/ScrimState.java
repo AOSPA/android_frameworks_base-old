@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.phone;
 
 import android.graphics.Color;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.util.MathUtils;
 
@@ -49,6 +50,8 @@ public enum ScrimState {
                     // fade it out afterwards.
                     mBlankScreen = true;
                 }
+            } else if (previousState == ScrimState.KEYGUARD) {
+                mAnimationDuration = StackStateAnimator.ANIMATION_DURATION_WAKEUP;
             } else {
                 mAnimationDuration = ScrimController.ANIMATION_DURATION;
             }
@@ -59,8 +62,29 @@ public enum ScrimState {
         @Override
         public float getBehindAlpha(float busynessFactor) {
             return MathUtils.map(0 /* start */, 1 /* stop */,
-                   mScrimBehindAlphaKeyguard, ScrimController.GRADIENT_SCRIM_ALPHA_BUSY,
-                   busynessFactor);
+                    mScrimBehindAlphaKeyguard, ScrimController.GRADIENT_SCRIM_ALPHA_BUSY,
+                    busynessFactor);
+        }
+    },
+
+    /**
+     * On semi-awake lock screen.
+     */
+    DARK_KEYGUARD(7) {
+
+        @Override
+        public void prepare(ScrimState previousState) {
+            mBlankScreen = mDisplayRequiresBlanking && previousState != ScrimState.AOD;
+            mAnimationDuration = StackStateAnimator.ANIMATION_DURATION_WAKEUP;
+            String opacity = SystemProperties.get("persist.sysui.aod2_scrim_opacity", "0.8");
+            try {
+                mCurrentBehindAlpha = Float.parseFloat(opacity);
+            } catch (RuntimeException e) {
+                mCurrentBehindAlpha = ScrimController.GRADIENT_SCRIM_DARK_KEYGUARD;
+            }
+            mCurrentInFrontAlpha = 0;
+            mCurrentInFrontTint = Color.BLACK;
+            mCurrentBehindTint = Color.BLACK;
         }
     },
 

@@ -15,7 +15,10 @@
  */
 package com.android.server.pm;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -26,6 +29,7 @@ import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageParser;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ServiceInfo;
+import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
 import android.os.Bundle;
 import android.os.Parcel;
@@ -37,11 +41,11 @@ import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import libcore.io.IoUtils;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import libcore.io.IoUtils;
 
 import java.io.File;
 import java.lang.reflect.Array;
@@ -460,6 +464,7 @@ public class PackageParserTest {
         pkg.services.add(new PackageParser.Service(dummy, new ServiceInfo()));
         pkg.instrumentation.add(new PackageParser.Instrumentation(dummy, new InstrumentationInfo()));
         pkg.requestedPermissions.add("foo7");
+        pkg.implicitPermissions.add("foo25");
 
         pkg.protectedBroadcasts = new ArrayList<>();
         pkg.protectedBroadcasts.add("foo8");
@@ -487,6 +492,9 @@ public class PackageParserTest {
         pkg.usesOptionalLibraries.add("foo12");
 
         pkg.usesLibraryFiles = new String[] { "foo13"};
+
+        pkg.usesLibraryInfos = new ArrayList<>();
+        pkg.usesLibraryInfos.add(new SharedLibraryInfo(null, null, null, 0L, 0, null, null, null));
 
         pkg.mOriginalPackages = new ArrayList<>();
         pkg.mOriginalPackages.add("foo14");

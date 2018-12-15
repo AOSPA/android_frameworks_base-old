@@ -33,10 +33,9 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-
 import android.widget.LinearLayout;
+
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.keyguard.AlphaOptimizedLinearLayout;
 import com.android.settingslib.graph.SignalDrawable;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.StatusBarSignalPolicy.MobileIconState;

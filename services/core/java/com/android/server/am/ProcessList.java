@@ -18,7 +18,6 @@ package com.android.server.am;
 
 import static android.app.ActivityManager.PROCESS_STATE_CACHED_ACTIVITY;
 import static android.app.ActivityThread.PROC_START_SEQ_IDENT;
-import static android.content.pm.PackageManager.MATCH_DEBUG_TRIAGED_MISSING;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AUTO;
 import static android.os.Process.FIRST_ISOLATED_UID;
 import static android.os.Process.LAST_ISOLATED_UID;
@@ -28,6 +27,7 @@ import static android.os.Process.getFreeMemory;
 import static android.os.Process.getTotalMemory;
 import static android.os.Process.killProcessQuiet;
 import static android.os.Process.startWebView;
+import static android.os.storage.StorageManager.PROP_ISOLATED_STORAGE;
 
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_LRU;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_PROCESSES;
@@ -45,17 +45,6 @@ import static com.android.server.am.ActivityManagerService.TAG_PROCESSES;
 import static com.android.server.am.ActivityManagerService.TAG_PSS;
 import static com.android.server.am.ActivityManagerService.TAG_UID_OBSERVERS;
 
-import dalvik.system.VMRuntime;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.app.AppProtoEnums;
@@ -64,11 +53,14 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
+import android.content.res.Resources;
+import android.graphics.Point;
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.FactoryTest;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -77,6 +69,17 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.StrictMode;
 import android.os.SystemClock;
+import android.os.SystemProperties;
+import android.os.Trace;
+import android.os.UserHandle;
+import android.os.storage.StorageManagerInternal;
+import android.text.TextUtils;
+import android.util.EventLog;
+import android.util.LongSparseArray;
+import android.util.Slog;
+import android.util.SparseArray;
+import android.util.StatsLog;
+import android.view.Display;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -89,26 +92,30 @@ import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.Watchdog;
 import com.android.server.pm.dex.DexManager;
+import com.android.server.wm.ActivityServiceConnectionsHolder;
 import com.android.server.wm.WindowManagerService;
 
-import android.content.res.Resources;
-import android.graphics.Point;
-import android.os.SystemProperties;
-import android.net.LocalSocketAddress;
-import android.net.LocalSocket;
-import android.os.Trace;
-import android.os.UserHandle;
-import android.os.storage.StorageManagerInternal;
-import android.text.TextUtils;
-import android.util.EventLog;
-import android.util.LongSparseArray;
-import android.util.Slog;
-import android.util.SparseArray;
-import android.util.StatsLog;
-import android.view.Display;
+import dalvik.system.VMRuntime;
+
+import libcore.io.IoUtils;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Activity manager code dealing with processes.
+ *
+ * Method naming convention:
+ * <ul>
+ * <li> Methods suffixed with "LS" should be called within the {@link #sLmkdSocketLock} lock.
+ * </ul>
  */
 public final class ProcessList {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ProcessList" : TAG_AM;
@@ -206,7 +213,7 @@ public final class ProcessList {
     // Activity manager's version of Process.THREAD_GROUP_DEFAULT
     static final int SCHED_GROUP_DEFAULT = 2;
     // Activity manager's version of Process.THREAD_GROUP_TOP_APP
-    static final int SCHED_GROUP_TOP_APP = 3;
+    public static final int SCHED_GROUP_TOP_APP = 3;
     // Activity manager's version of Process.THREAD_GROUP_TOP_APP
     // Disambiguate between actual top app and processes bound to the top app
     static final int SCHED_GROUP_TOP_APP_BOUND = 4;
@@ -231,10 +238,12 @@ public final class ProcessList {
     // LMK_PROCPRIO <pid> <uid> <prio>
     // LMK_PROCREMOVE <pid>
     // LMK_PROCPURGE
+    // LMK_GETKILLCNT
     static final byte LMK_TARGET = 0;
     static final byte LMK_PROCPRIO = 1;
     static final byte LMK_PROCREMOVE = 2;
     static final byte LMK_PROCPURGE = 3;
+    static final byte LMK_GETKILLCNT = 4;
 
     ActivityManagerService mService = null;
 
@@ -270,8 +279,16 @@ public final class ProcessList {
 
     private boolean mHaveDisplaySize;
 
+    private static Object sLmkdSocketLock = new Object();
+
+    @GuardedBy("sLmkdSocketLock")
     private static LocalSocket sLmkdSocket;
+
+    @GuardedBy("sLmkdSocketLock")
     private static OutputStream sLmkdOutputStream;
+
+    @GuardedBy("sLmkdSocketLock")
+    private static InputStream sLmkdInputStream;
 
     /**
      * Temporary to avoid allocations.  Protected by main lock.
@@ -507,7 +524,7 @@ public final class ProcessList {
                 buf.putInt(mOomAdj[i]);
             }
 
-            writeLmkd(buf);
+            writeLmkd(buf, null);
             SystemProperties.set("sys.sysctl.extra_free_kbytes", Integer.toString(reserve));
         }
         // GB: 2048,3072,4096,6144,7168,8192
@@ -980,7 +997,7 @@ public final class ProcessList {
         buf.putInt(pid);
         buf.putInt(uid);
         buf.putInt(amt);
-        writeLmkd(buf);
+        writeLmkd(buf, null);
         long now = SystemClock.elapsedRealtime();
         if ((now-start) > 250) {
             Slog.w("ActivityManager", "SLOW OOM ADJ: " + (now-start) + "ms for pid " + pid
@@ -999,16 +1016,38 @@ public final class ProcessList {
         ByteBuffer buf = ByteBuffer.allocate(4 * 2);
         buf.putInt(LMK_PROCREMOVE);
         buf.putInt(pid);
-        writeLmkd(buf);
+        writeLmkd(buf, null);
     }
 
-    private static boolean openLmkdSocket() {
+    /*
+     * {@hide}
+     */
+    public static final Integer getLmkdKillCount(int min_oom_adj, int max_oom_adj) {
+        ByteBuffer buf = ByteBuffer.allocate(4 * 3);
+        ByteBuffer repl = ByteBuffer.allocate(4 * 2);
+        buf.putInt(LMK_GETKILLCNT);
+        buf.putInt(min_oom_adj);
+        buf.putInt(max_oom_adj);
+        if (writeLmkd(buf, repl)) {
+            int i = repl.getInt();
+            if (i != LMK_GETKILLCNT) {
+                Slog.e("ActivityManager", "Failed to get kill count, code mismatch");
+                return null;
+            }
+            return new Integer(repl.getInt());
+        }
+        return null;
+    }
+
+    @GuardedBy("sLmkdSocketLock")
+    private static boolean openLmkdSocketLS() {
         try {
             sLmkdSocket = new LocalSocket(LocalSocket.SOCKET_SEQPACKET);
             sLmkdSocket.connect(
                 new LocalSocketAddress("lmkd",
                         LocalSocketAddress.Namespace.RESERVED));
             sLmkdOutputStream = sLmkdSocket.getOutputStream();
+            sLmkdInputStream = sLmkdSocket.getInputStream();
         } catch (IOException ex) {
             Slog.w(TAG, "lowmemorykiller daemon socket open failed");
             sLmkdSocket = null;
@@ -1019,47 +1058,63 @@ public final class ProcessList {
     }
 
     // Never call directly, use writeLmkd() instead
-    private static boolean writeLmkdCommand(ByteBuffer buf) {
+    @GuardedBy("sLmkdSocketLock")
+    private static boolean writeLmkdCommandLS(ByteBuffer buf) {
         try {
             sLmkdOutputStream.write(buf.array(), 0, buf.position());
         } catch (IOException ex) {
             Slog.w(TAG, "Error writing to lowmemorykiller socket");
-
-            try {
-                sLmkdSocket.close();
-            } catch (IOException ex2) {
-            }
-
+            IoUtils.closeQuietly(sLmkdSocket);
             sLmkdSocket = null;
             return false;
         }
         return true;
     }
 
-    private static void writeLmkd(ByteBuffer buf) {
-
-        for (int i = 0; i < 3; i++) {
-            if (sLmkdSocket == null) {
-                if (openLmkdSocket() == false) {
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException ie) {
-                    }
-                    continue;
-                }
-
-                // Purge any previously registered pids
-                ByteBuffer purge_buf = ByteBuffer.allocate(4);
-                purge_buf.putInt(LMK_PROCPURGE);
-                if (writeLmkdCommand(purge_buf) == false) {
-                    // Write failed, skip the rest and retry
-                    continue;
-                }
+    // Never call directly, use writeLmkd() instead
+    @GuardedBy("sLmkdSocketLock")
+    private static boolean readLmkdReplyLS(ByteBuffer buf) {
+        int len;
+        try {
+            len = sLmkdInputStream.read(buf.array(), 0, buf.array().length);
+            if (len == buf.array().length) {
+                return true;
             }
-            if (writeLmkdCommand(buf)) {
-                return;
+        } catch (IOException ex) {
+            Slog.w(TAG, "Error reading from lowmemorykiller socket");
+        }
+
+        IoUtils.closeQuietly(sLmkdSocket);
+        sLmkdSocket = null;
+        return false;
+    }
+
+    private static boolean writeLmkd(ByteBuffer buf, ByteBuffer repl) {
+        synchronized (sLmkdSocketLock) {
+            for (int i = 0; i < 3; i++) {
+                if (sLmkdSocket == null) {
+                    if (openLmkdSocketLS() == false) {
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ie) {
+                        }
+                        continue;
+                    }
+
+                    // Purge any previously registered pids
+                    ByteBuffer purge_buf = ByteBuffer.allocate(4);
+                    purge_buf.putInt(LMK_PROCPURGE);
+                    if (writeLmkdCommandLS(purge_buf) == false) {
+                        // Write failed, skip the rest and retry
+                        continue;
+                    }
+                }
+                if (writeLmkdCommandLS(buf) && (repl == null || readLmkdReplyLS(repl))) {
+                    return true;
+                }
             }
         }
+        return false;
     }
 
     static void killProcessGroup(int uid, int pid) {
@@ -1182,7 +1237,8 @@ public final class ProcessList {
      */
     @GuardedBy("mService")
     boolean startProcessLocked(ProcessRecord app, String hostingType,
-            String hostingNameStr, boolean disableHiddenApiChecks, String abiOverride) {
+            String hostingNameStr, boolean disableHiddenApiChecks, boolean mountExtStorageFull,
+            String abiOverride) {
         if (app.pendingStart) {
             return true;
         }
@@ -1224,10 +1280,15 @@ public final class ProcessList {
                     final IPackageManager pm = AppGlobals.getPackageManager();
                     permGids = pm.getPackageGids(app.info.packageName,
                             MATCH_DIRECT_BOOT_AUTO, app.userId);
-                    StorageManagerInternal storageManagerInternal = LocalServices.getService(
-                            StorageManagerInternal.class);
-                    mountExternal = storageManagerInternal.getExternalStorageMountMode(uid,
-                            app.info.packageName);
+                    if (SystemProperties.getBoolean(PROP_ISOLATED_STORAGE, false)
+                            && mountExtStorageFull) {
+                        mountExternal = Zygote.MOUNT_EXTERNAL_FULL;
+                    } else {
+                        StorageManagerInternal storageManagerInternal = LocalServices.getService(
+                                StorageManagerInternal.class);
+                        mountExternal = storageManagerInternal.getExternalStorageMountMode(uid,
+                                app.info.packageName);
+                    }
                 } catch (RemoteException e) {
                     throw e.rethrowAsRuntimeException();
                 }
@@ -1250,6 +1311,7 @@ public final class ProcessList {
                 if (gids[0] == UserHandle.ERR_GID) gids[0] = gids[2];
                 if (gids[1] == UserHandle.ERR_GID) gids[1] = gids[2];
             }
+            app.mountMode = mountExternal;
             checkSlow(startTime, "startProcess: building args");
             if (mService.mAtmInternal.isFactoryTestProcess(app.getWindowProcessController())) {
                 uid = 0;
@@ -1301,8 +1363,7 @@ public final class ProcessList {
 
             if (!disableHiddenApiChecks && !mService.mHiddenApiBlacklist.isDisabled()) {
                 app.info.maybeUpdateHiddenApiEnforcementPolicy(
-                        mService.mHiddenApiBlacklist.getPolicyForPrePApps(),
-                        mService.mHiddenApiBlacklist.getPolicyForPApps());
+                        mService.mHiddenApiBlacklist.getPolicy());
                 @ApplicationInfo.HiddenApiEnforcementPolicy int policy =
                         app.info.getHiddenApiEnforcementPolicy();
                 int policyBits = (policy << Zygote.API_ENFORCEMENT_POLICY_SHIFT);
@@ -1482,7 +1543,7 @@ public final class ProcessList {
     final boolean startProcessLocked(ProcessRecord app,
             String hostingType, String hostingNameStr, String abiOverride) {
         return startProcessLocked(app, hostingType, hostingNameStr,
-                false /* disableHiddenApiChecks */, abiOverride);
+                false /* disableHiddenApiChecks */, false /* mountExtStorageFull */, abiOverride);
     }
 
     @GuardedBy("mService")
@@ -1911,7 +1972,7 @@ public final class ProcessList {
         }
         UidRecord uidRec = mService.mActiveUids.get(proc.uid);
         if (uidRec == null) {
-            uidRec = new UidRecord(proc.uid);
+            uidRec = new UidRecord(proc.uid, mService.mAtmInternal);
             // This is the first appearance of the uid, report it now!
             if (DEBUG_UID_OBSERVERS) Slog.i(TAG_UID_OBSERVERS,
                     "Creating new process uid: " + uidRec);
@@ -1923,7 +1984,7 @@ public final class ProcessList {
             uidRec.updateHasInternetPermission();
             mService.mActiveUids.put(proc.uid, uidRec);
             EventLogTags.writeAmUidRunning(uidRec.uid);
-            mService.noteUidProcessState(uidRec.uid, uidRec.curProcState);
+            mService.noteUidProcessState(uidRec.uid, uidRec.getCurProcState());
         }
         proc.uidRecord = uidRec;
 
@@ -1978,8 +2039,7 @@ public final class ProcessList {
             StatsLog.write(StatsLog.ISOLATED_UID_CHANGED, info.uid, uid,
                     StatsLog.ISOLATED_UID_CHANGED__EVENT__CREATED);
         }
-        final ProcessRecord r = new ProcessRecord(mService, info, proc, uid,
-                mService.getGlobalConfiguration());
+        final ProcessRecord r = new ProcessRecord(mService, info, proc, uid);
 
         if (!mService.mBooted && !mService.mBooting
                 && userId == UserHandle.USER_SYSTEM
@@ -2464,9 +2524,13 @@ public final class ProcessList {
                     currApp.importanceReasonImportance =
                             ActivityManager.RunningAppProcessInfo.procStateToImportance(
                                     app.adjSourceProcState);
-                } else if (app.adjSource instanceof ActivityRecord) {
-                    ActivityRecord r = (ActivityRecord)app.adjSource;
-                    if (r.app != null) currApp.importanceReasonPid = r.app.getPid();
+                } else if (app.adjSource instanceof ActivityServiceConnectionsHolder) {
+                    final ActivityServiceConnectionsHolder r =
+                            (ActivityServiceConnectionsHolder) app.adjSource;
+                    final int pid = r.getActivityPid();
+                    if (pid != -1) {
+                        currApp.importanceReasonPid = pid;
+                    }
                 }
                 if (app.adjTarget instanceof ComponentName) {
                     currApp.importanceReasonComponent = (ComponentName)app.adjTarget;

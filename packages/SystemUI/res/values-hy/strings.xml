@@ -21,14 +21,6 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" msgid="7164937344850004466">"Համակարգային UI"</string>
     <string name="status_bar_clear_all_button" msgid="7774721344716731603">"Մաքրել"</string>
-    <string name="status_bar_recent_remove_item_title" msgid="6026395868129852968">"Հեռացնել ցանկից"</string>
-    <string name="status_bar_recent_inspect_item_title" msgid="7793624864528818569">"Տեղեկություններ ծրագրի մասին"</string>
-    <string name="status_bar_no_recent_apps" msgid="7374907845131203189">"Ձեր վերջին էկրանները տեսանելի են այստեղ"</string>
-    <string name="status_bar_accessibility_dismiss_recents" msgid="4576076075226540105">"Անտեսել վերջին ծրագրերը"</string>
-    <plurals name="status_bar_accessibility_recent_apps" formatted="false" msgid="9138535907802238759">
-      <item quantity="one">Համատեսքում ցուցադրված է %d էկրան</item>
-      <item quantity="other">Համատեսքում ցուցադրված է %d էկրան</item>
-    </plurals>
     <string name="status_bar_no_notifications_title" msgid="4755261167193833213">"Ծանուցումներ չկան"</string>
     <string name="status_bar_ongoing_events_title" msgid="1682504513316879202">"Ընթացիկ"</string>
     <string name="status_bar_latest_events_title" msgid="6594767438577593172">"Ծանուցումներ"</string>
@@ -78,6 +70,22 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="3637758096565605541">"Փորձեք նորից"</string>
     <string name="screenshot_failed_to_save_text" msgid="3041612585107107310">"Չհաջողվեց պահել սքրինշոթը անբավարար հիշողության պատճառով"</string>
     <string name="screenshot_failed_to_capture_text" msgid="173674476457581486">"Հավելվածը կամ ձեր կազմակերպությունը չի թույլատրում սքրինշոթի ստացումը"</string>
+    <string name="screenrecord_name" msgid="4196719243134204796">"Էկրանի տեսագրում"</string>
+    <string name="screenrecord_channel_description" msgid="4630777331970993858">"Էկրանի տեսագրման աշխատաշրջանի ընթացիկ ծանուցում"</string>
+    <string name="screenrecord_start_label" msgid="5177739269492196055">"Սկսել տեսագրումը"</string>
+    <string name="screenrecord_mic_label" msgid="4522870600914810019">"Ձայնագրել ուղեկցող ձայները"</string>
+    <string name="screenrecord_taps_label" msgid="1776467076607964790">"Ցույց տալ հպումները"</string>
+    <string name="screenrecord_stop_label" msgid="2544887572381260038">"Կանգնեցնել"</string>
+    <string name="screenrecord_pause_label" msgid="7162476078856786227">"Դադարեցնել"</string>
+    <string name="screenrecord_resume_label" msgid="3605818317015993314">"Վերսկսել"</string>
+    <string name="screenrecord_cancel_label" msgid="3385204992871088609">"Չեղարկել"</string>
+    <string name="screenrecord_share_label" msgid="4197867360204019389">"Կիսվել"</string>
+    <string name="screenrecord_delete_label" msgid="7893716870917824013">"Ջնջել"</string>
+    <string name="screenrecord_cancel_success" msgid="7768976011702614782">"Էկրանի տեսագրումը չեղարկվեց"</string>
+    <string name="screenrecord_save_message" msgid="4733982661301846778">"Էկրանի տեսագրությունը պահվեց։ Հպեք՝ դիտելու համար:"</string>
+    <string name="screenrecord_delete_description" msgid="5743190456090354585">"Էկրանի տեսագրությունը ջնջվեց"</string>
+    <string name="screenrecord_delete_error" msgid="8154904464563560282">"Չհաջողվեց ջնջել տեսագրությունը"</string>
+    <string name="screenrecord_permission_error" msgid="1526755299469001000">"Չհաջողվեց ստանալ անհրաժեշտ թույլտվությունները"</string>
     <string name="usb_preference_title" msgid="6551050377388882787">"USB ֆայլերի փոխանցման ընտրանքներ"</string>
     <string name="use_mtp_button_title" msgid="4333504413563023626">"Միացնել որպես մեդիա նվագարկիչ (MTP)"</string>
     <string name="use_ptp_button_title" msgid="7517127540301625751">"Միացնել որպես ֆոտոխցիկ (PTP)"</string>
@@ -101,7 +109,6 @@
     <string name="phone_label" msgid="2320074140205331708">"բացել հեռախոսը"</string>
     <string name="voice_assist_label" msgid="3956854378310019854">"բացեք ձայնային հուշումը"</string>
     <string name="camera_label" msgid="7261107956054836961">"բացել ֆոտոխցիկը"</string>
-    <string name="recents_caption_resize" msgid="3517056471774958200">"Ընտրել առաջադրանքի նոր դասավորություն"</string>
     <string name="cancel" msgid="6442560571259935130">"Չեղարկել"</string>
     <string name="accessibility_biometric_dialog_help_area" msgid="8953787076940186847">"Օգնության հաղորդագրության դաշտ"</string>
     <string name="biometric_dialog_confirm" msgid="6468457350041712674">"Հաստատել"</string>
@@ -188,11 +195,6 @@
     <skip />
     <!-- no translation found for accessibility_work_mode (702887484664647430) -->
     <skip />
-    <string name="accessibility_recents_item_will_be_dismissed" msgid="395770242498031481">"Անտեսել <xliff:g id="APP">%s</xliff:g>-ը:"</string>
-    <string name="accessibility_recents_item_dismissed" msgid="6803574935084867070">"<xliff:g id="APP">%s</xliff:g>-ը անտեսված է:"</string>
-    <string name="accessibility_recents_all_items_dismissed" msgid="4464697366179168836">"Բոլոր վերջին հավելվածները հեռացվել են ցուցակից:"</string>
-    <string name="accessibility_recents_item_open_app_info" msgid="5107479759905883540">"Բացել <xliff:g id="APP">%s</xliff:g> հավելվածի մասին տեղեկությունները"</string>
-    <string name="accessibility_recents_item_launched" msgid="7616039892382525203">"Մեկնարկել <xliff:g id="APP">%s</xliff:g>-ը:"</string>
     <string name="accessibility_notification_dismissed" msgid="854211387186306927">"Ծանուցումը անտեսվեց:"</string>
     <string name="accessibility_desc_notification_shade" msgid="4690274844447504208">"Ծանուցումների վահանակ:"</string>
     <string name="accessibility_desc_quick_settings" msgid="6186378411582437046">"Արագ կարգավորումներ:"</string>
@@ -319,6 +321,7 @@
     <string name="quick_settings_cast_device_default_name" msgid="5367253104742382945">"Անանուն սարք"</string>
     <string name="quick_settings_cast_device_default_description" msgid="2484573682378634413">"Պատրաստ է հեռարձակման"</string>
     <string name="quick_settings_cast_detail_empty_text" msgid="311785821261640623">"Հասանելի սարքեր չկան"</string>
+    <string name="quick_settings_cast_no_wifi" msgid="2696477881905521882">"Wi-Fi-ը միացված չէ"</string>
     <string name="quick_settings_brightness_dialog_title" msgid="8599674057673605368">"Պայծառություն"</string>
     <string name="quick_settings_brightness_dialog_auto_brightness_label" msgid="5064982743784071218">"Ավտոմատ"</string>
     <string name="quick_settings_inversion_label" msgid="8790919884718619648">"Շրջել գույները"</string>
@@ -354,23 +357,8 @@
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC-ն անջատված է"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC-ն միացված է"</string>
-    <string name="recents_empty_message" msgid="808480104164008572">"Վերջին տարրեր չկան"</string>
-    <string name="recents_empty_message_dismissed_all" msgid="2791312568666558651">"Դուք ջնջել եք ամենը"</string>
-    <string name="recents_app_info_button_label" msgid="2890317189376000030">"Հավելվածի մասին"</string>
-    <string name="recents_lock_to_app_button_label" msgid="6942899049072506044">"էկրանի ամրացում"</string>
-    <string name="recents_search_bar_label" msgid="8074997400187836677">"որոնել"</string>
-    <string name="recents_launch_error_message" msgid="2969287838120550506">"Հնարավոր չէ գործարկել <xliff:g id="APP">%s</xliff:g>-ը:"</string>
-    <string name="recents_launch_disabled_message" msgid="1624523193008871793">"<xliff:g id="APP">%s</xliff:g> հավելվածը անվտանգ ռեժիմում անջատված է:"</string>
-    <string name="recents_stack_action_button_label" msgid="6593727103310426253">"Մաքրել բոլորը"</string>
-    <string name="recents_drag_hint_message" msgid="2649739267073203985">"Քաշեք այստեղ՝ էկրանի տրոհումն օգտագործելու համար"</string>
     <string name="recents_swipe_up_onboarding" msgid="3824607135920170001">"Սահեցրեք վերև՝ մյուս հավելվածին անցնելու համար"</string>
     <string name="recents_quick_scrub_onboarding" msgid="2778062804333285789">"Քաշեք աջ՝ հավելվածների միջև անցնելու համար"</string>
-    <string name="recents_multistack_add_stack_dialog_split_horizontal" msgid="8848514474543427332">"Հորիզոնական տրոհում"</string>
-    <string name="recents_multistack_add_stack_dialog_split_vertical" msgid="9075292233696180813">"Ուղղահայաց տրոհում"</string>
-    <string name="recents_multistack_add_stack_dialog_split_custom" msgid="4177837597513701943">"Հատուկ տրոհում"</string>
-    <string name="recents_accessibility_split_screen_top" msgid="9056056469282256287">"Տրոհել էկրանը վերևից"</string>
-    <string name="recents_accessibility_split_screen_left" msgid="8987144699630620019">"Տրոհել էկրանը ձախից"</string>
-    <string name="recents_accessibility_split_screen_right" msgid="275069779299592867">"Տրոհել էկրանն աջից"</string>
     <string name="quick_step_accessibility_toggle_overview" msgid="7171470775439860480">"Միացնել/անջատել համատեսքը"</string>
     <string name="expanded_header_battery_charged" msgid="5945855970267657951">"Լիցքավորված է"</string>
     <string name="expanded_header_battery_charging" msgid="205623198487189724">"Լիցքավորվում է"</string>
@@ -610,11 +598,19 @@
     <string name="notification_header_default_channel" msgid="7506845022070889909">"Ծանուցումներ"</string>
     <string name="notification_channel_disabled" msgid="344536703863700565">"Դուք այլևս չեք ստանա այս ծանուցումները"</string>
     <string name="notification_channel_minimized" msgid="1664411570378910931">"Այս ծանուցումները կծալվեն:"</string>
+    <!-- no translation found for notification_channel_silenced (2877199534497961942) -->
+    <skip />
+    <!-- no translation found for notification_channel_unsilenced (4790904571552394137) -->
+    <skip />
     <string name="inline_blocking_helper" msgid="3055064577771478591">"Դուք սովորաբար փակում եք այս ծանուցումները: \nՇարունակե՞լ ցուցադրել դրանք:"</string>
     <string name="inline_keep_showing" msgid="8945102997083836858">"Ցուցադրե՞լ այս ծանուցումները։"</string>
     <string name="inline_stop_button" msgid="4172980096860941033">"Չցուցադրել ծանուցումներ"</string>
     <string name="inline_keep_button" msgid="6665940297019018232">"Ցուցադրել"</string>
     <string name="inline_minimize_button" msgid="966233327974702195">"Ծալել"</string>
+    <!-- no translation found for inline_silent_button_silent (4411510650503783646) -->
+    <skip />
+    <!-- no translation found for inline_silent_button_alert (2967599358027208807) -->
+    <skip />
     <string name="inline_keep_showing_app" msgid="1723113469580031041">"Ցուցադրե՞լ ծանուցումներ այս հավելվածից։"</string>
     <string name="notification_unblockable_desc" msgid="1037434112919403708">"Այս ծանուցումները հնարավոր չէ անջատել"</string>
     <string name="appops_camera" msgid="8100147441602585776">"Այս հավելվածն օգտագործում է տեսախցիկը:"</string>
@@ -751,6 +747,7 @@
     <item msgid="2139628951880142927">"Ցույց տալ տոկոսը լիցքավորելու ժամանակ (կանխադրված է)"</item>
     <item msgid="3327323682209964956">"Ցույց չտալ այս պատկերակը"</item>
   </string-array>
+    <string name="tuner_low_priority" msgid="1325884786608312358">"Ցուցադրել ցածր առաջնահերթության ծանուցումների պատկերակները"</string>
     <string name="other" msgid="4060683095962566764">"Այլ"</string>
     <string name="accessibility_divider" msgid="5903423481953635044">"Տրոհված էկրանի բաժանիչ"</string>
     <string name="accessibility_action_divider_left_full" msgid="2801570521881574972">"Ձախ էկրանը՝ լիաէկրան"</string>
@@ -782,6 +779,7 @@
     <string name="accessibility_quick_settings_user" msgid="1567445362870421770">"Մուտք է գործել որպես <xliff:g id="ID_1">%s</xliff:g>"</string>
     <string name="data_connection_no_internet" msgid="4503302451650972989">"Ինտերնետ կապ չկա"</string>
     <string name="accessibility_quick_settings_open_details" msgid="4230931801728005194">"Բացել մանրամասները:"</string>
+    <string name="accessibility_quick_settings_not_available" msgid="4190068184294019846">"Անհասանելի է, քանի որ <xliff:g id="REASON">%s</xliff:g>"</string>
     <string name="accessibility_quick_settings_open_settings" msgid="7806613775728380737">"Բացել <xliff:g id="ID_1">%s</xliff:g> կարգավորումները:"</string>
     <string name="accessibility_quick_settings_edit" msgid="7839992848995240393">"Խմբագրել կարգավորումների հերթականությունը:"</string>
     <string name="accessibility_quick_settings_page" msgid="5032979051755200721">"Էջ <xliff:g id="ID_1">%1$d</xliff:g> / <xliff:g id="ID_2">%2$d</xliff:g>"</string>
@@ -829,7 +827,7 @@
     <string name="instant_apps_message" msgid="1183313016396018086">"Հավելվածը բացվել է առանց տեղադրման։"</string>
     <string name="instant_apps_message_with_help" msgid="6179830437630729747">"Հավելվածը բացվել է առանց տեղադրման։ Հպեք՝ ավելին իմանալու համար։"</string>
     <string name="app_info" msgid="6856026610594615344">"Հավելվածի տվյալներ"</string>
-    <string name="go_to_web" msgid="1106022723459948514">"Բացեք համացանցում"</string>
+    <string name="go_to_web" msgid="2650669128861626071">"Անցնել դիտարկիչ"</string>
     <string name="mobile_data" msgid="7094582042819250762">"Բջջային ինտերնետ"</string>
     <string name="mobile_data_text_format" msgid="3526214522670876454">"<xliff:g id="ID_1">%1$s</xliff:g> — <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="wifi_is_off" msgid="1838559392210456893">"Wi-Fi-ն անջատված է"</string>
@@ -861,4 +859,16 @@
     <string name="open_saver_setting_action" msgid="8314624730997322529">"Կարգավորումներ"</string>
     <string name="auto_saver_okay_action" msgid="2701221740227683650">"Եղավ"</string>
     <string name="heap_dump_tile_name" msgid="9141031328971226374">"Dump SysUI Heap"</string>
+    <string name="ongoing_privacy_chip_content_single_app" msgid="4479560741898690064">"<xliff:g id="APP">%1$s</xliff:g> հավելվածն օգտագործում է ձեր <xliff:g id="TYPES_LIST">%2$s</xliff:g>:"</string>
+    <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8640691753867990511">"Հավելվածներն օգտագործում են ձեր <xliff:g id="TYPES_LIST">%s</xliff:g>:"</string>
+    <string name="ongoing_privacy_dialog_open_app" msgid="2483886665314567948">"Բացել հավելվածը"</string>
+    <string name="ongoing_privacy_dialog_cancel" msgid="5479124524931216790">"Չեղարկել"</string>
+    <string name="ongoing_privacy_dialog_okay" msgid="5823914553907253532">"Փակել"</string>
+    <string name="ongoing_privacy_dialog_open_settings" msgid="6382622467527049074">"Պարամետրեր"</string>
+    <string name="ongoing_privacy_dialog_app_item" msgid="486085465491760739">"<xliff:g id="APP">%1$s</xliff:g> հավելվածն օգտագործում է ձեր <xliff:g id="TYPE">%2$s</xliff:g> վերջին <xliff:g id="TIME">%3$d</xliff:g> րոպեի ընթացքում"</string>
+    <string name="ongoing_privacy_dialog_apps_item" msgid="9207187236823950491">"<xliff:g id="APPS">%1$s</xliff:g> հավելվածներն օգտագործում են ձեր <xliff:g id="TYPE">%2$s</xliff:g>"</string>
+    <string name="ongoing_privacy_dialog_single_app" msgid="3884812469179810924">"<xliff:g id="APP">%1$s</xliff:g> հավելվածն օգտագործում է ձեր <xliff:g id="TYPES_LIST">%2$s</xliff:g>"</string>
+    <string name="privacy_type_camera" msgid="1676604631892420333">"տեսախցիկը"</string>
+    <string name="privacy_type_location" msgid="6435497989657286700">"վայրը"</string>
+    <string name="privacy_type_microphone" msgid="4153045784928554506">"խոսափողը"</string>
 </resources>

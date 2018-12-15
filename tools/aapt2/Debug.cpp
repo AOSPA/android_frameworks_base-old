@@ -306,8 +306,29 @@ void Debug::PrintTable(const ResourceTable& table, const DebugPrintTableOptions&
             break;
         }
 
-        if (entry->overlayable) {
-          printer->Print(" OVERLAYABLE");
+        for (size_t i = 0; i < entry->overlayable_declarations.size(); i++) {
+          printer->Print((i == 0) ? " " : "|");
+          printer->Print("OVERLAYABLE");
+
+          if (entry->overlayable_declarations[i].policy) {
+            switch (entry->overlayable_declarations[i].policy.value()) {
+              case Overlayable::Policy::kProduct:
+                printer->Print("_PRODUCT");
+                break;
+              case Overlayable::Policy::kProductServices:
+                printer->Print("_PRODUCT_SERVICES");
+                break;
+              case Overlayable::Policy::kSystem:
+                printer->Print("_SYSTEM");
+                break;
+              case Overlayable::Policy::kVendor:
+                printer->Print("_VENDOR");
+                break;
+              case Overlayable::Policy::kPublic:
+                printer->Print("_PUBLIC");
+                break;
+            }
+          }
         }
 
         printer->Println();
@@ -410,7 +431,7 @@ void Debug::DumpHex(const void* data, size_t len) {
 
 void Debug::DumpResStringPool(const android::ResStringPool* pool, text::Printer* printer) {
   using namespace android;
-  
+
   if (pool->getError() == NO_INIT) {
     printer->Print("String pool is unitialized.\n");
     return;
@@ -439,7 +460,7 @@ void Debug::DumpResStringPool(const android::ResStringPool* pool, text::Printer*
   const size_t NS = pool->size();
   for (size_t s=0; s<NS; s++) {
     String8 str = pool->string8ObjectAt(s);
-    printer->Print(StringPrintf("String #%zd : %s\n", s, str.string()));
+    printer->Print(StringPrintf("String #%zd: %s\n", s, str.string()));
   }
 }
 
