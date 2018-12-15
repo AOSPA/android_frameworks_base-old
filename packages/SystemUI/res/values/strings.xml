@@ -24,26 +24,6 @@
          all of the currently visible notifications. [CHAR LIMIT=10]-->
     <string name="status_bar_clear_all_button">Clear</string>
 
-    <!-- Title shown in recents popup for removing an application from the list -->
-    <string name="status_bar_recent_remove_item_title">Remove from list</string>
-
-    <!-- Title shown in recents popup for inspecting an application's properties -->
-    <string name="status_bar_recent_inspect_item_title">App info</string>
-
-    <!-- Message shown in the middle of the screen after clicking on the recent apps button
-         when there are no recent apps to show. Also used for accessibility. [CHAR LIMIT=45]-->
-    <string name="status_bar_no_recent_apps">Your recent screens appear here</string>
-
-    <!-- Content description for the button to dismiss Recent Apps (only present on large
-         devices) -->
-    <string name="status_bar_accessibility_dismiss_recents">Dismiss recent apps</string>
-
-    <!-- Message that is read when you enter recent apps in TalkBack -->
-    <plurals name="status_bar_accessibility_recent_apps">
-        <item quantity="one">1 screen in Overview</item>
-        <item quantity="other">%d screens in Overview</item>
-    </plurals>
-
     <!-- The label in the bar at the top of the status bar when there are no notifications
          showing.  [CHAR LIMIT=40]-->
     <string name="status_bar_no_notifications_title">No notifications</string>
@@ -205,6 +185,39 @@
     <string name="screenshot_failed_to_capture_text">Taking screenshots isn\'t allowed by the app or
         your organization</string>
 
+    <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
+    <string name="screenrecord_name">Screen Recording</string>
+    <!-- Description of the screen recording notification channel [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_channel_description">Ongoing notification for a screen record session</string>
+    <!-- Label for the button to begin screen recording [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_start_label">Start Recording</string>
+    <!-- Label for the checkbox to enable microphone input during screen recording [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_mic_label">Record voiceover</string>
+    <!-- Label for the checkbox to enable showing location of touches during screen recording [CHAR LIMIT=NONE]-->
+    <string name="screenrecord_taps_label">Show taps</string>
+    <!-- Label for notification action to stop and save the screen recording [CHAR LIMIT=35] -->
+    <string name="screenrecord_stop_label">Stop</string>
+    <!-- Label for notification action to pause screen recording [CHAR LIMIT=35] -->
+    <string name="screenrecord_pause_label">Pause</string>
+    <!-- Label for notification action to resume screen recording [CHAR LIMIT=35] -->
+    <string name="screenrecord_resume_label">Resume</string>
+    <!-- Label for notification action to cancel and discard screen recording [CHAR LIMIT=35] -->
+    <string name="screenrecord_cancel_label">Cancel</string>
+    <!-- Label for notification action to share screen recording [CHAR LIMIT=35] -->
+    <string name="screenrecord_share_label">Share</string>
+    <!-- Label for notification action to delete a screen recording file [CHAR LIMIT=35] -->
+    <string name="screenrecord_delete_label">Delete</string>
+    <!-- A toast message shown after successfully canceling a screen recording [CHAR LIMIT=NONE] -->
+    <string name="screenrecord_cancel_success">Screen recording canceled</string>
+    <!-- Notification text shown after saving a screen recording to prompt the user to view it [CHAR LIMIT=100] -->
+    <string name="screenrecord_save_message">Screen recording saved, tap to view</string>
+    <!-- A toast message shown after successfully deleting a screen recording [CHAR LIMIT=NONE] -->
+    <string name="screenrecord_delete_description">Screen recording deleted</string>
+    <!-- A toast message shown when there is an error deleting a screen recording [CHAR LIMIT=NONE] -->
+    <string name="screenrecord_delete_error">Error deleting screen recording</string>
+    <!-- A toast message shown when the screen recording cannot be started due to insufficient permissions [CHAR LIMIT=NONE] -->
+    <string name="screenrecord_permission_error">Failed to get permissions</string>
+
     <!-- Title for the USB function chooser in UsbPreferenceActivity. [CHAR LIMIT=30] -->
     <string name="usb_preference_title">USB file transfer options</string>
     <!-- Label for the MTP USB function in UsbPreferenceActivity. [CHAR LIMIT=50] -->
@@ -252,8 +265,6 @@
     <string name="voice_assist_label">open voice assist</string>
     <!-- Click action label for accessibility for the phone button. [CHAR LIMIT=NONE] -->
     <string name="camera_label">open camera</string>
-    <!-- Caption for "Recents resize" developer debug feature. [CHAR LIMIT=NONE] -->
-    <string name="recents_caption_resize">Select new task layout</string>
     <!-- Button name for "Cancel". [CHAR LIMIT=NONE] -->
     <string name="cancel">Cancel</string>
 
@@ -479,16 +490,6 @@
     <!-- Content description of the work mode icon in the notification panel for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_work_mode">@string/quick_settings_work_mode_label</string>
 
-    <!-- Content description to tell the user that this button will remove an application from recents -->
-    <string name="accessibility_recents_item_will_be_dismissed">Dismiss <xliff:g id="app" example="Calendar">%s</xliff:g>.</string>
-    <!-- Content description to tell the user an application has been removed from recents -->
-    <string name="accessibility_recents_item_dismissed"><xliff:g id="app" example="Calendar">%s</xliff:g> dismissed.</string>
-    <!-- Content description to tell the user all applications has been removed from recents -->
-    <string name="accessibility_recents_all_items_dismissed">All recent applications dismissed.</string>
-    <!-- Content description to tell the user that this button will open application info for an application in recents -->
-    <string name="accessibility_recents_item_open_app_info">Open <xliff:g id="app" example="Calendar">%s</xliff:g> application info.</string>
-    <!-- Content description to tell the user an application has been launched from recents -->
-    <string name="accessibility_recents_item_launched">Starting <xliff:g id="app" example="Calendar">%s</xliff:g>.</string>
     <!-- Content description to tell the user a notification has been removed from the notification shade -->
     <string name="accessibility_notification_dismissed">Notification dismissed.</string>
 
@@ -838,42 +839,10 @@
     <!-- QuickSettings: NFC (on) [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_on">NFC is enabled</string>
 
-    <!-- Recents: The empty recents string. [CHAR LIMIT=NONE] -->
-    <string name="recents_empty_message">No recent items</string>
-    <!-- Recents: The empty recents string after dismissing all tasks. [CHAR LIMIT=NONE] -->
-    <string name="recents_empty_message_dismissed_all">You\'ve cleared everything</string>
-    <!-- Recents: The info panel app info button string. [CHAR LIMIT=NONE] -->
-    <string name="recents_app_info_button_label">Application Info</string>
-    <!-- Recents: The screen pinning button. [CHAR LIMIT=NONE] -->
-    <string name="recents_lock_to_app_button_label">screen pinning</string>
-    <!-- Recents: Temporary string for the button in the recents search bar. [CHAR LIMIT=NONE] -->
-    <string name="recents_search_bar_label">search</string>
-    <!-- Recents: Launch error string. [CHAR LIMIT=NONE] -->
-    <string name="recents_launch_error_message">Could not start <xliff:g id="app" example="Calendar">%s</xliff:g>.</string>
-    <!-- Recents: Launch disabled string. [CHAR LIMIT=NONE] -->
-    <string name="recents_launch_disabled_message"><xliff:g id="app" example="Calendar">%s</xliff:g> is disabled in safe-mode.</string>
-    <!-- Recents: Stack action button string. [CHAR LIMIT=NONE] -->
-    <string name="recents_stack_action_button_label">Clear all</string>
-    <!-- Recents: Hint text that shows on the drop targets to start multiwindow. [CHAR LIMIT=NONE] -->
-    <string name="recents_drag_hint_message">Drag here to use split screen</string>
     <!-- Recents: Text that shows above the navigation bar after launching a few apps. [CHAR LIMIT=NONE] -->
     <string name="recents_swipe_up_onboarding">Swipe up to switch apps</string>
     <!-- Recents: Text that shows above the navigation bar after launching several apps. [CHAR LIMIT=NONE] -->
     <string name="recents_quick_scrub_onboarding">Drag right to quickly switch apps</string>
-
-    <!-- Recents: MultiStack add stack split horizontal radio button. [CHAR LIMIT=NONE] -->
-    <string name="recents_multistack_add_stack_dialog_split_horizontal">Split Horizontal</string>
-    <!-- Recents: MultiStack add stack split vertical radio button. [CHAR LIMIT=NONE] -->
-    <string name="recents_multistack_add_stack_dialog_split_vertical">Split Vertical</string>
-    <!-- Recents: MultiStack add stack split custom radio button. [CHAR LIMIT=NONE] -->
-    <string name="recents_multistack_add_stack_dialog_split_custom">Split Custom</string>
-    <!-- Recents: Accessibility split to the top -->
-    <string name="recents_accessibility_split_screen_top">Split screen to the top</string>
-    <!-- Recents: Accessibility split to the left -->
-    <string name="recents_accessibility_split_screen_left">Split screen to the left</string>
-    <!-- Recents: Accessibility split to the right -->
-    <string name="recents_accessibility_split_screen_right">Split screen to the right</string>
-
     <!-- QuickStep: Accessibility to toggle overview [CHAR LIMIT=40] -->
     <string name="quick_step_accessibility_toggle_overview">Toggle Overview</string>
 
@@ -1573,6 +1542,12 @@
     <!-- Notification inline controls: Shown when a channel's notifications are minimized -->
     <string name="notification_channel_minimized">These notifications will be minimized</string>
 
+    <!-- Notification inline controls: Shown when a channel's notifications are silenced [CHAR_LIMIT=100] -->
+    <string name="notification_channel_silenced">These notifications will be shown silently</string>
+
+    <!-- Notification inline controls: Shown when a channel's notifications are set to alert [CHAR_LIMIT=100] -->
+    <string name="notification_channel_unsilenced">These notifications will alert you</string>
+
     <!-- Notification Inline controls: continue receiving notifications prompt, channel level -->
     <string name="inline_blocking_helper">You usually dismiss these notifications.
     \nKeep showing them?</string>
@@ -1588,6 +1563,12 @@
 
     <!-- Notification inline controls: minimize notifications button -->
     <string name="inline_minimize_button">Minimize</string>
+
+    <!-- Notification inline controls: show notifications silently button [CHAR_LIMIT=25] -->
+    <string name="inline_silent_button_silent">Show silently</string>
+
+    <!-- Notification inline controls: show and alert button [CHAR_LIMIT=25] -->
+    <string name="inline_silent_button_alert">Show and alert</string>
 
     <!-- Notification Inline controls: continue receiving notifications prompt, app level -->
     <string name="inline_keep_showing_app">Keep showing notifications from this app?</string>
@@ -1917,6 +1898,9 @@
         <item>Don\'t show this icon</item>
     </string-array>
 
+    <!-- SysUI Tuner: Switch for showing low-priority notification icons in status bar [CHAR LIMIT=NONE] -->
+    <string name="tuner_low_priority">Show low-priority notification icons</string>
+
     <!-- SysUI Tuner: Other section -->
     <string name="other">Other</string>
 
@@ -2161,7 +2145,7 @@
     <string name="app_info">App info</string>
 
     <!-- Action label for switching to a browser for an instant app [CHAR LIMIT=20] -->
-    <string name="go_to_web">Go to web</string>
+    <string name="go_to_web">Go to browser</string>
 
     <!-- Quick settings tile for toggling mobile data [CHAR LIMIT=20] -->
     <string name="mobile_data">Mobile data</string>
@@ -2275,4 +2259,48 @@
          app for debugging. Will not be seen by users. [CHAR LIMIT=20] -->
     <string name="heap_dump_tile_name">Dump SysUI Heap</string>
 
+    <!-- Text on chip for multiple apps using a single app op [CHAR LIMIT=10] -->
+    <string name="ongoing_privacy_chip_multiple_apps"><xliff:g id="num_apps" example="3">%d</xliff:g> apps</string>
+
+    <!-- Content description for ongoing privacy chip. Use with a single app [CHAR LIMIT=NONE]-->
+    <string name="ongoing_privacy_chip_content_single_app"><xliff:g id="app" example="Example App">%1$s</xliff:g> is using your <xliff:g id="types_list" example="camera, location">%2$s</xliff:g>.</string>
+
+    <!-- Content description for ongoing privacy chip. Use with multiple apps [CHAR LIMIT=NONE]-->
+    <string name="ongoing_privacy_chip_content_multiple_apps">Applications are using your <xliff:g id="types_list" example="camera, location">%s</xliff:g>.</string>
+
+    <!-- Content description for ongoing privacy chip. Use with multiple apps using same app op[CHAR LIMIT=NONE]-->
+    <string name="ongoing_privacy_chip_content_multiple_apps_single_op"><xliff:g id="num_apps" example="3">%1$d</xliff:g> applications are using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</string>
+
+    <!-- Action on Ongoing Privacy Dialog to dismiss [CHAR LIMIT=10]-->
+    <string name="ongoing_privacy_dialog_cancel">Cancel</string>
+
+    <!-- Action on Ongoing Privacy Dialog to open privacy hub [CHAR LIMIT=15]-->
+    <string name="ongoing_privacy_dialog_open_settings">View details</string>
+
+    <!-- Text for item in Ongoing Privacy Dialog title when only one app is using app ops [CHAR LIMIT=NONE] -->
+    <string name="ongoing_privacy_dialog_single_app_title">App using your <xliff:g id="types_list" example="camera( and location)">%s</xliff:g></string>
+
+    <!-- Text for item in Ongoing Privacy Dialog title when multiple apps is using app ops [CHAR LIMIT=NONE] -->
+    <string name="ongoing_privacy_dialog_multiple_apps_title">Apps using your <xliff:g id="types_list" example="camera( and location)">%s</xliff:g></string>
+
+    <!-- Separator for types. Include spaces before and after if needed [CHAR LIMIT=10] -->
+    <string name="ongoing_privacy_dialog_separator">,\u0020</string>
+
+    <!-- Separator for types, before last type. Include spaces before and after if needed [CHAR LIMIT=10] -->
+    <string name="ongoing_privacy_dialog_last_separator">\u0020and\u0020</string>
+
+    <!-- Text for camera app op [CHAR LIMIT=20]-->
+    <string name="privacy_type_camera">camera</string>
+
+    <!-- Text for location app op [CHAR LIMIT=20]-->
+    <string name="privacy_type_location">location</string>
+
+    <!-- Text for microphone app op [CHAR LIMIT=20]-->
+    <string name="privacy_type_microphone">microphone</string>
+
+    <!-- Text for indicating extra apps using app ops [CHAR LIMIT=NONE] -->
+    <plurals name="ongoing_privacy_dialog_overflow_text">
+        <item quantity="one"><xliff:g id="num_apps" example="1">%d</xliff:g> other app</item>
+        <item quantity="other"><xliff:g id="num_apps" example="3">%d</xliff:g> other app</item>
+    </plurals>
 </resources>

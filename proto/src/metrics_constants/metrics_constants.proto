@@ -844,6 +844,8 @@ message MetricsEvent {
     //   PACKAGE: App that posted the notification
     // DETAIL: Notification is expanded by user.
     //   PACKAGE: App that posted the notification
+    // COLLAPSE: Notification is collapsed by user.
+    //   PACKAGE: App that posted the notification
     // DISMISS: Notification is dismissed.
     //   PACKAGE: App that posted the notification
     //   SUBTYPE: Dismiss reason from NotificationManagerService.java
@@ -2832,7 +2834,7 @@ message MetricsEvent {
     // ACTION: Logs the end to end time taken by all provisioning tasks.
     PROVISIONING_TOTAL_TASK_TIME_MS = 627;
 
-    // OPEN: Settings > Privacy
+    // OPEN: Settings > Security
     // CATEGORY: SETTINGS
     // OS: O
     ENTERPRISE_PRIVACY_SETTINGS = 628;
@@ -6563,6 +6565,44 @@ message MetricsEvent {
     // CATEGORY: SETTINGS
     // OS: Q
     MOBILE_ROAMING_DIALOG = 1583;
+
+    // OPEN: Settings > Display > Lock screen display > On lock screen
+    // CATEGORY: SETTINGS
+    // OS: Q
+    LOCK_SCREEN_NOTIFICATION_CONTENT = 1584;
+
+    // ConfirmDeviceCredentials > BiometricPrompt
+    // CATEGORY: SETTINGS
+    // OS: Q
+    BIOMETRIC_FRAGMENT = 1585;
+
+    // OPEN: Biometric Enrollment (android.settings.BIOMETRIC_ENROLL action intent)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    BIOMETRIC_ENROLL_ACTIVITY = 1586;
+
+    // OPEN: Settings > Privacy
+    // CATEGORY: SETTINGS
+    // OS: Q
+    TOP_LEVEL_PRIVACY = 1587;
+
+    // OPEN: Settings > Sound & notification > Do Not Disturb > See all exceptions >
+    // Allow apps to override
+    // CATEGORY: SETTINGS
+    // OS: Q
+    NOTIFICATION_ZEN_MODE_OVERRIDING_APPS = 1588;
+
+    // OPEN: Settings > Sound & notification > Do Not Disturb > See all exceptions >
+    // Allow apps to override > Choose app
+    // CATEGORY: SETTINGS
+    // OS: Q
+    NOTIFICATION_ZEN_MODE_OVERRIDING_APP = 1589;
+
+    // ACTION: User sent a direct reply
+    //    PACKAGE: App that posted the notification
+    // CATEGORY: NOTIFICATION
+    // OS: Q
+    NOTIFICATION_DIRECT_REPLY_ACTION = 1590;
 
     // ---- End Q Constants, all Q constants go above this line ----
 

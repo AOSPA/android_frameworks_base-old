@@ -19,6 +19,8 @@ package com.android.server.wm;
 import static android.testing.DexmakerShareClassLoaderRule.runWithDexmakerShareClassLoader;
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
+
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -33,6 +35,7 @@ import android.content.Context;
 import android.hardware.display.DisplayManagerInternal;
 import android.os.PowerManagerInternal;
 import android.os.PowerSaveState;
+import android.view.Display;
 import android.view.InputChannel;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
@@ -49,8 +52,6 @@ import org.mockito.invocation.InvocationOnMock;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
-
-import androidx.test.InstrumentationRegistry;
 
 /**
  * A test rule that sets up a fresh WindowManagerService instance before each test and makes sure
@@ -88,7 +89,7 @@ public class WindowManagerServiceRule implements TestRule {
             }
 
             private void setUp() {
-                final Context context = InstrumentationRegistry.getTargetContext();
+                final Context context = getInstrumentation().getTargetContext();
 
                 removeServices();
 
@@ -114,7 +115,7 @@ public class WindowManagerServiceRule implements TestRule {
                         runnable.run();
                     }
                     return null;
-                }).when(atm).notifyKeyguardFlagsChanged(any());
+                }).when(atm).notifyKeyguardFlagsChanged(any(), anyInt());
 
                 InputManagerService ims = mock(InputManagerService.class);
                 // InputChannel is final and can't be mocked.
@@ -123,9 +124,10 @@ public class WindowManagerServiceRule implements TestRule {
                     doReturn(input[1]).when(ims).monitorInput(anyString(), anyInt());
                 }
 
-                mService = WindowManagerService.main(context, ims, false,
-                        false, mPolicy = new TestWindowManagerPolicy(
-                                WindowManagerServiceRule.this::getWindowManagerService));
+                mService = WindowManagerService.main(context, ims, false, false,
+                        mPolicy = new TestWindowManagerPolicy(
+                                WindowManagerServiceRule.this::getWindowManagerService),
+                        new WindowManagerGlobalLock());
                 mService.mTransactionFactory = () -> {
                     final SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
                     mSurfaceTransactions.add(new WeakReference<>(transaction));
@@ -142,11 +144,11 @@ public class WindowManagerServiceRule implements TestRule {
 
                 mService.onInitReady();
 
+                final Display display = mService.mDisplayManager.getDisplay(DEFAULT_DISPLAY);
+                final DisplayWindowController dcw = new DisplayWindowController(display, mService);
                 // Display creation is driven by the ActivityManagerService via ActivityStackSupervisor.
                 // We emulate those steps here.
-                mService.mRoot.createDisplayContent(
-                        mService.mDisplayManager.getDisplay(DEFAULT_DISPLAY),
-                        mock(DisplayWindowController.class));
+                mService.mRoot.createDisplayContent(display, dcw);
             }
 
             private void removeServices() {

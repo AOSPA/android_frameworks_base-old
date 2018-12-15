@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.phone;
 import android.annotation.IdRes;
 import android.annotation.NonNull;
 import android.view.View;
+
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +41,7 @@ public class ContextualButtonGroup extends ButtonDispatcher {
      * @param button the button added to the group
      */
     public void addButton(@NonNull ContextualButton button) {
+        button.attachToGroup(this);
         mButtonData.add(new ButtonData(button));
     }
 

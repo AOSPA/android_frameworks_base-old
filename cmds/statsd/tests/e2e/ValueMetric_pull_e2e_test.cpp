@@ -49,6 +49,7 @@ StatsdConfig CreateStatsdConfig() {
         CreateDimensions(android::util::TEMPERATURE, {2/* sensor name field */ });
     valueMetric->set_bucket(FIVE_MINUTES);
     valueMetric->set_use_absolute_value_on_reset(true);
+    valueMetric->set_skip_zero_diff_output(false);
     return config;
 }
 
@@ -117,8 +118,8 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
 
     ConfigMetricsReportList reports;
     vector<uint8_t> buffer;
-    processor->onDumpReport(cfgKey, configAddedTimeNs + 7 * bucketSizeNs + 10, false, ADB_DUMP,
-                            &buffer);
+    processor->onDumpReport(cfgKey, configAddedTimeNs + 7 * bucketSizeNs + 10, false, true,
+                            ADB_DUMP, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
     backfillDimensionPath(&reports);
@@ -141,23 +142,23 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
 
     EXPECT_EQ(baseTimeNs + 2 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(0).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(0).values_size());
 
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(1).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(1).values_size());
 
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(2).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(2).values_size());
 
     EXPECT_EQ(baseTimeNs + 6 * bucketSizeNs, data.bucket_info(3).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(3).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(3).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(3).values_size());
 
     EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(4).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(4).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(4).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(4).values_size());
 }
 
 TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
@@ -224,8 +225,8 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
 
     ConfigMetricsReportList reports;
     vector<uint8_t> buffer;
-    processor->onDumpReport(cfgKey, configAddedTimeNs + 9 * bucketSizeNs + 10, false, ADB_DUMP,
-                            &buffer);
+    processor->onDumpReport(cfgKey, configAddedTimeNs + 9 * bucketSizeNs + 10, false, true,
+                            ADB_DUMP, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
     backfillDimensionPath(&reports);
@@ -248,15 +249,15 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
 
     EXPECT_EQ(baseTimeNs + 2 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(0).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(0).values_size());
 
     EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 9 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(1).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(1).values_size());
 
     EXPECT_EQ(baseTimeNs + 9 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 10 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(2).has_value_long());
+    EXPECT_EQ(1, data.bucket_info(2).values_size());
 }
 
 #else

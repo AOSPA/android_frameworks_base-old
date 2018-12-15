@@ -16,7 +16,6 @@
 
 package com.android.internal.telephony;
 
-import android.app.PendingIntent;
 import android.telephony.SubscriptionInfo;
 
 interface ISub {
@@ -166,31 +165,41 @@ interface ISub {
     int setOpportunistic(boolean opportunistic, int subId);
 
     /**
-     * Set parent subId by simInfo index
+     * Inform SubscriptionManager that subscriptions in the list are bundled
+     * as a group. Typically it's a primary subscription and an opportunistic
+     * subscription. It should only affect multi-SIM scenarios where primary
+     * and opportunistic subscriptions can be activated together.
+     * Being in the same group means they might be activated or deactivated
+     * together, some of them may be invisible to the users, etc.
      *
-     * @param parentSubId: subId of its parent subscription.
-     * @param subId the unique SubscriptionInfo index in database
-     * @return the number of records updated
+     * Caller will either have {@link android.Manifest.permission.MODIFY_PHONE_STATE}
+     * permission or can manage all subscriptions in the list, according to their
+     * acess rules.
+     *
+     * @param subIdList list of subId that will be in the same group
+     * @return groupUUID a UUID assigned to the subscription group. It returns
+     * null if fails.
+     *
      */
-    int setParentSubId(int parentSubId, int subId);
+    String setSubscriptionGroup(in int[] subIdList, String callingPackage);
 
     /**
-     * Set preferred default data.
-     * Set on which slot default data will be on.
+     * Set which subscription is preferred for cellular data. It's
+     * designed to overwrite default data subscription temporarily.
      *
-     * @param slotId which slot is preferred to for cellular data.
+     * @param subId which subscription is preferred to for cellular data.
      * @hide
      *
      */
-    int setPreferredData(int slotId);
+    int setPreferredData(int subId);
 
     /**
      * Get User downloaded Profiles.
      *
-     *  Provide all available user downloaded profile on the phone.
-     *  @param slotId on which phone the switch will operate on
+     * Return opportunistic subscriptions that can be visible to the caller.
+     * @return the list of opportunistic subscription info. If none exists, an empty list.
      */
-    List<SubscriptionInfo> getOpportunisticSubscriptions(int slotId, String callingPackage);
+    List<SubscriptionInfo> getOpportunisticSubscriptions(String callingPackage);
 
     int getSlotIndex(int subId);
 

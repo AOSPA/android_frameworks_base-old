@@ -136,6 +136,14 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> WLAN"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"WLAN 通话 | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"<xliff:g id="SPN">%s</xliff:g> VoWifi"</string>
+    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
+    <skip />
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"关闭"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"首选 WLAN"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"首选移动数据网络"</string>
@@ -292,6 +300,9 @@
     <string name="permgrouplab_microphone" msgid="171539900250043464">"麦克风"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"录制音频"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"允许&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;录音吗？"</string>
+    <string name="permgrouplab_activityRecognition" msgid="2838596644535616493">"运动识别"</string>
+    <string name="permgroupdesc_activityRecognition" msgid="7672248027571522602">"识别运动"</string>
+    <string name="permgrouprequest_activityRecognition" msgid="8121253142311250055">"允许&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;识别您的健身运动吗？"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"相机"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"拍摄照片和录制视频"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"允许&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;拍摄照片和录制视频吗？"</string>
@@ -414,18 +425,20 @@
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"允许该应用使用其他的位置信息提供程序命令。此权限使该应用可以干扰GPS或其他位置信息源的运作。"</string>
     <string name="permlab_accessFineLocation" msgid="6265109654698562427">"只能在前台获取精确的位置信息"</string>
     <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"此应用只有在前台运行时才能获取您的精确位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。这可能会增加耗电量。"</string>
-    <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"访问大致位置信息（以网络为依据）"</string>
-    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的平板电脑必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
-    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的电视必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
-    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
-    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"在后台获取精确的位置信息"</string>
-    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"此应用在后台运行时可随时获取您的精确位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。这可能会增加耗电量。"</string>
+    <string name="permlab_accessCoarseLocation" msgid="3707180371693213469">"只能在前台获取大概位置（基于网络）"</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="8594719010575779120">"此应用只能在前台根据网络来源（例如手机信号塔和 WLAN 网络）获取您的位置信息。您的平板电脑必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="3027871910200890806">"此应用只能在前台根据网络来源（例如手机信号塔和 WLAN 网络）获取您的位置信息。您的电视必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="854896049371048754">"此应用只能在前台根据网络来源（例如手机信号塔和 WLAN 网络）获取您的位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
+    <string name="permlab_accessBackgroundLocation" msgid="3965397804300661062">"在后台使用位置信息"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="1096394429579210251">"如果另外授予大致位置信息或精确位置信息访问权限，该应用便可在后台运行时使用位置信息。"</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"更改您的音频设置"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"允许该应用修改全局音频设置，例如音量和用于输出的扬声器。"</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"录音"</string>
     <string name="permdesc_recordAudio" msgid="4245930455135321433">"此应用可随时使用麦克风进行录音。"</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"向 SIM 卡发送命令"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"允许应用向SIM卡发送命令（此权限具有很高的危险性）。"</string>
+    <string name="permlab_activityRecognition" msgid="3634590230567608356">"识别健身运动"</string>
+    <string name="permdesc_activityRecognition" msgid="3143453925156552894">"此应用可以识别您的健身运动。"</string>
     <string name="permlab_camera" msgid="3616391919559751192">"拍摄照片和视频"</string>
     <string name="permdesc_camera" msgid="5392231870049240670">"此应用可随时使用相机拍摄照片和录制视频。"</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"控制振动"</string>
@@ -518,6 +531,7 @@
     <string name="permdesc_imagesWrite" msgid="7073662756617474375">"允许该应用修改您的照片收藏。"</string>
     <string name="permlab_mediaLocation" msgid="8675148183726247864">"从您的媒体收藏中读取位置信息"</string>
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"允许该应用从您的媒体收藏中读取位置信息。"</string>
+    <string name="biometric_dialog_default_title" msgid="4229778503907743328">"<xliff:g id="APP">%s</xliff:g>应用需要进行身份验证。"</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"生物识别硬件无法使用"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"仅检测到部分指纹，请重试。"</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"无法处理指纹，请重试。"</string>
@@ -1819,6 +1833,8 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"SS 请求已更改为 USSD 请求"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"已更改为新的 SS 请求"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"工作资料"</string>
+    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
+    <skip />
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"展开"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"收起"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"切换展开模式"</string>
@@ -1897,14 +1913,14 @@
       <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> 条自动填充建议</item>
       <item quantity="one">1 条自动填充建议</item>
     </plurals>
-    <string name="autofill_save_title" msgid="3345527308992082601">"要保存到&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;吗？"</string>
-    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"要将<xliff:g id="TYPE">%1$s</xliff:g>保存到&lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;吗？"</string>
-    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"要将<xliff:g id="TYPE_0">%1$s</xliff:g>和<xliff:g id="TYPE_1">%2$s</xliff:g>保存到&lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;吗？"</string>
-    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"要将<xliff:g id="TYPE_0">%1$s</xliff:g>、<xliff:g id="TYPE_1">%2$s</xliff:g>和<xliff:g id="TYPE_2">%3$s</xliff:g>保存到&lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;吗？"</string>
-    <string name="autofill_update_title" msgid="4879673117448810818">"要更新到&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;吗？"</string>
-    <string name="autofill_update_title_with_type" msgid="339733442087186755">"要将<xliff:g id="TYPE">%1$s</xliff:g>更新到&lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;吗？"</string>
-    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"要将<xliff:g id="TYPE_0">%1$s</xliff:g>和<xliff:g id="TYPE_1">%2$s</xliff:g>更新到&lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;吗？"</string>
-    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"要将<xliff:g id="TYPE_0">%1$s</xliff:g>、<xliff:g id="TYPE_1">%2$s</xliff:g>和<xliff:g id="TYPE_2">%3$s</xliff:g>更新到&lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;吗？"</string>
+    <string name="autofill_save_title" msgid="327541108460384555">"要保存到"<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"吗？"</string>
+    <string name="autofill_save_title_with_type" msgid="2339135393607143594">"要将<xliff:g id="TYPE">%1$s</xliff:g>保存到"<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"吗？"</string>
+    <string name="autofill_save_title_with_2types" msgid="87616102361154432">"要将<xliff:g id="TYPE_0">%1$s</xliff:g>和<xliff:g id="TYPE_1">%2$s</xliff:g>保存到"<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"吗？"</string>
+    <string name="autofill_save_title_with_3types" msgid="4108978552969604555">"要将<xliff:g id="TYPE_0">%1$s</xliff:g>、<xliff:g id="TYPE_1">%2$s</xliff:g>和<xliff:g id="TYPE_2">%3$s</xliff:g>保存到"<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"吗？"</string>
+    <string name="autofill_update_title" msgid="5305781141104585279">"要在"<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"中更新吗？"</string>
+    <string name="autofill_update_title_with_type" msgid="4624181147422762233">"要在"<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"中更新<xliff:g id="TYPE">%1$s</xliff:g>吗？"</string>
+    <string name="autofill_update_title_with_2types" msgid="2300113827053626484">"要在"<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"中更新<xliff:g id="TYPE_0">%1$s</xliff:g>和<xliff:g id="TYPE_1">%2$s</xliff:g>吗？"</string>
+    <string name="autofill_update_title_with_3types" msgid="9089824354296211922">"要在"<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"中更新<xliff:g id="TYPE_0">%1$s</xliff:g>、<xliff:g id="TYPE_1">%2$s</xliff:g>和<xliff:g id="TYPE_2">%3$s</xliff:g>这些内容吗？"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"保存"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"不用了"</string>
     <string name="autofill_update_yes" msgid="310358413273276958">"更新"</string>

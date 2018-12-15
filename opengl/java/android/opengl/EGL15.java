@@ -20,7 +20,9 @@ package android.opengl;
  * EGL 1.5
  *
  */
-public class EGL15 {
+public final class EGL15 {
+
+    private EGL15() {};
 
     public static final int EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT            = 0x00000001;
     public static final int EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT   = 0x00000002;
@@ -144,6 +146,24 @@ public class EGL15 {
         EGLDisplay dpy,
         EGLSync sync,
         int flags
+    );
+
+    // C function EGLImage eglCreateImage ( EGLDisplay dpy, EGLContext context, EGLenum target, EGLClientBuffer buffer, const EGLAttrib *attrib_list )
+
+    public static native EGLImage eglCreateImage(
+        EGLDisplay dpy,
+        EGLContext context,
+        int target,
+        long buffer,
+        long[] attrib_list,
+        int offset
+    );
+
+    // C function EGLBoolean eglDestroyImage ( EGLDisplay dpy, EGLImage image )
+
+    public static native boolean eglDestroyImage(
+        EGLDisplay dpy,
+        EGLImage image
     );
 
 }

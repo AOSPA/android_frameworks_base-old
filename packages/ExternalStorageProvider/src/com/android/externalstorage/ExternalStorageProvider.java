@@ -37,6 +37,7 @@ import android.provider.DocumentsContract;
 import android.provider.DocumentsContract.Document;
 import android.provider.DocumentsContract.Path;
 import android.provider.DocumentsContract.Root;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -185,7 +186,8 @@ public class ExternalStorageProvider extends FileSystemProvider {
                     title = mStorageManager.getBestVolumeDescription(privateVol);
                     storageUuid = StorageManager.convert(privateVol.fsUuid);
                 }
-            } else if (volume.getType() == VolumeInfo.TYPE_PUBLIC
+            } else if ((volume.getType() == VolumeInfo.TYPE_PUBLIC
+                            || volume.getType() == VolumeInfo.TYPE_STUB)
                     && volume.getMountUserId() == userId) {
                 rootId = volume.getFsUuid();
                 title = mStorageManager.getBestVolumeDescription(volume);
@@ -539,14 +541,14 @@ public class ExternalStorageProvider extends FileSystemProvider {
     }
 
     @Override
-    public Cursor querySearchDocuments(String rootId, String query, String[] projection)
+    public Cursor querySearchDocuments(String rootId, String[] projection, Bundle queryArgs)
             throws FileNotFoundException {
         final File parent;
         synchronized (mRootsLock) {
             parent = mRoots.get(rootId).path;
         }
 
-        return querySearchDocuments(parent, query, projection, Collections.emptySet());
+        return querySearchDocuments(parent, projection, Collections.emptySet(), queryArgs);
     }
 
     @Override
@@ -606,11 +608,16 @@ public class ExternalStorageProvider extends FileSystemProvider {
                     }
                     break;
                 }
-                case "getDocumentId": {
-                    final String path = arg;
-                    final List<UriPermission> accessUriPermissions =
-                            extras.getParcelableArrayList(AUTHORITY + ".extra.uriPermissions");
+                case MediaStore.GET_DOCUMENT_URI_CALL: {
+                    // All callers must go through MediaProvider
+                    getContext().enforceCallingPermission(
+                            android.Manifest.permission.WRITE_MEDIA_STORAGE, TAG);
 
+                    final Uri fileUri = extras.getParcelable(DocumentsContract.EXTRA_URI);
+                    final List<UriPermission> accessUriPermissions = extras
+                            .getParcelableArrayList(DocumentsContract.EXTRA_URI_PERMISSIONS);
+
+                    final String path = fileUri.getPath();
                     try {
                         final Bundle out = new Bundle();
                         final Uri uri = getDocumentUri(path, accessUriPermissions);
@@ -619,7 +626,22 @@ public class ExternalStorageProvider extends FileSystemProvider {
                     } catch (FileNotFoundException e) {
                         throw new IllegalStateException("File in " + path + " is not found.", e);
                     }
+                }
+                case MediaStore.GET_MEDIA_URI_CALL: {
+                    // All callers must go through MediaProvider
+                    getContext().enforceCallingPermission(
+                            android.Manifest.permission.WRITE_MEDIA_STORAGE, TAG);
 
+                    final Uri documentUri = extras.getParcelable(DocumentsContract.EXTRA_URI);
+                    final String docId = DocumentsContract.getDocumentId(documentUri);
+                    try {
+                        final Bundle out = new Bundle();
+                        final Uri uri = Uri.fromFile(getFileForDocId(docId));
+                        out.putParcelable(DocumentsContract.EXTRA_URI, uri);
+                        return out;
+                    } catch (FileNotFoundException e) {
+                        throw new IllegalStateException(e);
+                    }
                 }
                 default:
                     Log.w(TAG, "unknown method passed to call(): " + method);

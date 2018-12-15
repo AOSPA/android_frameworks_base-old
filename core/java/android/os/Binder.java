@@ -28,6 +28,8 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.FunctionalUtils.ThrowingRunnable;
 import com.android.internal.util.FunctionalUtils.ThrowingSupplier;
 
+import dalvik.annotation.optimization.CriticalNative;
+
 import libcore.io.IoUtils;
 import libcore.util.NativeAllocationRegistry;
 
@@ -247,6 +249,7 @@ public class Binder implements IBinder {
      * If the current thread is not currently executing an incoming transaction,
      * then its own pid is returned.
      */
+    @CriticalNative
     public static final native int getCallingPid();
 
     /**
@@ -256,6 +259,7 @@ public class Binder implements IBinder {
      * permissions.  If the current thread is not currently executing an
      * incoming transaction, then its own uid is returned.
      */
+    @CriticalNative
     public static final native int getCallingUid();
 
     /**
@@ -286,6 +290,7 @@ public class Binder implements IBinder {
      * @see #getCallingUid()
      * @see #restoreCallingIdentity(long)
      */
+    @CriticalNative
     public static final native long clearCallingIdentity();
 
     /**
@@ -362,6 +367,7 @@ public class Binder implements IBinder {
      * @see StrictMode
      * @hide
      */
+    @CriticalNative
     public static final native void setThreadStrictModePolicy(int policyMask);
 
     /**
@@ -370,7 +376,56 @@ public class Binder implements IBinder {
      * @see #setThreadStrictModePolicy
      * @hide
      */
+    @CriticalNative
     public static final native int getThreadStrictModePolicy();
+
+    /**
+     * Sets the work source for this thread.
+     *
+     * <p>All the following binder calls on this thread will use the provided work source.
+     *
+     * <p>The concept of worksource is similar to {@link WorkSource}. However, for performance
+     * reasons, we only support one UID. This UID represents the original user responsible for the
+     * binder calls.
+     *
+     * <p>A typical use case would be
+     * <pre>
+     * Binder.setThreadWorkSource(uid);
+     * try {
+     *   // Call an API.
+     * } finally {
+     *   Binder.clearThreadWorkSource();
+     * }
+     * </pre>
+     *
+     * @param workSource The original UID responsible for the binder call.
+     * @return The previously set work source.
+     * @hide
+     **/
+    @CriticalNative
+    public static final native int setThreadWorkSource(int workSource);
+
+    /**
+     * Returns the work source set by the caller.
+     *
+     * Unlike {@link Binder#getCallingUid()}, this result of this method cannot be trusted. The
+     * caller can set the value to whatever he wants. Only use this value if you trust the calling
+     * uid.
+     *
+     * @return The original UID responsible for the binder transaction.
+     * @hide
+     */
+    @CriticalNative
+    public static final native int getThreadWorkSource();
+
+    /**
+     * Clears the work source on this thread.
+     *
+     * @return The previously set work source.
+     * @hide
+     **/
+    @CriticalNative
+    public static final native int clearThreadWorkSource();
 
     /**
      * Flush any Binder commands pending in the current thread to the kernel
@@ -502,6 +557,79 @@ public class Binder implements IBinder {
      */
     public static void setDumpDisabled(String msg) {
         sDumpDisabled = msg;
+    }
+
+    /**
+     * Listener to be notified about each proxy-side binder call.
+     *
+     * See {@link setProxyTransactListener}.
+     * @hide
+     */
+    public interface ProxyTransactListener {
+        /**
+         * Called before onTransact.
+         *
+         * @return an object that will be passed back to #onTransactEnded (or null).
+         */
+        Object onTransactStarted(IBinder binder, int transactionCode);
+
+        /**
+         * Called after onTranact (even when an exception is thrown).
+         *
+         * @param session The object return by #onTransactStarted.
+         */
+        void onTransactEnded(@Nullable Object session);
+    }
+
+    /**
+     * Propagates the work source to binder calls executed by the system server.
+     *
+     * <li>By default, this listener will propagate the worksource if the outgoing call happens on
+     * the same thread as the incoming binder call.
+     * <li>Custom attribution can be done by calling {@link ThreadLocalWorkSourceUid#set(int)}.
+     * @hide
+     */
+    public static class PropagateWorkSourceTransactListener implements ProxyTransactListener {
+        @Override
+        public Object onTransactStarted(IBinder binder, int transactionCode) {
+           // Note that {@link Binder#getCallingUid()} is already set to the UID of the current
+           // process when this method is called.
+           //
+           // We use ThreadLocalWorkSourceUid instead. It also allows feature owners to set
+           // {@link ThreadLocalWorkSourceUid#set(int) manually to attribute resources to a UID.
+            int uid = ThreadLocalWorkSourceUid.get();
+            if (uid >= 0) {
+                int originalUid = Binder.setThreadWorkSource(uid);
+                return Integer.valueOf(originalUid);
+            }
+            return null;
+        }
+
+        @Override
+        public void onTransactEnded(Object session) {
+            if (session != null) {
+                int uid = (int) session;
+                Binder.setThreadWorkSource(uid);
+            }
+        }
+    }
+
+    /**
+     * Sets a listener for the transact method on the proxy-side.
+     *
+     * <li>The listener is global. Only fast operations should be done to avoid thread
+     * contentions.
+     * <li>The listener implementation needs to handle synchronization if needed. The methods on the
+     * listener can be called concurrently.
+     * <li>Listener set will be used for new transactions. On-going transaction will still use the
+     * previous listener (if already set).
+     * <li>The listener is called on the critical path of the binder transaction so be careful about
+     * performance.
+     * <li>Never execute another binder transaction inside the listener.
+     * @hide
+     */
+    public static void setProxyTransactListener(@Nullable ProxyTransactListener listener) {
+        BinderProxy.setTransactListener(listener);
     }
 
     /**

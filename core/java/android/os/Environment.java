@@ -199,6 +199,7 @@ public class Environment {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static File getProductDirectory() {
         return DIR_PRODUCT_ROOT;
     }
@@ -468,6 +469,14 @@ public class Environment {
     }
 
     /**
+     * Returns location of packages cache directory.
+     * {@hide}
+     */
+    public static File getPackageCacheDirectory() {
+        return new File(getDataSystemDirectory(), "package_cache");
+    }
+
+    /**
      * Return the primary shared/external storage directory. This directory may
      * not currently be accessible if it has been mounted by the user on their
      * computer, has been removed from the device, or some other problem has
@@ -639,6 +648,13 @@ public class Environment {
      * the user.
      */
     public static String DIRECTORY_DOCUMENTS = "Documents";
+
+    /**
+     * Standard directory in which to place screenshots that have been taken by
+     * the user. Typically used as a secondary directory under
+     * {@link #DIRECTORY_PICTURES}.
+     */
+    public static String DIRECTORY_SCREENSHOTS = "Screenshots";
 
     /**
      * List of standard storage directories.

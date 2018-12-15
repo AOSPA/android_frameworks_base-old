@@ -163,13 +163,18 @@ public final class NotificationRecord {
     private Light mLight;
     private String mGroupLogTag;
     private String mChannelIdLogTag;
-    private ArrayList<Notification.Action> mSmartActions;
+    /**
+     * This list contains system generated smart actions from NAS, app-generated smart actions are
+     * stored in Notification.actions marked as SEMANTIC_ACTION_CONTEXTUAL_SUGGESTION.
+     */
+    private ArrayList<Notification.Action> mSystemGeneratedSmartActions;
     private ArrayList<CharSequence> mSmartReplies;
 
     private final List<Adjustment> mAdjustments;
     private final NotificationStats mStats;
     private int mUserSentiment;
     private boolean mIsInterruptive;
+    private boolean mAudiblyAlerted;
     private boolean mTextChanged;
     private boolean mRecordedInterruption;
     private int mNumberOfSmartRepliesAdded;
@@ -611,6 +616,7 @@ public final class NotificationRecord {
     }
 
     public void applyAdjustments() {
+        long now = System.currentTimeMillis();
         synchronized (mAdjustments) {
             for (Adjustment adjustment: mAdjustments) {
                 Bundle signals = adjustment.getSignals();
@@ -618,17 +624,25 @@ public final class NotificationRecord {
                     final ArrayList<String> people =
                             adjustment.getSignals().getStringArrayList(Adjustment.KEY_PEOPLE);
                     setPeopleOverride(people);
+                    MetricsLogger.action(getAdjustmentLogMaker()
+                            .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_PEOPLE, people.size()));
                 }
                 if (signals.containsKey(Adjustment.KEY_SNOOZE_CRITERIA)) {
                     final ArrayList<SnoozeCriterion> snoozeCriterionList =
                             adjustment.getSignals().getParcelableArrayList(
                                     Adjustment.KEY_SNOOZE_CRITERIA);
                     setSnoozeCriteria(snoozeCriterionList);
+                    MetricsLogger.action(getAdjustmentLogMaker()
+                            .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_SNOOZE_CRITERIA,
+                                    snoozeCriterionList.size()));
                 }
                 if (signals.containsKey(Adjustment.KEY_GROUP_KEY)) {
                     final String groupOverrideKey =
                             adjustment.getSignals().getString(Adjustment.KEY_GROUP_KEY);
                     setOverrideGroupKey(groupOverrideKey);
+                    MetricsLogger.action(getAdjustmentLogMaker()
+                            .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_GROUP_KEY,
+                                    groupOverrideKey));
                 }
                 if (signals.containsKey(Adjustment.KEY_USER_SENTIMENT)) {
                     // Only allow user sentiment update from assistant if user hasn't already
@@ -637,19 +651,44 @@ public final class NotificationRecord {
                             && (getChannel().getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0) {
                         setUserSentiment(adjustment.getSignals().getInt(
                                 Adjustment.KEY_USER_SENTIMENT, USER_SENTIMENT_NEUTRAL));
+                        MetricsLogger.action(getAdjustmentLogMaker()
+                                .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_USER_SENTIMENT,
+                                        getUserSentiment()));
                     }
                 }
                 if (signals.containsKey(Adjustment.KEY_SMART_ACTIONS)) {
-                    setSmartActions(signals.getParcelableArrayList(Adjustment.KEY_SMART_ACTIONS));
+                    setSystemGeneratedSmartActions(
+                            signals.getParcelableArrayList(Adjustment.KEY_SMART_ACTIONS));
+                    MetricsLogger.action(getAdjustmentLogMaker()
+                            .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_SMART_ACTIONS,
+                                    getSystemGeneratedSmartActions().size()));
                 }
                 if (signals.containsKey(Adjustment.KEY_SMART_REPLIES)) {
                     setSmartReplies(signals.getCharSequenceArrayList(Adjustment.KEY_SMART_REPLIES));
+                    MetricsLogger.action(getAdjustmentLogMaker()
+                            .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_SMART_REPLIES,
+                                    getSmartReplies().size()));
                 }
+            }
+            applyImportanceFromAdjustments();
+        }
+    }
+
+    /**
+     * Update importance from the adjustment.
+     */
+    public void applyImportanceFromAdjustments() {
+        synchronized (mAdjustments) {
+            for (Adjustment adjustment : mAdjustments) {
+                Bundle signals = adjustment.getSignals();
                 if (signals.containsKey(Adjustment.KEY_IMPORTANCE)) {
                     int importance = signals.getInt(Adjustment.KEY_IMPORTANCE);
                     importance = Math.max(IMPORTANCE_UNSPECIFIED, importance);
                     importance = Math.min(IMPORTANCE_HIGH, importance);
                     setAssistantImportance(importance);
+                    MetricsLogger.action(getAdjustmentLogMaker()
+                            .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_IMPORTANCE,
+                                    importance));
                 }
             }
         }
@@ -732,10 +771,10 @@ public final class NotificationRecord {
     protected void calculateImportance() {
         mImportance = calculateInitialImportance();
         mImportanceExplanation = "app";
-        if (getChannel().isImportanceLocked()) {
+        if (getChannel().hasUserSetImportance()) {
             mImportanceExplanation = "user";
         }
-        if (!getChannel().isImportanceLocked() && mAssistantImportance != IMPORTANCE_UNSPECIFIED) {
+        if (!getChannel().hasUserSetImportance() && mAssistantImportance != IMPORTANCE_UNSPECIFIED) {
             mImportance = mAssistantImportance;
             mImportanceExplanation = "asst";
         }
@@ -1002,6 +1041,10 @@ public final class NotificationRecord {
         }
     }
 
+    public void setAudiblyAlerted(boolean audiblyAlerted) {
+        mAudiblyAlerted = audiblyAlerted;
+    }
+
     public void setTextChanged(boolean textChanged) {
         mTextChanged = textChanged;
     }
@@ -1016,6 +1059,11 @@ public final class NotificationRecord {
 
     public boolean isInterruptive() {
         return mIsInterruptive;
+    }
+
+    /** Returns true if the notification audibly alerted the user. */
+    public boolean getAudiblyAlerted() {
+        return mAudiblyAlerted;
     }
 
     protected void setPeopleOverride(ArrayList<String> people) {
@@ -1089,12 +1137,13 @@ public final class NotificationRecord {
         mHasSeenSmartReplies = hasSeenSmartReplies;
     }
 
-    public void setSmartActions(ArrayList<Notification.Action> smartActions) {
-        mSmartActions = smartActions;
+    public void setSystemGeneratedSmartActions(
+            ArrayList<Notification.Action> systemGeneratedSmartActions) {
+        mSystemGeneratedSmartActions = systemGeneratedSmartActions;
     }
 
-    public ArrayList<Notification.Action> getSmartActions() {
-        return mSmartActions;
+    public ArrayList<Notification.Action> getSystemGeneratedSmartActions() {
+        return mSystemGeneratedSmartActions;
     }
 
     public void setSmartReplies(ArrayList<CharSequence> smartReplies) {
@@ -1201,6 +1250,16 @@ public final class NotificationRecord {
 
     public LogMaker getLogMaker() {
         return getLogMaker(System.currentTimeMillis());
+    }
+
+    public LogMaker getItemLogMaker() {
+        return getLogMaker().setCategory(MetricsEvent.NOTIFICATION_ITEM);
+    }
+
+    public LogMaker getAdjustmentLogMaker() {
+        return getLogMaker()
+                .setCategory(MetricsEvent.NOTIFICATION_ITEM)
+                .setType(MetricsEvent.NOTIFICATION_ASSISTANT_ADJUSTMENT);
     }
 
     @VisibleForTesting

@@ -88,6 +88,8 @@ interface INotificationManager
     ParceledListSlice getRecentNotifyingAppsForUser(int userId);
     int getBlockedAppCount(int userId);
     boolean areChannelsBypassingDnd();
+    int getAppsBypassingDndCount(int uid);
+    ParceledListSlice getNotificationChannelsBypassingDnd(String pkg, int userId);
 
     // TODO: Remove this when callers have been migrated to the equivalent
     // INotificationListener method.
@@ -146,6 +148,7 @@ interface INotificationManager
 
     int getZenMode();
     ZenModeConfig getZenModeConfig();
+    NotificationManager.Policy getConsolidatedNotificationPolicy();
     oneway void setZenMode(int mode, in Uri conditionId, String reason);
     oneway void notifyConditions(String pkg, in IConditionProvider provider, in Condition[] conditions);
     boolean isNotificationPolicyAccessGranted(String pkg);

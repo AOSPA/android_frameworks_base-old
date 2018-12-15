@@ -27,33 +27,33 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
 
+import androidx.test.filters.FlakyTest;
+
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
 
-import androidx.test.filters.FlakyTest;
-
 /**
  * Tests for {@link ActivityManager}.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:com.android.server.am.ActivityManagerTest
+ *  atest FrameworksServicesTests:ActivityManagerTest
  */
-@Presubmit
 @FlakyTest(detail = "Promote to presubmit if stable")
+@Presubmit
 public class ActivityManagerTest {
 
-    private IActivityManager service;
+    private IActivityManager mService;
 
     @Before
     public void setUp() throws Exception {
-        service = ActivityManager.getService();
+        mService = ActivityManager.getService();
     }
 
     @Test
     public void testTaskIdsForRunningUsers() throws RemoteException {
-        int[] runningUserIds = service.getRunningUserIds();
+        int[] runningUserIds = mService.getRunningUserIds();
         assertThat(runningUserIds).isNotEmpty();
         for (int userId : runningUserIds) {
             testTaskIdsForUser(userId);
@@ -61,7 +61,7 @@ public class ActivityManagerTest {
     }
 
     private void testTaskIdsForUser(int userId) throws RemoteException {
-        List<?> recentTasks = service.getRecentTasks(100, 0, userId).getList();
+        List<?> recentTasks = mService.getRecentTasks(100, 0, userId).getList();
         if (recentTasks != null) {
             for (Object elem : recentTasks) {
                 assertThat(elem).isInstanceOf(RecentTaskInfo.class);

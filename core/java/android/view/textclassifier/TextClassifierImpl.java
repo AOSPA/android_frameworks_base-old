@@ -31,6 +31,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Icon;
+import android.icu.util.ULocale;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.LocaleList;
@@ -39,12 +40,15 @@ import android.os.UserManager;
 import android.provider.Browser;
 import android.provider.CalendarContract;
 import android.provider.ContactsContract;
+import android.text.TextUtils;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 
+import com.google.android.textclassifier.ActionsSuggestionsModel;
 import com.google.android.textclassifier.AnnotatorModel;
+import com.google.android.textclassifier.LangIdModel;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -56,16 +60,12 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Default implementation of the {@link TextClassifier} interface.
@@ -79,10 +79,23 @@ import java.util.regex.Pattern;
 public final class TextClassifierImpl implements TextClassifier {
 
     private static final String LOG_TAG = DEFAULT_LOG_TAG;
-    private static final String MODEL_DIR = "/etc/textclassifier/";
-    private static final String MODEL_FILE_REGEX = "textclassifier\\.(.*)\\.model";
-    private static final String UPDATED_MODEL_FILE_PATH =
-            "/data/misc/textclassifier/textclassifier.model";
+
+    private static final File FACTORY_MODEL_DIR = new File("/etc/textclassifier/");
+    // Annotator
+    private static final String ANNOTATOR_FACTORY_MODEL_FILENAME_REGEX =
+            "textclassifier\\.(.*)\\.model";
+    private static final File ANNOTATOR_UPDATED_MODEL_FILE =
+            new File("/data/misc/textclassifier/textclassifier.model");
+
+    // LangID
+    private static final String LANG_ID_FACTORY_MODEL_FILENAME_REGEX = "lang_id.model";
+    private static final File UPDATED_LANG_ID_MODEL_FILE =
+            new File("/data/misc/textclassifier/lang_id.model");
+
+    // Actions
+    private static final String ACTIONS_FACTORY_MODEL_FILENAME_REGEX = "actions_suggestions.model";
+    private static final File UPDATED_ACTIONS_MODEL =
+            new File("/data/misc/textclassifier/actions_suggestions.model");
 
     private final Context mContext;
     private final TextClassifier mFallback;
@@ -90,11 +103,13 @@ public final class TextClassifierImpl implements TextClassifier {
 
     private final Object mLock = new Object();
     @GuardedBy("mLock") // Do not access outside this lock.
-    private List<ModelFile> mAllModelFiles;
+    private ModelFileManager.ModelFile mAnnotatorModelInUse;
     @GuardedBy("mLock") // Do not access outside this lock.
-    private ModelFile mModel;
+    private AnnotatorModel mAnnotatorImpl;
     @GuardedBy("mLock") // Do not access outside this lock.
-    private AnnotatorModel mNative;
+    private LangIdModel mLangIdImpl;
+    @GuardedBy("mLock") // Do not access outside this lock.
+    private ActionsSuggestionsModel mActionsImpl;
 
     private final Object mLoggerLock = new Object();
     @GuardedBy("mLoggerLock") // Do not access outside this lock.
@@ -102,12 +117,37 @@ public final class TextClassifierImpl implements TextClassifier {
 
     private final TextClassificationConstants mSettings;
 
+    private final ModelFileManager mAnnotatorModelFileManager;
+    private final ModelFileManager mLangIdModelFileManager;
+    private final ModelFileManager mActionsModelFileManager;
+
     public TextClassifierImpl(
             Context context, TextClassificationConstants settings, TextClassifier fallback) {
         mContext = Preconditions.checkNotNull(context);
         mFallback = Preconditions.checkNotNull(fallback);
         mSettings = Preconditions.checkNotNull(settings);
         mGenerateLinksLogger = new GenerateLinksLogger(mSettings.getGenerateLinksLogSampleRate());
+        mAnnotatorModelFileManager = new ModelFileManager(
+                new ModelFileManager.ModelFileSupplierImpl(
+                        FACTORY_MODEL_DIR,
+                        ANNOTATOR_FACTORY_MODEL_FILENAME_REGEX,
+                        ANNOTATOR_UPDATED_MODEL_FILE,
+                        AnnotatorModel::getVersion,
+                        AnnotatorModel::getLocales));
+        mLangIdModelFileManager = new ModelFileManager(
+                new ModelFileManager.ModelFileSupplierImpl(
+                        FACTORY_MODEL_DIR,
+                        LANG_ID_FACTORY_MODEL_FILENAME_REGEX,
+                        UPDATED_LANG_ID_MODEL_FILE,
+                        fd -> -1, // TODO: Replace this with LangIdModel.getVersion(fd)
+                        fd -> ModelFileManager.ModelFile.LANGUAGE_INDEPENDENT));
+        mActionsModelFileManager = new ModelFileManager(
+                new ModelFileManager.ModelFileSupplierImpl(
+                        FACTORY_MODEL_DIR,
+                        ACTIONS_FACTORY_MODEL_FILENAME_REGEX,
+                        UPDATED_ACTIONS_MODEL,
+                        ActionsSuggestionsModel::getVersion,
+                        ActionsSuggestionsModel::getLocales));
     }
 
     public TextClassifierImpl(Context context, TextClassificationConstants settings) {
@@ -127,14 +167,15 @@ public final class TextClassifierImpl implements TextClassifier {
                     && rangeLength <= mSettings.getSuggestSelectionMaxRangeLength()) {
                 final String localesString = concatenateLocales(request.getDefaultLocales());
                 final ZonedDateTime refTime = ZonedDateTime.now();
-                final AnnotatorModel nativeImpl = getNative(request.getDefaultLocales());
+                final AnnotatorModel annotatorImpl =
+                        getAnnotatorImpl(request.getDefaultLocales());
                 final int start;
                 final int end;
                 if (mSettings.isModelDarkLaunchEnabled() && !request.isDarkLaunchAllowed()) {
                     start = request.getStartIndex();
                     end = request.getEndIndex();
                 } else {
-                    final int[] startEnd = nativeImpl.suggestSelection(
+                    final int[] startEnd = annotatorImpl.suggestSelection(
                             string, request.getStartIndex(), request.getEndIndex(),
                             new AnnotatorModel.SelectionOptions(localesString));
                     start = startEnd[0];
@@ -145,7 +186,7 @@ public final class TextClassifierImpl implements TextClassifier {
                         && start <= request.getStartIndex() && end >= request.getEndIndex()) {
                     final TextSelection.Builder tsBuilder = new TextSelection.Builder(start, end);
                     final AnnotatorModel.ClassificationResult[] results =
-                            nativeImpl.classifyText(
+                            annotatorImpl.classifyText(
                                     string, start, end,
                                     new AnnotatorModel.ClassificationOptions(
                                             refTime.toInstant().toEpochMilli(),
@@ -187,7 +228,7 @@ public final class TextClassifierImpl implements TextClassifier {
                 final ZonedDateTime refTime = request.getReferenceTime() != null
                         ? request.getReferenceTime() : ZonedDateTime.now();
                 final AnnotatorModel.ClassificationResult[] results =
-                        getNative(request.getDefaultLocales())
+                        getAnnotatorImpl(request.getDefaultLocales())
                                 .classifyText(
                                         string, request.getStartIndex(), request.getEndIndex(),
                                         new AnnotatorModel.ClassificationOptions(
@@ -230,10 +271,10 @@ public final class TextClassifierImpl implements TextClassifier {
                     ? request.getEntityConfig().resolveEntityListModifications(
                             getEntitiesForHints(request.getEntityConfig().getHints()))
                     : mSettings.getEntityListDefault();
-            final AnnotatorModel nativeImpl =
-                    getNative(request.getDefaultLocales());
+            final AnnotatorModel annotatorImpl =
+                    getAnnotatorImpl(request.getDefaultLocales());
             final AnnotatorModel.AnnotatedSpan[] annotations =
-                    nativeImpl.annotate(
+                    annotatorImpl.annotate(
                         textString,
                         new AnnotatorModel.AnnotationOptions(
                                 refTime.toInstant().toEpochMilli(),
@@ -288,6 +329,7 @@ public final class TextClassifierImpl implements TextClassifier {
         }
     }
 
+    /** @inheritDoc */
     @Override
     public void onSelectionEvent(SelectionEvent event) {
         Preconditions.checkNotNull(event);
@@ -299,104 +341,179 @@ public final class TextClassifierImpl implements TextClassifier {
         }
     }
 
-    private AnnotatorModel getNative(LocaleList localeList)
+    /** @inheritDoc */
+    @Override
+    public TextLanguage detectLanguage(@NonNull TextLanguage.Request request) {
+        Preconditions.checkNotNull(request);
+        Utils.checkMainThread();
+        try {
+            final TextLanguage.Builder builder = new TextLanguage.Builder();
+            final LangIdModel.LanguageResult[] langResults =
+                    getLangIdImpl().detectLanguages(request.getText().toString());
+            for (int i = 0; i < langResults.length; i++) {
+                builder.putLocale(
+                        ULocale.forLanguageTag(langResults[i].getLanguage()),
+                        langResults[i].getScore());
+            }
+            return builder.build();
+        } catch (Throwable t) {
+            // Avoid throwing from this method. Log the error.
+            Log.e(LOG_TAG, "Error detecting text language.", t);
+        }
+        return mFallback.detectLanguage(request);
+    }
+
+    @Override
+    public ConversationActions suggestConversationActions(ConversationActions.Request request) {
+        Preconditions.checkNotNull(request);
+        Utils.checkMainThread();
+        try {
+            ActionsSuggestionsModel actionsImpl = getActionsImpl();
+            if (actionsImpl == null) {
+                // Actions model is optional, fallback if it is not available.
+                return mFallback.suggestConversationActions(request);
+            }
+            List<ActionsSuggestionsModel.ConversationMessage> nativeMessages = new ArrayList<>();
+            for (ConversationActions.Message message : request.getConversation()) {
+                if (TextUtils.isEmpty(message.getText())) {
+                    continue;
+                }
+                // TODO: We need to map the Person object to user id.
+                int userId = 1;
+                nativeMessages.add(
+                        new ActionsSuggestionsModel.ConversationMessage(
+                                userId, message.getText().toString()));
+            }
+            ActionsSuggestionsModel.Conversation nativeConversation =
+                    new ActionsSuggestionsModel.Conversation(nativeMessages.toArray(
+                            new ActionsSuggestionsModel.ConversationMessage[0]));
+
+            ActionsSuggestionsModel.ActionSuggestion[] nativeSuggestions =
+                    actionsImpl.suggestActions(nativeConversation, null);
+
+            Collection<String> expectedTypes = resolveActionTypesFromRequest(request);
+            List<ConversationActions.ConversationAction> conversationActions = new ArrayList<>();
+            int maxSuggestions = Math.min(request.getMaxSuggestions(), nativeSuggestions.length);
+            for (int i = 0; i < maxSuggestions; i++) {
+                ActionsSuggestionsModel.ActionSuggestion nativeSuggestion = nativeSuggestions[i];
+                String actionType = nativeSuggestion.getActionType();
+                if (!expectedTypes.contains(actionType)) {
+                    continue;
+                }
+                conversationActions.add(
+                        new ConversationActions.ConversationAction.Builder(actionType)
+                                .setTextReply(nativeSuggestion.getResponseText())
+                                .setConfidenceScore(nativeSuggestion.getScore())
+                                .build());
+            }
+            return new ConversationActions(conversationActions);
+        } catch (Throwable t) {
+            // Avoid throwing from this method. Log the error.
+            Log.e(LOG_TAG, "Error suggesting conversation actions.", t);
+        }
+        return mFallback.suggestConversationActions(request);
+    }
+
+    private Collection<String> resolveActionTypesFromRequest(ConversationActions.Request request) {
+        List<String> defaultActionTypes =
+                request.getHints().contains(ConversationActions.HINT_FOR_NOTIFICATION)
+                        ? mSettings.getNotificationConversationActionTypes()
+                        : mSettings.getInAppConversationActionTypes();
+        return request.getTypeConfig().resolveTypes(defaultActionTypes);
+    }
+
+    private AnnotatorModel getAnnotatorImpl(LocaleList localeList)
             throws FileNotFoundException {
         synchronized (mLock) {
-            localeList = localeList == null ? LocaleList.getEmptyLocaleList() : localeList;
-            final ModelFile bestModel = findBestModelLocked(localeList);
+            localeList = localeList == null ? LocaleList.getDefault() : localeList;
+            final ModelFileManager.ModelFile bestModel =
+                    mAnnotatorModelFileManager.findBestModelFile(localeList);
             if (bestModel == null) {
-                throw new FileNotFoundException("No model for " + localeList.toLanguageTags());
+                throw new FileNotFoundException(
+                        "No annotator model for " + localeList.toLanguageTags());
             }
-            if (mNative == null || !Objects.equals(mModel, bestModel)) {
+            if (mAnnotatorImpl == null || !Objects.equals(mAnnotatorModelInUse, bestModel)) {
                 Log.d(DEFAULT_LOG_TAG, "Loading " + bestModel);
-                destroyNativeIfExistsLocked();
-                final ParcelFileDescriptor fd = ParcelFileDescriptor.open(
+                destroyAnnotatorImplIfExistsLocked();
+                final ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
                         new File(bestModel.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
-                mNative = new AnnotatorModel(fd.getFd());
-                closeAndLogError(fd);
-                mModel = bestModel;
+                try {
+                    if (pfd != null) {
+                        mAnnotatorImpl = new AnnotatorModel(pfd.getFd());
+                        mAnnotatorModelInUse = bestModel;
+                    }
+                } finally {
+                    maybeCloseAndLogError(pfd);
+                }
             }
-            return mNative;
+            return mAnnotatorImpl;
+        }
+    }
+
+    @GuardedBy("mLock") // Do not call outside this lock.
+    private void destroyAnnotatorImplIfExistsLocked() {
+        if (mAnnotatorImpl != null) {
+            mAnnotatorImpl.close();
+            mAnnotatorImpl = null;
+        }
+    }
+
+    private LangIdModel getLangIdImpl() throws FileNotFoundException {
+        synchronized (mLock) {
+            if (mLangIdImpl == null) {
+                final ModelFileManager.ModelFile bestModel =
+                        mLangIdModelFileManager.findBestModelFile(null);
+                if (bestModel == null) {
+                    throw new FileNotFoundException("No LangID model is found");
+                }
+                final ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
+                        new File(bestModel.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
+                try {
+                    if (pfd != null) {
+                        mLangIdImpl = new LangIdModel(pfd.getFd());
+                    }
+                } finally {
+                    maybeCloseAndLogError(pfd);
+                }
+            }
+            return mLangIdImpl;
+        }
+    }
+
+    @Nullable
+    private ActionsSuggestionsModel getActionsImpl() throws FileNotFoundException {
+        synchronized (mLock) {
+            if (mActionsImpl == null) {
+                // TODO: Use LangID to determine the locale we should use here?
+                final ModelFileManager.ModelFile bestModel =
+                        mActionsModelFileManager.findBestModelFile(LocaleList.getDefault());
+                if (bestModel == null) {
+                    return null;
+                }
+                final ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
+                        new File(bestModel.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
+                try {
+                    if (pfd != null) {
+                        mActionsImpl = new ActionsSuggestionsModel(pfd.getFd());
+                    }
+                } finally {
+                    maybeCloseAndLogError(pfd);
+                }
+            }
+            return mActionsImpl;
         }
     }
 
     private String createId(String text, int start, int end) {
         synchronized (mLock) {
-            return SelectionSessionLogger.createId(text, start, end, mContext, mModel.getVersion(),
-                    mModel.getSupportedLocales());
-        }
-    }
-
-    @GuardedBy("mLock") // Do not call outside this lock.
-    private void destroyNativeIfExistsLocked() {
-        if (mNative != null) {
-            mNative.close();
-            mNative = null;
+            return SelectionSessionLogger.createId(text, start, end, mContext,
+                    mAnnotatorModelInUse.getVersion(),
+                    mAnnotatorModelInUse.getSupportedLocales());
         }
     }
 
     private static String concatenateLocales(@Nullable LocaleList locales) {
         return (locales == null) ? "" : locales.toLanguageTags();
-    }
-
-    /**
-     * Finds the most appropriate model to use for the given target locale list.
-     *
-     * The basic logic is: we ignore all models that don't support any of the target locales. For
-     * the remaining candidates, we take the update model unless its version number is lower than
-     * the factory version. It's assumed that factory models do not have overlapping locale ranges
-     * and conflict resolution between these models hence doesn't matter.
-     */
-    @GuardedBy("mLock") // Do not call outside this lock.
-    @Nullable
-    private ModelFile findBestModelLocked(LocaleList localeList) {
-        // Specified localeList takes priority over the system default, so it is listed first.
-        final String languages = localeList.isEmpty()
-                ? LocaleList.getDefault().toLanguageTags()
-                : localeList.toLanguageTags() + "," + LocaleList.getDefault().toLanguageTags();
-        final List<Locale.LanguageRange> languageRangeList = Locale.LanguageRange.parse(languages);
-
-        ModelFile bestModel = null;
-        for (ModelFile model : listAllModelsLocked()) {
-            if (model.isAnyLanguageSupported(languageRangeList)) {
-                if (model.isPreferredTo(bestModel)) {
-                    bestModel = model;
-                }
-            }
-        }
-        return bestModel;
-    }
-
-    /** Returns a list of all model files available, in order of precedence. */
-    @GuardedBy("mLock") // Do not call outside this lock.
-    private List<ModelFile> listAllModelsLocked() {
-        if (mAllModelFiles == null) {
-            final List<ModelFile> allModels = new ArrayList<>();
-            // The update model has the highest precedence.
-            if (new File(UPDATED_MODEL_FILE_PATH).exists()) {
-                final ModelFile updatedModel = ModelFile.fromPath(UPDATED_MODEL_FILE_PATH);
-                if (updatedModel != null) {
-                    allModels.add(updatedModel);
-                }
-            }
-            // Factory models should never have overlapping locales, so the order doesn't matter.
-            final File modelsDir = new File(MODEL_DIR);
-            if (modelsDir.exists() && modelsDir.isDirectory()) {
-                final File[] modelFiles = modelsDir.listFiles();
-                final Pattern modelFilenamePattern = Pattern.compile(MODEL_FILE_REGEX);
-                for (File modelFile : modelFiles) {
-                    final Matcher matcher = modelFilenamePattern.matcher(modelFile.getName());
-                    if (matcher.matches() && modelFile.isFile()) {
-                        final ModelFile model = ModelFile.fromPath(modelFile.getAbsolutePath());
-                        if (model != null) {
-                            allModels.add(model);
-                        }
-                    }
-                }
-            }
-            mAllModelFiles = allModels;
-        }
-        return mAllModelFiles;
     }
 
     private TextClassification createClassificationResult(
@@ -407,20 +524,19 @@ public final class TextClassifierImpl implements TextClassifier {
                 .setText(classifiedText);
 
         final int size = classifications.length;
-        AnnotatorModel.ClassificationResult highestScoringResult = null;
-        float highestScore = Float.MIN_VALUE;
+        AnnotatorModel.ClassificationResult highestScoringResult =
+                size > 0 ? classifications[0] : null;
         for (int i = 0; i < size; i++) {
             builder.setEntityType(classifications[i].getCollection(),
                                   classifications[i].getScore());
-            if (classifications[i].getScore() > highestScore) {
+            if (classifications[i].getScore() > highestScoringResult.getScore()) {
                 highestScoringResult = classifications[i];
-                highestScore = classifications[i].getScore();
             }
         }
 
         boolean isPrimaryAction = true;
         for (LabeledIntent labeledIntent : IntentFactory.create(
-                mContext, referenceTime, highestScoringResult, classifiedText)) {
+                mContext, classifiedText, referenceTime, highestScoringResult)) {
             final RemoteAction action = labeledIntent.asRemoteAction(mContext);
             if (action == null) {
                 continue;
@@ -445,12 +561,26 @@ public final class TextClassifierImpl implements TextClassifier {
     @Override
     public void dump(@NonNull IndentingPrintWriter printWriter) {
         synchronized (mLock) {
-            listAllModelsLocked();
             printWriter.println("TextClassifierImpl:");
             printWriter.increaseIndent();
-            printWriter.println("Model file(s):");
+            printWriter.println("Annotator model file(s):");
             printWriter.increaseIndent();
-            for (ModelFile modelFile : mAllModelFiles) {
+            for (ModelFileManager.ModelFile modelFile :
+                    mAnnotatorModelFileManager.listModelFiles()) {
+                printWriter.println(modelFile.toString());
+            }
+            printWriter.decreaseIndent();
+            printWriter.println("LangID model file(s):");
+            printWriter.increaseIndent();
+            for (ModelFileManager.ModelFile modelFile :
+                    mLangIdModelFileManager.listModelFiles()) {
+                printWriter.println(modelFile.toString());
+            }
+            printWriter.decreaseIndent();
+            printWriter.println("Actions model file(s):");
+            printWriter.increaseIndent();
+            for (ModelFileManager.ModelFile modelFile :
+                    mActionsModelFileManager.listModelFiles()) {
                 printWriter.println(modelFile.toString());
             }
             printWriter.decreaseIndent();
@@ -461,127 +591,17 @@ public final class TextClassifierImpl implements TextClassifier {
     }
 
     /**
-     * Closes the ParcelFileDescriptor and logs any errors that occur.
+     * Closes the ParcelFileDescriptor, if non-null, and logs any errors that occur.
      */
-    private static void closeAndLogError(ParcelFileDescriptor fd) {
+    private static void maybeCloseAndLogError(@Nullable ParcelFileDescriptor fd) {
+        if (fd == null) {
+            return;
+        }
+
         try {
             fd.close();
         } catch (IOException e) {
             Log.e(LOG_TAG, "Error closing file.", e);
-        }
-    }
-
-    /**
-     * Describes TextClassifier model files on disk.
-     */
-    private static final class ModelFile {
-
-        private final String mPath;
-        private final String mName;
-        private final int mVersion;
-        private final List<Locale> mSupportedLocales;
-        private final boolean mLanguageIndependent;
-
-        /** Returns null if the path did not point to a compatible model. */
-        static @Nullable ModelFile fromPath(String path) {
-            final File file = new File(path);
-            try {
-                final ParcelFileDescriptor modelFd = ParcelFileDescriptor.open(
-                        file, ParcelFileDescriptor.MODE_READ_ONLY);
-                final int version = AnnotatorModel.getVersion(modelFd.getFd());
-                final String supportedLocalesStr =
-                        AnnotatorModel.getLocales(modelFd.getFd());
-                if (supportedLocalesStr.isEmpty()) {
-                    Log.d(DEFAULT_LOG_TAG, "Ignoring " + file.getAbsolutePath());
-                    return null;
-                }
-                final boolean languageIndependent = supportedLocalesStr.equals("*");
-                final List<Locale> supportedLocales = new ArrayList<>();
-                for (String langTag : supportedLocalesStr.split(",")) {
-                    supportedLocales.add(Locale.forLanguageTag(langTag));
-                }
-                closeAndLogError(modelFd);
-                return new ModelFile(path, file.getName(), version, supportedLocales,
-                                     languageIndependent);
-            } catch (FileNotFoundException e) {
-                Log.e(DEFAULT_LOG_TAG, "Failed to peek " + file.getAbsolutePath(), e);
-                return null;
-            }
-        }
-
-        /** The absolute path to the model file. */
-        String getPath() {
-            return mPath;
-        }
-
-        /** A name to use for id generation. Effectively the name of the model file. */
-        String getName() {
-            return mName;
-        }
-
-        /** Returns the version tag in the model's metadata. */
-        int getVersion() {
-            return mVersion;
-        }
-
-        /** Returns whether the language supports any language in the given ranges. */
-        boolean isAnyLanguageSupported(List<Locale.LanguageRange> languageRanges) {
-            return mLanguageIndependent || Locale.lookup(languageRanges, mSupportedLocales) != null;
-        }
-
-        /** All locales supported by the model. */
-        List<Locale> getSupportedLocales() {
-            return Collections.unmodifiableList(mSupportedLocales);
-        }
-
-        public boolean isPreferredTo(ModelFile model) {
-            // A model is preferred to no model.
-            if (model == null) {
-                return true;
-            }
-
-            // A language-specific model is preferred to a language independent
-            // model.
-            if (!mLanguageIndependent && model.mLanguageIndependent) {
-                return true;
-            }
-
-            // A higher-version model is preferred.
-            if (getVersion() > model.getVersion()) {
-                return true;
-            }
-            return false;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            } else if (other == null || !ModelFile.class.isAssignableFrom(other.getClass())) {
-                return false;
-            } else {
-                final ModelFile otherModel = (ModelFile) other;
-                return mPath.equals(otherModel.mPath);
-            }
-        }
-
-        @Override
-        public String toString() {
-            final StringJoiner localesJoiner = new StringJoiner(",");
-            for (Locale locale : mSupportedLocales) {
-                localesJoiner.add(locale.toLanguageTag());
-            }
-            return String.format(Locale.US, "ModelFile { path=%s name=%s version=%d locales=%s }",
-                    mPath, mName, mVersion, localesJoiner.toString());
-        }
-
-        private ModelFile(String path, String name, int version, List<Locale> supportedLocales,
-                          boolean languageIndependent) {
-            mPath = path;
-            mName = name;
-            mVersion = version;
-            mSupportedLocales = supportedLocales;
-            mLanguageIndependent = languageIndependent;
         }
     }
 
@@ -677,10 +697,12 @@ public final class TextClassifierImpl implements TextClassifier {
         @NonNull
         public static List<LabeledIntent> create(
                 Context context,
+                String text,
                 @Nullable Instant referenceTime,
-                AnnotatorModel.ClassificationResult classification,
-                String text) {
-            final String type = classification.getCollection().trim().toLowerCase(Locale.ENGLISH);
+                @Nullable AnnotatorModel.ClassificationResult classification) {
+            final String type = classification != null
+                    ? classification.getCollection().trim().toLowerCase(Locale.ENGLISH)
+                    : null;
             text = text.trim();
             switch (type) {
                 case TextClassifier.TYPE_EMAIL:

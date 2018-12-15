@@ -17,10 +17,15 @@
 package com.android.systemui.statusbar.phone;
 
 import static android.view.MotionEvent.ACTION_DOWN;
+
+import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_DISABLE_QUICK_SCRUB;
+import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_SHOW_OVERVIEW_BUTTON;
 import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_BACK;
 import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_DEAD_ZONE;
 import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_HOME;
 import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_NONE;
+import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_OVERVIEW;
+import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_ROTATION;
 
 import android.animation.LayoutTransition;
 import android.animation.LayoutTransition.TransitionListener;
@@ -29,7 +34,6 @@ import android.animation.PropertyValuesHolder;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.annotation.DrawableRes;
-import android.annotation.StyleRes;
 import android.app.StatusBarManager;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -39,9 +43,11 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.MotionEvent;
@@ -50,6 +56,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.inputmethod.InputMethodManager;
@@ -58,15 +65,15 @@ import android.widget.FrameLayout;
 import com.android.systemui.Dependency;
 import com.android.systemui.DockedStackExistsListener;
 import com.android.systemui.Interpolators;
-import com.android.systemui.OverviewProxyService;
 import com.android.systemui.R;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.plugins.PluginListener;
-import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.plugins.statusbar.phone.NavGesture;
 import com.android.systemui.plugins.statusbar.phone.NavGesture.GestureHelper;
+import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsOnboarding;
+import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.NavigationBarCompat;
 import com.android.systemui.shared.system.WindowManagerWrapper;
@@ -76,11 +83,6 @@ import com.android.systemui.statusbar.policy.KeyButtonDrawable;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.function.Consumer;
-
-import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_DISABLE_QUICK_SCRUB;
-import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_SHOW_OVERVIEW_BUTTON;
-import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_OVERVIEW;
-import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_ROTATION;
 
 public class NavigationBarView extends FrameLayout implements PluginListener<NavGesture> {
     final static boolean DEBUG = false;
@@ -143,6 +145,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     private NavigationBarInflaterView mNavigationInflaterView;
     private RecentsOnboarding mRecentsOnboarding;
     private NotificationPanelView mPanelView;
+
+    private QuickScrubAction mQuickScrubAction;
+    private QuickStepAction mQuickStepAction;
+    private NavigationBackAction mBackAction;
 
     /**
      * Helper that is responsible for showing the right toast when a disallowed activity operation
@@ -258,8 +264,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     public NavigationBarView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        mDisplay = ((WindowManager) context.getSystemService(
-                Context.WINDOW_SERVICE)).getDefaultDisplay();
+        mDisplay = context.getDisplay();
 
         mVertical = false;
         mLongClickableAccessibilityButton = false;
@@ -271,7 +276,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         final ContextualButton imeSwitcherButton = new ContextualButton(R.id.ime_switcher,
                 R.drawable.ic_ime_switcher_default);
         final RotationContextButton rotateSuggestionButton = new RotationContextButton(
-                R.id.rotate_suggestion, R.drawable.ic_sysbar_rotate_button,
+                R.id.rotate_suggestion, R.drawable.ic_sysbar_rotate_button, getContext(),
                 R.style.RotateButtonCCWStart90);
         final ContextualButton accessibilityButton =
                 new ContextualButton(R.id.accessibility_button,
@@ -300,6 +305,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         mButtonDispatchers.put(R.id.rotate_suggestion, rotateSuggestionButton);
         mButtonDispatchers.put(R.id.menu_container, mContextualButtonGroup);
         mDeadZone = new DeadZone(this);
+
+        mQuickScrubAction = new QuickScrubAction(this, mOverviewProxyService);
+        mQuickStepAction = new QuickStepAction(this, mOverviewProxyService);
+        mBackAction = new NavigationBackAction(this, mOverviewProxyService);
     }
 
     public BarTransitions getBarTransitions() {
@@ -314,6 +323,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         mPanelView = panel;
         if (mGestureHelper instanceof QuickStepController) {
             ((QuickStepController) mGestureHelper).setComponents(this);
+            ((QuickStepController) mGestureHelper).setGestureActions(mQuickStepAction,
+                    null /* swipeDownAction*/, mBackAction, mQuickScrubAction);
         }
     }
 
@@ -350,7 +361,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         shouldDeadZoneConsumeTouchEvents(event);
-        if (mGestureHelper.onTouchEvent(event)) {
+        if (mGestureHelper != null && mGestureHelper.onTouchEvent(event)) {
             return true;
         }
         return super.onTouchEvent(event);
@@ -418,8 +429,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         return mButtonDispatchers.get(R.id.accessibility_button);
     }
 
-    public ButtonDispatcher getRotateSuggestionButton() {
-        return mButtonDispatchers.get(R.id.rotate_suggestion);
+    public RotationContextButton getRotateSuggestionButton() {
+        return (RotationContextButton) mContextualButtonGroup
+                .getContextButton(R.id.rotate_suggestion);
     }
 
     public SparseArray<ButtonDispatcher> getButtonDispatchers() {
@@ -680,7 +692,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     }
 
     public void onNavigationButtonLongPress(View v) {
-        mGestureHelper.onNavigationButtonLongPress(v);
+        if (mGestureHelper != null) {
+            mGestureHelper.onNavigationButtonLongPress(v);
+        }
     }
 
     public void onPanelExpandedChange(boolean expanded) {
@@ -744,47 +758,14 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         mContextualButtonGroup.setButtonVisiblity(R.id.menu, show);
     }
 
-    public void updateRotateSuggestionButtonStyle(@StyleRes int style) {
-        RotationContextButton button = (RotationContextButton) mContextualButtonGroup
-                .getContextButton(R.id.rotate_suggestion);
-        button.setStyle(style);
-        button.updateIcon();
-    }
-
     public void setAccessibilityButtonState(final boolean visible, final boolean longClickable) {
         mLongClickableAccessibilityButton = longClickable;
         getAccessibilityButton().setLongClickable(longClickable);
         mContextualButtonGroup.setButtonVisiblity(R.id.accessibility_button, visible);
     }
 
-    public int setRotateButtonVisibility(boolean visible) {
-        return mContextualButtonGroup.setButtonVisiblity(R.id.rotate_suggestion, visible);
-    }
-
-    public boolean isRotateButtonVisible() {
-        return getRotateSuggestionButton().isVisible();
-    }
-
     void hideRecentsOnboarding() {
         mRecentsOnboarding.hide(true);
-    }
-
-    /**
-     * @return the button at the given {@param x} and {@param y}.
-     */
-    ButtonDispatcher getButtonAtPosition(int x, int y) {
-        for (int i = 0; i < mButtonDispatchers.size(); i++) {
-            ButtonDispatcher button = mButtonDispatchers.valueAt(i);
-            View buttonView = button.getCurrentView();
-            if (buttonView != null) {
-                buttonView.getHitRect(mTmpRect);
-                offsetDescendantRectToMyCoords(buttonView, mTmpRect);
-                if (mTmpRect.contains(x, y)) {
-                    return button;
-                }
-            }
-        }
-        return null;
     }
 
     @Override
@@ -807,7 +788,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
     @Override
     protected void onDraw(Canvas canvas) {
-        mGestureHelper.onDraw(canvas);
+        if (mGestureHelper != null) {
+            mGestureHelper.onDraw(canvas);
+        }
         mDeadZone.onDraw(canvas);
         super.onDraw(canvas);
     }
@@ -819,7 +802,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         updateButtonLocationOnScreen(getHomeButton(), mHomeButtonBounds);
         updateButtonLocationOnScreen(getRecentsButton(), mRecentsButtonBounds);
         updateButtonLocationOnScreen(getRotateSuggestionButton(), mRotationButtonBounds);
-        mGestureHelper.onLayout(changed, left, top, right, bottom);
+        if (mGestureHelper != null) {
+            mGestureHelper.onLayout(changed, left, top, right, bottom);
+        }
         mRecentsOnboarding.setNavBarHeight(getMeasuredHeight());
     }
 
@@ -917,7 +902,13 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     private void updateTaskSwitchHelper() {
         if (mGestureHelper == null) return;
         boolean isRtl = (getLayoutDirection() == View.LAYOUT_DIRECTION_RTL);
-        mGestureHelper.setBarState(mVertical, isRtl);
+        int navBarPos = 0;
+        try {
+            navBarPos = WindowManagerGlobal.getWindowManagerService().getNavBarPosition();
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Failed to get nav bar position.", e);
+        }
+        mGestureHelper.setBarState(isRtl, navBarPos);
     }
 
     @Override
@@ -1052,6 +1043,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
             mGestureHelper.destroy();
         }
         setUpSwipeUpOnboarding(false);
+        for (int i = 0; i < mButtonDispatchers.size(); ++i) {
+            mButtonDispatchers.valueAt(i).onDestroy();
+        }
     }
 
     private void setUpSwipeUpOnboarding(boolean connectedToOverviewProxy) {
@@ -1117,7 +1111,17 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         pw.println("    }");
 
         mContextualButtonGroup.dump(pw);
-        mGestureHelper.dump(pw);
+        if (mGestureHelper != null) {
+            pw.println("Navigation Gesture Actions {");
+            pw.print("    "); pw.println("QuickScrub Enabled=" + mQuickScrubAction.isEnabled());
+            pw.print("    "); pw.println("QuickScrub Active=" + mQuickScrubAction.isActive());
+            pw.print("    "); pw.println("QuickStep Enabled=" + mQuickStepAction.isEnabled());
+            pw.print("    "); pw.println("QuickStep Active=" + mQuickStepAction.isActive());
+            pw.print("    "); pw.println("Back Gesture Enabled=" + mBackAction.isEnabled());
+            pw.print("    "); pw.println("Back Gesture Active=" + mBackAction.isActive());
+            pw.println("}");
+            mGestureHelper.dump(pw);
+        }
         mRecentsOnboarding.dump(pw);
     }
 

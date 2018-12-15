@@ -25,6 +25,10 @@ package android.animation {
 
 package android.app {
 
+  public class Activity extends android.view.ContextThemeWrapper implements android.content.ComponentCallbacks2 android.view.KeyEvent.Callback android.view.LayoutInflater.Factory2 android.view.View.OnCreateContextMenuListener android.view.Window.Callback {
+    method public void onMovedToDisplay(int, android.content.res.Configuration);
+  }
+
   public class ActivityManager {
     method public void addOnUidImportanceListener(android.app.ActivityManager.OnUidImportanceListener, int);
     method public void alwaysShowUnsupportedCompileSdkWarning(android.content.ComponentName);
@@ -78,6 +82,8 @@ package android.app {
   }
 
   public class AppOpsManager {
+    method public java.util.List<android.app.AppOpsManager.HistoricalPackageOps> getAllHistoricPackagesOps(java.lang.String[], long, long);
+    method public android.app.AppOpsManager.HistoricalPackageOps getHistoricalPackagesOps(int, java.lang.String, java.lang.String[], long, long);
     method public static int getNumOps();
     method public static java.lang.String[] getOpStrs();
     method public boolean isOperationActive(int, int, java.lang.String);
@@ -135,12 +141,42 @@ package android.app {
     field public static final int OP_SYSTEM_ALERT_WINDOW = 24; // 0x18
   }
 
+  public static final class AppOpsManager.HistoricalOpEntry implements android.os.Parcelable {
+    method public int describeContents();
+    method public long getAccessCount(int);
+    method public long getAccessDuration(int);
+    method public long getBackgroundAccessCount();
+    method public long getBackgroundAccessDuration();
+    method public long getBackgroundRejectCount();
+    method public long getForegroundAccessCount();
+    method public long getForegroundAccessDuration();
+    method public long getForegroundRejectCount();
+    method public java.lang.String getOp();
+    method public long getRejectCount(int);
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalOpEntry> CREATOR;
+  }
+
+  public static final class AppOpsManager.HistoricalPackageOps implements android.os.Parcelable {
+    method public int describeContents();
+    method public android.app.AppOpsManager.HistoricalOpEntry getEntry(java.lang.String);
+    method public android.app.AppOpsManager.HistoricalOpEntry getEntryAt(int);
+    method public int getEntryCount();
+    method public java.lang.String getPackageName();
+    method public int getUid();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalPackageOps> CREATOR;
+  }
+
   public static abstract interface AppOpsManager.OnOpActiveChangedListener {
     method public abstract void onOpActiveChanged(int, int, java.lang.String, boolean);
   }
 
   public final class NotificationChannelGroup implements android.os.Parcelable {
+    method public int getUserLockedFields();
+    method public void lockFields(int);
     method public void setBlocked(boolean);
+    field public static final int USER_LOCKED_ALLOW_APP_OVERLAY = 2; // 0x2
   }
 
   public class NotificationManager {
@@ -176,10 +212,12 @@ package android.app {
     method public int getActivityType();
     method public android.graphics.Rect getAppBounds();
     method public android.graphics.Rect getBounds();
+    method public int getRotation();
     method public int getWindowingMode();
     method public void setActivityType(int);
     method public void setAppBounds(android.graphics.Rect);
     method public void setBounds(android.graphics.Rect);
+    method public void setRotation(int);
     method public void setTo(android.app.WindowConfiguration);
     method public void setWindowingMode(int);
     method public void writeToParcel(android.os.Parcel, int);
@@ -188,6 +226,7 @@ package android.app {
     field public static final int ACTIVITY_TYPE_RECENTS = 3; // 0x3
     field public static final int ACTIVITY_TYPE_STANDARD = 1; // 0x1
     field public static final int ACTIVITY_TYPE_UNDEFINED = 0; // 0x0
+    field public static final int ROTATION_UNDEFINED = -1; // 0xffffffff
     field public static final int WINDOWING_MODE_FREEFORM = 5; // 0x5
     field public static final int WINDOWING_MODE_FULLSCREEN = 1; // 0x1
     field public static final int WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY = 4; // 0x4
@@ -575,12 +614,6 @@ package android.media {
     method public static boolean isEncodingLinearPcm(int);
   }
 
-  public final class AudioPresentation {
-    ctor public AudioPresentation(int, int, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, int, boolean, boolean, boolean);
-    method public int getPresentationId();
-    method public int getProgramId();
-  }
-
   public final class BufferingParams implements android.os.Parcelable {
     method public int describeContents();
     method public int getInitialMarkMs();
@@ -681,6 +714,7 @@ package android.os {
 
   public class Environment {
     method public static java.io.File buildPath(java.io.File, java.lang.String...);
+    method public static java.io.File getProductDirectory();
     method public static java.io.File getStorageDirectory();
   }
 
@@ -710,7 +744,11 @@ package android.os {
   }
 
   public final class PowerManager {
+    method public int getPowerSaveMode();
+    method public boolean setDynamicPowerSavings(boolean, int);
     method public boolean setPowerSaveMode(boolean);
+    field public static final int POWER_SAVER_MODE_DYNAMIC = 1; // 0x1
+    field public static final int POWER_SAVER_MODE_PERCENTAGE = 0; // 0x0
   }
 
   public class Process {
@@ -947,6 +985,9 @@ package android.provider {
 
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {
     field public static final java.lang.String AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES = "autofill_compat_mode_allowed_packages";
+    field public static final java.lang.String AUTOMATIC_POWER_SAVER_MODE = "automatic_power_saver_mode";
+    field public static final java.lang.String DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD = "dynamic_power_savings_disable_threshold";
+    field public static final java.lang.String DYNAMIC_POWER_SAVINGS_ENABLED = "dynamic_power_savings_enabled";
     field public static final java.lang.String HIDDEN_API_BLACKLIST_EXEMPTIONS = "hidden_api_blacklist_exemptions";
     field public static final java.lang.String LOCATION_GLOBAL_KILL_SWITCH = "location_global_kill_switch";
     field public static final java.lang.String LOW_POWER_MODE = "low_power";
@@ -957,6 +998,7 @@ package android.provider {
 
   public static final class Settings.Secure extends android.provider.Settings.NameValueTable {
     field public static final java.lang.String ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED = "accessibility_display_magnification_enabled";
+    field public static final java.lang.String ACCESSIBILITY_SHORTCUT_TARGET_SERVICE = "accessibility_shortcut_target_service";
     field public static final java.lang.String AUTOFILL_FEATURE_FIELD_CLASSIFICATION = "autofill_field_classification";
     field public static final java.lang.String AUTOFILL_SERVICE = "autofill_service";
     field public static final java.lang.String AUTOFILL_USER_DATA_MAX_CATEGORY_COUNT = "autofill_user_data_max_category_count";
@@ -1183,6 +1225,10 @@ package android.telecom {
 
 package android.telephony {
 
+  public class CarrierConfigManager {
+    method public void overrideConfig(int, android.os.PersistableBundle);
+  }
+
   public class MbmsDownloadSession implements java.lang.AutoCloseable {
     field public static final java.lang.String MBMS_DOWNLOAD_SERVICE_OVERRIDE_METADATA = "mbms-download-service-override";
   }
@@ -1205,6 +1251,7 @@ package android.telephony {
 
   public class TelephonyManager {
     method public int getCarrierIdListVersion();
+    method public boolean isRttSupported();
     method public void refreshUiccProfile();
     method public void setCarrierTestOverride(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
     field public static final int UNKNOWN_CARRIER_ID_LIST_VERSION = -1; // 0xffffffff
@@ -1316,6 +1363,14 @@ package android.transition {
 
   public class TransitionManager {
     method public android.transition.Transition getTransition(android.transition.Scene);
+  }
+
+}
+
+package android.util {
+
+  public final class ArraySet<E> implements java.util.Collection java.util.Set {
+    method public E valueAtUnchecked(int);
   }
 
 }
@@ -1548,7 +1603,8 @@ package android.view {
 
   public class KeyEvent extends android.view.InputEvent implements android.os.Parcelable {
     method public static java.lang.String actionToString(int);
-    field public static final int LAST_KEYCODE = 285; // 0x11d
+    method public final void setDisplayId(int);
+    field public static final int LAST_KEYCODE = 288; // 0x120
   }
 
   public final class KeyboardShortcutGroup implements android.os.Parcelable {
@@ -1593,6 +1649,12 @@ package android.view {
     method public boolean unregisterFrameCommitCallback(java.lang.Runnable);
   }
 
+  public abstract interface WindowManager implements android.view.ViewManager {
+    method public default void setShouldShowIme(int, boolean);
+    method public default void setShouldShowSystemDecors(int, boolean);
+    method public default void setShouldShowWithInsecureKeyguard(int, boolean);
+  }
+
   public static class WindowManager.LayoutParams extends android.view.ViewGroup.LayoutParams implements android.os.Parcelable {
     field public static final int ACCESSIBILITY_TITLE_CHANGED = 33554432; // 0x2000000
     field public static final int PRIVATE_FLAG_NO_MOVE_ANIMATION = 64; // 0x40
@@ -1603,6 +1665,17 @@ package android.view {
 }
 
 package android.view.accessibility {
+
+  public final class AccessibilityManager {
+    method public void addAccessibilityServicesStateChangeListener(android.view.accessibility.AccessibilityManager.AccessibilityServicesStateChangeListener, android.os.Handler);
+    method public java.lang.String getAccessibilityShortcutService();
+    method public void performAccessibilityShortcut();
+    method public void removeAccessibilityServicesStateChangeListener(android.view.accessibility.AccessibilityManager.AccessibilityServicesStateChangeListener);
+  }
+
+  public static abstract interface AccessibilityManager.AccessibilityServicesStateChangeListener {
+    method public abstract void onAccessibilityServicesStateChanged(android.view.accessibility.AccessibilityManager);
+  }
 
   public class AccessibilityNodeInfo implements android.os.Parcelable {
     method public static void setNumInstancesInUseCounter(java.util.concurrent.atomic.AtomicInteger);

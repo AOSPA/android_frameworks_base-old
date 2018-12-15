@@ -270,6 +270,18 @@ message ValueMetric {
   optional int64 min_bucket_size_nanos = 10;
 
   optional bool use_absolute_value_on_reset = 11 [default = false];
+
+  optional bool use_diff = 12;
+
+  enum ValueDirection {
+      UNKNOWN = 0;
+      INCREASING = 1;
+      DECREASING = 2;
+      ANY = 3;
+  }
+  optional ValueDirection value_direction = 13 [default = INCREASING];
+
+  optional bool skip_zero_diff_output = 14 [default = true];
 }
 
 message Alert {
@@ -396,6 +408,10 @@ message StatsdConfig {
   optional bool hash_strings_in_metric_report = 16 [default = true];
 
   repeated MetricActivation metric_activation = 17;
+
+  optional bool version_strings_in_metric_report = 18;
+
+  optional bool installer_in_metric_report = 19;
 
   // Field number 1000 is reserved for later use.
   reserved 1000;

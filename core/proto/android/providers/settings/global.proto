@@ -270,6 +270,7 @@ message GlobalSettingsProto {
         optional SettingProto enable_freeform_windows_support = 3 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto force_rtl = 4 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto emulate_display_cutout = 5 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        optional SettingProto force_desktop_mode_on_external_displays = 6 [ (android.privacy).dest = DEST_AUTOMATIC ];
     }
     optional Development development = 39;
 
@@ -330,6 +331,18 @@ message GlobalSettingsProto {
         repeated SettingProto settings = 6;
     }
     optional Dropbox dropbox = 46;
+
+    message DynamicPowerSavings {
+        option (android.msg_privacy).dest = DEST_EXPLICIT;
+
+        // When to auto disable interventions that were triggered due to
+        // {@link #DYNAMIC_POWER_SAVINGS_ENABLED}. Value is a percentage indicating
+        // a battery level.
+        optional SettingProto disable_threshold = 1 [ (android.privacy).dest = DEST_AUTOMATIC];
+        // Whether dynamic power savings based behaviors should be running or not.
+        optional SettingProto enabled = 2 [ (android.privacy).dest = DEST_AUTOMATIC];
+    }
+    optional DynamicPowerSavings dynamic_power_savings = 143;
 
     message Emergency {
         option (android.msg_privacy).dest = DEST_EXPLICIT;
@@ -394,13 +407,19 @@ message GlobalSettingsProto {
 
         // App allowed to load GPU debug layers.
         optional SettingProto debug_app = 1;
-        // Ordered GPU debug layer list
+        // Ordered GPU debug layer list for Vulkan
         // i.e. <layer1>:<layer2>:...:<layerN>
         optional SettingProto debug_layers = 2 [ (android.privacy).dest = DEST_AUTOMATIC ];
         // App will load ANGLE instead of native GLES drivers.
         optional SettingProto angle_enabled_app = 3;
         // App that can provide layer libraries.
         optional SettingProto debug_layer_app = 4;
+        // Ordered GPU debug layer list for GLES
+        // i.e. <layer1>:<layer2>:...:<layerN>
+        optional SettingProto debug_layers_gles = 5;
+        // App opt in to load updated graphics driver instead of
+        // native graphcis driver through developer options.
+        optional SettingProto updated_gfx_driver_dev_opt_in_app = 6;
     }
     optional Gpu gpu = 59;
 
@@ -484,6 +503,9 @@ message GlobalSettingsProto {
         // The max value for {@link #LOW_POWER_MODE_TRIGGER_LEVEL}. If this setting
         // is not set or the value is 0, the default max will be used.
         optional SettingProto trigger_level_max = 3 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        // Whether automatic battery saver mode is controlled via percentage,
+        // {@link #DYNAMIC_POWER_SAVINGS_ENABLED} or disabled.
+        optional SettingProto automatic_power_saver_mode = 4 [ (android.privacy).dest = DEST_AUTOMATIC];
     }
     optional LowPowerMode low_power_mode = 70;
 
@@ -724,8 +746,10 @@ message GlobalSettingsProto {
     optional SettingProto set_install_location = 103 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto shortcut_manager_constants = 104;
     optional SettingProto show_first_crash_dialog = 105 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto show_hidden_launcher_icon_apps_enabled = 141 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto show_restart_in_crash_dialog = 106 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto show_mute_in_crash_dialog = 107 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto show_new_app_installed_notification_enabled = 142 [ (android.privacy).dest = DEST_AUTOMATIC ];
 
     message SmartSelection {
         option (android.msg_privacy).dest = DEST_EXPLICIT;
@@ -965,5 +989,5 @@ message GlobalSettingsProto {
 
     // Please insert fields in alphabetical order and group them into messages
     // if possible (to avoid reaching the method limit).
-    // Next tag = 141;
+    // Next tag = 144;
 }

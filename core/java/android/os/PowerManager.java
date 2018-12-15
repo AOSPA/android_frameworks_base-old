@@ -16,6 +16,7 @@
 
 package android.os;
 
+import android.Manifest.permission;
 import android.annotation.IntDef;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
@@ -23,6 +24,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.content.Context;
+import android.service.dreams.Sandman;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 
@@ -477,6 +479,13 @@ public final class PowerManager {
     public static final String SHUTDOWN_BATTERY_THERMAL_STATE = "thermal,battery";
 
     /**
+     * The value to pass as the 'reason' argument to android_reboot() when device temperature
+     * is too high.
+     * @hide
+     */
+    public static final String SHUTDOWN_THERMAL_STATE = "thermal";
+
+    /**
      * The value to pass as the 'reason' argument to android_reboot() when device is running
      * critically low on battery.
      * @hide
@@ -557,6 +566,7 @@ public final class PowerManager {
             ServiceType.FORCE_ALL_APPS_STANDBY,
             ServiceType.OPTIONAL_SENSORS,
             ServiceType.AOD,
+            ServiceType.QUICK_DOZE,
     })
     public @interface ServiceType {
         int NULL = 0;
@@ -586,6 +596,11 @@ public final class PowerManager {
          * Whether to disable non-essential sensors. (e.g. edge sensors.)
          */
         int OPTIONAL_SENSORS = 13;
+
+        /**
+         * Whether to go into Deep Doze as soon as the screen turns off or not.
+         */
+        int QUICK_DOZE = 15;
     }
 
     /**
@@ -987,6 +1002,29 @@ public final class PowerManager {
     }
 
     /**
+     * Requests the device to start dreaming.
+     * <p>
+     * If dream can not be started, for example if another {@link PowerManager} transition is in
+     * progress, does nothing. Unlike {@link #nap(long)}, this does not put device to sleep when
+     * dream ends.
+     * </p><p>
+     * Requires the {@link android.Manifest.permission#WRITE_DREAM_STATE} permission.
+     * </p>
+     *
+     * @param time The time when the request to nap was issued, in the
+     * {@link SystemClock#uptimeMillis()} time base.  This timestamp may be used to correctly
+     * order the dream request with other power management functions.  It should be set
+     * to the timestamp of the input event that caused the request to dream.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WRITE_DREAM_STATE)
+    public void dream(long time) {
+        Sandman.startDreamByUserRequest(mContext);
+    }
+
+    /**
      * Boosts the brightness of the screen to maximum for a predetermined
      * period of time.  This is used to make the screen more readable in bright
      * daylight for a short duration.
@@ -1166,6 +1204,105 @@ public final class PowerManager {
     public boolean setPowerSaveMode(boolean mode) {
         try {
             return mService.setPowerSaveMode(mode);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Updates the current state of dynamic power savings and disable threshold. This is
+     * a signal to the system which an app can update to serve as an indicator that
+     * the user will be in a battery critical situation before being able to plug in.
+     * Only apps with the {@link android.Manifest.permission#POWER_SAVER} permission may do this.
+     * This is a device global state, not a per user setting.
+     *
+     * <p>When enabled, the system may enact various measures for reducing power consumption in
+     * order to help ensure that the user will make it to their next charging point. The most
+     * visible of these will be the automatic enabling of battery saver if the user has set
+     * their battery saver mode to "automatic". Note
+     * that this is NOT simply an on/off switch for features, but rather a hint for the
+     * system to consider enacting these power saving features, some of which have additional
+     * logic around when to activate based on this signal.
+     *
+     * <p>The provided threshold is the percentage the system should consider itself safe at given
+     * the current state of the device. The value is an integer representing a battery level.
+     *
+     * <p>The threshold is meant to set an explicit stopping point for dynamic power savings
+     * functionality so that the dynamic power savings itself remains a signal rather than becoming
+     * an on/off switch for a subset of features.
+     * @hide
+     *
+     * @param dynamicPowerSavingsEnabled A signal indicating to the system if it believes the
+     * dynamic power savings behaviors should be activated.
+     * @param disableThreshold When the suggesting app believes it would be safe to disable dynamic
+     * power savings behaviors.
+     * @return True if the update was allowed and succeeded.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @RequiresPermission(permission.POWER_SAVER)
+    public boolean setDynamicPowerSavings(boolean dynamicPowerSavingsEnabled,
+            int disableThreshold) {
+        try {
+            return mService.setDynamicPowerSavings(dynamicPowerSavingsEnabled, disableThreshold);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Indicates automatic battery saver toggling by the system will be based on percentage.
+     *
+     * @see PowerManager#getPowerSaveMode()
+     *
+     *  @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final int POWER_SAVER_MODE_PERCENTAGE = 0;
+
+    /**
+     * Indicates automatic battery saver toggling by the system will be based on the state
+     * of the dynamic power savings signal.
+     *
+     * @see PowerManager#setDynamicPowerSavings(boolean, int)
+     * @see PowerManager#getPowerSaveMode()
+     *
+     *  @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final int POWER_SAVER_MODE_DYNAMIC = 1;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+        POWER_SAVER_MODE_PERCENTAGE,
+        POWER_SAVER_MODE_DYNAMIC
+
+    })
+    public @interface AutoPowerSaverMode{}
+
+
+    /**
+     * Returns the current battery saver control mode. Values it may return are defined in
+     * AutoPowerSaverMode. Note that this is a global device state, not a per user setting.
+     *
+     * @return The current value power saver mode for the system.
+     *
+     * @see AutoPowerSaverMode
+     * @see PowerManager#getPowerSaveMode()
+     * @hide
+     */
+    @AutoPowerSaverMode
+    @SystemApi
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.POWER_SAVER)
+    public int getPowerSaveMode() {
+        try {
+            return mService.getPowerSaveMode();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

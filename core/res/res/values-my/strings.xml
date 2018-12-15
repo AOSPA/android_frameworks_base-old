@@ -136,6 +136,14 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"WiFi ခေါ်ဆိုမှု | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"<xliff:g id="SPN">%s</xliff:g> VoWifi"</string>
+    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
+    <skip />
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"ပိတ်ထားရသည်"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"ဝိုင်ဖိုင်အား ပိုနှစ်သက်သော"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"မိုဘိုင်းကို အသုံးပြုလိုပါသည်"</string>
@@ -292,6 +300,9 @@
     <string name="permgrouplab_microphone" msgid="171539900250043464">"မိုက်ခရိုဖုန်း"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"အသံဖမ်းခြင်း"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; အား အသံဖမ်းယူခွင့် ပေးလိုပါသလား။"</string>
+    <string name="permgrouplab_activityRecognition" msgid="2838596644535616493">"လှုပ်ရှားမှုကို မှတ်သားပါ"</string>
+    <string name="permgroupdesc_activityRecognition" msgid="7672248027571522602">"လှုပ်ရှားမှုကို မှတ်သားခြင်း"</string>
+    <string name="permgrouprequest_activityRecognition" msgid="8121253142311250055">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; အား သင်၏ကိုယ်လက်လှုပ်ရှားမှုကို မှတ်သားခွင့်ပေးလိုပါသလား။"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"ကင်မရာ"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"ဓာတ်ပုံ ရိုက်ပြီးနောက် ဗွီဒီယို မှတ်တမ်းတင်ရန်"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; အား ဓာတ်ပုံနှင့် ဗီဒီယိုရိုက်ကူးခွင့် ပေးလိုပါသလား။"</string>
@@ -387,9 +398,9 @@
     <string name="permdesc_broadcastSticky" product="tv" msgid="6839285697565389467">"ထုတ်လွှင့်ခြင်းများ ပြီးဆုံးသည့်နောက် ဆက်လက်ရှိနေသည့်၊ တည်မြဲ ထုတ်လွှင့်မှုများပို့ရန် အက်ပ်အား ခွင့်ပြုပါ။ အလွန်အကျွံ လုပ်ဆောင်ပါက တီဗွီ နှေးသွားခြင်း သို့မဟုတ် မှတ်ဉာဏ်အသုံးများမှုကြောင့် မတည်မငြိမ်ဖြစ်ခြင်းများ ဖြစ်တတ်၏။"</string>
     <string name="permdesc_broadcastSticky" product="default" msgid="2825803764232445091">"အက်ပ်အား ကြာရှည်ခံ ထုတ်လွှင့်မှု ပြုပါ။ ဤထုတ်လွှင့်မှုများဟာ ထုတ်လွှင့်မှု ပြီးဆုံးပြီးသွားတည့်တိုင် ကျန်နေမည် ဖြစ်ပါသည်။ အလွန်အကျွံသုံးခြင်းကြောင့် မှတ်ဉာဏ်အသုံးများပြီး ဖုန်းနှေးခြင်း၊ မတည်ငြိမ်ခြင်း ဖြစ်နိုင်ပါသည်"</string>
     <string name="permlab_readContacts" msgid="8348481131899886131">"အဆက်အသွယ်များအား ဖတ်ခြင်း"</string>
-    <string name="permdesc_readContacts" product="tablet" msgid="5294866856941149639">"အပလီကေးရှင်းအား ခေါ်ဆိုသော အကြိမ်ရေ၊ အီးမေးလ်အကြိမ်ရေ၊ တခြားဆက်သွယ်မှုများစသည်ကဲ့သို့ သင့်တက်ဘလက်မှာ သိမ်းဆည်းထားသော အဆက်အသွယ်များရဲ့ အချက်အလက်ကို ဖတ်ခွင့်ပြုပါ။ ဤသို့ခွင့်ပြုခြင်းအားဖြင့် အပလီကေးရှင်းများကို သင့် အဆက်အသွယ်၏ အချက်မလက်များကို သိမ်းဆည်းရန် ခွင့်ပြုပြီး အန္တရာယ်ရှိသော အပလီကေးရှင်းများမှ ထိုအချက်အလက်များ ကို သင် မသိစေပဲ ဖြန့်ဝေနိုင််မည် ဖြစ်ပါသည်။"</string>
-    <string name="permdesc_readContacts" product="tv" msgid="1839238344654834087">"တစ်ဦးတစ်​ယောက်ထံ သင်ခေါ်ထားသော၊ အီးမေးိပု့ထားသော၊ သို့မဟုတ် တစ်ခြားနည်းဖြင့် အဆက်အသွယ်ပြုထားသော အကြိမ်အရေအတွက် အပါအဝင်၊ သင့်တီဗွီတွင် သိမ်းထားသည့် အဆက်အသွယ်ဆိုင်ရာ အချက်အလက်များ ဖတ်ရန် အက်ပ်အား ခွင့်ပြုပါ။ ဤနည်းဖြင့် သင့် အဆက်အသွယ် အချက်အလက်များအား သိမ်းဆည်းရန် အက်ပ်အား ခွင့်ပြုထားခြင်းဖြစ်ပြီး၊  အဆက်အသွယ် အချက်အလက်များအား အန္တရာယ်ရှိသော အက်ပ်များက သင်မသိဘဲ ဝေမျှနိုင်သည်။"</string>
-    <string name="permdesc_readContacts" product="default" msgid="8440654152457300662">"အပလီကေးရှင်းအား ခေါ်ဆိုသော အကြိမ်ရေ၊ အီးမေးလ်အကြိမ်ရေ၊ တခြားဆက်သွယ်မှုများစသည်ကဲ့သို့ သင့်ဖုန်းမှာ သိမ်းဆည်းထားသော အဆက်အသွယ်များရဲ့ အချက်အလက်ကို ဖတ်ခွင့်ပြုပါ။ ဤသို့ခွင့်ပြုခြင်းအားဖြင့် အပလီကေးရှင်းများကို သင့် အဆက်အသွယ်၏ အချက်မလက်များကို သိမ်းဆည်းရန် ခွင့်ပြုပြီး အန္တရာယ်ရှိသော အပလီကေးရှင်းများမှ ထိုအချက်အလက်များ ကို သင် မသိစေပဲ ဖြန့်ဝေနိုင််မည် ဖြစ်ပါသည်။"</string>
+    <string name="permdesc_readContacts" product="tablet" msgid="5294866856941149639">"အပလီကေးရှင်းအား ခေါ်ဆိုသော အကြိမ်ရေ၊ အီးမေးလ်အကြိမ်ရေ၊ တခြားဆက်သွယ်မှုများစသည်ကဲ့သို့ သင့်တက်ဘလက်မှာ သိမ်းဆည်းထားသော အဆက်အသွယ်များရဲ့ အချက်အလက်ကို ဖတ်ခွင့်ပြုပါ။ ဤသို့ခွင့်ပြုခြင်းအားဖြင့် အပလီကေးရှင်းများကို သင့် အဆက်အသွယ်၏ အချက်မလက်များကို သိမ်းရန် ခွင့်ပြုပြီး အန္တရာယ်ရှိသော အပလီကေးရှင်းများမှ ထိုအချက်အလက်များ ကို သင် မသိစေပဲ ဖြန့်ဝေနိုင််မည် ဖြစ်ပါသည်။"</string>
+    <string name="permdesc_readContacts" product="tv" msgid="1839238344654834087">"တစ်ဦးတစ်​ယောက်ထံ သင်ခေါ်ထားသော၊ အီးမေးိပု့ထားသော၊ သို့မဟုတ် တစ်ခြားနည်းဖြင့် အဆက်အသွယ်ပြုထားသော အကြိမ်အရေအတွက် အပါအဝင်၊ သင့်တီဗွီတွင် သိမ်းထားသည့် အဆက်အသွယ်ဆိုင်ရာ အချက်အလက်များ ဖတ်ရန် အက်ပ်အား ခွင့်ပြုပါ။ ဤနည်းဖြင့် သင့် အဆက်အသွယ် အချက်အလက်များအား သိမ်းရန် အက်ပ်အား ခွင့်ပြုထားခြင်းဖြစ်ပြီး၊  အဆက်အသွယ် အချက်အလက်များအား အန္တရာယ်ရှိသော အက်ပ်များက သင်မသိဘဲ ဝေမျှနိုင်သည်။"</string>
+    <string name="permdesc_readContacts" product="default" msgid="8440654152457300662">"အပလီကေးရှင်းအား ခေါ်ဆိုသော အကြိမ်ရေ၊ အီးမေးလ်အကြိမ်ရေ၊ တခြားဆက်သွယ်မှုများစသည်ကဲ့သို့ သင့်ဖုန်းမှာ သိမ်းဆည်းထားသော အဆက်အသွယ်များရဲ့ အချက်အလက်ကို ဖတ်ခွင့်ပြုပါ။ ဤသို့ခွင့်ပြုခြင်းအားဖြင့် အပလီကေးရှင်းများကို သင့် အဆက်အသွယ်၏ အချက်မလက်များကို သိမ်းရန် ခွင့်ပြုပြီး အန္တရာယ်ရှိသော အပလီကေးရှင်းများမှ ထိုအချက်အလက်များ ကို သင် မသိစေပဲ ဖြန့်ဝေနိုင််မည် ဖြစ်ပါသည်။"</string>
     <string name="permlab_writeContacts" msgid="5107492086416793544">"အဆက်အသွယ်များအား ပြင်ဆင်ခြင်း"</string>
     <string name="permdesc_writeContacts" product="tablet" msgid="897243932521953602">"အပလီကေးရှင်းအား သင့်တက်ဘလက်မှာ သိမ်းဆည်းထားသော အဆက်အသွယ်များရဲ့ အချက်အလက် (အထူးအဆက်အသွယ်များအား ခေါ်ဆိုသော အကြိမ်ရေ၊ အီးမေးလ်ပို့သောအကြိမ်ရေ သို့ အခြားနည်းလမ်းဖြင့်ဆက်သွယ်မှုများ) ကို ပြင်ဆင်ခွင့်ပြုခြင်း။ ဒီခွင့်ပြုချက်က အပလီကေးရှင်းများအား အဆက်အသွယ် အချက်အလက်များ ဖျက်စီးခြင်း လုပ်ဆောင်စေနိုင်မှာ ဖြစ်ပါသည်။"</string>
     <string name="permdesc_writeContacts" product="tv" msgid="5438230957000018959">"အထူးအဆက်အသွယ်များအား ခေါ်ဆိုသော အကြိမ်ရေ၊ အီးမေးလ်ပို့သောအကြိမ်ရေ သို့ အခြားနည်းလမ်းဖြင့်ဆက်သွယ်မှုများ အပါအဝင်၊ သင့်တီဗွီတွင် သိမ်းဆည်းထားသော အဆက်အသွယ်များ၏ အချက်အလက်အား ပြင်ဆင်ရန် အပလီကေးရှင်းအား ခွင့်ပြုပါ။ ဤသို့ ခွင့်ပြုခြင်းသည် အဆက်အသွယ် အချက်အလက်များ ဖျက်ဆီးရန် အပလီကေးရှင်းများအား  ခွင့်ပြုခြင်းဖြစ်၏။"</string>
@@ -414,18 +425,20 @@
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"အက်ပ်အား တည်နေရာ စီမံပေးရေး ညွှန်ကြားချက် အပိုများကို ရယူခွင့်ပြုသည်။ သို့ဖြစ်၍ အက်ပ်သည် GPS သို့မဟုတ် အခြား တည်နေရာ ရင်းမြစ်ကို သုံးကြသူတို့၏ လုပ်ငန်းများကို ဝင်စွက်ခွင့် ပြုနိုင်သည်။"</string>
     <string name="permlab_accessFineLocation" msgid="6265109654698562427">"မျက်နှာစာတွင်သာ တည်နေရာအတိအကျ အသုံးပြုခြင်း"</string>
     <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"မျက်နှာစာတွင် ဖွင့်ထားမှသာ ဤအက်ပ်က သင်၏တည်နေရာအတိအကျကို ရယူနိုင်ပါသည်။ သင်၏ဖုန်းတွင် အက်ပ်ကအသုံးပြုရန်အတွက် ဤတည်နေရာဝန်ဆောင်မှုများကို ဖွင့်ထားပြီး အသုံးပြု၍ ရပါမည်။ ၎င်းက ဘက်ထရီ ပိုကုန်နိုင်ပါသည်။"</string>
-    <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"အနီးစပ်ဆုံး တည်နေရာ (ကွန်ရက် အခြေခံ)ကို ရယူသုံးရန်"</string>
-    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"ဤအက်ပ်သည် ဆဲလ်တာဝါများနှင့် Wi-Fi ကွန်ရက်များကဲ့သို့ ကွန်ရက်အရင်းအမြစ်ပေါ် အခြေခံပြီး သင့်တည်နေရာအချက်အလက်ကို ရယူနိုင်ပါသည်။ အက်ပ်က အသုံးပြုနိုင်ရန်အတွက် ဤတည်နေရာ ဝန်ဆောင်မှုများကို ဖွင့်ထားရမည် ဖြစ်ပြီး သင့်တက်ဘလက်ပေါ်တွင် ရရှိနိုင်ရပါမည်။"</string>
-    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"ဤအက်ပ်သည် ဆဲလ်တာဝါများနှင့် Wi-Fi ကွန်ရက်များကဲ့သို့ ကွန်ရက်အရင်းအမြစ်ပေါ် အခြေခံပြီး သင့်တည်နေရာအချက်အလက်ကို ရယူနိုင်ပါသည်။ အက်ပ်က အသုံးပြုနိုင်ရန်အတွက် ဤတည်နေရာ ဝန်ဆောင်မှုများကို ဖွင့်ထားရမည် ဖြစ်ပြီး သင့်တီဗီပေါ်တွင် ရရှိနိုင်ရပါမည်။"</string>
-    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"ဤအက်ပ်သည် ဆဲလ်တာဝါများနှင့် Wi-Fi ကွန်ရက်များကဲ့သို့ ကွန်ရက်အရင်းအမြစ်ပေါ် အခြေခံပြီး သင့်တည်နေရာအချက်အလက်ကို ရယူနိုင်ပါသည်။ အက်ပ်က အသုံးပြုနိုင်ရန်အတွက် ဤတည်နေရာ ဝန်ဆောင်မှုများကို ဖွင့်ထားရမည် ဖြစ်ပြီး သင့်ဖုန်းပေါ်တွင် ရရှိနိုင်ရပါမည်။"</string>
-    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"နောက်ခံတွင် တည်နေရာအတိအကျ အသုံးပြုခြင်း"</string>
-    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"နောက်ခံတွင် ဖွင့်ထားသည့်အခါတိုင်း ဤအက်ပ်က သင်၏တည်နေရာအတိအကျကို ရယူနိုင်ပါသည်။ သင်၏ဖုန်းတွင် အက်ပ်ကအသုံးပြုရန်အတွက် ဤတည်နေရာဝန်ဆောင်မှုများကို ဖွင့်ထားပြီး အသုံးပြု၍ ရပါမည်။ ၎င်းက ဘက်ထရီ ပိုကုန်နိုင်ပါသည်။"</string>
+    <string name="permlab_accessCoarseLocation" msgid="3707180371693213469">"မျက်နှာစာတွင်သာ (ကွန်ရက် အခြေပြု) တည်နေရာခန့်မှန်း အသုံးပြုခြင်း"</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="8594719010575779120">"ဤအက်ပ်က ဆဲလ်တာဝါများနှင့် Wi-Fi ကွန်ရက်များကဲ့သို့ ကွန်ရက်ရင်းမြစ်များအပေါ် အခြေခံပြီး သင်၏တည်နေရာကို ရယူနိုင်သော်လည်း အက်ပ်ကို မျက်နှာစာတွင်ဖွင့်ထားမှ ရပါမည်။ အက်ပ်က အသုံးပြုနိုင်ရန်အတွက် ဤတည်နေရာ ဝန်ဆောင်မှုများကို ဖွင့်ထားရမည် ဖြစ်ပြီး သင့်တက်ဘလက်ပေါ်တွင် ရရှိနိုင်ရပါမည်။"</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="3027871910200890806">"ဤအက်ပ်က ဆဲလ်တာဝါများနှင့် Wi-Fi ကွန်ရက်များကဲ့သို့ ကွန်ရက်ရင်းမြစ်များအပေါ် အခြေခံပြီး သင်၏တည်နေရာကို ရယူနိုင်သော်လည်း အက်ပ်ကို မျက်နှာစာတွင်ဖွင့်ထားမှ ရပါမည်။ အက်ပ်က အသုံးပြုနိုင်ရန်အတွက် ဤတည်နေရာ ဝန်ဆောင်မှုများကို ဖွင့်ထားရမည် ဖြစ်ပြီး သင့်တီဗီပေါ်တွင် ရရှိနိုင်ရပါမည်။"</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="854896049371048754">"ဤအက်ပ်က ဆဲလ်တာဝါများနှင့် Wi-Fi ကွန်ရက်များကဲ့သို့ ကွန်ရက်ရင်းမြစ်များအပေါ် အခြေခံပြီး သင်၏တည်နေရာကို ရယူနိုင်သော်လည်း အက်ပ်ကို မျက်နှာစာတွင်ဖွင့်ထားမှ ရပါမည်။ အက်ပ်က အသုံးပြုနိုင်ရန်အတွက် ဤတည်နေရာ ဝန်ဆောင်မှုများကို ဖွင့်ထားရမည် ဖြစ်ပြီး သင့်ဖုန်းပေါ်တွင် ရရှိနိုင်ရပါမည်။"</string>
+    <string name="permlab_accessBackgroundLocation" msgid="3965397804300661062">"နောက်ခံတွင် တည်နေရာကို အသုံးပြုရန်"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="1096394429579210251">"ခန့်မှန်းခြေ သို့မဟုတ် တိကျသော တည်နေရာ ဝင်သုံးခွင့်အတွက် ၎င်းကို နောက်ဆက်တွဲ ခွင့်ပြုထားပါက နောက်ခံတွင် လုပ်ဆောင်နေစဉ် အက်ပ်က တည်နေရာကို ရယူအသုံးပြုနိုင်ပါသည်။"</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"သင့်အသံအပြင်အဆင်အားပြောင်းခြင်း"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"အပလီကေးရှင်းအား အသံအတိုးအကျယ်နှင့် အထွက်ကို မည်သည့်စပီကာကို သုံးရန်စသည်ဖြင့် စက်တစ်ခုလုံးနှင့်ဆိုင်သော အသံဆိုင်ရာ ဆက်တင်များ ပြင်ဆင်ခွင့် ပြုရန်"</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"အသံဖမ်းခြင်း"</string>
     <string name="permdesc_recordAudio" msgid="4245930455135321433">"ဤအက်ပ်သည် မိုက်ခရိုဖုန်းကို အသုံးပြုပြီး အချိန်မရွေး အသံသွင်းနိုင်ပါသည်။"</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"SIM ထံသို့ ညွှန်ကြားချက်များကို ပို့ပါ"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"အက်ပ်အား ဆင်းမ်ကဒ်ဆီသို့ အမိန့်များ ပေးပို့ခွင့် ပြုခြင်း။ ဤခွင့်ပြုမှုမှာ အန္တရာယ်အလွန် ရှိပါသည်။"</string>
+    <string name="permlab_activityRecognition" msgid="3634590230567608356">"ကိုယ်လက်လှုပ်ရှားမှုကို မှတ်သားပါ"</string>
+    <string name="permdesc_activityRecognition" msgid="3143453925156552894">"ဤအက်ပ်က သင်၏ကိုယ်လက်လှုပ်ရှားမှုကို မှတ်သားနိုင်ပါသည်။"</string>
     <string name="permlab_camera" msgid="3616391919559751192">"ဓါတ်ပုံနှင့်ဗွီဒီယိုရိုက်ခြင်း"</string>
     <string name="permdesc_camera" msgid="5392231870049240670">"ဤအက်ပ်သည် ကင်မရာကို အသုံးပြု၍ ဓာတ်ပုံနှင့် ဗီဒီယိုများကို အချိန်မရွေး ရိုက်ကူးနိုင်ပါသည်။"</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"တုန်ခုန်မှုအား ထိန်းချုပ်ခြင်း"</string>
@@ -518,6 +531,7 @@
     <string name="permdesc_imagesWrite" msgid="7073662756617474375">"အက်ပ်အား သင့်ဓာတ်ပုံစုစည်းမှုကို ပြုပြင်ခွင့်ပေးသည်။"</string>
     <string name="permlab_mediaLocation" msgid="8675148183726247864">"သင့်မီဒီယာစုစည်းမှုမှ တည်နေရာများကို ဖတ်ခြင်း"</string>
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"အက်ပ်အား သင့်မီဒီယာစုစည်းမှုမှ တည်နေရာများကို ဖတ်ခွင့်ပေးသည်။"</string>
+    <string name="biometric_dialog_default_title" msgid="4229778503907743328">"အပလီကေးရှင်း <xliff:g id="APP">%s</xliff:g> က အထောက်အထားစိစစ်လိုသည်။"</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"ဇီဝအချက်အလက်သုံး ကွန်ပျူတာစက်ပစ္စည်း မရရှိနိုင်ပါ"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"လက်ဗွေရဦ တစ်ပိုင်းတစ်စ တွေ့ရှိသည်။ ကျေးဇူးပြု၍ ထပ်မံကြိုးစားပါ။"</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"လက်ဗွေရာယူခြင်း မဆောင်ရွက်နိုင်ပါ။ ထပ်မံကြိုးစားပါ။"</string>
@@ -1820,6 +1834,8 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"SS တောင်းဆိုမှုကို USSD တောင်းဆိုမှုအဖြစ် ပြောင်းထားသည်"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"SS တောင်းဆိုမှုအသစ်သို့ ပြောင်းထားသည်"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"အလုပ်ကိုယ်ရေးအချက်အလက်"</string>
+    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
+    <skip />
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"ချဲ့ရန်"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"ခေါက်သိမ်းရန်"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"ချဲ့ခြင်းခလုတ်"</string>
@@ -1898,14 +1914,14 @@
       <item quantity="other">အော်တိုဖြည့်အကြံပြုချက် <xliff:g id="COUNT">%1$s</xliff:g> ခု</item>
       <item quantity="one">အော်တိုဖြည့်အကြံပြုချက် တစ်ခု</item>
     </plurals>
-    <string name="autofill_save_title" msgid="3345527308992082601">"&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt; တွင် သိမ်းဆည်းလိုပါသလား။"</string>
-    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"<xliff:g id="TYPE">%1$s</xliff:g> ကို &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt; တွင် သိမ်းဆည်းလိုပါသလား။"</string>
-    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"<xliff:g id="TYPE_0">%1$s</xliff:g> နှင့် <xliff:g id="TYPE_1">%2$s</xliff:g> ကို &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt; တွင် သိမ်းဆည်းလိုပါသလား။"</string>
-    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"<xliff:g id="TYPE_0">%1$s</xliff:g>၊ <xliff:g id="TYPE_1">%2$s</xliff:g>  နှင့် <xliff:g id="TYPE_2">%3$s</xliff:g> ကို &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt; တွင် သိမ်းဆည်းလိုပါသလား။"</string>
-    <string name="autofill_update_title" msgid="4879673117448810818">"&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt; သို့ အပ်ဒိတ်လုပ်လိုပါသလား။"</string>
-    <string name="autofill_update_title_with_type" msgid="339733442087186755">"<xliff:g id="TYPE">%1$s</xliff:g> ကို &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt; သို့ အပ်ဒိတ်လုပ်လိုပါသလား။"</string>
-    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"<xliff:g id="TYPE_0">%1$s</xliff:g> နှင့် <xliff:g id="TYPE_1">%2$s</xliff:g> ကို &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt; သို့ အပ်ဒိတ်လုပ်လိုပါသလား။"</string>
-    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"<xliff:g id="TYPE_0">%1$s</xliff:g>၊ <xliff:g id="TYPE_1">%2$s</xliff:g> နှင့် <xliff:g id="TYPE_2">%3$s</xliff:g> ကို &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt; သို့ အပ်ဒိတ်လုပ်လိုပါသလား။"</string>
+    <string name="autofill_save_title" msgid="327541108460384555"><b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"တွင် သိမ်းလိုပါသလား။"</string>
+    <string name="autofill_save_title_with_type" msgid="2339135393607143594">"<xliff:g id="TYPE">%1$s</xliff:g> ကို "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"တွင် သိမ်းဆည်းလိုပါသလား။"</string>
+    <string name="autofill_save_title_with_2types" msgid="87616102361154432">"<xliff:g id="TYPE_0">%1$s</xliff:g> နှင့် <xliff:g id="TYPE_1">%2$s</xliff:g> ကို "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"တွင် သိမ်းလိုပါသလား။"</string>
+    <string name="autofill_save_title_with_3types" msgid="4108978552969604555">"<xliff:g id="TYPE_0">%1$s</xliff:g>၊ <xliff:g id="TYPE_1">%2$s</xliff:g> နှင့် <xliff:g id="TYPE_2">%3$s</xliff:g> ကို "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"တွင် သိမ်းဆည်းလိုပါသလား။"</string>
+    <string name="autofill_update_title" msgid="5305781141104585279"><b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"တွင် အပ်ဒိတ်လုပ်လိုပါသလား။"</string>
+    <string name="autofill_update_title_with_type" msgid="4624181147422762233">"<xliff:g id="TYPE">%1$s</xliff:g> ကို "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>" တွင် အပ်ဒိတ်လုပ်လိုပါသလား။"</string>
+    <string name="autofill_update_title_with_2types" msgid="2300113827053626484">"<xliff:g id="TYPE_0">%1$s</xliff:g> နှင့် <xliff:g id="TYPE_1">%2$s</xliff:g> ကို "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"တွင် အပ်ဒိတ်လုပ်လိုပါသလား။"</string>
+    <string name="autofill_update_title_with_3types" msgid="9089824354296211922">"ဤအချက်အလက်များကို "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"တွင် အပ်ဒိတ်လုပ်လိုပါသလား- <xliff:g id="TYPE_0">%1$s</xliff:g>၊ <xliff:g id="TYPE_1">%2$s</xliff:g> နှင့် <xliff:g id="TYPE_2">%3$s</xliff:g>။"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"သိမ်းရန်"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"မလိုပါ"</string>
     <string name="autofill_update_yes" msgid="310358413273276958">"အပ်ဒိတ်လုပ်ရန်"</string>

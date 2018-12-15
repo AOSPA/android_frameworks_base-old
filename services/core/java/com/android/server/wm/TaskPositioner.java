@@ -49,8 +49,9 @@ import android.view.MotionEvent;
 import android.view.WindowManager;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.server.input.InputApplicationHandle;
-import com.android.server.input.InputWindowHandle;
+import android.view.InputApplicationHandle;
+import android.view.InputWindowHandle;
+import com.android.server.wm.WindowManagerService.H;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -159,7 +160,7 @@ class TaskPositioner {
                         if (DEBUG_TASK_POSITIONING){
                             Slog.w(TAG, "ACTION_MOVE @ {" + newX + ", " + newY + "}");
                         }
-                        synchronized (mService.mWindowMap) {
+                        synchronized (mService.mGlobalLock) {
                             mDragEnded = notifyMoveLocked(newX, newY);
                             mTask.getDimBounds(mTmpRect);
                         }
@@ -192,7 +193,7 @@ class TaskPositioner {
 
                 if (mDragEnded) {
                     final boolean wasResizing = mResizing;
-                    synchronized (mService.mWindowMap) {
+                    synchronized (mService.mGlobalLock) {
                         endDragLocked();
                         mTask.getDimBounds(mTmpRect);
                     }
@@ -265,7 +266,7 @@ class TaskPositioner {
         mDragApplicationHandle.dispatchingTimeoutNanos =
                 WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
 
-        mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle, null, null,
+        mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle, null,
                 display.getDisplayId());
         mDragWindowHandle.name = TAG;
         mDragWindowHandle.inputChannel = mServerChannel;
@@ -397,7 +398,7 @@ class TaskPositioner {
         // bounds yet. This will guarantee that the app starts the backdrop renderer before
         // configuration changes which could cause an activity restart.
         if (mResizing) {
-            synchronized (mService.mWindowMap) {
+            synchronized (mService.mGlobalLock) {
                 notifyMoveLocked(startX, startY);
             }
 

@@ -25,7 +25,7 @@ import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.am.ActivityManagerService;
-import com.android.server.am.ActivityStackSupervisor;
+import com.android.server.wm.ActivityStackSupervisor;
 import android.util.BoostFramework;
 
 import static android.view.PointerIcon.TYPE_NOT_SPECIFIED;
@@ -51,7 +51,7 @@ public class TaskTapPointerEventListener implements PointerEventListener {
         mDisplayContent = displayContent;
         mHandler = new Handler(mService.mH.getLooper());
         mMoveDisplayToTop = () -> {
-            synchronized (mService.mWindowMap) {
+            synchronized (mService.mGlobalLock) {
                 mDisplayContent.getParent().positionChildAt(WindowContainer.POSITION_TOP,
                         mDisplayContent, true /* includingParents */);
             }

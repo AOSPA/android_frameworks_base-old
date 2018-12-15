@@ -18,6 +18,7 @@ package com.android.server;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -83,6 +84,7 @@ import com.android.internal.location.ProviderRequest;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.Preconditions;
 import com.android.server.location.ActivityRecognitionProxy;
 import com.android.server.location.GeocoderProxy;
 import com.android.server.location.GeofenceManager;
@@ -111,6 +113,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -544,7 +547,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
     }
 
-    private void ensureFallbackFusedProviderPresentLocked(ArrayList<String> pkgs) {
+    private void ensureFallbackFusedProviderPresentLocked(String[] pkgs) {
         PackageManager pm = mContext.getPackageManager();
         String systemPackageName = mContext.getPackageName();
         ArrayList<HashSet<Signature>> sigSets = ServiceWatcher.getSignatureSets(mContext, pkgs);
@@ -649,16 +652,14 @@ public class LocationManagerService extends ILocationManager.Stub {
         that matches the signature of at least one package on this list.
         */
         Resources resources = mContext.getResources();
-        ArrayList<String> providerPackageNames = new ArrayList<>();
         String[] pkgs = resources.getStringArray(
                 com.android.internal.R.array.config_locationProviderPackageNames);
         if (D) {
             Log.d(TAG, "certificates for location providers pulled from: " +
                     Arrays.toString(pkgs));
         }
-        if (pkgs != null) providerPackageNames.addAll(Arrays.asList(pkgs));
 
-        ensureFallbackFusedProviderPresentLocked(providerPackageNames);
+        ensureFallbackFusedProviderPresentLocked(pkgs);
 
         // bind to network provider
         LocationProviderProxy networkProvider = LocationProviderProxy.createAndBind(
@@ -667,8 +668,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 NETWORK_LOCATION_SERVICE_ACTION,
                 com.android.internal.R.bool.config_enableNetworkLocationOverlay,
                 com.android.internal.R.string.config_networkLocationProviderPackageName,
-                com.android.internal.R.array.config_locationProviderPackageNames,
-                mLocationHandler);
+                com.android.internal.R.array.config_locationProviderPackageNames);
         if (networkProvider != null) {
             mRealProviders.put(LocationManager.NETWORK_PROVIDER, networkProvider);
             mProxyProviders.add(networkProvider);
@@ -684,8 +684,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 FUSED_LOCATION_SERVICE_ACTION,
                 com.android.internal.R.bool.config_enableFusedLocationOverlay,
                 com.android.internal.R.string.config_fusedLocationProviderPackageName,
-                com.android.internal.R.array.config_locationProviderPackageNames,
-                mLocationHandler);
+                com.android.internal.R.array.config_locationProviderPackageNames);
         if (fusedLocationProvider != null) {
             addProviderLocked(fusedLocationProvider);
             mProxyProviders.add(fusedLocationProvider);
@@ -700,8 +699,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         mGeocodeProvider = GeocoderProxy.createAndBind(mContext,
                 com.android.internal.R.bool.config_enableGeocoderOverlay,
                 com.android.internal.R.string.config_geocoderProviderPackageName,
-                com.android.internal.R.array.config_locationProviderPackageNames,
-                mLocationHandler);
+                com.android.internal.R.array.config_locationProviderPackageNames);
         if (mGeocodeProvider == null) {
             Slog.e(TAG, "no geocoder provider found");
         }
@@ -711,7 +709,6 @@ public class LocationManagerService extends ILocationManager.Stub {
                 mContext, com.android.internal.R.bool.config_enableGeofenceOverlay,
                 com.android.internal.R.string.config_geofenceProviderPackageName,
                 com.android.internal.R.array.config_locationProviderPackageNames,
-                mLocationHandler,
                 mGpsGeofenceProxy,
                 null);
         if (provider == null) {
@@ -728,7 +725,6 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
         ActivityRecognitionProxy proxy = ActivityRecognitionProxy.createAndBind(
                 mContext,
-                mLocationHandler,
                 activityRecognitionHardwareIsSupported,
                 activityRecognitionHardware,
                 com.android.internal.R.bool.config_enableActivityRecognitionHardwareOverlay,
@@ -3503,6 +3499,48 @@ public class LocationManagerService extends ILocationManager.Stub {
                 throw new IllegalArgumentException("Provider \"" + provider + "\" unknown");
             }
             mockProvider.clearStatus();
+        }
+    }
+
+    @Override
+    public PendingIntent createManageLocationPermissionIntent(String packageName,
+            String permission) {
+        Preconditions.checkNotNull(packageName);
+        Preconditions.checkArgument(permission.equals(Manifest.permission.ACCESS_FINE_LOCATION)
+                || permission.equals(Manifest.permission.ACCESS_COARSE_LOCATION)
+                || permission.equals(Manifest.permission.ACCESS_BACKGROUND_LOCATION));
+
+        int callingUid = Binder.getCallingUid();
+        long token = Binder.clearCallingIdentity();
+        try {
+            String locProvider = getNetworkProviderPackage();
+            if (locProvider == null) {
+                return null;
+            }
+
+            PackageInfo locProviderInfo;
+            try {
+                locProviderInfo = mContext.getPackageManager().getPackageInfo(
+                        locProvider, PackageManager.MATCH_DIRECT_BOOT_AUTO);
+            } catch (NameNotFoundException e) {
+                Log.e(TAG, "Could not resolve " + locProvider, e);
+                return null;
+            }
+
+            if (locProviderInfo.applicationInfo.uid != callingUid) {
+                throw new SecurityException("Only " + locProvider + " can call this API");
+            }
+
+            Intent intent = new Intent(Intent.ACTION_MANAGE_APP_PERMISSION);
+            intent.putExtra(Intent.EXTRA_PACKAGE_NAME, packageName);
+            intent.putExtra(Intent.EXTRA_PERMISSION_NAME, permission);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            return PendingIntent.getActivity(mContext,
+                    Objects.hash(packageName, permission), intent,
+                    PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 

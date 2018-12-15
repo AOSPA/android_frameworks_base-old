@@ -22,6 +22,7 @@ import android.annotation.UserIdInt;
 import android.app.AppProtoEnums;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
+import android.app.ProfilerInfo;
 import android.content.ComponentName;
 import android.content.IIntentSender;
 import android.content.Intent;
@@ -33,22 +34,17 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.SparseIntArray;
-
 import android.util.proto.ProtoOutputStream;
+
 import com.android.internal.app.IVoiceInteractor;
-import com.android.server.am.ActivityServiceConnectionsHolder;
 import com.android.server.am.PendingIntentRecord;
-import com.android.server.am.SafeActivityOptions;
-import com.android.server.am.TaskRecord;
 import com.android.server.am.UserState;
-import com.android.server.am.WindowProcessController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * Activity Task manager local system service interface.
@@ -229,8 +225,9 @@ public abstract class ActivityTaskManagerInternal {
      * @param callback Callback to run after activity visibilities have been reevaluated. This can
      *                 be used from window manager so that when the callback is called, it's
      *                 guaranteed that all apps have their visibility updated accordingly.
+     * @param displayId The id of the display where the keyguard flags changed.
      */
-    public abstract void notifyKeyguardFlagsChanged(@Nullable Runnable callback);
+    public abstract void notifyKeyguardFlagsChanged(@Nullable Runnable callback, int displayId);
 
     /**
      * Called when the trusted state of Keyguard has changed.
@@ -348,6 +345,8 @@ public abstract class ActivityTaskManagerInternal {
     /** @return The intent used to launch the home activity. */
     public abstract Intent getHomeIntent();
     public abstract boolean startHomeActivity(int userId, String reason);
+    /** Start home activities on all displays that support system decorations. */
+    public abstract boolean startHomeOnAllDisplays(int userId, String reason);
     /** @return true if the given process is the factory test process. */
     public abstract boolean isFactoryTestProcess(WindowProcessController wpc);
     public abstract void updateTopComponentForFactoryTest();
@@ -410,6 +409,9 @@ public abstract class ActivityTaskManagerInternal {
             String[] args, int opti, boolean dumpAll, boolean dumpVisibleStacksOnly,
             boolean dumpFocusedStackOnly);
 
+    /** Dump the current state for inclusion in oom dump. */
+    public abstract void dumpForOom(PrintWriter pw);
+
     /** @return true if it the activity management system is okay with GC running now. */
     public abstract boolean canGcNow();
 
@@ -439,4 +441,36 @@ public abstract class ActivityTaskManagerInternal {
      */
     public abstract int finishTopCrashedActivities(
             WindowProcessController crashedApp, String reason);
+
+    public abstract void onUidActive(int uid, int procState);
+    public abstract void onUidInactive(int uid);
+    public abstract void onActiveUidsCleared();
+    public abstract void onUidProcStateChanged(int uid, int procState);
+
+    public abstract void onUidAddedToPendingTempWhitelist(int uid, String tag);
+    public abstract void onUidRemovedFromPendingTempWhitelist(int uid);
+
+    /** Handle app crash event in {@link android.app.IActivityController} if there is one. */
+    public abstract boolean handleAppCrashInActivityController(String processName, int pid,
+            String shortMsg, String longMsg, long timeMillis, String stackTrace,
+            Runnable killCrashingAppCallback);
+
+    public abstract void removeRecentTasksByPackageName(String packageName, int userId);
+    public abstract void cleanupRecentTasksForUser(int userId);
+    public abstract void loadRecentTasksForUser(int userId);
+    public abstract void onPackagesSuspendedChanged(String[] packages, boolean suspended,
+            int userId);
+    /** Flush recent tasks to disk. */
+    public abstract void flushRecentTasks();
+
+    public abstract WindowProcessController getHomeProcess();
+    public abstract WindowProcessController getPreviousProcess();
+
+    public abstract void clearLockedTasks(String reason);
+    public abstract void updateUserConfiguration();
+    public abstract boolean canShowErrorDialogs();
+
+    public abstract void setProfileApp(String profileApp);
+    public abstract void setProfileProc(WindowProcessController wpc);
+    public abstract void setProfilerInfo(ProfilerInfo profilerInfo);
 }

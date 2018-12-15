@@ -30,13 +30,15 @@
 namespace android {
 
 MinikinFontSkia::MinikinFontSkia(sk_sp<SkTypeface> typeface, const void* fontData, size_t fontSize,
-                                 int ttcIndex, const std::vector<minikin::FontVariation>& axes)
+                                 std::string_view filePath, int ttcIndex,
+                                 const std::vector<minikin::FontVariation>& axes)
         : minikin::MinikinFont(typeface->uniqueID())
         , mTypeface(std::move(typeface))
         , mFontData(fontData)
         , mFontSize(fontSize)
         , mTtcIndex(ttcIndex)
-        , mAxes(axes) {}
+        , mAxes(axes)
+        , mFilePath(filePath) {}
 
 static void MinikinFontSkia_SetSkiaPaint(const minikin::MinikinFont* font, SkPaint* skPaint,
                                          const minikin::MinikinPaint& paint,
@@ -82,7 +84,7 @@ void MinikinFontSkia::GetFontExtent(minikin::MinikinExtent* extent,
                                     const minikin::FontFakery& fakery) const {
     SkPaint skPaint;
     MinikinFontSkia_SetSkiaPaint(this, &skPaint, paint, fakery);
-    SkPaint::FontMetrics metrics;
+    SkFontMetrics metrics;
     skPaint.getFontMetrics(&metrics);
     extent->ascent = metrics.fAscent;
     extent->descent = metrics.fDescent;
@@ -131,24 +133,24 @@ std::shared_ptr<minikin::MinikinFont> MinikinFontSkia::createFontWithVariation(
     sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
     sk_sp<SkTypeface> face(fm->makeFromStream(std::move(stream), params));
 
-    return std::make_shared<MinikinFontSkia>(std::move(face), mFontData, mFontSize, ttcIndex,
-                                             variations);
+    return std::make_shared<MinikinFontSkia>(std::move(face), mFontData, mFontSize, mFilePath,
+                                             ttcIndex, variations);
 }
 
 uint32_t MinikinFontSkia::packPaintFlags(const SkPaint* paint) {
     uint32_t flags = paint->getFlags();
-    SkPaint::Hinting hinting = paint->getHinting();
+    unsigned hinting = static_cast<unsigned>(paint->getHinting());
     // select only flags that might affect text layout
     flags &= (SkPaint::kAntiAlias_Flag | SkPaint::kFakeBoldText_Flag | SkPaint::kLinearText_Flag |
               SkPaint::kSubpixelText_Flag | SkPaint::kEmbeddedBitmapText_Flag |
-              SkPaint::kAutoHinting_Flag | SkPaint::kVerticalText_Flag);
+              SkPaint::kAutoHinting_Flag);
     flags |= (hinting << 16);
     return flags;
 }
 
 void MinikinFontSkia::unpackPaintFlags(SkPaint* paint, uint32_t paintFlags) {
     paint->setFlags(paintFlags & SkPaint::kAllFlags);
-    paint->setHinting(static_cast<SkPaint::Hinting>(paintFlags >> 16));
+    paint->setHinting(static_cast<SkFontHinting>(paintFlags >> 16));
 }
 
 void MinikinFontSkia::populateSkPaint(SkPaint* paint, const MinikinFont* font,

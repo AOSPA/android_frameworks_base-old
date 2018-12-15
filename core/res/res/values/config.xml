@@ -55,6 +55,8 @@
         <item><xliff:g id="id">@string/status_bar_hotspot</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_microphone</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_camera</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
     </string-array>
 
@@ -87,6 +89,8 @@
     <string translatable="false" name="status_bar_mobile">mobile</string>
     <string translatable="false" name="status_bar_vpn">vpn</string>
     <string translatable="false" name="status_bar_ethernet">ethernet</string>
+    <string translatable="false" name="status_bar_microphone">microphone</string>
+    <string translatable="false" name="status_bar_camera">camera</string>
     <string translatable="false" name="status_bar_airplane">airplane</string>
 
     <!-- Flag indicating whether the surface flinger has limited
@@ -513,17 +517,6 @@
     <string-array translatable="false" name="config_cdma_dun_supported_types">
     </string-array>
 
-    <!-- String containing the apn value for tethering.  May be overriden by secure settings
-         TETHER_DUN_APN.  Value is a comma separated series of strings:
-         "name,apn,proxy,port,username,password,server,mmsc,mmsproxy,mmsport,mcc,mnc,auth,type",
-         Or string format of ApnSettingV3 or higher.
-         note that empty fields can be ommitted: "name,apn,,,,,,,,,310,260,,DUN"
-         Multiple entries are separated by using string-array:
-         "<item>[ApnSettingV3]Name,apn,,,,,,,,,123,45,,mms|*,IPV6,IP,true,14,,,,,,,spn,testspn</item>
-          <item>[ApnSettingV5]Name1,apn2,,,,,,,,,123,46,,mms|*,IPV6,IP,true,12,,,,,,,,,,</item>" -->
-    <string-array translatable="false" name="config_tether_apndata">
-    </string-array>
-
     <!-- Boolean indicating whether the wifi chipset has dual frequency band support -->
     <bool translatable="false" name="config_wifi_dual_band_support">false</bool>
 
@@ -917,7 +910,7 @@
     <!--  Control whether to lock day/night mode change from normal application. When it is
           true, day / night mode change is only allowed to apps with MODIFY_DAY_NIGHT_MODE
           permission. -->
-    <bool name="config_lockDayNightMode">false</bool>
+    <bool name="config_lockDayNightMode">true</bool>
 
     <!-- Control the default night mode to use when there is no other mode override set.
          One of the following values (see UiModeManager.java):
@@ -2442,7 +2435,10 @@
          Can be customized for other product types -->
     <string name="config_chooseTypeAndAccountActivity" translatable="false"
             >android/android.accounts.ChooseTypeAndAccountActivity</string>
-
+    <!-- Name of the activity that will handle requests to the system to choose an activity for
+         the purposes of resolving an intent. -->
+    <string name="config_chooserActivity" translatable="false"
+            >com.android.systemui/com.android.systemui.chooser.ChooserActivity</string>
     <!-- Component name of a custom ResolverActivity (Intent resolver) to be used instead of
          the default framework version. If left empty, then the framework version will be used.
          Example: com.google.android.myapp/.resolver.MyResolverActivity  -->
@@ -2810,7 +2806,7 @@
         <item>LPP_PROFILE=0</item>
         <item>USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL=1</item>
         <item>A_GLONASS_POS_PROTOCOL_SELECT=0</item>
-        <item>GPS_LOCK=0</item>
+        <item>GPS_LOCK=3</item>
     </string-array>
 
     <!-- Sprint need a 70 ms delay for 3way call -->
@@ -3553,6 +3549,9 @@
 
     <!-- Whether or not battery saver should be "sticky" when manually enabled. -->
     <bool name="config_batterySaverStickyBehaviourDisabled">false</bool>
+
+    <!-- Config flag to track default disable threshold for Dynamic power savings enabled battery saver. -->
+    <integer name="config_dynamicPowerSavingsDefaultDisableThreshold">80</integer>
 
     <!-- Model of potentially misprovisioned devices. If none is specified in an overlay, an
          empty string is passed in. -->

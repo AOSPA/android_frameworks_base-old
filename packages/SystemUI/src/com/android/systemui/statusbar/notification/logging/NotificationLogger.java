@@ -29,9 +29,11 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
 import com.android.systemui.UiOffloadThread;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.NotificationListener;
+import com.android.systemui.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 
 import java.util.ArrayList;
@@ -42,7 +44,7 @@ import java.util.Collections;
  * Handles notification logging, in particular, logging which notifications are visible and which
  * are not.
  */
-public class NotificationLogger {
+public class NotificationLogger implements StateListener {
     private static final String TAG = "NotificationLogger";
 
     /** The minimum delay in ms between reports of notification visibility. */
@@ -56,13 +58,14 @@ public class NotificationLogger {
     private final NotificationListenerService mNotificationListener =
             Dependency.get(NotificationListener.class);
     private final UiOffloadThread mUiOffloadThread = Dependency.get(UiOffloadThread.class);
+    protected NotificationEntryManager mEntryManager
+            = Dependency.get(NotificationEntryManager.class);
 
-    protected NotificationEntryManager mEntryManager;
     protected Handler mHandler = new Handler();
     protected IStatusBarService mBarService;
     private long mLastVisibilityReportUptimeMs;
     private NotificationListContainer mListContainer;
-    private Object mDozingLock = new Object();
+    private final Object mDozingLock = new Object();
     private boolean mDozing;
 
     protected final OnChildLocationsChangedListener mNotificationLocationsChangedListener =
@@ -145,11 +148,11 @@ public class NotificationLogger {
     public NotificationLogger() {
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
+        // Not expected to be destroyed, don't need to unsubscribe
+        Dependency.get(StatusBarStateController.class).addListener(this);
     }
 
-    public void setUpWithEntryManager(NotificationEntryManager entryManager,
-            NotificationListContainer listContainer) {
-        mEntryManager = entryManager;
+    public void setUpWithContainer(NotificationListContainer listContainer) {
         mListContainer = listContainer;
     }
 
@@ -176,7 +179,7 @@ public class NotificationLogger {
         mNotificationLocationsChangedListener.onChildLocationsChanged();
     }
 
-    public void setDozing(boolean dozing) {
+    private void setDozing(boolean dozing) {
         synchronized (mDozingLock) {
             mDozing = dozing;
         }
@@ -257,6 +260,16 @@ public class NotificationLogger {
     @VisibleForTesting
     public Runnable getVisibilityReporter() {
         return mVisibilityReporter;
+    }
+
+    @Override
+    public void onStateChanged(int newState) {
+        // don't care about state change
+    }
+
+    @Override
+    public void onDozingChanged(boolean isDozing) {
+        setDozing(isDozing);
     }
 
     /**

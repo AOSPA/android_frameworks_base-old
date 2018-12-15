@@ -30,6 +30,7 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import android.os.SystemProperties;
+import androidx.annotation.VisibleForTesting;
 
 import com.android.settingslib.R;
 
@@ -37,8 +38,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-
-import androidx.annotation.VisibleForTesting;
 
 /**
  * CachedBluetoothDevice represents a remote Bluetooth device. It contains
@@ -56,11 +55,12 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private final Context mContext;
     private final BluetoothAdapter mLocalAdapter;
     private final LocalBluetoothProfileManager mProfileManager;
-    private final BluetoothDevice mDevice;
+    BluetoothDevice mDevice;
     private long mHiSyncId;
     // Need this since there is no method for getting RSSI
-    private short mRssi;
-
+    short mRssi;
+    // mProfiles and mRemovedProfiles does not do swap() between main and sub device. It is
+    // because current sub device is only for HearingAid and its profile is the same.
     private final List<LocalBluetoothProfile> mProfiles =
             Collections.synchronizedList(new ArrayList<>());
 
@@ -71,7 +71,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     // Device supports PANU but not NAP: remove PanProfile after device disconnects from NAP
     private boolean mLocalNapRoleConnected;
 
-    private boolean mJustDiscovered;
+    boolean mJustDiscovered;
 
     private int mMessageRejectionCount;
 
@@ -94,6 +94,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private boolean mIsActiveDeviceA2dp = false;
     private boolean mIsActiveDeviceHeadset = false;
     private boolean mIsActiveDeviceHearingAid = false;
+    // Group second device for Hearing Aid
+    private CachedBluetoothDevice mSubDevice;
 
     CachedBluetoothDevice(Context context, LocalBluetoothProfileManager profileManager,
             BluetoothDevice device) {
@@ -924,7 +926,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 if (batteryLevelPercentageString != null) {
                     //device is in phone call
                     if (com.android.settingslib.Utils.isAudioModeOngoingCall(mContext)) {
-                        if (mIsActiveDeviceHeadset) {
+                        if (mIsActiveDeviceHearingAid || mIsActiveDeviceHeadset) {
                             stringRes = R.string.bluetooth_active_battery_level;
                         } else {
                             stringRes = R.string.bluetooth_battery_level;
@@ -940,7 +942,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 } else {
                     //no battery information
                     if (com.android.settingslib.Utils.isAudioModeOngoingCall(mContext)) {
-                        if (mIsActiveDeviceHeadset) {
+                        if (mIsActiveDeviceHearingAid || mIsActiveDeviceHeadset) {
                             stringRes = R.string.bluetooth_active_no_battery_level;
                         }
                     } else {
@@ -1106,5 +1108,29 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         HearingAidProfile hearingAidProfile = mProfileManager.getHearingAidProfile();
         return hearingAidProfile != null && hearingAidProfile.getConnectionStatus(mDevice) ==
                 BluetoothProfile.STATE_CONNECTED;
+    }
+
+    public CachedBluetoothDevice getSubDevice() {
+        return mSubDevice;
+    }
+
+    public void setSubDevice(CachedBluetoothDevice subDevice) {
+        mSubDevice = subDevice;
+    }
+
+    public void switchSubDeviceContent() {
+        // Backup from main device
+        BluetoothDevice tmpDevice = mDevice;
+        short tmpRssi = mRssi;
+        boolean tmpJustDiscovered = mJustDiscovered;
+        // Set main device from sub device
+        mDevice = mSubDevice.mDevice;
+        mRssi = mSubDevice.mRssi;
+        mJustDiscovered = mSubDevice.mJustDiscovered;
+        // Set sub device from backup
+        mSubDevice.mDevice = tmpDevice;
+        mSubDevice.mRssi = tmpRssi;
+        mSubDevice.mJustDiscovered = tmpJustDiscovered;
+        fetchActiveDevices();
     }
 }

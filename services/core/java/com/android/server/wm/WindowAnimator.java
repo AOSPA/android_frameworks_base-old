@@ -94,7 +94,7 @@ public class WindowAnimator {
                 () -> mChoreographer = Choreographer.getSfInstance(), 0 /* timeout */);
 
         mAnimationFrameCallback = frameTimeNs -> {
-            synchronized (mService.mWindowMap) {
+            synchronized (mService.mGlobalLock) {
                 mAnimationFrameCallbackScheduled = false;
             }
             animate(frameTimeNs);
@@ -105,9 +105,6 @@ public class WindowAnimator {
         // Create the DisplayContentsAnimator object by retrieving it if the associated
         // {@link DisplayContent} exists.
         getDisplayContentsAnimatorLocked(displayId);
-        if (displayId == DEFAULT_DISPLAY) {
-            mInitialized = true;
-        }
     }
 
     void removeDisplayLocked(final int displayId) {
@@ -122,6 +119,10 @@ public class WindowAnimator {
         mDisplayContentsAnimators.delete(displayId);
     }
 
+    void ready() {
+        mInitialized = true;
+    }
+
     /**
      * DO NOT HOLD THE WINDOW MANAGER LOCK WHILE CALLING THIS METHOD. Reason: the method closes
      * an animation transaction, that might be blocking until the next sf-vsync, so we want to make
@@ -129,7 +130,7 @@ public class WindowAnimator {
      */
     private void animate(long frameTimeNs) {
 
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             if (!mInitialized) {
                 return;
             }
@@ -138,7 +139,7 @@ public class WindowAnimator {
             scheduleAnimation();
         }
 
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             mCurrentTime = frameTimeNs / TimeUtils.NANOS_PER_MS;
             mBulkUpdateParams = SET_ORIENTATION_CHANGE_COMPLETE;
             mAnimating = false;

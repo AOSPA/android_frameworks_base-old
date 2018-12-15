@@ -16,9 +16,13 @@
 
 package android.net.wifi.p2p;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
-import android.annotation.SystemService;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SystemApi;
+import android.annotation.SystemService;
 import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.net.wifi.WpsInfo;
@@ -481,12 +485,29 @@ public class WifiP2pManager {
     public static final int REPORT_NFC_HANDOVER_FAILED              = BASE + 81;
 
     /** @hide */
-    public static final int SET_WFDR2_INFO                          = BASE + 82;
+    public static final int FACTORY_RESET                           = BASE + 82;
     /** @hide */
-    public static final int SET_WFDR2_INFO_FAILED                   = BASE + 83;
+    public static final int FACTORY_RESET_FAILED                    = BASE + 83;
     /** @hide */
-    public static final int SET_WFDR2_INFO_SUCCEEDED                = BASE + 84;
+    public static final int FACTORY_RESET_SUCCEEDED                 = BASE + 84;
 
+    /** @hide */
+    public static final int REQUEST_ONGOING_PEER_CONFIG             = BASE + 85;
+    /** @hide */
+    public static final int RESPONSE_ONGOING_PEER_CONFIG            = BASE + 86;
+    /** @hide */
+    public static final int SET_ONGOING_PEER_CONFIG                 = BASE + 87;
+    /** @hide */
+    public static final int SET_ONGOING_PEER_CONFIG_FAILED          = BASE + 88;
+    /** @hide */
+    public static final int SET_ONGOING_PEER_CONFIG_SUCCEEDED       = BASE + 89;
+
+    /** @hide */
+    public static final int SET_WFDR2_INFO                          = BASE + 90;
+    /** @hide */
+    public static final int SET_WFDR2_INFO_FAILED                   = BASE + 91;
+    /** @hide */
+    public static final int SET_WFDR2_INFO_SUCCEEDED                = BASE + 92;
 
     /**
      * Create a new WifiP2pManager instance. Applications use
@@ -677,6 +698,18 @@ public class WifiP2pManager {
     }
 
     /**
+     * Interface for callback invocation when ongoing peer info is available
+     * @hide
+     */
+    public interface OngoingPeerInfoListener {
+        /**
+         * The requested ongoing WifiP2pConfig is available
+         * @param peerConfig WifiP2pConfig for current connecting session
+         */
+        void onOngoingPeerAvailable(WifiP2pConfig peerConfig);
+    }
+
+    /**
      * A channel that connects the application to the Wifi p2p framework.
      * Most p2p operations require a Channel as an argument. An instance of Channel is obtained
      * by doing a call on {@link #initialize}
@@ -784,6 +817,8 @@ public class WifiP2pManager {
                     case STOP_LISTEN_FAILED:
                     case SET_CHANNEL_FAILED:
                     case REPORT_NFC_HANDOVER_FAILED:
+                    case FACTORY_RESET_FAILED:
+                    case SET_ONGOING_PEER_CONFIG_FAILED:
                         if (listener != null) {
                             ((ActionListener) listener).onFailure(message.arg1);
                         }
@@ -811,6 +846,8 @@ public class WifiP2pManager {
                     case STOP_LISTEN_SUCCEEDED:
                     case SET_CHANNEL_SUCCEEDED:
                     case REPORT_NFC_HANDOVER_SUCCEEDED:
+                    case FACTORY_RESET_SUCCEEDED:
+                    case SET_ONGOING_PEER_CONFIG_SUCCEEDED:
                         if (listener != null) {
                             ((ActionListener) listener).onSuccess();
                         }
@@ -852,6 +889,13 @@ public class WifiP2pManager {
                                     : null;
                             ((HandoverMessageListener) listener)
                                     .onHandoverMessageAvailable(handoverMessage);
+                        }
+                        break;
+                    case RESPONSE_ONGOING_PEER_CONFIG:
+                        WifiP2pConfig peerConfig = (WifiP2pConfig) message.obj;
+                        if (listener != null) {
+                            ((OngoingPeerInfoListener) listener)
+                                    .onOngoingPeerAvailable(peerConfig);
                         }
                         break;
                     default:
@@ -1540,5 +1584,56 @@ public class WifiP2pManager {
         bundle.putString(EXTRA_HANDOVER_MESSAGE, handoverRequest);
         c.mAsyncChannel.sendMessage(RESPONDER_REPORT_NFC_HANDOVER, 0,
                 c.putListener(listener), bundle);
+    }
+
+    /**
+     * Removes all saved p2p groups.
+     *
+     * @param c is the channel created at {@link #initialize}.
+     * @param listener for callback on success or failure. Can be null.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void factoryReset(@NonNull Channel c, @Nullable ActionListener listener) {
+        checkChannel(c);
+        Bundle callingPackage = new Bundle();
+        callingPackage.putString(CALLING_PACKAGE, c.mContext.getOpPackageName());
+        c.mAsyncChannel.sendMessage(FACTORY_RESET, 0, c.putListener(listener),
+                callingPackage);
+    }
+
+    /**
+     * Request saved WifiP2pConfig which used for an ongoing peer connection
+     *
+     * @param c is the channel created at {@link #initialize}
+     * @param listener for callback when ongoing peer config updated. Can't be null.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
+    public void requestOngoingPeerConfig(@NonNull Channel c,
+            @NonNull OngoingPeerInfoListener listener) {
+        checkChannel(c);
+        c.mAsyncChannel.sendMessage(REQUEST_ONGOING_PEER_CONFIG,
+                Binder.getCallingUid(), c.putListener(listener));
+    }
+
+     /**
+     * Set saved WifiP2pConfig which used for an ongoing peer connection
+     *
+     * @param c is the channel created at {@link #initialize}
+     * @param config used for change an ongoing peer connection
+     * @param listener for callback when ongoing peer config updated. Can be null.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
+    public void setOngoingPeerConfig(@NonNull Channel c, @NonNull WifiP2pConfig config,
+            @Nullable ActionListener listener) {
+        checkChannel(c);
+        checkP2pConfig(config);
+        c.mAsyncChannel.sendMessage(SET_ONGOING_PEER_CONFIG, 0,
+                c.putListener(listener), config);
     }
 }
