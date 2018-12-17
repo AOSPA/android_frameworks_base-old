@@ -523,27 +523,26 @@ public class WifiP2pManager {
     public static final int SET_ONGOING_PEER_CONFIG_SUCCEEDED       = BASE + 89;
 
     /** @hide */
-<<<<<<< HEAD
     public static final int SET_WFDR2_INFO                          = BASE + 90;
     /** @hide */
     public static final int SET_WFDR2_INFO_FAILED                   = BASE + 91;
     /** @hide */
     public static final int SET_WFDR2_INFO_SUCCEEDED                = BASE + 92;
-=======
-    public static final int REQUEST_P2P_STATE                       = BASE + 90;
-    /** @hide */
-    public static final int RESPONSE_P2P_STATE                      = BASE + 91;
 
     /** @hide */
-    public static final int REQUEST_DISCOVERY_STATE                 = BASE + 92;
+    public static final int REQUEST_P2P_STATE                       = BASE + 93;
     /** @hide */
-    public static final int RESPONSE_DISCOVERY_STATE                = BASE + 93;
+    public static final int RESPONSE_P2P_STATE                      = BASE + 94;
 
     /** @hide */
-    public static final int REQUEST_NETWORK_INFO                    = BASE + 94;
+    public static final int REQUEST_DISCOVERY_STATE                 = BASE + 95;
     /** @hide */
-    public static final int RESPONSE_NETWORK_INFO                   = BASE + 95;
->>>>>>> 61ca34324405523e51cc712004164983cb623845
+    public static final int RESPONSE_DISCOVERY_STATE                = BASE + 96;
+
+    /** @hide */
+    public static final int REQUEST_NETWORK_INFO                    = BASE + 97;
+    /** @hide */
+    public static final int RESPONSE_NETWORK_INFO                   = BASE + 98;
 
     /**
      * Create a new WifiP2pManager instance. Applications use

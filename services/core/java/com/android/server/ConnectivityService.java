@@ -2106,7 +2106,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return new MockableSystemProperties();
     }
 
-<<<<<<< HEAD
     private void updateTcpBufferSizes(NetworkAgentInfo nai) {
         if (isDefaultNetwork(nai) == false) {
             return;
@@ -2117,9 +2116,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
             tcpBufferSizes = NetPluginDelegate.get5GTcpBuffers(tcpBufferSizes,
                 nai.networkCapabilities.getNetworkSpecifier());
         }
-=======
+        updateTcpBufferSizes(tcpBufferSizes);
+    }
+
     private void updateTcpBufferSizes(String tcpBufferSizes) {
->>>>>>> 61ca34324405523e51cc712004164983cb623845
         String[] values = null;
         if (tcpBufferSizes != null) {
             values = tcpBufferSizes.split(",");
@@ -6278,7 +6278,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private boolean satisfiesMobileNetworkDataCheck(NetworkCapabilities agentNc) {
         if (agentNc != null && agentNc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
             if((agentNc.hasCapability(NET_CAPABILITY_EIMS) &&
-                 (mSubscriptionManager != null && 
+                 (mSubscriptionManager != null &&
                   (mSubscriptionManager.getActiveSubscriptionInfoList() == null ||
                    mSubscriptionManager.getActiveSubscriptionInfoList().size()==0))) ||
                (getIntSpecifier(agentNc.getNetworkSpecifier()) == SubscriptionManager
