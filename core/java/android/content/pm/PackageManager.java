@@ -145,6 +145,7 @@ public abstract class PackageManager {
             MATCH_FACTORY_ONLY,
             MATCH_DEBUG_TRIAGED_MISSING,
             MATCH_INSTANT,
+            MATCH_APEX,
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
@@ -540,6 +541,17 @@ public abstract class PackageManager {
     public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
+     * {@link PackageInfo} flag: include APEX packages that are currently
+     * installed. In APEX terminology, this corresponds to packages that are
+     * currently active, i.e. mounted and available to other processes of the OS.
+     * In particular, this flag alone will not match APEX files that are staged
+     * for activation at next reboot.
+     * TODO(b/119767311): include uninstalled/inactive APEX if
+     *                    MATCH_UNINSTALLED_PACKAGES is set.
+     */
+    public static final int MATCH_APEX = 0x40000000;
+
+    /**
      * Flag for {@link #addCrossProfileIntentFilter}: if this flag is set: when
      * resolving an intent that matches the {@code CrossProfileIntentFilter},
      * the current profile will be skipped. Only activities in the target user
@@ -688,10 +700,8 @@ public abstract class PackageManager {
 
     /** @hide */
     @IntDef(flag = true, prefix = { "INSTALL_" }, value = {
-            INSTALL_FORWARD_LOCK,
             INSTALL_REPLACE_EXISTING,
             INSTALL_ALLOW_TEST,
-            INSTALL_EXTERNAL,
             INSTALL_INTERNAL,
             INSTALL_FROM_ADB,
             INSTALL_ALL_USERS,
@@ -709,17 +719,6 @@ public abstract class PackageManager {
     public @interface InstallFlags {}
 
     /**
-     * Flag parameter for {@link #installPackage} to indicate that this package
-     * should be installed as forward locked, i.e. only the app itself should
-     * have access to its code and non-resource assets.
-     *
-     * @deprecated new installs into ASEC containers are no longer supported.
-     * @hide
-     */
-    @Deprecated
-    public static final int INSTALL_FORWARD_LOCK = 0x00000001;
-
-    /**
      * Flag parameter for {@link #installPackage} to indicate that you want to
      * replace an already installed package, if one exists.
      *
@@ -735,17 +734,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_ALLOW_TEST = 0x00000004;
-
-    /**
-     * Flag parameter for {@link #installPackage} to indicate that this package
-     * must be installed to an ASEC on a {@link VolumeInfo#TYPE_PUBLIC}.
-     *
-     * @deprecated new installs into ASEC containers are no longer supported;
-     *             use adoptable storage instead.
-     * @hide
-     */
-    @Deprecated
-    public static final int INSTALL_EXTERNAL = 0x00000008;
 
     /**
      * Flag parameter for {@link #installPackage} to indicate that this package
@@ -1506,14 +1494,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int MOVE_FAILED_SYSTEM_PACKAGE = -3;
-
-    /**
-     * Error code that is passed to the {@link IPackageMoveObserver} if the
-     * specified package cannot be moved since its forward locked.
-     *
-     * @hide
-     */
-    public static final int MOVE_FAILED_FORWARD_LOCKED = -4;
 
     /**
      * Error code that is passed to the {@link IPackageMoveObserver} if the
@@ -5392,6 +5372,10 @@ public abstract class PackageManager {
     public abstract void removePackageFromPreferred(String packageName);
 
     /**
+     * @deprecated This function no longer does anything; it was an old
+     * approach to managing preferred activities, which has been superseded
+     * by (and conflicts with) the modern activity-based preferences.
+     *
      * Retrieve the list of all currently configured preferred packages. The
      * first package on the list is the most preferred, the last is the least
      * preferred.
@@ -5400,6 +5384,7 @@ public abstract class PackageManager {
      * @return A List of PackageInfo objects, one for each preferred
      *         application, in order of preference.
      */
+    @Deprecated
     public abstract List<PackageInfo> getPreferredPackages(@PackageInfoFlags int flags);
 
     /**
@@ -5426,11 +5411,16 @@ public abstract class PackageManager {
             ComponentName[] set, ComponentName activity);
 
     /**
+     * @deprecated This is a protected API that should not have been available
+     * to third party applications.  It is the platform's responsibility for
+     * assigning preferred activities and this cannot be directly modified.
+     *
      * Same as {@link #addPreferredActivity(IntentFilter, int,
             ComponentName[], ComponentName)}, but with a specific userId to apply the preference
             to.
      * @hide
      */
+    @Deprecated
     @UnsupportedAppUsage
     public void addPreferredActivityAsUser(IntentFilter filter, int match,
             ComponentName[] set, ComponentName activity, @UserIdInt int userId) {
@@ -5464,6 +5454,10 @@ public abstract class PackageManager {
             ComponentName[] set, ComponentName activity);
 
     /**
+     * @deprecated This is a protected API that should not have been available
+     * to third party applications.  It is the platform's responsibility for
+     * assigning preferred activities and this cannot be directly modified.
+     *
      * Replaces an existing preferred activity mapping to the system, and if that were not present
      * adds a new preferred activity.  This will be used to automatically select the given activity
      * component when {@link Context#startActivity(Intent) Context.startActivity()} finds multiple
@@ -5479,6 +5473,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @Deprecated
     @SystemApi
     public void replacePreferredActivity(@NonNull IntentFilter filter, int match,
             @NonNull List<ComponentName> set, @NonNull ComponentName activity) {
@@ -5496,6 +5491,10 @@ public abstract class PackageManager {
     }
 
     /**
+     * @deprecated This function no longer does anything; it was an old
+     * approach to managing preferred activities, which has been superseded
+     * by (and conflicts with) the modern activity-based preferences.
+     *
      * Remove all preferred activity mappings, previously added with
      * {@link #addPreferredActivity}, from the
      * system whose activities are implemented in the given package name.
@@ -5504,9 +5503,14 @@ public abstract class PackageManager {
      * @param packageName The name of the package whose preferred activity
      * mappings are to be removed.
      */
+    @Deprecated
     public abstract void clearPackagePreferredActivities(String packageName);
 
     /**
+     * @deprecated This function no longer does anything; it was an old
+     * approach to managing preferred activities, which has been superseded
+     * by (and conflicts with) the modern activity-based preferences.
+     *
      * Retrieve all preferred activities, previously added with
      * {@link #addPreferredActivity}, that are
      * currently registered with the system.
@@ -5523,6 +5527,7 @@ public abstract class PackageManager {
      * (the number of distinct IntentFilter records, not the number of unique
      * activity components) that were found.
      */
+    @Deprecated
     public abstract int getPreferredActivities(@NonNull List<IntentFilter> outFilters,
             @NonNull List<ComponentName> outActivities, String packageName);
 
@@ -6427,6 +6432,20 @@ public abstract class PackageManager {
     public boolean isPackageStateProtected(String packageName, int userId) {
         throw new UnsupportedOperationException(
             "isPackageStateProtected not implemented in subclass");
+    }
+
+    /**
+     * Notify to the rest of the system that a new device configuration has
+     * been prepared and that it is time to refresh caches.
+     *
+     * @see android.content.Intent#ACTION_DEVICE_CUSTOMIZATION_READY
+     *
+     * @hide
+     */
+    @SystemApi
+    public void sendDeviceCustomizationReadyBroadcast() {
+        throw new UnsupportedOperationException(
+            "sendDeviceCustomizationReadyBroadcast not implemented in subclass");
     }
 
 }

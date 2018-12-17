@@ -19,13 +19,17 @@ package com.android.server.intelligence;
 import static android.content.Context.INTELLIGENCE_MANAGER_SERVICE;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
 import android.content.ComponentName;
 import android.content.Context;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.UserManager;
 import android.service.intelligence.InteractionSessionId;
+import android.view.autofill.AutofillId;
+import android.view.autofill.IAutoFillManagerClient;
 import android.view.intelligence.ContentCaptureEvent;
 import android.view.intelligence.IIntelligenceManager;
 
@@ -46,8 +50,8 @@ import java.util.List;
  * <p>The data collected by this service can be analyzed and combined with other sources to provide
  * contextual data in other areas of the system such as Autofill.
  */
-public final class IntelligenceManagerService
-        extends AbstractMasterSystemService<IntelligencePerUserService> {
+public final class IntelligenceManagerService extends
+        AbstractMasterSystemService<IntelligenceManagerService, IntelligencePerUserService> {
 
     private static final String TAG = "IntelligenceManagerService";
 
@@ -97,7 +101,7 @@ public final class IntelligenceManagerService
     final class IntelligenceManagerServiceStub extends IIntelligenceManager.Stub {
 
         @Override
-        public void startSession(int userId, @NonNull IBinder activityToken,
+        public void startSession(@UserIdInt int userId, @NonNull IBinder activityToken,
                 @NonNull ComponentName componentName, @NonNull InteractionSessionId sessionId,
                 int flags, @NonNull IResultReceiver result) {
             Preconditions.checkNotNull(activityToken);
@@ -119,7 +123,7 @@ public final class IntelligenceManagerService
         }
 
         @Override
-        public void sendEvents(int userId, @NonNull InteractionSessionId sessionId,
+        public void sendEvents(@UserIdInt int userId, @NonNull InteractionSessionId sessionId,
                 @NonNull List<ContentCaptureEvent> events) {
             Preconditions.checkNotNull(sessionId);
             Preconditions.checkNotNull(events);
@@ -131,12 +135,13 @@ public final class IntelligenceManagerService
         }
 
         @Override
-        public void finishSession(int userId, @NonNull InteractionSessionId sessionId) {
+        public void finishSession(@UserIdInt int userId, @NonNull InteractionSessionId sessionId,
+                @Nullable List<ContentCaptureEvent> events) {
             Preconditions.checkNotNull(sessionId);
 
             synchronized (mLock) {
                 final IntelligencePerUserService service = getServiceForUserLocked(userId);
-                service.finishSessionLocked(sessionId);
+                service.finishSessionLocked(sessionId, events);
             }
         }
 
@@ -153,15 +158,40 @@ public final class IntelligenceManagerService
     private final class LocalService extends IntelligenceManagerInternal {
 
         @Override
-        public boolean isIntelligenceServiceForUser(int uid, int userId) {
+        public boolean isIntelligenceServiceForUser(int uid, @UserIdInt int userId) {
             synchronized (mLock) {
                 final IntelligencePerUserService service = peekServiceForUserLocked(userId);
                 if (service != null) {
                     return service.isIntelligenceServiceForUserLocked(uid);
                 }
             }
-
             return false;
+        }
+
+        @Override
+        public boolean sendActivityAssistData(@UserIdInt int userId, @NonNull IBinder activityToken,
+                @NonNull Bundle data) {
+            synchronized (mLock) {
+                final IntelligencePerUserService service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    return service.sendActivityAssistDataLocked(activityToken, data);
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public AugmentedAutofillCallback requestAutofill(@UserIdInt int userId,
+                @NonNull IAutoFillManagerClient client, @NonNull IBinder activityToken,
+                int autofillSessionId, @NonNull AutofillId focusedId) {
+            synchronized (mLock) {
+                final IntelligencePerUserService service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    return service.requestAutofill(client, activityToken, autofillSessionId,
+                            focusedId);
+                }
+            }
+            return null;
         }
     }
 }

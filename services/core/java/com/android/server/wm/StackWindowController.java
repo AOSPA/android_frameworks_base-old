@@ -200,14 +200,15 @@ public class StackWindowController
     }
 
     /**
-     * @see TaskStack.getStackDockedModeBoundsLocked(Rect, Rect, Rect, boolean)
+     * @see TaskStack.getStackDockedModeBoundsLocked(ConfigurationContainer, Rect, Rect, Rect)
      */
-   public void getStackDockedModeBounds(Rect currentTempTaskBounds, Rect outStackBounds,
-           Rect outTempTaskBounds, boolean ignoreVisibility) {
+    public void getStackDockedModeBounds(Configuration parentConfig, Rect dockedBounds,
+            Rect currentTempTaskBounds,
+            Rect outStackBounds, Rect outTempTaskBounds) {
         synchronized (mGlobalLock) {
             if (mContainer != null) {
-                mContainer.getStackDockedModeBoundsLocked(currentTempTaskBounds, outStackBounds,
-                        outTempTaskBounds, ignoreVisibility);
+                mContainer.getStackDockedModeBoundsLocked(parentConfig, dockedBounds,
+                        currentTempTaskBounds, outStackBounds, outTempTaskBounds);
                 return;
             }
             outStackBounds.setEmpty();
@@ -260,11 +261,12 @@ public class StackWindowController
             final DisplayContent displayContent = stack.getDisplayContent();
             final DisplayInfo di = displayContent.getDisplayInfo();
             final DisplayCutout displayCutout = di.displayCutout;
+            final DisplayPolicy displayPolicy = displayContent.getDisplayPolicy();
 
             // Get the insets and display bounds
-            mService.mPolicy.getStableInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight,
+            displayPolicy.getStableInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight,
                     displayCutout, mTmpStableInsets);
-            mService.mPolicy.getNonDecorInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight,
+            displayPolicy.getNonDecorInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight,
                     displayCutout, mTmpNonDecorInsets);
             mTmpDisplayBounds.set(0, 0, di.logicalWidth, di.logicalHeight);
 
@@ -370,14 +372,6 @@ public class StackWindowController
 
     void requestResize(Rect bounds) {
         mHandler.obtainMessage(H.REQUEST_RESIZE, bounds).sendToTarget();
-    }
-
-    /** @see TaskStack.updateBoundsForConfigChange(Configuration, Configuration, Rect) */
-    public boolean updateBoundsForConfigChange(
-            Configuration parentConfig, Configuration prevConfig, Rect outBounds) {
-        synchronized (mGlobalLock) {
-            return mContainer.updateBoundsForConfigChange(parentConfig, prevConfig, outBounds);
-        }
     }
 
     @Override

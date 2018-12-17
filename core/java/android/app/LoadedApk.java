@@ -29,6 +29,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.SharedLibraryInfo;
 import android.content.pm.dex.ArtManager;
 import android.content.pm.split.SplitDependencyLoader;
 import android.content.res.AssetManager;
@@ -70,8 +71,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 final class IntentReceiverLeaked extends AndroidRuntimeException {
     @UnsupportedAppUsage
@@ -117,6 +120,7 @@ public final class LoadedApk {
     private File mCredentialProtectedDataDirFile;
     @UnsupportedAppUsage
     private final ClassLoader mBaseClassLoader;
+    private ClassLoader mDefaultClassLoader;
     private final boolean mSecurityViolation;
     private final boolean mIncludeCode;
     private final boolean mRegisterPackage;
@@ -224,9 +228,10 @@ public final class LoadedApk {
         mSecurityViolation = false;
         mIncludeCode = true;
         mRegisterPackage = false;
-        mClassLoader = ClassLoader.getSystemClassLoader();
         mResources = Resources.getSystem();
-        mAppComponentFactory = createAppFactory(mApplicationInfo, mClassLoader);
+        mDefaultClassLoader = ClassLoader.getSystemClassLoader();
+        mAppComponentFactory = createAppFactory(mApplicationInfo, mDefaultClassLoader);
+        mClassLoader = mAppComponentFactory.instantiateClassLoader(mDefaultClassLoader);
     }
 
     /**
@@ -235,15 +240,21 @@ public final class LoadedApk {
     void installSystemApplicationInfo(ApplicationInfo info, ClassLoader classLoader) {
         assert info.packageName.equals("android");
         mApplicationInfo = info;
-        mClassLoader = classLoader;
-        mAppComponentFactory = createAppFactory(info, classLoader);
+        mDefaultClassLoader = classLoader;
+        mAppComponentFactory = createAppFactory(info, mDefaultClassLoader);
+        mClassLoader = mAppComponentFactory.instantiateClassLoader(mDefaultClassLoader);
     }
 
     private AppComponentFactory createAppFactory(ApplicationInfo appInfo, ClassLoader cl) {
         if (appInfo.appComponentFactory != null && cl != null) {
             try {
-                return (AppComponentFactory) cl.loadClass(appInfo.appComponentFactory)
-                        .newInstance();
+                AppComponentFactory factory = (AppComponentFactory) cl.loadClass(
+                        appInfo.appComponentFactory).newInstance();
+                // Pass a copy of ApplicationInfo to the factory. Copying protects the framework
+                // from apps which would override the factory and change ApplicationInfo contents.
+                // ApplicationInfo is used to set up the default class loader.
+                factory.setApplicationInfo(new ApplicationInfo(appInfo));
+                return factory;
             } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
                 Slog.e(TAG, "Unable to instantiate appComponentFactory", e);
             }
@@ -357,7 +368,7 @@ public final class LoadedApk {
                         getClassLoader());
             }
         }
-        mAppComponentFactory = createAppFactory(aInfo, mClassLoader);
+        mAppComponentFactory = createAppFactory(aInfo, mDefaultClassLoader);
     }
 
     private void setApplicationInfo(ApplicationInfo aInfo) {
@@ -389,6 +400,24 @@ public final class LoadedApk {
         makePaths(activityThread, false, aInfo, outZipPaths, null);
     }
 
+    private static void appendSharedLibrariesLibPathsIfNeeded(
+            List<SharedLibraryInfo> sharedLibraries, ApplicationInfo aInfo,
+            Set<String> outSeenPaths,
+            List<String> outLibPaths) {
+        if (sharedLibraries == null) {
+            return;
+        }
+        for (SharedLibraryInfo lib : sharedLibraries) {
+            List<String> paths = lib.getAllCodePaths();
+            outSeenPaths.addAll(paths);
+            for (String path : paths) {
+                appendApkLibPathIfNeeded(path, aInfo, outLibPaths);
+            }
+            appendSharedLibrariesLibPathsIfNeeded(
+                    lib.getDependencies(), aInfo, outSeenPaths, outLibPaths);
+        }
+    }
+
     public static void makePaths(ActivityThread activityThread,
                                  boolean isBundledApp,
                                  ApplicationInfo aInfo,
@@ -396,7 +425,6 @@ public final class LoadedApk {
                                  List<String> outLibPaths) {
         final String appDir = aInfo.sourceDir;
         final String libDir = aInfo.nativeLibraryDir;
-        final String[] sharedLibraries = aInfo.sharedLibraryFiles;
 
         outZipPaths.clear();
         outZipPaths.add(appDir);
@@ -491,11 +519,19 @@ public final class LoadedApk {
             }
         }
 
-        // Prepend the shared libraries, maintaining their original order where possible.
-        if (sharedLibraries != null) {
+        // Add the shared libraries native paths. The dex files in shared libraries will
+        // be resolved through shared library loaders, which are setup later.
+        Set<String> outSeenPaths = new LinkedHashSet<>();
+        appendSharedLibrariesLibPathsIfNeeded(
+                aInfo.sharedLibraryInfos, aInfo, outSeenPaths, outLibPaths);
+
+        // ApplicationInfo.sharedLibraryFiles is a public API, so anyone can change it.
+        // We prepend shared libraries that the package manager hasn't seen, maintaining their
+        // original order where possible.
+        if (aInfo.sharedLibraryFiles != null) {
             int index = 0;
-            for (String lib : sharedLibraries) {
-                if (!outZipPaths.contains(lib)) {
+            for (String lib : aInfo.sharedLibraryFiles) {
+                if (!outSeenPaths.contains(lib) && !outZipPaths.contains(lib)) {
                     outZipPaths.add(index, lib);
                     index++;
                     appendApkLibPathIfNeeded(lib, aInfo, outLibPaths);
@@ -623,6 +659,43 @@ public final class LoadedApk {
         return mSplitLoader.getSplitPathsForSplit(splitName);
     }
 
+    /**
+     * Create a class loader for the {@code sharedLibrary}. Shared libraries are canonicalized,
+     * so if we already created a class loader with that shared library, we return it.
+     *
+     * Implementation notes: the canonicalization of shared libraries is something dex2oat
+     * also does.
+     */
+    ClassLoader createSharedLibraryLoader(SharedLibraryInfo sharedLibrary,
+            boolean isBundledApp, String librarySearchPath, String libraryPermittedPath) {
+        List<String> paths = sharedLibrary.getAllCodePaths();
+        List<ClassLoader> sharedLibraries = createSharedLibrariesLoaders(
+                sharedLibrary.getDependencies(), isBundledApp, librarySearchPath,
+                libraryPermittedPath);
+        final String jars = (paths.size() == 1) ? paths.get(0) :
+                TextUtils.join(File.pathSeparator, paths);
+
+        // Shared libraries get a null parent: this has the side effect of having canonicalized
+        // shared libraries using ApplicationLoaders cache, which is the behavior we want.
+        return ApplicationLoaders.getDefault().getClassLoaderWithSharedLibraries(jars,
+                    mApplicationInfo.targetSdkVersion, isBundledApp, librarySearchPath,
+                    libraryPermittedPath, /* parent */ null,
+                    /* classLoaderName */ null, sharedLibraries);
+    }
+
+    private List<ClassLoader> createSharedLibrariesLoaders(List<SharedLibraryInfo> sharedLibraries,
+            boolean isBundledApp, String librarySearchPath, String libraryPermittedPath) {
+        if (sharedLibraries == null) {
+            return null;
+        }
+        List<ClassLoader> loaders = new ArrayList<>();
+        for (SharedLibraryInfo info : sharedLibraries) {
+            loaders.add(createSharedLibraryLoader(
+                    info, isBundledApp, librarySearchPath, libraryPermittedPath));
+        }
+        return loaders;
+    }
+
     private void createOrUpdateClassLoaderLocked(List<String> addedPaths) {
         if (mPackageName.equals("android")) {
             // Note: This branch is taken for system server and we don't need to setup
@@ -633,11 +706,12 @@ public final class LoadedApk {
             }
 
             if (mBaseClassLoader != null) {
-                mClassLoader = mBaseClassLoader;
+                mDefaultClassLoader = mBaseClassLoader;
             } else {
-                mClassLoader = ClassLoader.getSystemClassLoader();
+                mDefaultClassLoader = ClassLoader.getSystemClassLoader();
             }
-            mAppComponentFactory = createAppFactory(mApplicationInfo, mClassLoader);
+            mAppComponentFactory = createAppFactory(mApplicationInfo, mDefaultClassLoader);
+            mClassLoader = mAppComponentFactory.instantiateClassLoader(mDefaultClassLoader);
 
             return;
         }
@@ -715,14 +789,18 @@ public final class LoadedApk {
         // call System.loadLibrary() on a classloader from a LoadedApk with
         // mIncludeCode == false).
         if (!mIncludeCode) {
-            if (mClassLoader == null) {
+            if (mDefaultClassLoader == null) {
                 StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-                mClassLoader = ApplicationLoaders.getDefault().getClassLoader(
+                mDefaultClassLoader = ApplicationLoaders.getDefault().getClassLoader(
                         "" /* codePath */, mApplicationInfo.targetSdkVersion, isBundledApp,
                         librarySearchPath, libraryPermittedPath, mBaseClassLoader,
                         null /* classLoaderName */);
                 StrictMode.setThreadPolicy(oldPolicy);
                 mAppComponentFactory = AppComponentFactory.DEFAULT;
+            }
+
+            if (mClassLoader == null) {
+                mClassLoader = mAppComponentFactory.instantiateClassLoader(mDefaultClassLoader);
             }
 
             return;
@@ -741,16 +819,20 @@ public final class LoadedApk {
                     ", JNI path: " + librarySearchPath);
 
         boolean needToSetupJitProfiles = false;
-        if (mClassLoader == null) {
+        if (mDefaultClassLoader == null) {
             // Temporarily disable logging of disk reads on the Looper thread
             // as this is early and necessary.
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
 
-            mClassLoader = ApplicationLoaders.getDefault().getClassLoader(zip,
-                    mApplicationInfo.targetSdkVersion, isBundledApp, librarySearchPath,
+            List<ClassLoader> sharedLibraries = createSharedLibrariesLoaders(
+                    mApplicationInfo.sharedLibraryInfos, isBundledApp, librarySearchPath,
+                    libraryPermittedPath);
+
+            mDefaultClassLoader = ApplicationLoaders.getDefault().getClassLoaderWithSharedLibraries(
+                    zip, mApplicationInfo.targetSdkVersion, isBundledApp, librarySearchPath,
                     libraryPermittedPath, mBaseClassLoader,
-                    mApplicationInfo.classLoaderName);
-            mAppComponentFactory = createAppFactory(mApplicationInfo, mClassLoader);
+                    mApplicationInfo.classLoaderName, sharedLibraries);
+            mAppComponentFactory = createAppFactory(mApplicationInfo, mDefaultClassLoader);
 
             StrictMode.setThreadPolicy(oldPolicy);
             // Setup the class loader paths for profiling.
@@ -761,7 +843,7 @@ public final class LoadedApk {
             // Temporarily disable logging of disk reads on the Looper thread as this is necessary
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
             try {
-                ApplicationLoaders.getDefault().addNative(mClassLoader, libPaths);
+                ApplicationLoaders.getDefault().addNative(mDefaultClassLoader, libPaths);
             } finally {
                 StrictMode.setThreadPolicy(oldPolicy);
             }
@@ -799,7 +881,7 @@ public final class LoadedApk {
         if (!extraLibPaths.isEmpty()) {
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
             try {
-                ApplicationLoaders.getDefault().addNative(mClassLoader, extraLibPaths);
+                ApplicationLoaders.getDefault().addNative(mDefaultClassLoader, extraLibPaths);
             } finally {
                 StrictMode.setThreadPolicy(oldPolicy);
             }
@@ -807,7 +889,7 @@ public final class LoadedApk {
 
         if (addedPaths != null && addedPaths.size() > 0) {
             final String add = TextUtils.join(File.pathSeparator, addedPaths);
-            ApplicationLoaders.getDefault().addPath(mClassLoader, add);
+            ApplicationLoaders.getDefault().addPath(mDefaultClassLoader, add);
             // Setup the new code paths for profiling.
             needToSetupJitProfiles = true;
         }
@@ -823,6 +905,13 @@ public final class LoadedApk {
         // loads code from) so we explicitly disallow it there.
         if (needToSetupJitProfiles && !ActivityThread.isSystem()) {
             setupJitProfileSupport();
+        }
+
+        // Call AppComponentFactory to select/create the main class loader of this app.
+        // Since this may call code in the app, mDefaultClassLoader must be fully set up
+        // before invoking the factory.
+        if (mClassLoader == null) {
+            mClassLoader = mAppComponentFactory.instantiateClassLoader(mDefaultClassLoader);
         }
     }
 

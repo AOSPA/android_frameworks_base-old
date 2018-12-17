@@ -154,8 +154,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
     static final String KEY_CARRIER_NAME = "key_carrier_name";
     static final AtomicInteger sLastId = new AtomicInteger(0);
 
-    /**
-     * These values are matched in string arrays -- changes must be kept in sync
+    /*
+     * NOTE: These constants for security and PSK types are saved to the bundle in saveWifiState,
+     * and sent across IPC. The numeric values should remain stable, otherwise the changes will need
+     * to be synced with other unbundled users of this library.
      */
     public static final int SECURITY_NONE = 0;
     public static final int SECURITY_WEP = 1;
@@ -164,7 +166,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
     public static final int SECURITY_OWE = 4;
     public static final int SECURITY_SAE = 5;
     public static final int SECURITY_EAP_SUITE_B = 6;
+<<<<<<< HEAD
     public static final int SECURITY_DPP = 7;
+=======
+    public static final int SECURITY_MAX_VAL = 7; // Has to be the last
+>>>>>>> 61ca34324405523e51cc712004164983cb623845
 
     private static final int PSK_UNKNOWN = 0;
     private static final int PSK_WPA = 1;

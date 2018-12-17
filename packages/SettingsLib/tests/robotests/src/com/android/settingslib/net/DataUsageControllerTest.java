@@ -42,16 +42,15 @@ import android.telephony.TelephonyManager;
 import android.text.format.DateUtils;
 import android.util.FeatureFlagUtils;
 
-import com.android.settingslib.SettingsLibRobolectricTestRunner;
-
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 
-@RunWith(SettingsLibRobolectricTestRunner.class)
+@RunWith(RobolectricTestRunner.class)
 public class DataUsageControllerTest {
 
     private static final String SUB_ID = "Test Subscriber";
@@ -80,24 +79,25 @@ public class DataUsageControllerTest {
     }
 
     @Test
-    public void getHistoricalUsageLevel_noNetworkSession_shouldReturnNegative1() {
+    public void getHistoricalUsageLevel_v1_noNetworkSession_shouldReturnNegative1() {
+        FeatureFlagUtils.setEnabled(mContext, DataUsageController.DATA_USAGE_V2, false);
         doReturn(null).when(mController).getSession();
 
         assertThat(mController.getHistoricalUsageLevel(null /* template */)).isEqualTo(-1L);
-
     }
 
     @Test
-    public void getHistoriclUsageLevel_noUsageData_shouldReturn0() {
+    public void getHistoriclUsageLevel_v1_noUsageData_shouldReturn0() {
+        FeatureFlagUtils.setEnabled(mContext, DataUsageController.DATA_USAGE_V2, false);
         doReturn(mSession).when(mController).getSession();
 
         assertThat(mController.getHistoricalUsageLevel(NetworkTemplate.buildTemplateWifiWildcard()))
                 .isEqualTo(0L);
-
     }
 
     @Test
-    public void getHistoricalUsageLevel_hasUsageData_shouldReturnTotalUsage() {
+    public void getHistoricalUsageLevel_v1_hasUsageData_shouldReturnTotalUsage() {
+        FeatureFlagUtils.setEnabled(mContext, DataUsageController.DATA_USAGE_V2, false);
         doReturn(mSession).when(mController).getSession();
         final long receivedBytes = 743823454L;
         final long transmittedBytes = 16574289L;
@@ -110,7 +110,6 @@ public class DataUsageControllerTest {
 
         assertThat(mController.getHistoricalUsageLevel(NetworkTemplate.buildTemplateWifiWildcard()))
                 .isEqualTo(receivedBytes + transmittedBytes);
-
     }
 
     @Test

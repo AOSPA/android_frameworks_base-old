@@ -5532,7 +5532,7 @@
         <attr name="solidColor" format="color|reference" />
         <!-- @hide The divider for making the selection area. -->
         <attr name="selectionDivider" format="reference" />
-        <!-- @hide The height of the selection divider. -->
+        <!-- The height of the selection divider. -->
         <attr name="selectionDividerHeight" format="dimension" />
         <!-- @hide The distance between the two selection dividers. -->
         <attr name="selectionDividersDistance" format="dimension" />
@@ -7935,11 +7935,18 @@
              wallpaper. -->
         <attr name="showMetadataInPreview" format="boolean" />
 
-        <!-- Wallpapers optimized and capable of drawing in ambient mode will return true. -->
+        <!-- Wallpapers optimized and capable of drawing in ambient mode will return true.
+             This feature requires the android.permission.AMBIENT_WALLPAPER permission.
+             @hide @SystemApi -->
         <attr name="supportsAmbientMode" format="boolean" />
 
         <!-- Uri that specifies a settings Slice for this wallpaper. -->
         <attr name="settingsSliceUri" />
+
+        <!-- Indicates that this wallpaper service can support multiple engines to render on each
+             surface independently. An example use case is a multi-display set-up where the
+             wallpaper service can render surfaces to each of the connected displays. -->
+        <attr name="supportsMultipleDisplays" format="boolean" />
 
     </declare-styleable>
 
@@ -8798,6 +8805,7 @@
         <attr name="layout_ignoreOffset" format="boolean" />
         <attr name="layout_gravity" />
         <attr name="layout_hasNestedScrollIndicator" format="boolean" />
+        <attr name="layout_maxHeight" />
     </declare-styleable>
 
     <!-- @hide -->
@@ -9001,5 +9009,6 @@
         <attr name="magnifierElevation" format="dimension" />
         <attr name="magnifierVerticalOffset" format="dimension" />
         <attr name="magnifierHorizontalOffset" format="dimension" />
+        <attr name="magnifierColorOverlay" format="color" />
     </declare-styleable>
 </resources>

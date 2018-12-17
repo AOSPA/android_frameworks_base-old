@@ -20,6 +20,7 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.text.TextUtils;
+import android.util.ArraySet;
 import android.util.Log;
 import android.util.Printer;
 import android.util.Slog;
@@ -31,13 +32,9 @@ import com.android.server.inputmethod.InputMethodUtils.InputMethodSettings;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.TreeMap;
 
 /**
  * InputMethodSubtypeSwitchingController controls the switching behavior of the subtypes.
@@ -113,6 +110,7 @@ final class InputMethodSubtypeSwitchingController {
          *   <li>{@link #mIsSystemLocale}</li>
          *   <li>{@link #mIsSystemLanguage}</li>
          *   <li>{@link #mSubtypeName}</li>
+         *   <li>{@link #mImi} with {@link InputMethodInfo#getId()}</li>
          * </ol>
          * Note: this class has a natural ordering that is inconsistent with {@link #equals(Object).
          * This method doesn't compare {@link #mSubtypeId} but {@link #equals(Object)} does.
@@ -137,7 +135,11 @@ final class InputMethodSubtypeSwitchingController {
             if (result != 0) {
                 return result;
             }
-            return compareNullableCharSequences(mSubtypeName, other.mSubtypeName);
+            result = compareNullableCharSequences(mSubtypeName, other.mSubtypeName);
+            if (result != 0) {
+                return result;
+            }
+            return mImi.getId().compareTo(other.mImi.getId());
         }
 
         @Override
@@ -179,31 +181,10 @@ final class InputMethodSubtypeSwitchingController {
             mSystemLocaleStr = locale != null ? locale.toString() : "";
         }
 
-        private final TreeMap<InputMethodInfo, List<InputMethodSubtype>> mSortedImmis =
-                new TreeMap<>(
-                        new Comparator<InputMethodInfo>() {
-                            @Override
-                            public int compare(InputMethodInfo imi1, InputMethodInfo imi2) {
-                                if (imi2 == null)
-                                    return 0;
-                                if (imi1 == null)
-                                    return 1;
-                                if (mPm == null) {
-                                    return imi1.getId().compareTo(imi2.getId());
-                                }
-                                CharSequence imiId1 = imi1.loadLabel(mPm) + "/" + imi1.getId();
-                                CharSequence imiId2 = imi2.loadLabel(mPm) + "/" + imi2.getId();
-                                return imiId1.toString().compareTo(imiId2.toString());
-                            }
-                        });
-
         public List<ImeSubtypeListItem> getSortedInputMethodAndSubtypeList(
                 boolean includeAuxiliarySubtypes, boolean isScreenLocked) {
-            final ArrayList<ImeSubtypeListItem> imList = new ArrayList<>();
-            final HashMap<InputMethodInfo, List<InputMethodSubtype>> immis =
-                    mSettings.getExplicitlyOrImplicitlyEnabledInputMethodsAndSubtypeListLocked(
-                            mContext);
-            if (immis == null || immis.size() == 0) {
+            final ArrayList<InputMethodInfo> imis = mSettings.getEnabledInputMethodListLocked();
+            if (imis.isEmpty()) {
                 return Collections.emptyList();
             }
             if (isScreenLocked && includeAuxiliarySubtypes) {
@@ -212,14 +193,13 @@ final class InputMethodSubtypeSwitchingController {
                 }
                 includeAuxiliarySubtypes = false;
             }
-            mSortedImmis.clear();
-            mSortedImmis.putAll(immis);
-            for (InputMethodInfo imi : mSortedImmis.keySet()) {
-                if (imi == null) {
-                    continue;
-                }
-                List<InputMethodSubtype> explicitlyOrImplicitlyEnabledSubtypeList = immis.get(imi);
-                HashSet<String> enabledSubtypeSet = new HashSet<>();
+            final ArrayList<ImeSubtypeListItem> imList = new ArrayList<>();
+            final int numImes = imis.size();
+            for (int i = 0; i < numImes; ++i) {
+                final InputMethodInfo imi = imis.get(i);
+                final List<InputMethodSubtype> explicitlyOrImplicitlyEnabledSubtypeList =
+                        mSettings.getEnabledInputMethodSubtypeListLocked(mContext, imi, true);
+                final ArraySet<String> enabledSubtypeSet = new ArraySet<>();
                 for (InputMethodSubtype subtype : explicitlyOrImplicitlyEnabledSubtypeList) {
                     enabledSubtypeSet.add(String.valueOf(subtype.hashCode()));
                 }

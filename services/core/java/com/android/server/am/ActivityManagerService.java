@@ -128,6 +128,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.MemoryStatUtil.hasMemcg;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromFilesystem;
+import static com.android.server.am.MemoryStatUtil.readRssHighWaterMarkFromProcfs;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CLEANUP;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
@@ -183,6 +184,7 @@ import android.app.Instrumentation;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.ProcessMemoryHighWaterMark;
 import android.app.ProcessMemoryState;
 import android.app.ProfilerInfo;
 import android.app.WaitResult;
@@ -499,6 +501,18 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     // The minimum memory growth threshold (in KB) for low RAM devices.
     private static final int MINIMUM_MEMORY_GROWTH_THRESHOLD = 10 * 1000; // 10 MB
+
+    /**
+     * The number of binder proxies we need to have before we start warning and
+     * dumping debug info.
+     */
+    private static final int BINDER_PROXY_HIGH_WATERMARK = 6000;
+
+    /**
+     * Low watermark that needs to be met before we consider dumping info again,
+     * after already hitting the high watermark.
+     */
+    private static final int BINDER_PROXY_LOW_WATERMARK = 5500;
 
     /**
      * State indicating that there is no need for any blocking for network.
@@ -4433,7 +4447,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         EventLog.writeEvent(EventLogTags.AM_PROC_BOUND, app.userId, app.pid, app.processName);
 
-        app.makeActive(thread, mProcessStats);
         app.curAdj = app.setAdj = app.verifiedAdj = ProcessList.INVALID_ADJ;
         app.setCurrentSchedulingGroup(app.setSchedGroup = ProcessList.SCHED_GROUP_DEFAULT);
         app.forcingToImportant = null;
@@ -4640,6 +4653,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 profilerInfo.closeFd();
                 profilerInfo = null;
             }
+
+            // Make app active after binding application or client may be running requests (e.g
+            // starting activities) before it is ready.
+            app.makeActive(thread, mProcessStats);
             checkTime(startTime, "attachApplicationLocked: immediately after bindApplication");
             mProcessList.updateLruProcessLocked(app, false, null);
             checkTime(startTime, "attachApplicationLocked: after updateLruProcessLocked");
@@ -8550,7 +8567,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             mAtmInternal.resumeTopActivities(false /* scheduleIdle */);
             mUserController.sendUserSwitchBroadcasts(-1, currentUserId);
 
-            BinderInternal.nSetBinderProxyCountWatermarks(6000,5500);
+            BinderInternal.nSetBinderProxyCountWatermarks(BINDER_PROXY_HIGH_WATERMARK,
+                    BINDER_PROXY_LOW_WATERMARK);
             BinderInternal.nSetBinderProxyCountEnabled(true);
             BinderInternal.setBinderProxyCountCallback(
                     new BinderInternal.BinderProxyLimitListener() {
@@ -8643,7 +8661,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 r != null ? (r.isInterestingToUserLocked()
                         ? StatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__FOREGROUND
                         : StatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__BACKGROUND)
-                        : StatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__UNKNOWN
+                        : StatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__UNKNOWN,
+                (r != null) ? r.getProcessClassEnum() : 0
         );
 
         final int relaunchReason = r == null ? RELAUNCH_REASON_NONE
@@ -8826,7 +8845,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 processName, r == null ? -1 : r.info.flags, tag, crashInfo.exceptionMessage);
 
         StatsLog.write(StatsLog.WTF_OCCURRED, callingUid, tag, processName,
-                callingPid);
+                callingPid, (r != null) ? r.getProcessClassEnum() : 0);
 
         addErrorToDropBox("wtf", r, processName, null, null, null, tag, null, null, crashInfo);
 
@@ -9279,26 +9298,41 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 dumpAssociationsLocked(fd, pw, args, opti, dumpAll, dumpClient, dumpPackage);
             }
+            if (dumpPackage == null) {
+                pw.println();
+                if (dumpAll) {
+                    pw.println("-------------------------------------------------------------------------------");
+                }
+                mOomAdjProfiler.dump(pw);
+                pw.println();
+                if (dumpAll) {
+                    pw.println("-------------------------------------------------------------------------------");
+                }
+                dumpLmkLocked(pw);
+            }
+            pw.println();
+            if (dumpAll) {
+                pw.println("-------------------------------------------------------------------------------");
+            }
+            dumpLruLocked(pw, dumpPackage);
             pw.println();
             if (dumpAll) {
                 pw.println("-------------------------------------------------------------------------------");
             }
             dumpProcessesLocked(fd, pw, args, opti, dumpAll, dumpPackage, dumpAppId);
+        }
+        if (dumpPackage == null) {
+            // Intentionally dropping the lock for this, because dumpBinderProxies() will make many
+            // outgoing binder calls to retrieve interface descriptors; while that is system code,
+            // there is nothing preventing an app from overriding this implementation by talking to
+            // the binder driver directly, and hang up system_server in the process. So, dump
+            // without locks held, and even then only when there is an unreasonably large number of
+            // proxies in the first place.
             pw.println();
             if (dumpAll) {
                 pw.println("-------------------------------------------------------------------------------");
             }
-            mOomAdjProfiler.dump(pw);
-            pw.println();
-            if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
-            }
-            dumpBinderProxies(pw);
-            pw.println();
-            if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
-            }
-            dumpLmkLocked(pw);
+            dumpBinderProxies(pw, BINDER_PROXY_HIGH_WATERMARK /* minToDump */);
         }
     }
 
@@ -9438,7 +9472,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         cmd, fd, pw, args, opti, true /* dumpAll */, dumpClient, dumpPackage);
             } else if ("binder-proxies".equals(cmd)) {
                 if (opti >= args.length) {
-                    dumpBinderProxies(pw);
+                    dumpBinderProxies(pw, 0 /* minToDump */);
                 } else {
                     String uid = args[opti];
                     opti++;
@@ -9492,6 +9526,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             } else if ("lmk".equals(cmd)) {
                 synchronized (this) {
                     dumpLmkLocked(pw);
+                }
+            } else if ("lru".equals(cmd)) {
+                synchronized (this) {
+                    dumpLruLocked(pw, null);
                 }
             } else if ("permissions".equals(cmd) || "perm".equals(cmd)) {
                 synchronized (this) {
@@ -9770,17 +9808,109 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 pw.println();
             }
-            pw.println();
             return true;
         }
         return false;
     }
 
-    void dumpBinderProxies(PrintWriter pw) {
-        dumpBinderProxyInterfaceCounts(pw,
-                "Top proxy interface names held by SYSTEM");
+    void dumpBinderProxies(PrintWriter pw, int minCountToDumpInterfaces) {
+        pw.println("ACTIVITY MANAGER BINDER PROXY STATE (dumpsys activity binder-proxies)");
+        final int proxyCount = BinderProxy.getProxyCount();
+        if (proxyCount >= minCountToDumpInterfaces) {
+            dumpBinderProxyInterfaceCounts(pw,
+                    "Top proxy interface names held by SYSTEM");
+        } else {
+            pw.print("Not dumping proxy interface counts because size ("
+                    + Integer.toString(proxyCount) + ") looks reasonable");
+            pw.println();
+        }
         dumpBinderProxiesCounts(pw,
-                "Counts of Binder Proxies held by SYSTEM");
+                "  Counts of Binder Proxies held by SYSTEM");
+    }
+
+    void dumpLruEntryLocked(PrintWriter pw, int index, ProcessRecord proc) {
+        pw.print("    #");
+        pw.print(index);
+        pw.print(": ");
+        pw.print(ProcessList.makeOomAdjString(proc.setAdj));
+        pw.print(" ");
+        pw.print(ProcessList.makeProcStateString(proc.getCurProcState()));
+        pw.print(" ");
+        pw.print(proc.toShortString());
+        pw.print(" ");
+        if (proc.hasActivitiesOrRecentTasks() || proc.hasClientActivities()
+                || proc.treatLikeActivity) {
+            pw.print(" activity=");
+            boolean printed = false;
+            if (proc.hasActivities()) {
+                pw.print("activities");
+                printed = true;
+            }
+            if (proc.hasRecentTasks()) {
+                if (printed) {
+                    pw.print("|");
+                }
+                pw.print("recents");
+                printed = true;
+            }
+            if (proc.hasClientActivities()) {
+                if (printed) {
+                    pw.print("|");
+                }
+                pw.print("client");
+                printed = true;
+            }
+            if (proc.treatLikeActivity) {
+                if (printed) {
+                    pw.print("|");
+                }
+                pw.print("treated");
+            }
+        }
+        pw.println();
+    }
+
+    // TODO: Move to ProcessList?
+    void dumpLruLocked(PrintWriter pw, String dumpPackage) {
+        pw.println("ACTIVITY MANAGER LRU PROCESSES (dumpsys activity lru)");
+        final int N = mProcessList.mLruProcesses.size();
+        int i;
+        boolean first = true;
+        for (i = N - 1; i >= mProcessList.mLruProcessActivityStart; i--) {
+            final ProcessRecord r = mProcessList.mLruProcesses.get(i);
+            if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
+                continue;
+            }
+            if (first) {
+                pw.println("  Activities:");
+                first = false;
+            }
+            dumpLruEntryLocked(pw, i, r);
+        }
+        first = true;
+        for (; i >= mProcessList.mLruProcessServiceStart; i--) {
+            final ProcessRecord r = mProcessList.mLruProcesses.get(i);
+            if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
+                continue;
+            }
+            if (first) {
+                pw.println("  Services:");
+                first = false;
+            }
+            dumpLruEntryLocked(pw, i, r);
+        }
+        first = true;
+        for (; i >= 0; i--) {
+            final ProcessRecord r = mProcessList.mLruProcesses.get(i);
+            if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
+                continue;
+            }
+            if (first) {
+                pw.println("  Other:");
+                first = false;
+            }
+            dumpLruEntryLocked(pw, i, r);
+        }
     }
 
     // TODO: Move to ProcessList?
@@ -13283,6 +13413,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized(this) {
             return mServices.bindServiceLocked(caller, token, service,
                     resolvedType, connection, flags, instanceName, callingPackage, userId);
+        }
+    }
+
+    public void updateServiceGroup(IServiceConnection connection, int group, int importance) {
+        synchronized (this) {
+            mServices.updateServiceGroupLocked(connection, group, importance);
         }
     }
 
@@ -17474,8 +17610,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         int stepCached = 0;
         int stepEmpty = 0;
         int numCached = 0;
+        int numCachedExtraGroup = 0;
         int numEmpty = 0;
         int numTrimming = 0;
+        int lastCachedGroup = 0;
+        int lastCachedGroupUid = 0;
 
         mNumNonCachedProcs = 0;
         mNumCachedHiddenProcs = 0;
@@ -17630,7 +17769,21 @@ public class ActivityManagerService extends IActivityManager.Stub
                     case ActivityManager.PROCESS_STATE_CACHED_ACTIVITY_CLIENT:
                         mNumCachedHiddenProcs++;
                         numCached++;
-                        if (numCached > cachedProcessLimit) {
+                        if (app.connectionGroup != 0) {
+                            if (lastCachedGroupUid == app.uid
+                                    && lastCachedGroup == app.connectionGroup) {
+                                // If this process is the next in the same group, we don't
+                                // want it to count against our limit of the number of cached
+                                // processes, so bump up the group count to account for it.
+                                numCachedExtraGroup++;
+                            } else {
+                                lastCachedGroupUid = app.uid;
+                                lastCachedGroup = app.connectionGroup;
+                            }
+                        } else {
+                            lastCachedGroupUid = lastCachedGroup = 0;
+                        }
+                        if ((numCached - numCachedExtraGroup) > cachedProcessLimit) {
                             app.kill("cached #" + numCached, true);
                         }
                         break;
@@ -18886,12 +19039,25 @@ public class ActivityManagerService extends IActivityManager.Stub
                                     memoryStat.rssInBytes,
                                     memoryStat.cacheInBytes,
                                     memoryStat.swapInBytes,
-                                    memoryStat.rssHighWatermarkInBytes,
                                     memoryStat.startTimeNanos);
                     processMemoryStates.add(processMemoryState);
                 }
             }
             return processMemoryStates;
+        }
+
+        @Override
+        public List<ProcessMemoryHighWaterMark> getMemoryHighWaterMarkForProcesses() {
+            List<ProcessMemoryHighWaterMark> results = new ArrayList<>();
+            synchronized (mPidsSelfLocked) {
+                for (int i = 0, size = mPidsSelfLocked.size(); i < size; i++) {
+                    final ProcessRecord r = mPidsSelfLocked.valueAt(i);
+                    final long rssHighWaterMarkInBytes = readRssHighWaterMarkFromProcfs(r.pid);
+                    results.add(new ProcessMemoryHighWaterMark(r.uid, r.processName,
+                            rssHighWaterMarkInBytes));
+                }
+            }
+            return results;
         }
 
         @Override
@@ -19154,6 +19320,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             return mConstants.mFlagActivityStartsLoggingEnabled;
         }
 
+        public boolean isBackgroundActivityStartsEnabled() {
+            return mConstants.mFlagBackgroundActivityStartsEnabled;
+        }
+
         public void reportCurKeyguardUsageEvent(boolean keyguardShowing) {
             synchronized(ActivityManagerService.this) {
                 ActivityManagerService.this.reportGlobalUsageEventLocked(keyguardShowing
@@ -19294,7 +19464,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public boolean isAppStorageSandboxed(int pid, int uid) {
-            if (!SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
+            if (!StorageManager.hasIsolatedStorage()) {
                 return false;
             }
             if (uid == SHELL_UID || uid == ROOT_UID) {

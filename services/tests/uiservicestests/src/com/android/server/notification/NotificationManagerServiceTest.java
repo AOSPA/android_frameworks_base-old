@@ -38,10 +38,8 @@ import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.os.Build.VERSION_CODES.O_MR1;
 import static android.os.Build.VERSION_CODES.P;
-import static android.service.notification.NotificationListenerService.Ranking
-        .USER_SENTIMENT_NEGATIVE;
-import static android.service.notification.NotificationListenerService.Ranking
-        .USER_SENTIMENT_NEUTRAL;
+import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEGATIVE;
+import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
@@ -68,16 +66,15 @@ import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
-import android.app.Application;
 import android.app.IActivityManager;
 import android.app.INotificationManager;
+import android.app.ITransientNotification;
+import android.app.IUriGrantsManager;
 import android.app.Notification;
 import android.app.Notification.MessagingStyle.Message;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
-import android.app.ITransientNotification;
-import android.app.IUriGrantsManager;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.app.usage.UsageStatsManagerInternal;
 import android.companion.ICompanionDeviceManager;
@@ -100,7 +97,6 @@ import android.os.IBinder;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.os.UserManager;
 import android.provider.MediaStore;
 import android.provider.Settings.Secure;
 import android.service.notification.Adjustment;
@@ -116,7 +112,6 @@ import android.testing.TestableLooper.RunWithLooper;
 import android.text.Html;
 import android.util.ArrayMap;
 import android.util.AtomicFile;
-import android.util.Log;
 
 import com.android.internal.R;
 import com.android.internal.statusbar.NotificationVisibility;
@@ -288,6 +283,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mAudioManager.getRingerModeInternal()).thenReturn(AudioManager.RINGER_MODE_NORMAL);
         when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
         when(mUgmInternal.newUriPermissionOwner(anyString())).thenReturn(mPermOwner);
+        when(mPackageManager.getPackagesForUid(mUid)).thenReturn(new String[]{PKG});
 
         // write to a test file; the system file isn't readable from tests
         mFile = new File(mContext.getCacheDir(), "test.xml");
@@ -1735,7 +1731,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testGetNotificationChannelFromPrivilegedListener_assistant_noAccess() throws Exception {
+    public void testGetNotificationChannelFromPrivilegedListener_assistant_noAccess()
+            throws Exception {
         mService.setPreferencesHelper(mPreferencesHelper);
         when(mCompanionMgr.getAssociations(PKG, mUid)).thenReturn(new ArrayList<>());
         when(mAssistants.isServiceTokenValidLocked(any())).thenReturn(false);
@@ -2509,6 +2506,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         mService.mNotificationDelegate.onNotificationDirectReplied(r.getKey());
         assertTrue(mService.getNotificationRecord(r.getKey()).getStats().hasDirectReplied());
+        verify(mAssistants).notifyAssistantNotificationDirectReplyLocked(eq(r.sbn));
     }
 
     @Test
@@ -2517,8 +2515,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(r);
 
         mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), true, true);
+        verify(mAssistants).notifyAssistantExpansionChangedLocked(eq(r.sbn), eq(true), eq((true)));
         assertTrue(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
+
         mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), true, false);
+        verify(mAssistants).notifyAssistantExpansionChangedLocked(eq(r.sbn), eq(true), eq((false)));
         assertTrue(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
     }
 
@@ -2529,8 +2530,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, true);
         assertFalse(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
+        verify(mAssistants).notifyAssistantExpansionChangedLocked(eq(r.sbn), eq(false), eq((true)));
+
         mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, false);
         assertFalse(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
+        verify(mAssistants).notifyAssistantExpansionChangedLocked(
+                eq(r.sbn), eq(false), eq((false)));
     }
 
     @Test
@@ -3459,11 +3464,12 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         ApplicationInfo info = new ApplicationInfo();
         info.privateFlags = ApplicationInfo.PRIVATE_FLAG_INSTANT;
         when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(0))).thenReturn(info);
+        when(mPackageManager.getPackagesForUid(anyInt())).thenReturn(new String[]{"any"});
 
-        assertTrue(mService.isCallerInstantApp("any", 45770, 0));
+        assertTrue(mService.isCallerInstantApp(45770, 0));
 
         info.privateFlags = 0;
-        assertFalse(mService.isCallerInstantApp("any", 575370, 0));
+        assertFalse(mService.isCallerInstantApp(575370, 0));
     }
 
     @Test
@@ -3472,8 +3478,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         info.privateFlags = ApplicationInfo.PRIVATE_FLAG_INSTANT;
         when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(10))).thenReturn(info);
         when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(0))).thenReturn(null);
+        when(mPackageManager.getPackagesForUid(anyInt())).thenReturn(new String[]{"any"});
 
-        assertTrue(mService.isCallerInstantApp("any", 68638450, 10));
+        assertTrue(mService.isCallerInstantApp(68638450, 10));
     }
 
     @Test
@@ -3688,5 +3695,39 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         ((INotificationManager)mService.mService).enqueueToast(testPackage,
                 new TestableToastCallback(), 2000, 0);
         assertEquals(1, mService.mToastQueue.size());
+    }
+
+    @Test
+    public void testOnNotificationSmartReplySent() {
+        final int replyIndex = 2;
+        final String reply = "Hello";
+        final boolean generatedByAssistant = true;
+
+        NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
+        mService.addNotification(r);
+
+        mService.mNotificationDelegate.onNotificationSmartReplySent(
+                r.getKey(), replyIndex, reply, generatedByAssistant);
+        verify(mAssistants).notifyAssistantSuggestedReplySent(
+                eq(r.sbn), eq(reply), eq(generatedByAssistant));
+    }
+
+    @Test
+    public void testOnNotificationActionClick() {
+        final int actionIndex = 2;
+        final Notification.Action action =
+                new Notification.Action.Builder(null, "text", null).build();
+        final boolean generatedByAssistant = false;
+
+        NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
+        mService.addNotification(r);
+
+        NotificationVisibility notificationVisibility =
+                NotificationVisibility.obtain(r.getKey(), 1, 2, true);
+        mService.mNotificationDelegate.onNotificationActionClick(
+                10, 10, r.getKey(), actionIndex, action, notificationVisibility,
+                generatedByAssistant);
+        verify(mAssistants).notifyAssistantActionClicked(
+                eq(r.sbn), eq(actionIndex), eq(action), eq(generatedByAssistant));
     }
 }

@@ -99,9 +99,10 @@ interface ILocationManager
     void clearTestProviderLocation(String provider, String opPackageName);
     void setTestProviderEnabled(String provider, boolean enabled, String opPackageName);
     void clearTestProviderEnabled(String provider, String opPackageName);
+
+    // --- deprecated ---
     void setTestProviderStatus(String provider, int status, in Bundle extras, long updateTime,
             String opPackageName);
-    void clearTestProviderStatus(String provider, String opPackageName);
 
     boolean sendExtraCommand(String provider, String command, inout Bundle extras);
 
@@ -120,18 +121,4 @@ interface ILocationManager
 
     // used by gts tests to verify throttling whitelist
     String[] getBackgroundThrottlingWhitelist();
-
-    /**
-     * Allow the {@link android.location.LocationManager#getNetworkProviderPackage location
-     * provider} to start the UI to modify the location permission for a package.
-     *
-     * <p>Can only be called by the location provider.
-     *
-     * @param packageName The package the permission belongs to
-     * @param permission The (individual) permission to switch
-     *
-     * @return A pending intent that starts the permission management UI or {@code null} if the
-     *         intent cannot be created
-     */
-    PendingIntent createManageLocationPermissionIntent(in String packageName, in String permission);
 }

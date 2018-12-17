@@ -45,9 +45,6 @@ cc_defaults {
     ],
 
     product_variables: {
-        device_uses_hwc2: {
-            cflags: ["-DUSE_HWC2"],
-        },
         eng: {
             lto: {
                 never: true,
@@ -182,6 +179,7 @@ cc_defaults {
         "renderthread/CanvasContext.cpp",
         "renderthread/DrawFrameTask.cpp",
         "renderthread/EglManager.cpp",
+        "renderthread/ReliableSurface.cpp",
         "renderthread/VulkanManager.cpp",
         "renderthread/RenderProxy.cpp",
         "renderthread/RenderTask.cpp",

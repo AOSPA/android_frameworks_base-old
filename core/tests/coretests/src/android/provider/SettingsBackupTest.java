@@ -124,7 +124,9 @@ public class SettingsBackupTest {
                     Settings.Global.AUTOFILL_LOGGING_LEVEL,
                     Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE,
                     Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
+                    Settings.Global.AUTOFILL_SMART_SUGGESTION_EMULATION_FLAGS,
                     Settings.Global.AUTOMATIC_POWER_SAVER_MODE,
+                    Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED,
                     Settings.Global.BATTERY_DISCHARGE_DURATION_THRESHOLD,
                     Settings.Global.BATTERY_DISCHARGE_THRESHOLD,
                     Settings.Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS,
@@ -181,6 +183,8 @@ public class SettingsBackupTest {
                     Settings.Global.CONNECTIVITY_METRICS_BUFFER_SIZE,
                     Settings.Global.CONNECTIVITY_SAMPLING_INTERVAL_IN_SECONDS,
                     Settings.Global.CONTACT_METADATA_SYNC_ENABLED,
+                    Settings.Global.CONVERSATION_ACTIONS_UPDATE_CONTENT_URL,
+                    Settings.Global.CONVERSATION_ACTIONS_UPDATE_METADATA_URL,
                     Settings.Global.CONTACTS_DATABASE_WAL_ENABLED,
                     Settings.Global.DATA_ACTIVITY_TIMEOUT_MOBILE,
                     Settings.Global.DATA_ACTIVITY_TIMEOUT_WIFI,
@@ -189,6 +193,10 @@ public class SettingsBackupTest {
                     Settings.Global.DATA_ROAMING,
                     Settings.Global.DATA_STALL_ALARM_AGGRESSIVE_DELAY_IN_MS,
                     Settings.Global.DATA_STALL_ALARM_NON_AGGRESSIVE_DELAY_IN_MS,
+                    Settings.Global.DATA_STALL_CONSECUTIVE_DNS_TIMEOUT_THRESHOLD,
+                    Settings.Global.DATA_STALL_EVALUATION_TYPE,
+                    Settings.Global.DATA_STALL_MIN_EVALUATE_INTERVAL,
+                    Settings.Global.DATA_STALL_VALID_DNS_TIME_THRESHOLD,
                     Settings.Global.DEBUG_APP,
                     Settings.Global.DEBUG_VIEW_ATTRIBUTES,
                     Settings.Global.DEFAULT_DNS_SERVER,
@@ -281,6 +289,7 @@ public class SettingsBackupTest {
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PROXIMITY_ALERT_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST,
+                    Settings.Global.LOCATION_DISABLE_STATUS_CALLBACKS,
                     Settings.Global.LOCATION_LAST_LOCATION_MAX_AGE_MILLIS,
                     Settings.Global.LOCATION_GLOBAL_KILL_SWITCH,
                     Settings.Global.LOCATION_SETTINGS_LINK_TO_PERMISSIONS_ENABLED,
@@ -306,6 +315,7 @@ public class SettingsBackupTest {
                     Settings.Global.MULTI_SIM_SMS_SUBSCRIPTION,
                     Settings.Global.MULTI_SIM_VOICE_CALL_SUBSCRIPTION,
                     Settings.Global.MULTI_SIM_VOICE_PROMPT,
+                    Settings.Global.NATIVE_FLAGS_HEALTH_CHECK_ENABLED,
                     Settings.Global.NETSTATS_DEV_BUCKET_DURATION,
                     Settings.Global.NETSTATS_DEV_DELETE_AGE,
                     Settings.Global.NETSTATS_DEV_PERSIST_BYTES,
@@ -653,7 +663,8 @@ public class SettingsBackupTest {
                  Settings.Secure.SUPPRESS_AUTO_BATTERY_SAVER_SUGGESTION,
                  Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE,
                  Settings.Secure.FLASHLIGHT_AVAILABLE,
-                 Settings.Secure.FLASHLIGHT_ENABLED);
+                 Settings.Secure.FLASHLIGHT_ENABLED,
+                 Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

@@ -31,6 +31,7 @@ import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.BackgroundThread;
+import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
 
 import libcore.io.IoUtils;
@@ -45,6 +46,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * Stores the state of roles for a user.
@@ -62,17 +64,22 @@ public class RoleUserState {
     private static final String TAG_HOLDER = "holder";
     private static final String ATTRIBUTE_VERSION = "version";
     private static final String ATTRIBUTE_NAME = "name";
+    private static final String ATTRIBUTE_PACKAGES_HASH = "packagesHash";
 
     @UserIdInt
     private final int mUserId;
 
     @GuardedBy("RoleManagerService.mLock")
-    private int mVersion = VERSION_UNDEFINED;
+    private int mVersion;
+
+    @GuardedBy("RoleManagerService.mLock")
+    private String mLastGrantPackagesHash = null;
 
     /**
      * Maps role names to its holders' package names. The values should never be null.
      */
     @GuardedBy("RoleManagerService.mLock")
+    @Nullable
     private ArrayMap<String, ArraySet<String>> mRoles = null;
 
     @GuardedBy("RoleManagerService.mLock")
@@ -101,7 +108,28 @@ public class RoleUserState {
     @GuardedBy("RoleManagerService.mLock")
     public void setVersionLocked(int version) {
         throwIfDestroyedLocked();
+        if (mVersion == version) {
+            return;
+        }
         mVersion = version;
+        writeAsyncLocked();
+    }
+
+    /**
+     * Get the hash representing the state of packages during the last time initial grants was run
+     */
+    @GuardedBy("RoleManagerService.mLock")
+    public String getLastGrantPackagesHashLocked() {
+        return mLastGrantPackagesHash;
+    }
+
+    /**
+     * Set the hash representing the state of packages during the last time initial grants was run
+     */
+    @GuardedBy("RoleManagerService.mLock")
+    public void setLastGrantPackagesHashLocked(String lastGrantPackagesHash) {
+        mLastGrantPackagesHash = lastGrantPackagesHash;
+        writeAsyncLocked();
     }
 
     /**
@@ -132,6 +160,41 @@ public class RoleUserState {
     }
 
     /**
+     * Set the names of all available roles.
+     *
+     * @param roleNames the names of all the available roles
+     */
+    @GuardedBy("RoleManagerService.mLock")
+    public void setRoleNamesLocked(@NonNull List<String> roleNames) {
+        throwIfDestroyedLocked();
+        boolean changed = false;
+        for (int i = mRoles.size() - 1; i >= 0; i--) {
+            String roleName = mRoles.keyAt(i);
+            if (!roleNames.contains(roleName)) {
+                ArraySet<String> packageNames = mRoles.valueAt(i);
+                if (!packageNames.isEmpty()) {
+                    Slog.e(LOG_TAG, "Holders of a removed role should have been cleaned up, role: "
+                            + roleName + ", holders: " + packageNames);
+                }
+                mRoles.removeAt(i);
+                changed = true;
+            }
+        }
+        int roleNamesSize = roleNames.size();
+        for (int i = 0; i < roleNamesSize; i++) {
+            String roleName = roleNames.get(i);
+            if (!mRoles.containsKey(roleName)) {
+                mRoles.put(roleName, new ArraySet<>());
+                Slog.i(LOG_TAG, "Added new role: " + roleName);
+                changed = true;
+            }
+        }
+        if (changed) {
+            writeAsyncLocked();
+        }
+    }
+
+    /**
      * Add a holder to a role.
      *
      * @param roleName the name of the role to add the holder to
@@ -146,9 +209,14 @@ public class RoleUserState {
         throwIfDestroyedLocked();
         ArraySet<String> roleHolders = mRoles.get(roleName);
         if (roleHolders == null) {
+            Slog.e(LOG_TAG, "Cannot add role holder for unknown role, role: " + roleName
+                    + ", package: " + packageName);
             return false;
         }
-        roleHolders.add(packageName);
+        boolean changed = roleHolders.add(packageName);
+        if (changed) {
+            writeAsyncLocked();
+        }
         return true;
     }
 
@@ -167,9 +235,14 @@ public class RoleUserState {
         throwIfDestroyedLocked();
         ArraySet<String> roleHolders = mRoles.get(roleName);
         if (roleHolders == null) {
+            Slog.e(LOG_TAG, "Cannot remove role holder for unknown role, role: " + roleName
+                    + ", package: " + packageName);
             return false;
         }
-        roleHolders.remove(packageName);
+        boolean changed = roleHolders.remove(packageName);
+        if (changed) {
+            writeAsyncLocked();
+        }
         return true;
     }
 
@@ -177,27 +250,29 @@ public class RoleUserState {
      * Schedule writing the state to file.
      */
     @GuardedBy("RoleManagerService.mLock")
-    public void writeAsyncLocked() {
+    void writeAsyncLocked() {
         throwIfDestroyedLocked();
         int version = mVersion;
         ArrayMap<String, ArraySet<String>> roles = new ArrayMap<>();
-        for (int i = 0, size = mRoles.size(); i < size; ++i) {
+        for (int i = 0, size = CollectionUtils.size(mRoles); i < size; ++i) {
             String roleName = mRoles.keyAt(i);
             ArraySet<String> roleHolders = mRoles.valueAt(i);
             roleHolders = new ArraySet<>(roleHolders);
             roles.put(roleName, roleHolders);
         }
         mWriteHandler.removeCallbacksAndMessages(null);
+        // TODO: Throttle writes.
         mWriteHandler.sendMessage(PooledLambda.obtainMessage(
-                RoleUserState::writeSync, this, version, roles));
+                RoleUserState::writeSync, this, version, roles, mLastGrantPackagesHash));
     }
 
     @WorkerThread
-    private void writeSync(int version, @NonNull ArrayMap<String, ArraySet<String>> roles) {
-        AtomicFile destination = new AtomicFile(getFile(mUserId), "roles-" + mUserId);
+    private void writeSync(int version, @NonNull ArrayMap<String, ArraySet<String>> roles,
+            String packagesHash) {
+        AtomicFile atomicFile = new AtomicFile(getFile(mUserId), "roles-" + mUserId);
         FileOutputStream out = null;
         try {
-            out = destination.startWrite();
+            out = atomicFile.startWrite();
 
             XmlSerializer serializer = Xml.newSerializer();
             serializer.setOutput(out, StandardCharsets.UTF_8.name());
@@ -205,14 +280,15 @@ public class RoleUserState {
                     "http://xmlpull.org/v1/doc/features.html#indent-output", true);
             serializer.startDocument(null, true);
 
-            serializeRoles(serializer, version, roles);
+            serializeRoles(serializer, version, roles, packagesHash);
 
             serializer.endDocument();
-            destination.finishWrite(out);
-        } catch (Throwable t) {
-            // Any error while writing is fatal.
-            Slog.wtf(LOG_TAG, "Failed to write roles file, restoring backup", t);
-            destination.failWrite(out);
+            atomicFile.finishWrite(out);
+        } catch (IllegalArgumentException | IllegalStateException | IOException e) {
+            Slog.wtf(LOG_TAG, "Failed to write roles.xml, restoring backup", e);
+            if (out != null) {
+                atomicFile.failWrite(out);
+            }
         } finally {
             IoUtils.closeQuietly(out);
         }
@@ -220,9 +296,11 @@ public class RoleUserState {
 
     @WorkerThread
     private void serializeRoles(@NonNull XmlSerializer serializer, int version,
-            @NonNull ArrayMap<String, ArraySet<String>> roles) throws IOException {
+            @NonNull ArrayMap<String, ArraySet<String>> roles, String packagesHash)
+            throws IOException {
         serializer.startTag(null, TAG_ROLES);
         serializer.attribute(null, ATTRIBUTE_VERSION, Integer.toString(version));
+        serializer.attribute(null, ATTRIBUTE_PACKAGES_HASH, packagesHash);
         for (int i = 0, size = roles.size(); i < size; ++i) {
             String roleName = roles.keyAt(i);
             ArraySet<String> roleHolders = roles.valueAt(i);
@@ -251,37 +329,34 @@ public class RoleUserState {
     @GuardedBy("RoleManagerService.mLock")
     public void readSyncLocked() {
         if (mRoles != null) {
-            throw new IllegalStateException("This RoleUserState has already read the XML file");
-        }
-        File file = getFile(mUserId);
-        FileInputStream in;
-        try {
-            in = new AtomicFile(file).openRead();
-        } catch (FileNotFoundException e) {
-            Slog.i(LOG_TAG, "No roles file found");
-            return;
+            throw new IllegalStateException("This RoleUserState has already read the roles.xml");
         }
 
-        try {
+        File file = getFile(mUserId);
+        try (FileInputStream in = new AtomicFile(file).openRead()) {
             XmlPullParser parser = Xml.newPullParser();
             parser.setInput(in, null);
             parseXmlLocked(parser);
+        } catch (FileNotFoundException e) {
+            Slog.i(LOG_TAG, "roles.xml not found");
+            mRoles = new ArrayMap<>();
+            mVersion = VERSION_UNDEFINED;
         } catch (XmlPullParserException | IOException e) {
-            throw new IllegalStateException("Failed to parse roles file: " + file , e);
-        } finally {
-            IoUtils.closeQuietly(in);
+            throw new IllegalStateException("Failed to parse roles.xml: " + file, e);
         }
     }
 
     private void parseXmlLocked(@NonNull XmlPullParser parser) throws IOException,
             XmlPullParserException {
-        int outerDepth = parser.getDepth();
         int type;
+        int depth;
+        int innerDepth = parser.getDepth() + 1;
         while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
-                && (type != XmlPullParser.END_TAG || parser.getDepth() > outerDepth)) {
-            if (type == XmlPullParser.END_TAG || type == XmlPullParser.TEXT) {
+                && ((depth = parser.getDepth()) >= innerDepth || type != XmlPullParser.END_TAG)) {
+            if (depth > innerDepth || type != XmlPullParser.START_TAG) {
                 continue;
             }
+
             if (parser.getName().equals(TAG_ROLES)) {
                 parseRolesLocked(parser);
                 return;
@@ -292,14 +367,18 @@ public class RoleUserState {
     private void parseRolesLocked(@NonNull XmlPullParser parser) throws IOException,
             XmlPullParserException {
         mVersion = Integer.parseInt(parser.getAttributeValue(null, ATTRIBUTE_VERSION));
+        mLastGrantPackagesHash = parser.getAttributeValue(null, ATTRIBUTE_PACKAGES_HASH);
         mRoles = new ArrayMap<>();
-        int outerDepth = parser.getDepth();
+
         int type;
+        int depth;
+        int innerDepth = parser.getDepth() + 1;
         while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
-                && (type != XmlPullParser.END_TAG || parser.getDepth() > outerDepth)) {
-            if (type == XmlPullParser.END_TAG || type == XmlPullParser.TEXT) {
+                && ((depth = parser.getDepth()) >= innerDepth || type != XmlPullParser.END_TAG)) {
+            if (depth > innerDepth || type != XmlPullParser.START_TAG) {
                 continue;
             }
+
             if (parser.getName().equals(TAG_ROLE)) {
                 String roleName = parser.getAttributeValue(null, ATTRIBUTE_NAME);
                 ArraySet<String> roleHolders = parseRoleHoldersLocked(parser);
@@ -312,18 +391,22 @@ public class RoleUserState {
     private ArraySet<String> parseRoleHoldersLocked(@NonNull XmlPullParser parser)
             throws IOException, XmlPullParserException {
         ArraySet<String> roleHolders = new ArraySet<>();
-        int outerDepth = parser.getDepth();
+
         int type;
+        int depth;
+        int innerDepth = parser.getDepth() + 1;
         while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
-                && (type != XmlPullParser.END_TAG || parser.getDepth() > outerDepth)) {
-            if (type == XmlPullParser.END_TAG || type == XmlPullParser.TEXT) {
+                && ((depth = parser.getDepth()) >= innerDepth || type != XmlPullParser.END_TAG)) {
+            if (depth > innerDepth || type != XmlPullParser.START_TAG) {
                 continue;
             }
+
             if (parser.getName().equals(TAG_HOLDER)) {
                 String roleHolder = parser.getAttributeValue(null, ATTRIBUTE_NAME);
                 roleHolders.add(roleHolder);
             }
         }
+
         return roleHolders;
     }
 

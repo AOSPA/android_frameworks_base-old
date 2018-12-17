@@ -150,34 +150,42 @@ public class NotificationRemoteInputManager implements Dumpable {
         }
 
         private void logActionClick(View view) {
+            Integer actionIndex = (Integer)
+                    view.getTag(com.android.internal.R.id.notification_action_index_tag);
+            if (actionIndex == null) {
+                Log.e(TAG, "Couldn't retrieve the actionIndex from the clicked button");
+                return;
+            }
             ViewParent parent = view.getParent();
-            String key = getNotificationKeyForParent(parent);
-            if (key == null) {
+            StatusBarNotification statusBarNotification = getNotificationForParent(parent);
+            if (statusBarNotification == null) {
                 Log.w(TAG, "Couldn't determine notification for click.");
                 return;
             }
-            int index = -1;
+            String key = statusBarNotification.getKey();
+            int buttonIndex = -1;
             // If this is a default template, determine the index of the button.
             if (view.getId() == com.android.internal.R.id.action0 &&
                     parent != null && parent instanceof ViewGroup) {
                 ViewGroup actionGroup = (ViewGroup) parent;
-                index = actionGroup.indexOfChild(view);
+                buttonIndex = actionGroup.indexOfChild(view);
             }
             final int count = mEntryManager.getNotificationData().getActiveNotifications().size();
             final int rank = mEntryManager.getNotificationData().getRank(key);
+            final Notification.Action action =
+                    statusBarNotification.getNotification().actions[actionIndex];
             final NotificationVisibility nv = NotificationVisibility.obtain(key, rank, count, true);
             try {
-                mBarService.onNotificationActionClick(key, index, nv);
+                mBarService.onNotificationActionClick(key, buttonIndex, action, nv, false);
             } catch (RemoteException e) {
                 // Ignore
             }
         }
 
-        private String getNotificationKeyForParent(ViewParent parent) {
+        private StatusBarNotification getNotificationForParent(ViewParent parent) {
             while (parent != null) {
                 if (parent instanceof ExpandableNotificationRow) {
-                    return ((ExpandableNotificationRow) parent)
-                            .getStatusBarNotification().getKey();
+                    return ((ExpandableNotificationRow) parent).getStatusBarNotification();
                 }
                 parent = parent.getParent();
             }
@@ -393,7 +401,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     }
 
     public boolean shouldKeepForRemoteInputHistory(NotificationData.Entry entry) {
-        if (entry.row == null || entry.row.isDismissed()) {
+        if (entry.isDismissed()) {
             return false;
         }
         if (!FORCE_REMOTE_INPUT_HISTORY) {
@@ -403,7 +411,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     }
 
     public boolean shouldKeepForSmartReplyHistory(NotificationData.Entry entry) {
-        if (entry.row == null || entry.row.isDismissed()) {
+        if (entry.isDismissed()) {
             return false;
         }
         if (!FORCE_REMOTE_INPUT_HISTORY) {
@@ -532,7 +540,7 @@ public class NotificationRemoteInputManager implements Dumpable {
 
                 // Ensure the entry hasn't already been removed. This can happen if there is an
                 // inflation exception while updating the remote history
-                if (entry.row == null || entry.row.isRemoved()) {
+                if (entry.isRemoved()) {
                     return;
                 }
 
@@ -570,7 +578,7 @@ public class NotificationRemoteInputManager implements Dumpable {
 
                 mEntryManager.updateNotification(newSbn, null);
 
-                if (entry.row == null || entry.row.isRemoved()) {
+                if (entry.isRemoved()) {
                     return;
                 }
 
@@ -593,7 +601,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     protected class RemoteInputActiveExtender extends RemoteInputExtender {
         @Override
         public boolean shouldExtendLifetime(@NonNull NotificationData.Entry entry) {
-            if (entry.row == null || entry.row.isDismissed()) {
+            if (entry.isDismissed()) {
                 return false;
             }
             return mRemoteInputController.isRemoteInputActive(entry);

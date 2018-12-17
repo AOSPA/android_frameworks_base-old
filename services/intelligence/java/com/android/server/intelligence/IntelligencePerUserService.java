@@ -16,24 +16,37 @@
 
 package com.android.server.intelligence;
 
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_CONTENT;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_DATA;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_STRUCTURE;
+
 import android.Manifest;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.AppGlobals;
+import android.app.assist.AssistContent;
+import android.app.assist.AssistStructure;
 import android.content.ComponentName;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ServiceInfo;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.service.intelligence.InteractionSessionId;
+import android.service.intelligence.SnapshotData;
 import android.util.ArrayMap;
 import android.util.Slog;
+import android.view.autofill.AutofillId;
+import android.view.autofill.IAutoFillManagerClient;
 import android.view.intelligence.ContentCaptureEvent;
 import android.view.intelligence.IntelligenceManager;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.IResultReceiver;
 import com.android.server.AbstractPerUserSystemService;
+import com.android.server.intelligence.IntelligenceManagerInternal.AugmentedAutofillCallback;
 
 import java.io.PrintWriter;
 import java.util.List;
@@ -42,7 +55,8 @@ import java.util.List;
  * Per-user instance of {@link IntelligenceManagerService}.
  */
 final class IntelligencePerUserService
-        extends AbstractPerUserSystemService<IntelligencePerUserService> {
+        extends AbstractPerUserSystemService<IntelligencePerUserService,
+            IntelligenceManagerService> {
 
     private static final String TAG = "IntelligencePerUserService";
 
@@ -53,7 +67,7 @@ final class IntelligencePerUserService
     // TODO(b/111276913): add mechanism to prune stale sessions, similar to Autofill's
 
     protected IntelligencePerUserService(
-            IntelligenceManagerService master, Object lock, int userId) {
+            IntelligenceManagerService master, Object lock, @UserIdInt int userId) {
         super(master, lock, userId);
     }
 
@@ -133,7 +147,8 @@ final class IntelligencePerUserService
 
     // TODO(b/111276913): log metrics
     @GuardedBy("mLock")
-    public void finishSessionLocked(@NonNull InteractionSessionId sessionId) {
+    public void finishSessionLocked(@NonNull InteractionSessionId sessionId,
+            @Nullable List<ContentCaptureEvent> events) {
         if (!isEnabledLocked()) {
             return;
         }
@@ -145,8 +160,18 @@ final class IntelligencePerUserService
             }
             return;
         }
+        if (events != null && !events.isEmpty()) {
+            // TODO(b/111276913): for now we're sending the events and the onDestroy() in 2 separate
+            // calls because it's not clear yet whether we'll change the manager to send events
+            // to the service directly (i.e., without passing through system server). Once we
+            // decide, we might need to split IIntelligenceService.onSessionLifecycle() in 2
+            // methods, one for start and another for finish (and passing the events to finish),
+            // otherwise the service might receive the 2 calls out of order.
+            session.sendEventsLocked(events);
+        }
         if (mMaster.verbose) {
-            Slog.v(TAG, "finishSession(): " + session);
+            Slog.v(TAG, "finishSession(" + (events == null ? 0 : events.size()) + " events): "
+                    + session);
         }
         session.removeSelfLocked(true);
     }
@@ -173,6 +198,25 @@ final class IntelligencePerUserService
     }
 
     @GuardedBy("mLock")
+    public boolean sendActivityAssistDataLocked(@NonNull IBinder activityToken,
+            @NonNull Bundle data) {
+        final InteractionSessionId id = getInteractionSessionId(activityToken);
+        if (id != null) {
+            final ContentCaptureSession session = mSessions.get(id);
+            final Bundle assistData = data.getBundle(ASSIST_KEY_DATA);
+            final AssistStructure assistStructure = data.getParcelable(ASSIST_KEY_STRUCTURE);
+            final AssistContent assistContent = data.getParcelable(ASSIST_KEY_CONTENT);
+            final SnapshotData snapshotData = new SnapshotData(assistData,
+                    assistStructure, assistContent);
+            session.sendActivitySnapshotLocked(snapshotData);
+            return true;
+        } else {
+            Slog.e(TAG, "Failed to notify activity assist data for activity: " + activityToken);
+        }
+        return false;
+    }
+
+    @GuardedBy("mLock")
     public void removeSessionLocked(@NonNull InteractionSessionId sessionId) {
         mSessions.remove(sessionId);
     }
@@ -180,6 +224,17 @@ final class IntelligencePerUserService
     @GuardedBy("mLock")
     public boolean isIntelligenceServiceForUserLocked(int uid) {
         return uid == getServiceUidLocked();
+    }
+
+    @GuardedBy("mLock")
+    private ContentCaptureSession getSession(@NonNull IBinder activityToken) {
+        for (int i = 0; i < mSessions.size(); i++) {
+            final ContentCaptureSession session = mSessions.valueAt(i);
+            if (session.mActivityToken.equals(activityToken)) {
+                return session;
+            }
+        }
+        return null;
     }
 
     /**
@@ -198,6 +253,22 @@ final class IntelligencePerUserService
         mSessions.clear();
     }
 
+    public AugmentedAutofillCallback requestAutofill(@NonNull IAutoFillManagerClient client,
+            @NonNull IBinder activityToken, int autofillSessionId, @NonNull AutofillId focusedId) {
+        synchronized (mLock) {
+            final ContentCaptureSession session = getSession(activityToken);
+            if (session != null) {
+                // TODO(b/111330312): log metrics
+                if (mMaster.verbose) Slog.v(TAG, "requestAugmentedAutofill()");
+                return session.requestAutofillLocked(client, autofillSessionId, focusedId);
+            }
+            if (mMaster.debug) {
+                Slog.d(TAG, "requestAutofill(): no session for " + activityToken);
+            }
+            return null;
+        }
+    }
+
     @Override
     protected void dumpLocked(String prefix, PrintWriter pw) {
         super.dumpLocked(prefix, pw);
@@ -213,6 +284,20 @@ final class IntelligencePerUserService
                 session.dumpLocked(prefix2, pw);
             }
         }
+    }
+
+    /**
+     * Returns the InteractionSessionId associated with the given activity.
+     */
+    @GuardedBy("mLock")
+    private InteractionSessionId getInteractionSessionId(@NonNull IBinder activityToken) {
+        for (int i = 0; i < mSessions.size(); i++) {
+            ContentCaptureSession session = mSessions.valueAt(i);
+            if (session.isActivitySession(activityToken)) {
+                return mSessions.keyAt(i);
+            }
+        }
+        return null;
     }
 
     private static void sendToClient(@NonNull IResultReceiver resultReceiver, int value) {

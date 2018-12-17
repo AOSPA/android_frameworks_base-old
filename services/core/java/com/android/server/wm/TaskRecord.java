@@ -452,13 +452,13 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
     void removeWindowContainer() {
         mService.getLockTaskController().clearLockedTask(this);
         mWindowContainerController.removeContainer();
+        mWindowContainerController = null;
         if (!getWindowConfiguration().persistTaskBounds()) {
             // Reset current bounds for task whose bounds shouldn't be persisted so it uses
             // default configuration the next time it launches.
             updateOverrideConfiguration(null);
         }
         mService.getTaskChangeNotificationController().notifyTaskRemoved(taskId);
-        mWindowContainerController = null;
     }
 
     @Override
@@ -472,8 +472,8 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
         }
         mResizeMode = resizeMode;
         mWindowContainerController.setResizeable(resizeMode);
-        mService.mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
-        mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
+        mService.mRootActivityContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
+        mService.mRootActivityContainer.resumeFocusedStacksTopActivities();
     }
 
     void setTaskDockedResizing(boolean resizing) {
@@ -544,10 +544,9 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
                     // this won't cause tons of irrelevant windows being preserved because only
                     // activities in this task may experience a bounds change. Configs for other
                     // activities stay the same.
-                    mService.mStackSupervisor.ensureActivitiesVisibleLocked(r, 0,
-                            preserveWindow);
+                    mService.mRootActivityContainer.ensureActivitiesVisible(r, 0, preserveWindow);
                     if (!kept) {
-                        mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
+                        mService.mRootActivityContainer.resumeFocusedStacksTopActivities();
                     }
                 }
             }
@@ -623,6 +622,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
             @ReparentMoveStackMode int moveStackMode, boolean animate, boolean deferResume,
             boolean schedulePictureInPictureModeChange, String reason) {
         final ActivityStackSupervisor supervisor = mService.mStackSupervisor;
+        final RootActivityContainer root = mService.mRootActivityContainer;
         final WindowManagerService windowManager = mService.mWindowManager;
         final ActivityStack sourceStack = getStack();
         final ActivityStack toStack = supervisor.getReparentTargetStack(this, preferredStack,
@@ -655,7 +655,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
         boolean kept = true;
         try {
             final ActivityRecord r = topRunningActivityLocked();
-            final boolean wasFocused = r != null && supervisor.isTopDisplayFocusedStack(sourceStack)
+            final boolean wasFocused = r != null && root.isTopDisplayFocusedStack(sourceStack)
                     && (topRunningActivityLocked() == r);
             final boolean wasResumed = r != null && sourceStack.getResumedActivity() == r;
             final boolean wasPaused = r != null && sourceStack.mPausingActivity == r;
@@ -748,8 +748,8 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
         if (!deferResume) {
             // The task might have already been running and its visibility needs to be synchronized
             // with the visibility of the stack / windows.
-            supervisor.ensureActivitiesVisibleLocked(null, 0, !mightReplaceWindow);
-            supervisor.resumeFocusedStacksTopActivitiesLocked();
+            root.ensureActivitiesVisible(null, 0, !mightReplaceWindow);
+            root.resumeFocusedStacksTopActivities();
         }
 
         // TODO: Handle incorrect request to move before the actual move, not after.
@@ -903,7 +903,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
         // Correct the activity intent for aliasing. The task record intent will always be based on
         // the real activity that will be launched not the alias, so we need to use an intent with
         // the component name pointing to the real activity not the alias in the activity record.
-        intent.setComponent(r.realActivity);
+        intent.setComponent(r.mActivityComponent);
         return intent.filterEquals(this.intent);
     }
 
@@ -982,7 +982,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
     @Override
     protected void onParentChanged() {
         super.onParentChanged();
-        mService.mStackSupervisor.updateUIDsPresentOnDisplay();
+        mService.mRootActivityContainer.updateUIDsPresentOnDisplay();
     }
 
     // Close up recents linked list.
@@ -1143,7 +1143,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
     }
 
     boolean okToShowLocked() {
-        // NOTE: If {@link TaskRecord#topRunningActivityLocked} return is not null then it is
+        // NOTE: If {@link TaskRecord#topRunningActivity} return is not null then it is
         // okay to show the activity when locked.
         return mService.mStackSupervisor.isCurrentProfileLocked(userId)
                 || topRunningActivityLocked() != null;
@@ -1182,7 +1182,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
         mActivities.add(newTop);
 
         // Make sure window manager is aware of the position change.
-        mWindowContainerController.positionChildAtTop(newTop.mWindowContainerController);
+        mWindowContainerController.positionChildAtTop(newTop.mAppWindowToken);
         updateEffectiveIntent();
 
         setFrontOfTask();
@@ -1211,7 +1211,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
      * be in the current task or unparented to any task.
      */
     void addActivityAtIndex(int index, ActivityRecord r) {
-        TaskRecord task = r.getTask();
+        TaskRecord task = r.getTaskRecord();
         if (task != null && task != this) {
             throw new IllegalArgumentException("Can not add r=" + " to task=" + this
                     + " current parent=" + task);
@@ -1264,18 +1264,15 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
             mService.notifyTaskPersisterLocked(this, false);
         }
 
-        // Sync. with window manager
-        updateOverrideConfigurationFromLaunchBounds();
-        final AppWindowContainerController appController = r.getWindowContainerController();
-        if (appController != null) {
+        if (r.mAppWindowToken != null) {
             // Only attempt to move in WM if the child has a controller. It is possible we haven't
             // created controller for the activity we are starting yet.
-            mWindowContainerController.positionChildAt(appController, index);
+            mWindowContainerController.positionChildAt(r.mAppWindowToken, index);
         }
 
         // Make sure the list of display UID whitelists is updated
         // now that this record is in a new task.
-        mService.mStackSupervisor.updateUIDsPresentOnDisplay();
+        mService.mRootActivityContainer.updateUIDsPresentOnDisplay();
     }
 
     /**
@@ -1288,7 +1285,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
     }
 
     boolean removeActivity(ActivityRecord r, boolean reparenting) {
-        if (r.getTask() != this) {
+        if (r.getTaskRecord() != this) {
             throw new IllegalArgumentException(
                     "Activity=" + r + " does not belong to task=" + this);
         }
@@ -1404,7 +1401,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
             if (r.finishing) {
                 continue;
             }
-            if (r.realActivity.equals(newR.realActivity)) {
+            if (r.mActivityComponent.equals(newR.mActivityComponent)) {
                 // Here it is!  Now finish everything in front...
                 final ActivityRecord ret = r;
 
@@ -1562,13 +1559,13 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
      * the index within the history at which it's found, or < 0 if not found.
      */
     final ActivityRecord findActivityInHistoryLocked(ActivityRecord r) {
-        final ComponentName realActivity = r.realActivity;
+        final ComponentName realActivity = r.mActivityComponent;
         for (int activityNdx = mActivities.size() - 1; activityNdx >= 0; --activityNdx) {
             ActivityRecord candidate = mActivities.get(activityNdx);
             if (candidate.finishing) {
                 continue;
             }
-            if (candidate.realActivity.equals(realActivity)) {
+            if (candidate.mActivityComponent.equals(realActivity)) {
                 return candidate;
             }
         }
@@ -1684,9 +1681,9 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
         // to do this for the pinned stack as the bounds are controlled by the system.
         if (!inPinnedWindowingMode()) {
             final int defaultMinSizeDp =
-                    mService.mStackSupervisor.mDefaultMinSizeOfResizeableTaskDp;
+                    mService.mRootActivityContainer.mDefaultMinSizeOfResizeableTaskDp;
             final ActivityDisplay display =
-                    mService.mStackSupervisor.getActivityDisplay(mStack.mDisplayId);
+                    mService.mRootActivityContainer.getActivityDisplay(mStack.mDisplayId);
             final float density =
                     (float) display.getConfiguration().densityDpi / DisplayMetrics.DENSITY_DEFAULT;
             final int defaultMinSize = (int) (defaultMinSizeDp * density);
@@ -1993,7 +1990,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
                 ? reuseActivitiesReport.base.intent.getComponent()
                 : null;
         info.topActivity = reuseActivitiesReport.top != null
-                ? reuseActivitiesReport.top.realActivity
+                ? reuseActivitiesReport.top.mActivityComponent
                 : null;
         info.origActivity = origActivity;
         info.realActivity = realActivity;
@@ -2044,7 +2041,7 @@ public class TaskRecord extends ConfigurationContainer implements TaskWindowCont
             pw.println(origActivity.flattenToShortString());
         }
         if (realActivity != null) {
-            pw.print(prefix); pw.print("realActivity=");
+            pw.print(prefix); pw.print("mActivityComponent=");
             pw.println(realActivity.flattenToShortString());
         }
         if (autoRemoveRecents || isPersistable || !isActivityTypeStandard() || numFullscreen != 0) {

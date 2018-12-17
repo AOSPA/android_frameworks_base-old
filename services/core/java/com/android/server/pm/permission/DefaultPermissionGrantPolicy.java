@@ -144,6 +144,11 @@ public final class DefaultPermissionGrantPolicy {
         LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
     }
 
+    private static final Set<String> ACTIVITY_RECOGNITION_PERMISSIONS = new ArraySet<>();
+    static {
+        ACTIVITY_RECOGNITION_PERMISSIONS.add(Manifest.permission.ACTIVITY_RECOGNITION);
+    }
+
     private static final Set<String> COARSE_LOCATION_PERMISSIONS = new ArraySet<>();
     static {
         COARSE_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
@@ -184,7 +189,7 @@ public final class DefaultPermissionGrantPolicy {
     private static final Set<String> STORAGE_PERMISSIONS = new ArraySet<>();
     static {
         // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (!SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
+        if (!StorageManager.hasIsolatedStorage()) {
             STORAGE_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
             STORAGE_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
@@ -193,20 +198,17 @@ public final class DefaultPermissionGrantPolicy {
     private static final Set<String> MEDIA_AURAL_PERMISSIONS = new ArraySet<>();
     static {
         // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
+        if (StorageManager.hasIsolatedStorage()) {
             MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_AUDIO);
-            MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.WRITE_MEDIA_AUDIO);
         }
     }
 
     private static final Set<String> MEDIA_VISUAL_PERMISSIONS = new ArraySet<>();
     static {
         // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
-            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_IMAGES);
-            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.WRITE_MEDIA_IMAGES);
+        if (StorageManager.hasIsolatedStorage()) {
             MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_VIDEO);
-            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.WRITE_MEDIA_VIDEO);
+            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_IMAGES);
         }
     }
 
@@ -627,7 +629,7 @@ public final class DefaultPermissionGrantPolicy {
                         PHONE_PERMISSIONS, SMS_PERMISSIONS, CAMERA_PERMISSIONS,
                         SENSORS_PERMISSIONS, STORAGE_PERMISSIONS);
                 grantSystemFixedPermissionsToSystemPackage(packageName, userId,
-                        LOCATION_PERMISSIONS);
+                        LOCATION_PERMISSIONS, ACTIVITY_RECOGNITION_PERMISSIONS);
             }
         }
 
@@ -1205,6 +1207,21 @@ public final class DefaultPermissionGrantPolicy {
                     if (DEBUG) {
                         Log.i(TAG, "Granted " + (systemFixed ? "fixed " : "not fixed ")
                                 + permission + " to default handler " + pkg);
+
+                        int appOp = AppOpsManager.permissionToOpCode(permission);
+                        if (appOp != AppOpsManager.OP_NONE
+                                && AppOpsManager.opToDefaultMode(appOp)
+                                        != AppOpsManager.MODE_ALLOWED) {
+                            // Permission has a corresponding appop which is not allowed by default
+                            // We must allow it as well, as it's usually checked alongside the
+                            // permission
+                            if (DEBUG) {
+                                Log.i(TAG, "Granting OP_" + AppOpsManager.opToName(appOp)
+                                        + " to " + pkg.packageName);
+                            }
+                            mContext.getSystemService(AppOpsManager.class).setUidMode(
+                                    appOp, pkg.applicationInfo.uid, AppOpsManager.MODE_ALLOWED);
+                        }
                     }
                 }
 
