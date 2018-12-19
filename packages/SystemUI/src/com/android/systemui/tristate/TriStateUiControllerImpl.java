@@ -356,7 +356,7 @@ public class TriStateUiControllerImpl implements ConfigurationListener, TriState
                             if (mTriStateMode != MODE_VIBRATE) {
                                 if (mTriStateMode == MODE_NORMAL) {
                                     positionY2 = res.getDimensionPixelSize(R.dimen.tri_state_down_dialog_position) + res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height);
-                                    bg = isTsKeyRight ? R.drawable.right_dialog_tri_state_down_bg : R.drawable.left_dialog_tri_state_down_bg
+                                    bg = isTsKeyRight ? R.drawable.right_dialog_tri_state_down_bg : R.drawable.left_dialog_tri_state_down_bg;
                                     break;
                                 }
                             }
