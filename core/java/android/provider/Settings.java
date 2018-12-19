@@ -4489,7 +4489,7 @@ public final class Settings {
 
         /**
          * Preferred silent mode for Alert Slider..
-         * 0: Alarms only.
+         * 0: Vibration
          * 1: Total silence
          * @hide
          */
