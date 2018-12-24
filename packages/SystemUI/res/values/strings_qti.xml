@@ -26,19 +26,25 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="14dp"
-    android:height="17dp"
-    android:viewportWidth="14"
-    android:viewportHeight="17">
+    <string-array name="origin_carrier_names"></string-array>
 
-    <path
-        android:pathData="M 1.2 4 H 13.7 V 13.2 H 1.2 V 4 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M5.7,11.9V13H1.5c0-0.3,0-0.5,0.1-0.8c0.1-0.4,0.3-0.8,0.5-1.2c0.2-0.4,0.6-0.8,1-1.4c0.7-0.8,1.2-1.4,1.4-1.9c0.2-0.5,0.4-0.9,0.4-1.3c0-0.4-0.1-0.8-0.3-1.1C4.3,5,4,4.9,3.7,4.9C3.3,4.9,3,5,2.8,5.4C2.5,5.7,2.4,6.1,2.4,6.7L1.6,6.6=c0.1-0.8,0.3-1.5,0.6-1.9C2.6,4.2,3.1,4,3.7,4c0.6,0,1.1,0.2,1.5,0.7c0.4,0.5,0.5,1.1,0.5,1.8c0,0.4-0.1,0.7-0.2,1.1C5.4,7.9,5.3,8.2,5,8.6C4.8,9,4.4,9.5,3.8,10.2c-0.5,0.6-0.8,0.9-0.9,1.1s-0.2,0.4-0.3,0.6H5.7z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M9.8,9.5V8.4l2.7,0v3.3c-0.4,0.5-0.8,0.8-1.3,1.1c-0.4,0.2-0.9,0.4-1.4,0.4c-0.6,0-1.2-0.2-1.7-0.6c-0.5-0.4-0.9-0.9-1.2-1.6c-0.3-0.7-0.4-1.5-0.4-2.4c0-0.9,0.1-1.7,0.4-2.4c0.3-0.8,0.6-1.3,1.1-1.7C8.6,4,9.2,3.8,9.8,3.8c0.5,0,0.9,0.1,1.3,0.3C11.5,4.4,11.8,4.7,12,5c0.2,0.4,0.4,0.9,0.5,1.5l-0.8,0.3c-0.1-0.5-0.2-0.8-0.4-1.1c-0.1-0.3-0.3-0.5-0.6-0.6s-0.6-0.2-0.9-0.2c-0.4,0-0.7,0.1-1,0.2C8.6,5.3,8.3,5.5,8.2,5.8C8,6,7.9,6.3,7.8,6.7C7.6,7.2,7.5,7.8,7.5,8.5c0,0.8,0.1,1.5,0.3,2C8,11,8.3,11.4,8.7,11.7c0.4,0.3,0.8,0.4,1.2,0.4c0.4,0,0.7-0.1,1.1-0.3s0.6-0.4,0.8-0.6V9.5H9.8z" />
-</vector>
+    <string-array name="locale_carrier_names"></string-array>
+
+    <!-- config 2G/3G/4G RAT strings for carriers -->
+    <string name="config_rat_unknown" translatable="false">""</string>
+    <string name="config_rat_2g" translatable="false">2G</string>
+    <string name="config_rat_3g" translatable="false">3G</string>
+    <string name="config_rat_4g" translatable="false">4G</string>
+
+    <!-- Content description of the data connection type 5G Basic. [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5g_basic" translate="false">5GBasic</string>
+
+    <!-- Content description of the data connection type 5G UWB. [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5g_uwb" translate="false">5GUWB</string>
+
+    <!-- Content description of the data connection type 5G stand alone. [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5g_sa" translate="false">5GSA</string>
+
+</resources>

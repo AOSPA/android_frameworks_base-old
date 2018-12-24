@@ -28,6 +28,21 @@
 -->
 
 <resources>
+    <bool name="kg_hide_emgcy_btn_when_oos">false</bool>
+    <bool name="config_showEmergencyButton">false</bool>
+    <bool name="config_show_customize_carrier_name">false</bool>
+
+    <!-- Whether or not we also show rsrp level for LTE. -->
+    <bool name="config_showRsrpSignalLevelforLTE">false</bool>
+
+    <!-- Whether or not we always show type icon -->
+    <bool name="config_alwaysShowTypeIcon">false</bool>
+
+    <!-- When true, hide no internet statue on signal strength icon -->
+    <bool name="config_hideNoInternetState">false</bool>
+
+    <!-- Whether to show VoLTE icon in the status bar -->
+    <bool name="config_display_volte">false</bool>
 
     <integer name="config_5g_num_signal_strength_bins">4</integer>
 

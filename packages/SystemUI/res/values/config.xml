@@ -129,19 +129,6 @@
     <integer name="quick_settings_brightness_dialog_short_timeout">2000</integer>
     <integer name="quick_settings_brightness_dialog_long_timeout">4000</integer>
 
-
-    <!-- Whether or not we also show rsrp level for LTE. -->
-    <bool name="config_showRsrpSignalLevelforLTE">false</bool>
-
-    <!-- Whether or not we always show type icon -->
-    <bool name="config_alwaysShowTypeIcon">false</bool>
-
-    <!-- Whether or not we show 2G for CDMA/1xRTT -->
-    <bool name="config_show2GforCDMA_1X">false</bool>
-
-    <!-- When true, hide no internet statue on signal strength icon -->
-    <bool name="config_hideNoInternetState">false</bool>
-
     <!-- Should "LTE"/"4G" be shown instead of "LTE+"/"4G+" when on NETWORK_TYPE_LTE_CA? -->
     <bool name="config_hideLtePlus">false</bool>
 
@@ -453,53 +440,7 @@
         <item>120</item>
     </integer-array>
 
-    <string-array name="origin_carrier_names">
-        <item>CHINA\u0020\u0020MOBILE</item>
-        <item>CMCC</item>
-        <item>CHN-UNICOM</item>
-        <item>China Mobile</item>
-        <item>China Mobile (HD)</item>
-        <item>China Unicom</item>
-        <item>China Telecom</item>
-        <item>CHN-CT</item>
-        <item>中国移动</item>
-        <item>中国联通</item>
-        <item>中国电信</item>
-        <item>中國移動</item>
-        <item>中國聯通</item>
-        <item>中國電信</item>
-        <item>Searching for Service</item>
-    </string-array>
 
-    <string-array name="locale_carrier_names">
-        <item>China_Mobile</item>
-        <item>China_Mobile</item>
-        <item>China_Unicom</item>
-        <item>China_Mobile</item>
-        <item>China_Mobile_HD</item>
-        <item>China_Unicom</item>
-        <item>China_Telecom</item>
-        <item>China_Telecom</item>
-        <item>China_Mobile</item>
-        <item>China_Unicom</item>
-        <item>China_Telecom</item>
-        <item>China_Mobile</item>
-        <item>China_Unicom</item>
-        <item>China_Telecom</item>
-        <item>roamingTextSearching</item>
-    </string-array>
-
-    <!-- monitor locale change -->
-    <bool name="config_monitor_locale_change">true</bool>
-
-    <!-- display for radio tech -->
-    <bool name="config_display_rat">true</bool>
-
-    <!-- config 2G/3G/4G RAT strings for carriers -->
-    <string name="config_rat_unknown" translatable="false">""</string>
-    <string name="config_rat_2g" translatable="false">2G</string>
-    <string name="config_rat_3g" translatable="false">3G</string>
-    <string name="config_rat_4g" translatable="false">4G</string>
 
 
     <!-- Smart replies in notifications: Whether smart replies in notifications are enabled. -->
@@ -537,9 +478,6 @@
 
     <!-- On debuggable builds, alert the user if SystemUI PSS goes over this number (in kb) -->
     <integer name="watch_heap_limit">256000</integer>
-
-    <!-- Whether to show VoLTE icon in the status bar -->
-    <bool name="config_display_volte">false</bool>
 
     <!-- Allow dragging the PIP to a location to close it -->
     <bool name="config_pipEnableDismissDragToEdge">true</bool>
