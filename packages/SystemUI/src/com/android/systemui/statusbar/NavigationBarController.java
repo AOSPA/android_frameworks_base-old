@@ -22,9 +22,13 @@ import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
 import static com.android.systemui.SysUiServiceProvider.getComponent;
 
 import android.content.Context;
+import android.database.ContentObserver;
 import android.hardware.display.DisplayManager;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.RemoteException;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Display;
@@ -61,6 +65,8 @@ public class NavigationBarController implements Callbacks {
     private final Handler mHandler;
     private final DisplayManager mDisplayManager;
 
+    private final SettingsObserver mObserver;
+
     /** A displayId - nav bar maps. */
     @VisibleForTesting
     SparseArray<NavigationBarFragment> mNavigationBars = new SparseArray<>();
@@ -74,6 +80,8 @@ public class NavigationBarController implements Callbacks {
         if (commandQueue != null) {
             commandQueue.addCallback(this);
         }
+        mObserver = new SettingsObserver();
+        mObserver.register();
     }
 
     @Override
@@ -232,5 +240,52 @@ public class NavigationBarController implements Callbacks {
     /** @return {@link NavigationBarFragment} on the default display. */
     public NavigationBarFragment getDefaultNavigationBarFragment() {
         return mNavigationBars.get(DEFAULT_DISPLAY);
+    }
+
+    private void updateNavigationBars() {
+        final IWindowManager wms = WindowManagerGlobal.getWindowManagerService();
+        Display[] displays = mDisplayManager.getDisplays();
+        for (Display display : displays) {
+            int displayId = display.getDisplayId();
+            try {
+                if (wms.hasNavigationBar(displayId)) {
+                    if (mNavigationBars.get(displayId) == null) {
+                        createNavigationBar(display, null);
+                    }
+                } else {
+                    removeNavigationBar(display.getDisplayId());
+                }
+            } catch (RemoteException e) {
+                // Cannot get wms, just return with warning message.
+                Log.w(TAG, "Cannot get WindowManager.");
+                return;
+            }
+        }
+    }
+
+    private class SettingsObserver extends ContentObserver {
+
+        private boolean mNavBarEnabled;
+
+        public SettingsObserver() {
+            super(mHandler);
+            mNavBarEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.NAVIGATION_BAR_ENABLED, 1, UserHandle.USER_CURRENT) != 0;
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            updateNavigationBars();
+        }
+
+        public void register() {
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.NAVIGATION_BAR_ENABLED), false, this,
+                    UserHandle.USER_ALL);
+        }
+
+        public void unregister() {
+            mContext.getContentResolver().unregisterContentObserver(this);
+        }
     }
 }

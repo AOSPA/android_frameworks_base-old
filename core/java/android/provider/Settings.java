@@ -4735,6 +4735,17 @@ public final class Settings {
         private static final Validator NAVIGATION_HANDLE_WIDTH_VALIDATOR = ANY_INTEGER_VALIDATOR;
 
         /**
+         * Whether user can enable/disable navigation bar.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String NAVIGATION_BAR_ENABLED = "navigation_bar_enabled";
+
+        /** @hide */
+        private static final Validator NAVIGATION_BAR_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -4943,6 +4954,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(NAVIGATION_HANDLE_WIDTH);
             PRIVATE_SETTINGS.add(BUTTON_BRIGHTNESS);
             PRIVATE_SETTINGS.add(BUTTON_BRIGHTNESS_ENABLED);
+            PRIVATE_SETTINGS.add(NAVIGATION_BAR_ENABLED);
         }
 
         /**
@@ -5041,6 +5053,7 @@ public final class Settings {
             VALIDATORS.put(INCALL_FEEDBACK_VIBRATE, INCALL_FEEDBACK_VIBRATE_VALIDATOR);
             VALIDATORS.put(POCKET_JUDGE, POCKET_JUDGE_VALIDATOR);
             VALIDATORS.put(NAVIGATION_HANDLE_WIDTH, NAVIGATION_HANDLE_WIDTH_VALIDATOR);
+            VALIDATORS.put(NAVIGATION_BAR_ENABLED, NAVIGATION_BAR_ENABLED_VALIDATOR);
         }
 
         /**
