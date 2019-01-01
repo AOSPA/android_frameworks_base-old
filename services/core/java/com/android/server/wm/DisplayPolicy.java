@@ -819,7 +819,8 @@ public class DisplayPolicy {
     }
 
     public boolean hasNavigationBar() {
-        return mHasNavigationBar;
+        return mHasNavigationBar || Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.NAVIGATION_BAR_ENABLED, 1, UserHandle.USER_CURRENT) != 0;
     }
 
     public boolean hasStatusBar() {
@@ -827,7 +828,7 @@ public class DisplayPolicy {
     }
 
     boolean hasSideGestures() {
-        return mHasNavigationBar && mSideGestureInset > 0;
+        return hasNavigationBar() && mSideGestureInset > 0;
     }
 
     public boolean navigationBarCanMove() {
