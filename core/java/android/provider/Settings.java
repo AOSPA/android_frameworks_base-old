@@ -4488,6 +4488,30 @@ public final class Settings {
         private static final Validator SHOW_BATTERY_PERCENT_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
+<<<<<<< HEAD   (47d674 [WIFI] Protect broadcasts used by the Wi-Fi framework)
+=======
+         * Face auto unlock
+         * @hide
+         */
+        public static final String FACE_AUTO_UNLOCK = "face_auto_unlock";
+
+         /** @hide */
+        public static final Validator FACE_AUTO_UNLOCK_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
+         * Whether user can enable/disable navigation bar.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String NAVIGATION_BAR_ENABLED = "navigation_bar_enabled";
+
+        /** @hide */
+        private static final Validator NAVIGATION_BAR_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
+
+        /**
+>>>>>>> CHANGE (889130 input: support dynamic navigation bar toggling)
          * IMPORTANT: If you add a new public settings you also have to add it to
          * PUBLIC_SETTINGS below. If the new setting is hidden you have to add
          * it to PRIVATE_SETTINGS below. Also add a validator that can validate
@@ -4873,8 +4897,13 @@ public final class Settings {
             PRIVATE_SETTINGS.add(GESTURE_ONE_FINGER_SWIPE_LEFT);
             PRIVATE_SETTINGS.add(INCALL_FEEDBACK_VIBRATE);
             PRIVATE_SETTINGS.add(POCKET_JUDGE);
+<<<<<<< HEAD   (47d674 [WIFI] Protect broadcasts used by the Wi-Fi framework)
             PRIVATE_SETTINGS.add(AMBIENT_NOTIFICATION_LIGHT);
             PRIVATE_SETTINGS.add(AMBIENT_NOTIFICATION_LIGHT_AUTOMATIC);
+=======
+            PRIVATE_SETTINGS.add(FACE_AUTO_UNLOCK);
+            PRIVATE_SETTINGS.add(NAVIGATION_BAR_ENABLED);
+>>>>>>> CHANGE (889130 input: support dynamic navigation bar toggling)
         }
 
         /**
@@ -4970,8 +4999,13 @@ public final class Settings {
             VALIDATORS.put(AMBIENT_NOTIFICATION_LIGHT, AMBIENT_NOTIFICATION_LIGHT_VALIDATOR);
             VALIDATORS.put(AMBIENT_NOTIFICATION_LIGHT_AUTOMATIC, AMBIENT_NOTIFICATION_LIGHT_AUTOMATIC_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_LIGHT_PULSE, BOOLEAN_VALIDATOR);
+<<<<<<< HEAD   (47d674 [WIFI] Protect broadcasts used by the Wi-Fi framework)
             VALIDATORS.put(INCALL_FEEDBACK_VIBRATE, INCALL_FEEDBACK_VIBRATE_VALIDATOR);
             VALIDATORS.put(POCKET_JUDGE, POCKET_JUDGE_VALIDATOR);
+=======
+            VALIDATORS.put(FACE_AUTO_UNLOCK, FACE_AUTO_UNLOCK_VALIDATOR);
+            VALIDATORS.put(NAVIGATION_BAR_ENABLED, NAVIGATION_BAR_ENABLED_VALIDATOR);
+>>>>>>> CHANGE (889130 input: support dynamic navigation bar toggling)
         }
 
         /**

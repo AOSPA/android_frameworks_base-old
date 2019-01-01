@@ -73,6 +73,11 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+<<<<<<< HEAD   (47d674 [WIFI] Protect broadcasts used by the Wi-Fi framework)
+=======
+import android.database.ContentObserver;
+import android.graphics.Bitmap;
+>>>>>>> CHANGE (889130 input: support dynamic navigation bar toggling)
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
@@ -907,7 +912,41 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         createNavigationBar(result);
 
+<<<<<<< HEAD   (47d674 [WIFI] Protect broadcasts used by the Wi-Fi framework)
         if (ENABLE_LOCKSCREEN_WALLPAPER && mWallpaperSupported) {
+=======
+        if (MULTIUSER_DEBUG) {
+            mNotificationPanelDebugText = mNotificationPanel.findViewById(R.id.header_debug_info);
+            mNotificationPanelDebugText.setVisibility(View.VISIBLE);
+        }
+
+        try {
+            boolean showNav = mWindowManagerService.needsNavigationBar();
+            mUseNavBar = showNav;
+            if (DEBUG) Log.v(TAG, "needsNavigationBar=" + showNav);
+            if (showNav) {
+                createNavigationBar();
+            }
+        } catch (RemoteException ex) {
+            // no window manager? good luck with that
+        }
+        mScreenPinningNotify = new ScreenPinningNotify(mContext);
+        mStackScroller.setLongPressListener(mEntryManager.getNotificationLongClicker());
+        mStackScroller.setStatusBar(this);
+        mStackScroller.setGroupManager(mGroupManager);
+        mStackScroller.setHeadsUpManager(mHeadsUpManager);
+        mGroupManager.setOnGroupChangeListener(mStackScroller);
+        mVisualStabilityManager.setVisibilityLocationProvider(mStackScroller);
+
+        inflateEmptyShadeView();
+        inflateFooterView();
+
+        mBackdrop = mStatusBarWindow.findViewById(R.id.backdrop);
+        mBackdropFront = mBackdrop.findViewById(R.id.backdrop_front);
+        mBackdropBack = mBackdrop.findViewById(R.id.backdrop_back);
+
+        if (ENABLE_LOCKSCREEN_WALLPAPER) {
+>>>>>>> CHANGE (889130 input: support dynamic navigation bar toggling)
             mLockscreenWallpaper = new LockscreenWallpaper(mContext, this, mHandler);
         }
 
@@ -1066,6 +1105,9 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         // Private API call to make the shadows look better for Recents
         ThreadedRenderer.overrideProperty("ambientRatio", String.valueOf(1.5f));
+
+        // listen for NAVIGATION_BAR_ENABLED setting (per-user)
+        resetNavBarObserver();
     }
 
     protected QS createDefaultQSFragment() {
@@ -2711,9 +2753,24 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     @Override
+<<<<<<< HEAD   (47d674 [WIFI] Protect broadcasts used by the Wi-Fi framework)
     public void setLockscreenUser(int newUserId) {
         if (mLockscreenWallpaper != null) {
             mLockscreenWallpaper.setCurrentUser(newUserId);
+=======
+    public void onUserSwitched(int newUserId) {
+        // Begin old BaseStatusBar.userSwitched
+        setHeadsUpUser(newUserId);
+        // End old BaseStatusBar.userSwitched
+        if (MULTIUSER_DEBUG) mNotificationPanelDebugText.setText("USER " + newUserId);
+        resetNavBarObserver();
+        animateCollapsePanels();
+        updatePublicMode();
+        mEntryManager.getNotificationData().filterAndSort();
+        if (mReinflateNotificationsOnUserSwitched) {
+            mEntryManager.updateNotificationsOnDensityOrFontScaleChanged();
+            mReinflateNotificationsOnUserSwitched = false;
+>>>>>>> CHANGE (889130 input: support dynamic navigation bar toggling)
         }
         mScrimController.setCurrentUser(newUserId);
         if (mWallpaperSupported) {
@@ -4607,4 +4664,78 @@ public class StatusBar extends SystemUI implements DemoMode,
         return mStatusBarMode;
     }
 
+<<<<<<< HEAD   (47d674 [WIFI] Protect broadcasts used by the Wi-Fi framework)
+=======
+    private final NotificationInfo.CheckSaveListener mCheckSaveListener =
+            (Runnable saveImportance, StatusBarNotification sbn) -> {
+                // If the user has security enabled, show challenge if the setting is changed.
+                if (mLockscreenUserManager.isLockscreenPublicMode(sbn.getUser().getIdentifier())
+                        && (mState == StatusBarState.KEYGUARD ||
+                                mState == StatusBarState.SHADE_LOCKED)) {
+                    onLockedNotificationImportanceChange(() -> {
+                        saveImportance.run();
+                        return true;
+                    });
+                } else {
+                    saveImportance.run();
+                }
+            };
+
+    /*
+     * Navigation Bar
+     */
+
+    // Reset navigation bar visibility after adding its view to window manager.
+    private static final boolean RESET_SYSTEMUI_VISIBILITY_FOR_NAVBAR = true;
+    private boolean mUseNavBar = false;
+
+    private final ContentObserver mNavBarObserver = new ContentObserver(mHandler) {
+        @Override
+        public void onChange(boolean selfChange) {
+            boolean wasUsing = mUseNavBar;
+            mUseNavBar = Settings.System.getIntForUser(
+                    mContext.getContentResolver(), Settings.System.NAVIGATION_BAR_ENABLED, wasUsing ? 1 : 0,
+                    UserHandle.USER_CURRENT) != 0;
+            Log.d(TAG, "navbar is " + (mUseNavBar ? "enabled" : "disabled"));
+            if (wasUsing != mUseNavBar) {
+                setNavBarEnabled(mUseNavBar);
+                if (mAssistManager != null) {
+                    mAssistManager.onConfigurationChanged(mContext.getResources().getConfiguration());
+                }
+            }
+        }
+    };
+
+    private void resetNavBarObserver() {
+        mContext.getContentResolver().unregisterContentObserver(mNavBarObserver);
+        mNavBarObserver.onChange(false);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.NAVIGATION_BAR_ENABLED), true,
+                mNavBarObserver, ActivityManager.getCurrentUser());
+    }
+
+    private void setNavBarEnabled(boolean enabled) {
+        if (enabled) {
+            createNavigationBar();
+            if (RESET_SYSTEMUI_VISIBILITY_FOR_NAVBAR) {
+                resetSystemUIVisibility();
+            }
+        } else {
+            removeNavigationBar();
+        }
+    }
+
+    private void removeNavigationBar() {
+        if (mNavigationBarView != null) {
+            if (DEBUG) Log.v(TAG, "removeNavigationBar: about to remove " + mNavigationBarView);
+            mWindowManager.removeViewImmediate(mNavigationBarView);
+            mNavigationBarView = null;
+        }
+    }
+
+    private void resetSystemUIVisibility() {
+        checkBarModes();
+        notifyUiVisibilityChanged(mSystemUiVisibility);
+    }
+>>>>>>> CHANGE (889130 input: support dynamic navigation bar toggling)
 }
