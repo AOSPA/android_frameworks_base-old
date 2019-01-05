@@ -4081,13 +4081,15 @@ public final class Settings {
         /**
          * Setting to determine whether or not to show the battery percentage in the status bar.
          *    0 - Don't show percentage
-         *    1 - Show percentage
+         *    1 - Show percentage outside the battery icon
+         *    2 - Show percentage inside the battery icon
          * @hide
          */
         public static final String SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
 
         /** @hide */
-        private static final Validator SHOW_BATTERY_PERCENT_VALIDATOR = BOOLEAN_VALIDATOR;
+        private static final Validator SHOW_BATTERY_PERCENT_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 2);
 
         /**
          * IMPORTANT: If you add a new public settings you also have to add it to
@@ -7946,6 +7948,29 @@ public final class Settings {
                 "packages_to_clear_data_before_full_restore";
 
         /**
+         * Paranoid Android SecureSettings additions starts
+         */
+
+        /**
+         * Display style of the status bar battery information
+         * 0: Display the battery an icon in portrait mode
+         * 1: Display the battery as a circle
+         * 2: Display the battery as text
+         * 3: Do not display the battery
+         * default: 0
+         * @hide
+         */
+        public static final String STATUS_BAR_BATTERY_STYLE = "status_bar_battery_style";
+
+        /** @hide */
+        private static final Validator STATUS_BAR_BATTERY_STYLE_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 3);
+
+        /**
+         * Paranoid Android SecureSettings additions ends
+         */
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -8048,7 +8073,9 @@ public final class Settings {
             VOLUME_HUSH_GESTURE,
             MANUAL_RINGER_TOGGLE_COUNT,
             HUSH_GESTURE_USED,
-            WIFI_DISCONNECT_DELAY_DURATION
+            WIFI_DISCONNECT_DELAY_DURATION,
+            // Paranoid Android additions starts
+            STATUS_BAR_BATTERY_STYLE,
         };
 
         /**
@@ -8198,6 +8225,8 @@ public final class Settings {
             VALIDATORS.put(HUSH_GESTURE_USED, HUSH_GESTURE_USED_VALIDATOR);
             VALIDATORS.put(MANUAL_RINGER_TOGGLE_COUNT, MANUAL_RINGER_TOGGLE_COUNT_VALIDATOR);
             VALIDATORS.put(WIFI_DISCONNECT_DELAY_DURATION, WIFI_DISCONNECT_DELAY_DURATION_VALIDATOR);
+            // Paranoid Android additions starts
+            VALIDATORS.put(STATUS_BAR_BATTERY_STYLE , STATUS_BAR_BATTERY_STYLE_VALIDATOR);
         }
 
         /**
