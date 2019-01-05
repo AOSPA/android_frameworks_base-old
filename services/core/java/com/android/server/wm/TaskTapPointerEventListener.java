@@ -24,9 +24,6 @@ import android.view.MotionEvent;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.server.wm.WindowManagerService.H;
-import com.android.server.am.ActivityManagerService;
-import com.android.server.wm.ActivityStackSupervisor;
-import android.util.BoostFramework;
 
 import static android.view.PointerIcon.TYPE_NOT_SPECIFIED;
 import static android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW;
@@ -43,7 +40,6 @@ public class TaskTapPointerEventListener implements PointerEventListener {
     private final Runnable mMoveDisplayToTop;
     private final Rect mTmpRect = new Rect();
     private int mPointerIconType = TYPE_NOT_SPECIFIED;
-    public BoostFramework mPerfObj = null;
 
     public TaskTapPointerEventListener(WindowManagerService service,
             DisplayContent displayContent) {
@@ -56,9 +52,6 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                         mDisplayContent, true /* includingParents */);
             }
         };
-        if (mPerfObj == null) {
-            mPerfObj = new BoostFramework();
-        }
     }
 
     @Override
@@ -117,17 +110,6 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                 }
             }
             break;
-        }
-        if (ActivityStackSupervisor.mIsPerfBoostAcquired && (mPerfObj != null)) {
-            if (ActivityStackSupervisor.mPerfHandle > 0) {
-                mPerfObj.perfLockReleaseHandler(ActivityStackSupervisor.mPerfHandle);
-                ActivityStackSupervisor.mPerfHandle = -1;
-            }
-            ActivityStackSupervisor.mIsPerfBoostAcquired = false;
-        }
-        if (ActivityStackSupervisor.mPerfSendTapHint && (mPerfObj != null)) {
-            mPerfObj.perfHint(BoostFramework.VENDOR_HINT_TAP_EVENT, null);
-            ActivityStackSupervisor.mPerfSendTapHint = false;
         }
     }
 

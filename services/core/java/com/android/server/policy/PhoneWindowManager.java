@@ -20,14 +20,6 @@ import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.Manifest.permission.SYSTEM_ALERT_WINDOW;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.AppOpsManager.OP_TOAST_WINDOW;
-<<<<<<< HEAD
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.Context.CONTEXT_RESTRICTED;
 import static android.content.Context.DISPLAY_SERVICE;
@@ -171,11 +163,6 @@ import android.service.dreams.IDreamManager;
 import android.service.vr.IPersistentVrStateCallbacks;
 import android.speech.RecognizerIntent;
 import android.telecom.TelecomManager;
-<<<<<<< HEAD
-import android.util.BoostFramework;
-import android.util.ArraySet;
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
 import android.util.EventLog;
 import android.util.Log;
 import android.util.LongSparseArray;
@@ -318,32 +305,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
             .build();
 
-<<<<<<< HEAD
-    /**
-     * Broadcast Action: WiFi Display video is enabled or disabled
-     *
-     * <p>The intent will have the following extra values:</p>
-     * <ul>
-     *    <li><em>state</em> - 0 for disabled, 1 for enabled. </li>
-     * </ul>
-     */
-
-    private static final String ACTION_WIFI_DISPLAY_VIDEO =
-                                        "org.codeaurora.intent.action.WIFI_DISPLAY_VIDEO";
-
-
-    // The panic gesture may become active only after the keyguard is dismissed and the immersive
-    // app shows again. If that doesn't happen for 30s we drop the gesture.
-    private static final long PANIC_GESTURE_EXPIRATION = 30000;
-
-    private static final String SYSUI_PACKAGE = "com.android.systemui";
-    private static final String SYSUI_SCREENSHOT_SERVICE =
-            "com.android.systemui.screenshot.TakeScreenshotService";
-    private static final String SYSUI_SCREENSHOT_ERROR_RECEIVER =
-            "com.android.systemui.screenshot.ScreenshotServiceErrorReceiver";
-
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
     /**
      * Keyguard stuff
      */
@@ -387,15 +348,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      */
     private final Object mLock = new Object();
 
-    private static final boolean SCROLL_BOOST_SS_ENABLE =
-                    SystemProperties.getBoolean("vendor.perf.gestureflingboost.enable", false);
-
-    /*
-     * @hide
-     */
-    BoostFramework mPerfBoostDrag = null;
-    BoostFramework mPerfBoostFling = null;
-    BoostFramework mPerfBoostPrefling = null;
     Context mContext;
     IWindowManager mWindowManager;
     WindowManagerFuncs mWindowManagerFuncs;
@@ -421,7 +373,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private ScreenshotHelper mScreenshotHelper;
     private boolean mHasFeatureWatch;
     private boolean mHasFeatureLeanback;
-    private boolean mIsPerfBoostFlingAcquired;
 
     // Assigned on main thread, accessed on UI thread
     volatile VrManagerInternal mVrManagerInternal;
@@ -661,29 +612,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int MSG_LAUNCH_VOICE_ASSIST_WITH_WAKE_LOCK = 12;
     private static final int MSG_POWER_DELAYED_PRESS = 13;
     private static final int MSG_POWER_LONG_PRESS = 14;
-<<<<<<< HEAD
-    private static final int MSG_UPDATE_DREAMING_SLEEP_TOKEN = 15;
-    private static final int MSG_REQUEST_TRANSIENT_BARS = 16;
-    private static final int MSG_SHOW_PICTURE_IN_PICTURE_MENU = 17;
-    private static final int MSG_BACK_LONG_PRESS = 18;
-    private static final int MSG_DISPOSE_INPUT_CONSUMER = 19;
-    private static final int MSG_ACCESSIBILITY_SHORTCUT = 20;
-    private static final int MSG_BUGREPORT_TV = 21;
-    private static final int MSG_ACCESSIBILITY_TV = 22;
-    private static final int MSG_DISPATCH_BACK_KEY_TO_AUTOFILL = 23;
-    private static final int MSG_SYSTEM_KEY_PRESS = 24;
-    private static final int MSG_HANDLE_ALL_APPS = 25;
-    private static final int MSG_LAUNCH_ASSIST = 26;
-    private static final int MSG_LAUNCH_ASSIST_LONG_PRESS = 27;
-    private static final int MSG_POWER_VERY_LONG_PRESS = 28;
-    private static final int MSG_NOTIFY_USER_ACTIVITY = 29;
-    private static final int MSG_RINGER_TOGGLE_CHORD = 30;
-
-    private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_STATUS = 0;
-    private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_NAVIGATION = 1;
-    private boolean mWifiDisplayConnected = false;
-    private int mWifiDisplayCustomRotation = -1;
-=======
     private static final int MSG_SHOW_PICTURE_IN_PICTURE_MENU = 15;
     private static final int MSG_BACK_LONG_PRESS = 16;
     private static final int MSG_ACCESSIBILITY_SHORTCUT = 17;
@@ -697,7 +625,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int MSG_POWER_VERY_LONG_PRESS = 25;
     private static final int MSG_NOTIFY_USER_ACTIVITY = 26;
     private static final int MSG_RINGER_TOGGLE_CHORD = 27;
->>>>>>> 61ca34324405523e51cc712004164983cb623845
 
     private class PolicyHandler extends Handler {
         @Override
@@ -1742,24 +1669,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mDefaultDisplayPolicy = mDefaultDisplayRotation.getDisplayPolicy();
     }
 
-    private boolean isTopAppGame() {
-        boolean isGame = false;
-        try {
-            ActivityManager.RunningTaskInfo rti = ActivityManager.getService().getFilteredTasks(1,
-                                    ACTIVITY_TYPE_RECENTS, WINDOWING_MODE_UNDEFINED).get(0);
-            ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(
-                        rti.topActivity.getPackageName(), 0);
-            if(ai != null) {
-                isGame = (ai.category == ApplicationInfo.CATEGORY_GAME) ||
-                        ((ai.flags & ApplicationInfo.FLAG_IS_GAME) ==
-                            ApplicationInfo.FLAG_IS_GAME);
-            }
-        } catch (Exception e) {
-            return false;
-        }
-        return isGame;
-    }
-
     /** {@inheritDoc} */
     @Override
     public void init(Context context, IWindowManager windowManager,
@@ -1931,139 +1840,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         filter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
         context.registerReceiver(mMultiuserReceiver, filter);
 
-<<<<<<< HEAD
-        // monitor for system gestures
-        // TODO(multi-display): Needs to be display specific.
-        mSystemGestures = new SystemGesturesPointerEventListener(context,
-                new SystemGesturesPointerEventListener.Callbacks() {
-                    @Override
-                    public void onSwipeFromTop() {
-                        if (mStatusBar != null) {
-                            requestTransientBars(mStatusBar);
-                        }
-                    }
-                    @Override
-                    public void onSwipeFromBottom() {
-                        if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_BOTTOM) {
-                            requestTransientBars(mNavigationBar);
-                        }
-                    }
-                    @Override
-                    public void onSwipeFromRight() {
-                        if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_RIGHT) {
-                            requestTransientBars(mNavigationBar);
-                        }
-                    }
-                    @Override
-                    public void onSwipeFromLeft() {
-                        if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_LEFT) {
-                            requestTransientBars(mNavigationBar);
-                        }
-                    }
-                    @Override
-                    public void onFling(int duration) {
-                        if (mPowerManagerInternal != null) {
-                            mPowerManagerInternal.powerHint(
-                                    PowerHint.INTERACTION, duration);
-                        }
-                    }
-                    @Override
-                    public void onVerticalFling(int duration) {
-                        String currentPackage = mContext.getPackageName();
-                        boolean isGame = isTopAppGame();
-                        if (SCROLL_BOOST_SS_ENABLE && !isGame) {
-                            if (mPerfBoostFling == null) {
-                                mPerfBoostFling = new BoostFramework();
-                                mIsPerfBoostFlingAcquired = false;
-                            }
-                            if (mPerfBoostFling == null) {
-                                Slog.e(TAG, "Error: boost object null");
-                                return;
-                            }
-
-                            mPerfBoostFling.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST,
-                                currentPackage, duration + 160, BoostFramework.Scroll.VERTICAL);
-                            mIsPerfBoostFlingAcquired = true;
-                        }
-                    }
-                    @Override
-                    public void onScroll(boolean started) {
-                        String currentPackage = mContext.getPackageName();
-                        boolean isGame = isTopAppGame();
-                        if (mPerfBoostDrag == null) {
-                            mPerfBoostDrag = new BoostFramework();
-                        }
-                        if (mPerfBoostDrag == null) {
-                            Slog.e(TAG, "Error: boost object null");
-                            return;
-                        }
-                        if (SCROLL_BOOST_SS_ENABLE && !isGame) {
-                            if (mPerfBoostPrefling == null) {
-                                mPerfBoostPrefling = new BoostFramework();
-                            }
-                            if (mPerfBoostPrefling == null) {
-                                Slog.e(TAG, "Error: boost object null");
-                                return;
-                            }
-                            mPerfBoostPrefling.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST,
-                                    currentPackage, -1, BoostFramework.Scroll.PREFILING);
-                        }
-                        if (!isGame && started) {
-                            mPerfBoostDrag.perfHint(BoostFramework.VENDOR_HINT_DRAG_BOOST,
-                                            currentPackage, -1, 1);
-                        } else {
-                            mPerfBoostDrag.perfLockRelease();
-                        }
-                    }
-
-                    @Override
-                    public void onDebug() {
-                        // no-op
-                    }
-                    @Override
-                    public void onDown() {
-                        mDefaultOrientationListener.onTouchStart();
-                        if(SCROLL_BOOST_SS_ENABLE && mPerfBoostFling!= null
-                                            && mIsPerfBoostFlingAcquired) {
-                            mPerfBoostFling.perfLockRelease();
-                            mIsPerfBoostFlingAcquired = false;
-                        }
-                    }
-                    @Override
-                    public void onUpOrCancel() {
-                        mDefaultOrientationListener.onTouchEnd();
-                    }
-                    @Override
-                    public void onMouseHoverAtTop() {
-                        mHandler.removeMessages(MSG_REQUEST_TRANSIENT_BARS);
-                        Message msg = mHandler.obtainMessage(MSG_REQUEST_TRANSIENT_BARS);
-                        msg.arg1 = MSG_REQUEST_TRANSIENT_BARS_ARG_STATUS;
-                        mHandler.sendMessageDelayed(msg, 500);
-                    }
-                    @Override
-                    public void onMouseHoverAtBottom() {
-                        mHandler.removeMessages(MSG_REQUEST_TRANSIENT_BARS);
-                        Message msg = mHandler.obtainMessage(MSG_REQUEST_TRANSIENT_BARS);
-                        msg.arg1 = MSG_REQUEST_TRANSIENT_BARS_ARG_NAVIGATION;
-                        mHandler.sendMessageDelayed(msg, 500);
-                    }
-                    @Override
-                    public void onMouseLeaveFromEdge() {
-                        mHandler.removeMessages(MSG_REQUEST_TRANSIENT_BARS);
-                    }
-                });
-        mImmersiveModeConfirmation = new ImmersiveModeConfirmation(mContext);
-        //TODO (b/111365687) : make system context per display.
-        mWindowManagerFuncs.registerPointerEventListener(mSystemGestures, DEFAULT_DISPLAY);
-
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
         mVibrator = (Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
-
-        /* Register for WIFI Display Intents */
-        IntentFilter wifiDisplayFilter = new IntentFilter(ACTION_WIFI_DISPLAY_VIDEO);
-        Intent wifidisplayIntent = context.registerReceiver(
-                                        mWifiDisplayReceiver, wifiDisplayFilter);
         mLongPressVibePattern = getLongIntArray(mContext.getResources(),
                 com.android.internal.R.array.config_longPressVibePattern);
         mCalendarDateVibePattern = getLongIntArray(mContext.getResources(),
@@ -4468,66 +4245,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     };
 
-<<<<<<< HEAD
-    private final Runnable mHiddenNavPanic = new Runnable() {
-        @Override
-        public void run() {
-            synchronized (mWindowManagerFuncs.getWindowManagerLock()) {
-                if (!isUserSetupComplete()) {
-                    // Swipe-up for navigation bar is disabled during setup
-                    return;
-                }
-                mPendingPanicGestureUptime = SystemClock.uptimeMillis();
-                if (!isNavBarEmpty(mLastSystemUiFlags)) {
-                    mNavigationBarController.showTransient();
-                }
-            }
-        }
-    };
-
-    private void requestTransientBars(WindowState swipeTarget) {
-        synchronized (mWindowManagerFuncs.getWindowManagerLock()) {
-            if (!isUserSetupComplete()) {
-                // Swipe-up for navigation bar is disabled during setup
-                return;
-            }
-            boolean sb = mStatusBarController.checkShowTransientBarLw();
-            boolean nb = mNavigationBarController.checkShowTransientBarLw()
-                    && !isNavBarEmpty(mLastSystemUiFlags);
-            if (sb || nb) {
-                // Don't show status bar when swiping on already visible navigation bar
-                if (!nb && swipeTarget == mNavigationBar) {
-                    if (DEBUG) Slog.d(TAG, "Not showing transient bar, wrong swipe target");
-                    return;
-                }
-                if (sb) mStatusBarController.showTransient();
-                if (nb) mNavigationBarController.showTransient();
-                mImmersiveModeConfirmation.confirmCurrentPrompt();
-                updateSystemUiVisibilityLw();
-            }
-        }
-    }
-
-
-    BroadcastReceiver mWifiDisplayReceiver = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (action.equals(ACTION_WIFI_DISPLAY_VIDEO)) {
-                int state = intent.getIntExtra("state", 0);
-                if(state == 1) {
-                    mWifiDisplayConnected = true;
-                } else {
-                    mWifiDisplayConnected = false;
-                }
-                mWifiDisplayCustomRotation =
-                    intent.getIntExtra("wfd_UIBC_rot", -1);
-                updateRotation(true);
-            }
-        }
-    };
-
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
     // Called on the PowerManager's Notifier thread.
     @Override
     public void startedGoingToSleep(int why) {

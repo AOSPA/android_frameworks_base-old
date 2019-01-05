@@ -148,8 +148,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
-import com.android.internal.app.ActivityTrigger;
-
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -158,12 +156,6 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.ActivityManagerService.ItemMatcher;
-import com.android.server.am.ActivityPluginDelegate;
-import com.android.server.wm.ConfigurationContainer;
-import com.android.server.wm.StackWindowController;
-import com.android.server.wm.StackWindowListener;
-import com.android.server.wm.WindowManagerService;
-import android.util.BoostFramework;
 import com.android.server.am.AppTimeTracker;
 import com.android.server.am.EventLogTags;
 import com.android.server.am.PendingIntentRecord;
@@ -179,7 +171,7 @@ import java.util.Set;
 /**
  * State and management of a single stack of activities.
  */
-public class ActivityStack<T extends StackWindowController> extends ConfigurationContainer
+class ActivityStack<T extends StackWindowController> extends ConfigurationContainer
         implements StackWindowListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStack" : TAG_ATM;
     private static final String TAG_ADD_REMOVE = TAG + POSTFIX_ADD_REMOVE;
@@ -313,7 +305,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
     private final WindowManagerService mWindowManager;
     T mWindowContainerController;
 
-    public BoostFramework mPerf = null;
     /**
      * The back history of all previous (and possibly still
      * running) activities.  It contains #TaskRecord objects.
@@ -422,12 +413,8 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
 
     final Handler mHandler;
 
-    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
-
-    private static final ActivityPluginDelegate mActivityPluginDelegate =
-        new ActivityPluginDelegate();
-
     private class ActivityStackHandler extends Handler {
+
         ActivityStackHandler(Looper looper) {
             super(looper);
         }
@@ -999,7 +986,7 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
         return super.setBounds(!inMultiWindowMode() ? null : bounds);
     }
 
-    public ActivityRecord topRunningActivityLocked() {
+    ActivityRecord topRunningActivityLocked() {
         return topRunningActivityLocked(false /* focusableOnly */);
     }
 
@@ -1614,17 +1601,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
 
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to PAUSING: " + prev);
         else if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Start pausing: " + prev);
-
-        if (mActivityTrigger != null) {
-            mActivityTrigger.activityPauseTrigger(prev.intent, prev.info, prev.appInfo);
-        }
-
-        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
-            mActivityPluginDelegate.activitySuspendNotification
-                (prev.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
-        }
-
-        mResumedActivity = null;
         mPausingActivity = prev;
         mLastPausedActivity = prev;
         mLastNoHistoryActivity = (prev.intent.getFlags() & Intent.FLAG_ACTIVITY_NO_HISTORY) != 0
@@ -1819,9 +1795,8 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
         // Notify when the task stack has changed, but only if visibilities changed (not just
         // focus). Also if there is an active pinned stack - we always want to notify it about
         // task stack changes, because its positioning may depend on it.
-        boolean hasPinnedStack = getDisplay() != null && getDisplay().hasPinnedStack();
         if (mStackSupervisor.mAppVisibilitiesChangedSinceLastPause
-                || hasPinnedStack) {
+                || getDisplay().hasPinnedStack()) {
             mService.getTaskChangeNotificationController().notifyTaskStackChanged();
             mStackSupervisor.mAppVisibilitiesChangedSinceLastPause = false;
         }
@@ -2610,28 +2585,11 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
         mStackSupervisor.mGoingToSleepActivities.remove(next);
         next.sleeping = false;
         mStackSupervisor.mActivitiesWaitingForVisibleActivity.remove(next);
-        next.launching = true;
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
-<<<<<<< HEAD
-        if (mActivityTrigger != null) {
-            mActivityTrigger.activityResumeTrigger(next.intent, next.info, next.appInfo,
-                    next.fullscreen);
-        }
-
-        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
-            mActivityPluginDelegate.activityInvokeNotification
-                (next.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN);
-        }
-
-        // If we are currently pausing an activity, then don't do anything
-        // until that is done.
-        if (!mStackSupervisor.allPausedActivitiesComplete()) {
-=======
         // If we are currently pausing an activity, then don't do anything until that is done.
         if (!mRootActivityContainer.allPausedActivitiesComplete()) {
->>>>>>> 61ca34324405523e51cc712004164983cb623845
             if (DEBUG_SWITCH || DEBUG_PAUSE || DEBUG_STATES) Slog.v(TAG_PAUSE,
                     "resumeTopActivityLocked: Skip resume: some activity pausing.");
             return false;
@@ -2755,9 +2713,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
         // that the previous one will be hidden soon.  This way it can know
         // to ignore it when computing the desired screen orientation.
         boolean anim = true;
-        if (mPerf == null) {
-            mPerf = new BoostFramework();
-        }
         final DisplayWindowController dwc = getDisplay().getWindowContainerController();
         if (prev != null) {
             if (prev.finishing) {
@@ -2767,12 +2722,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
                     anim = false;
                     dwc.prepareAppTransition(TRANSIT_NONE, false);
                 } else {
-                    mWindowManager.prepareAppTransition(prev.getTask() == next.getTask()
-                            ? TRANSIT_ACTIVITY_CLOSE
-                            : TRANSIT_TASK_CLOSE, false);
-                    if(prev.getTask() != next.getTask() && mPerf != null) {
-                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST, next.packageName);
-                    }
                     dwc.prepareAppTransition(
                             prev.getTaskRecord() == next.getTaskRecord() ? TRANSIT_ACTIVITY_CLOSE
                                     : TRANSIT_TASK_CLOSE, false);
@@ -2785,14 +2734,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
                     anim = false;
                     dwc.prepareAppTransition(TRANSIT_NONE, false);
                 } else {
-                    mWindowManager.prepareAppTransition(prev.getTask() == next.getTask()
-                            ? TRANSIT_ACTIVITY_OPEN
-                            : next.mLaunchTaskBehind
-                                    ? TRANSIT_TASK_OPEN_BEHIND
-                                    : TRANSIT_TASK_OPEN, false);
-                    if(prev.getTask() != next.getTask() && mPerf != null) {
-                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST, next.packageName);
-                    }
                     dwc.prepareAppTransition(
                             prev.getTaskRecord() == next.getTaskRecord() ? TRANSIT_ACTIVITY_OPEN
                                     : next.mLaunchTaskBehind ? TRANSIT_TASK_OPEN_BEHIND
@@ -3669,7 +3610,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
 
     final void stopActivityLocked(ActivityRecord r) {
         if (DEBUG_SWITCH) Slog.d(TAG_SWITCH, "Stopping: " + r);
-        r.launching = false;
         if ((r.intent.getFlags()&Intent.FLAG_ACTIVITY_NO_HISTORY) != 0
                 || (r.info.flags&ActivityInfo.FLAG_NO_HISTORY) != 0) {
             if (!r.finishing) {
@@ -3694,22 +3634,11 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
             r.resumeKeyDispatchingLocked();
             try {
                 r.stopped = false;
-
                 if (DEBUG_STATES) Slog.v(TAG_STATES,
                         "Moving to STOPPING: " + r + " (stop requested)");
                 r.setState(STOPPING, "stopActivityLocked");
                 if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY,
                         "Stopping visible=" + r.visible + " for " + r);
-
-                if (mActivityTrigger != null) {
-                    mActivityTrigger.activityStopTrigger(r.intent, r.info, r.appInfo);
-                }
-
-                if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
-                    mActivityPluginDelegate.activitySuspendNotification
-                        (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
-                }
-
                 if (!r.visible) {
                     r.setVisible(false);
                 }
@@ -4047,12 +3976,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
             }
             if (DEBUG_STATES) Slog.v(TAG_STATES,
                     "Moving to STOPPING: "+ r + " (finish requested)");
-
-            if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
-                mActivityPluginDelegate.activitySuspendNotification
-                    (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
-            }
-
             r.setState(STOPPING, "finishCurrentActivityLocked");
             if (oomAdj) {
                 mService.updateOomAdj();
@@ -4066,11 +3989,6 @@ public class ActivityStack<T extends StackWindowController> extends Configuratio
         mStackSupervisor.mActivitiesWaitingForVisibleActivity.remove(r);
         final ActivityState prevState = r.getState();
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to FINISHING: " + r);
-
-        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
-            mActivityPluginDelegate.activitySuspendNotification
-                (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
-        }
 
         r.setState(FINISHING, "finishCurrentActivityLocked");
         final boolean finishingInNonFocusedStackOrNoRunning = mode == FINISH_AFTER_VISIBLE

@@ -179,7 +179,6 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
 import android.service.voice.IVoiceInteractionSession;
-import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.MergedConfiguration;
@@ -208,7 +207,6 @@ import com.android.server.wm.ActivityStack.ActivityState;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
-import android.util.BoostFramework;
 
 import java.io.File;
 import java.io.IOException;
@@ -219,19 +217,11 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import android.util.BoostFramework;
-
-import android.os.AsyncTask;
-import android.util.BoostFramework;
 
 /**
  * An entry in the history stack, representing an activity.
  */
-<<<<<<< HEAD
-public final class ActivityRecord extends ConfigurationContainer implements AppWindowContainerListener {
-=======
 final class ActivityRecord extends ConfigurationContainer {
->>>>>>> 61ca34324405523e51cc712004164983cb623845
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityRecord" : TAG_ATM;
     private static final String TAG_CONFIGURATION = TAG + POSTFIX_CONFIGURATION;
     private static final String TAG_SAVED_STATE = TAG + POSTFIX_SAVED_STATE;
@@ -270,7 +260,7 @@ final class ActivityRecord extends ConfigurationContainer {
     final ComponentName mActivityComponent;  // the intent component, or target of an alias.
     final String shortComponentName; // the short component name of the intent
     final String resolvedType; // as per original caller;
-    public final String packageName; // the package implementing intent's component
+    final String packageName; // the package implementing intent's component
     final String processName; // process where this component wants to run
     final String taskAffinity; // as per ActivityInfo.taskAffinity
     final boolean stateNotNeeded; // As per ActivityInfo.flags
@@ -288,7 +278,6 @@ final class ActivityRecord extends ConfigurationContainer {
     private int theme;              // resource identifier of activity's theme.
     private int realTheme;          // actual theme resource we will use, never 0.
     private int windowFlags;        // custom window flags for preview window.
-    public int perfActivityBoostHandler = -1; //perflock handler when activity is created.
     private TaskRecord task;        // the task this is in.
     private long createTime = System.currentTimeMillis();
     long lastVisibleTime;   // last time this activity became visible
@@ -336,7 +325,6 @@ final class ActivityRecord extends ConfigurationContainer {
     private boolean mDeferHidingClient; // If true we told WM to defer reporting to the client
                                         // process that it is hidden.
     boolean sleeping;       // have we told the activity to sleep?
-    public boolean launching;      // is activity launch in progress?
     boolean nowVisible;     // is this activity's window visible?
     boolean mDrawn;          // is this activity's window drawn?
     boolean mClientVisibilityDeferred;// was the visibility change message to client deferred?
@@ -384,10 +372,6 @@ final class ActivityRecord extends ConfigurationContainer {
     boolean pendingVoiceInteractionStart;   // Waiting for activity-invoked voice session
     IVoiceInteractionSession voiceSession;  // Voice interaction session for this activity
 
-    public BoostFramework mPerf = null;
-    public BoostFramework mUxPerf = new BoostFramework();
-    public BoostFramework mPerf_iop = null;
-
     // A hint to override the window specified rotation animation, or -1
     // to use the window specified value. We use this so that
     // we can select the right animation in the cases of starting
@@ -397,7 +381,6 @@ final class ActivityRecord extends ConfigurationContainer {
 
     private boolean mShowWhenLocked;
     private boolean mTurnScreenOn;
-    public static BoostFramework mPerfFirstDraw = null;
 
     /**
      * Temp configs used in {@link #ensureActivityConfiguration(int, boolean)}
@@ -822,30 +805,6 @@ final class ActivityRecord extends ConfigurationContainer {
         mAppWindowToken.setWillCloseOrEnterPip(willCloseOrEnterPip);
     }
 
-    private class PreferredAppsTask extends AsyncTask<Void, Void, Void> {
-        @Override
-        protected Void doInBackground(Void... params) {
-            String res = null;
-            if (mUxPerf != null) {
-                res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
-                if (res == null)
-                    return null;
-                String[] p_apps = res.split("/");
-                if (p_apps.length != 0) {
-                    ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
-                    Bundle bParams = new Bundle();
-                    if (bParams == null)
-                        return null;
-                    bParams.putStringArrayList("start_empty_apps", apps_l);
-                    // TODO(b/120845511)
-                    // service.mAm.startActivityAsUserEmpty(null, null, intent, null,
-                    //               null, null, 0, 0, null, bParams, 0);
-                }
-            }
-            return null;
-        }
-    }
-
     static class Token extends IApplicationToken.Stub {
         private final WeakReference<ActivityRecord> weakActivity;
         private final String name;
@@ -1045,9 +1004,6 @@ final class ActivityRecord extends ConfigurationContainer {
                 lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED;
             }
         }
-
-        if (mPerf == null)
-            mPerf = new BoostFramework();
     }
 
     void setProcess(WindowProcessController proc) {
@@ -2041,13 +1997,8 @@ final class ActivityRecord extends ConfigurationContainer {
             if (hasProcess() && app != mAtmService.mHomeProcess) {
                 mAtmService.mHomeProcess = app;
             }
-            // TODO(b/120845511)
-            // try {
-            //     new PreferredAppsTask().execute();
-            // } catch (Exception e) {
-            //     Log.v (TAG, "Exception: " + e);
-            // }
         }
+
         if (nowVisible) {
             // We won't get a call to reportActivityVisibleLocked() so dismiss lockscreen now.
             mStackSupervisor.reportActivityVisibleLocked(this);
@@ -2213,22 +2164,9 @@ final class ActivityRecord extends ConfigurationContainer {
         }
     }
 
-<<<<<<< HEAD
-    public int isAppInfoGame() {
-        int isGame = 0;
-        if (appInfo != null) {
-            isGame = (appInfo.category == ApplicationInfo.CATEGORY_GAME ||
-                      (appInfo.flags & ApplicationInfo.FLAG_IS_GAME) == ApplicationInfo.FLAG_IS_GAME) ? 1 : 0;
-        }
-        return isGame;
-    }
-
-    @Override
-=======
     /**
      * Called when the starting window for this container is drawn.
      */
->>>>>>> 61ca34324405523e51cc712004164983cb623845
     public void onStartingWindowDrawn(long timestamp) {
         synchronized (mAtmService.mGlobalLock) {
             mStackSupervisor.getActivityMetricsLogger().notifyStartingWindowDrawn(
@@ -2263,7 +2201,6 @@ final class ActivityRecord extends ConfigurationContainer {
             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "windowsVisibleLocked(): " + this);
             if (!nowVisible) {
                 nowVisible = true;
-                launching = false;
                 lastVisibleTime = SystemClock.uptimeMillis();
                 if (idle || mStackSupervisor.isStoppingNoHistoryActivity()) {
                     // If this activity was already idle or there is an activity that must be
@@ -2296,7 +2233,6 @@ final class ActivityRecord extends ConfigurationContainer {
         synchronized (mAtmService.mGlobalLock) {
             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "windowsGone(): " + this);
             nowVisible = false;
-            launching = false;
         }
     }
 

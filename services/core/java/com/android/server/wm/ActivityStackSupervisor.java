@@ -53,7 +53,6 @@ import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_MOVING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_FOCUS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_PAUSE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RECENTS;
@@ -61,7 +60,6 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_STATES;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_TASKS;
-import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_IDLE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_PAUSE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_RECENTS;
@@ -132,14 +130,6 @@ import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
-<<<<<<< HEAD
-import android.util.TimeUtils;
-import android.util.proto.ProtoOutputStream;
-import android.util.BoostFramework;
-import android.view.Display;
-import android.view.DisplayInfo;
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -165,7 +155,6 @@ import java.util.List;
 // - All other little things to other files.
 public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStackSupervisor" : TAG_ATM;
-    private static final String TAG_FOCUS = TAG + POSTFIX_FOCUS;
     private static final String TAG_IDLE = TAG + POSTFIX_IDLE;
     private static final String TAG_PAUSE = TAG + POSTFIX_PAUSE;
     private static final String TAG_RECENTS = TAG + POSTFIX_RECENTS;
@@ -187,15 +176,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     static final int RESUME_TOP_ACTIVITY_MSG = FIRST_SUPERVISOR_STACK_MSG + 2;
     static final int SLEEP_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 3;
     static final int LAUNCH_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 4;
-
-    public static boolean mPerfSendTapHint = false;
-    public static boolean mIsPerfBoostAcquired = false;
-    public static int mPerfHandle = -1;
-    public BoostFramework mPerfBoost = null;
-    public BoostFramework mUxPerf = null;
-    static final int HANDLE_DISPLAY_ADDED = FIRST_SUPERVISOR_STACK_MSG + 5;
-    static final int HANDLE_DISPLAY_CHANGED = FIRST_SUPERVISOR_STACK_MSG + 6;
-    static final int HANDLE_DISPLAY_REMOVED = FIRST_SUPERVISOR_STACK_MSG + 7;
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
     static final int REPORT_MULTI_WINDOW_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 14;
     static final int REPORT_PIP_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 15;
@@ -499,98 +479,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     void setWindowManager(WindowManagerService wm) {
         mWindowManager = wm;
         getKeyguardController().setWindowManager(wm);
-<<<<<<< HEAD
-        setWindowContainerController(new RootWindowContainerController(this));
-
-        mDisplayManager = mService.mContext.getSystemService(DisplayManager.class);
-        mDisplayManager.registerDisplayListener(this, mHandler);
-        mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
-
-        final Display[] displays = mDisplayManager.getDisplays();
-        for (int displayNdx = 0; displayNdx < displays.length; ++displayNdx) {
-            final Display display = displays[displayNdx];
-            final ActivityDisplay activityDisplay = new ActivityDisplay(this, display);
-            if (activityDisplay.mDisplayId == DEFAULT_DISPLAY) {
-                mDefaultDisplay = activityDisplay;
-            }
-            addChild(activityDisplay, ActivityDisplay.POSITION_TOP);
-        }
-        calculateDefaultMinimalSizeOfResizeableTasks();
-
-        final ActivityDisplay defaultDisplay = getDefaultDisplay();
-
-        defaultDisplay.getOrCreateStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, ON_TOP);
-        positionChildAt(defaultDisplay, ActivityDisplay.POSITION_TOP);
-    }
-
-    /** Change the z-order of the given display. */
-    private void positionChildAt(ActivityDisplay display, int position) {
-        if (position >= mActivityDisplays.size()) {
-            position = mActivityDisplays.size() - 1;
-        } else if (position < 0) {
-            position = 0;
-        }
-
-        if (mActivityDisplays.isEmpty()) {
-            mActivityDisplays.add(display);
-        } else if (mActivityDisplays.get(position) != display) {
-            mActivityDisplays.remove(display);
-            mActivityDisplays.add(position, display);
-        }
-    }
-
-    @Override
-    public void onChildPositionChanged(DisplayWindowController childController, int position) {
-        // Assume AM lock is held from positionChildAt of controller in each hierarchy.
-        final ActivityDisplay display = getActivityDisplay(childController.getDisplayId());
-        if (display != null) {
-            positionChildAt(display, position);
-        }
-    }
-
-    public ActivityStack getTopDisplayFocusedStack() {
-        for (int i = mActivityDisplays.size() - 1; i >= 0; --i) {
-            final ActivityStack focusedStack = mActivityDisplays.get(i).getFocusedStack();
-            if (focusedStack != null) {
-                return focusedStack;
-            }
-        }
-        return null;
-    }
-
-    ActivityRecord getTopResumedActivity() {
-        final ActivityStack focusedStack = getTopDisplayFocusedStack();
-        if (focusedStack == null) {
-            return null;
-        }
-        final ActivityRecord resumedActivity = focusedStack.getResumedActivity();
-        if (resumedActivity != null && resumedActivity.app != null) {
-            return resumedActivity;
-        }
-        // The top focused stack might not have a resumed activity yet - look on all displays in
-        // focus order.
-        for (int i = mActivityDisplays.size() - 1; i >= 0; --i) {
-            final ActivityDisplay display = mActivityDisplays.get(i);
-            final ActivityRecord resumedActivityOnDisplay = display.getResumedActivity();
-            if (resumedActivityOnDisplay != null) {
-                return resumedActivityOnDisplay;
-            }
-        }
-        return null;
-    }
-
-    boolean isFocusable(ConfigurationContainer container, boolean alwaysFocusable) {
-        if (container.inSplitScreenPrimaryWindowingMode() && mIsDockMinimized) {
-            return false;
-        }
-
-        return container.getWindowConfiguration().canReceiveKeys() || alwaysFocusable;
-    }
-
-    boolean isTopDisplayFocusedStack(ActivityStack stack) {
-        return stack != null && stack == getTopDisplayFocusedStack();
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
     }
 
     void moveRecentsStackToFront(String reason) {
@@ -802,7 +690,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    public ActivityInfo resolveActivity(Intent intent, String resolvedType, int startFlags,
+    ActivityInfo resolveActivity(Intent intent, String resolvedType, int startFlags,
             ProfilerInfo profilerInfo, int userId, int filterCallingUid) {
         final ResolveInfo rInfo = resolveIntent(intent, resolvedType, userId, 0, filterCallingUid);
         return resolveActivity(intent, rInfo, startFlags, profilerInfo);
@@ -1465,16 +1353,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     void findTaskToMoveToFront(TaskRecord task, int flags, ActivityOptions options, String reason,
             boolean forceNonResizeable) {
         ActivityStack currentStack = task.getStack();
-
-        ActivityStack focusedStack = getTopDisplayFocusedStack();
-        ActivityRecord top_activity = focusedStack != null ? focusedStack.getTopActivity() : null;
-
-        //top_activity = task.stack.topRunningActivityLocked();
-        /* App is launching from recent apps and it's a new process */
-        if(top_activity != null && top_activity.getState() == ActivityState.DESTROYED) {
-            acquireAppLaunchPerfLock(top_activity);
-        }
-
         if (currentStack == null) {
             Slog.e(TAG, "findTaskToMoveToFront: can't move task="
                     + task + " to front. Stack is null");
@@ -2112,251 +1990,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             }
         }
 
-<<<<<<< HEAD
-        // Need to make sure the pinned stack exist so we can resize it below...
-        stack = display.getOrCreateStack(WINDOWING_MODE_PINNED, r.getActivityType(), ON_TOP);
-
-        // Calculate the target bounds here before the task is reparented back into pinned windowing
-        // mode (which will reset the saved bounds)
-        final Rect destBounds = stack.getDefaultPictureInPictureBounds(aspectRatio);
-
-        try {
-            final TaskRecord task = r.getTask();
-            // Resize the pinned stack to match the current size of the task the activity we are
-            // going to be moving is currently contained in. We do this to have the right starting
-            // animation bounds for the pinned stack to the desired bounds the caller wants.
-            resizeStackLocked(stack, task.getOverrideBounds(), null /* tempTaskBounds */,
-                    null /* tempTaskInsetBounds */, !PRESERVE_WINDOWS,
-                    true /* allowResizeInDockedMode */, !DEFER_RESUME);
-
-            if (task.mActivities.size() == 1) {
-                // Defer resume until below, and do not schedule PiP changes until we animate below
-                task.reparent(stack, ON_TOP, REPARENT_MOVE_STACK_TO_FRONT, !ANIMATE, DEFER_RESUME,
-                        false /* schedulePictureInPictureModeChange */, reason);
-            } else {
-                // There are multiple activities in the task and moving the top activity should
-                // reveal/leave the other activities in their original task.
-
-                // Currently, we don't support reparenting activities across tasks in two different
-                // stacks, so instead, just create a new task in the same stack, reparent the
-                // activity into that task, and then reparent the whole task to the new stack. This
-                // ensures that all the necessary work to migrate states in the old and new stacks
-                // is also done.
-                final TaskRecord newTask = task.getStack().createTaskRecord(
-                        getNextTaskIdForUserLocked(r.userId), r.info, r.intent, null, null, true);
-                r.reparent(newTask, MAX_VALUE, "moveActivityToStack");
-
-                // Defer resume until below, and do not schedule PiP changes until we animate below
-                newTask.reparent(stack, ON_TOP, REPARENT_MOVE_STACK_TO_FRONT, !ANIMATE,
-                        DEFER_RESUME, false /* schedulePictureInPictureModeChange */, reason);
-            }
-
-            // Reset the state that indicates it can enter PiP while pausing after we've moved it
-            // to the pinned stack
-            r.supportsEnterPipOnTaskSwitch = false;
-        } finally {
-            mWindowManager.continueSurfaceLayout();
-        }
-
-        stack.animateResizePinnedStack(sourceHintBounds, destBounds, -1 /* animationDuration */,
-                true /* fromFullscreen */);
-
-        // Update the visibility of all activities after the they have been reparented to the new
-        // stack.  This MUST run after the animation above is scheduled to ensure that the windows
-        // drawn signal is scheduled after the bounds animation start call on the bounds animator
-        // thread.
-        ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
-        resumeFocusedStacksTopActivitiesLocked();
-
-        mService.getTaskChangeNotificationController().notifyActivityPinned(r);
-    }
-
-    /** Move activity with its stack to front and make the stack focused. */
-    // TODO(b/111363427): Move this method to ActivityRecord.
-    boolean moveFocusableActivityToTop(ActivityRecord r, String reason) {
-        if (r == null || !r.isFocusable()) {
-            if (DEBUG_FOCUS) Slog.d(TAG_FOCUS,
-                    "moveActivityStackToFront: unfocusable r=" + r);
-            return false;
-        }
-
-        final TaskRecord task = r.getTask();
-        final ActivityStack stack = r.getStack();
-        if (stack == null) {
-            Slog.w(TAG, "moveActivityStackToFront: invalid task or stack: r="
-                    + r + " task=" + task);
-            return false;
-        }
-
-        if (r == getTopResumedActivity()) {
-            if (DEBUG_FOCUS) Slog.d(TAG_FOCUS,
-                    "moveActivityStackToFront: already on top, r=" + r);
-            return false;
-        }
-
-        if (DEBUG_FOCUS) Slog.d(TAG_FOCUS,
-                "moveActivityStackToFront: r=" + r);
-
-        stack.moveToFront(reason, task);
-        // Report top activity change to tracking services and WM
-        if (r == getTopResumedActivity()) {
-            // TODO(b/111361570): Support multiple focused apps in WM
-            mService.setResumedActivityUncheckLocked(r, reason);
-        }
-        return true;
-    }
-
-    void acquireAppLaunchPerfLock(ActivityRecord r) {
-       /* Acquire perf lock during new app launch */
-       if (mPerfBoost == null) {
-           mPerfBoost = new BoostFramework();
-       }
-       if (mPerfBoost != null) {
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
-           mPerfSendTapHint = true;
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
-
-           if(mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) == BoostFramework.WorkloadType.GAME)
-           {
-               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1,
-                                                                                               BoostFramework.Launch.BOOST_GAME);
-           } else {
-               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1,
-                                                                                                 BoostFramework.Launch.BOOST_V3);
-           }
-           if (mPerfHandle > 0)
-               mIsPerfBoostAcquired = true;
-       // Start IOP
-       mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-               r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
-       }
-   }
-
-   void acquireUxPerfLock(int opcode, String packageName) {
-        mUxPerf = new BoostFramework();
-        if (mUxPerf != null) {
-            mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
-        }
-    }
-
-    ActivityRecord findTaskLocked(ActivityRecord r, int preferredDisplayId) {
-        if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Looking for task of " + r);
-        mTmpFindTaskResult.clear();
-
-        // Looking up task on preferred display first
-        final ActivityDisplay preferredDisplay = getActivityDisplay(preferredDisplayId);
-        if (preferredDisplay != null) {
-            preferredDisplay.findTaskLocked(r, true /* isPreferredDisplay */, mTmpFindTaskResult);
-            if (mTmpFindTaskResult.mIdealMatch) {
-                return mTmpFindTaskResult.mRecord;
-            }
-        }
-
-        for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
-            final ActivityDisplay display = mActivityDisplays.get(displayNdx);
-            if (display.mDisplayId == preferredDisplayId) {
-                continue;
-            }
-
-            display.findTaskLocked(r, false /* isPreferredDisplay */, mTmpFindTaskResult);
-            if (mTmpFindTaskResult.mIdealMatch) {
-                if(mTmpFindTaskResult.mRecord.getState() == ActivityState.DESTROYED ) {
-                    /*It's a new app launch */
-                    acquireAppLaunchPerfLock(r);
-                }
-
-                if(mTmpFindTaskResult.mRecord.getState() == ActivityState.STOPPED) {
-                    /*Warm launch */
-                    acquireUxPerfLock(BoostFramework.UXE_EVENT_SUB_LAUNCH, r.packageName);
-                }
-                return mTmpFindTaskResult.mRecord;
-            }
-        }
-
-        /* Acquire perf lock *only* during new app launch */
-        if (mTmpFindTaskResult.mRecord == null || mTmpFindTaskResult.mRecord.getState() == ActivityState.DESTROYED) {
-            acquireAppLaunchPerfLock(r);
-        }
-
-        if (DEBUG_TASKS && mTmpFindTaskResult.mRecord == null) Slog.d(TAG_TASKS, "No task found");
-        return mTmpFindTaskResult.mRecord;
-    }
-
-    ActivityRecord findActivityLocked(Intent intent, ActivityInfo info,
-            boolean compareIntentFilters) {
-        for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
-            final ActivityDisplay display = mActivityDisplays.get(displayNdx);
-            for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
-                final ActivityStack stack = display.getChildAt(stackNdx);
-                final ActivityRecord ar = stack.findActivityLocked(
-                        intent, info, compareIntentFilters);
-                if (ar != null) {
-                    return ar;
-                }
-            }
-        }
-        return null;
-    }
-
-    boolean hasAwakeDisplay() {
-        for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
-            final ActivityDisplay display = mActivityDisplays.get(displayNdx);
-            if (!display.shouldSleep()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void goingToSleepLocked() {
-        scheduleSleepTimeout();
-        if (!mGoingToSleep.isHeld()) {
-            mGoingToSleep.acquire();
-            if (mLaunchingActivity.isHeld()) {
-                if (VALIDATE_WAKE_LOCK_CALLER && Binder.getCallingUid() != Process.myUid()) {
-                    throw new IllegalStateException("Calling must be system uid");
-                }
-                mLaunchingActivity.release();
-                mHandler.removeMessages(LAUNCH_TIMEOUT_MSG);
-            }
-        }
-
-        applySleepTokensLocked(false /* applyToStacks */);
-
-        checkReadyForSleepLocked(true /* allowDelay */);
-    }
-
-    void prepareForShutdownLocked() {
-        for (int i = 0; i < mActivityDisplays.size(); i++) {
-            createSleepTokenLocked("shutdown", mActivityDisplays.get(i).mDisplayId);
-        }
-    }
-
-    boolean shutdownLocked(int timeout) {
-        goingToSleepLocked();
-
-        boolean timedout = false;
-        final long endTime = System.currentTimeMillis() + timeout;
-        while (true) {
-            if (!putStacksToSleepLocked(true /* allowDelay */, true /* shuttingDown */)) {
-                long timeRemaining = endTime - System.currentTimeMillis();
-                if (timeRemaining > 0) {
-                    try {
-                        mService.mGlobalLock.wait(timeRemaining);
-                    } catch (InterruptedException e) {
-                    }
-                } else {
-                    Slog.w(TAG, "Activity manager shutdown timed out");
-                    timedout = true;
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-=======
->>>>>>> 61ca34324405523e51cc712004164983cb623845
         // Force checkReadyForSleep to complete.
         checkReadyForSleepLocked(false /* allowDelay */);
 

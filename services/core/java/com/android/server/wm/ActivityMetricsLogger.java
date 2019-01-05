@@ -92,7 +92,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
 import android.os.Trace;
-import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
@@ -166,9 +165,6 @@ class ActivityMetricsLogger {
 
     private ArtManagerInternal mArtManagerInternal;
     private final StringBuilder mStringBuilder = new StringBuilder();
-
-    public static BoostFramework mPerfFirstDraw = null;
-    private static ActivityRecord mLaunchedActivity;
 
     /**
      * Due to the global single concurrent launch sequence, all calls to this observer must be made
@@ -650,8 +646,6 @@ class ActivityMetricsLogger {
                 return;
             }
 
-            mLaunchedActivity = info.launchedActivity;
-
             // Take a snapshot of the transition info before sending it to the handler for logging.
             // This will avoid any races with other operations that modify the ActivityRecord.
             final WindowingModeTransitionInfoSnapshot infoSnapshot =
@@ -754,30 +748,7 @@ class ActivityMetricsLogger {
         sb.append(info.launchedActivityShortComponentName);
         sb.append(": ");
         TimeUtils.formatDuration(info.windowsDrawnDelayMs, sb);
-
-        if (mLaunchedActivity.mUxPerf != null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
-        }
-
         Log.i(TAG, sb.toString());
-
-        int isGame = mLaunchedActivity.isAppInfoGame();
-        if (mLaunchedActivity.mUxPerf !=  null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
-        }
-
-        if (mPerfFirstDraw == null) {
-            mPerfFirstDraw = new BoostFramework();
-        }
-
-        if (mPerfFirstDraw != null) {
-            mPerfFirstDraw.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName, info.windowsDrawnDelayMs, BoostFramework.Draw.EVENT_TYPE_V1);
-        }
-
-        if (mLaunchedActivity.mPerf != null && mLaunchedActivity.perfActivityBoostHandler > 0) {
-            mLaunchedActivity.mPerf.perfLockReleaseHandler(mLaunchedActivity.perfActivityBoostHandler);
-            mLaunchedActivity.perfActivityBoostHandler = -1;
-        }
     }
 
     private int convertAppStartTransitionType(int tronType) {

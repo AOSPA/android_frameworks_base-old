@@ -351,12 +351,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     /* Global service lock used by the package the owns this service. */
     final WindowManagerGlobalLock mGlobalLock = new WindowManagerGlobalLock();
-<<<<<<< HEAD
-    public ActivityStackSupervisor mStackSupervisor;
-=======
     ActivityStackSupervisor mStackSupervisor;
     RootActivityContainer mRootActivityContainer;
->>>>>>> 61ca34324405523e51cc712004164983cb623845
     WindowManagerService mWindowManager;
     private UserManagerService mUserManager;
     private AppOpsService mAppOpsService;
