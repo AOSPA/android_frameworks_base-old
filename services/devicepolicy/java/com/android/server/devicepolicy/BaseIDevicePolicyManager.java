@@ -17,9 +17,14 @@ package com.android.server.devicepolicy;
 
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
+import android.app.admin.StartInstallingUpdateCallback;
 import android.content.ComponentName;
+import android.os.ParcelFileDescriptor;
 
 import com.android.server.SystemService;
+
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Defines the required interface for IDevicePolicyManager implemenation.
@@ -87,5 +92,32 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     @Override
     public String getGlobalPrivateDnsHost(ComponentName who) {
         return null;
+    }
+
+    @Override
+    public void grantDeviceIdsAccessToProfileOwner(ComponentName who, int userId) { }
+
+    @Override
+    public void installUpdateFromFile(ComponentName admin,
+            ParcelFileDescriptor updateFileDescriptor, StartInstallingUpdateCallback listener) {}
+
+    @Override
+    public void addCrossProfileCalendarPackage(ComponentName admin, String packageName) {
+    }
+
+    @Override
+    public boolean removeCrossProfileCalendarPackage(ComponentName admin, String packageName) {
+        return false;
+    }
+
+    @Override
+    public List<String> getCrossProfileCalendarPackages(ComponentName admin) {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public boolean isPackageAllowedToAccessCalendarForUser(String packageName,
+            int userHandle) {
+        return false;
     }
 }

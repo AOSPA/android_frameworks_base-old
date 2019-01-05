@@ -1692,6 +1692,15 @@ public final class Settings {
     /** @hide - Private call() method to write to 'configuration' table */
     public static final String CALL_METHOD_PUT_CONFIG = "PUT_config";
 
+    /** @hide - Private call() method to delete from the 'system' table */
+    public static final String CALL_METHOD_DELETE_SYSTEM = "DELETE_system";
+
+    /** @hide - Private call() method to delete from the 'secure' table */
+    public static final String CALL_METHOD_DELETE_SECURE = "DELETE_secure";
+
+    /** @hide - Private call() method to delete from the 'global' table */
+    public static final String CALL_METHOD_DELETE_GLOBAL = "DELETE_global";
+
     /** @hide - Private call() method to reset to defaults the 'global' table */
     public static final String CALL_METHOD_RESET_GLOBAL = "RESET_global";
 
@@ -1700,6 +1709,15 @@ public final class Settings {
 
     /** @hide - Private call() method to reset to defaults the 'secure' table */
     public static final String CALL_METHOD_RESET_SECURE = "RESET_secure";
+
+    /** @hide - Private call() method to query the 'system' table */
+    public static final String CALL_METHOD_LIST_SYSTEM = "LIST_system";
+
+    /** @hide - Private call() method to query the 'secure' table */
+    public static final String CALL_METHOD_LIST_SECURE = "LIST_secure";
+
+    /** @hide - Private call() method to query the 'global' table */
+    public static final String CALL_METHOD_LIST_GLOBAL = "LIST_global";
 
     /**
      * Activity Extra: Limit available options in launched activity based on the given authority.
@@ -7963,6 +7981,14 @@ public final class Settings {
                 "managed_profile_contact_remote_search";
 
         /**
+         * Whether parent profile can access remote calendar data in managed profile.
+         *
+         * @hide
+         */
+        public static final String CROSS_PROFILE_CALENDAR_ENABLED =
+                "cross_profile_calendar_enabled";
+
+        /**
          * Whether or not the automatic storage manager is enabled and should run on the device.
          *
          * @hide
@@ -9335,6 +9361,13 @@ public final class Settings {
          */
         public static final String LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST =
             "location_background_throttle_package_whitelist";
+
+        /**
+         * Whether to disable location status callbacks in preparation for deprecation.
+         * @hide
+         */
+        public static final String LOCATION_DISABLE_STATUS_CALLBACKS =
+                "location_disable_status_callbacks";
 
         /**
          * Maximum staleness allowed for last location when returned to clients with only foreground
@@ -10781,6 +10814,41 @@ public final class Settings {
         public static final String CAPTIVE_PORTAL_USER_AGENT = "captive_portal_user_agent";
 
         /**
+         * The threshold value for the number of consecutive dns timeout events received to be a
+         * signal of data stall. Set the value to 0 or less than 0 to disable. Note that the value
+         * should be larger than 0 if the DNS data stall detection is enabled.
+         *
+         * @hide
+         */
+        public static final String DATA_STALL_CONSECUTIVE_DNS_TIMEOUT_THRESHOLD =
+                "data_stall_consecutive_dns_timeout_threshold";
+
+        /**
+         * The minimal time interval in milliseconds for data stall reevaluation.
+         *
+         * @hide
+         */
+        public static final String DATA_STALL_MIN_EVALUATE_INTERVAL =
+                "data_stall_min_evaluate_interval";
+
+        /**
+         * DNS timeouts older than this timeout (in milliseconds) are not considered for detecting
+         * a data stall.
+         *
+         * @hide
+         */
+        public static final String DATA_STALL_VALID_DNS_TIME_THRESHOLD =
+                "data_stall_valid_dns_time_threshold";
+
+        /**
+         * Which data stall detection signal to use. Possible values are a union of the powers of 2
+         * of DATA_STALL_EVALUATION_TYPE_*.
+         *
+         * @hide
+         */
+        public static final String DATA_STALL_EVALUATION_TYPE = "data_stall_evaluation_type";
+
+        /**
          * Whether network service discovery is enabled.
          *
          * @hide
@@ -10999,6 +11067,16 @@ public final class Settings {
          */
         public static final String ACTIVITY_STARTS_LOGGING_ENABLED
                 = "activity_starts_logging_enabled";
+
+        /**
+         * Feature flag to enable or disable the background activity starts.
+         * When disabled, apps aren't allowed to start activities unless they're in the foreground.
+         * Type: int (0 for false, 1 for true)
+         * Default: 1
+         * @hide
+         */
+        public static final String BACKGROUND_ACTIVITY_STARTS_ENABLED =
+                "background_activity_starts_enabled";
 
         /**
          * @hide
@@ -11566,7 +11644,7 @@ public final class Settings {
         /**
          * Whether or not show hidden launcher icon apps feature is enabled.
          * Type: int (0 for false, 1 for true)
-         * Default: 0
+         * Default: 1
          * @hide
          */
         public static final String SHOW_HIDDEN_LAUNCHER_ICON_APPS_ENABLED =
@@ -12146,6 +12224,20 @@ public final class Settings {
                 "smart_selection_metadata_url";
 
         /**
+         * URL for conversation actions model updates
+         * @hide
+         */
+        public static final String CONVERSATION_ACTIONS_UPDATE_CONTENT_URL =
+                "conversation_actions_content_url";
+
+        /**
+         * URL for conversation actions model update metadata
+         * @hide
+         */
+        public static final String CONVERSATION_ACTIONS_UPDATE_METADATA_URL =
+                "conversation_actions_metadata_url";
+
+        /**
          * SELinux enforcement status. If 0, permissive; if 1, enforcing.
          * @hide
          */
@@ -12179,7 +12271,7 @@ public final class Settings {
         /**
          * Defines global runtime overrides to window policy.
          *
-         * See {@link com.android.server.policy.PolicyControl} for value format.
+         * See {@link com.android.server.wm.PolicyControl} for value format.
          *
          * @hide
          */
@@ -12693,6 +12785,17 @@ public final class Settings {
          * @hide
          */
         public static final String AUTOFILL_MAX_VISIBLE_DATASETS = "autofill_max_visible_datasets";
+
+        /**
+         * Used to emulate Smart Suggestion for Augmented Autofill during development
+         *
+         * <p>Valid values: {@code 0x1} for IME and/or {@code 0x2} for popup window.
+         *
+         * @hide
+         */
+        @TestApi
+        public static final String AUTOFILL_SMART_SUGGESTION_EMULATION_FLAGS =
+                "autofill_smart_suggestion_emulation_flags";
 
         /**
          * Exemptions to the hidden API blacklist.
@@ -13693,6 +13796,15 @@ public final class Settings {
          * @hide
          */
         public static final String LAST_ACTIVE_USER_ID = "last_active_persistent_user_id";
+
+
+        /**
+         * Whether we've enabled native flags health check on this device. Takes effect on
+         * reboot. The value "1" enables native flags health check; otherwise it's disabled.
+         * @hide
+         */
+        public static final String NATIVE_FLAGS_HEALTH_CHECK_ENABLED =
+                "native_flags_health_check_enabled";
 
     }
 

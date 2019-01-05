@@ -225,7 +225,7 @@ public class LockTaskController {
      * of the last locked task and finishing it would mean that lock task mode is ended illegally.
      */
     boolean activityBlockedFromFinish(ActivityRecord activity) {
-        final TaskRecord task = activity.getTask();
+        final TaskRecord task = activity.getTaskRecord();
         if (activity == task.getRootActivity()
                 && activity == task.getTopActivity()
                 && task.mLockTaskAuth != LOCK_TASK_AUTH_LAUNCHABLE_PRIV
@@ -447,7 +447,7 @@ public class LockTaskController {
             return;
         }
         task.performClearTaskLocked();
-        mSupervisor.resumeFocusedStacksTopActivitiesLocked();
+        mSupervisor.mRootActivityContainer.resumeFocusedStacksTopActivities();
     }
 
     /**
@@ -579,7 +579,7 @@ public class LockTaskController {
         if (andResume) {
             mSupervisor.findTaskToMoveToFront(task, 0, null, reason,
                     lockTaskModeState != LOCK_TASK_MODE_NONE);
-            mSupervisor.resumeFocusedStacksTopActivitiesLocked();
+            mSupervisor.mRootActivityContainer.resumeFocusedStacksTopActivities();
             final ActivityStack stack = task.getStack();
             if (stack != null) {
                 stack.getDisplay().getWindowContainerController().executeAppTransition();
@@ -641,12 +641,13 @@ public class LockTaskController {
             taskChanged = true;
         }
 
-        for (int displayNdx = mSupervisor.getChildCount() - 1; displayNdx >= 0; --displayNdx) {
-            mSupervisor.getChildAt(displayNdx).onLockTaskPackagesUpdated();
+        for (int displayNdx = mSupervisor.mRootActivityContainer.getChildCount() - 1;
+             displayNdx >= 0; --displayNdx) {
+            mSupervisor.mRootActivityContainer.getChildAt(displayNdx).onLockTaskPackagesUpdated();
         }
 
-        final ActivityRecord r = mSupervisor.topRunningActivityLocked();
-        final TaskRecord task = (r != null) ? r.getTask() : null;
+        final ActivityRecord r = mSupervisor.mRootActivityContainer.topRunningActivity();
+        final TaskRecord task = (r != null) ? r.getTaskRecord() : null;
         if (mLockTaskModeTasks.isEmpty() && task!= null
                 && task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE) {
             // This task must have just been authorized.
@@ -657,7 +658,7 @@ public class LockTaskController {
         }
 
         if (taskChanged) {
-            mSupervisor.resumeFocusedStacksTopActivitiesLocked();
+            mSupervisor.mRootActivityContainer.resumeFocusedStacksTopActivities();
         }
     }
 

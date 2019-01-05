@@ -2246,9 +2246,11 @@ public class TelephonyManager {
     /** Current network is LTE_CA {@hide} */
     @UnsupportedAppUsage
     public static final int NETWORK_TYPE_LTE_CA = TelephonyProtoEnums.NETWORK_TYPE_LTE_CA; // = 19.
+    /** Current network is NR(New Radio) 5G. */
+    public static final int NETWORK_TYPE_NR = TelephonyProtoEnums.NETWORK_TYPE_NR; // 20.
 
     /** Max network type number. Update as new types are added. Don't add negative types. {@hide} */
-    public static final int MAX_NETWORK_TYPE = NETWORK_TYPE_LTE_CA;
+    public static final int MAX_NETWORK_TYPE = NETWORK_TYPE_NR;
 
     /** @hide */
     @IntDef({
@@ -2272,6 +2274,7 @@ public class TelephonyManager {
             NETWORK_TYPE_TD_SCDMA,
             NETWORK_TYPE_IWLAN,
             NETWORK_TYPE_LTE_CA,
+            NETWORK_TYPE_NR,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface NetworkType{}
@@ -7680,7 +7683,7 @@ public class TelephonyManager {
      * @see SubscriptionManager#getDefaultSubscriptionId()
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public boolean isImsRegistered() {
        try {
            return getITelephony().isImsRegistered(getSubId());
@@ -7697,12 +7700,12 @@ public class TelephonyManager {
      * @see SubscriptionManager#getDefaultSubscriptionId()
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public boolean isVolteAvailable() {
         try {
             return getITelephony().isAvailable(getSubId(),
                     MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
-                    ImsRegistrationImplBase.REGISTRATION_TECH_LTE, getOpPackageName());
+                    ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
         } catch (RemoteException | NullPointerException ex) {
             return false;
         }
@@ -7716,7 +7719,7 @@ public class TelephonyManager {
      * @return true if VT is available, or false if it is unavailable or unknown.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public boolean isVideoTelephonyAvailable() {
         try {
             return getITelephony().isVideoTelephonyAvailable(getSubId());
@@ -7731,7 +7734,7 @@ public class TelephonyManager {
      * @return true if VoWiFi is available, or false if it is unavailable or unknown.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public boolean isWifiCallingAvailable() {
        try {
            return getITelephony().isWifiCallingAvailable(getSubId());
@@ -8563,6 +8566,26 @@ public class TelephonyManager {
         return UNKNOWN_CARRIER_ID;
     }
 
+     /**
+      * Returns carrier id based on MCCMNC only. This is for fallback when exact carrier id
+      * {@link #getSimCarrierId()} configurations are not found
+      *
+      * @return matching carrier id from passing mccmnc.
+      * @hide
+      */
+     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+     public int getCarrierIdFromMccMnc(String mccmnc) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.getCarrierIdFromMccMnc(getSlotIndex(), mccmnc);
+            }
+        } catch (RemoteException ex) {
+            // This could happen if binder process crashes.
+        }
+        return UNKNOWN_CARRIER_ID;
+    }
+
     /**
      * Return the application ID for the uicc application type like {@link #APPTYPE_CSIM}.
      * All uicc applications are uniquely identified by application ID. See ETSI 102.221 and 101.220
@@ -9202,6 +9225,7 @@ public class TelephonyManager {
                     NETWORK_TYPE_BITMASK_TD_SCDMA,
                     NETWORK_TYPE_BITMASK_LTE,
                     NETWORK_TYPE_BITMASK_LTE_CA,
+                    NETWORK_TYPE_BITMASK_NR,
             })
     public @interface NetworkTypeBitMask {}
 
@@ -9316,6 +9340,13 @@ public class TelephonyManager {
      */
     @SystemApi
     public static final int NETWORK_TYPE_BITMASK_LTE_CA = (1 << NETWORK_TYPE_LTE_CA);
+
+    /**
+     * network type bitmask indicating the support of radio tech NR(New Radio) 5G.
+     * @hide
+     */
+    @SystemApi
+    public static final int NETWORK_TYPE_BITMASK_NR = (1 << NETWORK_TYPE_NR);
 
     /**
      * @return Modem supported radio access family bitmask

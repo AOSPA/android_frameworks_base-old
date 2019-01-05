@@ -21,6 +21,10 @@
 #include <sstream>
 #include <string>
 
+#ifndef FALLTHROUGH_INTENDED
+#define FALLTHROUGH_INTENDED [[fallthrough]]
+#endif
+
 using namespace android;
 using namespace android::os;
 using namespace google::protobuf;
@@ -258,8 +262,9 @@ static bool isDefaultMessageImpl(const Descriptor* descriptor, const Destination
                 return false;
             case FieldDescriptor::TYPE_STRING:
                 if (getPrivacyFlags(field).patterns_size() != 0) return false;
+                break;
             default:
-                continue;
+                break;
         }
     }
     parents->erase(descriptor->full_name());
@@ -355,6 +360,7 @@ static bool generatePrivacyFlags(const Descriptor* descriptor, const Destination
                     printPrivacy(fieldName, field, "NULL", fieldDest, fieldName + "_patterns");
                     break;
                 }
+                FALLTHROUGH_INTENDED;
                 // else treat string field as primitive field and goes to default
             default:
                 if (!hasDefaultFlags[i]) printPrivacy(fieldName, field, "NULL", fieldDest, "NULL");

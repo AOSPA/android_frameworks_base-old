@@ -42,18 +42,20 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.util.Slog;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.DumpUtils;
+
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
 
 /**
- * A proxy to BackupManagerService implementation.
+ * A proxy to the {@link BackupManagerService} implementation.
  *
- * <p>This is an external interface to the BackupManagerService which is being accessed via
- * published binder (see BackupManagerService$Lifecycle). This lets us turn down the heavy
+ * <p>This is an external interface to the {@link BackupManagerService} which is being accessed via
+ * published binder {@link BackupManagerService.Lifecycle}. This lets us turn down the heavy
  * implementation object on the fly without disturbing binders that have been cached somewhere in
  * the system.
  *
@@ -143,7 +145,7 @@ public class Trampoline extends IBackupManager.Stub {
     }
 
     /**
-     * Called from {@link BackupManagerService$Lifecycle} when the system user is unlocked. Attempts
+     * Called from {@link BackupManagerService.Lifecycle} when the system user is unlocked. Attempts
      * to initialize {@link BackupManagerService} and set backup state for the system user.
      *
      * @see BackupManagerService#unlockSystemUser()

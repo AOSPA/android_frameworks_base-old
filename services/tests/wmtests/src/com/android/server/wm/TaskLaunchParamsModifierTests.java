@@ -26,13 +26,13 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.util.DisplayMetrics.DENSITY_DEFAULT;
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.RESULT_CONTINUE;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.RESULT_SKIP;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 import android.app.ActivityOptions;
 import android.content.pm.ActivityInfo;
@@ -175,7 +175,7 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
                 WINDOWING_MODE_FREEFORM);
         ActivityRecord source = createSourceActivity(freeformDisplay);
 
-        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(source.getTask(), null /* layout */,
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(source.getTaskRecord(), null /* layout */,
                 null /* activity */, null /* source */, null /* options */, mCurrent, mResult));
 
         assertEquals(freeformDisplay.mDisplayId, mResult.mPreferredDisplayId);
@@ -888,10 +888,10 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
 
     @Test
     public void testAdjustBoundsToFitNewDisplay_LargerThanDisplay_RTL() {
-        final Configuration overrideConfig = mSupervisor.getOverrideConfiguration();
+        final Configuration overrideConfig = mRootActivityContainer.getOverrideConfiguration();
         // Egyptian Arabic is a RTL language.
         overrideConfig.setLayoutDirection(new Locale("ar", "EG"));
-        mSupervisor.onOverrideConfigurationChanged(overrideConfig);
+        mRootActivityContainer.onOverrideConfigurationChanged(overrideConfig);
 
         final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
                 WINDOWING_MODE_FREEFORM);

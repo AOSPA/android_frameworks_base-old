@@ -3373,9 +3373,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * |-------|-------|-------|-------|
      *                              1111 PFLAG4_IMPORTANT_FOR_CONTENT_CAPTURE_MASK
-     *                             1     PFLAG4_NOTIFIED_CONTENT_CAPTURE_ON_LAYOUT
-     *                            1      PFLAG4_NOTIFIED_CONTENT_CAPTURE_ADDED
-     *                           1       PFLAG4_LAST_CONTENT_CAPTURE_NOTIFICATION_TYPE
+     *                             1     PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED
+     *                            1      PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED
      * |-------|-------|-------|-------|
      */
 
@@ -3396,27 +3395,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Variables used to control when the IntelligenceManager.notifyNodeAdded()/removed() methods
      * should be called.
      *
-     * The idea is to call notifyNodeAdded() after the view is layout and visible, then call
-     * notifyNodeRemoved() when it's gone (without known when it was removed from the parent).
-     *
-     * TODO(b/111276913): the current algortighm could probably be optimized and some of them
-     * removed
+     * The idea is to call notifyAppeared() after the view is layout and visible, then call
+     * notifyDisappeared() when it's gone (without known when it was removed from the parent).
      */
-    private static final int PFLAG4_NOTIFIED_CONTENT_CAPTURE_ON_LAYOUT = 0x10;
-    private static final int PFLAG4_NOTIFIED_CONTENT_CAPTURE_ADDED = 0x20;
-    private static final int PFLAG4_LAST_CONTENT_CAPTURE_NOTIFICATION_TYPE = 0x40;
+    private static final int PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED = 0x10;
+    private static final int PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED = 0x20;
 
     /* End of masks for mPrivateFlags4 */
-
-    private static final int CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED = 1;
-    private static final int CONTENT_CAPTURE_NOTIFICATION_TYPE_DISAPPEARED = 0;
-
-    @IntDef(flag = true, prefix = { "CONTENT_CAPTURE_NOTIFICATION_TYPE_" }, value = {
-            CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED,
-            CONTENT_CAPTURE_NOTIFICATION_TYPE_DISAPPEARED
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    private @interface ContentCaptureNotificationType {}
 
     /** @hide */
     protected static final int VIEW_STRUCTURE_FOR_ASSIST = 0;
@@ -3993,7 +3978,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getParent()
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     protected ViewParent mParent;
 
     /**
@@ -4199,7 +4184,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@hide}
      */
     @ViewDebug.ExportedProperty(category = "layout")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     protected int mLeft;
     /**
      * The distance in pixels from the left edge of this view's parent
@@ -4207,7 +4192,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@hide}
      */
     @ViewDebug.ExportedProperty(category = "layout")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     protected int mRight;
     /**
      * The distance in pixels from the top edge of this view's parent
@@ -4215,7 +4200,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@hide}
      */
     @ViewDebug.ExportedProperty(category = "layout")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     protected int mTop;
     /**
      * The distance in pixels from the top edge of this view's parent
@@ -4223,7 +4208,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@hide}
      */
     @ViewDebug.ExportedProperty(category = "layout")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     protected int mBottom;
 
     /**
@@ -4714,7 +4699,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * of this view to at least this amount.
      */
     @ViewDebug.ExportedProperty(category = "measurement")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private int mMinHeight;
 
     /**
@@ -4722,7 +4707,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * of this view to at least this amount.
      */
     @ViewDebug.ExportedProperty(category = "measurement")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private int mMinWidth;
 
     /**
@@ -8152,6 +8137,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * the user, and the activity rendering the view is enabled for Content Capture) is laid out and
      * is visible.
      *
+     * <p>The populated structure is then passed to the service through
+     * {@link IntelligenceManager#notifyViewAppeared(ViewStructure)}.
+     *
      * <p><b>Note: </b>the following methods of the {@code structure} will be ignored:
      * <ul>
      *   <li>{@link ViewStructure#setChildCount(int)}
@@ -8165,16 +8153,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *   <li>{@link ViewStructure#setHtmlInfo(android.view.ViewStructure.HtmlInfo)}
      *   <li>{@link ViewStructure#setDataIsSensitive(boolean)}
      * </ul>
-     *
-     * @return whether the IntelligenceService should be notified that the view was added (through
-     * the {@link IntelligenceManager#notifyViewAppeared(ViewStructure)} method) to the view
-     * hierarchy. Most views should return {@code true} here, but views that contains virtual
-     * hierarchy might opt to return {@code false} and notify the manager independently, as the
-     * virtual views are rendered.
      */
-    public boolean onProvideContentCaptureStructure(@NonNull ViewStructure structure, int flags) {
+    public void onProvideContentCaptureStructure(@NonNull ViewStructure structure, int flags) {
         onProvideStructure(structure, VIEW_STRUCTURE_FOR_CONTENT_CAPTURE, flags);
-        return true;
     }
 
     /** @hide */
@@ -8937,65 +8918,61 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Helper used to notify the {@link IntelligenceManager} when the view is removed or
      * added, based on whether it's laid out and visible, and without knowing if the parent removed
      * it from the view hierarchy.
+     *
+     * <p>This method is called from many places (visibility changed, view laid out, view attached
+     * or detached to/from window, etc...) and hence must contain the logic to call the manager, as
+     * described below:
+     *
+     * <ol>
+     *   <li>It should only be called when content capture is enabled for the view.
+     *   <li>It must call viewAppeared() before viewDisappeared()
+     *   <li>viewAppearead() can only be called when the view is visible and laidout
+     *   <li>It should not call the same event twice.
+     * </ol>
      */
-    // TODO(b/111276913): make sure the current algorithm covers all cases. For example, it should
-    // probably be called every time notifyEnterOrExitForAutoFillIfNeeded() is called as well.
-    private void notifyNodeAddedOrRemovedForContentCaptureIfNeeded(
-            @ContentCaptureNotificationType int type) {
-        if (type != CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED
-                && type != CONTENT_CAPTURE_NOTIFICATION_TYPE_DISAPPEARED) {
-            // Sanity check so it does not screw up the flags
-            Log.wtf(CONTENT_CAPTURE_LOG_TAG, "notifyNodeAddedOrRemovedForContentCaptureIfNeeded(): "
-                    + "invalid type " + type + " for " + this);
-            return;
-        }
-
-        if (!isImportantForContentCapture()) return;
+    private void notifyAppearedOrDisappearedForContentCaptureIfNeeded(boolean appeared) {
 
         final IntelligenceManager im = mContext.getSystemService(IntelligenceManager.class);
         if (im == null || !im.isContentCaptureEnabled()) return;
 
-        // Make sure event is notified just once, and reset the
-        // PFLAG4_LAST_CONTENT_CAPTURE_NOTIFICATION_TYPE flag
-        boolean ignoreNotification = false;
-        if (type == CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED) {
-            if ((mPrivateFlags4 & PFLAG4_LAST_CONTENT_CAPTURE_NOTIFICATION_TYPE)
-                    == CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED) {
-                ignoreNotification = true;
-            } else {
-                mPrivateFlags4 |= PFLAG4_LAST_CONTENT_CAPTURE_NOTIFICATION_TYPE;
-            }
-        } else {
-            if ((mPrivateFlags4 & PFLAG4_LAST_CONTENT_CAPTURE_NOTIFICATION_TYPE)
-                    == CONTENT_CAPTURE_NOTIFICATION_TYPE_DISAPPEARED) {
-                ignoreNotification = true;
-            } else {
-                mPrivateFlags4 &= ~PFLAG4_LAST_CONTENT_CAPTURE_NOTIFICATION_TYPE;
-            }
-        }
-        if (ignoreNotification) {
-            if (Log.isLoggable(CONTENT_CAPTURE_LOG_TAG, Log.VERBOSE)) {
-                // TODO(b/111276913): remove this log statement if the algorithm is not improved
-                // (right now it's called too many times when the activity is stopped and/or views
-                // disappear
-                Log.v(CONTENT_CAPTURE_LOG_TAG, "notifyNodeAddedOrRemovedForContentCaptureIfNeeded("
-                        + type + "): ignoring repeated notification on " + this);
-            }
-            return;
-        }
+        // NOTE: isImportantForContentCapture() is more expensive than im.isContentCaptureEnabled()
+        if (!isImportantForContentCapture()) return;
 
-        if (type == CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED) {
+        if (appeared) {
+            if (!isLaidOut() || !isVisibleToUser()
+                    || (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0) {
+                if (Log.isLoggable(CONTENT_CAPTURE_LOG_TAG, Log.VERBOSE)) {
+                    Log.v(CONTENT_CAPTURE_LOG_TAG, "Ignoring 'appeared' on " + this + ": laid="
+                            + isLaidOut() + ", visible=" + isVisibleToUser()
+                            + ": alreadyNotifiedAppeared="
+                            + ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0));
+                }
+                return;
+            }
+            // All good: notify the manager...
             final ViewStructure structure = im.newViewStructure(this);
-            boolean notifyMgr = onProvideContentCaptureStructure(structure, /* flags= */ 0);
-            if (notifyMgr) {
-                im.notifyViewAppeared(structure);
-            }
-            mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_ADDED;
+            onProvideContentCaptureStructure(structure, /* flags= */ 0);
+            im.notifyViewAppeared(structure);
+            // ...and set the flags
+            mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
+            mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED;
         } else {
-            if ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_ADDED) == 0) {
-                return; // skip initial notification
+            if ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) == 0
+                    || (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED) != 0) {
+                if (Log.isLoggable(CONTENT_CAPTURE_LOG_TAG, Log.VERBOSE)) {
+                    Log.v(CONTENT_CAPTURE_LOG_TAG, "Ignoring 'disappeared' on " + this
+                            + ": notifiedAppeared="
+                            + ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0)
+                            + ", alreadyNotifiedDisappeared=" + ((mPrivateFlags4
+                                    & PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED) != 0));
+                }
+                return;
             }
+            // All good: notify the manager...
             im.notifyViewDisappeared(getAutofillId());
+            // ...and set the flags
+            mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED;
+            mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
         }
     }
 
@@ -12902,6 +12879,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public void dispatchStartTemporaryDetach() {
         mPrivateFlags3 |= PFLAG3_TEMPORARY_DETACH;
         notifyEnterOrExitForAutoFillIfNeeded(false);
+        notifyAppearedOrDisappearedForContentCaptureIfNeeded(false);
         onStartTemporaryDetach();
     }
 
@@ -12928,6 +12906,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             notifyFocusChangeToInputMethodManager(true /* hasFocus */);
         }
         notifyEnterOrExitForAutoFillIfNeeded(true);
+        notifyAppearedOrDisappearedForContentCaptureIfNeeded(true);
     }
 
     /**
@@ -13510,9 +13489,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         : AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED);
             }
         }
-        notifyNodeAddedOrRemovedForContentCaptureIfNeeded(isVisible
-                ? CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED
-                : CONTENT_CAPTURE_NOTIFICATION_TYPE_DISAPPEARED);
+
+        notifyAppearedOrDisappearedForContentCaptureIfNeeded(isVisible);
     }
 
     /**
@@ -19086,6 +19064,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         needGlobalAttributesUpdate(false);
 
         notifyEnterOrExitForAutoFillIfNeeded(true);
+        notifyAppearedOrDisappearedForContentCaptureIfNeeded(true);
     }
 
     @UnsupportedAppUsage
@@ -19135,8 +19114,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         notifyEnterOrExitForAutoFillIfNeeded(false);
-        notifyNodeAddedOrRemovedForContentCaptureIfNeeded(
-                CONTENT_CAPTURE_NOTIFICATION_TYPE_DISAPPEARED);
+        notifyAppearedOrDisappearedForContentCaptureIfNeeded(false);
     }
 
     /**
@@ -21442,12 +21420,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             notifyEnterOrExitForAutoFillIfNeeded(true);
         }
 
-        if ((mViewFlags & VISIBILITY_MASK) == VISIBLE
-                && (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_ON_LAYOUT) == 0) {
-            notifyNodeAddedOrRemovedForContentCaptureIfNeeded(
-                    CONTENT_CAPTURE_NOTIFICATION_TYPE_APPEARED);
-            mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_ON_LAYOUT;
-        }
+        notifyAppearedOrDisappearedForContentCaptureIfNeeded(true);
     }
 
     private boolean hasParentWantsFocus() {
@@ -21556,10 +21529,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Same as setFrame, but public and hidden. For use in {@link android.transition.ChangeBounds}.
-     * @hide
+     * Assign a size and position to this view.
+     *
+     * This method is meant to be used in animations only as it applies this position and size
+     * for the view only temporary and it can be changed back at any time by the layout.
+     *
+     * @param left Left position, relative to parent
+     * @param top Top position, relative to parent
+     * @param right Right position, relative to parent
+     * @param bottom Bottom position, relative to parent
+     *
+     * @see #setLeft(int), #setRight(int), #setTop(int), #setBottom(int)
      */
-    @UnsupportedAppUsage
     public void setLeftTopRightBottom(int left, int top, int right, int bottom) {
         setFrame(left, top, right, bottom);
     }
@@ -23161,26 +23142,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Modifies the input matrix such that it maps view-local coordinates to
      * on-screen coordinates.
      *
-     * @param m input matrix to modify
-     * @hide
+     * @param matrix input matrix to modify
      */
-    @UnsupportedAppUsage
-    public void transformMatrixToGlobal(Matrix m) {
+    public void transformMatrixToGlobal(Matrix matrix) {
         final ViewParent parent = mParent;
         if (parent instanceof View) {
             final View vp = (View) parent;
-            vp.transformMatrixToGlobal(m);
-            m.preTranslate(-vp.mScrollX, -vp.mScrollY);
+            vp.transformMatrixToGlobal(matrix);
+            matrix.preTranslate(-vp.mScrollX, -vp.mScrollY);
         } else if (parent instanceof ViewRootImpl) {
             final ViewRootImpl vr = (ViewRootImpl) parent;
-            vr.transformMatrixToGlobal(m);
-            m.preTranslate(0, -vr.mCurScrollY);
+            vr.transformMatrixToGlobal(matrix);
+            matrix.preTranslate(0, -vr.mCurScrollY);
         }
 
-        m.preTranslate(mLeft, mTop);
+        matrix.preTranslate(mLeft, mTop);
 
         if (!hasIdentityMatrix()) {
-            m.preConcat(getMatrix());
+            matrix.preConcat(getMatrix());
         }
     }
 
@@ -23188,26 +23167,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Modifies the input matrix such that it maps on-screen coordinates to
      * view-local coordinates.
      *
-     * @param m input matrix to modify
-     * @hide
+     * @param matrix input matrix to modify
      */
-    @UnsupportedAppUsage
-    public void transformMatrixToLocal(Matrix m) {
+    public void transformMatrixToLocal(Matrix matrix) {
         final ViewParent parent = mParent;
         if (parent instanceof View) {
             final View vp = (View) parent;
-            vp.transformMatrixToLocal(m);
-            m.postTranslate(vp.mScrollX, vp.mScrollY);
+            vp.transformMatrixToLocal(matrix);
+            matrix.postTranslate(vp.mScrollX, vp.mScrollY);
         } else if (parent instanceof ViewRootImpl) {
             final ViewRootImpl vr = (ViewRootImpl) parent;
-            vr.transformMatrixToLocal(m);
-            m.postTranslate(0, vr.mCurScrollY);
+            vr.transformMatrixToLocal(matrix);
+            matrix.postTranslate(0, vr.mCurScrollY);
         }
 
-        m.postTranslate(-mLeft, -mTop);
+        matrix.postTranslate(-mLeft, -mTop);
 
         if (!hasIdentityMatrix()) {
-            m.postConcat(getInverseMatrix());
+            matrix.postConcat(getInverseMatrix());
         }
     }
 
@@ -23569,6 +23546,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.CapturedViewProperty
     public int getId() {
         return mID;
+    }
+
+    /**
+     * Get the identifier used for this view by the drawing system.
+     *
+     * @see RenderNode#getUniqueId()
+     * @return A long that uniquely identifies this view's drawing component
+     */
+    public long getUniqueDrawingId() {
+        return mRenderNode.getUniqueId();
     }
 
     /**
@@ -24776,7 +24763,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         final SurfaceSession session = new SurfaceSession(root.mSurface);
         final SurfaceControl surfaceControl = new SurfaceControl.Builder(session)
                 .setName("drag surface")
-                .setSize(shadowSize.x, shadowSize.y)
+                .setBufferSize(shadowSize.x, shadowSize.y)
                 .setFormat(PixelFormat.TRANSLUCENT)
                 .build();
         final Surface surface = new Surface();

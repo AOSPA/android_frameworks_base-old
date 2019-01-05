@@ -18,23 +18,22 @@ package com.android.server.wm;
 
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
+import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_BOTTOM;
+import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_LEFT;
+import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_RIGHT;
 import static com.android.server.wm.ActivityStack.ActivityState.INITIALIZING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.wm.ActivityStack.ActivityState.STOPPED;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_MOVING;
-import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_BOTTOM;
-import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_LEFT;
-import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_RIGHT;
-
-import static junit.framework.TestCase.assertNotNull;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.when;
 
 import android.app.ActivityOptions;
 import android.app.servertransaction.ClientTransaction;
@@ -65,7 +64,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Before
     public void setUp() throws Exception {
         setupActivityTaskManagerService();
-        mStack = new StackBuilder(mSupervisor).build();
+        mStack = new StackBuilder(mRootActivityContainer).build();
         mTask = mStack.getChildAt(0);
         mActivity = mTask.getTopActivity();
     }
@@ -86,7 +85,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testStackCleanupOnTaskRemoval() {
         mStack.removeTask(mTask, null /*reason*/, REMOVE_TASK_MODE_MOVING);
         // Stack should be gone on task removal.
-        assertNull(mService.mStackSupervisor.getStack(mStack.mStackId));
+        assertNull(mService.mRootActivityContainer.getStack(mStack.mStackId));
     }
 
     @Test
@@ -116,7 +115,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         assertFalse(pauseFound.value);
 
         // Clear focused stack
-        final ActivityDisplay display = mActivity.mStackSupervisor.getDefaultDisplay();
+        final ActivityDisplay display = mRootActivityContainer.getDefaultDisplay();
         when(display.getFocusedStack()).thenReturn(null);
 
         // In the unfocused stack, the activity should move to paused.
@@ -163,7 +162,8 @@ public class ActivityRecordTests extends ActivityTestsBase {
     private void verifyPositionWithLimitedAspectRatio(int navBarPosition, Rect taskBounds,
             float aspectRatio, Rect expectedActivityBounds) {
         // Verify with nav bar on the right.
-        when(mService.mWindowManager.getNavBarPosition()).thenReturn(navBarPosition);
+        when(mService.mWindowManager.getNavBarPosition(mActivity.getDisplayId()))
+                .thenReturn(navBarPosition);
         mTask.getConfiguration().windowConfiguration.setAppBounds(taskBounds);
         mActivity.info.maxAspectRatio = aspectRatio;
         mActivity.ensureActivityConfiguration(

@@ -20,6 +20,7 @@ package android.app.admin;
 import android.app.admin.NetworkEvent;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
+import android.app.admin.StartInstallingUpdateCallback;
 import android.app.admin.SystemUpdateInfo;
 import android.app.admin.SystemUpdatePolicy;
 import android.app.admin.PasswordMetrics;
@@ -417,4 +418,13 @@ interface IDevicePolicyManager {
     void setGlobalPrivateDns(in ComponentName admin, int mode, in String privateDnsHost);
     int getGlobalPrivateDnsMode(in ComponentName admin);
     String getGlobalPrivateDnsHost(in ComponentName admin);
+
+    void grantDeviceIdsAccessToProfileOwner(in ComponentName who, int userId);
+
+    void installUpdateFromFile(in ComponentName admin, in ParcelFileDescriptor updateFileDescriptor, in StartInstallingUpdateCallback listener);
+
+    void addCrossProfileCalendarPackage(in ComponentName admin, String packageName);
+    boolean removeCrossProfileCalendarPackage(in ComponentName admin, String packageName);
+    List<String> getCrossProfileCalendarPackages(in ComponentName admin);
+    boolean isPackageAllowedToAccessCalendarForUser(String packageName, int userHandle);
 }

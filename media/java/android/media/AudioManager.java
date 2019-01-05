@@ -54,7 +54,6 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Pair;
-import android.util.Slog;
 import android.view.KeyEvent;
 
 import com.android.internal.annotations.GuardedBy;
@@ -542,6 +541,7 @@ public class AudioManager {
      * Adjusting the volume due to a hardware key press.
      * @hide
      */
+    @SystemApi
     public static final int FLAG_FROM_KEY = 1 << 12;
 
     private static final String[] FLAG_NAMES = {

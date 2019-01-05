@@ -425,6 +425,15 @@ public abstract class Context {
      */
     public static final int BIND_EXTERNAL_SERVICE = 0x80000000;
 
+    /**
+     * These bind flags reduce the strength of the binding such that we shouldn't
+     * consider it as pulling the process up to the level of the one that is bound to it.
+     * @hide
+     */
+    public static final int BIND_REDUCTION_FLAGS =
+            Context.BIND_ALLOW_OOM_MANAGEMENT | Context.BIND_WAIVE_PRIORITY
+                    | Context.BIND_ADJUST_BELOW_PERCEPTIBLE | Context.BIND_NOT_VISIBLE;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "RECEIVER_VISIBLE_" }, value = {
             RECEIVER_VISIBLE_TO_INSTANT_APPS
@@ -732,16 +741,22 @@ public abstract class Context {
     /** Return the name of this application's package. */
     public abstract String getPackageName();
 
-    /** @hide Return the name of the base context this context is derived from. */
+    /**
+     * @hide Return the name of the base context this context is derived from.
+     * This is the same as {@link #getOpPackageName()} except in
+     * cases where system components are loaded into other app processes, in which
+     * case {@link #getOpPackageName()} will be the name of the primary package in
+     * that process (so that app ops uid verification will work with the name).
+     */
     @UnsupportedAppUsage
     public abstract String getBasePackageName();
 
-    /** @hide Return the package name that should be used for app ops calls from
-     * this context.  This is the same as {@link #getBasePackageName()} except in
-     * cases where system components are loaded into other app processes, in which
-     * case this will be the name of the primary package in that process (so that app
-     * ops uid verification will work with the name). */
-    @TestApi
+    /**
+     * Return the package name that should be used for {@link android.app.AppOpsManager} calls from
+     * this context, so that app ops manager's uid verification will work with the name.
+     * <p>
+     * This is not generally intended for third party application developers.
+     */
     public abstract String getOpPackageName();
 
     /** Return the full application info for this context's package. */
@@ -2980,6 +2995,31 @@ public abstract class Context {
             Handler handler, UserHandle user) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
+
+    /**
+     * For a service previously bound with {@link #bindService} or a related method, change
+     * how the system manages that service's process in relation to other processes.  This
+     * doesn't modify the original bind flags that were passed in when binding, but adjusts
+     * how the process will be managed in some cases based on those flags.  Currently only
+     * works on isolated processes (will be ignored for non-isolated processes).
+     *
+     * @param conn The connection interface previously supplied to bindService().  This
+     *             parameter must not be null.
+     * @param group A group to put this connection's process in.  Upon calling here, this
+     *              will override any previous group that was set for that process.  The group
+     *              tells the system about processes that are logically grouped together, so
+     *              should be managed as one unit of importance (such as when being considered
+     *              a recently used app).  All processes in the same app with the same group
+     *              are considered to be related.  Supplying 0 reverts to the default behavior
+     *              of not grouping.
+     * @param importance Additional importance of the processes within a group.  Upon calling
+     *                   here, this will override any previous group that was set for that
+     *                   process.  This fine-tunes process killing of all processes within
+     *                   a related groups -- higher importance values will be killed before
+     *                   lower ones.
+     */
+    public abstract void updateServiceGroup(@NonNull ServiceConnection conn, int group,
+            int importance);
 
     /**
      * Disconnect from an application service.  You will no longer receive

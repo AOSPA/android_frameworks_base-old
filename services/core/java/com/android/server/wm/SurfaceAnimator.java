@@ -302,10 +302,9 @@ class SurfaceAnimator {
         if (DEBUG_ANIM) Slog.i(TAG, "Reparenting to leash");
         final SurfaceControl.Builder builder = mAnimatable.makeAnimationLeash()
                 .setParent(mAnimatable.getAnimationLeashParent())
-                .setName(surface + " - animation-leash")
-                .setSize(width, height);
+                .setName(surface + " - animation-leash");
         final SurfaceControl leash = builder.build();
-        t.setWindowCrop(surface, width, height);
+        t.setWindowCrop(leash, width, height);
         if (!hidden) {
             t.show(leash);
         }

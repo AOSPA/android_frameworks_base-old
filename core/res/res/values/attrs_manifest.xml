@@ -1601,6 +1601,10 @@
         <attr name="request" />
         <attr name="protectionLevel" />
         <attr name="permissionFlags" />
+        <!-- If {@code true} applications that target Q <em>must</em> specify the permission usage
+             attributes in their {@code uses-permission} elements or the permission will not be
+             granted. -->
+        <attr name="usageInfoRequired" format="boolean" />
     </declare-styleable>
 
     <!-- The <code>permission-group</code> tag declares a logical grouping of
@@ -1700,6 +1704,81 @@
         requested.  If it does support the feature, it will be as if the manifest didn't
         request it at all. -->
         <attr name="requiredNotFeature" format="string" />
+
+        <!-- Specify if the app uploads data, or derived data, guarded by this permission.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+        -->
+        <attr name="dataSentOffDevice">
+          <!-- The application may send data, or derived data, guarded by this permission off of the
+               device. -->
+          <enum name="yes" value="1" />
+          <!-- The application may send data, or derived data, guarded by this permission off of the
+               device, however it will only do so when explicitly triggered by a user action. -->
+          <enum name="userTriggered" value="2" />
+          <!-- The application does not send data, or derived data, guarded by this permission off
+               of the device. -->
+          <enum name="no" value="3" />
+        </attr>
+
+        <!-- Specify if the application or its related off-device services provide data,
+             or derived data, guarded by this permission to third parties outside of the developer's
+             organization that do not qualify as data processors.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+             -->
+        <attr name="dataSharedWithThirdParty">
+          <!-- The application or its services may provide data, or derived data, guarded by this
+               permission to third party organizations. -->
+          <enum name="yes" value="1" />
+          <!-- The application or its services may provide data, or derived data, guarded by this
+               permission to third party organizations, however it will only do so when explicitly
+               triggered by a user action. -->
+          <enum name="userTriggered" value="2" />
+          <!-- The application or its services does not provide data, or derived data, guarded by
+               this permission to third party organizations. -->
+          <enum name="no" value="3" />
+        </attr>
+
+        <!-- Specify if the application or its related off-device services use data,
+             or derived data, guarded by this permission for monetization purposes.
+
+             For example, if the data is sold to another party or used for targeting advertisements
+             this must be set to {@code yes}.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+             -->
+        <attr name="dataUsedForMonetization">
+          <!-- The application or its services may use data, or derived data, guarded by this
+               permission for monetization purposes. -->
+          <enum name="yes" value="1" />
+          <!-- The application or its services may use data, or derived data, guarded by this
+               permission for monetization purposes, however it will only do so when explicity
+               triggered by a user action. -->
+          <enum name="userTriggered" value="2" />
+          <!--  The application or its services does not use data, or derived data, guarded by
+                this permission for monetization purposes. -->
+          <enum name="no" value="3" />
+        </attr>
+
+        <!-- Specify how long the application or its related off-device services store
+             data, or derived data, guarded by this permission.
+
+             This can be one of "notRetained", "userSelected", "unlimited", or a number
+             representing the number of weeks the data is retained.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+             -->
+        <attr name="dataRetentionTime" format="string" />
+
     </declare-styleable>
 
     <!-- The <code>uses-configuration</code> tag specifies
@@ -2148,6 +2227,21 @@
         <attr name="visibleToInstantApps" />
         <!-- The code for this component is located in the given split. -->
         <attr name="splitName" />
+        <!-- If true, and this is an {@link android.R.attr#isolatedProcess} service, the service
+             will be spawned from an Application Zygote, instead of the regular Zygote.
+             <p>
+             The Application Zygote will pre-initialize the application's class loader,
+             and call a static callback into the application to allow it to perform
+             application-specific preloads (such as loading a shared library). Therefore,
+             spawning from the Application Zygote will typically reduce the service
+             launch time and reduce its memory usage. The downside of using this flag
+             is that you will have an additional process (the app zygote itself) that
+             is taking up memory. Whether actual memory usage is improved therefore strongly
+             depends on the number of isolated services that an application starts,
+             and how much memory those services save by preloading. Therefore, it is
+             recommended to measure memory usage under typical workloads to determine
+             whether it makes sense to use this flag. -->
+        <attr name="useAppZygote" format="boolean" />
     </declare-styleable>
 
     <!-- The <code>receiver</code> tag declares an

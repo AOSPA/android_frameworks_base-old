@@ -241,6 +241,8 @@ abstract class DisplayDevice {
         viewport.deviceHeight = isRotated ? info.width : info.height;
 
         viewport.uniqueId = info.uniqueId;
+        // TODO(b/112898898) Use an actual port here.
+        viewport.physicalPort = null;
     }
 
     /**

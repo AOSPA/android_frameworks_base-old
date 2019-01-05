@@ -19,12 +19,12 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.eq;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import android.app.IApplicationThread;
 import android.content.Intent;
@@ -74,7 +74,7 @@ public class ActivityStartControllerTests extends ActivityTestsBase {
         final ActivityRecord activity = new ActivityBuilder(mService).build();
         final ActivityRecord source = new ActivityBuilder(mService).build();
         final int startFlags = random.nextInt();
-        final ActivityStack stack = mService.mStackSupervisor.getDefaultDisplay().createStack(
+        final ActivityStack stack = mService.mRootActivityContainer.getDefaultDisplay().createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         final WindowProcessController wpc = new WindowProcessController(mService,
                 mService.mContext.getApplicationInfo(), "name", 12345,

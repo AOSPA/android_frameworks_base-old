@@ -2046,8 +2046,6 @@ public class ApplicationPackageManager extends PackageManager {
             StorageManager storage) {
         if (app.isInternal()) {
             return storage.findVolumeById(VolumeInfo.ID_PRIVATE_INTERNAL);
-        } else if (app.isExternalAsec()) {
-            return storage.getPrimaryPhysicalVolume();
         } else {
             return storage.findVolumeByUuid(app.volumeUuid);
         }
@@ -2979,6 +2977,15 @@ public class ApplicationPackageManager extends PackageManager {
     public boolean isPackageStateProtected(String packageName, int userId) {
         try {
             return mPM.isPackageStateProtected(packageName, userId);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public void sendDeviceCustomizationReadyBroadcast() {
+        try {
+            mPM.sendDeviceCustomizationReadyBroadcast();
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }

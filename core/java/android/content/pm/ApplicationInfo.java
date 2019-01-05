@@ -34,7 +34,6 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
-import android.text.TextUtils;
 import android.util.Printer;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
@@ -47,6 +46,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.text.Collator;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -465,16 +465,6 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public static final int PRIVATE_FLAG_CANT_SAVE_STATE = 1<<1;
 
     /**
-     * Value for {@link #privateFlags}: Set to true if the application has been
-     * installed using the forward lock option.
-     *
-     * NOTE: DO NOT CHANGE THIS VALUE!  It is saved in packages.xml.
-     *
-     * {@hide}
-     */
-    public static final int PRIVATE_FLAG_FORWARD_LOCK = 1<<2;
-
-    /**
      * Value for {@link #privateFlags}: set to {@code true} if the application
      * is permitted to hold privileged permissions.
      *
@@ -652,7 +642,6 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             PRIVATE_FLAG_CANT_SAVE_STATE,
             PRIVATE_FLAG_DEFAULT_TO_DEVICE_PROTECTED_STORAGE,
             PRIVATE_FLAG_DIRECT_BOOT_AWARE,
-            PRIVATE_FLAG_FORWARD_LOCK,
             PRIVATE_FLAG_HAS_DOMAIN_URLS,
             PRIVATE_FLAG_HIDDEN,
             PRIVATE_FLAG_INSTANT,
@@ -845,7 +834,17 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * the structure.
      */
     public String[] sharedLibraryFiles;
-    
+
+    /**
+     * List of all shared libraries this application is linked against.  This
+     * field is only set if the {@link PackageManager#GET_SHARED_LIBRARY_FILES
+     * PackageManager.GET_SHARED_LIBRARY_FILES} flag was used when retrieving
+     * the structure.
+     *
+     * {@hide}
+     */
+    public List<SharedLibraryInfo> sharedLibraryInfos;
+
     /**
      * Full path to the default directory assigned to the package for its
      * persistent data.
@@ -1491,6 +1490,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         seInfo = orig.seInfo;
         seInfoUser = orig.seInfoUser;
         sharedLibraryFiles = orig.sharedLibraryFiles;
+        sharedLibraryInfos = orig.sharedLibraryInfos;
         dataDir = orig.dataDir;
         deviceProtectedDataDir = orig.deviceProtectedDataDir;
         credentialProtectedDataDir = orig.credentialProtectedDataDir;
@@ -1568,6 +1568,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeString(seInfo);
         dest.writeString(seInfoUser);
         dest.writeStringArray(sharedLibraryFiles);
+        dest.writeTypedList(sharedLibraryInfos);
         dest.writeString(dataDir);
         dest.writeString(deviceProtectedDataDir);
         dest.writeString(credentialProtectedDataDir);
@@ -1642,6 +1643,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         seInfo = source.readString();
         seInfoUser = source.readString();
         sharedLibraryFiles = source.readStringArray();
+        sharedLibraryInfos = source.createTypedArrayList(SharedLibraryInfo.CREATOR);
         dataDir = source.readString();
         deviceProtectedDataDir = source.readString();
         credentialProtectedDataDir = source.readString();
@@ -1848,17 +1850,6 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** @hide */
     public boolean isExternal() {
         return (flags & ApplicationInfo.FLAG_EXTERNAL_STORAGE) != 0;
-    }
-
-    /** @hide */
-    public boolean isExternalAsec() {
-        return TextUtils.isEmpty(volumeUuid) && isExternal();
-    }
-
-    /** @hide */
-    @UnsupportedAppUsage
-    public boolean isForwardLocked() {
-        return (privateFlags & ApplicationInfo.PRIVATE_FLAG_FORWARD_LOCK) != 0;
     }
 
     /**

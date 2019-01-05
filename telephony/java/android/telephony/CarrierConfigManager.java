@@ -25,6 +25,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
+import android.content.ComponentName;
 import android.content.Context;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
@@ -1037,9 +1038,9 @@ public class CarrierConfigManager {
     public static final String KEY_HIDE_ENHANCED_4G_LTE_BOOL = "hide_enhanced_4g_lte_bool";
 
     /**
-     * Default Enhanced 4G LTE mode enabled. When this is {@code true}, Enhanced 4G LTE mode by
-     * default is on, otherwise if {@code false}, Enhanced 4G LTE mode by default is off.
-     * @hide
+     * Sets the default state for the "Enhanced 4G LTE" or "Advanced Calling" mode toggle set by the
+     * user. When this is {@code true}, this mode by default is on, otherwise if {@code false},
+     * this mode by default is off.
      */
     public static final String KEY_ENHANCED_4G_LTE_ON_BY_DEFAULT_BOOL =
             "enhanced_4g_lte_on_by_default_bool";
@@ -1168,11 +1169,20 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_NAME_STRING = "carrier_name_string";
 
-    /**
-     * The Component Name of a carrier-provided CallScreeningService implementation. Telecom will
-     * bind to this CallScreeningService for ALL incoming calls and provide the carrier
-     * CallScreeningService with the opportunity to allow or block calls.
-     */
+ /**
+  * The Component Name of a carrier-provided CallScreeningService implementation. Telecom will
+  * bind to {@link android.telecom.CallScreeningService} for ALL incoming calls and provide
+  * the carrier
+  * CallScreeningService with the opportunity to allow or block calls.
+  * <p>
+  * The String includes the package name/the class name.
+  * Example:
+  * <item>com.android.carrier/com.android.carrier.callscreeningserviceimpl</item>
+  * <p>
+  * Using {@link ComponentName#flattenToString()} to convert a ComponentName object to String.
+  * Using {@link ComponentName#unflattenFromString(String)} to convert a String object to a
+  * ComponentName.
+  */
     public static final String KEY_CARRIER_CALL_SCREENING_APP_STRING = "call_screening_app";
 
     /**
@@ -1856,6 +1866,13 @@ public class CarrierConfigManager {
             "notify_international_call_on_wfc_bool";
 
     /**
+     * Flag to hide Preset APN details. If true, user cannot enter ApnEditor view of Preset APN,
+     * and cannot view details of the APN. If false, user can enter ApnEditor view of Preset APN.
+     * Default value is false.
+     */
+    public static final String KEY_HIDE_PRESET_APN_DETAILS_BOOL = "hide_preset_apn_details_bool";
+
+    /**
      * Flag specifying whether to show an alert dialog for video call charges.
      * By default this value is {@code false}.
      * @hide
@@ -2320,6 +2337,45 @@ public class CarrierConfigManager {
     public static final String KEY_SUPPORT_EMERGENCY_DIALER_SHORTCUT_BOOL =
             "support_emergency_dialer_shortcut_bool";
 
+    /**
+     * Call forwarding uses USSD command without SS command.
+     * When {@code true}, the call forwarding query/set by ussd command and UI only display Call
+     * Forwarding when unanswered.
+     * When {@code false}, don't use USSD to query/set call forwarding.
+     * @hide
+     */
+    public static final String KEY_USE_CALL_FORWARDING_USSD_BOOL = "use_call_forwarding_ussd_bool";
+
+    /**
+     * This flag specifies whether to support for the caller id set command by ussd.
+     * When {@code true}, device shall sync caller id ussd result to ss command.
+     * When {@code false}, caller id don't support ussd command.
+     * @hide
+     */
+    public static final String KEY_USE_CALLER_ID_USSD_BOOL = "use_caller_id_ussd_bool";
+
+    /**
+     * Specifies the service class for call waiting service.
+     * Default value is
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_VOICE}.
+     * <p>
+     * See 27.007 +CCFC or +CLCK.
+     * The value set as below:
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_NONE}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_VOICE}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_DATA}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_FAX}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_SMS}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_DATA_SYNC}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_DATA_ASYNC}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_PACKET}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_PAD}
+     * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_MAX}
+     * @hide
+     */
+    public static final String KEY_CALL_WAITING_SERVICE_CLASS_INT =
+            "call_waiting_service_class_int";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -2625,6 +2681,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_DISPLAY_VOICEMAIL_NUMBER_AS_DEFAULT_CALL_FORWARDING_NUMBER_BOOL,
                 false);
         sDefaults.putBoolean(KEY_NOTIFY_INTERNATIONAL_CALL_ON_WFC_BOOL, false);
+        sDefaults.putBoolean(KEY_HIDE_PRESET_APN_DETAILS_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_VIDEO_CALL_CHARGES_ALERT_DIALOG_BOOL, false);
         sDefaults.putStringArray(KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY,
                 null);
@@ -2679,6 +2736,9 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CALL_WAITING_OVER_UT_WARNING_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_CLIR_NETWORK_DEFAULT_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_EMERGENCY_DIALER_SHORTCUT_BOOL, true);
+        sDefaults.putBoolean(KEY_USE_CALL_FORWARDING_USSD_BOOL, false);
+        sDefaults.putBoolean(KEY_USE_CALLER_ID_USSD_BOOL, false);
+        sDefaults.putInt(KEY_CALL_WAITING_SERVICE_CLASS_INT, 1 /* SERVICE_CLASS_VOICE */);
     }
 
     /**

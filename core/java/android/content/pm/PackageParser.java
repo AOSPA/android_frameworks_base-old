@@ -785,18 +785,23 @@ public class PackageParser {
                     pi.permissions[i] = generatePermissionInfo(p.permissions.get(i), flags);
                 }
             }
-            N = p.requestedPermissions.size();
+            N = p.usesPermissionInfos.size();
             if (N > 0) {
                 pi.requestedPermissions = new String[N];
                 pi.requestedPermissionsFlags = new int[N];
+                pi.usesPermissions = new UsesPermissionInfo[N];
                 for (int i=0; i<N; i++) {
-                    final String perm = p.requestedPermissions.get(i);
+                    UsesPermissionInfo info = p.usesPermissionInfos.get(i);
+                    final String perm = info.getPermission();
                     pi.requestedPermissions[i] = perm;
+                    int permissionFlags = 0;
                     // The notion of required permissions is deprecated but for compatibility.
-                    pi.requestedPermissionsFlags[i] |= PackageInfo.REQUESTED_PERMISSION_REQUIRED;
+                    permissionFlags |= PackageInfo.REQUESTED_PERMISSION_REQUIRED;
                     if (grantedPermissions != null && grantedPermissions.contains(perm)) {
-                        pi.requestedPermissionsFlags[i] |= PackageInfo.REQUESTED_PERMISSION_GRANTED;
+                        permissionFlags |= PackageInfo.REQUESTED_PERMISSION_GRANTED;
                     }
+                    pi.requestedPermissionsFlags[i] = permissionFlags;
+                    pi.usesPermissions[i] = new UsesPermissionInfo(info, permissionFlags);
                 }
             }
         }
@@ -829,9 +834,6 @@ public class PackageParser {
 
     public static final int PARSE_MUST_BE_APK = 1 << 0;
     public static final int PARSE_IGNORE_PROCESSES = 1 << 1;
-    /** @deprecated forward lock no longer functional. remove. */
-    @Deprecated
-    public static final int PARSE_FORWARD_LOCK = 1 << 2;
     public static final int PARSE_EXTERNAL_STORAGE = 1 << 3;
     public static final int PARSE_IS_SYSTEM_DIR = 1 << 4;
     public static final int PARSE_COLLECT_CERTIFICATES = 1 << 5;
@@ -845,7 +847,6 @@ public class PackageParser {
             PARSE_ENFORCE_CODE,
             PARSE_EXTERNAL_STORAGE,
             PARSE_FORCE_SDK,
-            PARSE_FORWARD_LOCK,
             PARSE_IGNORE_PROCESSES,
             PARSE_IS_SYSTEM_DIR,
             PARSE_MUST_BE_APK,
@@ -2006,11 +2007,6 @@ public class PackageParser {
                 PARSE_DEFAULT_TARGET_SANDBOX);
         pkg.applicationInfo.targetSandboxVersion = targetSandboxVersion;
 
-        /* Set the global "forward lock" flag */
-        if ((flags & PARSE_FORWARD_LOCK) != 0) {
-            pkg.applicationInfo.privateFlags |= ApplicationInfo.PRIVATE_FLAG_FORWARD_LOCK;
-        }
-
         /* Set the global "on SD card" flag */
         if ((flags & PARSE_EXTERNAL_STORAGE) != 0) {
             pkg.applicationInfo.flags |= ApplicationInfo.FLAG_EXTERNAL_STORAGE;
@@ -2123,12 +2119,12 @@ public class PackageParser {
                     return null;
                 }
             } else if (tagName.equals(TAG_USES_PERMISSION)) {
-                if (!parseUsesPermission(pkg, res, parser)) {
+                if (!parseUsesPermission(pkg, res, parser, outError)) {
                     return null;
                 }
             } else if (tagName.equals(TAG_USES_PERMISSION_SDK_M)
                     || tagName.equals(TAG_USES_PERMISSION_SDK_23)) {
-                if (!parseUsesPermission(pkg, res, parser)) {
+                if (!parseUsesPermission(pkg, res, parser, outError)) {
                     return null;
                 }
             } else if (tagName.equals(TAG_USES_CONFIGURATION)) {
@@ -2451,7 +2447,7 @@ public class PackageParser {
                     newPermsMsg.append(' ');
                 }
                 newPermsMsg.append(npi.name);
-                pkg.requestedPermissions.add(npi.name);
+                addRequestedPermission(pkg, npi.name);
                 pkg.implicitPermissions.add(npi.name);
             }
         }
@@ -2472,7 +2468,7 @@ public class PackageParser {
             for (int in = 0; in < newPerms.size(); in++) {
                 final String perm = newPerms.get(in);
                 if (!pkg.requestedPermissions.contains(perm)) {
-                    pkg.requestedPermissions.add(perm);
+                    addRequestedPermission(pkg, perm);
                     pkg.implicitPermissions.add(perm);
                 }
             }
@@ -2517,7 +2513,7 @@ public class PackageParser {
         // If the storage model feature flag is disabled, we need to fiddle
         // around with permission definitions to return us to pre-Q behavior.
         // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (!SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
+        if (!StorageManager.hasIsolatedStorage()) {
             if ("android".equals(pkg.packageName)) {
                 final ArraySet<String> newGroups = new ArraySet<>();
                 newGroups.add(android.Manifest.permission_group.MEDIA_AURAL);
@@ -2532,55 +2528,33 @@ public class PackageParser {
 
                 final ArraySet<String> newPermissions = new ArraySet<>();
                 newPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
-                newPermissions.add(android.Manifest.permission.WRITE_MEDIA_AUDIO);
                 newPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
-                newPermissions.add(android.Manifest.permission.WRITE_MEDIA_VIDEO);
                 newPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
-                newPermissions.add(android.Manifest.permission.WRITE_MEDIA_IMAGES);
                 newPermissions.add(android.Manifest.permission.ACCESS_MEDIA_LOCATION);
                 newPermissions.add(android.Manifest.permission.WRITE_OBB);
 
-                final ArraySet<String> dangerousPermissions = new ArraySet<>();
-                dangerousPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
-                dangerousPermissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
+                final ArraySet<String> removedPermissions = new ArraySet<>();
+                removedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+                removedPermissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
                 for (int i = pkg.permissions.size() - 1; i >= 0; i--) {
                     final Permission p = pkg.permissions.get(i);
                     if (newPermissions.contains(p.info.name)) {
                         pkg.permissions.remove(i);
-                    } else if (dangerousPermissions.contains(p.info.name)) {
-                        p.info.protectionLevel &= ~PermissionInfo.PROTECTION_MASK_BASE;
-                        p.info.protectionLevel |= PermissionInfo.PROTECTION_DANGEROUS;
+                    } else if (removedPermissions.contains(p.info.name)) {
+                        p.info.flags &= ~PermissionInfo.FLAG_REMOVED;
                     }
                 }
             }
         } else {
             if (FORCE_AUDIO_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
-                pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_AUDIO);
+                addRequestedPermission(pkg, android.Manifest.permission.READ_MEDIA_AUDIO);
             }
             if (FORCE_VIDEO_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
-                pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_VIDEO);
+                addRequestedPermission(pkg, android.Manifest.permission.READ_MEDIA_VIDEO);
             }
             if (FORCE_IMAGES_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
-                pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_IMAGES);
-            }
-
-            if (SystemProperties.getBoolean(StorageManager.PROP_FORCE_LEGACY, false)) {
-                if (pkg.requestedPermissions
-                        .contains(android.Manifest.permission.READ_EXTERNAL_STORAGE)) {
-                    pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
-                    pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
-                    pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
-                }
-                if (pkg.requestedPermissions
-                        .contains(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                    pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_AUDIO);
-                    pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_VIDEO);
-                    pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_IMAGES);
-                }
+                addRequestedPermission(pkg, android.Manifest.permission.READ_MEDIA_IMAGES);
             }
         }
 
@@ -2617,6 +2591,14 @@ public class PackageParser {
             a.info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
             a.info.flags &= ~FLAG_SUPPORTS_PICTURE_IN_PICTURE;
         }
+    }
+
+    /**
+     * Helper method for adding a requested permission to a package outside of a uses-permission.
+     */
+    private void addRequestedPermission(Package pkg, String permission) {
+        pkg.requestedPermissions.add(permission);
+        pkg.usesPermissionInfos.add(new UsesPermissionInfo(permission));
     }
 
     /**
@@ -2876,8 +2858,8 @@ public class PackageParser {
         return certSha256Digests;
     }
 
-    private boolean parseUsesPermission(Package pkg, Resources res, XmlResourceParser parser)
-            throws XmlPullParserException, IOException {
+    private boolean parseUsesPermission(Package pkg, Resources res, XmlResourceParser parser,
+            String[] outError) throws XmlPullParserException, IOException {
         TypedArray sa = res.obtainAttributes(parser,
                 com.android.internal.R.styleable.AndroidManifestUsesPermission);
 
@@ -2901,6 +2883,44 @@ public class PackageParser {
         final String requiredNotfeature = sa.getNonConfigurationString(
                 com.android.internal.R.styleable.AndroidManifestUsesPermission_requiredNotFeature, 0);
 
+        int dataSentOffDevice = sa.getInt(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_dataSentOffDevice, 0);
+
+        int dataSharedWithThirdParty = sa.getInt(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_dataSharedWithThirdParty, 0);
+
+        int dataUsedForMonetization = sa.getInt(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_dataUsedForMonetization, 0);
+
+        int retentionWeeks = -1;
+        int retention;
+
+        String rawRetention = sa.getString(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_dataRetentionTime);
+
+        if (rawRetention == null) {
+            retention = UsesPermissionInfo.RETENTION_UNDEFINED;
+        } else if ("notRetained".equals(rawRetention)) {
+            retention = UsesPermissionInfo.RETENTION_NOT_RETAINED;
+        } else if ("userSelected".equals(rawRetention)) {
+            retention = UsesPermissionInfo.RETENTION_USER_SELECTED;
+        } else if ("unlimited".equals(rawRetention)) {
+            retention = UsesPermissionInfo.RETENTION_UNLIMITED;
+        } else {
+            // A number of weeks was specified
+            retention = UsesPermissionInfo.RETENTION_SPECIFIED;
+            retentionWeeks = sa.getInt(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_dataRetentionTime,
+                -1);
+
+            if (retentionWeeks < 0) {
+                outError[0] = "Bad value provided for dataRetentionTime.";
+                mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
+                XmlUtils.skipCurrentTag(parser);
+                sa.recycle();
+                return false;
+            }
+        }
         sa.recycle();
 
         XmlUtils.skipCurrentTag(parser);
@@ -2932,6 +2952,10 @@ public class PackageParser {
                     + name + " in package: " + pkg.packageName + " at: "
                     + parser.getPositionDescription());
         }
+
+        UsesPermissionInfo info = new UsesPermissionInfo(name, dataSentOffDevice,
+                dataSharedWithThirdParty, dataUsedForMonetization, retention, retentionWeeks);
+        pkg.usesPermissionInfos.add(info);
 
         return true;
     }
@@ -3266,6 +3290,10 @@ public class PackageParser {
 
         perm.info.flags = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermission_permissionFlags, 0);
+
+        perm.info.usageInfoRequired = sa.getInt(
+                com.android.internal.R.styleable.AndroidManifestPermission_usageInfoRequired, 0)
+                != 0;
 
         sa.recycle();
 
@@ -5369,6 +5397,11 @@ public class PackageParser {
             s.info.flags |= ServiceInfo.FLAG_EXTERNAL_SERVICE;
         }
         if (sa.getBoolean(
+                com.android.internal.R.styleable.AndroidManifestService_useAppZygote,
+                false)) {
+            s.info.flags |= ServiceInfo.FLAG_USE_APP_ZYGOTE;
+        }
+        if (sa.getBoolean(
                 com.android.internal.R.styleable.AndroidManifestService_singleUser,
                 false)) {
             s.info.flags |= ServiceInfo.FLAG_SINGLE_USER;
@@ -6396,6 +6429,9 @@ public class PackageParser {
         @UnsupportedAppUsage
         public final ArrayList<String> requestedPermissions = new ArrayList<String>();
 
+        public final ArrayList<UsesPermissionInfo> usesPermissionInfos =
+                new ArrayList<>();
+
         /** Permissions requested but not in the manifest. */
         public final ArrayList<String> implicitPermissions = new ArrayList<>();
 
@@ -6801,7 +6837,7 @@ public class PackageParser {
 
         /** @hide */
         public boolean isForwardLocked() {
-            return applicationInfo.isForwardLocked();
+            return false;
         }
 
         /** @hide */
@@ -6843,9 +6879,7 @@ public class PackageParser {
         public boolean canHaveOatDir() {
             // The following app types CANNOT have oat directory
             // - non-updated system apps
-            // - forward-locked apps or apps installed in ASEC containers
-            return (!isSystem() || isUpdatedSystemApp())
-                    && !isForwardLocked() && !applicationInfo.isExternalAsec();
+            return !isSystem() || isUpdatedSystemApp();
         }
 
         public boolean isMatch(int flags) {
@@ -6928,6 +6962,7 @@ public class PackageParser {
 
             dest.readStringList(requestedPermissions);
             internStringArrayList(requestedPermissions);
+            dest.readParcelableList(usesPermissionInfos, boot);
             dest.readStringList(implicitPermissions);
             internStringArrayList(implicitPermissions);
             protectedBroadcasts = dest.createStringArrayList();
@@ -7094,6 +7129,7 @@ public class PackageParser {
             dest.writeParcelableList(instrumentation, flags);
 
             dest.writeStringList(requestedPermissions);
+            dest.writeParcelableList(usesPermissionInfos, flags);
             dest.writeStringList(implicitPermissions);
             dest.writeStringList(protectedBroadcasts);
 
@@ -7669,6 +7705,7 @@ public class PackageParser {
         }
         if ((flags & PackageManager.GET_SHARED_LIBRARY_FILES) != 0) {
             ai.sharedLibraryFiles = p.usesLibraryFiles;
+            ai.sharedLibraryInfos = p.usesLibraryInfos;
         }
         if (state.stopped) {
             ai.flags |= ApplicationInfo.FLAG_STOPPED;

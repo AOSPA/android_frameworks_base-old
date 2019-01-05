@@ -46,6 +46,7 @@ import android.util.Log;
 import com.android.internal.backup.IBackupTransport;
 import com.android.server.backup.BackupManagerService;
 import com.android.server.backup.TransportManager;
+import com.android.server.backup.UserBackupManagerService;
 import com.android.server.backup.testing.TransportData;
 import com.android.server.backup.testing.TransportTestUtils;
 import com.android.server.backup.testing.TransportTestUtils.TransportMock;
@@ -71,7 +72,7 @@ import java.util.stream.Stream;
 @Config(shadows = ShadowSlog.class)
 @Presubmit
 public class PerformInitializeTaskTest {
-    @Mock private BackupManagerService mBackupManagerService;
+    @Mock private UserBackupManagerService mBackupManagerService;
     @Mock private TransportManager mTransportManager;
     @Mock private OnTaskFinishedListener mListener;
     @Mock private IBackupTransport mTransportBinder;
