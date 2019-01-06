@@ -19,16 +19,22 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IInterface;
 import android.os.RemoteException;
 import android.service.intelligence.IIntelligenceService;
 import android.service.intelligence.InteractionContext;
 import android.service.intelligence.InteractionSessionId;
+import android.service.intelligence.SnapshotData;
 import android.text.format.DateUtils;
 import android.util.Slog;
+import android.view.autofill.AutofillId;
+import android.view.autofill.AutofillManager;
+import android.view.autofill.IAutoFillManagerClient;
 import android.view.intelligence.ContentCaptureEvent;
 
+import com.android.internal.os.IResultReceiver;
 import com.android.server.AbstractRemoteService;
 
 import java.util.List;
@@ -38,7 +44,7 @@ final class RemoteIntelligenceService extends AbstractRemoteService {
     private static final String TAG = "RemoteIntelligenceService";
 
     private static final long TIMEOUT_IDLE_BIND_MILLIS = 2 * DateUtils.MINUTE_IN_MILLIS;
-    private static final long TIMEOUT_REMOTE_REQUEST_MILLIS = 2 * DateUtils.MINUTE_IN_MILLIS;
+    private static final long TIMEOUT_REMOTE_REQUEST_MILLIS = 2 * DateUtils.SECOND_IN_MILLIS;
 
     private final RemoteIntelligenceServiceCallbacks mCallbacks;
     private IIntelligenceService mService;
@@ -91,6 +97,34 @@ final class RemoteIntelligenceService extends AbstractRemoteService {
         scheduleRequest(new PendingOnContentCaptureEventsRequest(this, sessionId, events));
     }
 
+    /**
+     * Called by {@link ContentCaptureSession} to send snapshot data to the service.
+     */
+    public void onActivitySnapshotRequest(@NonNull InteractionSessionId sessionId,
+            @NonNull SnapshotData snapshotData) {
+        cancelScheduledUnbind();
+        scheduleRequest(new PendingOnActivitySnapshotRequest(this, sessionId, snapshotData));
+    }
+
+    /**
+     * Called by {@link ContentCaptureSession} to request augmented autofill.
+     */
+    public void onRequestAutofillLocked(@NonNull InteractionSessionId sessionId,
+            @NonNull IAutoFillManagerClient client, int autofillSessionId,
+            @NonNull AutofillId focusedId) {
+        cancelScheduledUnbind();
+        scheduleRequest(new PendingAutofillRequest(this, sessionId, client, autofillSessionId,
+                focusedId));
+    }
+
+    /**
+     * Called by {@link ContentCaptureSession} when it's time to destroy all augmented autofill
+     * requests.
+     */
+    public void onDestroyAutofillWindowsRequest(@NonNull InteractionSessionId sessionId) {
+        cancelScheduledUnbind();
+        scheduleRequest(new PendingDestroyAutofillWindowsRequest(this, sessionId));
+    }
 
     private abstract static class MyPendingRequest
             extends PendingRequest<RemoteIntelligenceService> {
@@ -114,8 +148,9 @@ final class RemoteIntelligenceService extends AbstractRemoteService {
             final RemoteIntelligenceService remoteService = getService();
             if (remoteService != null) {
                 try {
-                    myRun(remoteService);
                     // We don't expect the service to call us back, so we finish right away.
+                    myRun(remoteService);
+                    // TODO(b/111330312): not true anymore!!
                     finish();
                 } catch (RemoteException e) {
                     Slog.w(TAG, "exception handling " + getClass().getSimpleName() + " for "
@@ -160,6 +195,71 @@ final class RemoteIntelligenceService extends AbstractRemoteService {
         @Override // from MyPendingRequest
         public void myRun(@NonNull RemoteIntelligenceService remoteService) throws RemoteException {
             remoteService.mService.onContentCaptureEvents(mSessionId, mEvents);
+        }
+    }
+
+    private static final class PendingOnActivitySnapshotRequest extends MyPendingRequest {
+
+        private final SnapshotData mSnapshotData;
+
+        protected PendingOnActivitySnapshotRequest(@NonNull RemoteIntelligenceService service,
+                @NonNull InteractionSessionId sessionId,
+                @NonNull SnapshotData snapshotData) {
+            super(service, sessionId);
+            mSnapshotData = snapshotData;
+        }
+
+        @Override // from MyPendingRequest
+        protected void myRun(@NonNull RemoteIntelligenceService remoteService)
+                throws RemoteException {
+            remoteService.mService.onActivitySnapshot(mSessionId, mSnapshotData);
+        }
+    }
+
+    private static final class PendingAutofillRequest extends MyPendingRequest {
+        private final @NonNull AutofillId mFocusedId;
+        private final @NonNull IAutoFillManagerClient mClient;
+        private final int mAutofillSessionId;
+
+        protected PendingAutofillRequest(@NonNull RemoteIntelligenceService service,
+                @NonNull InteractionSessionId sessionId, @NonNull IAutoFillManagerClient client,
+                int autofillSessionId, @NonNull AutofillId focusedId) {
+            super(service, sessionId);
+            mClient = client;
+            mAutofillSessionId = autofillSessionId;
+            mFocusedId = focusedId;
+        }
+
+        @Override // from MyPendingRequest
+        public void myRun(@NonNull RemoteIntelligenceService remoteService) throws RemoteException {
+            final IResultReceiver receiver = new IResultReceiver.Stub() {
+
+                @Override
+                public void send(int resultCode, Bundle resultData) throws RemoteException {
+                    final IBinder realClient = resultData
+                            .getBinder(AutofillManager.EXTRA_AUGMENTED_AUTOFILL_CLIENT);
+                    remoteService.mService.onAutofillRequest(mSessionId, realClient,
+                            mAutofillSessionId, mFocusedId);
+                }
+            };
+
+            // TODO(b/111330312): set cancellation signal, timeout (from  both mClient and service),
+            // cache IAugmentedAutofillManagerClient reference, etc...
+            mClient.getAugmentedAutofillClient(receiver);
+        }
+    }
+
+    private static final class PendingDestroyAutofillWindowsRequest extends MyPendingRequest {
+
+        protected PendingDestroyAutofillWindowsRequest(@NonNull RemoteIntelligenceService service,
+                @NonNull InteractionSessionId sessionId) {
+            super(service, sessionId);
+        }
+
+        @Override
+        protected void myRun(@NonNull RemoteIntelligenceService service) throws RemoteException {
+            service.mService.onDestroyAutofillWindowsRequest(mSessionId);
+            // TODO(b/111330312): implement timeout
         }
     }
 

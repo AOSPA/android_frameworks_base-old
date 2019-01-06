@@ -6254,8 +6254,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return mHint;
     }
 
-    @UnsupportedAppUsage
-    boolean isSingleLine() {
+    /**
+     * Returns if the text is constrained to a single horizontally scrolling line ignoring new
+     * line characters instead of letting it wrap onto multiple lines.
+     *
+     * @attr ref android.R.styleable#TextView_singleLine
+     */
+    public boolean isSingleLine() {
         return mSingleLine;
     }
 
@@ -10942,6 +10947,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
                 || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
             if (mLayout == null) {
+                if (viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+                    Log.w(LOG_TAG, "onProvideContentCaptureStructure(): calling assumeLayout()");
+                }
                 assumeLayout();
             }
             Layout layout = mLayout;
@@ -12265,13 +12273,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Returns the current {@link TextDirectionHeuristic}.
-     *
-     * @return the current {@link TextDirectionHeuristic}.
-     * @hide
+     * Returns resolved {@link TextDirectionHeuristic} that will be used for text layout.
+     * The {@link TextDirectionHeuristic} that is used by TextView is only available after
+     * {@link #getTextDirection()} and {@link #getLayoutDirection()} is resolved. Therefore the
+     * return value may not be the same as the one TextView uses if the View's layout direction is
+     * not resolved or detached from parent root view.
      */
-    @UnsupportedAppUsage
-    protected TextDirectionHeuristic getTextDirectionHeuristic() {
+    public TextDirectionHeuristic getTextDirectionHeuristic() {
         if (hasPasswordTransformationMethod()) {
             // passwords fields should be LTR
             return TextDirectionHeuristics.LTR;

@@ -80,6 +80,7 @@ package android.test.mock {
     method public java.io.File getNoBackupFilesDir();
     method public java.io.File getObbDir();
     method public java.io.File[] getObbDirs();
+    method public java.lang.String getOpPackageName();
     method public java.lang.String getPackageCodePath();
     method public android.content.pm.PackageManager getPackageManager();
     method public java.lang.String getPackageName();
@@ -135,6 +136,7 @@ package android.test.mock {
     method public boolean stopService(android.content.Intent);
     method public void unbindService(android.content.ServiceConnection);
     method public void unregisterReceiver(android.content.BroadcastReceiver);
+    method public void updateServiceGroup(android.content.ServiceConnection, int, int);
   }
 
   public deprecated class MockCursor implements android.database.Cursor {

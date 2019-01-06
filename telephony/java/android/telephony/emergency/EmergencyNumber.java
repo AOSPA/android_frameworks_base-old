@@ -17,8 +17,9 @@
 package android.telephony.emergency;
 
 import android.annotation.IntDef;
-import android.hardware.radio.V1_3.EmergencyNumberSource;
-import android.hardware.radio.V1_3.EmergencyServiceCategory;
+import android.annotation.NonNull;
+import android.hardware.radio.V1_4.EmergencyNumberSource;
+import android.hardware.radio.V1_4.EmergencyServiceCategory;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -138,7 +139,7 @@ public final class EmergencyNumber implements Parcelable, Comparable<EmergencyNu
     }
 
     /**
-     * The source to tell where the corresponding @1.3::EmergencyNumber comes from.
+     * The source to tell where the corresponding @1.4::EmergencyNumber comes from.
      *
      * The emergency number has one or more defined emergency number sources.
      *
@@ -196,7 +197,7 @@ public final class EmergencyNumber implements Parcelable, Comparable<EmergencyNu
     private final int mEmergencyNumberSourceBitmask;
 
     /** @hide */
-    public EmergencyNumber(String number, String countryIso,
+    public EmergencyNumber(@NonNull String number, @NonNull String countryIso,
                            int emergencyServiceCategories,
                            int emergencyNumberSources) {
         this.mNumber = number;
@@ -403,7 +404,7 @@ public final class EmergencyNumber implements Parcelable, Comparable<EmergencyNu
      *         0 if both have equal display priority.
      */
     @Override
-    public int compareTo(EmergencyNumber emergencyNumber) {
+    public int compareTo(@NonNull EmergencyNumber emergencyNumber) {
         if (this.getDisplayPriorityScore()
                 > emergencyNumber.getDisplayPriorityScore()) {
             return -1;

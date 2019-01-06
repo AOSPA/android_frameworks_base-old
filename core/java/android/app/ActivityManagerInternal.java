@@ -161,6 +161,13 @@ public abstract class ActivityManagerInternal {
     public abstract List<ProcessMemoryState> getMemoryStateForProcesses();
 
     /**
+     * Returns a list that contains the memory high-water mark for currently running processes.
+     *
+     * Only processes managed by ActivityManagerService are included.
+     */
+    public abstract List<ProcessMemoryHighWaterMark> getMemoryHighWaterMarkForProcesses();
+
+    /**
      * Checks to see if the calling pid is allowed to handle the user. Returns adjusted user id as
      * needed.
      */
@@ -236,6 +243,8 @@ public abstract class ActivityManagerInternal {
     public abstract void ensureBootCompleted();
     public abstract void updateOomLevelsForDisplay(int displayId);
     public abstract boolean isActivityStartsLoggingEnabled();
+    /** Returns true if the background activity starts is enabled. */
+    public abstract boolean isBackgroundActivityStartsEnabled();
     public abstract void reportCurKeyguardUsageEvent(boolean keyguardShowing);
 
     /** Input dispatch timeout to a window, start the ANR process. */

@@ -574,6 +574,10 @@
   <java-symbol type="string" name="add_calendar_event_desc" />
   <java-symbol type="string" name="view_flight" />
   <java-symbol type="string" name="view_flight_desc" />
+  <java-symbol type="string" name="translate" />
+  <java-symbol type="string" name="translate_desc" />
+  <java-symbol type="string" name="define" />
+  <java-symbol type="string" name="define_desc" />
   <java-symbol type="string" name="textSelectionCABTitle" />
   <java-symbol type="string" name="BaMmi" />
   <java-symbol type="string" name="CLIRDefaultOffNextCallOff" />
@@ -2404,7 +2408,9 @@
   <!-- Biometric messages -->
   <java-symbol type="string" name="biometric_dialog_default_title" />
   <java-symbol type="string" name="biometric_error_hw_unavailable" />
+  <java-symbol type="string" name="biometric_error_user_canceled" />
   <java-symbol type="string" name="biometric_not_recognized" />
+  <java-symbol type="string" name="biometric_error_canceled" />
 
   <!-- Fingerprint messages -->
   <java-symbol type="string" name="fingerprint_error_unable_to_process" />
@@ -2639,18 +2645,21 @@
   <java-symbol type="attr" name="floatingToolbarDividerColor" />
 
   <!-- Magnifier -->
-  <java-symbol type="dimen" name="magnifier_width" />
-  <java-symbol type="dimen" name="magnifier_height" />
-  <java-symbol type="dimen" name="magnifier_elevation" />
-  <java-symbol type="dimen" name="magnifier_zoom" />
-  <java-symbol type="dimen" name="magnifier_vertical_offset" />
-  <java-symbol type="dimen" name="magnifier_horizontal_offset" />
+  <java-symbol type="dimen" name="default_magnifier_width" />
+  <java-symbol type="dimen" name="default_magnifier_height" />
+  <java-symbol type="dimen" name="default_magnifier_elevation" />
+  <java-symbol type="dimen" name="default_magnifier_corner_radius" />
+  <java-symbol type="dimen" name="default_magnifier_zoom" />
+  <java-symbol type="dimen" name="default_magnifier_vertical_offset" />
+  <java-symbol type="dimen" name="default_magnifier_horizontal_offset" />
+  <java-symbol type="color" name="default_magnifier_color_overlay" />
   <java-symbol type="attr" name="magnifierWidth" />
   <java-symbol type="attr" name="magnifierHeight" />
   <java-symbol type="attr" name="magnifierElevation" />
   <java-symbol type="attr" name="magnifierZoom" />
   <java-symbol type="attr" name="magnifierVerticalOffset" />
   <java-symbol type="attr" name="magnifierHorizontalOffset" />
+  <java-symbol type="attr" name="magnifierColorOverlay" />
   <java-symbol type="attr" name="magnifierStyle" />
 
   <java-symbol type="string" name="date_picker_prev_month_button" />
@@ -2678,6 +2687,7 @@
   <java-symbol type="id" name="smart_reply_container" />
   <java-symbol type="id" name="remote_input_tag" />
   <java-symbol type="id" name="pending_intent_tag" />
+  <java-symbol type="id" name="notification_action_index_tag" />
 
   <java-symbol type="attr" name="seekBarDialogPreferenceStyle" />
   <java-symbol type="string" name="ext_media_status_removed" />

@@ -61,6 +61,7 @@ package android.app {
   }
 
   public class ActivityTaskManager {
+    method public void clearLaunchParamsForPackages(java.util.List<java.lang.String>);
     method public java.lang.String listAllStacks();
     method public void moveTaskToStack(int, int, boolean);
     method public boolean moveTopActivityToPinnedStack(int, android.graphics.Rect);
@@ -79,6 +80,10 @@ package android.app {
     field public static final int INVALID_STACK_ID = -1; // 0xffffffff
     field public static final int SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT = 1; // 0x1
     field public static final int SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT = 0; // 0x0
+  }
+
+  public class AppDetailsActivity extends android.app.Activity {
+    ctor public AppDetailsActivity();
   }
 
   public class AppOpsManager {
@@ -300,14 +305,9 @@ package android.content {
 
   public abstract class Context {
     method public android.content.Context createPackageContextAsUser(java.lang.String, int, android.os.UserHandle) throws android.content.pm.PackageManager.NameNotFoundException;
-    method public abstract java.lang.String getOpPackageName();
     method public android.os.UserHandle getUser();
     method public int getUserId();
     method public void setAutofillCompatibilityEnabled(boolean);
-  }
-
-  public class ContextWrapper extends android.content.Context {
-    method public java.lang.String getOpPackageName();
   }
 
 }
@@ -943,6 +943,10 @@ package android.os.health {
 
 package android.os.storage {
 
+  public class StorageManager {
+    method public static boolean hasIsolatedStorage();
+  }
+
   public final class StorageVolume implements android.os.Parcelable {
     method public java.lang.String getPath();
   }
@@ -985,6 +989,7 @@ package android.provider {
 
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {
     field public static final java.lang.String AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES = "autofill_compat_mode_allowed_packages";
+    field public static final java.lang.String AUTOFILL_SMART_SUGGESTION_EMULATION_FLAGS = "autofill_smart_suggestion_emulation_flags";
     field public static final java.lang.String AUTOMATIC_POWER_SAVER_MODE = "automatic_power_saver_mode";
     field public static final java.lang.String DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD = "dynamic_power_savings_disable_threshold";
     field public static final java.lang.String DYNAMIC_POWER_SAVINGS_ENABLED = "dynamic_power_savings_enabled";
@@ -1035,6 +1040,11 @@ package android.security.keystore {
     field public static final int ID_TYPE_IMEI = 2; // 0x2
     field public static final int ID_TYPE_MEID = 3; // 0x3
     field public static final int ID_TYPE_SERIAL = 1; // 0x1
+  }
+
+  public class DeviceIdAttestationException extends java.lang.Exception {
+    ctor public DeviceIdAttestationException(java.lang.String);
+    ctor public DeviceIdAttestationException(java.lang.String, java.lang.Throwable);
   }
 
   public static final class KeyGenParameterSpec.Builder {
@@ -1149,13 +1159,19 @@ package android.service.notification {
     ctor public NotificationAssistantService();
     method public final void adjustNotification(android.service.notification.Adjustment);
     method public final void adjustNotifications(java.util.List<android.service.notification.Adjustment>);
+    method public void onActionClicked(java.lang.String, android.app.Notification.Action, int);
     method public final android.os.IBinder onBind(android.content.Intent);
+    method public void onNotificationDirectReply(java.lang.String);
     method public android.service.notification.Adjustment onNotificationEnqueued(android.service.notification.StatusBarNotification);
     method public android.service.notification.Adjustment onNotificationEnqueued(android.service.notification.StatusBarNotification, android.app.NotificationChannel);
+    method public void onNotificationExpansionChanged(java.lang.String, boolean, boolean);
     method public abstract void onNotificationSnoozedUntilContext(android.service.notification.StatusBarNotification, java.lang.String);
     method public void onNotificationsSeen(java.util.List<java.lang.String>);
+    method public void onSuggestedReplySent(java.lang.String, java.lang.CharSequence, int);
     method public final void unsnoozeNotification(java.lang.String);
     field public static final java.lang.String SERVICE_INTERFACE = "android.service.notification.NotificationAssistantService";
+    field public static final int SOURCE_FROM_APP = 0; // 0x0
+    field public static final int SOURCE_FROM_ASSISTANT = 1; // 0x1
   }
 
   public abstract class NotificationListenerService extends android.app.Service {
@@ -1313,9 +1329,9 @@ package android.telephony.mbms.vendor {
     method public int initialize(android.telephony.mbms.MbmsGroupCallSessionCallback, int) throws android.os.RemoteException;
     method public void onAppCallbackDied(int, int);
     method public android.os.IBinder onBind(android.content.Intent);
-    method public int startGroupCall(int, long, int[], int[], android.telephony.mbms.GroupCallCallback);
+    method public int startGroupCall(int, long, java.util.List<java.lang.Integer>, java.util.List<java.lang.Integer>, android.telephony.mbms.GroupCallCallback);
     method public void stopGroupCall(int, long);
-    method public void updateGroupCall(int, long, int[], int[]);
+    method public void updateGroupCall(int, long, java.util.List<java.lang.Integer>, java.util.List<java.lang.Integer>);
   }
 
   public class MbmsStreamingServiceBase extends android.os.Binder {

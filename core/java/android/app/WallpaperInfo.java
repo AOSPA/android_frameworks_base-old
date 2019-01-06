@@ -16,6 +16,7 @@
 
 package android.app;
 
+import android.annotation.SystemApi;
 import android.app.slice.Slice;
 import android.content.ComponentName;
 import android.content.Context;
@@ -36,6 +37,7 @@ import android.service.wallpaper.WallpaperService;
 import android.util.AttributeSet;
 import android.util.Printer;
 import android.util.Xml;
+import android.view.SurfaceHolder;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -79,6 +81,7 @@ public final class WallpaperInfo implements Parcelable {
     final boolean mShowMetadataInPreview;
     final boolean mSupportsAmbientMode;
     final String mSettingsSliceUri;
+    final boolean mSupportMultipleDisplays;
 
     /**
      * Constructor.
@@ -143,6 +146,9 @@ public final class WallpaperInfo implements Parcelable {
                     false);
             mSettingsSliceUri = sa.getString(
                     com.android.internal.R.styleable.Wallpaper_settingsSliceUri);
+            mSupportMultipleDisplays = sa.getBoolean(
+                    com.android.internal.R.styleable.Wallpaper_supportsMultipleDisplays,
+                    false);
 
             sa.recycle();
         } catch (NameNotFoundException e) {
@@ -163,6 +169,7 @@ public final class WallpaperInfo implements Parcelable {
         mShowMetadataInPreview = source.readInt() != 0;
         mSupportsAmbientMode = source.readInt() != 0;
         mSettingsSliceUri = source.readString();
+        mSupportMultipleDisplays = source.readInt() != 0;
         mService = ResolveInfo.CREATOR.createFromParcel(source);
     }
     
@@ -324,7 +331,9 @@ public final class WallpaperInfo implements Parcelable {
      * @see WallpaperService.Engine#onAmbientModeChanged(boolean, boolean)
      * @see WallpaperService.Engine#isInAmbientMode()
      * @return {@code true} if wallpaper can draw when in ambient mode.
+     * @hide
      */
+    @SystemApi
     public boolean supportsAmbientMode() {
         return mSupportsAmbientMode;
     }
@@ -358,6 +367,19 @@ public final class WallpaperInfo implements Parcelable {
         return Uri.parse(mSettingsSliceUri);
     }
 
+    /**
+     * Returns whether this wallpaper service can support multiple engines to render on each surface
+     * independently. An example use case is a multi-display set-up where the wallpaper service can
+     * render surfaces to each of the connected displays.
+     *
+     * @see WallpaperService#onCreateEngine()
+     * @see WallpaperService.Engine#onCreate(SurfaceHolder)
+     * @return {@code true} if multiple engines can render independently on each surface.
+     */
+    public boolean supportsMultipleDisplays() {
+        return mSupportMultipleDisplays;
+    }
+
     public void dump(Printer pw, String prefix) {
         pw.println(prefix + "Service:");
         mService.dump(pw, prefix + "  ");
@@ -387,6 +409,7 @@ public final class WallpaperInfo implements Parcelable {
         dest.writeInt(mShowMetadataInPreview ? 1 : 0);
         dest.writeInt(mSupportsAmbientMode ? 1 : 0);
         dest.writeString(mSettingsSliceUri);
+        dest.writeInt(mSupportMultipleDisplays ? 1 : 0);
         mService.writeToParcel(dest, flags);
     }
 

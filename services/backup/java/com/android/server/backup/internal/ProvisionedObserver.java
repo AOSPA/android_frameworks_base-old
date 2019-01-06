@@ -23,15 +23,15 @@ import android.database.ContentObserver;
 import android.os.Handler;
 import android.util.Slog;
 
-import com.android.server.backup.BackupManagerService;
 import com.android.server.backup.KeyValueBackupJob;
+import com.android.server.backup.UserBackupManagerService;
 
 public class ProvisionedObserver extends ContentObserver {
 
-    private BackupManagerService backupManagerService;
+    private UserBackupManagerService backupManagerService;
 
     public ProvisionedObserver(
-            BackupManagerService backupManagerService, Handler handler) {
+            UserBackupManagerService backupManagerService, Handler handler) {
         super(handler);
         this.backupManagerService = backupManagerService;
     }

@@ -147,7 +147,8 @@ public class SubscriptionManager {
     public static final Uri WFC_ENABLED_CONTENT_URI = Uri.withAppendedPath(CONTENT_URI, "wfc");
 
     /**
-     * A content {@link Uri} used to receive updates on advanced calling user setting.
+     * A content {@link Uri} used to receive updates on advanced calling user setting
+     * @see ImsMmTelManager#isAdvancedCallingSettingEnabled().
      * <p>
      * Use this {@link Uri} with a {@link ContentObserver} to be notified of changes to the
      * subscription advanced calling enabled
@@ -566,14 +567,6 @@ public class SubscriptionManager {
      * @hide
      */
     public static final String IS_OPPORTUNISTIC = "is_opportunistic";
-
-    /**
-     * TelephonyProvider column name for subId of parent subscription of an opportunistic
-     * subscription.
-     * if the parent sub id is valid, then is_opportunistic should always to true.
-     * @hide
-     */
-    public static final String PARENT_SUB_ID = "parent_sub_id";
 
     /**
      * TelephonyProvider column name for group ID. Subscriptions with same group ID
@@ -1421,11 +1414,12 @@ public class SubscriptionManager {
 
     /**
      * Get an array of Subscription Ids for specified slot Index.
-     * @param slotIndex the slot Index.
-     * @return subscription Ids or null if the given slot Index is not valid.
+     * @param slotIndex the slot index.
+     * @return subscription Ids or null if the given slot Index is not valid or there are no active
+     * subscriptions in the slot.
      */
     @Nullable
-    public static int[] getSubscriptionIds(int slotIndex) {
+    public int[] getSubscriptionIds(int slotIndex) {
         return getSubId(slotIndex);
     }
 

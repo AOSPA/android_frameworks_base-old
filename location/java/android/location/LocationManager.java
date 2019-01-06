@@ -22,7 +22,6 @@ import static android.Manifest.permission.LOCATION_HARDWARE;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 
 import android.Manifest;
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
@@ -146,9 +145,14 @@ public class LocationManager {
     public static final String KEY_PROXIMITY_ENTERING = "entering";
 
     /**
+     * This key is no longer in use.
+     *
      * Key used for a Bundle extra holding an Integer status value
      * when a status change is broadcast using a PendingIntent.
+     *
+     * @deprecated Status changes are deprecated and no longer broadcast.
      */
+    @Deprecated
     public static final String KEY_STATUS_CHANGED = "status";
 
     /**
@@ -1595,8 +1599,7 @@ public class LocationManager {
     }
 
     /**
-     * Sets mock status values for the given provider.  These values will be used in place
-     * of any actual values from the provider.
+     * This method has no effect as provider status has been deprecated and is no longer supported.
      *
      * @param provider the provider name
      * @param status the mock status
@@ -1607,7 +1610,10 @@ public class LocationManager {
      * mock location app op} is not set to {@link android.app.AppOpsManager#MODE_ALLOWED
      * allowed} for your app.
      * @throws IllegalArgumentException if no provider with the given name exists
+     *
+     * @deprecated This method has no effect.
      */
+    @Deprecated
     public void setTestProviderStatus(String provider, int status, Bundle extras, long updateTime) {
         try {
             mService.setTestProviderStatus(provider, status, extras, updateTime,
@@ -1618,21 +1624,19 @@ public class LocationManager {
     }
 
     /**
-     * Removes any mock status values associated with the given provider.
+     * This method has no effect as provider status has been deprecated and is no longer supported.
      *
      * @param provider the provider name
-     *
      * @throws SecurityException if {@link android.app.AppOpsManager#OPSTR_MOCK_LOCATION
      * mock location app op} is not set to {@link android.app.AppOpsManager#MODE_ALLOWED
      * allowed} for your app.
      * @throws IllegalArgumentException if no provider with the given name exists
+     *
+     * @deprecated This method has no effect.
      */
+    @Deprecated
     public void clearTestProviderStatus(String provider) {
-        try {
-            mService.clearTestProviderStatus(provider, mContext.getOpPackageName());
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        setTestProviderStatus(provider, LocationProvider.AVAILABLE, null, 0L);
     }
 
     // --- GPS-specific support ---
@@ -2408,31 +2412,6 @@ public class LocationManager {
     public @Nullable String getNetworkProviderPackage() {
         try {
             return mService.getNetworkProviderPackage();
-        } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
-            return null;
-        }
-    }
-
-    /**
-     * Allow the {@link android.location.LocationManager#getNetworkProviderPackage location
-     * provider} to start the UI to modify the location permission for a package.
-     *
-     * <p>Can only be called by the location provider.
-     *
-     * @param packageName The package the permission belongs to
-     * @param permission The (individual) location permission to switch
-     *
-     * @return A one-shot pending intent that starts the permission management UI or {@code null} if
-     *         the intent cannot be created
-     *
-     * @hide
-     */
-    @SystemApi
-    public @Nullable PendingIntent createManageLocationPermissionIntent(@NonNull String packageName,
-            @NonNull String permission) {
-        try {
-            return mService.createManageLocationPermissionIntent(packageName, permission);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return null;

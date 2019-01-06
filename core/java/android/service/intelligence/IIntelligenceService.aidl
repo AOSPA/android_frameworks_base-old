@@ -16,9 +16,12 @@
 
 package android.service.intelligence;
 
+import android.os.IBinder;
 import android.service.intelligence.InteractionSessionId;
 import android.service.intelligence.InteractionContext;
+import android.service.intelligence.SnapshotData;
 
+import android.view.autofill.AutofillId;
 import android.view.intelligence.ContentCaptureEvent;
 
 import java.util.List;
@@ -36,4 +39,12 @@ oneway interface IIntelligenceService {
 
     void onContentCaptureEvents(in InteractionSessionId sessionId,
                                 in List<ContentCaptureEvent> events);
+
+    void onActivitySnapshot(in InteractionSessionId sessionId,
+                            in SnapshotData snapshotData);
+
+    void onAutofillRequest(in InteractionSessionId sessionId, in IBinder autofillManagerClient,
+                           int autofilSessionId, in AutofillId focusedId);
+
+    void onDestroyAutofillWindowsRequest(in InteractionSessionId sessionId);
 }
