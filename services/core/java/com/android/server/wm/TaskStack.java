@@ -184,9 +184,15 @@ public class TaskStack extends WindowContainer<Task> implements
         // Update bounds of containing tasks.
         for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; --taskNdx) {
             final Task task = mChildren.get(taskNdx);
-            task.setBounds(taskBounds.get(task.mTaskId), false /* forced */);
-            task.setTempInsetBounds(taskTempInsetBounds != null ?
-                    taskTempInsetBounds.get(task.mTaskId) : null);
+            final Rect insetBounds =
+                    taskTempInsetBounds != null ? taskTempInsetBounds.get(task.mTaskId) : null;
+            if (insetBounds != null) {
+                task.setBounds(insetBounds);
+                task.setOverrideDisplayedBounds(taskBounds.get(task.mTaskId));
+            } else {
+                task.setBounds(taskBounds.get(task.mTaskId));
+                task.setOverrideDisplayedBounds(null);
+            }
         }
         return true;
     }
@@ -276,7 +282,7 @@ public class TaskStack extends WindowContainer<Task> implements
 
     @Override
     public int setBounds(Rect bounds) {
-        return setBounds(getOverrideBounds(), bounds);
+        return setBounds(getRequestedOverrideBounds(), bounds);
     }
 
     private int setBounds(Rect existing, Rect bounds) {
@@ -298,8 +304,8 @@ public class TaskStack extends WindowContainer<Task> implements
 
     /** Bounds of the stack without adjusting for other factors in the system like visibility
      * of docked stack.
-     * Most callers should be using {@link ConfigurationContainer#getOverrideBounds} as it take into
-     * consideration other system factors. */
+     * Most callers should be using {@link ConfigurationContainer#getRequestedOverrideBounds} a
+     * it takes into consideration other system factors. */
     void getRawBounds(Rect out) {
         out.set(getRawBounds());
     }
@@ -442,7 +448,8 @@ public class TaskStack extends WindowContainer<Task> implements
      * @param inOutBounds the bounds to update (both input and output).
      */
     void calculateDockedBoundsForConfigChange(Configuration parentConfig, Rect inOutBounds) {
-        final boolean primary = getOverrideWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
+        final boolean primary =
+                getRequestedOverrideWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
         repositionSplitScreenStackAfterRotation(parentConfig, primary, inOutBounds);
         final DisplayCutout cutout = mDisplayContent.getDisplayInfo().displayCutout;
         snapDockedStackAfterRotation(parentConfig, cutout, inOutBounds);
@@ -739,7 +746,7 @@ public class TaskStack extends WindowContainer<Task> implements
             return;
         }
 
-        final Rect stackBounds = getBounds();
+        final Rect stackBounds = getDisplayedBounds();
         int width = stackBounds.width();
         int height = stackBounds.height();
 
@@ -989,15 +996,20 @@ public class TaskStack extends WindowContainer<Task> implements
      * Adjusts the stack bounds if the IME is visible.
      *
      * @param imeWin The IME window.
+     * @param keepLastAmount Use {@code true} to keep the last adjusted amount from
+     *                       {@link DockedStackDividerController} for adjusting the stack bounds,
+     *                       Use {@code false} to reset adjusted amount as 0.
+     * @see #updateAdjustForIme(float, float, boolean)
      */
-    void setAdjustedForIme(WindowState imeWin, boolean forceUpdate) {
+    void setAdjustedForIme(WindowState imeWin, boolean keepLastAmount) {
         mImeWin = imeWin;
         mImeGoingAway = false;
-        if (!mAdjustedForIme || forceUpdate) {
+        if (!mAdjustedForIme || keepLastAmount) {
             mAdjustedForIme = true;
-            mAdjustImeAmount = 0f;
-            mAdjustDividerAmount = 0f;
-            updateAdjustForIme(0f, 0f, true /* force */);
+            DockedStackDividerController controller = getDisplayContent().mDividerControllerLocked;
+            final float adjustImeAmount = keepLastAmount ? controller.mLastAnimationProgress : 0f;
+            final float adjustDividerAmount = keepLastAmount ? controller.mLastDividerProgress : 0f;
+            updateAdjustForIme(adjustImeAmount, adjustDividerAmount, true /* force */);
         }
     }
 
@@ -1752,14 +1764,6 @@ public class TaskStack extends WindowContainer<Task> implements
     void stopDimming() {
         mDimmer.stopDim(getPendingTransaction());
         scheduleAnimation();
-    }
-
-    @Override
-    void getRelativePosition(Point outPos) {
-        super.getRelativePosition(outPos);
-        final int outset = getStackOutset();
-        outPos.x -= outset;
-        outPos.y -= outset;
     }
 
     AnimatingAppWindowTokenRegistry getAnimatingAppWindowTokenRegistry() {

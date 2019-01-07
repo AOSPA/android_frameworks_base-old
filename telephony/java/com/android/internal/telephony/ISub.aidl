@@ -104,7 +104,7 @@ interface ISub {
     /**
      * @see android.telephony.SubscriptionManager#requestEmbeddedSubscriptionInfoListRefresh
      */
-    oneway void requestEmbeddedSubscriptionInfoListRefresh();
+    oneway void requestEmbeddedSubscriptionInfoListRefresh(int cardId);
 
     /**
      * Add a new SubscriptionInfo to subinfo database if needed
@@ -162,7 +162,7 @@ interface ISub {
      * @param subId the unique SubscriptionInfo index in database
      * @return the number of records updated
      */
-    int setOpportunistic(boolean opportunistic, int subId);
+    int setOpportunistic(boolean opportunistic, int subId, String callingPackage);
 
     /**
      * Inform SubscriptionManager that subscriptions in the list are bundled
@@ -184,6 +184,15 @@ interface ISub {
     String setSubscriptionGroup(in int[] subIdList, String callingPackage);
 
     /**
+     * Set whether a subscription is metered
+     *
+     * @param isMetered whether it’s a metered subscription.
+     * @param subId the unique SubscriptionInfo index in database
+     * @return the number of records updated
+     */
+    int setMetered(boolean isMetered, int subId, String callingPackage);
+
+    /**
      * Set which subscription is preferred for cellular data. It's
      * designed to overwrite default data subscription temporarily.
      *
@@ -200,6 +209,10 @@ interface ISub {
      * @return the list of opportunistic subscription info. If none exists, an empty list.
      */
     List<SubscriptionInfo> getOpportunisticSubscriptions(String callingPackage);
+
+    boolean removeSubscriptionsFromGroup(in int[] subIdList, String callingPackage);
+
+    List<SubscriptionInfo> getSubscriptionsInGroup(int subId, String callingPackage);
 
     int getSlotIndex(int subId);
 

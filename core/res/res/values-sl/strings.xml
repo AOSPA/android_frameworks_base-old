@@ -138,14 +138,10 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"Wi-Fi operaterja <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"Klicanje prek WiFi-ja | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"Govor prek Wi-Fi-ja operaterja <xliff:g id="SPN">%s</xliff:g>"</string>
-    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
-    <skip />
+    <string name="wfcSpnFormat_wifi_calling" msgid="4990486735013125329">"Klicanje prek Wi-Fi-ja"</string>
+    <string name="wfcSpnFormat_wifi" msgid="1892673884655959773">"Wi-Fi"</string>
+    <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="1336669776254502831">"Klicanje prek Wi-Fi-ja"</string>
+    <string name="wfcSpnFormat_vowifi" msgid="1765176406171272629">"Govor prek Wi-Fi-ja"</string>
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Izklopljeno"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Prednostno Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"Prednostno mobilno"</string>
@@ -457,6 +453,8 @@
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"Aplikaciji omogoča dostop do funkcij telefona v napravi. S tem dovoljenjem lahko aplikacija določi telefonsko številko in ID-je naprave, določi lahko tudi, ali je klic aktiven, in oddaljeno številko, s katero je klic povezan."</string>
     <string name="permlab_manageOwnCalls" msgid="1503034913274622244">"Usmeri klice prek sistema"</string>
     <string name="permdesc_manageOwnCalls" msgid="6552974537554717418">"Dovoli, da aplikacija usmeri klice prek sistema, da se tako izboljša izkušnja klicanja."</string>
+    <string name="permlab_callCompanionApp" msgid="3599252979411970473">"ogled in nadzor klicev prek sistema."</string>
+    <string name="permdesc_callCompanionApp" msgid="4567344683275099090">"Aplikaciji dovoljuje, da si ogleda in nadzoruje aktivne klice v napravi. To vključuje informacije, kot so telefonske številke klicev in stanje klicev."</string>
     <string name="permlab_acceptHandover" msgid="2661534649736022409">"Nadaljevanje klica iz druge aplikacije"</string>
     <string name="permdesc_acceptHandovers" msgid="4570660484220539698">"Aplikaciji dovoljuje nadaljevanje klica, ki se je začel v drugi aplikaciji."</string>
     <string name="permlab_readPhoneNumbers" msgid="6108163940932852440">"branje telefonskih številk"</string>
@@ -517,6 +515,8 @@
     <string name="permdesc_nfc" msgid="7120611819401789907">"Podpira komunikacijo med računalnikom in oznakami, karticami in bralniki komunikacije s tehnologijo bližnjega polja."</string>
     <string name="permlab_disableKeyguard" msgid="3598496301486439258">"onemogočanje zaklepanja zaslona"</string>
     <string name="permdesc_disableKeyguard" msgid="6034203065077122992">"Aplikaciji dovoljuje, da onemogoči zaklep tipkovnice in morebitno povezano varnostno geslo. Telefon na primer onemogoči zaklep tipkovnice pri dohodnem klicu ter vnovič omogoči zaklep, ko je klic končan."</string>
+    <string name="permlab_getAndRequestScreenLockComplexity" msgid="3911592334192005424">"pridobi in zahtevaj zapletenost zaklepanja zaslona"</string>
+    <string name="permdesc_getAndRequestScreenLockComplexity" msgid="9045202063228854873">"Aplikaciji dovoljuje, da pridobi raven zapletenosti zaklepanja zaslona (visoka, srednja, nizka ali brez), ki označuje možen obseg dolžine in vrsto zaklepanja zaslona. Aplikacija lahko tudi predlaga uporabnikom, da posodobijo zaklepanje zaslona na določeno raven, vendar lahko uporabniki to opozorilo prezrejo in ga zaprejo tako, da se pomaknejo stran. Upoštevajte, da zaklepanje zaslona ni shranjeno v navadnem besedilu, tako da aplikacija ne pozna točnega gesla."</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"uporaba strojne opreme za biometrične podatke"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"Aplikaciji omogoča uporabo strojne opreme za biometrične podatke za preverjanje pristnosti"</string>
     <string name="permlab_manageFingerprint" msgid="5640858826254575638">"upravljanje strojne opreme za prstne odtise"</string>
@@ -539,6 +539,11 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Aplikaciji omogoča branje lokacij v predstavnostni zbirki."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"Aplikacija <xliff:g id="APP">%s</xliff:g> želi preveriti pristnost."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Strojna oprema za biometrične podatke ni na voljo"</string>
+    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
+    <skip />
+    <string name="biometric_not_recognized" msgid="5770511773560736082">"Ni prepoznano"</string>
+    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
+    <skip />
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Zaznan delni prstni odtis. Poskusite znova."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Prstnega odtisa ni bilo mogoče obdelati. Poskusite znova."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Tipalo prstnih odtisov je umazano. Očistite ga in poskusite znova."</string>
@@ -546,7 +551,6 @@
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"Prepočasen premik prsta. Poskusite znova."</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="biometric_not_recognized" msgid="5770511773560736082">"Ni prepoznano"</string>
     <string name="fingerprint_authenticated" msgid="5309333983002526448">"Pristnost prstnega odtisa je preverjena"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"Pristnost obraza je potrjena"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"Pristnost obraza je preverjena. Pritisnite gumb »Potrdi«."</string>
@@ -602,14 +606,10 @@
     <string name="permdesc_writeSyncSettings" msgid="8956262591306369868">"Aplikaciji omogoča spreminjanje nastavitev sinhronizacije za račun. S tem se lahko na primer omogoči sinhronizacijo aplikacije Ljudje z računom."</string>
     <string name="permlab_readSyncStats" msgid="7396577451360202448">"branje statističnih podatkov sinhronizacije"</string>
     <string name="permdesc_readSyncStats" msgid="1510143761757606156">"Aplikaciji omogoča branje statističnih podatkov o sinhronizaciji za račun, vključno z zgodovino dogodkov sinhronizacije in količino sinhroniziranih podatkov."</string>
-    <string name="permlab_sdcardRead" product="nosdcard" msgid="367275095159405468">"branje vsebine pomnilnika USB"</string>
-    <string name="permlab_sdcardRead" product="default" msgid="2188156462934977940">"branje vsebine kartice SD"</string>
-    <string name="permdesc_sdcardRead" product="nosdcard" msgid="3446988712598386079">"Aplikaciji omogoča branje vsebine shrambe USB."</string>
-    <string name="permdesc_sdcardRead" product="default" msgid="2607362473654975411">"Aplikaciji omogoča branje vsebine kartice SD."</string>
-    <string name="permlab_sdcardWrite" product="nosdcard" msgid="8485979062254666748">"spreminjanje ali brisanje vsebine shrambe USB"</string>
-    <string name="permlab_sdcardWrite" product="default" msgid="8805693630050458763">"spreminjanje ali brisanje vsebine kartice SD"</string>
-    <string name="permdesc_sdcardWrite" product="nosdcard" msgid="6175406299445710888">"Aplikaciji omogoča zapisovanje v pomnilnik USB."</string>
-    <string name="permdesc_sdcardWrite" product="default" msgid="4337417790936632090">"Aplikaciji omogoča pisanje na kartico SD."</string>
+    <string name="permlab_sdcardRead" msgid="1438933556581438863">"branje vsebine skupne shrambe"</string>
+    <string name="permdesc_sdcardRead" msgid="1804941689051236391">"Aplikaciji omogoča branje vsebine skupne shrambe."</string>
+    <string name="permlab_sdcardWrite" msgid="9220937740184960897">"spreminjanje ali brisanje vsebine skupne shrambe"</string>
+    <string name="permdesc_sdcardWrite" msgid="2834431057338203959">"Aplikaciji omogoča zapisovanje vsebine skupne shrambe."</string>
     <string name="permlab_use_sip" msgid="2052499390128979920">"opravljanje/sprejemanje klicev SIP"</string>
     <string name="permdesc_use_sip" msgid="2297804849860225257">"Aplikaciji omogoča opravljanje in sprejemanje klicev SIP."</string>
     <string name="permlab_register_sim_subscription" msgid="3166535485877549177">"registriranje novih telekomunikacijskih povezav s kartico SIM"</string>
@@ -1127,24 +1127,28 @@
     <string name="deleteText" msgid="6979668428458199034">"Izbriši"</string>
     <string name="inputMethod" msgid="1653630062304567879">"Način vnosa"</string>
     <string name="editTextMenuTitle" msgid="4909135564941815494">"Besedilna dejanja"</string>
-    <string name="email" msgid="4560673117055050403">"E-pošta"</string>
+    <string name="email" msgid="4560673117055050403">"Pošlji e-pošto"</string>
     <string name="email_desc" msgid="3638665569546416795">"Pošlji na izbrani naslov"</string>
     <string name="dial" msgid="1253998302767701559">"Pokliči"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Pokliči izbrano telefonsko številko"</string>
-    <string name="map" msgid="5441053548030107189">"Zemljevid"</string>
+    <string name="map" msgid="5441053548030107189">"Odpri zemljevid"</string>
     <string name="map_desc" msgid="1836995341943772348">"Poišči izbrani naslov na zemljevidu"</string>
     <string name="browse" msgid="1245903488306147205">"Odpri"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Odpri izbrani URL"</string>
-    <string name="sms" msgid="4560537514610063430">"Sporočilo"</string>
+    <string name="sms" msgid="4560537514610063430">"Pošlji SMS"</string>
     <string name="sms_desc" msgid="7526588350969638809">"Pošlji sporočilo na izbrano telefonsko številko"</string>
     <string name="add_contact" msgid="7867066569670597203">"Dodaj"</string>
     <string name="add_contact_desc" msgid="4830217847004590345">"Dodaj med stike"</string>
-    <string name="view_calendar" msgid="979609872939597838">"Ogled"</string>
-    <string name="view_calendar_desc" msgid="5828320291870344584">"Ogled izbranega časa v koledarju"</string>
+    <string name="view_calendar" msgid="979609872939597838">"Prikaži"</string>
+    <string name="view_calendar_desc" msgid="5828320291870344584">"Prikaži izbrani čas v koledarju"</string>
     <string name="add_calendar_event" msgid="1953664627192056206">"Dodaj na razpored"</string>
     <string name="add_calendar_event_desc" msgid="4326891793260687388">"Razporedi dogodek na izbrano uro"</string>
-    <string name="view_flight" msgid="7691640491425680214">"Sledenje"</string>
+    <string name="view_flight" msgid="7691640491425680214">"Sledi"</string>
     <string name="view_flight_desc" msgid="3876322502674253506">"Sledi izbranemu letu"</string>
+    <string name="translate" msgid="9218619809342576858">"Prevedi"</string>
+    <string name="translate_desc" msgid="4502367770068777202">"Prevedi izbrano besedilo"</string>
+    <string name="define" msgid="7394820043869954211">"Opredeli"</string>
+    <string name="define_desc" msgid="7910883642444919726">"Opredeli izbrano besedilo"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"Prostor za shranjevanje bo pošel"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"Nekatere sistemske funkcije morda ne delujejo"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"V shrambi ni dovolj prostora za sistem. Sprostite 250 MB prostora in znova zaženite napravo."</string>
@@ -1221,6 +1225,7 @@
     <string name="android_upgrading_title" product="tablet" msgid="4503169817302593560">"Tablični računalnik se posodablja …"</string>
     <string name="android_upgrading_title" product="device" msgid="7009520271220804517">"Naprava se posodablja …"</string>
     <string name="android_start_title" product="default" msgid="4536778526365907780">"Telefon se zaganja …"</string>
+    <string name="android_start_title" product="automotive" msgid="8418054686415318207">"Android se zaganja …"</string>
     <string name="android_start_title" product="tablet" msgid="4929837533850340472">"Tablični računalnik se zaganja …"</string>
     <string name="android_start_title" product="device" msgid="7467484093260449437">"Naprava se zaganja …"</string>
     <string name="android_upgrading_fstrim" msgid="8036718871534640010">"Optimiziranje shrambe."</string>
@@ -1283,6 +1288,10 @@
     <string name="wifi_available_content_failed_to_connect" msgid="3377406637062802645">"Dotaknite se, če si želite ogledati vsa omrežja"</string>
     <string name="wifi_available_action_connect" msgid="2635699628459488788">"Vzpostavi povezavo"</string>
     <string name="wifi_available_action_all_networks" msgid="4368435796357931006">"Vsa omrežja"</string>
+    <string name="wifi_suggestion_title" msgid="1524719325616630906">"Vzpostavljena povezava z omrežjem Wi‑Fi na predlog aplikacije <xliff:g id="NAME">%s</xliff:g>"</string>
+    <string name="wifi_suggestion_content" msgid="4505530604935334589">"Ali želite aplikaciji <xliff:g id="NAME">%s</xliff:g> dovoliti predlaganje omrežij?"</string>
+    <string name="wifi_suggestion_action_allow_app" msgid="3689946344485394085">"Da"</string>
+    <string name="wifi_suggestion_action_disallow_app" msgid="7977918905605931385">"Ne"</string>
     <string name="wifi_wakeup_onboarding_title" msgid="228772560195634292">"Povezava Wi‑Fi se bo samodejno vklopila"</string>
     <string name="wifi_wakeup_onboarding_subtext" msgid="3989697580301186973">"Ko ste v bližini zanesljivega shranjenega omrežja"</string>
     <string name="wifi_wakeup_onboarding_action_disable" msgid="838648204200836028">"Ne vklopi znova"</string>
@@ -1506,8 +1515,7 @@
       <item quantity="other"><xliff:g id="INDEX">%d</xliff:g> od <xliff:g id="TOTAL">%d</xliff:g></item>
     </plurals>
     <string name="action_mode_done" msgid="7217581640461922289">"Končano"</string>
-    <string name="progress_erasing" product="nosdcard" msgid="4521573321524340058">"Brisanje pomnilnika USB ..."</string>
-    <string name="progress_erasing" product="default" msgid="6596988875507043042">"Brisanje kartice SD ..."</string>
+    <string name="progress_erasing" msgid="2569962663843586562">"Brisanje skupne shrambe …"</string>
     <string name="share" msgid="1778686618230011964">"Deli z dr."</string>
     <string name="find" msgid="4808270900322985960">"Najdi"</string>
     <string name="websearch" msgid="4337157977400211589">"Spletno iskanje"</string>
@@ -1899,8 +1907,7 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"Zahteva SS je spremenjena v zahtevo USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"Spremenjeno v novo zahtevo SS"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Delovni profil"</string>
-    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
-    <skip />
+    <string name="notification_alerted_content_description" msgid="1296617716556420585">"Opozorilo prikazano"</string>
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"Razširi"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"Strni"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"preklop razširitve"</string>

@@ -18,6 +18,7 @@ package com.android.server.backup;
 
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_BACKUP_IN_FOREGROUND;
 
+import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.server.backup.BackupManagerService.DEBUG;
 import static com.android.server.backup.BackupManagerService.DEBUG_SCHEDULING;
 import static com.android.server.backup.BackupManagerService.MORE_DEBUG;
@@ -36,6 +37,7 @@ import static com.android.server.backup.internal.BackupHandler.MSG_RUN_RESTORE;
 import static com.android.server.backup.internal.BackupHandler.MSG_SCHEDULE_BACKUP_PACKAGE;
 
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.AppGlobals;
@@ -86,6 +88,7 @@ import android.os.WorkSource;
 import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.EventLog;
@@ -160,10 +163,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** System service that performs backup/restore operations. */
 public class UserBackupManagerService {
-    // File containing backup-enabled state.  Contains a single byte;
-    // nonzero == enabled.  File missing or contains a zero byte == disabled.
-    private static final String BACKUP_ENABLE_FILE = "backup_enabled";
-
     // Persistently track the need to do a full init.
     private static final String INIT_SENTINEL_FILE_NAME = "_need_init_";
 
@@ -243,6 +242,7 @@ public class UserBackupManagerService {
     private static final long BUSY_BACKOFF_MIN_MILLIS = 1000 * 60 * 60;  // one hour
     private static final int BUSY_BACKOFF_FUZZ = 1000 * 60 * 60 * 2;  // two hours
 
+    private final @UserIdInt int mUserId;
     private final BackupAgentTimeoutParameters mAgentTimeoutParameters;
     private final TransportManager mTransportManager;
 
@@ -345,9 +345,9 @@ public class UserBackupManagerService {
     final AtomicInteger mNextToken = new AtomicInteger();
 
     // Where we keep our journal files and other bookkeeping.
-    private File mBaseStateDir;
-    private File mDataDir;
-    private File mJournalDir;
+    private final File mBaseStateDir;
+    private final File mDataDir;
+    private final File mJournalDir;
     @Nullable
     private DataChangedJournal mJournal;
     private File mFullBackupScheduleFile;
@@ -360,15 +360,74 @@ public class UserBackupManagerService {
     private long mAncestralToken = 0;
     private long mCurrentToken = 0;
 
+    /**
+     * Creates an instance of {@link UserBackupManagerService} and initializes state for it. This
+     * includes setting up the directories where we keep our bookkeeping and transport management.
+     *
+     * @see #createAndInitializeService(int, Context, Trampoline, HandlerThread, File, File,
+     *     TransportManager)
+     */
+    static UserBackupManagerService createAndInitializeService(
+            @UserIdInt int userId,
+            Context context,
+            Trampoline trampoline,
+            HandlerThread backupThread,
+            Set<ComponentName> transportWhitelist) {
+        String currentTransport =
+                Settings.Secure.getString(
+                        context.getContentResolver(), Settings.Secure.BACKUP_TRANSPORT);
+        if (TextUtils.isEmpty(currentTransport)) {
+            currentTransport = null;
+        }
+
+        if (DEBUG) {
+            Slog.v(TAG, "Starting with transport " + currentTransport);
+        }
+        TransportManager transportManager =
+                new TransportManager(context, transportWhitelist, currentTransport);
+
+        File baseStateDir = UserBackupManagerFiles.getBaseStateDir(userId);
+        File dataDir = UserBackupManagerFiles.getDataDir(userId);
+
+        return createAndInitializeService(
+                userId, context, trampoline, backupThread, baseStateDir, dataDir, transportManager);
+    }
+
+    /**
+     * Creates an instance of {@link UserBackupManagerService}.
+     *
+     * @param userId The user which this service is for.
+     * @param context The system server context.
+     * @param trampoline A reference to the proxy to {@link BackupManagerService}.
+     * @param backupThread The thread running backup/restore operations for the user.
+     * @param baseStateDir The directory we store the user's persistent bookkeeping data.
+     * @param dataDir The directory we store the user's temporary staging data.
+     * @param transportManager The {@link TransportManager} responsible for handling the user's
+     *     transports.
+     */
     @VisibleForTesting
-    public UserBackupManagerService(
+    public static UserBackupManagerService createAndInitializeService(
+            @UserIdInt int userId,
+            Context context,
+            Trampoline trampoline,
+            HandlerThread backupThread,
+            File baseStateDir,
+            File dataDir,
+            TransportManager transportManager) {
+        return new UserBackupManagerService(
+                userId, context, trampoline, backupThread, baseStateDir, dataDir, transportManager);
+    }
+
+    private UserBackupManagerService(
+            @UserIdInt int userId,
             Context context,
             Trampoline parent,
             HandlerThread backupThread,
             File baseStateDir,
             File dataDir,
             TransportManager transportManager) {
-        mContext = context;
+        mUserId = userId;
+        mContext = checkNotNull(context, "context cannot be null");
         mPackageManager = context.getPackageManager();
         mPackageManagerBinder = AppGlobals.getPackageManager();
         mActivityManager = ActivityManager.getService();
@@ -377,6 +436,7 @@ public class UserBackupManagerService {
         mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mStorageManager = IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
 
+        checkNotNull(parent, "trampoline cannot be null");
         mBackupManagerBinder = Trampoline.asInterface(parent.asBinder());
 
         mAgentTimeoutParameters = new
@@ -384,6 +444,7 @@ public class UserBackupManagerService {
         mAgentTimeoutParameters.start();
 
         // spin up the backup/restore handler thread
+        checkNotNull(backupThread, "backupThread cannot be null");
         mBackupHandler = new BackupHandler(this, backupThread.getLooper());
 
         // Set up our bookkeeping
@@ -398,13 +459,13 @@ public class UserBackupManagerService {
                 Settings.Global.getUriFor(Settings.Global.DEVICE_PROVISIONED),
                 false, mProvisionedObserver);
 
-        mBaseStateDir = baseStateDir;
+        mBaseStateDir = checkNotNull(baseStateDir, "baseStateDir cannot be null");
         mBaseStateDir.mkdirs();
         if (!SELinux.restorecon(mBaseStateDir)) {
             Slog.e(TAG, "SELinux restorecon failed on " + mBaseStateDir);
         }
 
-        mDataDir = dataDir;
+        mDataDir = checkNotNull(dataDir, "dataDir cannot be null");
 
         mBackupPasswordManager = new BackupPasswordManager(mContext, mBaseStateDir, mRng);
 
@@ -451,7 +512,7 @@ public class UserBackupManagerService {
             addPackageParticipantsLocked(null);
         }
 
-        mTransportManager = transportManager;
+        mTransportManager = checkNotNull(transportManager, "transportManager cannot be null");
         mTransportManager.setOnTransportRegisteredListener(this::onTransportRegistered);
         mRegisterTransportsRequestedTime = SystemClock.elapsedRealtime();
         mBackupHandler.postDelayed(
@@ -464,7 +525,6 @@ public class UserBackupManagerService {
         // Power management
         mWakelock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "*backup*");
     }
-
 
     public BackupManagerConstants getConstants() {
         return mConstants;
@@ -655,16 +715,8 @@ public class UserBackupManagerService {
         return mBaseStateDir;
     }
 
-    public void setBaseStateDir(File baseStateDir) {
-        mBaseStateDir = baseStateDir;
-    }
-
     public File getDataDir() {
         return mDataDir;
-    }
-
-    public void setDataDir(File dataDir) {
-        mDataDir = dataDir;
     }
 
     @Nullable
@@ -2359,9 +2411,9 @@ public class UserBackupManagerService {
      * return to the caller until the backup has been completed. It requires on-screen confirmation
      * by the user.
      */
-    public void adbBackup(ParcelFileDescriptor fd, boolean includeApks, boolean includeObbs,
-            boolean includeShared, boolean doWidgets, boolean doAllApps, boolean includeSystem,
-            boolean compress, boolean doKeyValue, String[] pkgList) {
+    public void adbBackup(ParcelFileDescriptor fd, boolean includeApks,
+            boolean includeObbs, boolean includeShared, boolean doWidgets, boolean doAllApps,
+            boolean includeSystem, boolean compress, boolean doKeyValue, String[] pkgList) {
         mContext.enforceCallingPermission(android.Manifest.permission.BACKUP, "adbBackup");
 
         final int callingUserHandle = UserHandle.getCallingUserId();
@@ -2664,8 +2716,7 @@ public class UserBackupManagerService {
         try {
             boolean wasEnabled = mEnabled;
             synchronized (this) {
-                // TODO(b/118520567): Clean up writing backup enabled logic.
-                BackupManagerService.writeBackupEnableState(enable, UserHandle.USER_SYSTEM);
+                UserBackupManagerFilePersistedSettings.writeBackupEnableState(mUserId, enable);
                 mEnabled = enable;
             }
 
@@ -2740,15 +2791,6 @@ public class UserBackupManagerService {
         }
     }
 
-    /** Mark the backup service as having been provisioned. */
-    public void setBackupProvisioned(boolean available) {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
-                "setBackupProvisioned");
-        /*
-         * This is now a no-op; provisioning is simply the device's own setup state.
-         */
-    }
-
     /** Report whether the backup mechanism is currently enabled. */
     public boolean isBackupEnabled() {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
@@ -2796,19 +2838,6 @@ public class UserBackupManagerService {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
                 "listAllTransportComponents");
         return mTransportManager.getRegisteredTransportComponents();
-    }
-
-    /** Report all system whitelisted transports. */
-    public String[] getTransportWhitelist() {
-        // No permission check, intentionally.
-        Set<ComponentName> whitelistedComponents = mTransportManager.getTransportWhitelist();
-        String[] whitelistedTransports = new String[whitelistedComponents.size()];
-        int i = 0;
-        for (ComponentName component : whitelistedComponents) {
-            whitelistedTransports[i] = component.flattenToShortString();
-            i++;
-        }
-        return whitelistedTransports;
     }
 
     /**

@@ -75,6 +75,7 @@ public class BluetoothMediaManager extends MediaManager implements BluetoothCall
             Log.w(TAG, "addConnectedA2dpDevices() a2dp profile is null!");
             return;
         }
+
         final List<BluetoothDevice> devices = a2dpProfile.getConnectedDevices();
         final CachedBluetoothDeviceManager cachedBluetoothDeviceManager =
                 mLocalBluetoothManager.getCachedDeviceManager();
@@ -103,6 +104,7 @@ public class BluetoothMediaManager extends MediaManager implements BluetoothCall
             Log.w(TAG, "addConnectedA2dpDevices() hap profile is null!");
             return;
         }
+
         final List<Long> devicesHiSyncIds = new ArrayList<>();
         final List<BluetoothDevice> devices = hapProfile.getConnectedDevices();
         final CachedBluetoothDeviceManager cachedBluetoothDeviceManager =
@@ -185,7 +187,7 @@ public class BluetoothMediaManager extends MediaManager implements BluetoothCall
     private boolean isCachedDeviceConnected(CachedBluetoothDevice cachedDevice) {
         final boolean isConnectedHearingAidDevice = cachedDevice.isConnectedHearingAidDevice();
         final boolean isConnectedA2dpDevice = cachedDevice.isConnectedA2dpDevice();
-        Log.d(TAG, "isCachedDeviceConnected() cachedDevice : " + cachedDevice.getName()
+        Log.d(TAG, "isCachedDeviceConnected() cachedDevice : " + cachedDevice
                 + ", is hearing aid connected : " + isConnectedHearingAidDevice
                 + ", is a2dp connected : " + isConnectedA2dpDevice);
 
@@ -226,7 +228,7 @@ public class BluetoothMediaManager extends MediaManager implements BluetoothCall
     @Override
     public void onProfileConnectionStateChanged(CachedBluetoothDevice cachedDevice, int state,
             int bluetoothProfile) {
-        Log.d(TAG, "onProfileConnectionStateChanged() device: " + cachedDevice.getName()
+        Log.d(TAG, "onProfileConnectionStateChanged() device: " + cachedDevice
                 + ", state: " + state + ", bluetoothProfile: " + bluetoothProfile);
 
         if (isCachedDeviceConnected(cachedDevice)) {
@@ -240,8 +242,7 @@ public class BluetoothMediaManager extends MediaManager implements BluetoothCall
 
     @Override
     public void onAclConnectionStateChanged(CachedBluetoothDevice cachedDevice, int state) {
-        Log.d(TAG, "onAclConnectionStateChanged() device: " + cachedDevice.getName()
-                + ", state: " + state);
+        Log.d(TAG, "onAclConnectionStateChanged() device: " + cachedDevice + ", state: " + state);
 
         if (isCachedDeviceConnected(cachedDevice)) {
             addMediaDevice(cachedDevice);
@@ -251,7 +252,6 @@ public class BluetoothMediaManager extends MediaManager implements BluetoothCall
             dispatchDeviceRemoved(cachedDevice);
         }
     }
-
     class DeviceAttributeChangeCallback implements CachedBluetoothDevice.Callback {
         @Override
         public void onDeviceAttributesChanged() {

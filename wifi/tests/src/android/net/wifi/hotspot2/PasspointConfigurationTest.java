@@ -25,8 +25,9 @@ import android.net.wifi.hotspot2.pps.HomeSp;
 import android.net.wifi.hotspot2.pps.Policy;
 import android.net.wifi.hotspot2.pps.UpdateParameter;
 import android.os.Parcel;
-import android.support.test.filters.SmallTest;
 import android.util.Base64;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
 
@@ -166,6 +167,10 @@ public class PasspointConfigurationTest {
         config.setUsageLimitStartTimeInMillis(124214213);
         config.setUsageLimitDataLimit(14121);
         config.setUsageLimitTimeLimitInMinutes(78912);
+        Map<String, String> friendlyNames = new HashMap<>();
+        friendlyNames.put("en", "ServiceName1");
+        friendlyNames.put("kr", "ServiceName2");
+        config.setServiceFriendlyNames(friendlyNames);
         return config;
     }
 
@@ -203,6 +208,18 @@ public class PasspointConfigurationTest {
     @Test
     public void verifyParcelWithFullConfiguration() throws Exception {
         verifyParcel(createConfig());
+    }
+
+    /**
+     * Verify parcel read/write for a configuration that doesn't contain a list of service names.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void verifyParcelWithoutServiceNames() throws Exception {
+        PasspointConfiguration config = createConfig();
+        config.setServiceFriendlyNames(null);
+        verifyParcel(config);
     }
 
     /**

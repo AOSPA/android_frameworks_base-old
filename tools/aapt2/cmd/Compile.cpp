@@ -433,7 +433,7 @@ static bool CompileXml(IAaptContext* context, const CompileOptions& options,
     }
 
     Printer r_txt_printer(&fout_text);
-    for (const auto res : xmlres->file.exported_symbols) {
+    for (const auto& res : xmlres->file.exported_symbols) {
       r_txt_printer.Print("default int id ");
       r_txt_printer.Println(res.name.entry);
     }
@@ -584,7 +584,7 @@ static bool CompileFile(IAaptContext* context, const CompileOptions& options,
 
 class CompileContext : public IAaptContext {
  public:
-  CompileContext(IDiagnostics* diagnostics) : diagnostics_(diagnostics) {
+  explicit CompileContext(IDiagnostics* diagnostics) : diagnostics_(diagnostics) {
   }
 
   PackageType GetPackageType() override {

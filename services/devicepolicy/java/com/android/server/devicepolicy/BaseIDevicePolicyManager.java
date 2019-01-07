@@ -81,7 +81,8 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     }
 
     @Override
-    public void setGlobalPrivateDns(ComponentName who, int mode, String privateDnsHost) {
+    public int setGlobalPrivateDns(ComponentName who, int mode, String privateDnsHost) {
+        return DevicePolicyManager.PRIVATE_DNS_SET_ERROR_FAILURE_SETTING;
     }
 
     @Override
@@ -96,6 +97,11 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
 
     @Override
     public void grantDeviceIdsAccessToProfileOwner(ComponentName who, int userId) { }
+
+    @Override
+    public int getPasswordComplexity() {
+        return DevicePolicyManager.PASSWORD_COMPLEXITY_NONE;
+    }
 
     @Override
     public void installUpdateFromFile(ComponentName admin,
@@ -118,6 +124,27 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     @Override
     public boolean isPackageAllowedToAccessCalendarForUser(String packageName,
             int userHandle) {
+        return false;
+    }
+
+    @Override
+    public List<String> getCrossProfileCalendarPackagesForUser(int userHandle) {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public boolean isManagedKiosk() {
+        return false;
+    }
+
+    @Override
+    public boolean isUnattendedManagedKiosk() {
+        return false;
+    }
+
+    @Override
+    public boolean startViewCalendarEventInManagedProfile(String packageName, long eventId,
+            long start, long end, boolean allDay, int flags) {
         return false;
     }
 }

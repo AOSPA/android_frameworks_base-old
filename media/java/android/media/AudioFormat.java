@@ -213,6 +213,8 @@ import java.util.Objects;
  * (e.g.{@link AudioTrack#getPlaybackHeadPosition()
  * AudioTrack.getPlaybackHeadPosition()}),
  * depending on the context where audio frame is used.
+ * For the purposes of {@link AudioFormat#getFrameSizeInBytes()}, a compressed data format
+ * returns a frame size of 1 byte.
  */
 public final class AudioFormat implements Parcelable {
 
@@ -721,27 +723,53 @@ public final class AudioFormat implements Parcelable {
     }
 
     /**
-     * Private constructor with an ignored argument to differentiate from the removed default ctor
-     * @param ignoredArgument
-     */
-    private AudioFormat(int ignoredArgument) {
-    }
-
-    /**
      * Constructor used by the JNI.  Parameters are not checked for validity.
      */
     // Update sound trigger JNI in core/jni/android_hardware_SoundTrigger.cpp when modifying this
     // constructor
     @UnsupportedAppUsage
     private AudioFormat(int encoding, int sampleRate, int channelMask, int channelIndexMask) {
-        mEncoding = encoding;
-        mSampleRate = sampleRate;
-        mChannelMask = channelMask;
-        mChannelIndexMask = channelIndexMask;
-        mPropertySetMask = AUDIO_FORMAT_HAS_PROPERTY_ENCODING |
-                AUDIO_FORMAT_HAS_PROPERTY_SAMPLE_RATE |
-                AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_MASK |
-                AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_INDEX_MASK;
+        this(
+             AUDIO_FORMAT_HAS_PROPERTY_ENCODING
+             | AUDIO_FORMAT_HAS_PROPERTY_SAMPLE_RATE
+             | AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_MASK
+             | AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_INDEX_MASK,
+             encoding, sampleRate, channelMask, channelIndexMask
+             );
+    }
+
+    private AudioFormat(int propertySetMask,
+            int encoding, int sampleRate, int channelMask, int channelIndexMask) {
+        mPropertySetMask = propertySetMask;
+        mEncoding = (propertySetMask & AUDIO_FORMAT_HAS_PROPERTY_ENCODING) != 0
+                ? encoding : ENCODING_INVALID;
+        mSampleRate = (propertySetMask & AUDIO_FORMAT_HAS_PROPERTY_SAMPLE_RATE) != 0
+                ? sampleRate : SAMPLE_RATE_UNSPECIFIED;
+        mChannelMask = (propertySetMask & AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_MASK) != 0
+                ? channelMask : CHANNEL_INVALID;
+        mChannelIndexMask = (propertySetMask & AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_INDEX_MASK) != 0
+                ? channelIndexMask : CHANNEL_INVALID;
+
+        // Compute derived values.
+
+        final int channelIndexCount = Integer.bitCount(getChannelIndexMask());
+        int channelCount = channelCountFromOutChannelMask(getChannelMask());
+        if (channelCount == 0) {
+            channelCount = channelIndexCount;
+        } else if (channelCount != channelIndexCount && channelIndexCount != 0) {
+            channelCount = 0; // position and index channel count mismatch
+        }
+        mChannelCount = channelCount;
+
+        int frameSizeInBytes = 1;
+        try {
+            frameSizeInBytes = getBytesPerSample(mEncoding) * channelCount;
+        } catch (IllegalArgumentException iae) {
+            // ignored
+        }
+        // it is possible that channel count is 0, so ensure we return 1 for
+        // mFrameSizeInBytes for consistency.
+        mFrameSizeInBytes = frameSizeInBytes != 0 ? frameSizeInBytes : 1;
     }
 
     /** @hide */
@@ -755,14 +783,21 @@ public final class AudioFormat implements Parcelable {
     /** @hide */
     public final static int AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_INDEX_MASK = 0x1 << 3;
 
+    // This is an immutable class, all member variables are final.
+
+    // Essential values.
     @UnsupportedAppUsage
-    private int mEncoding;
+    private final int mEncoding;
     @UnsupportedAppUsage
-    private int mSampleRate;
+    private final int mSampleRate;
     @UnsupportedAppUsage
-    private int mChannelMask;
-    private int mChannelIndexMask;
-    private int mPropertySetMask;
+    private final int mChannelMask;
+    private final int mChannelIndexMask;
+    private final int mPropertySetMask;
+
+    // Derived values computed in the constructor, cached here.
+    private final int mChannelCount;
+    private final int mFrameSizeInBytes;
 
     /**
      * Return the encoding.
@@ -772,9 +807,6 @@ public final class AudioFormat implements Parcelable {
      * {@link AudioFormat#ENCODING_INVALID} if not set.
      */
     public int getEncoding() {
-        if ((mPropertySetMask & AUDIO_FORMAT_HAS_PROPERTY_ENCODING) == 0) {
-            return ENCODING_INVALID;
-        }
         return mEncoding;
     }
 
@@ -796,9 +828,6 @@ public final class AudioFormat implements Parcelable {
      * {@link AudioFormat#CHANNEL_INVALID} if not set.
      */
     public int getChannelMask() {
-        if ((mPropertySetMask & AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_MASK) == 0) {
-            return CHANNEL_INVALID;
-        }
         return mChannelMask;
     }
 
@@ -811,9 +840,6 @@ public final class AudioFormat implements Parcelable {
      * {@link AudioFormat#CHANNEL_INVALID} if not set or an invalid mask was used.
      */
     public int getChannelIndexMask() {
-        if ((mPropertySetMask & AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_INDEX_MASK) == 0) {
-            return CHANNEL_INVALID;
-        }
         return mChannelIndexMask;
     }
 
@@ -823,14 +849,26 @@ public final class AudioFormat implements Parcelable {
      * Zero is returned if both the channel position mask and the channel index mask are not set.
      */
     public int getChannelCount() {
-        final int channelIndexCount = Integer.bitCount(getChannelIndexMask());
-        int channelCount = channelCountFromOutChannelMask(getChannelMask());
-        if (channelCount == 0) {
-            channelCount = channelIndexCount;
-        } else if (channelCount != channelIndexCount && channelIndexCount != 0) {
-            channelCount = 0; // position and index channel count mismatch
-        }
-        return channelCount;
+        return mChannelCount;
+    }
+
+    /**
+     * Return the frame size in bytes.
+     *
+     * For PCM or PCM packed compressed data this is the size of a sample multiplied
+     * by the channel count. For all other cases, including invalid/unset channel masks,
+     * this will return 1 byte.
+     * As an example, a stereo 16-bit PCM format would have a frame size of 4 bytes,
+     * an 8 channel float PCM format would have a frame size of 32 bytes,
+     * and a compressed data format (not packed in PCM) would have a frame size of 1 byte.
+     *
+     * Both {@link AudioRecord} or {@link AudioTrack} process data in multiples of
+     * this frame size.
+     *
+     * @return The audio frame size in bytes corresponding to the encoding and the channel mask.
+     */
+    public int getFrameSizeInBytes() {
+        return mFrameSizeInBytes;
     }
 
     /** @hide */
@@ -841,7 +879,7 @@ public final class AudioFormat implements Parcelable {
     /** @hide */
     public String toLogFriendlyString() {
         return String.format("%dch %dHz %s",
-                getChannelCount(), mSampleRate, toLogFriendlyEncoding(mEncoding));
+                mChannelCount, mSampleRate, toLogFriendlyEncoding(mEncoding));
     }
 
     /**
@@ -890,14 +928,13 @@ public final class AudioFormat implements Parcelable {
          * @return a new {@link AudioFormat} object
          */
         public AudioFormat build() {
-            AudioFormat af = new AudioFormat(1980/*ignored*/);
-            af.mEncoding = mEncoding;
-            // not calling setSampleRate is equivalent to calling
-            // setSampleRate(SAMPLE_RATE_UNSPECIFIED)
-            af.mSampleRate = mSampleRate;
-            af.mChannelMask = mChannelMask;
-            af.mChannelIndexMask = mChannelIndexMask;
-            af.mPropertySetMask = mPropertySetMask;
+            AudioFormat af = new AudioFormat(
+                    mPropertySetMask,
+                    mEncoding,
+                    mSampleRate,
+                    mChannelMask,
+                    mChannelIndexMask
+                    );
             return af;
         }
 
@@ -1106,11 +1143,13 @@ public final class AudioFormat implements Parcelable {
     }
 
     private AudioFormat(Parcel in) {
-        mPropertySetMask = in.readInt();
-        mEncoding = in.readInt();
-        mSampleRate = in.readInt();
-        mChannelMask = in.readInt();
-        mChannelIndexMask = in.readInt();
+        this(
+             in.readInt(), // propertySetMask
+             in.readInt(), // encoding
+             in.readInt(), // sampleRate
+             in.readInt(), // channelMask
+             in.readInt()  // channelIndexMask
+            );
     }
 
     public static final Parcelable.Creator<AudioFormat> CREATOR =

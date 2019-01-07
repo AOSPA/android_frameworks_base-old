@@ -46,10 +46,13 @@ public final class Telecom extends BaseCommand {
     private static final String COMMAND_SET_PHONE_ACCOUNT_DISABLED = "set-phone-account-disabled";
     private static final String COMMAND_REGISTER_PHONE_ACCOUNT = "register-phone-account";
     private static final String COMMAND_REGISTER_SIM_PHONE_ACCOUNT = "register-sim-phone-account";
+    private static final String COMMAND_SET_TEST_CALL_REDIRECTION_APP = "set-test-call-redirection-app";
     private static final String COMMAND_SET_TEST_CALL_SCREENING_APP = "set-test-call-screening-app";
     private static final String COMMAND_ADD_OR_REMOVE_CALL_COMPANION_APP =
             "add-or-remove-call-companion-app";
     private static final String COMMAND_SET_TEST_AUTO_MODE_APP = "set-test-auto-mode-app";
+    private static final String COMMAND_SET_PHONE_ACCOUNT_SUGGESTION_COMPONENT =
+            "set-phone-acct-suggestion-component";
     private static final String COMMAND_UNREGISTER_PHONE_ACCOUNT = "unregister-phone-account";
     private static final String COMMAND_SET_DEFAULT_DIALER = "set-default-dialer";
     private static final String COMMAND_GET_DEFAULT_DIALER = "get-default-dialer";
@@ -63,35 +66,37 @@ public final class Telecom extends BaseCommand {
 
     @Override
     public void onShowUsage(PrintStream out) {
-        out.println(
-                "usage: telecom [subcommand] [options]\n" +
-                "usage: telecom set-phone-account-enabled <COMPONENT> <ID> <USER_SN>\n" +
-                "usage: telecom set-phone-account-disabled <COMPONENT> <ID> <USER_SN>\n" +
-                "usage: telecom register-phone-account <COMPONENT> <ID> <USER_SN> <LABEL>\n" +
-                "usage: telecom set-test-call-screening-app <PACKAGE>\n" +
-                "usage: telecom set-test-auto-mode-app <PACKAGE>\n" +
-                "usage: telecom add-or-remove-call-companion-app <PACKAGE> <1/0>\n" +
-                "usage: telecom register-sim-phone-account <COMPONENT> <ID> <USER_SN> <LABEL> <ADDRESS>\n" +
-                "usage: telecom unregister-phone-account <COMPONENT> <ID> <USER_SN>\n" +
-                "usage: telecom set-default-dialer <PACKAGE>\n" +
-                "usage: telecom get-default-dialer\n" +
-                "usage: telecom get-system-dialer\n" +
-                "usage: telecom wait-on-handlers\n" +
-                "\n" +
-                "telecom set-phone-account-enabled: Enables the given phone account, if it has \n" +
-                " already been registered with Telecom.\n" +
-                "\n" +
-                "telecom set-phone-account-disabled: Disables the given phone account, if it \n" +
-                " has already been registered with telecom.\n" +
-                "\n" +
-                "telecom set-default-dialer: Sets the default dialer to the given component. \n" +
-                "\n" +
-                "telecom get-default-dialer: Displays the current default dialer. \n" +
-                "\n" +
-                "telecom get-system-dialer: Displays the current system dialer. \n" +
-                "\n" +
-                "telecom wait-on-handlers: Wait until all handlers finish their work. \n"
-                );
+        out.println("usage: telecom [subcommand] [options]\n"
+                + "usage: telecom set-phone-account-enabled <COMPONENT> <ID> <USER_SN>\n"
+                + "usage: telecom set-phone-account-disabled <COMPONENT> <ID> <USER_SN>\n"
+                + "usage: telecom register-phone-account <COMPONENT> <ID> <USER_SN> <LABEL>\n"
+                + "usage: telecom set-test-call-redirection-app <PACKAGE>\n"
+                + "usage: telecom set-test-call-screening-app <PACKAGE>\n"
+                + "usage: telecom set-test-auto-mode-app <PACKAGE>\n"
+                + "usage: telecom set-phone-acct-suggestion-component <COMPONENT>\n"
+                + "usage: telecom add-or-remove-call-companion-app <PACKAGE> <1/0>\n"
+                + "usage: telecom register-sim-phone-account <COMPONENT> <ID> <USER_SN>"
+                + " <LABEL> <ADDRESS>\n"
+                + "usage: telecom unregister-phone-account <COMPONENT> <ID> <USER_SN>\n"
+                + "usage: telecom set-default-dialer <PACKAGE>\n"
+                + "usage: telecom get-default-dialer\n"
+                + "usage: telecom get-system-dialer\n"
+                + "usage: telecom wait-on-handlers\n"
+                + "\n"
+                + "telecom set-phone-account-enabled: Enables the given phone account, if it has \n"
+                + " already been registered with Telecom.\n"
+                + "\n"
+                + "telecom set-phone-account-disabled: Disables the given phone account, if it \n"
+                + " has already been registered with telecom.\n"
+                + "\n"
+                + "telecom set-default-dialer: Sets the default dialer to the given component. \n"
+                + "\n"
+                + "telecom get-default-dialer: Displays the current default dialer. \n"
+                + "\n"
+                + "telecom get-system-dialer: Displays the current system dialer. \n"
+                + "\n"
+                + "telecom wait-on-handlers: Wait until all handlers finish their work. \n"
+        );
     }
 
     @Override
@@ -120,6 +125,9 @@ public final class Telecom extends BaseCommand {
             case COMMAND_REGISTER_PHONE_ACCOUNT:
                 runRegisterPhoneAccount();
                 break;
+            case COMMAND_SET_TEST_CALL_REDIRECTION_APP:
+                runSetTestCallRedirectionApp();
+                break;
             case COMMAND_SET_TEST_CALL_SCREENING_APP:
                 runSetTestCallScreeningApp();
                 break;
@@ -128,6 +136,9 @@ public final class Telecom extends BaseCommand {
                 break;
             case COMMAND_SET_TEST_AUTO_MODE_APP:
                 runSetTestAutoModeApp();
+                break;
+            case COMMAND_SET_PHONE_ACCOUNT_SUGGESTION_COMPONENT:
+                runSetTestPhoneAcctSuggestionComponent();
                 break;
             case COMMAND_REGISTER_SIM_PHONE_ACCOUNT:
                 runRegisterSimPhoneAccount();
@@ -189,6 +200,11 @@ public final class Telecom extends BaseCommand {
         System.out.println("Success - " + handle + " registered.");
     }
 
+    private void runSetTestCallRedirectionApp() throws RemoteException {
+        final String packageName = nextArg();
+        mTelecomService.setTestDefaultCallRedirectionApp(packageName);
+    }
+
     private void runSetTestCallScreeningApp() throws RemoteException {
         final String packageName = nextArg();
         mTelecomService.setTestDefaultCallScreeningApp(packageName);
@@ -204,6 +220,11 @@ public final class Telecom extends BaseCommand {
     private void runSetTestAutoModeApp() throws RemoteException {
         final String packageName = nextArg();
         mTelecomService.setTestAutoModeApp(packageName);
+    }
+
+    private void runSetTestPhoneAcctSuggestionComponent() throws RemoteException {
+        final String componentName = nextArg();
+        mTelecomService.setTestPhoneAcctSuggestionComponent(componentName);
     }
 
     private void runUnregisterPhoneAccount() throws RemoteException {

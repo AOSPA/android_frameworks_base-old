@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <system/graphics.h>
 #include <ui/DisplayInfo.h>
+#include <ui/DisplayedFrameStats.h>
 #include <ui/FrameStats.h>
 #include <ui/GraphicTypes.h>
 #include <ui/HdrCapabilities.h>
@@ -96,6 +97,16 @@ static struct {
     jclass clazz;
     jmethodID builder;
 } gGraphicBufferClassInfo;
+
+static struct {
+    jclass clazz;
+    jmethodID ctor;
+} gDisplayedContentSampleClassInfo;
+
+static struct {
+    jclass clazz;
+    jmethodID ctor;
+} gDisplayedContentSamplingAttributesClassInfo;
 
 // ----------------------------------------------------------------------------
 
@@ -337,6 +348,15 @@ static void nativeSetInputWindowInfo(JNIEnv* env, jclass clazz, jlong transactio
     transaction->setInputWindowInfo(ctrl, *handle->getInfo());
 }
 
+static void nativeTransferTouchFocus(JNIEnv* env, jclass clazz, jlong transactionObj,
+        jobject fromTokenObj, jobject toTokenObj) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    sp<IBinder> fromToken(ibinderForJavaObject(env, fromTokenObj));
+    sp<IBinder> toToken(ibinderForJavaObject(env, toTokenObj));
+    transaction->transferTouchFocus(fromToken, toToken);
+}
+
 static void nativeSetColor(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject, jfloatArray fColor) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
@@ -377,6 +397,14 @@ static void nativeSetWindowCrop(JNIEnv* env, jclass clazz, jlong transactionObj,
     transaction->setCrop_legacy(ctrl, crop);
 }
 
+static void nativeSetCornerRadius(JNIEnv* env, jclass clazz, jlong transactionObj,
+         jlong nativeObject, jfloat cornerRadius) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
+    transaction->setCornerRadius(ctrl, cornerRadius);
+}
+
 static void nativeSetLayerStack(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject, jint layerStack) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
@@ -388,6 +416,73 @@ static void nativeSetLayerStack(JNIEnv* env, jclass clazz, jlong transactionObj,
 static jobject nativeGetBuiltInDisplay(JNIEnv* env, jclass clazz, jint id) {
     sp<IBinder> token(SurfaceComposerClient::getBuiltInDisplay(id));
     return javaObjectForIBinder(env, token);
+}
+
+static jobject nativeGetDisplayedContentSamplingAttributes(JNIEnv* env, jclass clazz,
+        jobject tokenObj) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+
+    ui::PixelFormat format;
+    ui::Dataspace dataspace;
+    uint8_t componentMask;
+    status_t err = SurfaceComposerClient::getDisplayedContentSamplingAttributes(
+            token, &format, &dataspace, &componentMask);
+    if (err != OK) {
+        return nullptr;
+    }
+    return env->NewObject(gDisplayedContentSamplingAttributesClassInfo.clazz,
+                          gDisplayedContentSamplingAttributesClassInfo.ctor,
+                          format, dataspace, componentMask);
+}
+
+static jboolean nativeSetDisplayedContentSamplingEnabled(JNIEnv* env, jclass clazz,
+        jobject tokenObj, jboolean enable, jint componentMask, jint maxFrames) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+    return SurfaceComposerClient::setDisplayContentSamplingEnabled(
+            token, enable, componentMask, maxFrames);
+}
+
+static jobject nativeGetDisplayedContentSample(JNIEnv* env, jclass clazz, jobject tokenObj,
+    jlong maxFrames, jlong timestamp) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+
+    DisplayedFrameStats stats;
+    status_t err = SurfaceComposerClient::getDisplayedContentSample(
+            token, maxFrames, timestamp, &stats);
+    if (err != OK) {
+        return nullptr;
+    }
+
+    jlongArray histogramComponent0 = env->NewLongArray(stats.component_0_sample.size());
+    jlongArray histogramComponent1 = env->NewLongArray(stats.component_1_sample.size());
+    jlongArray histogramComponent2 = env->NewLongArray(stats.component_2_sample.size());
+    jlongArray histogramComponent3 = env->NewLongArray(stats.component_3_sample.size());
+    if ((histogramComponent0 == nullptr) ||
+        (histogramComponent1 == nullptr) ||
+        (histogramComponent2 == nullptr) ||
+        (histogramComponent3 == nullptr)) {
+        return JNI_FALSE;
+    }
+
+    env->SetLongArrayRegion(histogramComponent0, 0,
+            stats.component_0_sample.size(),
+            reinterpret_cast<jlong*>(stats.component_0_sample.data()));
+    env->SetLongArrayRegion(histogramComponent1, 0,
+            stats.component_1_sample.size(),
+            reinterpret_cast<jlong*>(stats.component_1_sample.data()));
+    env->SetLongArrayRegion(histogramComponent2, 0,
+            stats.component_2_sample.size(),
+            reinterpret_cast<jlong*>(stats.component_2_sample.data()));
+    env->SetLongArrayRegion(histogramComponent3, 0,
+            stats.component_3_sample.size(),
+            reinterpret_cast<jlong*>(stats.component_3_sample.data()));
+    return env->NewObject(gDisplayedContentSampleClassInfo.clazz,
+                          gDisplayedContentSampleClassInfo.ctor,
+                          stats.numFrames,
+                          histogramComponent0,
+                          histogramComponent1,
+                          histogramComponent2,
+                          histogramComponent3);
 }
 
 static jobject nativeCreateDisplay(JNIEnv* env, jclass clazz, jstring nameObj,
@@ -883,6 +978,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetFlags },
     {"nativeSetWindowCrop", "(JJIIII)V",
             (void*)nativeSetWindowCrop },
+    {"nativeSetCornerRadius", "(JJF)V",
+            (void*)nativeSetCornerRadius },
     {"nativeSetLayerStack", "(JJI)V",
             (void*)nativeSetLayerStack },
     {"nativeGetBuiltInDisplay", "(I)Landroid/os/IBinder;",
@@ -944,7 +1041,17 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
     {"nativeCaptureLayers", "(Landroid/os/IBinder;Landroid/graphics/Rect;F)Landroid/graphics/GraphicBuffer;",
             (void*)nativeCaptureLayers },
     {"nativeSetInputWindowInfo", "(JJLandroid/view/InputWindowHandle;)V",
-     (void*)nativeSetInputWindowInfo },
+            (void*)nativeSetInputWindowInfo },
+    {"nativeTransferTouchFocus", "(JLandroid/os/IBinder;Landroid/os/IBinder;)V",
+            (void*)nativeTransferTouchFocus },
+    {"nativeGetDisplayedContentSamplingAttributes",
+            "(Landroid/os/IBinder;)Landroid/hardware/display/DisplayedContentSamplingAttributes;",
+            (void*)nativeGetDisplayedContentSamplingAttributes },
+    {"nativeSetDisplayedContentSamplingEnabled", "(Landroid/os/IBinder;ZII)Z",
+            (void*)nativeSetDisplayedContentSamplingEnabled },
+    {"nativeGetDisplayedContentSample",
+            "(Landroid/os/IBinder;JJ)Landroid/hardware/display/DisplayedContentSample;",
+            (void*)nativeGetDisplayedContentSample },
 };
 
 int register_android_view_SurfaceControl(JNIEnv* env)
@@ -999,6 +1106,18 @@ int register_android_view_SurfaceControl(JNIEnv* env)
     gGraphicBufferClassInfo.builder = GetStaticMethodIDOrDie(env, graphicsBufferClazz,
             "createFromExisting", "(IIIIJ)Landroid/graphics/GraphicBuffer;");
 
+    jclass displayedContentSampleClazz = FindClassOrDie(env,
+            "android/hardware/display/DisplayedContentSample");
+    gDisplayedContentSampleClassInfo.clazz = MakeGlobalRefOrDie(env, displayedContentSampleClazz);
+    gDisplayedContentSampleClassInfo.ctor = GetMethodIDOrDie(env,
+            displayedContentSampleClazz, "<init>", "(J[J[J[J[J)V");
+
+    jclass displayedContentSamplingAttributesClazz = FindClassOrDie(env,
+            "android/hardware/display/DisplayedContentSamplingAttributes");
+    gDisplayedContentSamplingAttributesClassInfo.clazz = MakeGlobalRefOrDie(env,
+            displayedContentSamplingAttributesClazz);
+    gDisplayedContentSamplingAttributesClassInfo.ctor = GetMethodIDOrDie(env,
+            displayedContentSamplingAttributesClazz, "<init>", "(III)V");
     return err;
 }
 

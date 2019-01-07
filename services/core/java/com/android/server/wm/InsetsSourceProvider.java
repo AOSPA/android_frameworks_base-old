@@ -19,10 +19,18 @@ package com.android.server.wm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Rect;
+import android.util.proto.ProtoOutputStream;
+import android.view.InsetsState;
+import android.view.SurfaceControl;
+import android.view.SurfaceControl.Transaction;
 import android.view.InsetsSource;
+import android.view.InsetsSourceControl;
 
 import com.android.internal.util.function.TriConsumer;
-import com.android.server.policy.WindowManagerPolicy;
+import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
+
+import java.io.PrintWriter;
 
 /**
  * Controller for a specific inset source on the server. It's called provider as it provides the
@@ -32,11 +40,29 @@ class InsetsSourceProvider {
 
     private final Rect mTmpRect = new Rect();
     private final @NonNull InsetsSource mSource;
+    private final DisplayContent mDisplayContent;
+    private final InsetsStateController mStateController;
+    private @Nullable InsetsSourceControl mControl;
+    private @Nullable WindowState mControllingWin;
+    private @Nullable ControlAdapter mAdapter;
     private WindowState mWin;
     private TriConsumer<DisplayFrames, WindowState, Rect> mFrameProvider;
 
-    InsetsSourceProvider(InsetsSource source) {
+    /** The visibility override from the current controlling window. */
+    private boolean mClientVisible;
+
+    /**
+     * Whether the window is available and considered visible as in {@link WindowState#isVisible}.
+     */
+    private boolean mServerVisible;
+
+
+    InsetsSourceProvider(InsetsSource source, InsetsStateController stateController,
+            DisplayContent displayContent) {
+        mClientVisible = InsetsState.getDefaultVisibly(source.getType());
         mSource = source;
+        mDisplayContent = displayContent;
+        mStateController = stateController;
     }
 
     InsetsSource getSource() {
@@ -58,10 +84,9 @@ class InsetsSourceProvider {
         mWin = win;
         mFrameProvider = frameProvider;
         if (win == null) {
-            mSource.setVisible(false);
+            setServerVisible(false);
             mSource.setFrame(new Rect());
         } else {
-            mSource.setVisible(true);
             mWin.setInsetProvider(this);
         }
     }
@@ -81,7 +106,109 @@ class InsetsSourceProvider {
             mTmpRect.inset(mWin.mGivenContentInsets);
         }
         mSource.setFrame(mTmpRect);
-        mSource.setVisible(mWin.isVisible() && !mWin.mGivenInsetsPending);
-
+        setServerVisible(mWin.wouldBeVisibleIfPolicyIgnored() && mWin.mPolicyVisibility
+                && !mWin.mGivenInsetsPending);
     }
+
+    void updateControlForTarget(@Nullable WindowState target) {
+        if (target == mControllingWin) {
+            return;
+        }
+        if (target == null) {
+            // Cancelling the animation will invoke onAnimationCancelled, resetting all the fields.
+            mWin.cancelAnimation();
+            return;
+        }
+        mAdapter = new ControlAdapter();
+        mWin.startAnimation(mDisplayContent.getPendingTransaction(), mAdapter,
+                !mClientVisible /* hidden */);
+        mControllingWin = target;
+        mControl = new InsetsSourceControl(mSource.getType(), mAdapter.mCapturedLeash);
+    }
+
+    boolean onInsetsModified(WindowState caller, InsetsSource modifiedSource) {
+        if (mControllingWin != caller || modifiedSource.isVisible() == mClientVisible) {
+            return false;
+        }
+        setClientVisible(modifiedSource.isVisible());
+        return true;
+    }
+
+    private void setClientVisible(boolean clientVisible) {
+        if (mClientVisible == clientVisible) {
+            return;
+        }
+        mClientVisible = clientVisible;
+        mDisplayContent.mWmService.mH.sendMessage(PooledLambda.obtainMessage(
+                DisplayContent::layoutAndAssignWindowLayersIfNeeded, mDisplayContent));
+        updateVisibility();
+    }
+
+    private void setServerVisible(boolean serverVisible) {
+        mServerVisible = serverVisible;
+        updateVisibility();
+    }
+
+    private void updateVisibility() {
+        mSource.setVisible(mServerVisible && mClientVisible);
+    }
+
+    InsetsSourceControl getControl() {
+        return mControl;
+    }
+
+    boolean isClientVisible() {
+        return mClientVisible;
+    }
+
+    private class ControlAdapter implements AnimationAdapter {
+
+        private SurfaceControl mCapturedLeash;
+
+        @Override
+        public boolean getShowWallpaper() {
+            return false;
+        }
+
+        @Override
+        public int getBackgroundColor() {
+            return 0;
+        }
+
+        @Override
+        public void startAnimation(SurfaceControl animationLeash, Transaction t,
+                OnAnimationFinishedCallback finishCallback) {
+            mCapturedLeash = animationLeash;
+            t.setPosition(mCapturedLeash, mSource.getFrame().left, mSource.getFrame().top);
+        }
+
+        @Override
+        public void onAnimationCancelled(SurfaceControl animationLeash) {
+            if (mAdapter == this) {
+                mStateController.notifyControlRevoked(mControllingWin, InsetsSourceProvider.this);
+                setClientVisible(InsetsState.getDefaultVisibly(mSource.getType()));
+                mControl = null;
+                mControllingWin = null;
+                mAdapter = null;
+            }
+        }
+
+        @Override
+        public long getDurationHint() {
+            return 0;
+        }
+
+        @Override
+        public long getStatusBarTransitionsStartTime() {
+            return 0;
+        }
+
+        @Override
+        public void dump(PrintWriter pw, String prefix) {
+        }
+
+        @Override
+        public void writeToProto(ProtoOutputStream proto) {
+        }
+    };
 }

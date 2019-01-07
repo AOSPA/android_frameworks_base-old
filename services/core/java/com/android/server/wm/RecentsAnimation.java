@@ -47,7 +47,7 @@ import android.view.IRecentsAnimationRunner;
 
 import com.android.server.LocalServices;
 import com.android.server.am.AssistDataRequester;
-import com.android.server.intelligence.IntelligenceManagerInternal;
+import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.wm.RecentsAnimationController.RecentsAnimationCallbacks;
 
 import java.util.List;
@@ -93,12 +93,12 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "RecentsAnimation#startRecentsActivity");
 
         // TODO(multi-display) currently only support recents animation in default display.
-        final DisplayWindowController dwc =
-                mService.mRootActivityContainer.getDefaultDisplay().getWindowContainerController();
+        final DisplayContent dc =
+                mService.mRootActivityContainer.getDefaultDisplay().mDisplayContent;
         if (!mWindowManager.canStartRecentsAnimation()) {
             notifyAnimationCancelBeforeStart(recentsAnimationRunner);
             if (DEBUG) Slog.d(TAG, "Can't start recents animation, nextAppTransition="
-                        + dwc.getPendingAppTransition());
+                        + dc.mAppTransition.getAppTransition());
             return;
         }
 
@@ -107,7 +107,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                 && recentsComponent.equals(intent.getComponent())
                         ? ACTIVITY_TYPE_RECENTS
                         : ACTIVITY_TYPE_HOME;
-        final ActivityStack targetStack = mDefaultDisplay.getStack(WINDOWING_MODE_UNDEFINED,
+        ActivityStack targetStack = mDefaultDisplay.getStack(WINDOWING_MODE_UNDEFINED,
                 mTargetActivityType);
         ActivityRecord targetActivity = getTargetActivity(targetStack, intent.getComponent());
         final boolean hasExistingActivity = targetActivity != null;
@@ -134,10 +134,8 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
 
         mWindowManager.deferSurfaceLayout();
         try {
-            final int userId = mService.getCurrentUserId();
-
             // Kick off the assist data request in the background before showing the target activity
-            requestAssistData(recentsComponent, recentsUid, assistDataReceiver, userId);
+            requestAssistData(recentsComponent, recentsUid, assistDataReceiver);
 
             if (hasExistingActivity) {
                 // Move the recents activity into place for the animation if it is not top most
@@ -153,7 +151,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                             "startRecentsActivity");
                 }
             } else {
-                // No recents activity
+                // No recents activity, create the new recents activity bottom most
                 ActivityOptions options = ActivityOptions.makeBasic();
                 options.setLaunchActivityType(mTargetActivityType);
                 options.setAvoidMoveToFront();
@@ -164,13 +162,22 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                         .setCallingUid(recentsUid)
                         .setCallingPackage(recentsComponent.getPackageName())
                         .setActivityOptions(SafeActivityOptions.fromBundle(options.toBundle()))
-                        .setMayWait(userId)
+                        .setMayWait(mService.getCurrentUserId())
                         .execute();
+
+                // Move the recents activity into place for the animation
+                targetActivity = mDefaultDisplay.getStack(WINDOWING_MODE_UNDEFINED,
+                        mTargetActivityType).getTopActivity();
+                targetStack = targetActivity.getActivityStack();
+                mDefaultDisplay.moveStackBehindBottomMostVisibleStack(targetStack);
+                if (DEBUG) {
+                    Slog.d(TAG, "Moved stack=" + targetStack + " behind stack="
+                            + mDefaultDisplay.getStackAbove(targetStack));
+                }
+
                 mWindowManager.prepareAppTransition(TRANSIT_NONE, false);
                 mWindowManager.executeAppTransition();
 
-                targetActivity = mDefaultDisplay.getStack(WINDOWING_MODE_UNDEFINED,
-                        mTargetActivityType).getTopActivity();
 
                 // TODO: Maybe wait for app to draw in this particular case?
 
@@ -212,7 +219,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
      * Requests assist data for the top visible activities.
      */
     private void requestAssistData(ComponentName recentsComponent, int recentsUid,
-            @Deprecated IAssistDataReceiver assistDataReceiver, int userId) {
+            @Deprecated IAssistDataReceiver assistDataReceiver) {
         final AppOpsManager appOpsManager = (AppOpsManager)
                 mService.mContext.getSystemService(Context.APP_OPS_SERVICE);
         final List<IBinder> topActivities =
@@ -225,19 +232,20 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                 public void onAssistDataReceivedLocked(Bundle data, int activityIndex,
                         int activityCount) {
                     // Try to notify the intelligence service first
-                    final IntelligenceManagerInternal imService =
-                            LocalServices.getService(IntelligenceManagerInternal.class);
+                    final ContentCaptureManagerInternal imService =
+                            LocalServices.getService(ContentCaptureManagerInternal.class);
                     final IBinder activityToken = topActivities.get(activityIndex);
-                    if (imService == null
-                            || !imService.sendActivityAssistData(userId, activityToken, data)) {
+                    final ActivityRecord r = ActivityRecord.forTokenLocked(activityToken);
+                    if (r != null && (imService == null
+                            || !imService.sendActivityAssistData(r.mUserId, activityToken, data))) {
                         // Otherwise, use the provided assist data receiver
                         super.onAssistDataReceivedLocked(data, activityIndex, activityCount);
                     }
                 }
             };
         } else {
-            final IntelligenceManagerInternal imService =
-                    LocalServices.getService(IntelligenceManagerInternal.class);
+            final ContentCaptureManagerInternal imService =
+                    LocalServices.getService(ContentCaptureManagerInternal.class);
             if (imService == null) {
                 // There is no intelligence service, so there is no point requesting assist data
                 return;
@@ -254,7 +262,10 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                         int activityCount) {
                     // Try to notify the intelligence service
                     final IBinder activityToken = topActivities.get(activityIndex);
-                    imService.sendActivityAssistData(userId, activityToken, data);
+                    final ActivityRecord r = ActivityRecord.forTokenLocked(activityToken);
+                    if (r != null) {
+                        imService.sendActivityAssistData(r.mUserId, activityToken, data);
+                    }
                 }
             };
         }
@@ -378,7 +389,13 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
     }
 
     @Override
-    public void onStackOrderChanged() {
+    public void onStackOrderChanged(ActivityStack stack) {
+        if (DEBUG) Slog.d(TAG, "onStackOrderChanged(): stack=" + stack);
+        if (mDefaultDisplay.getIndexOf(stack) == -1 || !stack.shouldBeVisible(null)) {
+            // The stack is not visible, so ignore this change
+            return;
+        }
+
         // If the activity display stack order changes, cancel any running recents animation in
         // place
         mWindowManager.cancelRecentsAnimationSynchronously(REORDER_KEEP_IN_PLACE,
@@ -420,7 +437,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
         }
 
         for (int i = targetStack.getChildCount() - 1; i >= 0; i--) {
-            final TaskRecord task = (TaskRecord) targetStack.getChildAt(i);
+            final TaskRecord task = targetStack.getChildAt(i);
             if (task.getBaseIntent().getComponent().equals(component)) {
                 return task.getTopActivity();
             }

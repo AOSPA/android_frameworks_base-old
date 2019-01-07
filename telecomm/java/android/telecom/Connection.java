@@ -637,6 +637,11 @@ public abstract class Connection extends Conferenceable {
             "android.telecom.event.HANDOVER_FAILED";
 
     /**
+     * Connection extra key used to store SIP invite fields for an incoming call for IMS calls
+     */
+    public static final String EXTRA_SIP_INVITE = "android.telecom.extra.SIP_INVITE";
+
+    /**
      * Connection event used to inform an {@link InCallService} that the call session property
      * has changed
      * @hide

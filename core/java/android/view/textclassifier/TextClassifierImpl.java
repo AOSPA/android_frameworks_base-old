@@ -80,6 +80,8 @@ public final class TextClassifierImpl implements TextClassifier {
 
     private static final String LOG_TAG = DEFAULT_LOG_TAG;
 
+    private static final boolean DEBUG = false;
+
     private static final File FACTORY_MODEL_DIR = new File("/etc/textclassifier/");
     // Annotator
     private static final String ANNOTATOR_FACTORY_MODEL_FILENAME_REGEX =
@@ -108,6 +110,8 @@ public final class TextClassifierImpl implements TextClassifier {
     private AnnotatorModel mAnnotatorImpl;
     @GuardedBy("mLock") // Do not access outside this lock.
     private LangIdModel mLangIdImpl;
+    @GuardedBy("mLock") // Do not access outside this lock.
+    private ModelFileManager.ModelFile mActionModelInUse;
     @GuardedBy("mLock") // Do not access outside this lock.
     private ActionsSuggestionsModel mActionsImpl;
 
@@ -139,7 +143,7 @@ public final class TextClassifierImpl implements TextClassifier {
                         FACTORY_MODEL_DIR,
                         LANG_ID_FACTORY_MODEL_FILENAME_REGEX,
                         UPDATED_LANG_ID_MODEL_FILE,
-                        fd -> -1, // TODO: Replace this with LangIdModel.getVersion(fd)
+                        LangIdModel::getVersion,
                         fd -> ModelFileManager.ModelFile.LANGUAGE_INDEPENDENT));
         mActionsModelFileManager = new ModelFileManager(
                 new ModelFileManager.ModelFileSupplierImpl(
@@ -341,6 +345,13 @@ public final class TextClassifierImpl implements TextClassifier {
         }
     }
 
+    @Override
+    public void onTextClassifierEvent(TextClassifierEvent event) {
+        if (DEBUG) {
+            Log.d(DEFAULT_LOG_TAG, "onTextClassifierEvent() called with: event = [" + event + "]");
+        }
+    }
+
     /** @inheritDoc */
     @Override
     public TextLanguage detectLanguage(@NonNull TextLanguage.Request request) {
@@ -374,7 +385,8 @@ public final class TextClassifierImpl implements TextClassifier {
                 return mFallback.suggestConversationActions(request);
             }
             ActionsSuggestionsModel.ConversationMessage[] nativeMessages =
-                    ActionsSuggestionsHelper.toNativeMessages(request.getConversation());
+                    ActionsSuggestionsHelper.toNativeMessages(request.getConversation(),
+                            this::detectLanguageTagsFromText);
             if (nativeMessages.length == 0) {
                 return mFallback.suggestConversationActions(request);
             }
@@ -386,7 +398,10 @@ public final class TextClassifierImpl implements TextClassifier {
 
             Collection<String> expectedTypes = resolveActionTypesFromRequest(request);
             List<ConversationActions.ConversationAction> conversationActions = new ArrayList<>();
-            int maxSuggestions = Math.min(request.getMaxSuggestions(), nativeSuggestions.length);
+            int maxSuggestions = nativeSuggestions.length;
+            if (request.getMaxSuggestions() > 0) {
+                maxSuggestions = Math.min(request.getMaxSuggestions(), nativeSuggestions.length);
+            }
             for (int i = 0; i < maxSuggestions; i++) {
                 ActionsSuggestionsModel.ActionSuggestion nativeSuggestion = nativeSuggestions[i];
                 String actionType = nativeSuggestion.getActionType();
@@ -399,12 +414,37 @@ public final class TextClassifierImpl implements TextClassifier {
                                 .setConfidenceScore(nativeSuggestion.getScore())
                                 .build());
             }
-            return new ConversationActions(conversationActions);
+            String resultId = ActionsSuggestionsHelper.createResultId(
+                    mContext,
+                    request.getConversation(),
+                    mActionModelInUse.getVersion(),
+                    mActionModelInUse.getSupportedLocales());
+            return new ConversationActions(conversationActions, resultId);
         } catch (Throwable t) {
             // Avoid throwing from this method. Log the error.
             Log.e(LOG_TAG, "Error suggesting conversation actions.", t);
         }
         return mFallback.suggestConversationActions(request);
+    }
+
+    @Nullable
+    private String detectLanguageTagsFromText(CharSequence text) {
+        TextLanguage.Request request = new TextLanguage.Request.Builder(text).build();
+        TextLanguage textLanguage = detectLanguage(request);
+        int localeHypothesisCount = textLanguage.getLocaleHypothesisCount();
+        List<String> languageTags = new ArrayList<>();
+        // TODO: Reconsider this and probably make the score threshold configurable.
+        for (int i = 0; i < localeHypothesisCount; i++) {
+            ULocale locale = textLanguage.getLocale(i);
+            if (textLanguage.getConfidenceScore(locale) < 0.5) {
+                break;
+            }
+            languageTags.add(locale.toLanguageTag());
+        }
+        if (languageTags.isEmpty()) {
+            return LocaleList.getDefault().toLanguageTags();
+        }
+        return String.join(",", languageTags);
     }
 
     private Collection<String> resolveActionTypesFromRequest(ConversationActions.Request request) {
@@ -488,6 +528,7 @@ public final class TextClassifierImpl implements TextClassifier {
                 try {
                     if (pfd != null) {
                         mActionsImpl = new ActionsSuggestionsModel(pfd.getFd());
+                        mActionModelInUse = bestModel;
                     }
                 } finally {
                     maybeCloseAndLogError(pfd);
@@ -777,6 +818,9 @@ public final class TextClassifierImpl implements TextClassifier {
             if (foreignText) {
                 insertTranslateAction(actions, context, text);
             }
+            actions.forEach(
+                    action -> action.getIntent()
+                            .putExtra(TextClassifier.EXTRA_FROM_TEXT_CLASSIFIER, true));
             return actions;
         }
 

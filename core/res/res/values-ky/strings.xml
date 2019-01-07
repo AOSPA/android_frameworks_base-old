@@ -136,14 +136,10 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"WiFi аркылуу чалуу | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"<xliff:g id="SPN">%s</xliff:g> VoWifi"</string>
-    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
-    <skip />
+    <string name="wfcSpnFormat_wifi_calling" msgid="4990486735013125329">"Wi-Fi аркылуу чалуу"</string>
+    <string name="wfcSpnFormat_wifi" msgid="1892673884655959773">"Wi‑Fi"</string>
+    <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="1336669776254502831">"Wi-Fi аркылуу чалынууда"</string>
+    <string name="wfcSpnFormat_vowifi" msgid="1765176406171272629">"VoWifi"</string>
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Өчүк"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Wi-Fi тандалган"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"Тандалган мобилдик түзмөк"</string>
@@ -451,6 +447,8 @@
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"Колдонмого түзмөктүн чалуу мүмкүнчүлүктөрүнө жетки алуу уруксатын берет. Бул уруксат колдонмого, телефондун номурун, түзмөктүн ID-син, чалуунун абалын жана байланышта чыккан номурду аныктоого жол берет."</string>
     <string name="permlab_manageOwnCalls" msgid="1503034913274622244">"чалууларды тутум аркылуу өткөрүү"</string>
     <string name="permdesc_manageOwnCalls" msgid="6552974537554717418">"Чалуунун сапатын жакшыртуу максатында колдонмого чалууларын тутум аркылуу өткөрүүгө уруксат берет."</string>
+    <string name="permlab_callCompanionApp" msgid="3599252979411970473">"тутум аркылуу чалууларды көрүп, көзөмөлдөө."</string>
+    <string name="permdesc_callCompanionApp" msgid="4567344683275099090">"Колдонмого түзмөктөгү аткарылып жаткан чалууларды көрүп, көзөмөлдөөгө уруксат берет. Буга чалуулардын саны жана абалы сыяктуу маалымат кирет."</string>
     <string name="permlab_acceptHandover" msgid="2661534649736022409">"чалууну башка колдонмодон улантуу"</string>
     <string name="permdesc_acceptHandovers" msgid="4570660484220539698">"Башка колдонмодон аткарылган чалууну бул колдонмодо улантууга уруксат берүү."</string>
     <string name="permlab_readPhoneNumbers" msgid="6108163940932852440">"телефон номерлерин окуу"</string>
@@ -511,6 +509,8 @@
     <string name="permdesc_nfc" msgid="7120611819401789907">"Колдонмого Жакынкы аралыкта байланышуу (NFC) белгилери, карталары жана окугучтары менен байланышуу мүмкүнчүлүгүн берет."</string>
     <string name="permlab_disableKeyguard" msgid="3598496301486439258">"экранды бөгөттөөнү өчүрүү"</string>
     <string name="permdesc_disableKeyguard" msgid="6034203065077122992">"Колдонмого экрандын бөгөттөөчү жана ага байланыштуу сырсөз коргоосун өчүрүү уруксатын берет. Мисалы, чалуу келгенде экрандын бөгөтүн алып салат, чалуу бүткөндө кайрадан орнотот."</string>
+    <string name="permlab_getAndRequestScreenLockComplexity" msgid="3911592334192005424">"экранды бөгөттөө канчалык татаал экенин сурап, маалымат алуу"</string>
+    <string name="permdesc_getAndRequestScreenLockComplexity" msgid="9045202063228854873">"Колдонмого экранды бөгөттөөнүн татаалдыгын (татаал, орточо, оңой же такыр жок) үйрөнүүгө мүмкүнчүлүк берет. Татаалдык деңгээли сырсөздүн узундугу жана экранды бөгөттөөнүн түрү боюнча айырмаланат. Колдонмо экранды бөгөттөөнү белгилүү деңгээлге тууралоону колдонуучуларга сунуштай да алат, бирок колдонуучулар ага көңүл бурбай койсо болот. Сырсөздү колдонмо билбеши үчүн, экранды бөгөттөө сырсөзүн кадимки текстте сактоого болбойт."</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"биометрикалык аппаратты колдонуу"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"Колдонмого аныктыгын текшерүү үчүн биометрикалык аппаратты пайдалануу мүмкүндүгүн берет"</string>
     <string name="permlab_manageFingerprint" msgid="5640858826254575638">"манжа изинин аппараттык камсыздоосун башкаруу"</string>
@@ -533,6 +533,11 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Колдонмого медиа жыйнагыңыз сакталган жерлерди окууга мүмкүнчүлүк берет."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"<xliff:g id="APP">%s</xliff:g> колдонмосунда аутентификациядан өтүңүз."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Биометрикалык аппарат жеткиликсиз"</string>
+    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
+    <skip />
+    <string name="biometric_not_recognized" msgid="5770511773560736082">"Таанылган жок"</string>
+    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
+    <skip />
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Манжа изи жарым-жартылай аныкталды. Кайра аракет кылыңыз."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Манжа изи иштелбей койду. Кайра аракет кылыңыз."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Манжа изинин сенсору кирдеп калган. Тазалап, кайра аракет кылыңыз."</string>
@@ -540,7 +545,6 @@
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"Манжа өтө жай жылды. Кайра аракет кылыңыз."</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="biometric_not_recognized" msgid="5770511773560736082">"Таанылган жок"</string>
     <string name="fingerprint_authenticated" msgid="5309333983002526448">"Манжа изинин аныктыгы текшерилди"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"Жүздүн аныктыгы текшерилди"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"Жүздүн аныктыгы текшерилди, эми \"Ырастоону\" басыңыз"</string>
@@ -596,14 +600,10 @@
     <string name="permdesc_writeSyncSettings" msgid="8956262591306369868">"Колдонмого эсеп менен синхрондошуу тууралоолорун өзгөртүү уруксатын берет. Мисалы, бул Кишилер колдонмосун эсеп менен синхрондошуусун иштете алат."</string>
     <string name="permlab_readSyncStats" msgid="7396577451360202448">"шайкештирүү статистикасын окуу"</string>
     <string name="permdesc_readSyncStats" msgid="1510143761757606156">"Колдонмого эсептин статистикасын, синхрондоштуруу тарыхын, анын ичинде, канча берилиштер синхрондошкондугун окуганга уруксат берет."</string>
-    <string name="permlab_sdcardRead" product="nosdcard" msgid="367275095159405468">"USB сактагычыңыздын мазмунун окуу"</string>
-    <string name="permlab_sdcardRead" product="default" msgid="2188156462934977940">"SD-картаңыздын мазмунун окуу"</string>
-    <string name="permdesc_sdcardRead" product="nosdcard" msgid="3446988712598386079">"Колдонмого USB сактагычыңыздын мазмунун окуу мүмкүнчүлүгүн берет."</string>
-    <string name="permdesc_sdcardRead" product="default" msgid="2607362473654975411">"Колдонмого SD-картаңыздын мазмунун окуу мүмкүнчүлүгүн берет."</string>
-    <string name="permlab_sdcardWrite" product="nosdcard" msgid="8485979062254666748">"USB сактагычыңыздын мазмунун өзгөртүү же жок кылуу"</string>
-    <string name="permlab_sdcardWrite" product="default" msgid="8805693630050458763">"SD-картаңыздын мазмунун өзгөртүү же жок кылуу"</string>
-    <string name="permdesc_sdcardWrite" product="nosdcard" msgid="6175406299445710888">"Колдонмого USB сактагычына жазуу мүмкүнчүлүгүн берет."</string>
-    <string name="permdesc_sdcardWrite" product="default" msgid="4337417790936632090">"Колдонмого SD картага жазуу мүмкүнчүлүгүн берет."</string>
+    <string name="permlab_sdcardRead" msgid="1438933556581438863">"жалпы сактагычыңыздын мазмунун окуу"</string>
+    <string name="permdesc_sdcardRead" msgid="1804941689051236391">"Колдонмого жалпы сактагычыңыздын мазмунун окуу мүмкүнчүлүгүн берет."</string>
+    <string name="permlab_sdcardWrite" msgid="9220937740184960897">"жалпы сактагычыңыздын мазмунун өзгөртүү же жок кылуу"</string>
+    <string name="permdesc_sdcardWrite" msgid="2834431057338203959">"Колдонмого жалпы сактагычыңыздын мазмунун жазуу мүмкүнчүлүгүн берет."</string>
     <string name="permlab_use_sip" msgid="2052499390128979920">"SIP чалуу/чалууну кабыл алуу"</string>
     <string name="permdesc_use_sip" msgid="2297804849860225257">"Колдонмого SIP чалууларга жана чалууларды кабыл алууга мүмкүнчүлүк берет."</string>
     <string name="permlab_register_sim_subscription" msgid="3166535485877549177">"жаңы телеком SIM туташууларын каттоо"</string>
@@ -1087,15 +1087,15 @@
     <string name="deleteText" msgid="6979668428458199034">"Жок кылуу"</string>
     <string name="inputMethod" msgid="1653630062304567879">"Киргизүү ыкмасы"</string>
     <string name="editTextMenuTitle" msgid="4909135564941815494">"Текст боюнча иштер"</string>
-    <string name="email" msgid="4560673117055050403">"Электрондук почта"</string>
+    <string name="email" msgid="4560673117055050403">"Кат жөнөтүү"</string>
     <string name="email_desc" msgid="3638665569546416795">"Тандалган дарекке электрондук кат жөнөтүү"</string>
     <string name="dial" msgid="1253998302767701559">"Чалуу"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Тандалган телефон номерине чалуу"</string>
-    <string name="map" msgid="5441053548030107189">"Карта"</string>
+    <string name="map" msgid="5441053548030107189">"Картадан кароо"</string>
     <string name="map_desc" msgid="1836995341943772348">"Тандалган даректи картада табуу"</string>
     <string name="browse" msgid="1245903488306147205">"Ачуу"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Тандалган URL\'ди ачуу"</string>
-    <string name="sms" msgid="4560537514610063430">"Билдирүү"</string>
+    <string name="sms" msgid="4560537514610063430">"Билдирүү жазуу"</string>
     <string name="sms_desc" msgid="7526588350969638809">"Тандалган телефон номерине билдирүү жөнөтүү"</string>
     <string name="add_contact" msgid="7867066569670597203">"Кошуу"</string>
     <string name="add_contact_desc" msgid="4830217847004590345">"Байланыштарга кошуу"</string>
@@ -1105,6 +1105,10 @@
     <string name="add_calendar_event_desc" msgid="4326891793260687388">"Иш-чараны тандалган убакытка графикке киргизүү"</string>
     <string name="view_flight" msgid="7691640491425680214">"Көз салуу"</string>
     <string name="view_flight_desc" msgid="3876322502674253506">"Тандалган аба каттамына көз салуу"</string>
+    <string name="translate" msgid="9218619809342576858">"Которуу"</string>
+    <string name="translate_desc" msgid="4502367770068777202">"Тандалган текстти которуу"</string>
+    <string name="define" msgid="7394820043869954211">"Аныктоо"</string>
+    <string name="define_desc" msgid="7910883642444919726">"Тандалган текстти аныктоо"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"Сактагычта орун калбай баратат"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"Системанын кээ бир функциялары иштебеши мүмкүн"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"Тутумда сактагыч жетишсиз. 250МБ бош орун бар экенин текшерип туруп, өчүрүп күйгүзүңүз."</string>
@@ -1181,6 +1185,7 @@
     <string name="android_upgrading_title" product="tablet" msgid="4503169817302593560">"Планшет жаңыртылууда…"</string>
     <string name="android_upgrading_title" product="device" msgid="7009520271220804517">"Түзмөк жаңыртылууда…"</string>
     <string name="android_start_title" product="default" msgid="4536778526365907780">"Телефон күйгүзүлүүдө…"</string>
+    <string name="android_start_title" product="automotive" msgid="8418054686415318207">"Android жүргүзүлүүдө…"</string>
     <string name="android_start_title" product="tablet" msgid="4929837533850340472">"Планшет күйгүзүлүүдө…"</string>
     <string name="android_start_title" product="device" msgid="7467484093260449437">"Түзмөк күйүгүзүлүүдө…"</string>
     <string name="android_upgrading_fstrim" msgid="8036718871534640010">"Сактагыч ыңгайлаштырылууда."</string>
@@ -1239,6 +1244,10 @@
     <string name="wifi_available_content_failed_to_connect" msgid="3377406637062802645">"Бардык тармактарды көрүү үчүн басыңыз"</string>
     <string name="wifi_available_action_connect" msgid="2635699628459488788">"Туташуу"</string>
     <string name="wifi_available_action_all_networks" msgid="4368435796357931006">"Бардык тармактар"</string>
+    <string name="wifi_suggestion_title" msgid="1524719325616630906">"<xliff:g id="NAME">%s</xliff:g> сунуштаган Wi‑Fi тармагына туташтырылды"</string>
+    <string name="wifi_suggestion_content" msgid="4505530604935334589">"<xliff:g id="NAME">%s</xliff:g> сизге тармактарды сунуштай берсинби?"</string>
+    <string name="wifi_suggestion_action_allow_app" msgid="3689946344485394085">"Ооба"</string>
+    <string name="wifi_suggestion_action_disallow_app" msgid="7977918905605931385">"Жок"</string>
     <string name="wifi_wakeup_onboarding_title" msgid="228772560195634292">"Wi‑Fi автоматтык түрдө күйөт"</string>
     <string name="wifi_wakeup_onboarding_subtext" msgid="3989697580301186973">"Байланыш сигналы күчтүү тармактарга жакындаганда"</string>
     <string name="wifi_wakeup_onboarding_action_disable" msgid="838648204200836028">"Өзү кайра күйбөйт"</string>
@@ -1462,8 +1471,7 @@
       <item quantity="one">1 дал келүү</item>
     </plurals>
     <string name="action_mode_done" msgid="7217581640461922289">"Даяр"</string>
-    <string name="progress_erasing" product="nosdcard" msgid="4521573321524340058">"USB сактагыч тазаланууда…"</string>
-    <string name="progress_erasing" product="default" msgid="6596988875507043042">"SD-карта тазаланууда…"</string>
+    <string name="progress_erasing" msgid="2569962663843586562">"Жалпы сактагыч тазаланууда…"</string>
     <string name="share" msgid="1778686618230011964">"Бөлүшүү"</string>
     <string name="find" msgid="4808270900322985960">"Табуу"</string>
     <string name="websearch" msgid="4337157977400211589">"Интернеттен издөө"</string>
@@ -1835,8 +1843,7 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"SS сурамы USSD сурамына өзгөртүлдү"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"Жаңы SS сурамына өзгөртүлдү"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Жумуш профили"</string>
-    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
-    <skip />
+    <string name="notification_alerted_content_description" msgid="1296617716556420585">"Эскертилди"</string>
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"Жайып көрсөтүү"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"Жыйыштыруу"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"жайып көрсөтүү же жыйыштыруу"</string>

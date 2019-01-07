@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.policy;
 
 import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
 
 import android.app.ActivityManager;
 import android.app.Dialog;
@@ -50,7 +51,6 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.UserIcons;
 import com.android.settingslib.RestrictedLockUtilsInternal;
 import com.android.settingslib.Utils;
-import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.GuestResumeSessionReceiver;
 import com.android.systemui.Prefs;
@@ -68,9 +68,14 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.inject.Inject;
+import javax.inject.Named;
+import javax.inject.Singleton;
+
 /**
  * Keeps a list of all users on the device for user switching.
  */
+@Singleton
 public class UserSwitcherController implements Dumpable {
 
     private static final String TAG = "UserSwitcherController";
@@ -102,8 +107,9 @@ public class UserSwitcherController implements Dumpable {
     private Intent mSecondaryUserServiceIntent;
     private SparseBooleanArray mForcePictureLoadForUserId = new SparseBooleanArray(2);
 
+    @Inject
     public UserSwitcherController(Context context, KeyguardMonitor keyguardMonitor,
-            Handler handler, ActivityStarter activityStarter) {
+            @Named(MAIN_HANDLER_NAME) Handler handler, ActivityStarter activityStarter) {
         mContext = context;
         mGuestResumeSessionReceiver.register(context);
         mKeyguardMonitor = keyguardMonitor;
@@ -590,7 +596,7 @@ public class UserSwitcherController implements Dumpable {
 
         protected BaseUserAdapter(UserSwitcherController controller) {
             mController = controller;
-            mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
+            mKeyguardMonitor = controller.mKeyguardMonitor;
             controller.addAdapter(new WeakReference<>(this));
         }
 

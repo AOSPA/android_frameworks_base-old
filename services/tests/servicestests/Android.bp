@@ -69,10 +69,10 @@ android_test {
         "liblog",
         "liblzma",
         "libnativehelper",
-        "libnetdaidl",
         "libui",
-        "libunwind",
+        "libunwindstack",
         "libutils",
+        "netd_aidl_interface-cpp",
     ],
 
     dxflags: ["--multi-dex"],
@@ -88,7 +88,7 @@ java_library {
         "utils/**/*.java",
     ],
     static_libs: [
-        "android-support-test",
+        "junit",
         "mockito-target-minus-junit4",
     ],
     libs: [

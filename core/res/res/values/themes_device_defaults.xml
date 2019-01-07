@@ -68,6 +68,10 @@ easier.
         <item name="textAppearanceLargePopupMenu">@style/TextAppearance.DeviceDefault.Widget.PopupMenu.Large</item>
         <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.DeviceDefault.Widget.PopupMenu.Small</item>
 
+        <item name="textAppearanceListItem">@style/TextAppearance.DeviceDefault.ListItem</item>
+        <item name="textAppearanceListItemSmall">@style/TextAppearance.DeviceDefault.ListItem</item>
+        <item name="textAppearanceListItemSecondary">@style/TextAppearance.DeviceDefault.ListItemSecondary</item>
+
         <!-- Button styles -->
         <item name="buttonCornerRadius">@dimen/config_buttonCornerRadius</item>
         <item name="buttonStyle">@style/Widget.DeviceDefault.Button</item>
@@ -211,7 +215,7 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
-
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
     </style>
 
     <style name="Theme.DeviceDefault" parent="Theme.DeviceDefaultBase" />
@@ -783,7 +787,6 @@ easier.
         <!-- Text styles -->
         <item name="textAppearance">@style/TextAppearance.DeviceDefault</item>
         <item name="textAppearanceInverse">@style/TextAppearance.DeviceDefault.Inverse</item>
-
         <item name="textAppearanceLarge">@style/TextAppearance.DeviceDefault.Large</item>
         <item name="textAppearanceMedium">@style/TextAppearance.DeviceDefault.Medium</item>
         <item name="textAppearanceSmall">@style/TextAppearance.DeviceDefault.Small</item>
@@ -792,11 +795,12 @@ easier.
         <item name="textAppearanceSmallInverse">@style/TextAppearance.DeviceDefault.Small.Inverse</item>
         <item name="textAppearanceSearchResultTitle">@style/TextAppearance.DeviceDefault.SearchResult.Title</item>
         <item name="textAppearanceSearchResultSubtitle">@style/TextAppearance.DeviceDefault.SearchResult.Subtitle</item>
-
         <item name="textAppearanceButton">@style/TextAppearance.DeviceDefault.Widget.Button</item>
-
         <item name="textAppearanceLargePopupMenu">@style/TextAppearance.DeviceDefault.Widget.PopupMenu.Large</item>
         <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.DeviceDefault.Widget.PopupMenu.Small</item>
+        <item name="textAppearanceListItem">@style/TextAppearance.DeviceDefault.ListItem</item>
+        <item name="textAppearanceListItemSmall">@style/TextAppearance.DeviceDefault.ListItem</item>
+        <item name="textAppearanceListItemSecondary">@style/TextAppearance.DeviceDefault.ListItemSecondary</item>
 
         <!-- Button styles -->
         <item name="buttonCornerRadius">@dimen/config_buttonCornerRadius</item>
@@ -936,6 +940,7 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
     </style>
 
     <!-- Variant of the DeviceDefault (light) theme that has a solid (opaque) action bar with an
@@ -1438,19 +1443,23 @@ easier.
     </style>
 
     <!-- DeviceDefault theme for a window that should look like the Settings app.  -->
-    <style name="Theme.DeviceDefault.Settings" parent="Theme.Material.Settings">
+    <style name="Theme.DeviceDefault.Settings" parent="Theme.DeviceDefault.Light">
+        <!-- From Theme.Material.Light.LightStatusBar -->
+        <item name="windowLightStatusBar">true</item>
+
+        <!-- From Theme.Material.Settings -->
+        <item name="homeAsUpIndicator">@drawable/ic_ab_back_material_settings</item>
+        <item name="presentationTheme">@style/Theme.Material.Settings.Dialog.Presentation</item>
+        <item name="searchDialogTheme">@style/Theme.Material.Settings.SearchBar</item>
+        <item name="panelMenuListTheme">@style/Theme.Material.Settings.CompactMenu</item>
+
         <!-- action bar -->
-        <item name="actionBarStyle">@style/Widget.DeviceDefault.Light.ActionBar.Solid</item>
-        <item name="actionBarTheme">@style/ThemeOverlay.DeviceDefault.ActionBar.Accent</item>
+        <item name="actionBarTheme">@style/ThemeOverlay.DeviceDefault.ActionBar</item>
         <item name="popupTheme">@style/ThemeOverlay.DeviceDefault.Popup.Light</item>
 
         <!-- Color palette -->
-        <item name="colorBackground">@color/background_device_default_light</item>
-        <item name="colorPrimary">@color/primary_device_default_settings_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings_light</item>
         <item name="colorSecondary">@color/secondary_device_default_settings_light</item>
-        <item name="colorAccent">@color/accent_device_default_light</item>
-        <item name="colorError">@color/error_color_device_default_light</item>
         <item name="colorEdgeEffect">@android:color/black</item>
 
         <!-- Add white nav bar with divider that matches material -->
@@ -1458,23 +1467,8 @@ easier.
         <item name="navigationBarColor">@android:color/white</item>
         <item name="windowLightNavigationBar">true</item>
 
-        <!-- Dialog attributes -->
-        <item name="dialogCornerRadius">@dimen/config_dialogCornerRadius</item>
-        <item name="alertDialogTheme">@style/Theme.DeviceDefault.Light.Dialog.Alert</item>
-
-        <!-- Text styles -->
-        <item name="textAppearanceButton">@style/TextAppearance.DeviceDefault.Widget.Button</item>
-
         <!-- Button styles -->
-        <item name="buttonCornerRadius">@dimen/config_buttonCornerRadius</item>
         <item name="buttonBarButtonStyle">@style/Widget.DeviceDefault.Button.ButtonBar.AlertDialog</item>
-
-        <!-- Progress bar attributes -->
-        <item name="colorProgressBackgroundNormal">@color/config_progress_background_tint</item>
-        <item name="progressBarCornerRadius">@dimen/config_progressBarCornerRadius</item>
-
-        <!-- Toolbar attributes -->
-        <item name="toolbarStyle">@style/Widget.DeviceDefault.Toolbar</item>
 
         <item name="listDivider">@color/list_divider_color_light</item>
     </style>
@@ -1646,8 +1640,10 @@ easier.
 
     <style name="Theme.DeviceDefault.Settings.Dialog.NoActionBar" parent="Theme.DeviceDefault.Light.Dialog.NoActionBar" />
 
+    <style name="Theme.DeviceDefault.DayNight" parent="Theme.DeviceDefault.Light" />
+
     <!-- Theme used for the intent picker activity. -->
-    <style name="Theme.DeviceDefault.Resolver" parent="Theme.Material.Light">
+    <style name="Theme.DeviceDefault.Resolver" parent="Theme.DeviceDefault.DayNight">
         <item name="windowEnterTransition">@empty</item>
         <item name="windowExitTransition">@empty</item>
         <item name="windowIsTranslucent">true</item>
@@ -1659,29 +1655,7 @@ easier.
         <item name="colorControlActivated">?attr/colorControlHighlight</item>
         <item name="listPreferredItemPaddingStart">?attr/dialogPreferredPadding</item>
         <item name="listPreferredItemPaddingEnd">?attr/dialogPreferredPadding</item>
-
-        <!-- Dialog attributes -->
-        <item name="dialogCornerRadius">@dimen/config_dialogCornerRadius</item>
-        <item name="alertDialogTheme">@style/Theme.DeviceDefault.Light.Dialog.Alert</item>
-
-        <!-- Button styles -->
-        <item name="buttonCornerRadius">@dimen/config_buttonCornerRadius</item>
-        <item name="buttonBarButtonStyle">@style/Widget.DeviceDefault.Button.ButtonBar.AlertDialog</item>
-
-        <!-- Color palette -->
-        <item name="colorPrimary">@color/primary_device_default_light</item>
-        <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
-        <item name="colorAccent">@color/accent_device_default_light</item>
-        <item name="colorError">@color/error_color_device_default_light</item>
-
-        <!-- Progress bar attributes -->
-        <item name="colorProgressBackgroundNormal">@color/config_progress_background_tint</item>
-        <item name="progressBarCornerRadius">@dimen/config_progressBarCornerRadius</item>
-
-        <!-- Toolbar attributes -->
-        <item name="toolbarStyle">@style/Widget.DeviceDefault.Toolbar</item>
     </style>
-
 
     <!-- @hide DeviceDefault themes for the autofill FillUi -->
     <style name="Theme.DeviceDefault.Autofill" />
@@ -1697,11 +1671,8 @@ easier.
 
     <style name="ThemeOverlay.DeviceDefault" />
 
-    <!-- @hide Theme overlay that inherits from material actionbar, and use accent color for
-             primary text -->
-    <style name="ThemeOverlay.DeviceDefault.ActionBar.Accent" parent="ThemeOverlay.Material.ActionBar">
-        <item name="textColorPrimary">@color/btn_colored_borderless_text_material</item>
-    </style>
+    <!-- @hide Theme overlay that inherits from material actionbar -->
+    <style name="ThemeOverlay.DeviceDefault.ActionBar" parent="ThemeOverlay.Material.ActionBar" />
 
     <!-- @hide Theme overlay for a light popup in action bar -->
     <style name="ThemeOverlay.DeviceDefault.Popup.Light" parent="@style/ThemeOverlay.Material.Light" />
@@ -1722,6 +1693,14 @@ easier.
         <item name="colorBackground">@color/background_device_default_light</item>
         <item name="colorBackgroundFloating">@color/background_device_default_light</item>
         <item name="layout_gravity">center</item>
+    </style>
+
+    <style name="Theme.DeviceDefault.Notification" parent="@style/Theme.Material.Notification">
+        <item name="notificationHeaderTextAppearance">@style/TextAppearance.DeviceDefault.Notification.Info</item>
+    </style>
+
+    <style name="Theme.DeviceDefault.Notification.Ambient" parent="@style/Theme.Material.Notification.Ambient">
+        <item name="notificationHeaderTextAppearance">@style/TextAppearance.DeviceDefault.Notification.Info.Ambient</item>
     </style>
 
 </resources>

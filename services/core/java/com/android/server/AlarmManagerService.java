@@ -48,6 +48,7 @@ import android.content.pm.PermissionInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -1122,8 +1123,6 @@ class AlarmManagerService extends SystemService {
         rescheduleKernelAlarmsLocked();
         updateNextAlarmClockLocked();
 
-        // And send a TIME_TICK right now, since it is important to get the UI updated.
-        mHandler.post(() ->  getContext().sendBroadcastAsUser(mTimeTickIntent, UserHandle.ALL));
     }
 
     static final class InFlight {
@@ -1297,7 +1296,7 @@ class AlarmManagerService extends SystemService {
         mInjector.init();
 
         synchronized (mLock) {
-            mHandler = new AlarmHandler(Looper.myLooper());
+            mHandler = new AlarmHandler();
             mConstants = new Constants(mHandler);
 
             mNextWakeup = mNextNonWakeup = 0;
@@ -1306,8 +1305,12 @@ class AlarmManagerService extends SystemService {
             // because kernel doesn't keep this after reboot
             setTimeZoneImpl(SystemProperties.get(TIMEZONE_PROPERTY));
 
-            // Also sure that we're booting with a halfway sensible current time
-            final long systemBuildTime = Environment.getRootDirectory().lastModified();
+            // Ensure that we're booting with a halfway sensible current time.  Use the
+            // most recent of Build.TIME, the root file system's timestamp, and the
+            // value of the ro.build.date.utc system property (which is in seconds).
+            final long systemBuildTime =  Long.max(
+                    1000L * SystemProperties.getLong("ro.build.date.utc", -1L),
+                    Long.max(Environment.getRootDirectory().lastModified(), Build.TIME));
             if (mInjector.getCurrentTimeMillis() < systemBuildTime) {
                 Slog.i(TAG, "Current time only " + mInjector.getCurrentTimeMillis()
                         + ", advancing to build time " + systemBuildTime);
@@ -3045,6 +3048,9 @@ class AlarmManagerService extends SystemService {
                         mNonInteractiveTime = dur;
                     }
                 }
+                // And send a TIME_TICK right now, since it is important to get the UI updated.
+                mHandler.post(() ->
+                        getContext().sendBroadcastAsUser(mTimeTickIntent, UserHandle.ALL));
             } else {
                 mNonInteractiveStartTime = nowELAPSED;
             }
@@ -3833,7 +3839,8 @@ class AlarmManagerService extends SystemService {
         mWakeLock.setWorkSource(null);
     }
 
-    private class AlarmHandler extends Handler {
+    @VisibleForTesting
+    class AlarmHandler extends Handler {
         public static final int ALARM_EVENT = 1;
         public static final int SEND_NEXT_ALARM_CLOCK_CHANGED = 2;
         public static final int LISTENER_TIMEOUT = 3;
@@ -3842,8 +3849,8 @@ class AlarmManagerService extends SystemService {
         public static final int APP_STANDBY_PAROLE_CHANGED = 6;
         public static final int REMOVE_FOR_STOPPED = 7;
 
-        AlarmHandler(Looper looper) {
-            super(looper);
+        AlarmHandler() {
+            super(Looper.myLooper());
         }
 
         public void postRemoveForStopped(int uid) {
@@ -3956,8 +3963,8 @@ class AlarmManagerService extends SystemService {
 
             final WorkSource workSource = null; // Let system take blame for time tick events.
             setImpl(ELAPSED_REALTIME, mInjector.getElapsedRealtime() + tickEventDelay, 0,
-                    0, null, mTimeTickTrigger, null, AlarmManager.FLAG_STANDALONE, workSource,
-                    null, Process.myUid(), "android");
+                    0, null, mTimeTickTrigger, "TIME_TICK", AlarmManager.FLAG_STANDALONE,
+                    workSource, null, Process.myUid(), "android");
 
             // Finally, remember when we set the tick alarm
             synchronized (mLock) {

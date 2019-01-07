@@ -128,7 +128,9 @@ private:
         int sampleSize;
         // If this dimension has any non-tainted value. If not, don't report the
         // dimension.
-        bool hasValue;
+        bool hasValue = false;
+        // Whether new data is seen in the bucket.
+        bool seenNewData = false;
     } Interval;
 
     std::unordered_map<MetricDimensionKey, std::vector<Interval>> mCurrentSlicedBucket;
@@ -146,7 +148,12 @@ private:
     // Util function to check whether the specified dimension hits the guardrail.
     bool hitGuardRailLocked(const MetricDimensionKey& newKey);
 
+    bool hitFullBucketGuardRailLocked(const MetricDimensionKey& newKey);
+
     void pullAndMatchEventsLocked(const int64_t timestampNs);
+
+    // Reset diff base and mHasGlobalBase
+    void resetBase();
 
     static const size_t kBucketSize = sizeof(ValueBucket{});
 
@@ -163,6 +170,20 @@ private:
     const ValueMetric::ValueDirection mValueDirection;
 
     const bool mSkipZeroDiffOutput;
+
+    // If true, use a zero value as base to compute the diff.
+    // This is used for new keys which are present in the new data but was not
+    // present in the base data.
+    // The default base will only be used if we have a global base.
+    const bool mUseZeroDefaultBase;
+
+    // For pulled metrics, this is always set to true whenever a pull succeeds.
+    // It is set to false when a pull fails, or upon condition change to false.
+    // This is used to decide if we have the right base data to compute the
+    // diff against.
+    bool mHasGlobalBase;
+
+    const int64_t mMaxPullDelayNs;
 
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsNoCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsWithFiltering);
@@ -185,6 +206,11 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestFirstBucket);
     FRIEND_TEST(ValueMetricProducerTest, TestCalcPreviousBucketEndTime);
     FRIEND_TEST(ValueMetricProducerTest, TestSkipZeroDiffOutput);
+    FRIEND_TEST(ValueMetricProducerTest, TestUseZeroDefaultBase);
+    FRIEND_TEST(ValueMetricProducerTest, TestUseZeroDefaultBaseWithPullFailures);
+    FRIEND_TEST(ValueMetricProducerTest, TestTrimUnusedDimensionKey);
+    FRIEND_TEST(ValueMetricProducerTest, TestResetBaseOnPullFail);
+    FRIEND_TEST(ValueMetricProducerTest, TestResetBaseOnPullTooLate);
 };
 
 }  // namespace statsd

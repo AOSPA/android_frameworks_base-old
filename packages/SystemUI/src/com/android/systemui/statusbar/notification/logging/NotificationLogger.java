@@ -15,35 +15,43 @@
  */
 package com.android.systemui.statusbar.notification.logging;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.service.notification.NotificationListenerService;
+import android.service.notification.NotificationStats;
+import android.service.notification.StatusBarNotification;
 import android.util.ArraySet;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
-import com.android.systemui.Dependency;
 import com.android.systemui.UiOffloadThread;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
+import com.android.systemui.statusbar.policy.HeadsUpManager;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Handles notification logging, in particular, logging which notifications are visible and which
  * are not.
  */
+@Singleton
 public class NotificationLogger implements StateListener {
     private static final String TAG = "NotificationLogger";
 
@@ -55,11 +63,10 @@ public class NotificationLogger implements StateListener {
             new ArraySet<>();
 
     // Dependencies:
-    private final NotificationListenerService mNotificationListener =
-            Dependency.get(NotificationListener.class);
-    private final UiOffloadThread mUiOffloadThread = Dependency.get(UiOffloadThread.class);
-    protected NotificationEntryManager mEntryManager
-            = Dependency.get(NotificationEntryManager.class);
+    private final NotificationListenerService mNotificationListener;
+    private final UiOffloadThread mUiOffloadThread;
+    private final NotificationEntryManager mEntryManager;
+    private HeadsUpManager mHeadsUpManager;
 
     protected Handler mHandler = new Handler();
     protected IStatusBarService mBarService;
@@ -145,15 +152,48 @@ public class NotificationLogger implements StateListener {
         }
     };
 
-    public NotificationLogger() {
+    @Inject
+    public NotificationLogger(NotificationListener notificationListener,
+            UiOffloadThread uiOffloadThread,
+            NotificationEntryManager entryManager,
+            StatusBarStateController statusBarStateController) {
+        mNotificationListener = notificationListener;
+        mUiOffloadThread = uiOffloadThread;
+        mEntryManager = entryManager;
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
         // Not expected to be destroyed, don't need to unsubscribe
-        Dependency.get(StatusBarStateController.class).addListener(this);
+        statusBarStateController.addCallback(this);
+
+        entryManager.addNotificationEntryListener(new NotificationEntryListener() {
+            @Override
+            public void onEntryRemoved(
+                    @Nullable NotificationData.Entry entry,
+                    String key,
+                    StatusBarNotification old,
+                    NotificationVisibility visibility,
+                    boolean lifetimeExtended,
+                    boolean removedByUser) {
+                if (removedByUser && visibility != null && entry != null) {
+                    logNotificationClear(key, entry.notification, visibility);
+                }
+            }
+
+            @Override
+            public void onInflationError(
+                    StatusBarNotification notification,
+                    Exception exception) {
+                logNotificationError(notification, exception);
+            }
+        });
     }
 
     public void setUpWithContainer(NotificationListContainer listContainer) {
         mListContainer = listContainer;
+    }
+
+    public void setHeadsUpManager(HeadsUpManager headsUpManager) {
+        mHeadsUpManager = headsUpManager;
     }
 
     public void stopNotificationLogging() {
@@ -182,6 +222,45 @@ public class NotificationLogger implements StateListener {
     private void setDozing(boolean dozing) {
         synchronized (mDozingLock) {
             mDozing = dozing;
+        }
+    }
+
+    private void logNotificationClear(String key, StatusBarNotification notification,
+            NotificationVisibility nv) {
+        final String pkg = notification.getPackageName();
+        final String tag = notification.getTag();
+        final int id = notification.getId();
+        final int userId = notification.getUserId();
+        try {
+            int dismissalSurface = NotificationStats.DISMISSAL_SHADE;
+            if (mHeadsUpManager.isAlerting(key)) {
+                dismissalSurface = NotificationStats.DISMISSAL_PEEK;
+            } else if (mListContainer.hasPulsingNotifications()) {
+                dismissalSurface = NotificationStats.DISMISSAL_AOD;
+            }
+            int dismissalSentiment = NotificationStats.DISMISS_SENTIMENT_NEUTRAL;
+            mBarService.onNotificationClear(pkg, tag, id, userId, notification.getKey(),
+                    dismissalSurface,
+                    dismissalSentiment, nv);
+        } catch (RemoteException ex) {
+            // system process is dead if we're here.
+        }
+    }
+
+    private void logNotificationError(
+            StatusBarNotification notification,
+            Exception exception) {
+        try {
+            mBarService.onNotificationError(
+                    notification.getPackageName(),
+                    notification.getTag(),
+                    notification.getId(),
+                    notification.getUid(),
+                    notification.getInitialPid(),
+                    exception.getMessage(),
+                    notification.getUserId());
+        } catch (RemoteException ex) {
+            // The end is nigh.
         }
     }
 

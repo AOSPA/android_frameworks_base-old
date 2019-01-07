@@ -36,6 +36,8 @@ import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.hardware.display.DisplayedContentSample;
+import android.hardware.display.DisplayedContentSamplingAttributes;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -104,6 +106,8 @@ public class SurfaceControl implements Parcelable {
             int flags, int mask);
     private static native void nativeSetWindowCrop(long transactionObj, long nativeObject,
             int l, int t, int r, int b);
+    private static native void nativeSetCornerRadius(long transactionObj, long nativeObject,
+            float cornerRadius);
     private static native void nativeSetLayerStack(long transactionObj, long nativeObject,
             int layerStack);
 
@@ -127,6 +131,12 @@ public class SurfaceControl implements Parcelable {
             int width, int height);
     private static native SurfaceControl.PhysicalDisplayInfo[] nativeGetDisplayConfigs(
             IBinder displayToken);
+    private static native DisplayedContentSamplingAttributes
+            nativeGetDisplayedContentSamplingAttributes(IBinder displayToken);
+    private static native boolean nativeSetDisplayedContentSamplingEnabled(IBinder displayToken,
+            boolean enable, int componentMask, int maxFrames);
+    private static native DisplayedContentSample nativeGetDisplayedContentSample(
+            IBinder displayToken, long numFrames, long timestamp);
     private static native int nativeGetActiveConfig(IBinder displayToken);
     private static native boolean nativeSetActiveConfig(IBinder displayToken, int id);
     private static native int[] nativeGetDisplayColorModes(IBinder displayToken);
@@ -155,7 +165,8 @@ public class SurfaceControl implements Parcelable {
 
     private static native void nativeSetInputWindowInfo(long transactionObj, long nativeObject,
             InputWindowHandle handle);
-
+    private static native void nativeTransferTouchFocus(long transactionObj, IBinder fromToken,
+            IBinder toToken);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private final String mName;
@@ -1015,6 +1026,18 @@ public class SurfaceControl implements Parcelable {
         }
     }
 
+    /**
+     * Sets the corner radius of a {@link SurfaceControl}.
+     *
+     * @param cornerRadius Corner radius in pixels.
+     */
+    public void setCornerRadius(float cornerRadius) {
+        checkNotReleased();
+        synchronized (SurfaceControl.class) {
+            sGlobalTransaction.setCornerRadius(this, cornerRadius);
+        }
+    }
+
     public void setLayerStack(int layerStack) {
         checkNotReleased();
         synchronized(SurfaceControl.class) {
@@ -1158,6 +1181,45 @@ public class SurfaceControl implements Parcelable {
         }
         return nativeGetActiveConfig(displayToken);
     }
+
+    /**
+     * @hide
+     */
+    public static DisplayedContentSamplingAttributes getDisplayedContentSamplingAttributes(
+            IBinder displayToken) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        return nativeGetDisplayedContentSamplingAttributes(displayToken);
+    }
+
+    /**
+     * @hide
+     */
+    public static boolean setDisplayedContentSamplingEnabled(
+            IBinder displayToken, boolean enable, int componentMask, int maxFrames) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        final int maxColorComponents = 4;
+        if ((componentMask >> maxColorComponents) != 0) {
+            throw new IllegalArgumentException("invalid componentMask when enabling sampling");
+        }
+        return nativeSetDisplayedContentSamplingEnabled(
+                displayToken, enable, componentMask, maxFrames);
+    }
+
+    /**
+     * @hide
+     */
+    public static DisplayedContentSample getDisplayedContentSample(
+            IBinder displayToken, long maxFrames, long timestamp) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        return nativeGetDisplayedContentSample(displayToken, maxFrames, timestamp);
+    }
+
 
     public static boolean setActiveConfig(IBinder displayToken, int id) {
         if (displayToken == null) {
@@ -1489,6 +1551,21 @@ public class SurfaceControl implements Parcelable {
             return this;
         }
 
+        /**
+         * Transfers touch focus from one window to another. It is possible for multiple windows to
+         * have touch focus if they support split touch dispatch
+         * {@link android.view.WindowManager.LayoutParams#FLAG_SPLIT_TOUCH} but this
+         * method only transfers touch focus of the specified window without affecting
+         * other windows that may also have touch focus at the same time.
+         * @param fromToken The token of a window that currently has touch focus.
+         * @param toToken The token of the window that should receive touch focus in
+         * place of the first.
+         */
+        public Transaction transferTouchFocus(IBinder fromToken, IBinder toToken) {
+            nativeTransferTouchFocus(mNativeObject, fromToken, toToken);
+            return this;
+        }
+
         @UnsupportedAppUsage
         public Transaction setMatrix(SurfaceControl sc,
                 float dsdx, float dtdx, float dtdy, float dsdy) {
@@ -1535,6 +1612,20 @@ public class SurfaceControl implements Parcelable {
         public Transaction setWindowCrop(SurfaceControl sc, int width, int height) {
             sc.checkNotReleased();
             nativeSetWindowCrop(mNativeObject, sc.mNativeObject, 0, 0, width, height);
+            return this;
+        }
+
+        /**
+         * Sets the corner radius of a {@link SurfaceControl}.
+         * @param sc SurfaceControl
+         * @param cornerRadius Corner radius in pixels.
+         * @return Itself.
+         */
+        @UnsupportedAppUsage
+        public Transaction setCornerRadius(SurfaceControl sc, float cornerRadius) {
+            sc.checkNotReleased();
+            nativeSetCornerRadius(mNativeObject, sc.mNativeObject, cornerRadius);
+
             return this;
         }
 

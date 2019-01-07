@@ -820,7 +820,7 @@ android_media_MediaPlayer2_getCurrentPosition(JNIEnv *env, jobject thiz)
 }
 
 static jlong
-android_media_MediaPlayer2_getDuration(JNIEnv *env, jobject thiz)
+android_media_MediaPlayer2_getDuration(JNIEnv *env, jobject thiz, jlong srcId)
 {
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL ) {
@@ -828,7 +828,7 @@ android_media_MediaPlayer2_getDuration(JNIEnv *env, jobject thiz)
         return 0;
     }
     int64_t msec;
-    process_media_player_call( env, thiz, mp->getDuration(&msec), NULL, NULL );
+    process_media_player_call( env, thiz, mp->getDuration(srcId, &msec), NULL, NULL );
     ALOGV("getDuration: %lld (msec)", (long long)msec);
     return (jlong) msec;
 }
@@ -1192,7 +1192,7 @@ static Vector<uint8_t> JByteArrayToVector(JNIEnv *env, jbyteArray const &byteArr
 }
 
 static void android_media_MediaPlayer2_prepareDrm(JNIEnv *env, jobject thiz,
-                    jbyteArray uuidObj, jbyteArray drmSessionIdObj)
+                    jlong srcId, jbyteArray uuidObj, jbyteArray drmSessionIdObj)
 {
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL) {
@@ -1225,7 +1225,7 @@ static void android_media_MediaPlayer2_prepareDrm(JNIEnv *env, jobject thiz,
         return;
     }
 
-    status_t err = mp->prepareDrm(uuid.array(), drmSessionId);
+    status_t err = mp->prepareDrm(srcId, uuid.array(), drmSessionId);
     if (err != OK) {
         if (err == INVALID_OPERATION) {
             jniThrowException(
@@ -1243,7 +1243,7 @@ static void android_media_MediaPlayer2_prepareDrm(JNIEnv *env, jobject thiz,
     }
 }
 
-static void android_media_MediaPlayer2_releaseDrm(JNIEnv *env, jobject thiz)
+static void android_media_MediaPlayer2_releaseDrm(JNIEnv *env, jobject thiz, jlong srcId)
 {
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL ) {
@@ -1251,7 +1251,7 @@ static void android_media_MediaPlayer2_releaseDrm(JNIEnv *env, jobject thiz)
         return;
     }
 
-    status_t err = mp->releaseDrm();
+    status_t err = mp->releaseDrm(srcId);
     if (err != OK) {
         if (err == INVALID_OPERATION) {
             jniThrowException(
@@ -1408,7 +1408,7 @@ static const JNINativeMethod gMethods[] = {
     {"native_seekTo",       "(JI)V",                            (void *)android_media_MediaPlayer2_seekTo},
     {"native_pause",        "()V",                              (void *)android_media_MediaPlayer2_pause},
     {"getCurrentPosition",  "()J",                              (void *)android_media_MediaPlayer2_getCurrentPosition},
-    {"getDuration",         "()J",                              (void *)android_media_MediaPlayer2_getDuration},
+    {"native_getDuration",  "(J)J",                             (void *)android_media_MediaPlayer2_getDuration},
     {"native_release",      "()V",                              (void *)android_media_MediaPlayer2_release},
     {"native_reset",        "()V",                              (void *)android_media_MediaPlayer2_reset},
     {"native_setAudioAttributes", "(Landroid/media/AudioAttributes;)Z", (void *)android_media_MediaPlayer2_setAudioAttributes},
@@ -1425,8 +1425,8 @@ static const JNINativeMethod gMethods[] = {
     {"native_setAuxEffectSendLevel", "(F)V",                    (void *)android_media_MediaPlayer2_setAuxEffectSendLevel},
     {"native_attachAuxEffect", "(I)V",                          (void *)android_media_MediaPlayer2_attachAuxEffect},
     // Modular DRM
-    { "native_prepareDrm", "([B[B)V",                           (void *)android_media_MediaPlayer2_prepareDrm },
-    { "native_releaseDrm", "()V",                               (void *)android_media_MediaPlayer2_releaseDrm },
+    { "native_prepareDrm", "(J[B[B)V",                          (void *)android_media_MediaPlayer2_prepareDrm },
+    { "native_releaseDrm", "(J)V",                              (void *)android_media_MediaPlayer2_releaseDrm },
 
     // AudioRouting
     {"native_setPreferredDevice", "(Landroid/media/AudioDeviceInfo;)Z", (void *)android_media_MediaPlayer2_setPreferredDevice},

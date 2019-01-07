@@ -30,7 +30,7 @@ namespace skiapipeline {
 
 class SkiaPipeline : public renderthread::IRenderPipeline {
 public:
-    SkiaPipeline(renderthread::RenderThread& thread);
+    explicit SkiaPipeline(renderthread::RenderThread& thread);
     virtual ~SkiaPipeline();
 
     TaskManager* getTaskManager() override;
@@ -97,8 +97,7 @@ public:
         return mLightCenter;
     }
 
-    static void updateLighting(const LightGeometry& lightGeometry,
-                               const LightInfo& lightInfo) {
+    static void updateLighting(const LightGeometry& lightGeometry, const LightInfo& lightInfo) {
         mLightRadius = lightGeometry.radius;
         mAmbientShadowAlpha = lightInfo.ambientShadowAlpha;
         mSpotShadowAlpha = lightInfo.spotShadowAlpha;
@@ -107,9 +106,11 @@ public:
 
 protected:
     void dumpResourceCacheUsage() const;
+    void setSurfaceColorProperties(renderthread::ColorMode colorMode);
 
     renderthread::RenderThread& mRenderThread;
     SkColorType mSurfaceColorType;
+    SkColorSpace::Gamut mSurfaceColorGamut;
     sk_sp<SkColorSpace> mSurfaceColorSpace;
 
 private:

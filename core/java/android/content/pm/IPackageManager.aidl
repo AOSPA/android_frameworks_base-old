@@ -36,6 +36,7 @@ import android.content.pm.IOnPermissionsChangeListener;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.KeySet;
+import android.content.pm.ModuleInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.ProviderInfo;
@@ -276,7 +277,7 @@ interface IPackageManager {
             in PersistableBundle appExtras, in PersistableBundle launcherExtras,
             in SuspendDialogInfo dialogInfo, String callingPackage, int userId);
 
-    boolean canSuspendPackageForUser(String packageName, int userId);
+    String[] getUnsuspendablePackagesForUser(in String[] packageNames, int userId);
 
     boolean isPackageSuspendedForUser(String packageName, int userId);
 
@@ -675,7 +676,13 @@ interface IPackageManager {
 
     String getSystemTextClassifierPackageName();
 
+    String getWellbeingPackageName();
+
     boolean isPackageStateProtected(String packageName, int userId);
 
     void sendDeviceCustomizationReadyBroadcast();
+
+    List<ModuleInfo> getInstalledModules(int flags);
+
+    ModuleInfo getModuleInfo(String packageName, int flags);
 }

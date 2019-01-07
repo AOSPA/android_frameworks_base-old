@@ -268,6 +268,12 @@
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the system default text classifier -->
         <flag name="textClassifier" value="0x10000" />
+        <!-- Additional flag from base permission type: this permission will be granted to the
+             wellbeing app, as defined by the OEM. -->
+        <flag name="wellbeing" value="0x20000" />
+        <!-- Additional flag from base permission type: this permission can be automatically
+            granted to the document manager -->
+        <flag name="documenter" value="0x40000" />
     </attr>
 
     <!-- Flags indicating more context for a permission group. -->
@@ -1106,6 +1112,11 @@
          resource] to be present in order to function. Default value is false. -->
     <attr name="isSplitRequired" format="boolean" />
 
+    <!-- Flag to specify if this app prioritizes code integrity. The system may choose
+         to run with better integrity guarantee in various components if possible based on the app's
+         <code>targetSdkVersion</code>. -->
+    <attr name="preferCodeIntegrity" format="boolean" />
+
     <!-- Extra options for an activity's UI. Applies to either the {@code <activity>} or
          {@code <application>} tag. If specified on the {@code <application>}
          tag these will be considered defaults for all activities in the
@@ -1288,6 +1299,20 @@
          supports any size. -->
     <attr name="maxAspectRatio" format="float" />
 
+    <!-- This value indicates the minimum aspect ratio the activity supports. If the app runs on a
+         device with a narrower aspect ratio, the system automatically letterboxes the app, leaving
+         portions of the screen unused so the app can run at its specified minimum aspect ratio.
+         <p>
+         Minimum aspect ratio, expressed as (longer dimension / shorter dimension) in decimal
+         form. For example, if the minimum aspect ratio is 4:3, set value to 1.33.
+         <p>
+         Value needs to be greater or equal to 1.0, otherwise it is ignored.
+         <p>
+         NOTE: This attribute is ignored if the activity has
+         {@link android.R.attr#resizeableActivity} set to true, since that means your activity
+         supports any size. -->
+    <attr name="minAspectRatio" format="float" />
+
     <!-- This value indicates how tasks rooted at this activity will behave in lockTask mode.
          While in lockTask mode the system will not launch non-permitted tasks until
          lockTask mode is disabled.
@@ -1393,6 +1418,29 @@
     <attr name="appComponentFactory" format="string" />
 
     <attr name="usesNonSdkApi" format="boolean" />
+
+    <!-- Specify the type of foreground service. Apps targeting API
+     {@link android.os.Build.VERSION_CODES#Q} or later must specify foreground service type,
+     otherwise a SecurityException is thrown when
+     {@link android.app.Service#startForeground(int, Notification)} on this service is called.
+    -->
+    <attr name="foregroundServiceType">
+        <!-- Data (photo, file, account) upload/download, backup/restore, import/export, fetch,
+        transfer over network between device and cloud.  -->
+        <enum name="sync" value="1" />
+        <!-- Music, video, news or other media play. -->
+        <enum name="mediaPlay" value="2" />
+        <!-- Ongoing phone call or video conference. -->
+        <enum name="phoneCall" value="3" />
+        <!-- GPS, map, navigation location update. -->
+        <enum name="location" value="4" />
+        <!-- Auto, bluetooth, TV or other devices connection, monitoring and interaction. -->
+        <enum name="deviceCompanion" value="5" />
+        <!-- Process that should not be interrupted, including installation, setup, photo
+        compression etc. -->
+        <enum name="ongoingProcess" value="6" />
+    </attr>
+
 
     <!-- The <code>manifest</code> tag is the root of an
          <code>AndroidManifest.xml</code> file,
@@ -1537,11 +1585,13 @@
              to honor this flag as well. -->
         <attr name="usesCleartextTraffic" />
         <attr name="multiArch" />
+        <attr name="preferCodeIntegrity" />
         <attr name="extractNativeLibs" />
         <attr name="defaultToDeviceProtectedStorage" format="boolean" />
         <attr name="directBootAware" />
         <attr name="resizeableActivity" />
         <attr name="maxAspectRatio" />
+        <attr name="minAspectRatio" />
         <attr name="networkSecurityConfig" />
         <!-- Declare the category of this app. Categories are used to cluster multiple apps
              together into meaningful groups, such as when summarizing battery, network, or
@@ -1573,6 +1623,9 @@
 
         <!-- Declares that this application should be invoked without non-SDK API enforcement -->
         <attr name="usesNonSdkApi" />
+
+        <!-- If {@code true} the user is prompted to keep the app's data on uninstall -->
+        <attr name="hasFragileUserData" />
 
     </declare-styleable>
     <!-- The <code>permission</code> tag declares a security permission that can be
@@ -2242,6 +2295,8 @@
              recommended to measure memory usage under typical workloads to determine
              whether it makes sense to use this flag. -->
         <attr name="useAppZygote" format="boolean" />
+        <!-- If this is a foreground service, specify its category. -->
+        <attr name="foregroundServiceType" />
     </declare-styleable>
 
     <!-- The <code>receiver</code> tag declares an
@@ -2352,6 +2407,7 @@
         <attr name="resizeableActivity" />
         <attr name="supportsPictureInPicture" />
         <attr name="maxAspectRatio" />
+        <attr name="minAspectRatio" />
         <attr name="lockTaskMode" />
         <attr name="showForAllUsers" />
 

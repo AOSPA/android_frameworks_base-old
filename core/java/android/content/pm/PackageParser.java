@@ -30,6 +30,7 @@ import static android.content.pm.ApplicationInfo.FLAG_SUSPENDED;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_PACKAGE_NAME;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
@@ -162,6 +163,8 @@ public class PackageParser {
             SystemProperties.getBoolean(PROPERTY_CHILD_PACKAGES_ENABLED, false);
 
     private static final float DEFAULT_PRE_O_MAX_ASPECT_RATIO = 1.86f;
+    private static final float DEFAULT_PRE_Q_MIN_ASPECT_RATIO = 1.333f;
+    private static final float DEFAULT_PRE_Q_MIN_ASPECT_RATIO_WATCH = 1f;
 
     // TODO: switch outError users to PackageParserException
     // TODO: refactor "codePath" to "apkPath"
@@ -472,6 +475,7 @@ public class PackageParser {
         public final boolean extractNativeLibs;
         public final boolean isolatedSplits;
         public final boolean isSplitRequired;
+        public final boolean preferCodeIntegrity;
 
         public ApkLite(String codePath, String packageName, String splitName,
                 boolean isFeatureSplit,
@@ -480,7 +484,7 @@ public class PackageParser {
                 int revisionCode, int installLocation, List<VerifierInfo> verifiers,
                 SigningDetails signingDetails, boolean coreApp,
                 boolean debuggable, boolean multiArch, boolean use32bitAbi,
-                boolean extractNativeLibs, boolean isolatedSplits) {
+                boolean preferCodeIntegrity, boolean extractNativeLibs, boolean isolatedSplits) {
             this.codePath = codePath;
             this.packageName = packageName;
             this.splitName = splitName;
@@ -497,6 +501,7 @@ public class PackageParser {
             this.debuggable = debuggable;
             this.multiArch = multiArch;
             this.use32bitAbi = use32bitAbi;
+            this.preferCodeIntegrity = preferCodeIntegrity;
             this.extractNativeLibs = extractNativeLibs;
             this.isolatedSplits = isolatedSplits;
             this.isSplitRequired = isSplitRequired;
@@ -1719,6 +1724,7 @@ public class PackageParser {
         boolean isolatedSplits = false;
         boolean isFeatureSplit = false;
         boolean isSplitRequired = false;
+        boolean preferCodeIntegrity = false;
         String configForSplit = null;
         String usesSplitName = null;
 
@@ -1781,6 +1787,9 @@ public class PackageParser {
                     if ("extractNativeLibs".equals(attr)) {
                         extractNativeLibs = attrs.getAttributeBooleanValue(i, true);
                     }
+                    if ("preferCodeIntegrity".equals(attr)) {
+                        preferCodeIntegrity = attrs.getAttributeBooleanValue(i, false);
+                    }
                 }
             } else if (TAG_USES_SPLIT.equals(parser.getName())) {
                 if (usesSplitName != null) {
@@ -1797,10 +1806,16 @@ public class PackageParser {
             }
         }
 
+        if (preferCodeIntegrity && extractNativeLibs) {
+            throw new PackageParserException(
+                    PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
+                    "Can't request both preferCodeIntegrity and extractNativeLibs");
+        }
+
         return new ApkLite(codePath, packageSplit.first, packageSplit.second, isFeatureSplit,
                 configForSplit, usesSplitName, isSplitRequired, versionCode, versionCodeMajor,
                 revisionCode, installLocation, verifiers, signingDetails, coreApp, debuggable,
-                multiArch, use32bitAbi, extractNativeLibs, isolatedSplits);
+                multiArch, use32bitAbi, preferCodeIntegrity, extractNativeLibs, isolatedSplits);
     }
 
     /**
@@ -3652,6 +3667,12 @@ public class PackageParser {
         }
 
         if (sa.getBoolean(
+                R.styleable.AndroidManifestApplication_preferCodeIntegrity,
+                false)) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_PREFER_CODE_INTEGRITY;
+        }
+
+        if (sa.getBoolean(
                 R.styleable.AndroidManifestApplication_defaultToDeviceProtectedStorage,
                 false)) {
             ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_DEFAULT_TO_DEVICE_PROTECTED_STORAGE;
@@ -3673,6 +3694,7 @@ public class PackageParser {
         }
 
         ai.maxAspectRatio = sa.getFloat(R.styleable.AndroidManifestApplication_maxAspectRatio, 0);
+        ai.minAspectRatio = sa.getFloat(R.styleable.AndroidManifestApplication_minAspectRatio, 0);
 
         ai.networkSecurityConfigRes = sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestApplication_networkSecurityConfig,
@@ -3708,6 +3730,12 @@ public class PackageParser {
         if (sa.getBoolean(
                 com.android.internal.R.styleable.AndroidManifestApplication_usesNonSdkApi, false)) {
             ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_USES_NON_SDK_API;
+        }
+
+        if (sa.getBoolean(
+                com.android.internal.R.styleable.AndroidManifestApplication_hasFragileUserData,
+                false)) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_HAS_FRAGILE_USER_DATA;
         }
 
         if (outError[0] == null) {
@@ -3989,6 +4017,7 @@ public class PackageParser {
         // Must be ran after the entire {@link ApplicationInfo} has been fully processed and after
         // every activity info has had a chance to set it from its attributes.
         setMaxAspectRatio(owner);
+        setMinAspectRatio(owner);
 
         PackageBackwardCompatibility.modifySharedLibraries(owner);
 
@@ -4486,6 +4515,13 @@ public class PackageParser {
                         0 /*default*/));
             }
 
+            if (sa.hasValue(R.styleable.AndroidManifestActivity_minAspectRatio)
+                    && sa.getType(R.styleable.AndroidManifestActivity_minAspectRatio)
+                    == TypedValue.TYPE_FLOAT) {
+                a.setMinAspectRatio(sa.getFloat(R.styleable.AndroidManifestActivity_minAspectRatio,
+                        0 /*default*/));
+            }
+
             a.info.lockTaskLaunchMode =
                     sa.getInt(R.styleable.AndroidManifestActivity_lockTaskMode, 0);
 
@@ -4745,6 +4781,34 @@ public class PackageParser {
     }
 
     /**
+     * Sets every the max aspect ratio of every child activity that doesn't already have an aspect
+     * ratio set.
+     */
+    private void setMinAspectRatio(Package owner) {
+        final float minAspectRatio;
+        if (owner.applicationInfo.minAspectRatio != 0) {
+            // Use the application max aspect ration as default if set.
+            minAspectRatio = owner.applicationInfo.minAspectRatio;
+        } else {
+            // Default to (1.33) 4:3 aspect ratio for pre-Q apps and unset for Q and greater.
+            // NOTE: 4:3 was the min aspect ratio Android devices can support pre-Q per the CDD,
+            // except for watches which always supported 1:1.
+            minAspectRatio = owner.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q
+                    ? 0
+                    : mCallback.hasFeature(FEATURE_WATCH)
+                            ? DEFAULT_PRE_Q_MIN_ASPECT_RATIO_WATCH
+                            : DEFAULT_PRE_Q_MIN_ASPECT_RATIO;
+        }
+
+        for (Activity activity : owner.activities) {
+            if (activity.hasMinAspectRatio()) {
+                continue;
+            }
+            activity.setMinAspectRatio(minAspectRatio);
+        }
+    }
+
+    /**
      * @param configChanges The bit mask of configChanges fetched from AndroidManifest.xml.
      * @param recreateOnConfigChanges The bit mask recreateOnConfigChanges fetched from
      *                                AndroidManifest.xml.
@@ -4882,6 +4946,7 @@ public class PackageParser {
         info.windowLayout = target.info.windowLayout;
         info.resizeMode = target.info.resizeMode;
         info.maxAspectRatio = target.info.maxAspectRatio;
+        info.minAspectRatio = target.info.minAspectRatio;
         info.requestedVrComponent = target.info.requestedVrComponent;
 
         info.encryptionAware = info.directBootAware = target.info.directBootAware;
@@ -5379,6 +5444,10 @@ public class PackageParser {
 
         s.info.splitName =
                 sa.getNonConfigurationString(R.styleable.AndroidManifestService_splitName, 0);
+
+        s.info.mForegroundServiceType = sa.getInt(
+                com.android.internal.R.styleable.AndroidManifestService_foregroundServiceType,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_UNSPECIFIED);
 
         s.info.flags = 0;
         if (sa.getBoolean(
@@ -7763,9 +7832,14 @@ public class PackageParser {
         @UnsupportedAppUsage
         public final ActivityInfo info;
         private boolean mHasMaxAspectRatio;
+        private boolean mHasMinAspectRatio;
 
         private boolean hasMaxAspectRatio() {
             return mHasMaxAspectRatio;
+        }
+
+        private boolean hasMinAspectRatio() {
+            return mHasMinAspectRatio;
         }
 
         // To construct custom activity which does not exist in manifest
@@ -7803,6 +7877,22 @@ public class PackageParser {
             mHasMaxAspectRatio = true;
         }
 
+        private void setMinAspectRatio(float minAspectRatio) {
+            if (info.resizeMode == RESIZE_MODE_RESIZEABLE
+                    || info.resizeMode == RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION) {
+                // Resizeable activities can be put in any aspect ratio.
+                return;
+            }
+
+            if (minAspectRatio < 1.0f && minAspectRatio != 0) {
+                // Ignore any value lesser than 1.0.
+                return;
+            }
+
+            info.minAspectRatio = minAspectRatio;
+            mHasMinAspectRatio = true;
+        }
+
         public String toString() {
             StringBuilder sb = new StringBuilder(128);
             sb.append("Activity{");
@@ -7823,12 +7913,14 @@ public class PackageParser {
             super.writeToParcel(dest, flags);
             dest.writeParcelable(info, flags | Parcelable.PARCELABLE_ELIDE_DUPLICATES);
             dest.writeBoolean(mHasMaxAspectRatio);
+            dest.writeBoolean(mHasMinAspectRatio);
         }
 
         private Activity(Parcel in) {
             super(in);
             info = in.readParcelable(Object.class.getClassLoader());
             mHasMaxAspectRatio = in.readBoolean();
+            mHasMinAspectRatio = in.readBoolean();
 
             for (ActivityIntentInfo aii : intents) {
                 aii.activity = this;

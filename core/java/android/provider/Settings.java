@@ -150,6 +150,23 @@ public final class Settings {
             "android.settings.LOCATION_SOURCE_SETTINGS";
 
     /**
+     * Activity Action: Show settings to allow configuration of location controller extra package.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_LOCATION_CONTROLLER_EXTRA_PACKAGE_SETTINGS =
+            "android.settings.LOCATION_CONTROLLER_EXTRA_PACKAGE_SETTINGS";
+
+    /**
      * Activity Action: Show scanning settings to allow configuration of Wi-Fi
      * and Bluetooth scanning settings.
      * <p>
@@ -1680,6 +1697,11 @@ public final class Settings {
      */
     public static final String CALL_METHOD_TAG_KEY = "_tag";
 
+    /**
+     * @hide - String argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_PREFIX_KEY = "_prefix";
+
     /** @hide - Private call() method to write to 'system' table */
     public static final String CALL_METHOD_PUT_SYSTEM = "PUT_system";
 
@@ -1701,14 +1723,17 @@ public final class Settings {
     /** @hide - Private call() method to delete from the 'global' table */
     public static final String CALL_METHOD_DELETE_GLOBAL = "DELETE_global";
 
+    /** @hide - Private call() method to reset to defaults the 'configuration' table */
+    public static final String CALL_METHOD_DELETE_CONFIG = "DELETE_config";
+
+    /** @hide - Private call() method to reset to defaults the 'secure' table */
+    public static final String CALL_METHOD_RESET_SECURE = "RESET_secure";
+
     /** @hide - Private call() method to reset to defaults the 'global' table */
     public static final String CALL_METHOD_RESET_GLOBAL = "RESET_global";
 
     /** @hide - Private call() method to reset to defaults the 'configuration' table */
     public static final String CALL_METHOD_RESET_CONFIG = "RESET_config";
-
-    /** @hide - Private call() method to reset to defaults the 'secure' table */
-    public static final String CALL_METHOD_RESET_SECURE = "RESET_secure";
 
     /** @hide - Private call() method to query the 'system' table */
     public static final String CALL_METHOD_LIST_SYSTEM = "LIST_system";
@@ -1718,6 +1743,9 @@ public final class Settings {
 
     /** @hide - Private call() method to query the 'global' table */
     public static final String CALL_METHOD_LIST_GLOBAL = "LIST_global";
+
+    /** @hide - Private call() method to reset to defaults the 'configuration' table */
+    public static final String CALL_METHOD_LIST_CONFIG = "LIST_config";
 
     /**
      * Activity Extra: Limit available options in launched activity based on the given authority.
@@ -2044,7 +2072,8 @@ public final class Settings {
                     arg.putBoolean(CALL_METHOD_MAKE_DEFAULT_KEY, true);
                 }
                 IContentProvider cp = mProviderHolder.getProvider(cr);
-                cp.call(cr.getPackageName(), mCallSetCommand, name, arg);
+                cp.call(cr.getPackageName(), mProviderHolder.mUri.getAuthority(),
+                        mCallSetCommand, name, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't set key " + name + " in " + mUri, e);
                 return false;
@@ -2117,12 +2146,14 @@ public final class Settings {
                     if (Settings.isInSystemServer() && Binder.getCallingUid() != Process.myUid()) {
                         final long token = Binder.clearCallingIdentity();
                         try {
-                            b = cp.call(cr.getPackageName(), mCallGetCommand, name, args);
+                            b = cp.call(cr.getPackageName(), mProviderHolder.mUri.getAuthority(),
+                                    mCallGetCommand, name, args);
                         } finally {
                             Binder.restoreCallingIdentity(token);
                         }
                     } else {
-                        b = cp.call(cr.getPackageName(), mCallGetCommand, name, args);
+                        b = cp.call(cr.getPackageName(), mProviderHolder.mUri.getAuthority(),
+                                mCallGetCommand, name, args);
                     }
                     if (b != null) {
                         String value = b.getString(Settings.NameValueTable.VALUE);
@@ -4254,6 +4285,7 @@ public final class Settings {
             PUBLIC_SETTINGS.add(BLUETOOTH_DISCOVERABILITY_TIMEOUT);
             PUBLIC_SETTINGS.add(NEXT_ALARM_FORMATTED);
             PUBLIC_SETTINGS.add(FONT_SCALE);
+            PUBLIC_SETTINGS.add(SYSTEM_LOCALES);
             PUBLIC_SETTINGS.add(DIM_SCREEN);
             PUBLIC_SETTINGS.add(SCREEN_OFF_TIMEOUT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS);
@@ -5079,6 +5111,7 @@ public final class Settings {
          * @hide
          */
         @SystemApi
+        @TestApi
         @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
         public static void resetToDefaults(@NonNull ContentResolver resolver,
                 @Nullable String tag) {
@@ -5114,7 +5147,8 @@ public final class Settings {
                 }
                 arg.putInt(CALL_METHOD_RESET_MODE_KEY, mode);
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
-                cp.call(resolver.getPackageName(), CALL_METHOD_RESET_SECURE, null, arg);
+                cp.call(resolver.getPackageName(), sProviderHolder.mUri.getAuthority(),
+                        CALL_METHOD_RESET_SECURE, null, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't reset do defaults for " + CONTENT_URI, e);
             }
@@ -6292,6 +6326,7 @@ public final class Settings {
          *
          * @hide
          */
+        @SystemApi
         public static final String ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED =
                 "accessibility_display_magnification_navbar_enabled";
 
@@ -7863,6 +7898,24 @@ public final class Settings {
         public static final String ASSIST_GESTURE_SETUP_COMPLETE = "assist_gesture_setup_complete";
 
         /**
+         * Control whether Trust Agents are in active unlock or extend unlock mode.
+         * @hide
+         */
+        public static final String TRUST_AGENTS_EXTEND_UNLOCK = "trust_agents_extend_unlock";
+
+        private static final Validator TRUST_AGENTS_EXTEND_UNLOCK_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
+         * Control whether the screen locks when trust is lost.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_WHEN_TRUST_LOST = "lock_screen_when_trust_lost";
+
+        private static final Validator LOCK_SCREEN_WHEN_TRUST_LOST_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
          * Control whether Night display is currently activated.
          * @hide
          */
@@ -7916,6 +7969,15 @@ public final class Settings {
          */
         public static final String NIGHT_DISPLAY_LAST_ACTIVATED_TIME =
                 "night_display_last_activated_time";
+
+        /**
+         * Control whether display white balance is currently enabled.
+         * @hide
+         */
+        public static final String DISPLAY_WHITE_BALANCE_ENABLED = "display_white_balance_enabled";
+
+        private static final Validator DISPLAY_WHITE_BALANCE_ENABLED_VALIDATOR =
+                BOOLEAN_VALIDATOR;
 
         /**
          * Names of the service components that the current user has explicitly allowed to
@@ -8240,10 +8302,60 @@ public final class Settings {
                 "packages_to_clear_data_before_full_restore";
 
         /**
+         * Indicates the location state should be maintained after sensor privacy is disabled.
+         * @hide
+         */
+        public static final String MAINTAIN_LOCATION_AFTER_SP_DISABLED = "0";
+
+        /**
+         * Indicates location should be reenabled after sensor privacy is disabled.
+         * @hide
+         */
+        public static final String REENABLE_LOCATION_AFTER_SP_DISABLED = "1";
+
+        /**
+         * Indicates the state of airplane mode should be maintained after sensor privacy is
+         * disabled.
+         * @hide
+         */
+        public static final String MAINTAIN_AIRPLANE_MODE_AFTER_SP_DISABLED = "0";
+
+        /**
+         * Indicates airplane mode should be disabled after sensor privacy is disabled.
+         * @hide
+         */
+        public static final String DISABLE_AIRPLANE_MODE_AFTER_SP_DISABLED = "1";
+
+        /**
+         * The state of all sensors managed by SensorPrivacyService when sensor privacy is enabled.
+         * @hide
+         */
+        public static final String SENSOR_PRIVACY_SENSOR_STATE =
+                "sensor_privacy_sensor_state";
+
+        /**
          * Setting to determine whether to use the new notification priority handling features.
          * @hide
          */
         public static final String NOTIFICATION_NEW_INTERRUPTION_MODEL = "new_interruption_model";
+
+        /**
+         * How often to check for location access.
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String LOCATION_ACCESS_CHECK_INTERVAL_MILLIS =
+                "location_access_check_interval_millis";
+
+        /**
+         * Delay between granting location access and checking it.
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String LOCATION_ACCESS_CHECK_DELAY_MILLIS =
+                "location_access_check_delay_millis";
 
         /**
          * This are the settings to be backed up.
@@ -8316,6 +8428,7 @@ public final class Settings {
             NIGHT_DISPLAY_CUSTOM_END_TIME,
             NIGHT_DISPLAY_COLOR_TEMPERATURE,
             NIGHT_DISPLAY_AUTO_MODE,
+            DISPLAY_WHITE_BALANCE_ENABLED,
             SYNC_PARENT_SOUNDS,
             CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED,
             SWIPE_UP_TO_SWITCH_APPS_ENABLED,
@@ -8361,6 +8474,8 @@ public final class Settings {
             ACCESSIBILITY_NON_INTERACTIVE_UI_TIMEOUT_MS,
             ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS,
             NOTIFICATION_NEW_INTERRUPTION_MODEL,
+            TRUST_AGENTS_EXTEND_UNLOCK,
+            LOCK_SCREEN_WHEN_TRUST_LOST,
         };
 
         /**
@@ -8462,6 +8577,7 @@ public final class Settings {
             VALIDATORS.put(NIGHT_DISPLAY_COLOR_TEMPERATURE,
                     NIGHT_DISPLAY_COLOR_TEMPERATURE_VALIDATOR);
             VALIDATORS.put(NIGHT_DISPLAY_AUTO_MODE, NIGHT_DISPLAY_AUTO_MODE_VALIDATOR);
+            VALIDATORS.put(DISPLAY_WHITE_BALANCE_ENABLED, DISPLAY_WHITE_BALANCE_ENABLED_VALIDATOR);
             VALIDATORS.put(SYNC_PARENT_SOUNDS, SYNC_PARENT_SOUNDS_VALIDATOR);
             VALIDATORS.put(CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED,
                     CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED_VALIDATOR);
@@ -8523,6 +8639,8 @@ public final class Settings {
             VALIDATORS.put(USER_SETUP_COMPLETE, BOOLEAN_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_SETUP_COMPLETE, BOOLEAN_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_NEW_INTERRUPTION_MODEL, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(TRUST_AGENTS_EXTEND_UNLOCK, TRUST_AGENTS_EXTEND_UNLOCK_VALIDATOR);
+            VALIDATORS.put(LOCK_SCREEN_WHEN_TRUST_LOST, LOCK_SCREEN_WHEN_TRUST_LOST_VALIDATOR);
         }
 
         /**
@@ -11868,17 +11986,38 @@ public final class Settings {
         public static final String GPU_DEBUG_APP = "gpu_debug_app";
 
         /**
-         * App should try to use ANGLE
+         * Force all PKGs to use ANGLE, regardless of any other settings
+         * The value is a boolean (1 or 0).
          * @hide
          */
-        public static final String ANGLE_ENABLED_APP = "angle_enabled_app";
+        public static final String GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE =
+                "angle_gl_driver_all_angle";
 
         /**
-         * App that is selected to use updated graphics driver.
+         * List of PKGs that have an OpenGL driver selected
          * @hide
          */
-        public static final String UPDATED_GFX_DRIVER_DEV_OPT_IN_APP =
-                "updated_gfx_driver_dev_opt_in_app";
+        public static final String GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS =
+                "angle_gl_driver_selection_pkgs";
+
+        /**
+         * List of selected OpenGL drivers, corresponding to the PKGs in GLOBAL_SETTINGS_DRIVER_PKGS
+         * @hide
+         */
+        public static final String GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES =
+                "angle_gl_driver_selection_values";
+
+        /**
+         * Apps that are selected to use Game Update Package.
+         * @hide
+         */
+        public static final String GUP_DEV_OPT_IN_APPS = "gup_dev_opt_in_apps";
+
+        /**
+         * Apps on the black list that are forbidden to useGame Update Package.
+         * @hide
+         */
+        public static final String GUP_BLACK_LIST = "gup_black_list";
 
         /**
          * Ordered GPU debug layer list for Vulkan
@@ -12723,6 +12862,17 @@ public final class Settings {
                 "privileged_device_identifier_3p_check_relaxed";
 
         /**
+         * If set to 1, the device identifier check will be relaxed to the previous READ_PHONE_STATE
+         * permission check for preloaded non-privileged apps.
+         *
+         * STOPSHIP: Remove this once we ship with the new device identifier check enabled.
+         *
+         * @hide
+         */
+        public static final String PRIVILEGED_DEVICE_IDENTIFIER_NON_PRIV_CHECK_RELAXED =
+                "privileged_device_identifier_non_priv_check_relaxed";
+
+        /**
          * If set to 1, SettingsProvider's restoreAnyVersion="true" attribute will be ignored
          * and restoring to lower version of platform API will be skipped.
          *
@@ -12826,6 +12976,13 @@ public final class Settings {
         public static final String HIDDEN_API_POLICY = "hidden_api_policy";
 
         /**
+         * Current version of signed configuration applied.
+         *
+         * @hide
+         */
+        public static final String SIGNED_CONFIG_VERSION = "signed_config_version";
+
+        /**
          * Timeout for a single {@link android.media.soundtrigger.SoundTriggerDetectionService}
          * operation (in ms).
          *
@@ -12842,6 +12999,34 @@ public final class Settings {
          */
         public static final String MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY =
                 "max_sound_trigger_detection_service_ops_per_day";
+
+        /**
+         * Property used by {@code com.android.server.SystemServer} on start to decide whether
+         * the Content Capture service should be created or not.
+         *
+         * <p>Possible values are:
+         *
+         * <ul>
+         *   <li>If set to {@code default}, it will only be set if the OEM provides and defines the
+         *   service name by overlaying {@code config_defaultContentCaptureService} (this is the
+         *   "default" mode)
+         *   <li>If set to {@code always}, it will always be enabled, even when the resource is not
+         *   overlaid (this is useful during development and to run the CTS tests on AOSP builds).
+         *   <li>Otherwise, it's explicitly disabled (this could work as a "kill switch" so OEMs
+         *   can disable it remotely in case of emergency by setting to something else (like
+         *   {@code "false"}); notice that it's also disabled if the OEM doesn't explicitly set one
+         *   of the values above).
+         * </ul>
+         *
+         * @hide
+         */
+        public static final String CONTENT_CAPTURE_SERVICE_EXPLICITLY_ENABLED =
+                "content_capture_service_explicitly_enabled";
+
+        /** {@hide} */
+        public static final String ISOLATED_STORAGE_LOCAL = "isolated_storage_local";
+        /** {@hide} */
+        public static final String ISOLATED_STORAGE_REMOTE = "isolated_storage_remote";
 
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
@@ -13135,7 +13320,8 @@ public final class Settings {
                 }
                 arg.putInt(CALL_METHOD_RESET_MODE_KEY, mode);
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
-                cp.call(resolver.getPackageName(), CALL_METHOD_RESET_GLOBAL, null, arg);
+                cp.call(resolver.getPackageName(), sProviderHolder.mUri.getAuthority(),
+                        CALL_METHOD_RESET_GLOBAL, null, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't reset do defaults for " + CONTENT_URI, e);
             }
@@ -13516,6 +13702,13 @@ public final class Settings {
          */
         public static final String WARNING_TEMPERATURE = "warning_temperature";
 
+
+        /**
+         * USB Temperature at which the high temperature alarm notification should be shown.
+         * @hide
+         */
+        public static final String USB_ALARM_TEMPERATURE = "usb_alarm_temperature";
+
         /**
          * Whether the diskstats logging task is enabled/disabled.
          * @hide
@@ -13652,6 +13845,22 @@ public final class Settings {
                 "smart_replies_in_notifications_flags";
 
         /**
+         * Configuration flags for the automatic generation of smart replies and smart actions in
+         * notifications. This is encoded as a key=value list, separated by commas. Ex:
+         * "generate_replies=false,generate_actions=true".
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * generate_replies                 (boolean)
+         * generate_actions                 (boolean)
+         * </pre>
+         * @hide
+         */
+        public static final String SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS =
+                "smart_suggestions_in_notifications_flags";
+
+        /**
          * If nonzero, crashes in foreground processes will bring up a dialog.
          * Otherwise, the process will be silently killed.
          * @hide
@@ -13728,6 +13937,14 @@ public final class Settings {
                 "backup_agent_timeout_parameters";
 
         /**
+         * Whether the backup system service supports multiple users (0 = disabled, 1 = enabled). If
+         * disabled, the service will only be active for the system user.
+         *
+         * @hide
+         */
+        public static final String BACKUP_MULTI_USER_ENABLED = "backup_multi_user_enabled";
+
+        /**
          * Blacklist of GNSS satellites.
          *
          * This is a list of integers separated by commas to represent pairs of (constellation,
@@ -13797,7 +14014,6 @@ public final class Settings {
          */
         public static final String LAST_ACTIVE_USER_ID = "last_active_persistent_user_id";
 
-
         /**
          * Whether we've enabled native flags health check on this device. Takes effect on
          * reboot. The value "1" enables native flags health check; otherwise it's disabled.
@@ -13805,7 +14021,6 @@ public final class Settings {
          */
         public static final String NATIVE_FLAGS_HEALTH_CHECK_ENABLED =
                 "native_flags_health_check_enabled";
-
     }
 
     /**
@@ -13816,21 +14031,12 @@ public final class Settings {
      * @hide
      */
     public static final class Config extends NameValueTable {
-        /**
-         * The content:// style URL for the config table.
-         *
-         * TODO(b/113100523): Move this to DeviceConfig.java when it is added, and expose it as a
-         *     System API.
-         */
-        private static final Uri CONTENT_URI =
-                Uri.parse("content://" + AUTHORITY + "/config");
-
         private static final ContentProviderHolder sProviderHolder =
-                new ContentProviderHolder(CONTENT_URI);
+                new ContentProviderHolder(DeviceConfig.CONTENT_URI);
 
         // Populated lazily, guarded by class object:
         private static final NameValueCache sNameValueCache = new NameValueCache(
-                CONTENT_URI,
+                DeviceConfig.CONTENT_URI,
                 CALL_METHOD_GET_CONFIG,
                 CALL_METHOD_PUT_CONFIG,
                 sProviderHolder);
@@ -13851,13 +14057,6 @@ public final class Settings {
         /**
          * Store a name/value pair into the database.
          * <p>
-         * The method takes an optional tag to associate with the setting which can be used to clear
-         * only settings made by your package and associated with this tag by passing the tag to
-         * {@link #resetToDefaults(ContentResolver, String)}. The value of this setting can be
-         * overridden by future calls to this or other put methods, and the tag provided in those
-         * calls, which may be null, will override the tag provided in this call. Any call to a put
-         * method which does not accept a tag will effectively set the tag to null.
-         * </p><p>
          * Also the method takes an argument whether to make the value the default for this setting.
          * If the system already specified a default value, then the one passed in here will
          * <strong>not</strong> be set as the default.
@@ -13866,50 +14065,51 @@ public final class Settings {
          * @param resolver to access the database with.
          * @param name to store.
          * @param value to associate with the name.
-         * @param tag to associated with the setting.
          * @param makeDefault whether to make the value the default one.
          * @return true if the value was set, false on database errors.
          *
-         * @see #resetToDefaults(ContentResolver, String)
+         * @see #resetToDefaults(ContentResolver, int, String)
          *
          * @hide
          */
         // TODO(b/117663715): require a new write permission restricted to a single source
         @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-        static boolean putString(@NonNull ContentResolver resolver,
-                @NonNull String name, @Nullable String value, @Nullable String tag,
-                boolean makeDefault) {
-            return sNameValueCache.putStringForUser(resolver, name, value, tag, makeDefault,
+        static boolean putString(@NonNull ContentResolver resolver, @NonNull String name,
+                @Nullable String value, boolean makeDefault) {
+            return sNameValueCache.putStringForUser(resolver, name, value, null, makeDefault,
                     resolver.getUserId());
         }
 
         /**
-         * Reset the settings to their defaults. This would reset <strong>only</strong> settings set
-         * by the caller's package. Passing in the optional tag will reset only settings changed by
-         * your package and associated with this tag.
+         * Reset the values to their defaults.
+         * <p>
+         * The method accepts an optional prefix parameter. If provided, only pairs with a name that
+         * starts with the exact prefix will be reset. Otherwise all will be reset.
          *
          * @param resolver Handle to the content resolver.
-         * @param tag Optional tag which should be associated with the settings to reset.
+         * @param resetMode The reset mode to use.
+         * @param prefix Optionally, to limit which which pairs are reset.
          *
-         * @see #putString(ContentResolver, String, String, String, boolean)
+         * @see #putString(ContentResolver, String, String, boolean)
          *
          * @hide
          */
         // TODO(b/117663715): require a new write permission restricted to a single source
         @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-        static void resetToDefaults(@NonNull ContentResolver resolver,
-                @Nullable String tag) {
+        static void resetToDefaults(@NonNull ContentResolver resolver, @ResetMode int resetMode,
+                @Nullable String prefix) {
             try {
                 Bundle arg = new Bundle();
                 arg.putInt(CALL_METHOD_USER_KEY, resolver.getUserId());
-                if (tag != null) {
-                    arg.putString(CALL_METHOD_TAG_KEY, tag);
+                arg.putInt(CALL_METHOD_RESET_MODE_KEY, resetMode);
+                if (prefix != null) {
+                    arg.putString(Settings.CALL_METHOD_PREFIX_KEY, prefix);
                 }
-                arg.putInt(CALL_METHOD_RESET_MODE_KEY, RESET_MODE_PACKAGE_DEFAULTS);
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
-                cp.call(resolver.getPackageName(), CALL_METHOD_RESET_CONFIG, null, arg);
+                cp.call(resolver.getPackageName(), sProviderHolder.mUri.getAuthority(),
+                        CALL_METHOD_RESET_CONFIG, null, arg);
             } catch (RemoteException e) {
-                Log.w(TAG, "Can't reset to defaults for " + CONTENT_URI, e);
+                Log.w(TAG, "Can't reset to defaults for " + DeviceConfig.CONTENT_URI, e);
             }
         }
     }
@@ -14116,6 +14316,44 @@ public final class Settings {
             ResolveInfo info = packageManager.resolveActivity(intent, 0);
             return info != null ? info.loadLabel(packageManager) : "";
         }
+    }
+
+    /**
+     * <p>
+     *     A Settings panel is floating UI that contains a fixed subset of settings to address a
+     *     particular user problem. For example, the
+     *     {@link #ACTION_INTERNET_CONNECTIVITY Internet Panel} surfaces settings related to
+     *     connecting to the internet.
+     * <p>
+     *     Settings panels appear above the calling app to address the problem without
+     *     the user needing to open Settings and thus leave their current screen.
+     */
+    public static final class Panel {
+        private Panel() {
+        }
+
+        /**
+         * Activity Action: Show a settings dialog containing settings to enable internet
+         * connection.
+         * <p>
+         * Input: Nothing.
+         * <p>
+         * Output: Nothing.
+         */
+        @SdkConstant(SdkConstant.SdkConstantType.ACTIVITY_INTENT_ACTION)
+        public static final String ACTION_INTERNET_CONNECTIVITY =
+                "android.settings.panel.action.INTERNET_CONNECTIVITY";
+
+        /**
+         * Activity Action: Show a settings dialog containing all volume streams.
+         * <p>
+         * Input: Nothing.
+         * <p>
+         * Output: Nothing.
+         */
+        @SdkConstant(SdkConstant.SdkConstantType.ACTIVITY_INTENT_ACTION)
+        public static final String ACTION_VOLUME =
+                "android.settings.panel.action.VOLUME";
     }
 
     private static final String[] PM_WRITE_SETTINGS = {

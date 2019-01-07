@@ -26,8 +26,9 @@ import android.view.DisplayCutout;
 import android.view.DragEvent;
 import android.view.IWindow;
 import android.view.IWindowSession;
-import android.view.PointerIcon;
+import android.view.InsetsSourceControl;
 import android.view.InsetsState;
+import android.view.PointerIcon;
 
 import com.android.internal.os.IResultReceiver;
 
@@ -58,6 +59,11 @@ public class BaseIWindow extends IWindow.Stub {
     }
 
     @Override
+    public void insetsControlChanged(InsetsState insetsState,
+            InsetsSourceControl[] activeControls) throws RemoteException {
+    }
+
+    @Override
     public void moved(int newX, int newY) {
     }
 
@@ -70,7 +76,7 @@ public class BaseIWindow extends IWindow.Stub {
     }
 
     @Override
-    public void windowFocusChanged(boolean hasFocus, boolean touchEnabled, boolean reportToClient) {
+    public void windowFocusChanged(boolean hasFocus, boolean touchEnabled) {
     }
 
     @Override

@@ -39,6 +39,7 @@ import android.os.ResultReceiver;
 import android.os.WorkSource;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Abstract class implementing IWifiManager with stub methods throwing runtime exceptions.
@@ -123,6 +124,12 @@ public abstract class AbstractWifiService extends IWifiManager.Stub {
 
     @Override
     public List<OsuProvider> getMatchingOsuProviders(List<ScanResult> scanResults) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<OsuProvider, PasspointConfiguration> getMatchingPasspointConfigsForOsuProviders(
+            List<OsuProvider> osuProviders) {
         throw new UnsupportedOperationException();
     }
 
@@ -442,14 +449,19 @@ public abstract class AbstractWifiService extends IWifiManager.Stub {
     }
 
     @Override
-    public boolean addNetworkSuggestions(
+    public int addNetworkSuggestions(
             List<WifiNetworkSuggestion> networkSuggestions, String callingPackageName) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public boolean removeNetworkSuggestions(
+    public int removeNetworkSuggestions(
             List<WifiNetworkSuggestion> networkSuggestions, String callingPackageName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String[] getFactoryMacAddresses() {
         throw new UnsupportedOperationException();
     }
 }

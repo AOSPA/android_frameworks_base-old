@@ -91,6 +91,7 @@ public class NotificationContentView extends FrameLayout {
 
     private SmartReplyConstants mSmartReplyConstants;
     private SmartReplyView mExpandedSmartReplyView;
+    private SmartReplyView mHeadsUpSmartReplyView;
     private SmartReplyController mSmartReplyController;
 
     private NotificationViewWrapper mContractedWrapper;
@@ -253,6 +254,9 @@ public class NotificationContentView extends FrameLayout {
         }
         if (mHeadsUpChild != null) {
             int maxHeight = mHeadsUpHeight;
+            if (mHeadsUpSmartReplyView != null) {
+                maxHeight += mHeadsUpSmartReplyView.getHeightUpperLimit();
+            }
             maxHeight += mHeadsUpWrapper.getExtraMeasureHeight();
             int size = maxHeight;
             ViewGroup.LayoutParams layoutParams = mHeadsUpChild.getLayoutParams();
@@ -955,6 +959,9 @@ public class NotificationContentView extends FrameLayout {
         if (mExpandedSmartReplyView != null) {
             mExpandedSmartReplyView.setBackgroundTintColor(color);
         }
+        if (mHeadsUpSmartReplyView != null) {
+            mHeadsUpSmartReplyView.setBackgroundTintColor(color);
+        }
     }
 
     public int getVisibleType() {
@@ -1467,10 +1474,24 @@ public class NotificationContentView extends FrameLayout {
         if (mExpandedChild != null) {
             mExpandedSmartReplyView =
                     applySmartReplyView(mExpandedChild, smartRepliesAndActions, entry);
-            if (mExpandedSmartReplyView != null && smartRepliesAndActions.smartReplies != null) {
-                mSmartReplyController.smartRepliesAdded(
-                        entry, smartRepliesAndActions.smartReplies.choices.length);
+            if (mExpandedSmartReplyView != null) {
+                if (smartRepliesAndActions.smartReplies != null
+                        || smartRepliesAndActions.smartActions != null) {
+                    int numSmartReplies = smartRepliesAndActions.smartReplies == null
+                            ? 0 : smartRepliesAndActions.smartReplies.choices.length;
+                    int numSmartActions = smartRepliesAndActions.smartActions == null
+                            ? 0 : smartRepliesAndActions.smartActions.actions.size();
+                    boolean fromAssistant = smartRepliesAndActions.smartReplies == null
+                            ? smartRepliesAndActions.smartActions.fromAssistant
+                            : smartRepliesAndActions.smartReplies.fromAssistant;
+                    mSmartReplyController.smartSuggestionsAdded(entry, numSmartReplies,
+                            numSmartActions, fromAssistant);
+                }
             }
+        }
+        if (mHeadsUpChild != null) {
+            mHeadsUpSmartReplyView =
+                    applySmartReplyView(mHeadsUpChild, smartRepliesAndActions, entry);
         }
     }
 
@@ -1520,7 +1541,8 @@ public class NotificationContentView extends FrameLayout {
             }
             if (smartRepliesAndActions.smartActions != null) {
                 smartReplyView.addSmartActions(
-                        smartRepliesAndActions.smartActions, mSmartReplyController, entry);
+                        smartRepliesAndActions.smartActions, mSmartReplyController, entry,
+                        mContainingNotification.getHeadsUpManager());
             }
             smartReplyContainer.setVisibility(View.VISIBLE);
         }
@@ -1603,15 +1625,15 @@ public class NotificationContentView extends FrameLayout {
     }
 
     /** Sets whether the notification being displayed audibly alerted the user. */
-    public void setAudiblyAlerted(boolean audiblyAlerted) {
+    public void setRecentlyAudiblyAlerted(boolean audiblyAlerted) {
         if (mContractedChild != null && mContractedWrapper.getNotificationHeader() != null) {
-            mContractedWrapper.getNotificationHeader().setAudiblyAlerted(audiblyAlerted);
+            mContractedWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
         }
         if (mExpandedChild != null && mExpandedWrapper.getNotificationHeader() != null) {
-            mExpandedWrapper.getNotificationHeader().setAudiblyAlerted(audiblyAlerted);
+            mExpandedWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
         }
         if (mHeadsUpChild != null && mHeadsUpWrapper.getNotificationHeader() != null) {
-            mHeadsUpWrapper.getNotificationHeader().setAudiblyAlerted(audiblyAlerted);
+            mHeadsUpWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
         }
     }
 

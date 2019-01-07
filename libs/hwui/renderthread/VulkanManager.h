@@ -38,8 +38,10 @@ class RenderThread;
 
 class VulkanSurface {
 public:
-    VulkanSurface(ColorMode colorMode, ANativeWindow* window)
-            : mColorMode(colorMode), mNativeWindow(window) {}
+    VulkanSurface(ColorMode colorMode, ANativeWindow* window, sk_sp<SkColorSpace> colorSpace,
+                  SkColorSpace::Gamut colorGamut, SkColorType colorType)
+            : mColorMode(colorMode), mNativeWindow(window), mColorSpace(colorSpace),
+              mColorGamut(colorGamut), mColorType(colorType) {}
 
     sk_sp<SkSurface> getBackBufferSurface() { return mBackbuffer; }
 
@@ -79,6 +81,9 @@ private:
     ANativeWindow* mNativeWindow;
     int mWindowWidth = 0;
     int mWindowHeight = 0;
+    sk_sp<SkColorSpace> mColorSpace;
+    SkColorSpace::Gamut mColorGamut;
+    SkColorType mColorType;
 };
 
 // This class contains the shared global Vulkan objects, such as VkInstance, VkDevice and VkQueue,
@@ -96,7 +101,10 @@ public:
 
     // Given a window this creates a new VkSurfaceKHR and VkSwapchain and stores them inside a new
     // VulkanSurface object which is returned.
-    VulkanSurface* createSurface(ANativeWindow* window, ColorMode colorMode);
+    VulkanSurface* createSurface(ANativeWindow* window, ColorMode colorMode,
+                                 sk_sp<SkColorSpace> surfaceColorSpace,
+                                 SkColorSpace::Gamut surfaceColorGamut,
+                                 SkColorType surfaceColorType);
 
     // Destroy the VulkanSurface and all associated vulkan objects.
     void destroySurface(VulkanSurface* surface);
@@ -152,6 +160,7 @@ private:
             fPtr = ptr;
             return *this;
         }
+        // NOLINTNEXTLINE(google-explicit-constructor)
         operator FNPTR_TYPE() const { return fPtr; }
 
     private:

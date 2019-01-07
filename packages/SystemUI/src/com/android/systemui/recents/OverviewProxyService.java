@@ -43,7 +43,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.MotionEvent;
 
-import com.android.systemui.Dependency;
+import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.Prefs;
 import com.android.systemui.SysUiServiceProvider;
@@ -62,9 +62,13 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Class to send information from overview to launcher with a binder.
  */
+@Singleton
 public class OverviewProxyService implements CallbackController<OverviewProxyListener>, Dumpable {
 
     private static final String ACTION_QUICKSTEP = "android.intent.action.QUICKSTEP_SERVICE";
@@ -85,8 +89,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private final Handler mHandler;
     private final Runnable mConnectionRunnable = this::internalConnectToCurrentUser;
     private final ComponentName mRecentsComponentName;
-    private final DeviceProvisionedController mDeviceProvisionedController
-            = Dependency.get(DeviceProvisionedController.class);
+    private final DeviceProvisionedController mDeviceProvisionedController;
     private final List<OverviewProxyListener> mConnectionCallbacks = new ArrayList<>();
     private final Intent mQuickStepIntent;
 
@@ -97,6 +100,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private int mCurrentBoundedUserId = -1;
     private float mBackButtonAlpha;
     private MotionEvent mStatusBarGestureDownEvent;
+    private float mWindowCornerRadius;
 
     private ISystemUiProxy mSysUiProxy = new ISystemUiProxy.Stub() {
 
@@ -228,6 +232,18 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
+        public float getWindowCornerRadius() {
+            if (!verifyCaller("getWindowCornerRadius")) {
+                return 0;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                return mWindowCornerRadius;
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
         private boolean verifyCaller(String reason) {
             final int callerId = Binder.getCallingUserHandle().getIdentifier();
             if (callerId != mCurrentBoundedUserId) {
@@ -324,9 +340,11 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private final IBinder.DeathRecipient mOverviewServiceDeathRcpt
             = this::cleanupAfterDeath;
 
-    public OverviewProxyService(Context context) {
+    @Inject
+    public OverviewProxyService(Context context, DeviceProvisionedController provisionController) {
         mContext = context;
         mHandler = new Handler();
+        mDeviceProvisionedController = provisionController;
         mConnectionBackoffAttempts = 0;
         mRecentsComponentName = ComponentName.unflattenFromString(context.getString(
                 com.android.internal.R.string.config_recentsComponentName));
@@ -334,6 +352,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 .setPackage(mRecentsComponentName.getPackageName());
         mInteractionFlags = Prefs.getInt(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS,
                 getDefaultInteractionFlags());
+        mWindowCornerRadius = ScreenDecorationsUtils.getWindowCornerRadius(mContext.getResources());
 
         // Listen for the package update changes.
         if (mDeviceProvisionedController.getCurrentUser() == UserHandle.USER_SYSTEM) {

@@ -141,6 +141,9 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     private volatile boolean mPerceptible;
     // Set to true when process was launched with a wrapper attached
     private volatile boolean mUsingWrapper;
+    // Set to true if this process is currently temporarily whitelisted to start activities even if
+    // it's not in the foreground
+    private volatile boolean mAllowBackgroundActivityStarts;
 
     // Thread currently set for VR scheduling
     int mVrThreadTid;
@@ -341,6 +344,14 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
     boolean isUsingWrapper() {
         return mUsingWrapper;
+    }
+
+    public void setAllowBackgroundActivityStarts(boolean allowBackgroundActivityStarts) {
+        mAllowBackgroundActivityStarts = allowBackgroundActivityStarts;
+    }
+
+    public boolean areBackgroundActivityStartsAllowed() {
+        return mAllowBackgroundActivityStarts;
     }
 
     public void setInstrumenting(boolean instrumenting) {
@@ -770,8 +781,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     }
 
     @Override
-    public void onOverrideConfigurationChanged(Configuration newOverrideConfig) {
-        super.onOverrideConfigurationChanged(newOverrideConfig);
+    public void onRequestedOverrideConfigurationChanged(Configuration newOverrideConfig) {
+        super.onRequestedOverrideConfigurationChanged(newOverrideConfig);
         updateConfiguration();
     }
 
@@ -924,7 +935,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             }
         }
         pw.println(prefix + " Configuration=" + getConfiguration());
-        pw.println(prefix + " OverrideConfiguration=" + getOverrideConfiguration());
+        pw.println(prefix + " OverrideConfiguration=" + getRequestedOverrideConfiguration());
         pw.println(prefix + " mLastReportedConfiguration=" + mLastReportedConfiguration);
     }
 

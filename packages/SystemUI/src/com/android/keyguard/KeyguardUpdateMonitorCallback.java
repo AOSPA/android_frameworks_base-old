@@ -27,6 +27,8 @@ import android.view.WindowManagerPolicyConstants;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 
+import java.util.TimeZone;
+
 /**
  * Callback for general information relevant to lock screen.
  */
@@ -48,6 +50,13 @@ public class KeyguardUpdateMonitorCallback {
      * Called once per minute or when the time changes.
      */
     public void onTimeChanged() { }
+
+    /**
+     * Called when time zone changes.
+     *
+     * @note When time zone changes, onTimeChanged will be called too.
+     */
+    public void onTimeZoneChanged(TimeZone timeZone) { }
 
     /**
      * Called when the carrier PLMN or SPN changes.

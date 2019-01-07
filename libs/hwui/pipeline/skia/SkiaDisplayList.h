@@ -16,11 +16,11 @@
 
 #pragma once
 
-#include "hwui/AnimatedImageDrawable.h"
 #include "FunctorDrawable.h"
 #include "RecordingCanvas.h"
 #include "RenderNodeDrawable.h"
 #include "TreeInfo.h"
+#include "hwui/AnimatedImageDrawable.h"
 #include "utils/LinearAllocator.h"
 
 #include <deque>
@@ -36,7 +36,7 @@ class Outline;
 
 namespace VectorDrawable {
 class Tree;
-};
+}
 typedef uirenderer::VectorDrawable::Tree VectorDrawableRoot;
 
 namespace skiapipeline {
@@ -49,7 +49,7 @@ namespace skiapipeline {
  */
 class SkiaDisplayList {
 public:
-    size_t getUsedSize() { return allocator.usedSize(); }
+    size_t getUsedSize() { return allocator.usedSize() + mDisplayList.usedSize(); }
 
     ~SkiaDisplayList() {
         /* Given that we are using a LinearStdAllocator to store some of the
@@ -109,7 +109,7 @@ public:
      * NOTE: This function can be folded into RenderNode when we no longer need
      *       to subclass from DisplayList
      */
-    void syncContents();
+    void syncContents(const WebViewSyncData& data);
 
     /**
      * ONLY to be called by RenderNode::prepareTree in order to prepare this
@@ -179,6 +179,6 @@ public:
     SkMatrix mParentMatrix;
 };
 
-};  // namespace skiapipeline
-};  // namespace uirenderer
-};  // namespace android
+}  // namespace skiapipeline
+}  // namespace uirenderer
+}  // namespace android

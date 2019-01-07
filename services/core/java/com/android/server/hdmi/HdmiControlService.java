@@ -18,6 +18,7 @@ package com.android.server.hdmi;
 
 import static android.hardware.hdmi.HdmiControlManager.DEVICE_EVENT_ADD_DEVICE;
 import static android.hardware.hdmi.HdmiControlManager.DEVICE_EVENT_REMOVE_DEVICE;
+
 import static com.android.server.hdmi.Constants.DISABLED;
 import static com.android.server.hdmi.Constants.ENABLED;
 import static com.android.server.hdmi.Constants.OPTION_MHL_ENABLE;
@@ -67,6 +68,7 @@ import android.util.ArraySet;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.DumpUtils;
@@ -76,14 +78,18 @@ import com.android.server.hdmi.HdmiAnnotations.ServiceThreadOnly;
 import com.android.server.hdmi.HdmiCecController.AllocateAddressCallback;
 import com.android.server.hdmi.HdmiCecLocalDevice.ActiveSource;
 import com.android.server.hdmi.HdmiCecLocalDevice.PendingActionClearedCallback;
+
+import libcore.util.EmptyArray;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import libcore.util.EmptyArray;
+import java.util.Map;
 
 /**
  * Provides a service for sending and processing HDMI control messages,
@@ -93,6 +99,31 @@ public class HdmiControlService extends SystemService {
     private static final String TAG = "HdmiControlService";
     private final Locale HONG_KONG = new Locale("zh", "HK");
     private final Locale MACAU = new Locale("zh", "MO");
+
+    private static final Map<String, String> mTerminologyToBibliographicMap;
+    static {
+        mTerminologyToBibliographicMap = new HashMap<>();
+        // NOTE: (TERMINOLOGY_CODE, BIBLIOGRAPHIC_CODE)
+        mTerminologyToBibliographicMap.put("sqi", "alb"); // Albanian
+        mTerminologyToBibliographicMap.put("hye", "arm"); // Armenian
+        mTerminologyToBibliographicMap.put("eus", "baq"); // Basque
+        mTerminologyToBibliographicMap.put("mya", "bur"); // Burmese
+        mTerminologyToBibliographicMap.put("ces", "cze"); // Czech
+        mTerminologyToBibliographicMap.put("nld", "dut"); // Dutch
+        mTerminologyToBibliographicMap.put("kat", "geo"); // Georgian
+        mTerminologyToBibliographicMap.put("deu", "ger"); // German
+        mTerminologyToBibliographicMap.put("ell", "gre"); // Greek
+        mTerminologyToBibliographicMap.put("fra", "fre"); // French
+        mTerminologyToBibliographicMap.put("isl", "ice"); // Icelandic
+        mTerminologyToBibliographicMap.put("mkd", "mac"); // Macedonian
+        mTerminologyToBibliographicMap.put("mri", "mao"); // Maori
+        mTerminologyToBibliographicMap.put("msa", "may"); // Malay
+        mTerminologyToBibliographicMap.put("fas", "per"); // Persian
+        mTerminologyToBibliographicMap.put("ron", "rum"); // Romanian
+        mTerminologyToBibliographicMap.put("slk", "slo"); // Slovak
+        mTerminologyToBibliographicMap.put("bod", "tib"); // Tibetan
+        mTerminologyToBibliographicMap.put("cym", "wel"); // Welsh
+    }
 
     static final String PERMISSION = "android.permission.HDMI_CEC";
 
@@ -177,7 +208,18 @@ public class HdmiControlService extends SystemService {
                 // Chinese used in Taiwan/Hong Kong/Macau.
                 return "chi";
             } else {
-                return locale.getISO3Language();
+                String language = locale.getISO3Language();
+
+                // locale.getISO3Language() returns terminology code and need to
+                // send it as bibliographic code instead since the Bibliographic
+                // codes of ISO/FDIS 639-2 shall be used.
+                // NOTE: Chinese also has terminology/bibliographic code "zho" and "chi"
+                // But, as it depends on the locale, is not handled here.
+                if (mTerminologyToBibliographicMap.containsKey(language)) {
+                    language = mTerminologyToBibliographicMap.get(language);
+                }
+
+                return language;
             }
         }
     }
@@ -980,7 +1022,7 @@ public class HdmiControlService extends SystemService {
      * @param sourceAddress a logical address of source device where sends polling message
      * @param pickStrategy strategy how to pick polling candidates
      * @param retryCount the number of retry used to send polling message to remote devices
-     * @throw IllegalArgumentException if {@code pickStrategy} is invalid value
+     * @throws IllegalArgumentException if {@code pickStrategy} is invalid value
      */
     @ServiceThreadOnly
     void pollDevices(DevicePollingCallback callback, int sourceAddress, int pickStrategy,
@@ -1431,12 +1473,12 @@ public class HdmiControlService extends SystemService {
 
         @Override
         public boolean getSystemAudioMode() {
+            // TODO(shubang): handle getSystemAudioMode() for all device types
             enforceAccessPermission();
             HdmiCecLocalDeviceTv tv = tv();
-            if (tv == null) {
-                return false;
-            }
-            return tv.isSystemAudioActivated();
+            HdmiCecLocalDeviceAudioSystem audioSystem = audioSystem();
+            return (tv != null && tv.isSystemAudioActivated())
+                    || (audioSystem != null && audioSystem.isSystemAudioActivated());
         }
 
         @Override

@@ -74,6 +74,7 @@ import android.os.StatsDimensionsValue;
 import android.os.StatsLogEventWrapper;
 import android.os.SynchronousResultReceiver;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.Temperature;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -1140,7 +1141,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             e.writeLong(rssHighWaterMarkInBytes);
             pulledData.add(e);
         }
-        // TODO(b/119598534): Reset HWM counters here.
+        // Invoke rss_hwm_reset binary to reset RSS HWM counters for all processes.
+        SystemProperties.set("sys.rss_hwm_reset.on", "1");
     }
 
     private void pullBinderCallsStats(
@@ -1561,11 +1563,16 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         return mBatteryStatsHelper;
     }
 
+    private long milliAmpHrsToNanoAmpSecs(double mAh) {
+        final long MILLI_AMP_HR_TO_NANO_AMP_SECS = 1_000_000L * 3600L;
+        return (long) (mAh * MILLI_AMP_HR_TO_NANO_AMP_SECS + 0.5);
+    }
+
     private void pullDeviceCalculatedPowerUse(int tagId,
             long elapsedNanos, final long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
         BatteryStatsHelper bsHelper = getBatteryStatsHelper();
         StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
-        e.writeFloat((float) bsHelper.getComputedPower());
+        e.writeLong(milliAmpHrsToNanoAmpSecs(bsHelper.getComputedPower()));
         pulledData.add(e);
     }
 
@@ -1581,7 +1588,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(bs.uidObj.getUid());
-            e.writeFloat((float) bs.totalPowerMah);
+            e.writeLong(milliAmpHrsToNanoAmpSecs(bs.totalPowerMah));
             pulledData.add(e);
         }
     }
@@ -1601,7 +1608,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(bs.drainType.ordinal());
-            e.writeFloat((float) bs.totalPowerMah);
+            e.writeLong(milliAmpHrsToNanoAmpSecs(bs.totalPowerMah));
             pulledData.add(e);
         }
     }

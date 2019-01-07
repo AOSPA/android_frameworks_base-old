@@ -40,6 +40,8 @@ using ::android::base::StringPrintf;
 
 namespace aapt {
 
+const char* Overlayable::kActorScheme = "overlay";
+
 static bool less_than_type_and_id(const std::unique_ptr<ResourceTableType>& lhs,
                                   const std::pair<ResourceType, Maybe<uint8_t>>& rhs) {
   return lhs->type < rhs.first || (lhs->type == rhs.first && rhs.second && lhs->id < rhs.second);
@@ -625,18 +627,19 @@ bool ResourceTable::SetAllowNewImpl(const ResourceNameRef& name, const AllowNew&
   return true;
 }
 
-bool ResourceTable::AddOverlayable(const ResourceNameRef& name, const Overlayable& overlayable,
+bool ResourceTable::SetOverlayable(const ResourceNameRef& name, const OverlayableItem& overlayable,
                                    IDiagnostics* diag) {
-  return AddOverlayableImpl(name, overlayable, ResourceNameValidator, diag);
+  return SetOverlayableImpl(name, overlayable, ResourceNameValidator, diag);
 }
 
-bool ResourceTable::AddOverlayableMangled(const ResourceNameRef& name,
-                                          const Overlayable& overlayable, IDiagnostics* diag) {
-  return AddOverlayableImpl(name, overlayable, SkipNameValidator, diag);
+bool ResourceTable::SetOverlayableMangled(const ResourceNameRef& name,
+                                          const OverlayableItem& overlayable, IDiagnostics* diag) {
+  return SetOverlayableImpl(name, overlayable, SkipNameValidator, diag);
 }
 
-bool ResourceTable::AddOverlayableImpl(const ResourceNameRef& name, const Overlayable& overlayable,
-                                       NameValidator name_validator, IDiagnostics* diag) {
+bool ResourceTable::SetOverlayableImpl(const ResourceNameRef& name,
+                                       const OverlayableItem& overlayable,
+                                       NameValidator name_validator, IDiagnostics *diag) {
   CHECK(diag != nullptr);
 
   if (!ValidateName(name_validator, name, overlayable.source, diag)) {
@@ -647,27 +650,15 @@ bool ResourceTable::AddOverlayableImpl(const ResourceNameRef& name, const Overla
   ResourceTableType* type = package->FindOrCreateType(name.type);
   ResourceEntry* entry = type->FindOrCreateEntry(name.entry);
 
-  for (auto& overlayable_declaration : entry->overlayable_declarations) {
-    // An overlayable resource cannot be declared twice with the same policy
-    if (overlayable.policy == overlayable_declaration.policy) {
-      diag->Error(DiagMessage(overlayable.source)
-                    << "duplicate overlayable declaration for resource '" << name << "'");
-      diag->Error(DiagMessage(overlayable_declaration.source) << "previous declaration here");
-      return false;
-    }
-
-    // An overlayable resource cannot be declared once with a policy and without a policy because
-    // the policy becomes unused
-    if (!overlayable.policy || !overlayable_declaration.policy) {
-      diag->Error(DiagMessage(overlayable.source)
-                    << "overlayable resource '" << name << "'"
-                    << " declared once with a policy and once with no policy");
-      diag->Error(DiagMessage(overlayable_declaration.source) << "previous declaration here");
-      return false;
-    }
+  if (entry->overlayable_item) {
+    diag->Error(DiagMessage(overlayable.source)
+                << "duplicate overlayable declaration for resource '" << name << "'");
+    diag->Error(DiagMessage(entry->overlayable_item.value().source)
+                << "previous declaration here");
+    return false;
   }
 
-  entry->overlayable_declarations.push_back(overlayable);
+  entry->overlayable_item = overlayable;
   return true;
 }
 
@@ -703,7 +694,7 @@ std::unique_ptr<ResourceTable> ResourceTable::Clone() const {
         new_entry->id = entry->id;
         new_entry->visibility = entry->visibility;
         new_entry->allow_new = entry->allow_new;
-        new_entry->overlayable_declarations = entry->overlayable_declarations;
+        new_entry->overlayable_item = entry->overlayable_item;
 
         for (const auto& config_value : entry->values) {
           ResourceConfigValue* new_value =

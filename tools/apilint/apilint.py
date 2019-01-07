@@ -183,6 +183,11 @@ class Class():
 
         self.name = self.fullname[self.fullname.rindex(".")+1:]
 
+    def merge_from(self, other):
+        self.ctors.extend(other.ctors)
+        self.fields.extend(other.fields)
+        self.methods.extend(other.methods)
+
     def __hash__(self):
         return hash((self.raw, tuple(self.ctors), tuple(self.fields), tuple(self.methods)))
 
@@ -204,9 +209,46 @@ class Package():
         return self.raw
 
 
-def _parse_stream(f, clazz_cb=None):
-    line = 0
+def _parse_stream(f, clazz_cb=None, base_f=None, out_classes_with_base=None,
+                  in_classes_with_base=[]):
     api = {}
+    in_classes_with_base = _retry_iterator(in_classes_with_base)
+
+    if base_f:
+        base_classes = _retry_iterator(_parse_stream_to_generator(base_f))
+    else:
+        base_classes = []
+
+    def handle_class(clazz):
+        if clazz_cb:
+            clazz_cb(clazz)
+        else: # In callback mode, don't keep track of the full API
+            api[clazz.fullname] = clazz
+
+    def handle_missed_classes_with_base(clazz):
+        for c in _yield_until_matching_class(in_classes_with_base, clazz):
+            base_class = _skip_to_matching_class(base_classes, c)
+            if base_class:
+                handle_class(base_class)
+
+    for clazz in _parse_stream_to_generator(f):
+        # Before looking at clazz, let's see if there's some classes that were not present, but
+        # may have an entry in the base stream.
+        handle_missed_classes_with_base(clazz)
+
+        base_class = _skip_to_matching_class(base_classes, clazz)
+        if base_class:
+            clazz.merge_from(base_class)
+            if out_classes_with_base is not None:
+                out_classes_with_base.append(clazz)
+        handle_class(clazz)
+
+    handle_missed_classes_with_base(None)
+
+    return api
+
+def _parse_stream_to_generator(f):
+    line = 0
     pkg = None
     clazz = None
     blame = None
@@ -225,26 +267,67 @@ def _parse_stream(f, clazz_cb=None):
         if raw.startswith("package"):
             pkg = Package(line, raw, blame)
         elif raw.startswith("  ") and raw.endswith("{"):
-            # When provided with class callback, we treat as incremental
-            # parse and don't build up entire API
-            if clazz and clazz_cb:
-                clazz_cb(clazz)
             clazz = Class(pkg, line, raw, blame)
-            if not clazz_cb:
-                api[clazz.fullname] = clazz
         elif raw.startswith("    ctor"):
             clazz.ctors.append(Method(clazz, line, raw, blame))
         elif raw.startswith("    method"):
             clazz.methods.append(Method(clazz, line, raw, blame))
         elif raw.startswith("    field"):
             clazz.fields.append(Field(clazz, line, raw, blame))
+        elif raw.startswith("  }") and clazz:
+            yield clazz
 
-    # Handle last trailing class
-    if clazz and clazz_cb:
-        clazz_cb(clazz)
+def _retry_iterator(it):
+    """Wraps an iterator, such that calling send(True) on it will redeliver the same element"""
+    for e in it:
+        while True:
+            retry = yield e
+            if not retry:
+                break
+            # send() was called, asking us to redeliver clazz on next(). Still need to yield
+            # a dummy value to the send() first though.
+            if (yield "Returning clazz on next()"):
+                raise TypeError("send() must be followed by next(), not send()")
 
-    return api
+def _skip_to_matching_class(classes, needle):
+    """Takes a classes iterator and consumes entries until it returns the class we're looking for
 
+    This relies on classes being sorted by package and class name."""
+
+    for clazz in classes:
+        if clazz.pkg.name < needle.pkg.name:
+            # We haven't reached the right package yet
+            continue
+        if clazz.pkg.name == needle.pkg.name and clazz.fullname < needle.fullname:
+            # We're in the right package, but not the right class yet
+            continue
+        if clazz.fullname == needle.fullname:
+            return clazz
+        # We ran past the right class. Send it back into the generator, then report failure.
+        classes.send(clazz)
+        return None
+
+def _yield_until_matching_class(classes, needle):
+    """Takes a class iterator and yields entries it until it reaches the class we're looking for.
+
+    This relies on classes being sorted by package and class name."""
+
+    for clazz in classes:
+        if needle is None:
+            yield clazz
+        elif clazz.pkg.name < needle.pkg.name:
+            # We haven't reached the right package yet
+            yield clazz
+        elif clazz.pkg.name == needle.pkg.name and clazz.fullname < needle.fullname:
+            # We're in the right package, but not the right class yet
+            yield clazz
+        elif clazz.fullname == needle.fullname:
+            # Class found, abort.
+            return
+        else:
+            # We ran past the right class. Send it back into the iterator, then abort.
+            classes.send(clazz)
+            return
 
 class Failure():
     def __init__(self, sig, clazz, detail, error, rule, msg):
@@ -1504,12 +1587,14 @@ def examine_clazz(clazz):
     verify_singleton(clazz)
 
 
-def examine_stream(stream):
+def examine_stream(stream, base_stream=None, in_classes_with_base=[], out_classes_with_base=None):
     """Find all style issues in the given API stream."""
     global failures, noticed
     failures = {}
     noticed = {}
-    _parse_stream(stream, examine_clazz)
+    _parse_stream(stream, examine_clazz, base_f=base_stream,
+                  in_classes_with_base=in_classes_with_base,
+                  out_classes_with_base=out_classes_with_base)
     return (failures, noticed)
 
 
@@ -1650,6 +1735,12 @@ if __name__ == "__main__":
     parser.add_argument("current.txt", type=argparse.FileType('r'), help="current.txt")
     parser.add_argument("previous.txt", nargs='?', type=argparse.FileType('r'), default=None,
             help="previous.txt")
+    parser.add_argument("--base-current", nargs='?', type=argparse.FileType('r'), default=None,
+            help="The base current.txt to use when examining system-current.txt or"
+                 " test-current.txt")
+    parser.add_argument("--base-previous", nargs='?', type=argparse.FileType('r'), default=None,
+            help="The base previous.txt to use when examining system-previous.txt or"
+                 " test-previous.txt")
     parser.add_argument("--no-color", action='store_const', const=True,
             help="Disable terminal colors")
     parser.add_argument("--allow-google", action='store_const', const=True,
@@ -1669,7 +1760,9 @@ if __name__ == "__main__":
         ALLOW_GOOGLE = True
 
     current_file = args['current.txt']
+    base_current_file = args['base_current']
     previous_file = args['previous.txt']
+    base_previous_file = args['base_previous']
 
     if args['show_deprecations_at_birth']:
         with current_file as f:
@@ -1687,11 +1780,24 @@ if __name__ == "__main__":
         show_stats(cur, prev)
         sys.exit()
 
+    classes_with_base = []
+
     with current_file as f:
-        cur_fail, cur_noticed = examine_stream(f)
+        if base_current_file:
+            with base_current_file as base_f:
+                cur_fail, cur_noticed = examine_stream(f, base_f,
+                                                       out_classes_with_base=classes_with_base)
+        else:
+            cur_fail, cur_noticed = examine_stream(f, out_classes_with_base=classes_with_base)
+
     if not previous_file is None:
         with previous_file as f:
-            prev_fail, prev_noticed = examine_stream(f)
+            if base_previous_file:
+                with base_previous_file as base_f:
+                    prev_fail, prev_noticed = examine_stream(f, base_f,
+                                                             in_classes_with_base=classes_with_base)
+            else:
+                prev_fail, prev_noticed = examine_stream(f, in_classes_with_base=classes_with_base)
 
         # ignore errors from previous API level
         for p in prev_fail:

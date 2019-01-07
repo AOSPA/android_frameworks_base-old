@@ -295,7 +295,8 @@ RENDERTHREAD_TEST(RenderNode, prepareTree_nullableDisplayList) {
     canvasContext->destroy();
 }
 
-RENDERTHREAD_TEST(RenderNode, prepareTree_HwLayer_AVD_enqueueDamage) {
+// TODO: Is this supposed to work in SkiaGL/SkiaVK?
+RENDERTHREAD_TEST(DISABLED_RenderNode, prepareTree_HwLayer_AVD_enqueueDamage) {
     VectorDrawable::Group* group = new VectorDrawable::Group();
     sp<VectorDrawableRoot> vectorDrawable(new VectorDrawableRoot(group));
 
@@ -306,6 +307,7 @@ RENDERTHREAD_TEST(RenderNode, prepareTree_HwLayer_AVD_enqueueDamage) {
     ContextFactory contextFactory;
     std::unique_ptr<CanvasContext> canvasContext(
             CanvasContext::create(renderThread, false, rootNode.get(), &contextFactory));
+    canvasContext->setSurface(nullptr);
     TreeInfo info(TreeInfo::MODE_RT_ONLY, *canvasContext.get());
     DamageAccumulator damageAccumulator;
     LayerUpdateQueue layerUpdateQueue;

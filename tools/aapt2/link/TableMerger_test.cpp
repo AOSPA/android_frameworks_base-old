@@ -436,17 +436,23 @@ TEST_F(TableMergerTest, OverlaidStyleablesAndStylesShouldBeMerged) {
               Eq(make_value(Reference(test::ParseNameOrDie("com.app.a:style/OverlayParent")))));
 }
 
-TEST_F(TableMergerTest, AddOverlayable) {
+TEST_F(TableMergerTest, SetOverlayable) {
+  auto overlayable = std::make_shared<Overlayable>("CustomizableResources",
+                                                  "overlay://customization");
+  OverlayableItem overlayable_item(overlayable);
+  overlayable_item.policies |= OverlayableItem::Policy::kProduct;
+  overlayable_item.policies |= OverlayableItem::Policy::kVendor;
+
   std::unique_ptr<ResourceTable> table_a =
       test::ResourceTableBuilder()
           .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", Overlayable::Policy::kProduct)
+          .SetOverlayable("bool/foo", overlayable_item)
           .Build();
 
   std::unique_ptr<ResourceTable> table_b =
       test::ResourceTableBuilder()
           .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", Overlayable::Policy::kProductServices)
+          .AddSimple("bool/foo")
           .Build();
 
   ResourceTable final_table;
@@ -457,26 +463,71 @@ TEST_F(TableMergerTest, AddOverlayable) {
   ASSERT_TRUE(merger.Merge({}, table_b.get(), false /*overlay*/));
 
   const ResourceName name = test::ParseNameOrDie("com.app.a:bool/foo");
-  Maybe<ResourceTable::SearchResult> result = final_table.FindResource(name);
-  ASSERT_TRUE(result);
-  ASSERT_THAT(result.value().entry->overlayable_declarations.size(), Eq(2));
-  ASSERT_THAT(result.value().entry->overlayable_declarations[0].policy,
-              Eq(Overlayable::Policy::kProduct));
-  ASSERT_THAT(result.value().entry->overlayable_declarations[1].policy,
-              Eq(Overlayable::Policy::kProductServices));
+  Maybe<ResourceTable::SearchResult> search_result = final_table.FindResource(name);
+  ASSERT_TRUE(search_result);
+  ASSERT_TRUE(search_result.value().entry->overlayable_item);
+  OverlayableItem& result_overlayable_item = search_result.value().entry->overlayable_item.value();
+  EXPECT_THAT(result_overlayable_item.overlayable->name, Eq("CustomizableResources"));
+  EXPECT_THAT(result_overlayable_item.overlayable->actor, Eq("overlay://customization"));
+  EXPECT_THAT(result_overlayable_item.policies, Eq(OverlayableItem::Policy::kProduct
+                                                   | OverlayableItem::Policy::kVendor));
 }
 
-TEST_F(TableMergerTest, AddDuplicateOverlayableFail) {
+TEST_F(TableMergerTest, SetOverlayableLater) {
+  auto overlayable = std::make_shared<Overlayable>("CustomizableResources",
+                                                  "overlay://customization");
   std::unique_ptr<ResourceTable> table_a =
       test::ResourceTableBuilder()
           .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", Overlayable::Policy::kProduct)
+          .AddSimple("bool/foo")
           .Build();
 
+  OverlayableItem overlayable_item(overlayable);
+  overlayable_item.policies |= OverlayableItem::Policy::kPublic;
+  overlayable_item.policies |= OverlayableItem::Policy::kProductServices;
   std::unique_ptr<ResourceTable> table_b =
       test::ResourceTableBuilder()
           .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", Overlayable::Policy::kProduct)
+          .SetOverlayable("bool/foo", overlayable_item)
+          .Build();
+
+  ResourceTable final_table;
+  TableMergerOptions options;
+  options.auto_add_overlay = true;
+  TableMerger merger(context_.get(), &final_table, options);
+  ASSERT_TRUE(merger.Merge({}, table_a.get(), false /*overlay*/));
+  ASSERT_TRUE(merger.Merge({}, table_b.get(), false /*overlay*/));
+
+  const ResourceName name = test::ParseNameOrDie("com.app.a:bool/foo");
+  Maybe<ResourceTable::SearchResult> search_result = final_table.FindResource(name);
+  ASSERT_TRUE(search_result);
+  ASSERT_TRUE(search_result.value().entry->overlayable_item);
+  OverlayableItem& result_overlayable_item = search_result.value().entry->overlayable_item.value();
+  EXPECT_THAT(result_overlayable_item.overlayable->name, Eq("CustomizableResources"));
+  EXPECT_THAT(result_overlayable_item.overlayable->actor, Eq("overlay://customization"));
+  EXPECT_THAT(result_overlayable_item.policies, Eq(OverlayableItem::Policy::kPublic
+                                                   | OverlayableItem::Policy::kProductServices));
+}
+
+TEST_F(TableMergerTest, SameResourceDifferentNameFail) {
+  auto overlayable_first = std::make_shared<Overlayable>("CustomizableResources",
+                                                         "overlay://customization");
+  OverlayableItem overlayable_item_first(overlayable_first);
+  overlayable_item_first.policies |= OverlayableItem::Policy::kProduct;
+  std::unique_ptr<ResourceTable> table_a =
+      test::ResourceTableBuilder()
+          .SetPackageId("com.app.a", 0x7f)
+          .SetOverlayable("bool/foo", overlayable_item_first)
+          .Build();
+
+  auto overlayable_second = std::make_shared<Overlayable>("ThemeResources",
+                                                          "overlay://theme");
+  OverlayableItem overlayable_item_second(overlayable_second);
+  overlayable_item_second.policies |= OverlayableItem::Policy::kProduct;
+  std::unique_ptr<ResourceTable> table_b =
+      test::ResourceTableBuilder()
+          .SetPackageId("com.app.a", 0x7f)
+          .SetOverlayable("bool/foo", overlayable_item_second)
           .Build();
 
   ResourceTable final_table;
@@ -487,38 +538,24 @@ TEST_F(TableMergerTest, AddDuplicateOverlayableFail) {
   ASSERT_FALSE(merger.Merge({}, table_b.get(), false /*overlay*/));
 }
 
-TEST_F(TableMergerTest, AddOverlayablePolicyAndNoneFirstFail) {
+TEST_F(TableMergerTest, SameResourceSameNameFail) {
+  auto overlayable = std::make_shared<Overlayable>("CustomizableResources",
+                                                  "overlay://customization");
+
+  OverlayableItem overlayable_item_first(overlayable);
+  overlayable_item_first.policies |= OverlayableItem::Policy::kProduct;
   std::unique_ptr<ResourceTable> table_a =
       test::ResourceTableBuilder()
           .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", {})
+          .SetOverlayable("bool/foo", overlayable_item_first)
           .Build();
 
+  OverlayableItem overlayable_item_second(overlayable);
+  overlayable_item_second.policies |= OverlayableItem::Policy::kSystem;
   std::unique_ptr<ResourceTable> table_b =
       test::ResourceTableBuilder()
           .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", Overlayable::Policy::kProduct)
-          .Build();
-
-  ResourceTable final_table;
-  TableMergerOptions options;
-  options.auto_add_overlay = true;
-  TableMerger merger(context_.get(), &final_table, options);
-  ASSERT_TRUE(merger.Merge({}, table_a.get(), false /*overlay*/));
-  ASSERT_FALSE(merger.Merge({}, table_b.get(), false /*overlay*/));
-}
-
-TEST_F(TableMergerTest, AddOverlayablePolicyAndNoneLastFail) {
-  std::unique_ptr<ResourceTable> table_a =
-      test::ResourceTableBuilder()
-          .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", Overlayable::Policy::kProduct)
-          .Build();
-
-  std::unique_ptr<ResourceTable> table_b =
-      test::ResourceTableBuilder()
-          .SetPackageId("com.app.a", 0x7f)
-          .AddOverlayable("bool/foo", {})
+          .SetOverlayable("bool/foo", overlayable_item_second)
           .Build();
 
   ResourceTable final_table;

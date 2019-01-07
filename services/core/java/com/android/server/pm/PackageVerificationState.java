@@ -16,10 +16,10 @@
 
 package com.android.server.pm;
 
-import com.android.server.pm.PackageManagerService.InstallArgs;
-
 import android.content.pm.PackageManager;
 import android.util.SparseBooleanArray;
+
+import com.android.server.pm.PackageManagerService.InstallParams;
 
 /**
  * Tracks the package verification state for a particular package. Each package
@@ -29,7 +29,7 @@ import android.util.SparseBooleanArray;
  * then package verification is considered complete.
  */
 class PackageVerificationState {
-    private final InstallArgs mArgs;
+    private final InstallParams mParams;
 
     private final SparseBooleanArray mSufficientVerifierUids;
 
@@ -61,15 +61,15 @@ class PackageVerificationState {
      * @param requiredVerifierUid user ID of required package verifier
      * @param args
      */
-    public PackageVerificationState(int requiredVerifierUid, InstallArgs args) {
+    PackageVerificationState(int requiredVerifierUid, InstallParams params) {
         mRequiredVerifierUid = requiredVerifierUid;
-        mArgs = args;
+        mParams = params;
         mSufficientVerifierUids = new SparseBooleanArray();
         mExtendedTimeout = false;
     }
 
-    public InstallArgs getInstallArgs() {
-        return mArgs;
+    InstallParams getInstallParams() {
+        return mParams;
     }
 
     /**
@@ -77,7 +77,7 @@ class PackageVerificationState {
      *
      * @param uid user ID of sufficient verifier
      */
-    public void addSufficientVerifier(int uid) {
+    void addSufficientVerifier(int uid) {
         mSufficientVerifierUids.put(uid, true);
     }
 
@@ -93,7 +93,7 @@ class PackageVerificationState {
      * @param uid user ID of the verifying agent
      * @return {@code true} if the verifying agent actually exists in our list
      */
-    public boolean setVerifierResponse(int uid, int code) {
+    boolean setVerifierResponse(int uid, int code) {
         if (uid == mRequiredVerifierUid) {
             mRequiredVerificationComplete = true;
             switch (code) {
@@ -143,7 +143,7 @@ class PackageVerificationState {
      *
      * @return {@code true} when verification is considered complete
      */
-    public boolean isVerificationComplete() {
+    boolean isVerificationComplete() {
         if (mRequiredVerifierUid != -1 && !mRequiredVerificationComplete) {
             return false;
         }
@@ -165,7 +165,7 @@ class PackageVerificationState {
      *
      * @return {@code true} if installation should be allowed
      */
-    public boolean isInstallAllowed() {
+    boolean isInstallAllowed() {
         if (mRequiredVerifierUid != -1 && !mRequiredVerificationPassed) {
             return false;
         }
@@ -184,7 +184,7 @@ class PackageVerificationState {
     /**
      * Extend the timeout for this Package to be verified.
      */
-    public void extendTimeout() {
+    void extendTimeout() {
         if (!mExtendedTimeout) {
             mExtendedTimeout = true;
         }
@@ -195,7 +195,7 @@ class PackageVerificationState {
      *
      * @return {@code true} if a timeout was already extended.
      */
-    public boolean timeoutExtended() {
+    boolean timeoutExtended() {
         return mExtendedTimeout;
     }
 }

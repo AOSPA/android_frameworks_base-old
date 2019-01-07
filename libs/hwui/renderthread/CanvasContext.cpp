@@ -294,7 +294,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     mAnimationContext->startFrame(info.mode);
     mRenderPipeline->onPrepareTree();
-    for (const sp<RenderNode>& node : mRenderNodes) {
+    for (const sp<RenderNode> &node : mRenderNodes) {
         // Only the primary target node will be drawn full - all other nodes would get drawn in
         // real time mode. In case of a window, the primary node is the window content and the other
         // node(s) are non client / filler nodes.
@@ -318,7 +318,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     if (CC_LIKELY(mSwapHistory.size() && !Properties::forceDrawFrame)) {
         nsecs_t latestVsync = mRenderThread.timeLord().latestVsync();
-        SwapHistory& lastSwap = mSwapHistory.back();
+        SwapHistory &lastSwap = mSwapHistory.back();
         nsecs_t vsyncDelta = std::abs(lastSwap.vsyncTime - latestVsync);
         // The slight fudge-factor is to deal with cases where
         // the vsync was estimated due to being slow handling the signal.
@@ -329,6 +329,8 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
             // the deadline for RT animations
             info.out.canDrawThisFrame = false;
         }
+    } else {
+        info.out.canDrawThisFrame = true;
     }
 
     // TODO: Do we need to abort out if the backdrop is added but not ready? Should that even
@@ -337,21 +339,20 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
         info.out.canDrawThisFrame = false;
     }
 
-    if (!info.out.canDrawThisFrame) {
-        mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
-        return;
-    }
-
-    int err = mNativeSurface->reserveNext();
-    if (err != OK) {
-        mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
-        info.out.canDrawThisFrame = false;
-        ALOGW("reserveNext failed, error = %d", err);
-        if (err != TIMED_OUT) {
-            // A timed out surface can still recover, but assume others are permanently dead.
-            setSurface(nullptr);
+    if (info.out.canDrawThisFrame) {
+        int err = mNativeSurface->reserveNext();
+        if (err != OK) {
+            mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
+            info.out.canDrawThisFrame = false;
+            ALOGW("reserveNext failed, error = %d (%s)", err, strerror(-err));
+            if (err != TIMED_OUT) {
+                // A timed out surface can still recover, but assume others are permanently dead.
+                setSurface(nullptr);
+                return;
+            }
         }
-        return;
+    } else {
+        mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
     }
 
     bool postedFrameCallback = false;
@@ -575,8 +576,7 @@ void CanvasContext::trimMemory(RenderThread& thread, int level) {
     ATRACE_CALL();
     if (level >= TRIM_MEMORY_COMPLETE) {
         thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::Complete);
-        thread.destroyGlContext();
-        thread.vulkanManager().destroy();
+        thread.destroyRenderingContext();
     } else if (level >= TRIM_MEMORY_UI_HIDDEN) {
         thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::UiHidden);
     }

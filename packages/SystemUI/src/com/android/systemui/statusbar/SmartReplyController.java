@@ -21,26 +21,30 @@ import android.util.ArraySet;
 
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
-import com.android.systemui.Dependency;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 
 import java.util.Set;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Handles when smart replies are added to a notification
  * and clicked upon.
  */
+@Singleton
 public class SmartReplyController {
-    private IStatusBarService mBarService;
+    private final IStatusBarService mBarService;
+    private final NotificationEntryManager mEntryManager;
     private Set<String> mSendingKeys = new ArraySet<>();
     private Callback mCallback;
-    private final NotificationEntryManager mEntryManager =
-            Dependency.get(NotificationEntryManager.class);
 
-
-    public SmartReplyController() {
-        mBarService = Dependency.get(IStatusBarService.class);
+    @Inject
+    public SmartReplyController(NotificationEntryManager entryManager,
+            IStatusBarService statusBarService) {
+        mBarService = statusBarService;
+        mEntryManager = entryManager;
     }
 
     public void setCallback(Callback callback) {
@@ -88,10 +92,14 @@ public class SmartReplyController {
         return mSendingKeys.contains(key);
     }
 
-    public void smartRepliesAdded(final NotificationData.Entry entry, int replyCount) {
+    /**
+     * Smart Replies and Actions have been added to the UI.
+     */
+    public void smartSuggestionsAdded(final NotificationData.Entry entry, int replyCount,
+            int actionCount, boolean generatedByAssistant) {
         try {
-            mBarService.onNotificationSmartRepliesAdded(entry.notification.getKey(),
-                    replyCount);
+            mBarService.onNotificationSmartSuggestionsAdded(
+                    entry.notification.getKey(), replyCount, actionCount, generatedByAssistant);
         } catch (RemoteException e) {
             // Nothing to do, system going down
         }

@@ -136,14 +136,10 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"Wi‑Fi (<xliff:g id="SPN">%s</xliff:g>)"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"Trucades per Wi‑Fi | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"VoWifi (<xliff:g id="SPN">%s</xliff:g>)"</string>
-    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
-    <skip />
+    <string name="wfcSpnFormat_wifi_calling" msgid="4990486735013125329">"Trucades per Wi‑Fi"</string>
+    <string name="wfcSpnFormat_wifi" msgid="1892673884655959773">"Wi‑Fi"</string>
+    <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="1336669776254502831">"Trucades per Wi‑Fi"</string>
+    <string name="wfcSpnFormat_vowifi" msgid="1765176406171272629">"VoWifi"</string>
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Desactivat"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Preferència per la Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"Preferència per dades mòbils"</string>
@@ -251,7 +247,7 @@
     <string name="global_action_settings" msgid="1756531602592545966">"Configuració"</string>
     <string name="global_action_assist" msgid="3892832961594295030">"Assistència"</string>
     <string name="global_action_voice_assist" msgid="7751191495200504480">"Assist. per veu"</string>
-    <string name="global_action_lockdown" msgid="1099326950891078929">"Bloqueja"</string>
+    <string name="global_action_lockdown" msgid="1099326950891078929">"Bloq. de seguretat"</string>
     <string name="status_bar_notification_info_overflow" msgid="5301981741705354993">"+999"</string>
     <string name="notification_hidden_text" msgid="6351207030447943784">"Notificació nova"</string>
     <string name="notification_channel_virtual_keyboard" msgid="6969925135507955575">"Teclat virtual"</string>
@@ -451,6 +447,8 @@
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"Permet que l\'aplicació accedeixi a les funcions de telèfon del dispositiu. Aquest permís permet que l\'aplicació determini el número de telèfon i els identificadors del dispositiu, si hi ha una trucada activa i el número remot connectat amb una trucada."</string>
     <string name="permlab_manageOwnCalls" msgid="1503034913274622244">"encaminar trucades a través del sistema"</string>
     <string name="permdesc_manageOwnCalls" msgid="6552974537554717418">"Permet que l\'aplicació encamini les trucades a través del sistema per millorar-ne l\'experiència."</string>
+    <string name="permlab_callCompanionApp" msgid="3599252979411970473">"consulta i controla les trucades a través del sistema."</string>
+    <string name="permdesc_callCompanionApp" msgid="4567344683275099090">"Permet que l\'aplicació consulti i controli les trucades en curs al dispositiu. Inclou informació com ara l\'estat i els números de les trucades."</string>
     <string name="permlab_acceptHandover" msgid="2661534649736022409">"Continua una trucada d\'una altra aplicació"</string>
     <string name="permdesc_acceptHandovers" msgid="4570660484220539698">"Permet que l\'aplicació continuï una trucada que s\'havia iniciat en una altra aplicació."</string>
     <string name="permlab_readPhoneNumbers" msgid="6108163940932852440">"llegir els números de telèfon"</string>
@@ -511,6 +509,8 @@
     <string name="permdesc_nfc" msgid="7120611819401789907">"Permet que l\'aplicació es comuniqui amb les etiquetes, les targetes i els lectors de Comunicació de camp proper (NFC)."</string>
     <string name="permlab_disableKeyguard" msgid="3598496301486439258">"desactivació del bloqueig de pantalla"</string>
     <string name="permdesc_disableKeyguard" msgid="6034203065077122992">"Permet que l\'aplicació desactivi el bloqueig del teclat i qualsevol element de seguretat de contrasenyes associat. Per exemple, el telèfon desactiva el bloqueig del teclat en rebre una trucada entrant i, a continuació, reactiva el bloqueig del teclat quan finalitza la trucada."</string>
+    <string name="permlab_getAndRequestScreenLockComplexity" msgid="3911592334192005424">"obtenir i sol·licitar el nivell de complexitat del bloqueig de pantalla"</string>
+    <string name="permdesc_getAndRequestScreenLockComplexity" msgid="9045202063228854873">"Permet que l\'aplicació conegui el nivell de complexitat del bloqueig de pantalla (alt, mitjà, baix o cap), que indica la llargària i el tipus de bloqueig de pantalla possibles. L\'aplicació també pot suggerir que els usuaris actualitzin el bloqueig de pantalla a un nivell determinat, però els usuaris poden ignorar aquestes recomanacions. Tingues en compte que el bloqueig de pantalla no s\'emmagatzema com a text sense format, de manera que l\'aplicació no coneix la contrasenya exacta."</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"utilitza maquinari biomètric"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"Permet que l\'aplicació faci servir maquinari biomètric per a l\'autenticació"</string>
     <string name="permlab_manageFingerprint" msgid="5640858826254575638">"Gestionar el maquinari d\'empremtes digitals"</string>
@@ -533,6 +533,11 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Permet que l\'aplicació llegeixi les ubicacions de les teves col·leccions multimèdia."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"L\'aplicació <xliff:g id="APP">%s</xliff:g> vol que t\'autentiquis."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Maquinari biomètric no disponible"</string>
+    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
+    <skip />
+    <string name="biometric_not_recognized" msgid="5770511773560736082">"No s\'ha reconegut"</string>
+    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
+    <skip />
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"S\'ha detectat una empremta digital parcial. Torna-ho a provar."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"No s\'ha pogut processar l\'empremta digital. Torna-ho a provar."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"El sensor d\'empremtes digitals està brut. Neteja\'l i torna-ho a provar."</string>
@@ -540,7 +545,6 @@
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"El dit s\'ha mogut massa lentament. Torna-ho a provar."</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="biometric_not_recognized" msgid="5770511773560736082">"No s\'ha reconegut"</string>
     <string name="fingerprint_authenticated" msgid="5309333983002526448">"L\'empremta digital s\'ha autenticat"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"Cara autenticada"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"Cara autenticada; prem el botó per confirmar"</string>
@@ -596,14 +600,10 @@
     <string name="permdesc_writeSyncSettings" msgid="8956262591306369868">"Permet que una aplicació modifiqui la configuració de sincronització d\'un compte. Per exemple, aquesta acció es pot fer servir per activar la sincronització de l\'aplicació Persones amb un compte."</string>
     <string name="permlab_readSyncStats" msgid="7396577451360202448">"llegir les estadístiques de sincronització"</string>
     <string name="permdesc_readSyncStats" msgid="1510143761757606156">"Permet que una aplicació llegeixi les estadístiques de sincronització d\'un compte, inclòs l\'historial d\'esdeveniments sincronitzats i quantes dades se sincronitzen."</string>
-    <string name="permlab_sdcardRead" product="nosdcard" msgid="367275095159405468">"consultar contingut emmagatzematge USB"</string>
-    <string name="permlab_sdcardRead" product="default" msgid="2188156462934977940">"lectura del contingut de la targeta SD"</string>
-    <string name="permdesc_sdcardRead" product="nosdcard" msgid="3446988712598386079">"Permet que l\'aplicació llegeixi el contingut de l\'emmagatzematge USB."</string>
-    <string name="permdesc_sdcardRead" product="default" msgid="2607362473654975411">"Permet que l\'aplicació llegeixi el contingut de la targeta SD."</string>
-    <string name="permlab_sdcardWrite" product="nosdcard" msgid="8485979062254666748">"editar o suprimir contingut d\'USB"</string>
-    <string name="permlab_sdcardWrite" product="default" msgid="8805693630050458763">"modifica o suprimeix el contingut de la targeta SD"</string>
-    <string name="permdesc_sdcardWrite" product="nosdcard" msgid="6175406299445710888">"Permet que l\'aplicació escrigui a l\'emmagatzematge USB."</string>
-    <string name="permdesc_sdcardWrite" product="default" msgid="4337417790936632090">"Permet a l\'aplicació escriure a la targeta SD."</string>
+    <string name="permlab_sdcardRead" msgid="1438933556581438863">"llegir cont. d\'emmagatzematge compartit"</string>
+    <string name="permdesc_sdcardRead" msgid="1804941689051236391">"L\'app pot llegir contingut de l\'emmagatzematge compartit."</string>
+    <string name="permlab_sdcardWrite" msgid="9220937740184960897">"editar o suprimir cont. d\'emmagatzematge compartit"</string>
+    <string name="permdesc_sdcardWrite" msgid="2834431057338203959">"L\'app pot editar contingut de l\'emmagatzematge compartit."</string>
     <string name="permlab_use_sip" msgid="2052499390128979920">"Fer i rebre trucades de SIP"</string>
     <string name="permdesc_use_sip" msgid="2297804849860225257">"Permet que l\'aplicació pugui fer i rebre trucades de SIP."</string>
     <string name="permlab_register_sim_subscription" msgid="3166535485877549177">"registrar connexions SIM de telecomunicacions noves"</string>
@@ -1087,7 +1087,7 @@
     <string name="deleteText" msgid="6979668428458199034">"Suprimeix"</string>
     <string name="inputMethod" msgid="1653630062304567879">"Mètode d\'introducció de text"</string>
     <string name="editTextMenuTitle" msgid="4909135564941815494">"Accions de text"</string>
-    <string name="email" msgid="4560673117055050403">"Correu electrònic"</string>
+    <string name="email" msgid="4560673117055050403">"Envia un correu"</string>
     <string name="email_desc" msgid="3638665569546416795">"Envia un correu electrònic a l\'adreça seleccionada"</string>
     <string name="dial" msgid="1253998302767701559">"Truca"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Truca al número de telèfon seleccionat"</string>
@@ -1095,16 +1095,20 @@
     <string name="map_desc" msgid="1836995341943772348">"Localitza l\'adreça seleccionada"</string>
     <string name="browse" msgid="1245903488306147205">"Obre"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Obre l\'URL seleccionat"</string>
-    <string name="sms" msgid="4560537514610063430">"Missatge"</string>
+    <string name="sms" msgid="4560537514610063430">"Envia un SMS"</string>
     <string name="sms_desc" msgid="7526588350969638809">"Envia un SMS al número de telèfon seleccionat"</string>
     <string name="add_contact" msgid="7867066569670597203">"Afegeix"</string>
     <string name="add_contact_desc" msgid="4830217847004590345">"Afegeix als contactes"</string>
     <string name="view_calendar" msgid="979609872939597838">"Mostra"</string>
-    <string name="view_calendar_desc" msgid="5828320291870344584">"Consulta l\'hora seleccionada al calendari"</string>
+    <string name="view_calendar_desc" msgid="5828320291870344584">"Consulta la data seleccionada al calendari"</string>
     <string name="add_calendar_event" msgid="1953664627192056206">"Programa"</string>
     <string name="add_calendar_event_desc" msgid="4326891793260687388">"Programa un esdeveniment per a la data seleccionada"</string>
     <string name="view_flight" msgid="7691640491425680214">"Fes un seguiment"</string>
     <string name="view_flight_desc" msgid="3876322502674253506">"Fes un seguiment del vol seleccionat"</string>
+    <string name="translate" msgid="9218619809342576858">"Tradueix"</string>
+    <string name="translate_desc" msgid="4502367770068777202">"Tradueix el text seleccionat"</string>
+    <string name="define" msgid="7394820043869954211">"Defineix"</string>
+    <string name="define_desc" msgid="7910883642444919726">"Defineix el text seleccionat"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"L\'espai d\'emmagatzematge s\'està esgotant"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"És possible que algunes funcions del sistema no funcionin"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"No hi ha prou espai d\'emmagatzematge per al sistema. Comprova que tinguis 250 MB d\'espai lliure i reinicia."</string>
@@ -1181,6 +1185,7 @@
     <string name="android_upgrading_title" product="tablet" msgid="4503169817302593560">"La tauleta s\'està actualitzant…"</string>
     <string name="android_upgrading_title" product="device" msgid="7009520271220804517">"El dispositiu s\'està actualitzant…"</string>
     <string name="android_start_title" product="default" msgid="4536778526365907780">"S\'està iniciant el telèfon…"</string>
+    <string name="android_start_title" product="automotive" msgid="8418054686415318207">"S\'està iniciant Android…"</string>
     <string name="android_start_title" product="tablet" msgid="4929837533850340472">"S\'està iniciant la tauleta…"</string>
     <string name="android_start_title" product="device" msgid="7467484093260449437">"S\'està iniciant el dispositiu…"</string>
     <string name="android_upgrading_fstrim" msgid="8036718871534640010">"S\'està optimitzant l\'emmagatzematge."</string>
@@ -1239,6 +1244,10 @@
     <string name="wifi_available_content_failed_to_connect" msgid="3377406637062802645">"Toca per veure totes les xarxes"</string>
     <string name="wifi_available_action_connect" msgid="2635699628459488788">"Connecta"</string>
     <string name="wifi_available_action_all_networks" msgid="4368435796357931006">"Totes les xarxes"</string>
+    <string name="wifi_suggestion_title" msgid="1524719325616630906">"T\'has connectat a la xarxa Wi‑Fi proposada per l\'aplicació <xliff:g id="NAME">%s</xliff:g>"</string>
+    <string name="wifi_suggestion_content" msgid="4505530604935334589">"Vols permetre que <xliff:g id="NAME">%s</xliff:g> et proposi xarxes?"</string>
+    <string name="wifi_suggestion_action_allow_app" msgid="3689946344485394085">"Sí"</string>
+    <string name="wifi_suggestion_action_disallow_app" msgid="7977918905605931385">"No"</string>
     <string name="wifi_wakeup_onboarding_title" msgid="228772560195634292">"La Wi-Fi s\'activarà automàticament"</string>
     <string name="wifi_wakeup_onboarding_subtext" msgid="3989697580301186973">"Quan siguis a prop d\'una xarxa de qualitat desada"</string>
     <string name="wifi_wakeup_onboarding_action_disable" msgid="838648204200836028">"No tornis a activar"</string>
@@ -1460,8 +1469,7 @@
       <item quantity="one">1 partida</item>
     </plurals>
     <string name="action_mode_done" msgid="7217581640461922289">"Fet"</string>
-    <string name="progress_erasing" product="nosdcard" msgid="4521573321524340058">"S\'està esborrant l\'emmagatzematge USB..."</string>
-    <string name="progress_erasing" product="default" msgid="6596988875507043042">"S\'està esborrant la targeta SD..."</string>
+    <string name="progress_erasing" msgid="2569962663843586562">"S\'està esborrant l\'emmagatzematge compartit…"</string>
     <string name="share" msgid="1778686618230011964">"Comparteix"</string>
     <string name="find" msgid="4808270900322985960">"Cerca"</string>
     <string name="websearch" msgid="4337157977400211589">"Cerca al web"</string>
@@ -1833,8 +1841,7 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"La sol·licitud SS s\'ha canviat per una sol·licitud USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"S\'ha canviat a una nova sol·licitud SS"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Perfil professional"</string>
-    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
-    <skip />
+    <string name="notification_alerted_content_description" msgid="1296617716556420585">"S\'ha enviat una alerta"</string>
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"Desplega"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"Replega"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"desplega o replega"</string>

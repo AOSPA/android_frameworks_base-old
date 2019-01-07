@@ -65,12 +65,17 @@ public class InsetsSource implements Parcelable {
         return mFrame;
     }
 
+    public boolean isVisible() {
+        return mVisible;
+    }
+
     /**
      * Calculates the insets this source will cause to a client window.
      *
      * @param relativeFrame The frame to calculate the insets relative to.
      * @param ignoreVisibility If true, always reports back insets even if source isn't visible.
-     * @return The resulting insets.
+     * @return The resulting insets. The contract is that only one side will be occupied by a
+     *         source.
      */
     public Insets calculateInsets(Rect relativeFrame, boolean ignoreVisibility) {
         if (!ignoreVisibility && !mVisible) {

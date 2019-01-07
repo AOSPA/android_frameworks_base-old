@@ -76,8 +76,8 @@ typedef uint32_t Flags;
 namespace uirenderer {
 namespace VectorDrawable {
 class Tree;
-};
-};
+}
+}
 typedef uirenderer::VectorDrawable::Tree VectorDrawableRoot;
 
 typedef std::function<void(uint16_t* text, float* positions)> ReadGlyphFunc;
@@ -178,6 +178,9 @@ public:
     virtual void drawRenderNode(uirenderer::RenderNode* renderNode) = 0;
     virtual void callDrawGLFunction(Functor* functor,
                                     uirenderer::GlFunctorLifecycleListener* listener) = 0;
+    virtual void drawWebViewFunctor(int /*functor*/) {
+        LOG_ALWAYS_FATAL("Not supported");
+    }
 
     // ----------------------------------------------------------------------------
     // Canvas state operations
@@ -193,6 +196,7 @@ public:
                           SaveFlags::Flags flags) = 0;
     virtual int saveLayerAlpha(float left, float top, float right, float bottom, int alpha,
                                SaveFlags::Flags flags) = 0;
+    virtual int saveUnclippedLayer(int, int, int, int) = 0;
 
     // Matrix
     virtual void getMatrix(SkMatrix* outMatrix) const = 0;
@@ -318,4 +322,4 @@ protected:
     friend class DrawTextOnPathFunctor;
 };
 
-};  // namespace android
+}  // namespace android

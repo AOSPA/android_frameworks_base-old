@@ -1334,7 +1334,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             } catch (NoSuchElementException e) {
                 Slog.e(TAG, "Unable to unlinkToDeath", e);
             }
-
             mService = null;
             mClassName = null;
 

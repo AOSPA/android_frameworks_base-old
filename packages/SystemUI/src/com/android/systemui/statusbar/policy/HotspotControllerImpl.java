@@ -16,19 +16,27 @@
 
 package com.android.systemui.statusbar.policy;
 
+import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
+
 import android.app.ActivityManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
+import android.os.Handler;
 import android.os.UserManager;
 import android.util.Log;
-
-import com.android.systemui.Dependency;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
+import javax.inject.Inject;
+import javax.inject.Named;
+import javax.inject.Singleton;
+
+/**
+ */
+@Singleton
 public class HotspotControllerImpl implements HotspotController, WifiManager.SoftApCallback {
 
     private static final String TAG = "HotspotController";
@@ -37,17 +45,22 @@ public class HotspotControllerImpl implements HotspotController, WifiManager.Sof
     private final ArrayList<Callback> mCallbacks = new ArrayList<>();
     private final ConnectivityManager mConnectivityManager;
     private final WifiManager mWifiManager;
+    private final Handler mMainHandler;
     private final Context mContext;
 
     private int mHotspotState;
     private int mNumConnectedDevices;
     private boolean mWaitingForTerminalState;
 
-    public HotspotControllerImpl(Context context) {
+    /**
+     */
+    @Inject
+    public HotspotControllerImpl(Context context, @Named(MAIN_HANDLER_NAME) Handler mainHandler) {
         mContext = context;
         mConnectivityManager =
                 (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         mWifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        mMainHandler = mainHandler;
     }
 
     @Override
@@ -109,13 +122,15 @@ public class HotspotControllerImpl implements HotspotController, WifiManager.Sof
      * @param shouldListen whether we should start listening to various wifi statuses
      */
     private void updateWifiStateListeners(boolean shouldListen) {
+        if (mWifiManager == null) {
+            return;
+        }
         if (shouldListen) {
-            if(mWifiManager != null)
-                mWifiManager.registerSoftApCallback(
+            mWifiManager.registerSoftApCallback(
                     this,
-                    Dependency.get(Dependency.MAIN_HANDLER));
-            } else {
-                mWifiManager.unregisterSoftApCallback(this);
+                    mMainHandler);
+        } else {
+            mWifiManager.unregisterSoftApCallback(this);
         }
     }
 

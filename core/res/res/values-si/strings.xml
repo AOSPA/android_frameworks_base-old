@@ -136,14 +136,10 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"WiFi ඇමතුම් | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"<xliff:g id="SPN">%s</xliff:g> VoWifi"</string>
-    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
-    <skip />
+    <string name="wfcSpnFormat_wifi_calling" msgid="4990486735013125329">"Wi-Fi ඇමතීම"</string>
+    <string name="wfcSpnFormat_wifi" msgid="1892673884655959773">"Wi-Fi"</string>
+    <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="1336669776254502831">"Wi-Fi ඇමතීම"</string>
+    <string name="wfcSpnFormat_vowifi" msgid="1765176406171272629">"VoWifi"</string>
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"ක්‍රියාවිරහිතයි"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Wi-Fi වඩා කැමතියි"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"ජංගම කැමතියි"</string>
@@ -451,6 +447,8 @@
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"උපාංගයේ දුරකථන විශේෂාංග වෙත ප්‍රවේශයට යෙදුමට ඉඩ දෙයි.  ඇමතුම සක්‍රිය වුවත්, සහ ඇමතුමකින් දුරස්ථ අංකය සම්බන්ධ වුවත් දුරකථන අංකය සහ උපාංග ID හඳුනා ගැනීමට මෙම අවසරය යෙදුමට ඉඩ දෙයි."</string>
     <string name="permlab_manageOwnCalls" msgid="1503034913274622244">"පද්ධතිය හරහා ඇමතුම් මාර්ගගත කරන්න"</string>
     <string name="permdesc_manageOwnCalls" msgid="6552974537554717418">"ඇමතුම් අත්දැකීම වැඩිදියුණු කිරීම සඳහා යෙදුමට පද්ධතිය හරහා එහි ඇමතුම් මාර්ගගත කිරීමට ඉඩ දෙයි."</string>
+    <string name="permlab_callCompanionApp" msgid="3599252979411970473">"පද්ධතිය හරහා ඇමතුම් බලන්න සහ පාලනය කරන්න."</string>
+    <string name="permdesc_callCompanionApp" msgid="4567344683275099090">"යෙදුමට උපාංගයෙහි පවතින ඇමතුම් බැලීමට සහ පාලනය කිරීමට ඉඩ දෙයි මෙහි ඇමතුම් සඳහා ඇමතුම් අංක සහ ඇමතුම්වල තත්ත්වය වැනි තොරතුරු ඇතුළත් වේ."</string>
     <string name="permlab_acceptHandover" msgid="2661534649736022409">"වෙනත් යෙදුමක් වෙතින් වන ඇමතුමක් දිගටම කරගෙන යන්න"</string>
     <string name="permdesc_acceptHandovers" msgid="4570660484220539698">"වෙනත් යෙදුමක ආරම්භ කරන ලද ඇමතුමක් දිගටම කරගෙන යාමට යෙදුමට ඉඩ දෙයි."</string>
     <string name="permlab_readPhoneNumbers" msgid="6108163940932852440">"දුරකථන අංක කියවන්න"</string>
@@ -511,6 +509,8 @@
     <string name="permdesc_nfc" msgid="7120611819401789907">"ආසන්න ක්ෂේත්‍ර සන්නිවේදන (NFC) ටැග්, පත්, සහ කියවන්නන් සමඟ සන්නිවේදනය කිරීමට යෙදුමට අවසර දෙන්න."</string>
     <string name="permlab_disableKeyguard" msgid="3598496301486439258">"ඔබගේ තිරයේ අගුල අබල කරන්න"</string>
     <string name="permdesc_disableKeyguard" msgid="6034203065077122992">"යතුරු අගුල සහ ඕනෑම සම්බන්ධිත මුරපද ආරක්ෂාවක් අබල කිරීමට යෙදුමට අවසර දෙන්න. මෙහි උදාහරණයක් වන්නේ පැමිණෙන ඇමතුමක් ලැබෙද්දී, දුරකථනය අක්‍රිය වන අතර ඇමතුම අවසාන වන විට යතුරු අගුල නැවත සක්‍රිය වෙයි."</string>
+    <string name="permlab_getAndRequestScreenLockComplexity" msgid="3911592334192005424">"තිර අගුලු සංකිර්ණය ලබා ගන්න සහ ඉල්ලන්න"</string>
+    <string name="permdesc_getAndRequestScreenLockComplexity" msgid="9045202063228854873">"තිර අගුලෙහි තිබිය හැකි දිගෙහි පරාසය හා වර්ගයේ පිළිබිඹු කරන, තිර අගුලු සංකීර්ණතා මට්ටම (ඉහළ, මධ්‍යම, අඩු හෝ රහිත) දැන ගැනීමට යෙදුමට ඉඩ දෙයි. තිරයේ අගුල නිශ්චිත මට්ටමක් වෙත යාවත්කාලීන කරන බවද මෙම යෙදුම පරිශීලකයින්ට යෝජනා කළ හැකිය. නමුත් පරිශීලකයන්ට නිදහසේ නොසලකා හැර සංචාලනය කළ හැකිය. තිර අලුල සරල පෙළ තුළ ගබඩා කර නැති බව සලකන්න එම නිසා යෙදුම නිවැරදි මුරපදය නොදනී."</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"ජීවමිතික දෘඪාංග භාවිත කරන්න"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"සත්‍යාපනය සඳහා ජීවමිතික දෘඪාංග භාවිත කිරීමට යෙදුමට ඉඩ දෙයි"</string>
     <string name="permlab_manageFingerprint" msgid="5640858826254575638">"ඇඟිලි සලකුණු දෘඩාංග කළමනාකරණය කිරීම."</string>
@@ -533,6 +533,11 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"ඔබගේ මාධ්‍ය එකතුවෙන් ස්ථාන කියවීමට යෙදුමට ඉඩ දෙයි."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"<xliff:g id="APP">%s</xliff:g> යෙදුම වෙත සත්‍යාපනය කිරීමට අවශ්‍යයි."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"ජීවමිතික දෘඪාංග ලබා ගත නොහැකිය"</string>
+    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
+    <skip />
+    <string name="biometric_not_recognized" msgid="5770511773560736082">"හඳුනා නොගන්නා ලදී"</string>
+    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
+    <skip />
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"ඇඟිලි සලකුණ අඩ වශයෙන් අනාවරණය කර ගැනිණි. කරුණාකර නැවත උත්සාහ කරන්න."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"ඇඟිලි සලකුණ පිරිසැකසීමට නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"ඇඟිලි සලකුණු සංවේදකය අපිරිසිදුයි. කරුණාකර පිරිසිදු කර නැවත උත්සාහ කරන්න."</string>
@@ -540,7 +545,6 @@
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"ඇඟිල්ල වඩා සෙමෙන් ගෙන යන ලදි. කරුණාකර නැවත උත්සාහ කරන්න."</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="biometric_not_recognized" msgid="5770511773560736082">"හඳුනා නොගන්නා ලදී"</string>
     <string name="fingerprint_authenticated" msgid="5309333983002526448">"ඇඟිලි සලකුණ සත්‍යාපනය කරන ලදී"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"මුහුණ සත්‍යාපනය කරන ලදී"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"මුහුණ සත්‍යාපනය කරන ලදී, කරුණාකර තහවුරු කරන්න ඔබන්න"</string>
@@ -596,14 +600,10 @@
     <string name="permdesc_writeSyncSettings" msgid="8956262591306369868">"ගිණුමක් සඳහා සමමුහුර්ත සැකසීම් විකරණය කිරීමට යෙදුමකට ඉඩ දෙයි. උදාහරණයක් ලෙස, ගිණුමක් සමඟ පුද්ගල යෙදුම සමමුහුර්ත කිරීම සබල කිරීමට මෙය භාවිත කළ හැක."</string>
     <string name="permlab_readSyncStats" msgid="7396577451360202448">"සමමුහුර්ත කිරීමේ සංඛ්‍යාන කියවීම"</string>
     <string name="permdesc_readSyncStats" msgid="1510143761757606156">"සමමුහුර්ත කිරීමේ සිදුවීම් ඉතිහාසය සහ කෙතරම් දත්ත සමමුහුර්ත වී ඇතිදැයි ඇතුලත් ගිණුම සඳහා සමමුහුර්ත කිරීමේ සංඛ්‍යාන කියවීමට යෙදුමට අවසර දෙන්න."</string>
-    <string name="permlab_sdcardRead" product="nosdcard" msgid="367275095159405468">"ඔබගේ USB ආචයනය හි අන්තර්ගතය කියවන්න"</string>
-    <string name="permlab_sdcardRead" product="default" msgid="2188156462934977940">"ඔබගේ SD කාඩ් පතෙහි අන්තර්ගතය කියවන්න"</string>
-    <string name="permdesc_sdcardRead" product="nosdcard" msgid="3446988712598386079">"යෙදුමට ඔබගේ USB ආචයනය අන්තර්ගතය කියවීමට අවසර දෙන්න."</string>
-    <string name="permdesc_sdcardRead" product="default" msgid="2607362473654975411">"යෙදුමට ඔබගේ SD කාඩ්පතේ අන්තර්ගතය කියවීමට ඉඩ දෙයි."</string>
-    <string name="permlab_sdcardWrite" product="nosdcard" msgid="8485979062254666748">"ඔබගේ USB ආචයනයේ අන්තර්ගත වෙනස් කිරීම හෝ මැකීම"</string>
-    <string name="permlab_sdcardWrite" product="default" msgid="8805693630050458763">"ඔබගේ SD පතේ අන්තර්ගත වෙනස් කිරීම හෝ මැකීම"</string>
-    <string name="permdesc_sdcardWrite" product="nosdcard" msgid="6175406299445710888">"USB ආචයනය වෙත ලිවීමට යෙදුමට අවසර දෙන්න."</string>
-    <string name="permdesc_sdcardWrite" product="default" msgid="4337417790936632090">"SD පත වෙත ලිවීමට යෙදුමට අවසර දෙන්න."</string>
+    <string name="permlab_sdcardRead" msgid="1438933556581438863">"ඔබේ බෙදා ගත් ගබඩාවේ අන්තර්ගත කියවන්න"</string>
+    <string name="permdesc_sdcardRead" msgid="1804941689051236391">"යෙදුමට ඔබේ බෙදා ගත් ගබඩාවේ අන්තර්ගත කියවීමට ඉඩ දෙයි."</string>
+    <string name="permlab_sdcardWrite" msgid="9220937740184960897">"ඔබේ බෙදා ගත් ගබඩාවේ අන්තර්ගත වෙනස් කරන්න නැතහොත් මකන්න"</string>
+    <string name="permdesc_sdcardWrite" msgid="2834431057338203959">"යෙදුමට ඔබේ බෙදා ගත් ගබඩාවේ අන්තර්ගත කියවීමට ඉඩ දෙයි."</string>
     <string name="permlab_use_sip" msgid="2052499390128979920">"SIP ඇමතුම් සිදුකිරීමට/ලබාගැනීමට"</string>
     <string name="permdesc_use_sip" msgid="2297804849860225257">"SIP ඇමතුම් සිදුකිරීමට සහ ලබාගැනීමට යෙදුමට ඉඩ දෙන්න."</string>
     <string name="permlab_register_sim_subscription" msgid="3166535485877549177">"අලුත් විදුලි සංදේශ SIM සම්බන්ධතාවක් ලියාපදිංචි කරන්න"</string>
@@ -1107,6 +1107,10 @@
     <string name="add_calendar_event_desc" msgid="4326891793260687388">"තෝරා ගත් වේලාව සඳහා සිදුවීම කාලසටහන්ගත කරන්න"</string>
     <string name="view_flight" msgid="7691640491425680214">"ශ්‍රව්‍ය ඛණ්ඩය"</string>
     <string name="view_flight_desc" msgid="3876322502674253506">"තෝරා ගත් ගුවන් ගමන හඹා යන්න"</string>
+    <string name="translate" msgid="9218619809342576858">"පරිවර්තනය කරන්න"</string>
+    <string name="translate_desc" msgid="4502367770068777202">"තෝරා ගත් පෙළ පරිවර්තනය කරන්න"</string>
+    <string name="define" msgid="7394820043869954211">"නිර්වචනය කරන්න"</string>
+    <string name="define_desc" msgid="7910883642444919726">"තෝරා ගත් පෙළ නිර්වචනය කරන්න"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"ආචයනය ඉඩ ප්‍රමාණය අඩු වී ඇත"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"සමහර පද්ධති කාර්යයන් ක්‍රියා නොකරනු ඇත"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"පද්ධතිය සඳහා ප්‍රමාණවත් ඉඩ නොමැත. ඔබට 250MB නිදහස් ඉඩක් තිබෙන ඔබට තිබෙන බව සහතික කරගෙන නැවත උත්සාහ කරන්න."</string>
@@ -1183,6 +1187,7 @@
     <string name="android_upgrading_title" product="tablet" msgid="4503169817302593560">"ටැබ්ලට් පරිගණකය යාවත්කාලීන කරමින්..."</string>
     <string name="android_upgrading_title" product="device" msgid="7009520271220804517">"උපාංගය යාවත්කාලීන කරමින්..."</string>
     <string name="android_start_title" product="default" msgid="4536778526365907780">"දුරකථනය ආරම්භ කරමින්…"</string>
+    <string name="android_start_title" product="automotive" msgid="8418054686415318207">"Android ආරම්භ කරමින්…"</string>
     <string name="android_start_title" product="tablet" msgid="4929837533850340472">"ටැබ්ලට් පරිගණකය ආරම්භ කරමින්…"</string>
     <string name="android_start_title" product="device" msgid="7467484093260449437">"උපාංගය ආරම්භ කරමින්…"</string>
     <string name="android_upgrading_fstrim" msgid="8036718871534640010">"ආචයනය ප්‍රශස්තිකරණය කිරීම."</string>
@@ -1241,6 +1246,10 @@
     <string name="wifi_available_content_failed_to_connect" msgid="3377406637062802645">"සියලු ජාල බැලීමට තට්ටු කරන්න"</string>
     <string name="wifi_available_action_connect" msgid="2635699628459488788">"සම්බන්ධ කරන්න"</string>
     <string name="wifi_available_action_all_networks" msgid="4368435796357931006">"සියලු ජාල"</string>
+    <string name="wifi_suggestion_title" msgid="1524719325616630906">"<xliff:g id="NAME">%s</xliff:g> විසින් යෝජිත Wi-Fi ජාලයට සම්බන්ධ වුණි"</string>
+    <string name="wifi_suggestion_content" msgid="4505530604935334589">"<xliff:g id="NAME">%s</xliff:g>ඔබට ඔබ සඳහා ජාල යෝජනා කිරීමට අවශ්‍යද?"</string>
+    <string name="wifi_suggestion_action_allow_app" msgid="3689946344485394085">"ඔව්"</string>
+    <string name="wifi_suggestion_action_disallow_app" msgid="7977918905605931385">"නැත"</string>
     <string name="wifi_wakeup_onboarding_title" msgid="228772560195634292">"Wi‑Fi ස්වයංක්‍රියව ක්‍රියාත්මක වනු ඇත"</string>
     <string name="wifi_wakeup_onboarding_subtext" msgid="3989697580301186973">"ඔබ උසස් තත්ත්වයේ සුරැකි ජාලයක් අවට සිටින විට"</string>
     <string name="wifi_wakeup_onboarding_action_disable" msgid="838648204200836028">"නැවත ක්‍රියාත්මක නොකරන්න"</string>
@@ -1462,8 +1471,7 @@
       <item quantity="other"><xliff:g id="TOTAL">%d</xliff:g> න් <xliff:g id="INDEX">%d</xliff:g> යි</item>
     </plurals>
     <string name="action_mode_done" msgid="7217581640461922289">"හරි"</string>
-    <string name="progress_erasing" product="nosdcard" msgid="4521573321524340058">"USB ආචයනය මකමින්..."</string>
-    <string name="progress_erasing" product="default" msgid="6596988875507043042">"SD පත මකමින්..."</string>
+    <string name="progress_erasing" msgid="2569962663843586562">"බෙදා ගත් ගබඩාව මකා දමමින්…"</string>
     <string name="share" msgid="1778686618230011964">"බෙදාගන්න"</string>
     <string name="find" msgid="4808270900322985960">"සොයන්න"</string>
     <string name="websearch" msgid="4337157977400211589">"වෙබ් සෙවුම"</string>
@@ -1835,8 +1843,7 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"SS ඉල්ලීම USSD ඉල්ලීමට වෙනස් කරන ලදී"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"නව SS ඉල්ලීමට වෙනස් කරන ලදී"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"කාර්යාල පැතිකඩ"</string>
-    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
-    <skip />
+    <string name="notification_alerted_content_description" msgid="1296617716556420585">"අනතුරු අඟවන ලදී"</string>
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"දිග හරින්න"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"හකුළන්න"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"පුළුල් කිරීම ටොගල කරන්න"</string>

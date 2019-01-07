@@ -948,7 +948,7 @@ public class UserManager {
      * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
      * @see #getUserRestrictions()
      */
-    public static final String DISALLOW_INTELLIGENCE_CAPTURE = "no_intelligence_capture";
+    public static final String DISALLOW_CONTENT_CAPTURE = "no_content_capture";
 
     /**
      * Specifies if user switching is blocked on the current user.
@@ -1225,6 +1225,9 @@ public class UserManager {
      * system user hasn't been unlocked yet, or {@link #DISALLOW_USER_SWITCH} is set.
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
     public boolean canSwitchUsers() {
         boolean allowUserSwitchingWhenSystemUserLocked = Settings.Global.getInt(
                 mContext.getContentResolver(),
@@ -1512,11 +1515,11 @@ public class UserManager {
      * background user; the result here does not distinguish between the two.
      *
      * <p>Note prior to Android Nougat MR1 (SDK version <= 24;
-     * {@link android.os.Build.VERSION_CODES#N), this API required a system permission
+     * {@link android.os.Build.VERSION_CODES#N}, this API required a system permission
      * in order to check other profile's status.
      * Since Android Nougat MR1 (SDK version >= 25;
-     * {@link android.os.Build.VERSION_CODES#N_MR1)), the restriction has been relaxed, and now
-     * it'll accept any {@link UserHandle} within the same profile group as the caller.
+     * {@link android.os.Build.VERSION_CODES#N_MR1}), the restriction has been relaxed, and now
+     * it'll accept any {@link android.os.UserHandle} within the same profile group as the caller.
      *
      * @param user The user to retrieve the running state for.
      */
@@ -1541,11 +1544,11 @@ public class UserManager {
      * (but is not yet fully stopped, and still running some code).
      *
      * <p>Note prior to Android Nougat MR1 (SDK version <= 24;
-     * {@link android.os.Build.VERSION_CODES#N), this API required a system permission
+     * {@link android.os.Build.VERSION_CODES#N}, this API required a system permission
      * in order to check other profile's status.
      * Since Android Nougat MR1 (SDK version >= 25;
-     * {@link android.os.Build.VERSION_CODES#N_MR1)), the restriction has been relaxed, and now
-     * it'll accept any {@link UserHandle} within the same profile group as the caller.
+     * {@link android.os.Build.VERSION_CODES#N_MR1}), the restriction has been relaxed, and now
+     * it'll accept any {@link android.os.UserHandle} within the same profile group as the caller.
      *
      * @param user The user to retrieve the running state for.
      */
@@ -2463,6 +2466,27 @@ public class UserManager {
     }
 
     /**
+     * Get the parent of a user profile.
+     *
+     * @param user the handle of the user profile
+     *
+     * @return the parent of the user or {@code null} if the user is not profile
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public @Nullable UserHandle getProfileParent(@NonNull UserHandle user) {
+        UserInfo info = getProfileParent(user.getIdentifier());
+
+        if (info == null) {
+            return null;
+        }
+
+        return UserHandle.of(info.id);
+    }
+
+    /**
      * Enables or disables quiet mode for a managed profile. If quiet mode is enabled, apps in a
      * managed profile don't run, generate notifications, or consume data or battery.
      * <p>
@@ -2623,6 +2647,19 @@ public class UserManager {
             throw re.rethrowFromSystemServer();
         }
     }
+
+    /**
+     * Removes a user and all associated data.
+     *
+     * @param user the user that needs to be removed.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public boolean removeUser(UserHandle user) {
+        return removeUser(user.getIdentifier());
+    }
+
 
     /**
      * Similar to {@link #removeUser(int)} except bypassing the checking of

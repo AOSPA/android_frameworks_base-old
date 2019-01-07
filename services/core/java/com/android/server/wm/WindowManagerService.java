@@ -22,6 +22,7 @@ import static android.Manifest.permission.MANAGE_APP_TOKENS;
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.Manifest.permission.RESTRICTED_VR_ACCESS;
+import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
@@ -66,12 +67,12 @@ import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.REMOVE_CONTENT_MODE_UNDEFINED;
 import static android.view.WindowManagerGlobal.RELAYOUT_DEFER_SURFACE_DESTROY;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 
 import static com.android.internal.util.LatencyTracker.ACTION_ROTATE_SCREEN;
 import static com.android.server.LockGuard.INDEX_WINDOW;
 import static com.android.server.LockGuard.installLock;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static com.android.server.wm.KeyguardDisableHandler.KEYGUARD_POLICY_CHANGED;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_BOOT;
@@ -180,7 +181,6 @@ import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.MergedConfiguration;
-import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -208,6 +208,7 @@ import android.view.IWindowSessionCallback;
 import android.view.InputChannel;
 import android.view.InputDevice;
 import android.view.InputEventReceiver;
+import android.view.InsetsState;
 import android.view.KeyEvent;
 import android.view.MagnificationSpec;
 import android.view.MotionEvent;
@@ -218,7 +219,6 @@ import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import android.view.View;
 import android.view.WindowContentFrameStats;
-import android.view.InsetsState;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.view.WindowManager.RemoveContentMode;
@@ -234,6 +234,7 @@ import com.android.internal.policy.IShortcutService;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.LatencyTracker;
+import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.view.WindowManagerPolicyThread;
 import com.android.server.AnimationThread;
@@ -395,7 +396,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public void onReceive(Context context, Intent intent) {
             switch (intent.getAction()) {
                 case ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED:
-                    mKeyguardDisableHandler.sendEmptyMessage(KEYGUARD_POLICY_CHANGED);
+                    mKeyguardDisableHandler.updateKeyguardEnabled(getSendingUserId());
                     break;
             }
         }
@@ -431,6 +432,12 @@ public class WindowManagerService extends IWindowManager.Stub
     final boolean mHasPermanentDpad;
     final long mDrawLockTimeoutMillis;
     final boolean mAllowAnimationsInLowPowerMode;
+
+    /**
+     * Use very low resolution task snapshots. Replaces task snapshot starting windows with
+     * splashscreen starting windows. Used on low RAM devices to save memory.
+     */
+    final boolean mLowRamTaskSnapshots;
 
     final boolean mAllowBootMessages;
 
@@ -610,6 +617,9 @@ public class WindowManagerService extends IWindowManager.Stub
     boolean mClientFreezingScreen = false;
     int mAppsFreezingScreen = 0;
 
+    @VisibleForTesting
+    boolean mPerDisplayFocusEnabled;
+
     // State while inside of layoutAndPlaceSurfacesLocked().
     boolean mFocusMayChange;
 
@@ -734,6 +744,7 @@ public class WindowManagerService extends IWindowManager.Stub
     final InputManagerService mInputManager;
     final DisplayManagerInternal mDisplayManagerInternal;
     final DisplayManager mDisplayManager;
+    final ActivityTaskManagerService mAtmService;
 
     // Indicates whether this device supports wide color gamut / HDR rendering
     private boolean mHasWideColorGamutSupport;
@@ -896,11 +907,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public static WindowManagerService main(final Context context, final InputManagerService im,
             final boolean showBootMsgs, final boolean onlyCore, WindowManagerPolicy policy,
-            final WindowManagerGlobalLock globalLock) {
+            ActivityTaskManagerService atm) {
         DisplayThread.getHandler().runWithScissors(() ->
                 sInstance = new WindowManagerService(context, im, showBootMsgs, onlyCore, policy,
-                        globalLock),
-                0);
+                        atm), 0);
         return sInstance;
     }
 
@@ -922,9 +932,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private WindowManagerService(Context context, InputManagerService inputManager,
             boolean showBootMsgs, boolean onlyCore, WindowManagerPolicy policy,
-            WindowManagerGlobalLock globalLock) {
+            ActivityTaskManagerService atm) {
         installLock(this, INDEX_WINDOW);
-        mGlobalLock = globalLock;
+        mGlobalLock = atm.getGlobalLock();
+        mAtmService = atm;
         mContext = context;
         mAllowBootMessages = showBootMsgs;
         mOnlyCore = onlyCore;
@@ -942,6 +953,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 com.android.internal.R.integer.config_maxUiWidth);
         mDisableTransitionAnimation = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_disableTransitionAnimation);
+        mPerDisplayFocusEnabled = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_perDisplayFocusEnabled);
+        mLowRamTaskSnapshots = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_lowRamTaskSnapshotsAndRecents);
         mInputManager = inputManager; // Must be before createDisplayContentLocked.
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
         mDisplayWindowSettings = new DisplayWindowSettings(this);
@@ -959,7 +974,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
 
-        mKeyguardDisableHandler = new KeyguardDisableHandler(mContext, mPolicy);
+        mKeyguardDisableHandler = KeyguardDisableHandler.create(mContext, mPolicy, mH);
 
         mPowerManager = (PowerManager)context.getSystemService(Context.POWER_SERVICE);
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
@@ -1038,7 +1053,7 @@ public class WindowManagerService extends IWindowManager.Stub
         IntentFilter filter = new IntentFilter();
         // Track changes to DevicePolicyManager state so we can enable/disable keyguard.
         filter.addAction(ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
-        mContext.registerReceiver(mBroadcastReceiver, filter);
+        mContext.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
 
         mLatencyTracker = LatencyTracker.getInstance(context);
 
@@ -2376,85 +2391,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    @Override
-    public Configuration updateOrientationFromAppTokens(Configuration currentConfig,
-            IBinder freezeThisOneIfNeeded, int displayId) {
-        return updateOrientationFromAppTokens(currentConfig, freezeThisOneIfNeeded, displayId,
-                false /* forceUpdate */);
-    }
-
-    public Configuration updateOrientationFromAppTokens(Configuration currentConfig,
-            IBinder freezeThisOneIfNeeded, int displayId, boolean forceUpdate) {
-        if (!checkCallingPermission(MANAGE_APP_TOKENS, "updateOrientationFromAppTokens()")) {
-            throw new SecurityException("Requires MANAGE_APP_TOKENS permission");
-        }
-
-        final Configuration config;
-        final long ident = Binder.clearCallingIdentity();
-        try {
-            synchronized (mGlobalLock) {
-                config = updateOrientationFromAppTokensLocked(currentConfig, freezeThisOneIfNeeded,
-                        displayId, forceUpdate);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(ident);
-        }
-
-        return config;
-    }
-
-    /**
-     * Update orientation of the target display, returning a non-null new Configuration if it has
-     * changed from the current orientation. If a non-null configuration is returned, someone must
-     * call {@link #setNewDisplayOverrideConfiguration(Configuration, int)} to tell the window
-     * manager it can unfreeze the screen. This will typically be done by calling
-     * {@link #sendNewConfiguration(int)}.
-     *
-     * @see android.view.IWindowManager#updateOrientationFromAppTokens(Configuration, IBinder, int)
-     */
-    private Configuration updateOrientationFromAppTokensLocked(Configuration currentConfig,
-            IBinder freezeThisOneIfNeeded, int displayId, boolean forceUpdate) {
-        if (!mDisplayReady) {
-            return null;
-        }
-        Configuration config = null;
-
-        final DisplayContent dc = mRoot.getDisplayContent(displayId);
-        if (dc != null && dc.updateOrientationFromAppTokens(forceUpdate)) {
-            // If we changed the orientation but mOrientationChangeComplete is already true,
-            // we used seamless rotation, and we don't need to freeze the screen.
-            if (freezeThisOneIfNeeded != null && !mRoot.mOrientationChangeComplete) {
-                final AppWindowToken atoken = mRoot.getAppWindowToken(freezeThisOneIfNeeded);
-                if (atoken != null) {
-                    atoken.startFreezingScreen();
-                }
-            }
-            config = computeNewConfigurationLocked(displayId);
-
-        } else if (currentConfig != null) {
-            // No obvious action we need to take, but if our current state mismatches the activity
-            // manager's, update it, disregarding font scale, which should remain set to the value
-            // of the previous configuration.
-            // Here we're calling Configuration#unset() instead of setToDefaults() because we need
-            // to keep override configs clear of non-empty values (e.g. fontSize).
-            mTempConfiguration.unset();
-            mTempConfiguration.updateFrom(currentConfig);
-            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-            displayContent.computeScreenConfiguration(mTempConfiguration);
-            if (currentConfig.diff(mTempConfiguration) != 0) {
-                displayContent.mWaitingForConfig = true;
-                displayContent.setLayoutNeeded();
-                int anim[] = new int[2];
-                displayContent.getDisplayPolicy().selectRotationAnimationLw(anim);
-
-                startFreezingDisplayLocked(anim[0], anim[1], displayContent);
-                config = new Configuration(mTempConfiguration);
-            }
-        }
-
-        return config;
-    }
-
     void setNewDisplayOverrideConfiguration(Configuration overrideConfig,
             @NonNull DisplayContent dc) {
         if (dc.mWaitingForConfig) {
@@ -2815,45 +2751,38 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void disableKeyguard(IBinder token, String tag) {
+    public void disableKeyguard(IBinder token, String tag, int userId) {
+        userId = mAmInternal.handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
+                userId, false /* allowAll */, ALLOW_FULL_ONLY, "disableKeyguard", null);
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DISABLE_KEYGUARD)
             != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Requires DISABLE_KEYGUARD permission");
         }
-        // If this isn't coming from the system then don't allow disabling the lockscreen
-        // to bypass security.
-        if (Binder.getCallingUid() != SYSTEM_UID && isKeyguardSecure()) {
-            Log.d(TAG_WM, "current mode is SecurityMode, ignore disableKeyguard");
-            return;
+        final int callingUid = Binder.getCallingUid();
+        final long origIdentity = Binder.clearCallingIdentity();
+        try {
+            mKeyguardDisableHandler.disableKeyguard(token, tag, callingUid, userId);
+        } finally {
+            Binder.restoreCallingIdentity(origIdentity);
         }
-
-        // If this isn't coming from the current profiles, ignore it.
-        if (!isCurrentProfileLocked(UserHandle.getCallingUserId())) {
-            Log.d(TAG_WM, "non-current profiles, ignore disableKeyguard");
-            return;
-        }
-
-        if (token == null) {
-            throw new IllegalArgumentException("token == null");
-        }
-
-        mKeyguardDisableHandler.sendMessage(mKeyguardDisableHandler.obtainMessage(
-                KeyguardDisableHandler.KEYGUARD_DISABLE, new Pair<IBinder, String>(token, tag)));
     }
 
     @Override
-    public void reenableKeyguard(IBinder token) {
+    public void reenableKeyguard(IBinder token, int userId) {
+        userId = mAmInternal.handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
+                userId, false /* allowAll */, ALLOW_FULL_ONLY, "reenableKeyguard", null);
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DISABLE_KEYGUARD)
             != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Requires DISABLE_KEYGUARD permission");
         }
-
-        if (token == null) {
-            throw new IllegalArgumentException("token == null");
+        Preconditions.checkNotNull(token, "token is null");
+        final int callingUid = Binder.getCallingUid();
+        final long origIdentity = Binder.clearCallingIdentity();
+        try {
+            mKeyguardDisableHandler.reenableKeyguard(token, callingUid, userId);
+        } finally {
+            Binder.restoreCallingIdentity(origIdentity);
         }
-
-        mKeyguardDisableHandler.sendMessage(mKeyguardDisableHandler.obtainMessage(
-                KeyguardDisableHandler.KEYGUARD_REENABLE, token));
     }
 
     /**
@@ -3137,11 +3066,7 @@ public class WindowManagerService extends IWindowManager.Stub
             mCurrentUserId = newUserId;
             mCurrentProfileIds = currentProfileIds;
             mPolicy.setCurrentUserLw(newUserId);
-
-            // If keyguard was disabled, re-enable it
-            // TODO: Keep track of keyguardEnabled state per user and use here...
-            // e.g. enabled = mKeyguardDisableHandler.getEnabledStateForUser(newUserId);
-            mPolicy.enableKeyguard(true);
+            mKeyguardDisableHandler.setCurrentUser(newUserId);
 
             // Hide windows that should not be seen by the new user.
             mRoot.switchUser();
@@ -4482,7 +4407,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
                     AccessibilityController accessibilityController = null;
 
-                    final boolean topFocusedDisplayChanged = msg.arg1 != 0;
                     synchronized (mGlobalLock) {
                         // TODO(multidisplay): Accessibility supported only of default desiplay.
                         if (mAccessibilityController != null && displayContent.isDefaultDisplay) {
@@ -4493,19 +4417,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         newFocus = displayContent.mCurrentFocus;
                     }
                     if (lastFocus == newFocus) {
-                        // Report focus to ViewRootImpl when top focused display changes.
-                        // Or, nothing to do for no window focus change.
-                        if (topFocusedDisplayChanged && newFocus != null) {
-                            if (DEBUG_FOCUS_LIGHT) {
-                                Slog.d(TAG, "Reporting focus: " + newFocus
-                                        + " due to top focused display change.");
-                            }
-                            // See {@link IWindow#windowFocusChanged} to know why set
-                            // reportToClient as false.
-                            newFocus.reportFocusChangedSerialized(true, mInTouchMode,
-                                    false /* reportToClient */);
-                            notifyFocusChanged();
-                        }
+                        // Focus is not changing, so nothing to do.
                         return;
                     }
                     synchronized (mGlobalLock) {
@@ -4527,15 +4439,13 @@ public class WindowManagerService extends IWindowManager.Stub
 
                     if (newFocus != null) {
                         if (DEBUG_FOCUS_LIGHT) Slog.i(TAG_WM, "Gaining focus: " + newFocus);
-                        newFocus.reportFocusChangedSerialized(true, mInTouchMode,
-                                true /* reportToClient */);
+                        newFocus.reportFocusChangedSerialized(true, mInTouchMode);
                         notifyFocusChanged();
                     }
 
                     if (lastFocus != null) {
                         if (DEBUG_FOCUS_LIGHT) Slog.i(TAG_WM, "Losing focus: " + lastFocus);
-                        lastFocus.reportFocusChangedSerialized(false, mInTouchMode,
-                                true /* reportToClient */);
+                        lastFocus.reportFocusChangedSerialized(false, mInTouchMode);
                     }
                 } break;
 
@@ -4552,8 +4462,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     for (int i = 0; i < N; i++) {
                         if (DEBUG_FOCUS_LIGHT) Slog.i(TAG_WM, "Losing delayed focus: " +
                                 losers.get(i));
-                        losers.get(i).reportFocusChangedSerialized(false, mInTouchMode,
-                                true /* reportToClient */);
+                        losers.get(i).reportFocusChangedSerialized(false, mInTouchMode);
                     }
                 } break;
 
@@ -5640,22 +5549,12 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    // TODO: Make the callers use getNavBarPosition(int) only.
-    /**
-     * Used by SystemUI and shared SystemUI libraries.
-     * @see DisplayPolicy#getNavBarPosition()
-     */
-    @Override
-    @WindowManagerPolicy.NavigationBarPosition
-    public int getNavBarPosition() {
-        return getNavBarPosition(Display.DEFAULT_DISPLAY);
-    }
-
     /**
      * Used by ActivityManager to determine where to position an app with aspect ratio shorter then
      * the screen is.
      * @see DisplayPolicy#getNavBarPosition()
      */
+    @Override
     @WindowManagerPolicy.NavigationBarPosition
     public int getNavBarPosition(int displayId) {
         synchronized (mGlobalLock) {
@@ -5665,7 +5564,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (displayContent == null) {
                 Slog.w(TAG, "getNavBarPosition with invalid displayId=" + displayId
                         + " callers=" + Debug.getCallers(3));
-                return -1;
+                return NAV_BAR_INVALID;
             }
             displayContent.performLayout(false /* initial */,
                     false /* updateInputWindows */);
@@ -7132,6 +7031,11 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
+        public void reportPasswordChanged(int userId) {
+            mKeyguardDisableHandler.updateKeyguardEnabled(userId);
+        }
+
+        @Override
         public int getInputMethodWindowVisibleHeight(int displayId) {
             synchronized (mGlobalLock) {
                 final DisplayContent dc = mRoot.getDisplayContent(displayId);
@@ -7290,19 +7194,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 return Display.INVALID_DISPLAY;
             }
         }
-
-        @Override
-        public void onProcessConfigurationChanged(int pid, Configuration newConfig) {
-            synchronized (mGlobalLock) {
-                Configuration currentConfig = mProcessConfigurations.get(pid);
-                if (currentConfig == null) {
-                    currentConfig = new Configuration(newConfig);
-                } else {
-                    currentConfig.setTo(newConfig);
-                }
-                mProcessConfigurations.put(pid, currentConfig);
-            }
-        }
     }
 
     void registerAppFreezeListener(AppFreezeListener listener) {
@@ -7454,6 +7345,31 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mGlobalLock) {
             if (mPolicy.setAodShowing(aodShowing)) {
                 mWindowPlacerLocked.performSurfacePlacement();
+            }
+        }
+    }
+
+    @Override
+    public void reparentDisplayContent(int displayId, IBinder surfaceControlHandle) {
+        final Display display = mDisplayManager.getDisplay(displayId);
+        if (display == null) {
+            throw new IllegalArgumentException(
+                    "Can't reparent display for non-existent displayId: " + displayId);
+        }
+
+        final int callingUid = Binder.getCallingUid();
+        final int displayOwnerUid = display.getOwnerUid();
+        if (callingUid != displayOwnerUid) {
+            throw new SecurityException("Only owner of the display can reparent surfaces to it.");
+        }
+
+        synchronized (mGlobalLock) {
+            long token = Binder.clearCallingIdentity();
+            try {
+                DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
+                displayContent.reparentDisplayContent(surfaceControlHandle);
+            } finally {
+                Binder.restoreCallingIdentity(token);
             }
         }
     }

@@ -23,7 +23,6 @@ import com.android.settingslib.bluetooth.CachedBluetoothDevice;
  * MediaDeviceUtils provides utility function for MediaDevice
  */
 public class MediaDeviceUtils {
-
     /**
      * Use CachedBluetoothDevice address to represent unique id
      *

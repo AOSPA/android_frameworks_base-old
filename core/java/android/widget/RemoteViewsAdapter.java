@@ -16,6 +16,9 @@
 
 package android.widget;
 
+import static android.widget.RemoteViews.EXTRA_REMOTEADAPTER_APPWIDGET_ID;
+import static android.widget.RemoteViews.EXTRA_REMOTEADAPTER_ON_LIGHT_BACKGROUND;
+
 import android.annotation.UnsupportedAppUsage;
 import android.annotation.WorkerThread;
 import android.app.IServiceConnection;
@@ -97,6 +100,7 @@ public class RemoteViewsAdapter extends BaseAdapter implements Handler.Callback 
     private final Context mContext;
     private final Intent mIntent;
     private final int mAppWidgetId;
+    private final boolean mOnLightBackground;
     private final Executor mAsyncViewLoadExecutor;
 
     private OnClickHandler mRemoteViewsOnClickHandler;
@@ -249,8 +253,12 @@ public class RemoteViewsAdapter extends BaseAdapter implements Handler.Callback 
                     final IServiceConnection sd = mContext.getServiceDispatcher(this, this, flags);
                     Intent intent = (Intent) msg.obj;
                     int appWidgetId = msg.arg1;
-                    mBindRequested = AppWidgetManager.getInstance(mContext)
-                            .bindRemoteViewsService(mContext, appWidgetId, intent, sd, flags);
+                    try {
+                        mBindRequested = AppWidgetManager.getInstance(mContext)
+                                .bindRemoteViewsService(mContext, appWidgetId, intent, sd, flags);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to bind remoteViewsService: " + e.getMessage());
+                    }
                     return;
                 }
                 case MSG_NOTIFY_DATA_SET_CHANGED: {
@@ -817,13 +825,13 @@ public class RemoteViewsAdapter extends BaseAdapter implements Handler.Callback 
             throw new IllegalArgumentException("Non-null Intent must be specified.");
         }
 
-        mAppWidgetId = intent.getIntExtra(RemoteViews.EXTRA_REMOTEADAPTER_APPWIDGET_ID, -1);
+        mAppWidgetId = intent.getIntExtra(EXTRA_REMOTEADAPTER_APPWIDGET_ID, -1);
         mRequestedViews = new RemoteViewsFrameLayoutRefSet();
+        mOnLightBackground = intent.getBooleanExtra(EXTRA_REMOTEADAPTER_ON_LIGHT_BACKGROUND, false);
 
         // Strip the previously injected app widget id from service intent
-        if (intent.hasExtra(RemoteViews.EXTRA_REMOTEADAPTER_APPWIDGET_ID)) {
-            intent.removeExtra(RemoteViews.EXTRA_REMOTEADAPTER_APPWIDGET_ID);
-        }
+        intent.removeExtra(EXTRA_REMOTEADAPTER_APPWIDGET_ID);
+        intent.removeExtra(EXTRA_REMOTEADAPTER_ON_LIGHT_BACKGROUND);
 
         // Initialize the worker thread
         mWorkerThread = new HandlerThread("RemoteViewsCache-loader");
@@ -1107,6 +1115,7 @@ public class RemoteViewsAdapter extends BaseAdapter implements Handler.Callback 
             } else {
                 layout = new RemoteViewsFrameLayout(parent.getContext(), mCache);
                 layout.setExecutor(mAsyncViewLoadExecutor);
+                layout.setOnLightBackground(mOnLightBackground);
             }
 
             if (isInCache) {

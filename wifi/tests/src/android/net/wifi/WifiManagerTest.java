@@ -29,6 +29,7 @@ import static android.net.wifi.WifiManager.WIFI_AP_STATE_ENABLED;
 import static android.net.wifi.WifiManager.WIFI_AP_STATE_ENABLING;
 import static android.net.wifi.WifiManager.WIFI_AP_STATE_FAILED;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -65,7 +66,8 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.test.TestLooper;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -88,6 +90,7 @@ public class WifiManagerTest {
     private static final int TEST_UID = 14553;
     private static final String TEST_PACKAGE_NAME = "TestPackage";
     private static final String TEST_COUNTRY_CODE = "US";
+    private static final String[] TEST_MAC_ADDRESSES = {"da:a1:19:0:0:0"};
 
     @Mock Context mContext;
     @Mock
@@ -1298,13 +1301,37 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
      */
     @Test
     public void addRemoveNetworkSuggestions() throws Exception {
-        when(mWifiService.addNetworkSuggestions(any(List.class), anyString())).thenReturn(true);
-        when(mWifiService.removeNetworkSuggestions(any(List.class), anyString())).thenReturn(true);
+        when(mWifiService.addNetworkSuggestions(any(List.class), anyString()))
+                .thenReturn(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
+        when(mWifiService.removeNetworkSuggestions(any(List.class), anyString()))
+                .thenReturn(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
 
-        assertTrue(mWifiManager.addNetworkSuggestions(new ArrayList<>()));
+        assertEquals(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS,
+                mWifiManager.addNetworkSuggestions(new ArrayList<>()));
         verify(mWifiService).addNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME));
 
-        assertTrue(mWifiManager.removeNetworkSuggestions(new ArrayList<>()));
+        assertEquals(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS,
+                mWifiManager.removeNetworkSuggestions(new ArrayList<>()));
         verify(mWifiService).removeNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME));
+    }
+
+    /**
+     * Verify call to {@link WifiManager#getMaxNumberOfNetworkSuggestionsPerApp()}.
+     */
+    @Test
+    public void getMaxNumberOfNetworkSuggestionsPerApp() {
+        assertEquals(WifiManager.NETWORK_SUGGESTIONS_MAX_PER_APP,
+                mWifiManager.getMaxNumberOfNetworkSuggestionsPerApp());
+    }
+
+    /**
+     * Verify getting the factory MAC address.
+     * @throws Exception
+     */
+    @Test
+    public void testGetFactoryMacAddress() throws Exception {
+        when(mWifiService.getFactoryMacAddresses()).thenReturn(TEST_MAC_ADDRESSES);
+        assertArrayEquals(TEST_MAC_ADDRESSES, mWifiManager.getFactoryMacAddresses());
+        verify(mWifiService).getFactoryMacAddresses();
     }
 }

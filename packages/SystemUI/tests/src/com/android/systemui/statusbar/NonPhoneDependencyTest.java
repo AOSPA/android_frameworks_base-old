@@ -26,6 +26,7 @@ import android.testing.TestableLooper;
 import com.android.systemui.Dependency;
 import com.android.systemui.InitController;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
@@ -50,12 +51,13 @@ import org.mockito.MockitoAnnotations;
  */
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@TestableLooper.RunWithLooper(setAsMainLooper = true)
+@TestableLooper.RunWithLooper
 @Ignore("b/118400112")
 public class NonPhoneDependencyTest extends SysuiTestCase {
     @Mock private NotificationPresenter mPresenter;
     @Mock private NotificationListContainer mListContainer;
-    @Mock private NotificationEntryManager.Callback mEntryManagerCallback;
+    @Mock
+    private NotificationEntryListener mEntryListener;
     @Mock private HeadsUpManager mHeadsUpManager;
     @Mock private RemoteInputController.Delegate mDelegate;
     @Mock private NotificationRemoteInputManager.Callback mRemoteInputManagerCallback;
@@ -85,13 +87,13 @@ public class NonPhoneDependencyTest extends SysuiTestCase {
         NotificationViewHierarchyManager viewHierarchyManager =
                 Dependency.get(NotificationViewHierarchyManager.class);
         Dependency.get(InitController.class).executePostInitTasks();
-        entryManager.setUpWithPresenter(mPresenter, mListContainer, mEntryManagerCallback,
-                mHeadsUpManager);
+        entryManager.setUpWithPresenter(mPresenter, mListContainer, mHeadsUpManager);
+        entryManager.addNotificationEntryListener(mEntryListener);
         gutsManager.setUpWithPresenter(mPresenter, mListContainer,
                 mCheckSaveListener, mOnSettingsClickListener);
         notificationLogger.setUpWithContainer(mListContainer);
         mediaManager.setUpWithPresenter(mPresenter);
-        remoteInputManager.setUpWithPresenter(mPresenter, mRemoteInputManagerCallback,
+        remoteInputManager.setUpWithCallback(mRemoteInputManagerCallback,
                 mDelegate);
         lockscreenUserManager.setUpWithPresenter(mPresenter);
         viewHierarchyManager.setUpWithPresenter(mPresenter, mListContainer);

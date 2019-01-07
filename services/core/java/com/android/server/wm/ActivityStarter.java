@@ -73,6 +73,8 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_USER_
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerService.ANIMATE;
+import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_BOUNDS;
+import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_DISPLAY;
 import static com.android.server.wm.TaskRecord.REPARENT_KEEP_STACK_AT_FRONT;
 import static com.android.server.wm.TaskRecord.REPARENT_MOVE_STACK_TO_FRONT;
 
@@ -321,6 +323,7 @@ class ActivityStarter {
         WaitResult waitResult;
         int filterCallingUid;
         PendingIntentRecord originatingPendingIntent;
+        boolean allowBackgroundActivityStart;
 
         /**
          * If set to {@code true}, allows this activity start to look into
@@ -378,6 +381,7 @@ class ActivityStarter {
             allowPendingRemoteAnimationRegistryLookup = true;
             filterCallingUid = UserHandle.USER_NULL;
             originatingPendingIntent = null;
+            allowBackgroundActivityStart = false;
         }
 
         /**
@@ -417,6 +421,7 @@ class ActivityStarter {
                     = request.allowPendingRemoteAnimationRegistryLookup;
             filterCallingUid = request.filterCallingUid;
             originatingPendingIntent = request.originatingPendingIntent;
+            allowBackgroundActivityStart = request.allowBackgroundActivityStart;
         }
     }
 
@@ -502,7 +507,7 @@ class ActivityStarter {
                         mRequest.activityOptions, mRequest.ignoreTargetSecurity, mRequest.userId,
                         mRequest.inTask, mRequest.reason,
                         mRequest.allowPendingRemoteAnimationRegistryLookup,
-                        mRequest.originatingPendingIntent);
+                        mRequest.originatingPendingIntent, mRequest.allowBackgroundActivityStart);
             } else {
                 return startActivity(mRequest.caller, mRequest.intent, mRequest.ephemeralIntent,
                         mRequest.resolvedType, mRequest.activityInfo, mRequest.resolveInfo,
@@ -513,7 +518,7 @@ class ActivityStarter {
                         mRequest.ignoreTargetSecurity, mRequest.componentSpecified,
                         mRequest.outActivity, mRequest.inTask, mRequest.reason,
                         mRequest.allowPendingRemoteAnimationRegistryLookup,
-                        mRequest.originatingPendingIntent);
+                        mRequest.originatingPendingIntent, mRequest.allowBackgroundActivityStart);
             }
         } finally {
             onExecutionComplete();
@@ -546,7 +551,7 @@ class ActivityStarter {
             SafeActivityOptions options, boolean ignoreTargetSecurity, boolean componentSpecified,
             ActivityRecord[] outActivity, TaskRecord inTask, String reason,
             boolean allowPendingRemoteAnimationRegistryLookup,
-            PendingIntentRecord originatingPendingIntent) {
+            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
 
         if (TextUtils.isEmpty(reason)) {
             throw new IllegalArgumentException("Need to specify a reason.");
@@ -559,7 +564,8 @@ class ActivityStarter {
                 aInfo, rInfo, voiceSession, voiceInteractor, resultTo, resultWho, requestCode,
                 callingPid, callingUid, callingPackage, realCallingPid, realCallingUid, startFlags,
                 options, ignoreTargetSecurity, componentSpecified, mLastStartActivityRecord,
-                inTask, allowPendingRemoteAnimationRegistryLookup, originatingPendingIntent);
+                inTask, allowPendingRemoteAnimationRegistryLookup, originatingPendingIntent,
+                allowBackgroundActivityStart);
 
         if (outActivity != null) {
             // mLastStartActivityRecord[0] is set in the call to startActivity above.
@@ -590,7 +596,7 @@ class ActivityStarter {
             SafeActivityOptions options,
             boolean ignoreTargetSecurity, boolean componentSpecified, ActivityRecord[] outActivity,
             TaskRecord inTask, boolean allowPendingRemoteAnimationRegistryLookup,
-            PendingIntentRecord originatingPendingIntent) {
+            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
         int err = ActivityManager.START_SUCCESS;
         // Pull the optional Ephemeral Installer-only bundle out of the options early.
         final Bundle verificationBundle
@@ -740,7 +746,7 @@ class ActivityStarter {
         // on START_ABORTED
         if (!abort) {
             abort |= shouldAbortBackgroundActivityStart(callingUid, callingPackage, realCallingUid,
-                    callerApp);
+                    callerApp, originatingPendingIntent, allowBackgroundActivityStart);
         }
 
         // Merge the two options bundles, while realCallerOptions takes precedence.
@@ -888,7 +894,8 @@ class ActivityStarter {
     }
 
     private boolean shouldAbortBackgroundActivityStart(int callingUid, final String callingPackage,
-            int realCallingUid, WindowProcessController callerApp) {
+            int realCallingUid, WindowProcessController callerApp,
+            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
         if (mService.isBackgroundActivityStartsEnabled()) {
             return false;
         }
@@ -900,12 +907,25 @@ class ActivityStarter {
         if (callerApp != null && callerApp.hasForegroundActivities()) {
             return false;
         }
-        // don't abort if the callingUid is in the foreground
-        if (isUidForeground(callingUid)) {
+        // don't abort if the callingUid is in the foreground or is a persistent system process
+        if (isUidForeground(callingUid) || isUidPersistentSystemProcess(callingUid)) {
             return false;
         }
-        // don't abort if the realCallingUid is in the foreground and callingUid isn't
-        if ((realCallingUid != callingUid) && isUidForeground(realCallingUid)) {
+        // take realCallingUid into consideration
+        if (realCallingUid != callingUid) {
+            // don't abort if the realCallingUid is in the foreground and callingUid isn't
+            if (isUidForeground(realCallingUid)) {
+                return false;
+            }
+            // if the realCallingUid is a persistent system process, abort if the IntentSender
+            // wasn't whitelisted to start an activity
+            if (isUidPersistentSystemProcess(realCallingUid) && (originatingPendingIntent != null)
+                    && allowBackgroundActivityStart) {
+                return false;
+            }
+        }
+        // don't abort if the caller is currently temporarily whitelisted
+        if (callerApp != null && callerApp.areBackgroundActivityStartsAllowed()) {
             return false;
         }
         // don't abort if the caller has the same uid as the recents component
@@ -922,10 +942,15 @@ class ActivityStarter {
         return true;
     }
 
-    /** Returns true if uid has a visible window or its process is in top or persistent state. */
+    /** Returns true if uid has a visible window or its process is in a top state. */
     private boolean isUidForeground(int uid) {
-        return (mService.getUidStateLocked(uid) <= ActivityManager.PROCESS_STATE_TOP)
+        return (mService.getUidStateLocked(uid) == ActivityManager.PROCESS_STATE_TOP)
             || mService.mWindowManager.isAnyWindowVisibleForUid(uid);
+    }
+
+    /** Returns true if uid is in a persistent state. */
+    private boolean isUidPersistentSystemProcess(int uid) {
+        return (mService.getUidStateLocked(uid) <= ActivityManager.PROCESS_STATE_PERSISTENT_UI);
     }
 
     private void maybeLogActivityStart(int callingUid, String callingPackage, int realCallingUid,
@@ -1047,7 +1072,7 @@ class ActivityStarter {
             Configuration globalConfig, SafeActivityOptions options, boolean ignoreTargetSecurity,
             int userId, TaskRecord inTask, String reason,
             boolean allowPendingRemoteAnimationRegistryLookup,
-            PendingIntentRecord originatingPendingIntent) {
+            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
         // Refuse possible leaked file descriptors
         if (intent != null && intent.hasFileDescriptors()) {
             throw new IllegalArgumentException("File descriptors passed in Intent");
@@ -1193,7 +1218,8 @@ class ActivityStarter {
                     voiceSession, voiceInteractor, resultTo, resultWho, requestCode, callingPid,
                     callingUid, callingPackage, realCallingPid, realCallingUid, startFlags, options,
                     ignoreTargetSecurity, componentSpecified, outRecord, inTask, reason,
-                    allowPendingRemoteAnimationRegistryLookup, originatingPendingIntent);
+                    allowPendingRemoteAnimationRegistryLookup, originatingPendingIntent,
+                    allowBackgroundActivityStart);
 
             Binder.restoreCallingIdentity(origId);
 
@@ -1339,6 +1365,21 @@ class ActivityStarter {
                 voiceInteractor);
         final int preferredWindowingMode = mLaunchParams.mWindowingMode;
 
+        computeLaunchingTaskFlags();
+
+        computeSourceStack();
+
+        mIntent.setFlags(mLaunchFlags);
+
+        ActivityRecord reusedActivity = getReusableIntentActivity();
+
+        mSupervisor.getLaunchParamsController().calculate(
+                reusedActivity != null ? reusedActivity.getTaskRecord() : mInTask,
+                r.info.windowLayout, r, sourceRecord, options, PHASE_BOUNDS, mLaunchParams);
+        mPreferredDisplayId =
+                mLaunchParams.hasPreferredDisplay() ? mLaunchParams.mPreferredDisplayId
+                        : DEFAULT_DISPLAY;
+
         // Do not start home activity if it cannot be launched on preferred display. We are not
         // doing this in ActivityStackSupervisor#canPlaceEntityOnDisplay because it might
         // fallback to launch on other displays.
@@ -1347,14 +1388,6 @@ class ActivityStarter {
             Slog.w(TAG, "Cannot launch home on display " + mPreferredDisplayId);
             return START_CANCELED;
         }
-
-        computeLaunchingTaskFlags();
-
-        computeSourceStack();
-
-        mIntent.setFlags(mLaunchFlags);
-
-        ActivityRecord reusedActivity = getReusableIntentActivity();
 
         if (reusedActivity != null) {
             // When the flags NEW_TASK and CLEAR_TASK are set, then the task gets reused but
@@ -1565,7 +1598,7 @@ class ActivityStarter {
                 mTargetStack.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
                 // Go ahead and tell window manager to execute app transition for this activity
                 // since the app transition will not be triggered through the resume channel.
-                mTargetStack.getDisplay().getWindowContainerController().executeAppTransition();
+                mTargetStack.getDisplay().mDisplayContent.executeAppTransition();
             } else {
                 // If the target stack was not previously focusable (previous top running activity
                 // on that stack was not visible) then any prior calls to move the stack to the
@@ -1651,14 +1684,13 @@ class ActivityStarter {
 
         mLaunchParams.reset();
 
+        // Preferred display id is the only state we need for now and it could be updated again
+        // after we located a reusable task (which might be resided in another display).
         mSupervisor.getLaunchParamsController().calculate(inTask, r.info.windowLayout, r,
-                sourceRecord, options, mLaunchParams);
-
-        if (mLaunchParams.hasPreferredDisplay()) {
-            mPreferredDisplayId = mLaunchParams.mPreferredDisplayId;
-        } else {
-            mPreferredDisplayId = DEFAULT_DISPLAY;
-        }
+                sourceRecord, options, PHASE_DISPLAY, mLaunchParams);
+        mPreferredDisplayId =
+                mLaunchParams.hasPreferredDisplay() ? mLaunchParams.mPreferredDisplayId
+                        : DEFAULT_DISPLAY;
 
         mLaunchMode = r.launchMode;
 
@@ -2502,13 +2534,9 @@ class ActivityStarter {
 
         if (((launchFlags & FLAG_ACTIVITY_LAUNCH_ADJACENT) == 0)
                  || mPreferredDisplayId != DEFAULT_DISPLAY) {
-            // We don't pass in the default display id into the get launch stack call so it can do a
-            // full resolution.
-            mLaunchParams.mPreferredDisplayId =
-                    mPreferredDisplayId != DEFAULT_DISPLAY ? mPreferredDisplayId : INVALID_DISPLAY;
+            final boolean onTop = aOptions == null || !aOptions.getAvoidMoveToFront();
             final ActivityStack stack =
-                    mRootActivityContainer.getLaunchStack(r, aOptions, task, ON_TOP, mLaunchParams);
-            mLaunchParams.mPreferredDisplayId = mPreferredDisplayId;
+                    mRootActivityContainer.getLaunchStack(r, aOptions, task, onTop, mLaunchParams);
             return stack;
         }
         // Otherwise handle adjacent launch.
@@ -2724,6 +2752,11 @@ class ActivityStarter {
 
     ActivityStarter setOriginatingPendingIntent(PendingIntentRecord originatingPendingIntent) {
         mRequest.originatingPendingIntent = originatingPendingIntent;
+        return this;
+    }
+
+    ActivityStarter setAllowBackgroundActivityStart(boolean allowBackgroundActivityStart) {
+        mRequest.allowBackgroundActivityStart = allowBackgroundActivityStart;
         return this;
     }
 

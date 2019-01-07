@@ -29,6 +29,7 @@ class ReliableSurface : public ANativeObjectBase<ANativeWindow, ReliableSurface,
 
 public:
     ReliableSurface(sp<Surface>&& surface);
+    ~ReliableSurface();
 
     void setDequeueTimeout(nsecs_t timeout) { mSurface->setDequeueTimeout(timeout); }
 
@@ -51,9 +52,10 @@ private:
     PixelFormat mFormat = PIXEL_FORMAT_RGBA_8888;
     std::unique_ptr<AHardwareBuffer, void (*)(AHardwareBuffer*)> mScratchBuffer{
             nullptr, AHardwareBuffer_release};
-    bool mInErrorState = false;
     ANativeWindowBuffer* mReservedBuffer = nullptr;
     base::unique_fd mReservedFenceFd;
+    bool mHasDequeuedBuffer = false;
+    bool mInErrorState = false;
 
     bool isFallbackBuffer(const ANativeWindowBuffer* windowBuffer) const;
     ANativeWindowBuffer* acquireFallbackBuffer();

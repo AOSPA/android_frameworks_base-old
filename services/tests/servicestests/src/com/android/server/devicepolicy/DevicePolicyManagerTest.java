@@ -21,6 +21,9 @@ import static android.app.admin.DevicePolicyManager.ID_TYPE_BASE_INFO;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_IMEI;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_MEID;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_SERIAL;
+import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_HIGH;
+import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_MEDIUM;
+import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_NONE;
 import static android.app.admin.DevicePolicyManager.WIPE_EUICC;
 import static android.os.UserManagerInternal.CAMERA_DISABLED_GLOBALLY;
 import static android.os.UserManagerInternal.CAMERA_DISABLED_LOCALLY;
@@ -48,6 +51,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.hamcrest.MockitoHamcrest.argThat;
+import static org.testng.Assert.assertThrows;
 
 import android.Manifest.permission;
 import android.annotation.RawRes;
@@ -68,7 +72,6 @@ import android.content.pm.StringParceledListSlice;
 import android.content.pm.UserInfo;
 import android.graphics.Color;
 import android.net.Uri;
-import android.net.wifi.WifiInfo;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Process;
@@ -1985,17 +1988,16 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // Test 4, Caller is DO now.
         assertTrue(dpm.setDeviceOwner(admin1, null, UserHandle.USER_SYSTEM));
 
-        // 4-1.  But no WifiInfo.
+        // 4-1.  But WifiManager is not ready.
         assertNull(dpm.getWifiMacAddress(admin1));
 
-        // 4-2.  Returns WifiInfo, but with the default MAC.
-        when(getServices().wifiManager.getConnectionInfo()).thenReturn(new WifiInfo());
+        // 4-2.  When WifiManager returns an empty array, dpm should also output null.
+        when(getServices().wifiManager.getFactoryMacAddresses()).thenReturn(new String[0]);
         assertNull(dpm.getWifiMacAddress(admin1));
 
         // 4-3. With a real MAC address.
-        final WifiInfo wi = new WifiInfo();
-        wi.setMacAddress("11:22:33:44:55:66");
-        when(getServices().wifiManager.getConnectionInfo()).thenReturn(wi);
+        final String[] macAddresses = new String[]{"11:22:33:44:55:66"};
+        when(getServices().wifiManager.getFactoryMacAddresses()).thenReturn(macAddresses);
         assertEquals("11:22:33:44:55:66", dpm.getWifiMacAddress(admin1));
     }
 
@@ -4163,7 +4165,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // test reset password with token
         when(getServices().lockPatternUtils.setLockCredentialWithToken(eq(password),
                 eq(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD),
-                eq(DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED), eq(handle), eq(token),
+                eq(DevicePolicyManager.PASSWORD_QUALITY_ALPHABETIC), eq(handle), eq(token),
                 eq(UserHandle.USER_SYSTEM)))
                 .thenReturn(true);
         assertTrue(dpm.resetPasswordWithToken(admin1, password, token, 0));
@@ -5131,6 +5133,71 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                             UserHandle.getUid(DpmMockContext.CALLER_USER_HANDLE,
                                     DpmMockContext.DELEGATE_CERT_INSTALLER_UID)));
         });
+    }
+
+    public void testGetPasswordComplexity_securityExceptionIfParentInstance() {
+        assertThrows(SecurityException.class,
+                () -> new DevicePolicyManagerTestable(
+                        mServiceContext,
+                        dpms,
+                        /* parentInstance= */ true)
+                        .getPasswordComplexity());
+    }
+
+    public void testGetPasswordComplexity_illegalStateExceptionIfLocked() {
+        when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(false);
+        assertThrows(IllegalStateException.class, () -> dpm.getPasswordComplexity());
+    }
+
+    public void testGetPasswordComplexity_securityExceptionWithoutPermissions() {
+        when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(true);
+        assertThrows(SecurityException.class, () -> dpm.getPasswordComplexity());
+    }
+
+
+    public void testGetPasswordComplexity_currentUserNoPassword() {
+        when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(true);
+        mServiceContext.permissions.add(permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY);
+        when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
+
+        assertEquals(PASSWORD_COMPLEXITY_NONE, dpm.getPasswordComplexity());
+    }
+
+    public void testGetPasswordComplexity_currentUserHasPassword() {
+        when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(true);
+        mServiceContext.permissions.add(permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY);
+        when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
+        dpms.mUserPasswordMetrics.put(
+                DpmMockContext.CALLER_USER_HANDLE,
+                PasswordMetrics.computeForPassword("asdf"));
+
+        assertEquals(PASSWORD_COMPLEXITY_MEDIUM, dpm.getPasswordComplexity());
+    }
+
+    public void testGetPasswordComplexity_unifiedChallengeReturnsParentUserPassword() {
+        when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(true);
+        mServiceContext.permissions.add(permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY);
+
+        UserInfo parentUser = new UserInfo();
+        parentUser.id = DpmMockContext.CALLER_USER_HANDLE + 10;
+        when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
+                .thenReturn(parentUser.id);
+
+        dpms.mUserPasswordMetrics.put(
+                DpmMockContext.CALLER_USER_HANDLE,
+                PasswordMetrics.computeForPassword("asdf"));
+        dpms.mUserPasswordMetrics.put(
+                parentUser.id,
+                PasswordMetrics.computeForPassword("parentUser"));
+
+        assertEquals(PASSWORD_COMPLEXITY_HIGH, dpm.getPasswordComplexity());
     }
 
     private void configureProfileOwnerForDeviceIdAccess(ComponentName who, int userId) {

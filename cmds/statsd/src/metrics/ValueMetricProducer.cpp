@@ -52,6 +52,7 @@ const int FIELD_ID_TIME_BASE = 9;
 const int FIELD_ID_BUCKET_SIZE = 10;
 const int FIELD_ID_DIMENSION_PATH_IN_WHAT = 11;
 const int FIELD_ID_DIMENSION_PATH_IN_CONDITION = 12;
+const int FIELD_ID_IS_ACTIVE = 14;
 // for ValueMetricDataWrapper
 const int FIELD_ID_DATA = 1;
 const int FIELD_ID_SKIPPED = 2;
@@ -72,17 +73,15 @@ const int FIELD_ID_BUCKET_NUM = 4;
 const int FIELD_ID_START_BUCKET_ELAPSED_MILLIS = 5;
 const int FIELD_ID_END_BUCKET_ELAPSED_MILLIS = 6;
 
+const Value ZERO_LONG((int64_t)0);
+const Value ZERO_DOUBLE((int64_t)0);
+
 // ValueMetric has a minimum bucket size of 10min so that we don't pull too frequently
-ValueMetricProducer::ValueMetricProducer(const ConfigKey& key,
-                                         const ValueMetric& metric,
-                                         const int conditionIndex,
-                                         const sp<ConditionWizard>& conditionWizard,
-                                         const int whatMatcherIndex,
-                                         const sp<EventMatcherWizard>& matcherWizard,
-                                         const int pullTagId,
-                                         const int64_t timeBaseNs,
-                                         const int64_t startTimeNs,
-                                         const sp<StatsPullerManager>& pullerManager)
+ValueMetricProducer::ValueMetricProducer(
+        const ConfigKey& key, const ValueMetric& metric, const int conditionIndex,
+        const sp<ConditionWizard>& conditionWizard, const int whatMatcherIndex,
+        const sp<EventMatcherWizard>& matcherWizard, const int pullTagId, const int64_t timeBaseNs,
+        const int64_t startTimeNs, const sp<StatsPullerManager>& pullerManager)
     : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, conditionWizard),
       mWhatMatcherIndex(whatMatcherIndex),
       mEventMatcherWizard(matcherWizard),
@@ -102,7 +101,11 @@ ValueMetricProducer::ValueMetricProducer(const ConfigKey& key,
       mAggregationType(metric.aggregation_type()),
       mUseDiff(metric.has_use_diff() ? metric.use_diff() : (mIsPulled ? true : false)),
       mValueDirection(metric.value_direction()),
-      mSkipZeroDiffOutput(metric.skip_zero_diff_output()) {
+      mSkipZeroDiffOutput(metric.skip_zero_diff_output()),
+      mUseZeroDefaultBase(metric.use_zero_default_base()),
+      mHasGlobalBase(false),
+      mMaxPullDelayNs(metric.max_pull_delay_sec() > 0 ? metric.max_pull_delay_sec() * NS_PER_SEC
+                                                      : StatsdStats::kPullMaxDelayNs) {
     int64_t bucketSizeMills = 0;
     if (metric.has_bucket()) {
         bucketSizeMills = TimeUnitToBucketSizeInMillisGuardrailed(key.GetUid(), metric.bucket());
@@ -190,10 +193,12 @@ void ValueMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
     } else {
         flushIfNeededLocked(dumpTimeNs);
     }
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
+    protoOutput->write(FIELD_TYPE_BOOL | FIELD_ID_IS_ACTIVE, isActiveLocked());
+
     if (mPastBuckets.empty() && mSkippedBuckets.empty()) {
         return;
     }
-    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_TIME_BASE, (long long)mTimeBaseNs);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_BUCKET_SIZE, (long long)mBucketSizeNs);
     // Fills the dimension path if not slicing by ALL.
@@ -302,6 +307,15 @@ void ValueMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
     }
 }
 
+void ValueMetricProducer::resetBase() {
+    for (auto& slice : mCurrentSlicedBucket) {
+        for (auto& interval : slice.second) {
+            interval.hasBase = false;
+        }
+    }
+    mHasGlobalBase = false;
+}
+
 void ValueMetricProducer::onConditionChangedLocked(const bool condition,
                                                    const int64_t eventTimeNs) {
     if (eventTimeNs < mCurrentBucketStartTimeNs) {
@@ -317,13 +331,10 @@ void ValueMetricProducer::onConditionChangedLocked(const bool condition,
         pullAndMatchEventsLocked(eventTimeNs);
     }
 
-    // when condition change from true to false, clear diff base
+    // when condition change from true to false, clear diff base but don't
+    // reset other counters as we may accumulate more value in the bucket.
     if (mUseDiff && mCondition && !condition) {
-        for (auto& slice : mCurrentSlicedBucket) {
-            for (auto& interval : slice.second) {
-                interval.hasBase = false;
-            }
-        }
+        resetBase();
     }
 
     mCondition = condition;
@@ -331,17 +342,32 @@ void ValueMetricProducer::onConditionChangedLocked(const bool condition,
 
 void ValueMetricProducer::pullAndMatchEventsLocked(const int64_t timestampNs) {
     vector<std::shared_ptr<LogEvent>> allData;
-    if (mPullerManager->Pull(mPullTagId, timestampNs, &allData)) {
-        if (allData.size() == 0) {
-            return;
-        }
-        for (const auto& data : allData) {
-            if (mEventMatcherWizard->matchLogEvent(
-                *data, mWhatMatcherIndex) == MatchingState::kMatched) {
-                onMatchedLogEventLocked(mWhatMatcherIndex, *data);
-            }
+    if (!mPullerManager->Pull(mPullTagId, &allData)) {
+        ALOGE("Gauge Stats puller failed for tag: %d at %lld", mPullTagId, (long long)timestampNs);
+        resetBase();
+        return;
+    }
+    const int64_t pullDelayNs = getElapsedRealtimeNs() - timestampNs;
+    if (pullDelayNs > mMaxPullDelayNs) {
+        ALOGE("Pull finish too late for atom %d, longer than %lld", mPullTagId,
+              (long long)mMaxPullDelayNs);
+        StatsdStats::getInstance().notePullExceedMaxDelay(mPullTagId);
+        StatsdStats::getInstance().notePullDelay(mPullTagId, pullDelayNs);
+        resetBase();
+        return;
+    }
+    StatsdStats::getInstance().notePullDelay(mPullTagId, pullDelayNs);
+
+    for (const auto& data : allData) {
+        // make a copy before doing and changes
+        LogEvent localCopy = data->makeCopy();
+        localCopy.setElapsedTimestampNs(timestampNs);
+        if (mEventMatcherWizard->matchLogEvent(localCopy, mWhatMatcherIndex) ==
+            MatchingState::kMatched) {
+            onMatchedLogEventLocked(mWhatMatcherIndex, localCopy);
         }
     }
+    mHasGlobalBase = true;
 }
 
 int64_t ValueMetricProducer::calcPreviousBucketEndTime(const int64_t currentTimeNs) {
@@ -370,12 +396,14 @@ void ValueMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEven
             return;
         }
         for (const auto& data : allData) {
-            if (mEventMatcherWizard->matchLogEvent(*data, mWhatMatcherIndex) ==
+            LogEvent localCopy = data->makeCopy();
+            if (mEventMatcherWizard->matchLogEvent(localCopy, mWhatMatcherIndex) ==
                 MatchingState::kMatched) {
-                data->setElapsedTimestampNs(bucketEndTime);
-                onMatchedLogEventLocked(mWhatMatcherIndex, *data);
+                localCopy.setElapsedTimestampNs(bucketEndTime);
+                onMatchedLogEventLocked(mWhatMatcherIndex, localCopy);
             }
         }
+        mHasGlobalBase = true;
     } else {
         VLOG("No need to commit data on condition false.");
     }
@@ -412,6 +440,26 @@ bool ValueMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
         // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
         if (newTupleCount > mDimensionHardLimit) {
             ALOGE("ValueMetric %lld dropping data for dimension key %s", (long long)mMetricId,
+                  newKey.toString().c_str());
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ValueMetricProducer::hitFullBucketGuardRailLocked(const MetricDimensionKey& newKey) {
+    // ===========GuardRail==============
+    // 1. Report the tuple count if the tuple count > soft limit
+    if (mCurrentFullBucket.find(newKey) != mCurrentFullBucket.end()) {
+        return false;
+    }
+    if (mCurrentFullBucket.size() > mDimensionSoftLimit - 1) {
+        size_t newTupleCount = mCurrentFullBucket.size() + 1;
+        // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
+        if (newTupleCount > mDimensionHardLimit) {
+            ALOGE("ValueMetric %lld dropping data for full bucket dimension key %s",
+                  (long long)mMetricId,
                   newKey.toString().c_str());
             return true;
         }
@@ -484,13 +532,21 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
             VLOG("Failed to get value %d from event %s", i, event.ToString().c_str());
             return;
         }
+        interval.seenNewData = true;
 
         if (mUseDiff) {
-            // no base. just update base and return.
             if (!interval.hasBase) {
-                interval.base = value;
-                interval.hasBase = true;
-                return;
+                if (mHasGlobalBase && mUseZeroDefaultBase) {
+                    // The bucket has global base. This key does not.
+                    // Optionally use zero as base.
+                    interval.base = (value.type == LONG ? ZERO_LONG : ZERO_DOUBLE);
+                    interval.hasBase = true;
+                } else {
+                    // no base. just update base and return.
+                    interval.base = value;
+                    interval.hasBase = true;
+                    return;
+                }
             }
             Value diff;
             switch (mValueDirection) {
@@ -580,11 +636,7 @@ void ValueMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
     if (numBucketsForward > 1) {
         VLOG("Skipping forward %lld buckets", (long long)numBucketsForward);
         // take base again in future good bucket.
-        for (auto& slice : mCurrentSlicedBucket) {
-            for (auto& interval : slice.second) {
-                interval.hasBase = false;
-            }
-        }
+        resetBase();
     }
     VLOG("metric %lld: new bucket start time: %lld", (long long)mMetricId,
          (long long)mCurrentBucketStartTimeNs);
@@ -633,6 +685,9 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
         // Accumulate partial buckets with current value and then send to anomaly tracker.
         if (mCurrentFullBucket.size() > 0) {
             for (const auto& slice : mCurrentSlicedBucket) {
+                if (hitFullBucketGuardRailLocked(slice.first)) {
+                    continue;
+                }
                 // TODO: fix this when anomaly can accept double values
                 mCurrentFullBucket[slice.first] += slice.second[0].value.long_value;
             }
@@ -664,11 +719,21 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
         }
     }
 
-    // Reset counters
-    for (auto& slice : mCurrentSlicedBucket) {
-        for (auto& interval : slice.second) {
+    for (auto it = mCurrentSlicedBucket.begin(); it != mCurrentSlicedBucket.end();) {
+        bool obsolete = true;
+        for (auto& interval : it->second) {
             interval.hasValue = false;
             interval.sampleSize = 0;
+            if (interval.seenNewData) {
+                obsolete = false;
+            }
+            interval.seenNewData = false;
+        }
+
+        if (obsolete) {
+            it = mCurrentSlicedBucket.erase(it);
+        } else {
+            it++;
         }
     }
 }

@@ -296,6 +296,7 @@ void StatsService::dumpIncidentSection(int out) {
                                  ADB_DUMP, &proto);
         proto.end(reportsListToken);
         proto.flush(out);
+        proto.clear();
     }
 }
 
@@ -359,7 +360,11 @@ status_t StatsService::command(int in, int out, int err, Vector<String8>& args,
             if (mShellSubscriber == nullptr) {
                 mShellSubscriber = new ShellSubscriber(mUidMap, mPullerManager);
             }
-            mShellSubscriber->startNewSubscription(in, out, resultReceiver);
+            int timeoutSec = -1;
+            if (argCount >= 2) {
+                timeoutSec = atoi(args[1].c_str());
+            }
+            mShellSubscriber->startNewSubscription(in, out, resultReceiver, timeoutSec);
             return NO_ERROR;
         }
     }
@@ -424,13 +429,14 @@ void StatsService::print_cmd_help(int out) {
     dprintf(out, "\n                     be removed from memory and disk!\n");
     dprintf(out, "\n");
     dprintf(out,
-            "usage: adb shell cmd stats dump-report [UID] NAME [--include_current_bucket] "
-            "[--proto]\n");
+            "usage: adb shell cmd stats dump-report [UID] NAME [--keep_data] "
+            "[--include_current_bucket] [--proto]\n");
     dprintf(out, "  Dump all metric data for a configuration.\n");
     dprintf(out, "  UID           The uid of the configuration. It is only possible to pass\n");
     dprintf(out, "                the UID parameter on eng builds. If UID is omitted the\n");
     dprintf(out, "                calling uid is used.\n");
     dprintf(out, "  NAME          The name of the configuration\n");
+    dprintf(out, "  --keep_data   Do NOT erase the data upon dumping it.\n");
     dprintf(out, "  --proto       Print proto binary.\n");
     dprintf(out, "\n");
     dprintf(out, "\n");
@@ -465,23 +471,12 @@ status_t StatsService::cmd_trigger_broadcast(int out, Vector<String8>& args) {
         name.assign(args[1].c_str(), args[1].size());
         good = true;
     } else if (argCount == 3) {
-        // If it's a userdebug or eng build, then the shell user can
-        // impersonate other uids.
-        if (mEngBuild) {
-            const char* s = args[1].c_str();
-            if (*s != '\0') {
-                char* end = NULL;
-                uid = strtol(s, &end, 0);
-                if (*end == '\0') {
-                    name.assign(args[2].c_str(), args[2].size());
-                    good = true;
-                }
-            }
-        } else {
-            dprintf(out,
-                    "The metrics can only be dumped for other UIDs on eng or userdebug "
-                    "builds.\n");
+        good = getUidFromArgs(args, 1, uid);
+        if (!good) {
+            dprintf(out, "Invalid UID. Note that the metrics can only be dumped for "
+                         "other UIDs on eng or userdebug builds.\n");
         }
+        name.assign(args[2].c_str(), args[2].size());
     }
     if (!good) {
         print_cmd_help(out);
@@ -517,23 +512,12 @@ status_t StatsService::cmd_config(int in, int out, int err, Vector<String8>& arg
                 name.assign(args[2].c_str(), args[2].size());
                 good = true;
             } else if (argCount == 4) {
-                // If it's a userdebug or eng build, then the shell user can
-                // impersonate other uids.
-                if (mEngBuild) {
-                    const char* s = args[2].c_str();
-                    if (*s != '\0') {
-                        char* end = NULL;
-                        uid = strtol(s, &end, 0);
-                        if (*end == '\0') {
-                            name.assign(args[3].c_str(), args[3].size());
-                            good = true;
-                        }
-                    }
-                } else {
-                    dprintf(err,
-                            "The config can only be set for other UIDs on eng or userdebug "
-                            "builds.\n");
+                good = getUidFromArgs(args, 2, uid);
+                if (!good) {
+                    dprintf(err, "Invalid UID. Note that the config can only be set for "
+                                 "other UIDs on eng or userdebug builds.\n");
                 }
+                name.assign(args[3].c_str(), args[3].size());
             } else if (argCount == 2 && args[1] == "remove") {
                 good = true;
             }
@@ -590,6 +574,7 @@ status_t StatsService::cmd_dump_report(int out, const Vector<String8>& args) {
         bool good = false;
         bool proto = false;
         bool includeCurrentBucket = false;
+        bool eraseData = true;
         int uid;
         string name;
         if (!std::strcmp("--proto", args[argCount-1].c_str())) {
@@ -600,34 +585,27 @@ status_t StatsService::cmd_dump_report(int out, const Vector<String8>& args) {
             includeCurrentBucket = true;
             argCount -= 1;
         }
+        if (!std::strcmp("--keep_data", args[argCount-1].c_str())) {
+            eraseData = false;
+            argCount -= 1;
+        }
         if (argCount == 2) {
             // Automatically pick the UID
             uid = IPCThreadState::self()->getCallingUid();
             name.assign(args[1].c_str(), args[1].size());
             good = true;
         } else if (argCount == 3) {
-            // If it's a userdebug or eng build, then the shell user can
-            // impersonate other uids.
-            if (mEngBuild) {
-                const char* s = args[1].c_str();
-                if (*s != '\0') {
-                    char* end = NULL;
-                    uid = strtol(s, &end, 0);
-                    if (*end == '\0') {
-                        name.assign(args[2].c_str(), args[2].size());
-                        good = true;
-                    }
-                }
-            } else {
-                dprintf(out,
-                        "The metrics can only be dumped for other UIDs on eng or userdebug "
-                        "builds.\n");
+            good = getUidFromArgs(args, 1, uid);
+            if (!good) {
+                dprintf(out, "Invalid UID. Note that the metrics can only be dumped for "
+                             "other UIDs on eng or userdebug builds.\n");
             }
+            name.assign(args[2].c_str(), args[2].size());
         }
         if (good) {
             vector<uint8_t> data;
             mProcessor->onDumpReport(ConfigKey(uid, StrToInt64(name)), getElapsedRealtimeNs(),
-                                     includeCurrentBucket, true /* erase_data */, ADB_DUMP, &data);
+                                     includeCurrentBucket, eraseData, ADB_DUMP, &data);
             if (proto) {
                 for (size_t i = 0; i < data.size(); i ++) {
                     dprintf(out, "%c", data[i]);
@@ -708,18 +686,14 @@ status_t StatsService::cmd_log_app_breadcrumb(int out, const Vector<String8>& ar
         state = atoi(args[2].c_str());
         good = true;
     } else if (argCount == 4) {
-        uid = atoi(args[1].c_str());
-        // If it's a userdebug or eng build, then the shell user can impersonate other uids.
-        // Otherwise, the uid must match the actual caller's uid.
-        if (mEngBuild || (uid >= 0 && (uid_t)uid == IPCThreadState::self()->getCallingUid())) {
-            label = atoi(args[2].c_str());
-            state = atoi(args[3].c_str());
-            good = true;
-        } else {
+        good = getUidFromArgs(args, 1, uid);
+        if (!good) {
             dprintf(out,
-                    "Selecting a UID for writing AppBreadcrumb can only be done for other UIDs "
-                    "on eng or userdebug builds.\n");
+                    "Invalid UID. Note that selecting a UID for writing AppBreadcrumb can only be "
+                    "done for other UIDs on eng or userdebug builds.\n");
         }
+        label = atoi(args[2].c_str());
+        state = atoi(args[3].c_str());
     }
     if (good) {
         dprintf(out, "Logging AppBreadcrumbReported(%d, %d, %d) to statslog.\n", uid, label, state);
@@ -734,7 +708,7 @@ status_t StatsService::cmd_log_app_breadcrumb(int out, const Vector<String8>& ar
 status_t StatsService::cmd_print_pulled_metrics(int out, const Vector<String8>& args) {
     int s = atoi(args[1].c_str());
     vector<shared_ptr<LogEvent> > stats;
-    if (mPullerManager->Pull(s, getElapsedRealtimeNs(), &stats)) {
+    if (mPullerManager->Pull(s, &stats)) {
         for (const auto& it : stats) {
             dprintf(out, "Pull from %d: %s\n", s, it->ToString().c_str());
         }
@@ -784,6 +758,28 @@ status_t StatsService::cmd_print_logs(int out, const Vector<String8>& args) {
     } else {
         return PERMISSION_DENIED;
     }
+}
+
+bool StatsService::getUidFromArgs(const Vector<String8>& args, size_t uidArgIndex, int32_t& uid) {
+    const char* s = args[uidArgIndex].c_str();
+    if (*s == '\0') {
+        return false;
+    }
+    char* endc = NULL;
+    int64_t longUid = strtol(s, &endc, 0);
+    if (*endc != '\0') {
+        return false;
+    }
+    int32_t goodUid = static_cast<int32_t>(longUid);
+    if (longUid < 0 || static_cast<uint64_t>(longUid) != static_cast<uid_t>(goodUid)) {
+        return false;  // It was not of uid_t type.
+    }
+    uid = goodUid;
+
+    int32_t callingUid = IPCThreadState::self()->getCallingUid();
+    return mEngBuild // UserDebug/EngBuild are allowed to impersonate uids.
+            || (callingUid == goodUid) // Anyone can 'impersonate' themselves.
+            || (callingUid == AID_ROOT && goodUid == AID_SHELL); // ROOT can impersonate SHELL.
 }
 
 Status StatsService::informAllUidData(const vector<int32_t>& uid, const vector<int64_t>& version,

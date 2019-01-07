@@ -33,6 +33,7 @@ public class InfoMediaDevice extends MediaDevice {
     InfoMediaDevice(Context context, MediaRouter.RouteInfo info) {
         super(context, MediaDeviceType.TYPE_CAST_DEVICE);
         mRouteInfo = info;
+        initDeviceRecord();
     }
 
     @Override
@@ -55,6 +56,7 @@ public class InfoMediaDevice extends MediaDevice {
     public void connect() {
         //TODO(b/117129183): use MediaController2 to transfer media
         mIsConnected = true;
+        super.connect();
     }
 
     @Override

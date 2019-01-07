@@ -23,11 +23,14 @@ import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.fail;
 
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import android.annotation.UserIdInt;
 import android.app.backup.BackupManager;
 import android.app.backup.IBackupManagerMonitor;
 import android.app.backup.IBackupObserver;
@@ -43,9 +46,13 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
+import android.provider.Settings;
+import android.test.mock.MockContentResolver;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
+
+import com.android.internal.util.test.FakeSettingsProvider;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -81,8 +88,9 @@ public class TrampolineTest {
             new ComponentName("package1", "class1"),
             new ComponentName("package2", "class2")
     };
-    private final int NON_USER_SYSTEM = UserHandle.USER_SYSTEM + 1;
+    private static final int NON_USER_SYSTEM = UserHandle.USER_SYSTEM + 1;
 
+    @UserIdInt private int mUserId;
     @Mock private BackupManagerService mBackupManagerServiceMock;
     @Mock private Context mContextMock;
     @Mock private File mSuppressFileMock;
@@ -97,6 +105,7 @@ public class TrampolineTest {
     private FileDescriptor mFileDescriptorStub = new FileDescriptor();
 
     private TrampolineTestable mTrampoline;
+    private MockContentResolver mContentResolver;
 
     @Before
     public void setUp() {
@@ -104,12 +113,18 @@ public class TrampolineTest {
 
         TrampolineTestable.sBackupManagerServiceMock = mBackupManagerServiceMock;
         TrampolineTestable.sSuppressFile = mSuppressFileMock;
+        TrampolineTestable.sCallingUserId = UserHandle.USER_SYSTEM;
         TrampolineTestable.sCallingUid = Process.SYSTEM_UID;
         TrampolineTestable.sBackupDisabled = false;
 
         when(mSuppressFileMock.getParentFile()).thenReturn(mSuppressFileParentMock);
 
+        mUserId = NON_USER_SYSTEM;
         mTrampoline = new TrampolineTestable(mContextMock);
+
+        mContentResolver = new MockContentResolver();
+        mContentResolver.addProvider(Settings.AUTHORITY, new FakeSettingsProvider());
+        when(mContextMock.getContentResolver()).thenReturn(mContentResolver);
     }
 
     @Test
@@ -118,27 +133,78 @@ public class TrampolineTest {
     }
 
     @Test
-    public void initializeService_forUserSystem_successfullyInitialized() {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+    public void unlockUser_whenMultiUserSettingDisabled_callsBackupManagerServiceForSystemUser() {
+        Settings.Global.putInt(mContentResolver, Settings.Global.BACKUP_MULTI_USER_ENABLED, 0);
+        mTrampoline.initializeService();
 
-        assertTrue(mTrampoline.isBackupServiceActive(UserHandle.USER_SYSTEM));
+        mTrampoline.unlockUser(UserHandle.USER_SYSTEM);
+
+        verify(mBackupManagerServiceMock).startServiceForUser(UserHandle.USER_SYSTEM);
     }
 
-    // The BackupManagerService can only be initialized by USER_SYSTEM, so we check that if any
-    // other user trying to initialize it leaves it non-active.
     @Test
-    public void initializeService_forNonUserSystem_nonInitialized() {
-        mTrampoline.initializeService(NON_USER_SYSTEM);
+    public void unlockUser_whenMultiUserSettingDisabled_isIgnoredForNonSystemUser() {
+        Settings.Global.putInt(mContentResolver, Settings.Global.BACKUP_MULTI_USER_ENABLED, 0);
+        mTrampoline.initializeService();
 
-        assertFalse(mTrampoline.isBackupServiceActive(NON_USER_SYSTEM));
+        mTrampoline.unlockUser(10);
+
+        verify(mBackupManagerServiceMock, never()).startServiceForUser(10);
+    }
+
+    @Test
+    public void unlockUser_whenMultiUserSettingEnabled_callsBackupManagerServiceForNonSystemUser() {
+        Settings.Global.putInt(mContentResolver, Settings.Global.BACKUP_MULTI_USER_ENABLED, 1);
+        mTrampoline.initializeService();
+
+        mTrampoline.unlockUser(10);
+
+        verify(mBackupManagerServiceMock).startServiceForUser(10);
+    }
+
+    @Test
+    public void stopUser_whenMultiUserSettingDisabled_callsBackupManagerServiceForSystemUser() {
+        Settings.Global.putInt(mContentResolver, Settings.Global.BACKUP_MULTI_USER_ENABLED, 0);
+        mTrampoline.initializeService();
+
+        mTrampoline.stopUser(UserHandle.USER_SYSTEM);
+
+        verify(mBackupManagerServiceMock).stopServiceForUser(UserHandle.USER_SYSTEM);
+    }
+
+    @Test
+    public void stopUser_whenMultiUserSettingDisabled_isIgnoredForNonSystemUser() {
+        Settings.Global.putInt(mContentResolver, Settings.Global.BACKUP_MULTI_USER_ENABLED, 0);
+        mTrampoline.initializeService();
+
+        mTrampoline.stopUser(10);
+
+        verify(mBackupManagerServiceMock, never()).stopServiceForUser(10);
+    }
+
+    @Test
+    public void stopUser_whenMultiUserSettingEnabled_callsBackupManagerServiceForNonSystemUser() {
+        Settings.Global.putInt(mContentResolver, Settings.Global.BACKUP_MULTI_USER_ENABLED, 1);
+        mTrampoline.initializeService();
+
+        mTrampoline.stopUser(10);
+
+        verify(mBackupManagerServiceMock).stopServiceForUser(10);
+    }
+
+    @Test
+    public void initializeService_successfullyInitializesBackupService() {
+        mTrampoline.initializeService();
+
+        assertTrue(mTrampoline.isBackupServiceActive(UserHandle.USER_SYSTEM));
     }
 
     @Test
     public void initializeService_globallyDisabled_nonInitialized() {
         TrampolineTestable.sBackupDisabled = true;
-
         TrampolineTestable trampoline = new TrampolineTestable(mContextMock);
-        trampoline.initializeService(UserHandle.USER_SYSTEM);
+
+        trampoline.initializeService();
 
         assertFalse(trampoline.isBackupServiceActive(UserHandle.USER_SYSTEM));
     }
@@ -147,11 +213,18 @@ public class TrampolineTest {
     @Test
     public void initializeService_suppressFileExists_nonInitialized() {
         when(mSuppressFileMock.exists()).thenReturn(true);
-
         TrampolineTestable trampoline = new TrampolineTestable(mContextMock);
-        trampoline.initializeService(UserHandle.USER_SYSTEM);
+
+        trampoline.initializeService();
 
         assertFalse(trampoline.isBackupServiceActive(UserHandle.USER_SYSTEM));
+    }
+
+    @Test
+    public void initializeService_doesNotStartServiceForUsers() {
+        mTrampoline.initializeService();
+
+        verify(mBackupManagerServiceMock, never()).startServiceForUser(anyInt());
     }
 
     @Test
@@ -229,7 +302,7 @@ public class TrampolineTest {
     @Test
     public void setBackupServiceActive_makeNonActive_serviceDeletedAndSuppressFileCreated()
             throws IOException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
         assertTrue(mTrampoline.isBackupServiceActive(UserHandle.USER_SYSTEM));
 
         mTrampoline.setBackupServiceActive(UserHandle.USER_SYSTEM, false);
@@ -243,7 +316,7 @@ public class TrampolineTest {
     setBackupServiceActive_makeNonActive_serviceDeletedAndSuppressFileCreated_ioExceptionHandled()
             throws IOException {
         when(mSuppressFileMock.createNewFile()).thenThrow(new IOException());
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
         assertTrue(mTrampoline.isBackupServiceActive(UserHandle.USER_SYSTEM));
 
         mTrampoline.setBackupServiceActive(UserHandle.USER_SYSTEM, false);
@@ -268,10 +341,22 @@ public class TrampolineTest {
     }
 
     @Test
+    public void dataChangedForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.dataChangedForUser(mUserId, PACKAGE_NAME);
+
+        verify(mBackupManagerServiceMock).dataChanged(mUserId, PACKAGE_NAME);
+    }
+
+    @Test
     public void dataChanged_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.dataChanged(PACKAGE_NAME);
-        verify(mBackupManagerServiceMock).dataChanged(PACKAGE_NAME);
+
+        verify(mBackupManagerServiceMock).dataChanged(mUserId, PACKAGE_NAME);
     }
 
     @Test
@@ -281,10 +366,22 @@ public class TrampolineTest {
     }
 
     @Test
+    public void clearBackupDataForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.clearBackupDataForUser(mUserId, TRANSPORT_NAME, PACKAGE_NAME);
+
+        verify(mBackupManagerServiceMock).clearBackupData(mUserId, TRANSPORT_NAME, PACKAGE_NAME);
+    }
+
+    @Test
     public void clearBackupData_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.clearBackupData(TRANSPORT_NAME, PACKAGE_NAME);
-        verify(mBackupManagerServiceMock).clearBackupData(TRANSPORT_NAME, PACKAGE_NAME);
+
+        verify(mBackupManagerServiceMock).clearBackupData(mUserId, TRANSPORT_NAME, PACKAGE_NAME);
     }
 
     @Test
@@ -294,10 +391,22 @@ public class TrampolineTest {
     }
 
     @Test
+    public void agentConnectedForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.agentConnectedForUser(mUserId, PACKAGE_NAME, mAgentMock);
+
+        verify(mBackupManagerServiceMock).agentConnected(mUserId, PACKAGE_NAME, mAgentMock);
+    }
+
+    @Test
     public void agentConnected_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.agentConnected(PACKAGE_NAME, mAgentMock);
-        verify(mBackupManagerServiceMock).agentConnected(PACKAGE_NAME, mAgentMock);
+
+        verify(mBackupManagerServiceMock).agentConnected(mUserId, PACKAGE_NAME, mAgentMock);
     }
 
     @Test
@@ -307,10 +416,22 @@ public class TrampolineTest {
     }
 
     @Test
+    public void agentDisconnectedForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.agentDisconnectedForUser(mUserId, PACKAGE_NAME);
+
+        verify(mBackupManagerServiceMock).agentDisconnected(mUserId, PACKAGE_NAME);
+    }
+
+    @Test
     public void agentDisconnected_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.agentDisconnected(PACKAGE_NAME);
-        verify(mBackupManagerServiceMock).agentDisconnected(PACKAGE_NAME);
+
+        verify(mBackupManagerServiceMock).agentDisconnected(mUserId, PACKAGE_NAME);
     }
 
     @Test
@@ -320,10 +441,22 @@ public class TrampolineTest {
     }
 
     @Test
+    public void restoreAtInstallForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.restoreAtInstallForUser(mUserId, PACKAGE_NAME, 123);
+
+        verify(mBackupManagerServiceMock).restoreAtInstall(mUserId, PACKAGE_NAME, 123);
+    }
+
+    @Test
     public void restoreAtInstall_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.restoreAtInstall(PACKAGE_NAME, 123);
-        verify(mBackupManagerServiceMock).restoreAtInstall(PACKAGE_NAME, 123);
+
+        verify(mBackupManagerServiceMock).restoreAtInstall(mUserId, PACKAGE_NAME, 123);
     }
 
     @Test
@@ -333,10 +466,22 @@ public class TrampolineTest {
     }
 
     @Test
-    public void setBackupEnabled_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+    public void setBackupEnabledForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.setBackupEnabledForUser(mUserId, true);
+
+        verify(mBackupManagerServiceMock).setBackupEnabled(mUserId, true);
+    }
+
+    @Test
+    public void setBackupEnabled_forwardedToCallingUserId() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.setBackupEnabled(true);
-        verify(mBackupManagerServiceMock).setBackupEnabled(true);
+
+        verify(mBackupManagerServiceMock).setBackupEnabled(mUserId, true);
     }
 
     @Test
@@ -346,23 +491,22 @@ public class TrampolineTest {
     }
 
     @Test
+    public void setAutoRestoreForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.setAutoRestoreForUser(mUserId, true);
+
+        verify(mBackupManagerServiceMock).setAutoRestore(mUserId, true);
+    }
+
+    @Test
     public void setAutoRestore_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.setAutoRestore(true);
-        verify(mBackupManagerServiceMock).setAutoRestore(true);
-    }
 
-    @Test
-    public void setBackupProvisioned_calledBeforeInitialize_ignored() throws RemoteException {
-        mTrampoline.setBackupProvisioned(true);
-        verifyNoMoreInteractions(mBackupManagerServiceMock);
-    }
-
-    @Test
-    public void setBackupProvisioned_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.setBackupProvisioned(true);
-        verify(mBackupManagerServiceMock).setBackupProvisioned(true);
+        verify(mBackupManagerServiceMock).setAutoRestore(mUserId, true);
     }
 
     @Test
@@ -372,10 +516,22 @@ public class TrampolineTest {
     }
 
     @Test
-    public void isBackupEnabled_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+    public void isBackupEnabledForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.isBackupEnabledForUser(mUserId);
+
+        verify(mBackupManagerServiceMock).isBackupEnabled(mUserId);
+    }
+
+    @Test
+    public void isBackupEnabled_forwardedToCallingUserId() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.isBackupEnabled();
-        verify(mBackupManagerServiceMock).isBackupEnabled();
+
+        verify(mBackupManagerServiceMock).isBackupEnabled(mUserId);
     }
 
     @Test
@@ -386,7 +542,7 @@ public class TrampolineTest {
 
     @Test
     public void setBackupPassword_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
         mTrampoline.setBackupPassword(CURRENT_PASSWORD, NEW_PASSWORD);
         verify(mBackupManagerServiceMock).setBackupPassword(CURRENT_PASSWORD, NEW_PASSWORD);
     }
@@ -399,7 +555,7 @@ public class TrampolineTest {
 
     @Test
     public void hasBackupPassword_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
         mTrampoline.hasBackupPassword();
         verify(mBackupManagerServiceMock).hasBackupPassword();
     }
@@ -411,55 +567,68 @@ public class TrampolineTest {
     }
 
     @Test
-    public void backupNow_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+    public void backupNowForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.backupNowForUser(mUserId);
+
+        verify(mBackupManagerServiceMock).backupNow(mUserId);
+    }
+
+    @Test
+    public void backupNow_forwardedToCallingUserId() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.backupNow();
-        verify(mBackupManagerServiceMock).backupNow();
+
+        verify(mBackupManagerServiceMock).backupNow(mUserId);
     }
 
     @Test
     public void adbBackup_calledBeforeInitialize_ignored() throws RemoteException {
-        mTrampoline.adbBackup(mParcelFileDescriptorMock, true, true, true, true, true, true, true,
-                true,
+        mTrampoline.adbBackup(mUserId, mParcelFileDescriptorMock, true, true,
+                true, true, true, true, true, true,
                 PACKAGE_NAMES);
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
     public void adbBackup_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.adbBackup(mParcelFileDescriptorMock, true, true, true, true, true, true, true,
-                true,
+        mTrampoline.initializeService();
+        mTrampoline.adbBackup(mUserId, mParcelFileDescriptorMock, true, true,
+                true, true, true, true, true, true,
                 PACKAGE_NAMES);
-        verify(mBackupManagerServiceMock).adbBackup(mParcelFileDescriptorMock, true, true, true,
-                true,
-                true, true, true, true, PACKAGE_NAMES);
+        verify(mBackupManagerServiceMock).adbBackup(mUserId, mParcelFileDescriptorMock, true,
+                true, true, true, true, true, true, true, PACKAGE_NAMES);
     }
 
     @Test
     public void fullTransportBackup_calledBeforeInitialize_ignored() throws RemoteException {
-        mTrampoline.fullTransportBackup(PACKAGE_NAMES);
+        mTrampoline.fullTransportBackupForUser(mUserId, PACKAGE_NAMES);
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
-    public void fullTransportBackup_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.fullTransportBackup(PACKAGE_NAMES);
-        verify(mBackupManagerServiceMock).fullTransportBackup(PACKAGE_NAMES);
+    public void fullTransportBackupForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.fullTransportBackupForUser(mUserId, PACKAGE_NAMES);
+
+        verify(mBackupManagerServiceMock).fullTransportBackup(mUserId, PACKAGE_NAMES);
     }
 
     @Test
     public void adbRestore_calledBeforeInitialize_ignored() throws RemoteException {
-        mTrampoline.adbRestore(mParcelFileDescriptorMock);
+        mTrampoline.adbRestore(mUserId, mParcelFileDescriptorMock);
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
     public void adbRestore_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.adbRestore(mParcelFileDescriptorMock);
-        verify(mBackupManagerServiceMock).adbRestore(mParcelFileDescriptorMock);
+        mTrampoline.initializeService();
+        mTrampoline.adbRestore(mUserId, mParcelFileDescriptorMock);
+        verify(mBackupManagerServiceMock).adbRestore(mUserId, mParcelFileDescriptorMock);
     }
 
     @Test
@@ -471,12 +640,43 @@ public class TrampolineTest {
     }
 
     @Test
+    public void acknowledgeFullBackupOrRestoreForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.acknowledgeFullBackupOrRestoreForUser(
+                mUserId,
+                123,
+                true,
+                CURRENT_PASSWORD,
+                ENCRYPTION_PASSWORD,
+                mFullBackupRestoreObserverMock);
+
+        verify(mBackupManagerServiceMock)
+                .acknowledgeAdbBackupOrRestore(
+                        mUserId,
+                        123,
+                        true,
+                        CURRENT_PASSWORD,
+                        ENCRYPTION_PASSWORD,
+                        mFullBackupRestoreObserverMock);
+    }
+
+    @Test
     public void acknowledgeFullBackupOrRestore_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.acknowledgeFullBackupOrRestore(123, true, CURRENT_PASSWORD, ENCRYPTION_PASSWORD,
                 mFullBackupRestoreObserverMock);
-        verify(mBackupManagerServiceMock).acknowledgeAdbBackupOrRestore(123, true, CURRENT_PASSWORD,
-                ENCRYPTION_PASSWORD, mFullBackupRestoreObserverMock);
+
+        verify(mBackupManagerServiceMock)
+                .acknowledgeAdbBackupOrRestore(
+                        mUserId,
+                        123,
+                        true,
+                        CURRENT_PASSWORD,
+                        ENCRYPTION_PASSWORD,
+                        mFullBackupRestoreObserverMock);
     }
 
     @Test
@@ -486,13 +686,22 @@ public class TrampolineTest {
     }
 
     @Test
-    public void getCurrentTransport_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.getCurrentTransport()).thenReturn(TRANSPORT_NAME);
+    public void getCurrentTransportForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.getCurrentTransport(mUserId)).thenReturn(TRANSPORT_NAME);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        assertEquals(TRANSPORT_NAME, mTrampoline.getCurrentTransportForUser(mUserId));
+        verify(mBackupManagerServiceMock).getCurrentTransport(mUserId);
+    }
+
+    @Test
+    public void getCurrentTransport_forwarded() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        when(mBackupManagerServiceMock.getCurrentTransport(mUserId)).thenReturn(TRANSPORT_NAME);
+        mTrampoline.initializeService();
 
         assertEquals(TRANSPORT_NAME, mTrampoline.getCurrentTransport());
-        verify(mBackupManagerServiceMock).getCurrentTransport();
+        verify(mBackupManagerServiceMock).getCurrentTransport(mUserId);
     }
 
     @Test
@@ -502,28 +711,40 @@ public class TrampolineTest {
     }
 
     @Test
-    public void listAllTransports_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.listAllTransports()).thenReturn(TRANSPORTS);
+    public void listAllTransportsForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.listAllTransports(mUserId)).thenReturn(TRANSPORTS);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        assertEquals(TRANSPORTS, mTrampoline.listAllTransportsForUser(mUserId));
+        verify(mBackupManagerServiceMock).listAllTransports(mUserId);
+    }
+
+
+    @Test
+    public void listAllTransports_forwarded() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        when(mBackupManagerServiceMock.listAllTransports(mUserId)).thenReturn(TRANSPORTS);
+        mTrampoline.initializeService();
+
         assertEquals(TRANSPORTS, mTrampoline.listAllTransports());
-        verify(mBackupManagerServiceMock).listAllTransports();
+        verify(mBackupManagerServiceMock).listAllTransports(mUserId);
     }
 
     @Test
-    public void listAllTransportComponents_calledBeforeInitialize_ignored() throws RemoteException {
-        assertNull(mTrampoline.listAllTransportComponents());
+    public void listAllTransportComponentsForUser_calledBeforeInitialize_ignored()
+            throws RemoteException {
+        assertNull(mTrampoline.listAllTransportComponentsForUser(mUserId));
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
-    public void listAllTransportComponents_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.listAllTransportComponents()).thenReturn(
+    public void listAllTransportComponentsForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.listAllTransportComponents(mUserId)).thenReturn(
                 TRANSPORT_COMPONENTS);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        assertEquals(TRANSPORT_COMPONENTS, mTrampoline.listAllTransportComponents());
-        verify(mBackupManagerServiceMock).listAllTransportComponents();
+        assertEquals(TRANSPORT_COMPONENTS, mTrampoline.listAllTransportComponentsForUser(mUserId));
+        verify(mBackupManagerServiceMock).listAllTransportComponents(mUserId);
     }
 
     @Test
@@ -535,28 +756,50 @@ public class TrampolineTest {
     @Test
     public void getTransportWhitelist_forwarded() throws RemoteException {
         when(mBackupManagerServiceMock.getTransportWhitelist()).thenReturn(TRANSPORTS);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
         assertEquals(TRANSPORTS, mTrampoline.getTransportWhitelist());
         verify(mBackupManagerServiceMock).getTransportWhitelist();
     }
 
     @Test
-    public void describeTransport_calledBeforeInitialize_ignored() throws RemoteException {
-        mTrampoline.updateTransportAttributes(TRANSPORT_COMPONENT_NAME, TRANSPORT_NAME, null,
-                "Transport Destination", null, "Data Management");
+    public void updateTransportAttributesForUser_calledBeforeInitialize_ignored()
+            throws RemoteException {
+        mTrampoline.updateTransportAttributesForUser(
+                mUserId,
+                TRANSPORT_COMPONENT_NAME,
+                TRANSPORT_NAME,
+                null,
+                "Transport Destination",
+                null,
+                "Data Management");
+
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
-    public void describeTransport_forwarded() throws RemoteException {
+    public void updateTransportAttributesForUser_forwarded() throws RemoteException {
         when(mBackupManagerServiceMock.getTransportWhitelist()).thenReturn(TRANSPORTS);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.updateTransportAttributes(TRANSPORT_COMPONENT_NAME, TRANSPORT_NAME, null,
-                "Transport Destination", null, "Data Management");
-        verify(mBackupManagerServiceMock).updateTransportAttributes(TRANSPORT_COMPONENT_NAME,
-                TRANSPORT_NAME, null, "Transport Destination", null, "Data Management");
+        mTrampoline.updateTransportAttributesForUser(
+                mUserId,
+                TRANSPORT_COMPONENT_NAME,
+                TRANSPORT_NAME,
+                null,
+                "Transport Destination",
+                null,
+                "Data Management");
+
+        verify(mBackupManagerServiceMock)
+                .updateTransportAttributes(
+                        mUserId,
+                        TRANSPORT_COMPONENT_NAME,
+                        TRANSPORT_NAME,
+                        null,
+                        "Transport Destination",
+                        null,
+                        "Data Management");
     }
 
     @Test
@@ -566,16 +809,31 @@ public class TrampolineTest {
     }
 
     @Test
-    public void selectBackupTransport_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.selectBackupTransport(TRANSPORT_NAME);
-        verify(mBackupManagerServiceMock).selectBackupTransport(TRANSPORT_NAME);
+    public void selectBackupTransportForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.selectBackupTransportForUser(mUserId, TRANSPORT_NAME);
+
+        verify(mBackupManagerServiceMock).selectBackupTransport(mUserId, TRANSPORT_NAME);
     }
 
     @Test
-    public void selectBackupTransportAsync_calledBeforeInitialize_ignored() throws Exception {
+    public void selectBackupTransport_forwarded() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
+        mTrampoline.selectBackupTransport(TRANSPORT_NAME);
+
+        verify(mBackupManagerServiceMock).selectBackupTransport(mUserId, TRANSPORT_NAME);
+    }
+
+    @Test
+    public void selectBackupTransportAsyncForUser_calledBeforeInitialize_ignored()
+            throws Exception {
         LinkedBlockingQueue<Integer> q = new LinkedBlockingQueue();
-        mTrampoline.selectBackupTransportAsync(
+
+        mTrampoline.selectBackupTransportAsyncForUser(
+                mUserId,
                 TRANSPORT_COMPONENT_NAME,
                 new ISelectBackupTransportCallback() {
                     @Override
@@ -593,6 +851,7 @@ public class TrampolineTest {
                         return null;
                     }
                 });
+
         verifyNoMoreInteractions(mBackupManagerServiceMock);
         Integer errorCode = q.poll(5, TimeUnit.SECONDS);
         assertNotNull(errorCode);
@@ -600,17 +859,19 @@ public class TrampolineTest {
     }
 
     @Test
-    public void selectBackupTransportAsync_calledBeforeInitialize_ignored_nullListener()
+    public void selectBackupTransportAsyncForUser_calledBeforeInitialize_ignored_nullListener()
             throws Exception {
-        mTrampoline.selectBackupTransportAsync(TRANSPORT_COMPONENT_NAME, null);
+        mTrampoline.selectBackupTransportAsyncForUser(mUserId, TRANSPORT_COMPONENT_NAME, null);
+
         verifyNoMoreInteractions(mBackupManagerServiceMock);
         // No crash.
     }
 
     @Test
-    public void selectBackupTransportAsync_calledBeforeInitialize_ignored_listenerThrowException()
+    public void selectBackupTransportAsyncForUser_calledBeforeInitialize_ignored_listenerThrows()
             throws Exception {
-        mTrampoline.selectBackupTransportAsync(
+        mTrampoline.selectBackupTransportAsyncForUser(
+                mUserId,
                 TRANSPORT_COMPONENT_NAME,
                 new ISelectBackupTransportCallback() {
                     @Override
@@ -628,16 +889,19 @@ public class TrampolineTest {
                         return null;
                     }
                 });
+
         verifyNoMoreInteractions(mBackupManagerServiceMock);
         // No crash.
     }
 
     @Test
-    public void selectBackupTransportAsync_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.selectBackupTransportAsync(TRANSPORT_COMPONENT_NAME, null);
-        verify(mBackupManagerServiceMock).selectBackupTransportAsync(TRANSPORT_COMPONENT_NAME,
-                null);
+    public void selectBackupTransportAsyncForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.selectBackupTransportAsyncForUser(mUserId, TRANSPORT_COMPONENT_NAME, null);
+
+        verify(mBackupManagerServiceMock)
+                .selectBackupTransportAsync(mUserId, TRANSPORT_COMPONENT_NAME, null);
     }
 
     @Test
@@ -647,14 +911,28 @@ public class TrampolineTest {
     }
 
     @Test
-    public void getConfigurationIntent_forwarded() throws RemoteException {
+    public void getConfigurationIntentForUser_forwarded() throws RemoteException {
         Intent configurationIntentStub = new Intent();
-        when(mBackupManagerServiceMock.getConfigurationIntent(TRANSPORT_NAME)).thenReturn(
+        when(mBackupManagerServiceMock.getConfigurationIntent(mUserId, TRANSPORT_NAME)).thenReturn(
                 configurationIntentStub);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        assertEquals(
+                configurationIntentStub,
+                mTrampoline.getConfigurationIntentForUser(mUserId, TRANSPORT_NAME));
+        verify(mBackupManagerServiceMock).getConfigurationIntent(mUserId, TRANSPORT_NAME);
+    }
+
+    @Test
+    public void getConfigurationIntent_forwarded() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        Intent configurationIntentStub = new Intent();
+        when(mBackupManagerServiceMock.getConfigurationIntent(mUserId, TRANSPORT_NAME)).thenReturn(
+                configurationIntentStub);
+        mTrampoline.initializeService();
+
         assertEquals(configurationIntentStub, mTrampoline.getConfigurationIntent(TRANSPORT_NAME));
-        verify(mBackupManagerServiceMock).getConfigurationIntent(TRANSPORT_NAME);
+        verify(mBackupManagerServiceMock).getConfigurationIntent(mUserId, TRANSPORT_NAME);
     }
 
     @Test
@@ -664,13 +942,26 @@ public class TrampolineTest {
     }
 
     @Test
+    public void getDestinationStringForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.getDestinationString(mUserId, TRANSPORT_NAME)).thenReturn(
+                DESTINATION_STRING);
+        mTrampoline.initializeService();
+
+        assertEquals(
+                DESTINATION_STRING,
+                mTrampoline.getDestinationStringForUser(mUserId, TRANSPORT_NAME));
+        verify(mBackupManagerServiceMock).getDestinationString(mUserId, TRANSPORT_NAME);
+    }
+
+    @Test
     public void getDestinationString_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.getDestinationString(TRANSPORT_NAME)).thenReturn(
+        TrampolineTestable.sCallingUserId = mUserId;
+        when(mBackupManagerServiceMock.getDestinationString(mUserId, TRANSPORT_NAME)).thenReturn(
                 DESTINATION_STRING);
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
         assertEquals(DESTINATION_STRING, mTrampoline.getDestinationString(TRANSPORT_NAME));
-        verify(mBackupManagerServiceMock).getDestinationString(TRANSPORT_NAME);
+        verify(mBackupManagerServiceMock).getDestinationString(mUserId, TRANSPORT_NAME);
     }
 
     @Test
@@ -680,14 +971,28 @@ public class TrampolineTest {
     }
 
     @Test
-    public void getDataManagementIntent_forwarded() throws RemoteException {
+    public void getDataManagementIntentForUser_forwarded() throws RemoteException {
         Intent dataManagementIntent = new Intent();
-        when(mBackupManagerServiceMock.getDataManagementIntent(TRANSPORT_NAME)).thenReturn(
+        when(mBackupManagerServiceMock.getDataManagementIntent(mUserId, TRANSPORT_NAME)).thenReturn(
                 dataManagementIntent);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        assertEquals(
+                dataManagementIntent,
+                mTrampoline.getDataManagementIntentForUser(mUserId, TRANSPORT_NAME));
+        verify(mBackupManagerServiceMock).getDataManagementIntent(mUserId, TRANSPORT_NAME);
+    }
+
+    @Test
+    public void getDataManagementIntent_forwarded() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        Intent dataManagementIntent = new Intent();
+        when(mBackupManagerServiceMock.getDataManagementIntent(mUserId, TRANSPORT_NAME)).thenReturn(
+                dataManagementIntent);
+        mTrampoline.initializeService();
+
         assertEquals(dataManagementIntent, mTrampoline.getDataManagementIntent(TRANSPORT_NAME));
-        verify(mBackupManagerServiceMock).getDataManagementIntent(TRANSPORT_NAME);
+        verify(mBackupManagerServiceMock).getDataManagementIntent(mUserId, TRANSPORT_NAME);
     }
 
     @Test
@@ -697,26 +1002,42 @@ public class TrampolineTest {
     }
 
     @Test
-    public void getDataManagementLabel_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.getDataManagementLabel(TRANSPORT_NAME)).thenReturn(
+    public void getDataManagementLabelForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.getDataManagementLabel(mUserId, TRANSPORT_NAME)).thenReturn(
                 DATA_MANAGEMENT_LABEL);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        assertEquals(
+                DATA_MANAGEMENT_LABEL,
+                mTrampoline.getDataManagementLabelForUser(mUserId, TRANSPORT_NAME));
+        verify(mBackupManagerServiceMock).getDataManagementLabel(mUserId, TRANSPORT_NAME);
+    }
+
+    @Test
+    public void getDataManagementLabel_forwarded() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        when(mBackupManagerServiceMock.getDataManagementLabel(mUserId, TRANSPORT_NAME)).thenReturn(
+                DATA_MANAGEMENT_LABEL);
+        mTrampoline.initializeService();
+
         assertEquals(DATA_MANAGEMENT_LABEL, mTrampoline.getDataManagementLabel(TRANSPORT_NAME));
-        verify(mBackupManagerServiceMock).getDataManagementLabel(TRANSPORT_NAME);
+        verify(mBackupManagerServiceMock).getDataManagementLabel(mUserId, TRANSPORT_NAME);
     }
 
     @Test
     public void beginRestoreSession_calledBeforeInitialize_ignored() throws RemoteException {
-        mTrampoline.beginRestoreSession(PACKAGE_NAME, TRANSPORT_NAME);
+        mTrampoline.beginRestoreSessionForUser(mUserId, PACKAGE_NAME, TRANSPORT_NAME);
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
-    public void beginRestoreSession_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        mTrampoline.beginRestoreSession(PACKAGE_NAME, TRANSPORT_NAME);
-        verify(mBackupManagerServiceMock).beginRestoreSession(PACKAGE_NAME, TRANSPORT_NAME);
+    public void beginRestoreSessionForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.beginRestoreSessionForUser(mUserId, PACKAGE_NAME, TRANSPORT_NAME);
+
+        verify(mBackupManagerServiceMock)
+                .beginRestoreSession(mUserId, PACKAGE_NAME, TRANSPORT_NAME);
     }
 
     @Test
@@ -727,39 +1048,46 @@ public class TrampolineTest {
 
     @Test
     public void opComplete_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.opComplete(1, 2);
-        verify(mBackupManagerServiceMock).opComplete(1, 2);
+
+        verify(mBackupManagerServiceMock).opComplete(mUserId, 1, 2);
     }
 
     @Test
-    public void getAvailableRestoreToken_calledBeforeInitialize_ignored() throws RemoteException {
-        assertEquals(0, mTrampoline.getAvailableRestoreToken(PACKAGE_NAME));
+    public void getAvailableRestoreTokenForUser_calledBeforeInitialize_ignored()
+            throws RemoteException {
+        assertEquals(0, mTrampoline.getAvailableRestoreTokenForUser(mUserId, PACKAGE_NAME));
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
-    public void getAvailableRestoreToken_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.getAvailableRestoreToken(PACKAGE_NAME)).thenReturn(123L);
+    public void getAvailableRestoreTokenForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.getAvailableRestoreToken(mUserId, PACKAGE_NAME))
+                .thenReturn(123L);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        assertEquals(123, mTrampoline.getAvailableRestoreToken(PACKAGE_NAME));
-        verify(mBackupManagerServiceMock).getAvailableRestoreToken(PACKAGE_NAME);
+        assertEquals(123, mTrampoline.getAvailableRestoreTokenForUser(mUserId, PACKAGE_NAME));
+        verify(mBackupManagerServiceMock).getAvailableRestoreToken(mUserId, PACKAGE_NAME);
     }
 
     @Test
-    public void isAppEligibleForBackup_calledBeforeInitialize_ignored() throws RemoteException {
-        assertFalse(mTrampoline.isAppEligibleForBackup(PACKAGE_NAME));
+    public void isAppEligibleForBackupForUser_calledBeforeInitialize_ignored()
+            throws RemoteException {
+        assertFalse(mTrampoline.isAppEligibleForBackupForUser(mUserId, PACKAGE_NAME));
         verifyNoMoreInteractions(mBackupManagerServiceMock);
     }
 
     @Test
-    public void isAppEligibleForBackup_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.isAppEligibleForBackup(PACKAGE_NAME)).thenReturn(true);
+    public void isAppEligibleForBackupForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.isAppEligibleForBackup(mUserId, PACKAGE_NAME))
+                .thenReturn(true);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        assertTrue(mTrampoline.isAppEligibleForBackup(PACKAGE_NAME));
-        verify(mBackupManagerServiceMock).isAppEligibleForBackup(PACKAGE_NAME);
+        assertTrue(mTrampoline.isAppEligibleForBackupForUser(mUserId, PACKAGE_NAME));
+        verify(mBackupManagerServiceMock).isAppEligibleForBackup(mUserId, PACKAGE_NAME);
     }
 
     @Test
@@ -770,15 +1098,28 @@ public class TrampolineTest {
     }
 
     @Test
-    public void requestBackup_forwarded() throws RemoteException {
-        when(mBackupManagerServiceMock.requestBackup(PACKAGE_NAMES, mBackupObserverMock,
-                mBackupManagerMonitorMock, 123)).thenReturn(456);
+    public void requestBackupForUser_forwarded() throws RemoteException {
+        when(mBackupManagerServiceMock.requestBackup(mUserId, PACKAGE_NAMES,
+                mBackupObserverMock, mBackupManagerMonitorMock, 123)).thenReturn(456);
+        mTrampoline.initializeService();
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
-        assertEquals(456, mTrampoline.requestBackup(PACKAGE_NAMES, mBackupObserverMock,
-                mBackupManagerMonitorMock, 123));
-        verify(mBackupManagerServiceMock).requestBackup(PACKAGE_NAMES, mBackupObserverMock,
-                mBackupManagerMonitorMock, 123);
+        assertEquals(456, mTrampoline.requestBackupForUser(mUserId, PACKAGE_NAMES,
+                mBackupObserverMock, mBackupManagerMonitorMock, 123));
+        verify(mBackupManagerServiceMock).requestBackup(mUserId, PACKAGE_NAMES,
+                mBackupObserverMock, mBackupManagerMonitorMock, 123);
+    }
+
+    @Test
+    public void requestBackup_forwardedToCallingUserId() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        when(mBackupManagerServiceMock.requestBackup(NON_USER_SYSTEM, PACKAGE_NAMES,
+                mBackupObserverMock, mBackupManagerMonitorMock, 123)).thenReturn(456);
+        mTrampoline.initializeService();
+
+        assertEquals(456, mTrampoline.requestBackup(PACKAGE_NAMES,
+                mBackupObserverMock, mBackupManagerMonitorMock, 123));
+        verify(mBackupManagerServiceMock).requestBackup(mUserId, PACKAGE_NAMES,
+                mBackupObserverMock, mBackupManagerMonitorMock, 123);
     }
 
     @Test
@@ -788,10 +1129,22 @@ public class TrampolineTest {
     }
 
     @Test
-    public void cancelBackups_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+    public void cancelBackupsForUser_forwarded() throws RemoteException {
+        mTrampoline.initializeService();
+
+        mTrampoline.cancelBackupsForUser(mUserId);
+
+        verify(mBackupManagerServiceMock).cancelBackups(mUserId);
+    }
+
+    @Test
+    public void cancelBackups_forwardedToCallingUserId() throws RemoteException {
+        TrampolineTestable.sCallingUserId = mUserId;
+        mTrampoline.initializeService();
+
         mTrampoline.cancelBackups();
-        verify(mBackupManagerServiceMock).cancelBackups();
+
+        verify(mBackupManagerServiceMock).cancelBackups(mUserId);
     }
 
     @Test
@@ -805,7 +1158,7 @@ public class TrampolineTest {
         FullBackupJob fullBackupJob = new FullBackupJob();
         when(mBackupManagerServiceMock.beginFullBackup(fullBackupJob)).thenReturn(true);
 
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
         assertTrue(mTrampoline.beginFullBackup(fullBackupJob));
         verify(mBackupManagerServiceMock).beginFullBackup(fullBackupJob);
     }
@@ -818,7 +1171,7 @@ public class TrampolineTest {
 
     @Test
     public void endFullBackup_forwarded() throws RemoteException {
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
         mTrampoline.endFullBackup();
         verify(mBackupManagerServiceMock).endFullBackup();
     }
@@ -828,8 +1181,7 @@ public class TrampolineTest {
         when(mContextMock.checkCallingOrSelfPermission(
                 android.Manifest.permission.DUMP)).thenReturn(
                 PackageManager.PERMISSION_DENIED);
-
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
 
         mTrampoline.dump(mFileDescriptorStub, mPrintWriterMock, new String[0]);
 
@@ -852,8 +1204,7 @@ public class TrampolineTest {
         when(mContextMock.checkCallingOrSelfPermission(
                 android.Manifest.permission.DUMP)).thenReturn(
                 PackageManager.PERMISSION_GRANTED);
-
-        mTrampoline.initializeService(UserHandle.USER_SYSTEM);
+        mTrampoline.initializeService();
 
         mTrampoline.dump(mFileDescriptorStub, mPrintWriterMock, null);
 
@@ -863,6 +1214,7 @@ public class TrampolineTest {
     private static class TrampolineTestable extends Trampoline {
         static boolean sBackupDisabled = false;
         static File sSuppressFile = null;
+        static int sCallingUserId = -1;
         static int sCallingUid = -1;
         static BackupManagerService sBackupManagerServiceMock = null;
         private int mCreateServiceCallsCount = 0;
@@ -881,6 +1233,10 @@ public class TrampolineTest {
             return sSuppressFile;
         }
 
+        protected int binderGetCallingUserId() {
+            return sCallingUserId;
+        }
+
         @Override
         protected int binderGetCallingUid() {
             return sCallingUid;
@@ -890,6 +1246,11 @@ public class TrampolineTest {
         protected BackupManagerService createBackupManagerService() {
             mCreateServiceCallsCount++;
             return sBackupManagerServiceMock;
+        }
+
+        @Override
+        protected void postToHandler(Runnable runnable) {
+            runnable.run();
         }
 
         int getCreateServiceCallsCount() {

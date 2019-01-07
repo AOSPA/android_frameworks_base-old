@@ -41,6 +41,7 @@ public class PhoneMediaDevice extends MediaDevice {
 
         mLocalBluetoothManager = localBluetoothManager;
         mProfileManager = mLocalBluetoothManager.getProfileManager();
+        initDeviceRecord();
     }
 
     @Override
@@ -66,8 +67,8 @@ public class PhoneMediaDevice extends MediaDevice {
         final A2dpProfile a2dpProfile = mProfileManager.getA2dpProfile();
 
         if (hapProfile != null && a2dpProfile != null) {
-            mIsConnected =
-                    hapProfile.setActiveDevice(null) && a2dpProfile.setActiveDevice(null);
+            mIsConnected = hapProfile.setActiveDevice(null) && a2dpProfile.setActiveDevice(null);
+            super.connect();
         }
         Log.d(TAG, "connect() device : " + getName() + ", is selected : " + mIsConnected);
     }

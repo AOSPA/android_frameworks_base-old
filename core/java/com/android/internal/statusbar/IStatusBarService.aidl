@@ -41,6 +41,7 @@ interface IStatusBarService
     void setIcon(String slot, String iconPackage, int iconId, int iconLevel, String contentDescription);
     void setIconVisibility(String slot, boolean visible);
     void removeIcon(String slot);
+    // TODO(b/117478341): support back button change when IME is showing on a external display.
     void setImeWindowStatus(in IBinder token, int vis, int backDisposition,
             boolean showImeSwitcher);
     void expandSettingsPanel(String subPanel);
@@ -66,10 +67,11 @@ interface IStatusBarService
             in NotificationVisibility[] noLongerVisibleKeys);
     void onNotificationExpansionChanged(in String key, in boolean userAction, in boolean expanded);
     void onNotificationDirectReplied(String key);
-    void onNotificationSmartRepliesAdded(in String key, in int replyCount);
+    void onNotificationSmartSuggestionsAdded(String key, int smartReplyCount, int smartActionCount,
+            boolean generatedByAsssistant);
     void onNotificationSmartReplySent(in String key, in int replyIndex, in CharSequence reply, boolean generatedByAssistant);
     void onNotificationSettingsViewed(String key);
-    void setSystemUiVisibility(int vis, int mask, String cause);
+    void setSystemUiVisibility(int displayId, int vis, int mask, String cause);
 
     void onGlobalActionsShown();
     void onGlobalActionsHidden();

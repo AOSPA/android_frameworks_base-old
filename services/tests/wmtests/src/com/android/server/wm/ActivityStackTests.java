@@ -82,17 +82,17 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testEmptyTaskCleanupOnRemove() {
-        assertNotNull(mTask.getWindowContainerController());
+        assertNotNull(mTask.getTask());
         mStack.removeTask(mTask, "testEmptyTaskCleanupOnRemove", REMOVE_TASK_MODE_DESTROYING);
-        assertNull(mTask.getWindowContainerController());
+        assertNull(mTask.getTask());
     }
 
     @Test
     public void testOccupiedTaskCleanupOnRemove() {
         final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
-        assertNotNull(mTask.getWindowContainerController());
+        assertNotNull(mTask.getTask());
         mStack.removeTask(mTask, "testOccupiedTaskCleanupOnRemove", REMOVE_TASK_MODE_DESTROYING);
-        assertNotNull(mTask.getWindowContainerController());
+        assertNotNull(mTask.getTask());
     }
 
     @Test
@@ -162,7 +162,8 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
 
         // Ensure that the override mode is restored to undefined
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
     }
 
     @Test
@@ -184,7 +185,8 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertEquals(0, mDefaultDisplay.getIndexOf(primarySplitScreen));
 
         // Ensure that the override mode is restored to what it was (fullscreen)
-        assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_FULLSCREEN,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
     }
 
     @Test
@@ -193,11 +195,13 @@ public class ActivityStackTests extends ActivityTestsBase {
                 WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
 
         mDefaultDisplay.setWindowingMode(WINDOWING_MODE_FREEFORM);
         assertEquals(WINDOWING_MODE_FREEFORM, primarySplitScreen.getWindowingMode());
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
     }
 
     @Test
@@ -206,11 +210,13 @@ public class ActivityStackTests extends ActivityTestsBase {
                 WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
 
         primarySplitScreen.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
         // setting windowing mode should still work even though resolved mode is already fullscreen
-        assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_FULLSCREEN,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
 
         mDefaultDisplay.setWindowingMode(WINDOWING_MODE_FREEFORM);
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
@@ -791,7 +797,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         public boolean mChanged = false;
 
         @Override
-        public void onStackOrderChanged() {
+        public void onStackOrderChanged(ActivityStack stack) {
             mChanged = true;
         }
     }

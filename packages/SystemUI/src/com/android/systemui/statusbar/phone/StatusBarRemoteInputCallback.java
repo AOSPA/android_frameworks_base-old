@@ -17,8 +17,7 @@ package com.android.systemui.statusbar.phone;
 import static android.content.Intent.ACTION_DEVICE_LOCKED_CHANGED;
 
 import static com.android.systemui.SysUiServiceProvider.getComponent;
-import static com.android.systemui.statusbar.NotificationLockscreenUserManager
-        .NOTIFICATION_UNLOCKED_BY_WORK_CHALLENGE_ACTION;
+import static com.android.systemui.statusbar.NotificationLockscreenUserManager.NOTIFICATION_UNLOCKED_BY_WORK_CHALLENGE_ACTION;
 
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
@@ -48,6 +47,12 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import com.android.systemui.statusbar.policy.PreviewInflater;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
+/**
+ */
+@Singleton
 public class StatusBarRemoteInputCallback implements Callback, Callbacks {
 
     private final KeyguardMonitor mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
@@ -66,14 +71,17 @@ public class StatusBarRemoteInputCallback implements Callback, Callbacks {
     private int mDisabled2;
     protected BroadcastReceiver mChallengeReceiver = new ChallengeReceiver();
 
+    /**
+     */
+    @Inject
     public StatusBarRemoteInputCallback(Context context) {
         mContext = context;
         mContext.registerReceiverAsUser(mChallengeReceiver, UserHandle.ALL,
                 new IntentFilter(ACTION_DEVICE_LOCKED_CHANGED), null, null);
-        mStatusBarStateController.addListener(mStateListener);
+        mStatusBarStateController.addCallback(mStateListener);
         mKeyguardManager = context.getSystemService(KeyguardManager.class);
         mCommandQueue = getComponent(context, CommandQueue.class);
-        mCommandQueue.addCallbacks(this);
+        mCommandQueue.addCallback(this);
     }
 
     private void setStatusBarState(int state) {
@@ -163,7 +171,7 @@ public class StatusBarRemoteInputCallback implements Callback, Callbacks {
         mPendingWorkRemoteInputView = clicked;
     }
 
-    protected boolean startWorkChallengeIfNecessary(int userId, IntentSender intendSender,
+    boolean startWorkChallengeIfNecessary(int userId, IntentSender intendSender,
             String notificationKey) {
         // Clear pending remote view, as we do not want to trigger pending remote input view when
         // it's called by other code
@@ -206,7 +214,7 @@ public class StatusBarRemoteInputCallback implements Callback, Callbacks {
     }
 
     @Override
-    public boolean handleRemoteViewClick(PendingIntent pendingIntent,
+    public boolean handleRemoteViewClick(View view, PendingIntent pendingIntent,
             NotificationRemoteInputManager.ClickHandler defaultHandler) {
         final boolean isActivity = pendingIntent.isActivity();
         if (isActivity) {
@@ -230,8 +238,10 @@ public class StatusBarRemoteInputCallback implements Callback, Callbacks {
     }
 
     @Override
-    public void disable(int state1, int state2, boolean animate) {
-        mDisabled2 = state2;
+    public void disable(int displayId, int state1, int state2, boolean animate) {
+        if (displayId == mContext.getDisplayId()) {
+            mDisabled2 = state2;
+        }
     }
 
     protected class ChallengeReceiver extends BroadcastReceiver {

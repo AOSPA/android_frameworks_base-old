@@ -18,22 +18,17 @@
 #define IDMAP2_INCLUDE_IDMAP2_RESOURCEUTILS_H_
 
 #include <string>
-#include <utility>
 
 #include "android-base/macros.h"
 #include "androidfw/AssetManager2.h"
 
 #include "idmap2/Idmap.h"
+#include "idmap2/Result.h"
 
-namespace android {
-namespace idmap2 {
-namespace utils {
+namespace android::idmap2::utils {
 
-std::pair<bool, std::string> WARN_UNUSED ResToTypeEntryName(const AssetManager2& am,
-                                                            ResourceId resid);
+Result<std::string> WARN_UNUSED ResToTypeEntryName(const AssetManager2& am, ResourceId resid);
 
-}  // namespace utils
-}  // namespace idmap2
-}  // namespace android
+}  // namespace android::idmap2::utils
 
 #endif  // IDMAP2_INCLUDE_IDMAP2_RESOURCEUTILS_H_

@@ -17,8 +17,10 @@
 package com.android.internal.os;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.os.Binder;
+import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -56,9 +58,9 @@ public class BinderCallsStatsTest {
         bcs.setSamplingInterval(5);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
         assertEquals(1, uidEntries.size());
@@ -72,17 +74,17 @@ public class BinderCallsStatsTest {
         assertEquals(1, callStatsList.get(0).transactionCode);
 
         // CPU usage is sampled, should not be tracked here.
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 20;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
         assertEquals(2, uidEntry.callCount);
         assertEquals(1, uidEntry.recordedCallCount);
         assertEquals(10, uidEntry.cpuTimeMicros);
         assertEquals(1, callStatsList.size());
 
-        callSession = bcs.callStarted(binder, 2);
+        callSession = bcs.callStarted(binder, 2, WORKSOURCE_UID);
         bcs.time += 50;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
         uidEntry = bcs.getUidEntries().get(WORKSOURCE_UID);
         assertEquals(3, uidEntry.callCount);
         assertEquals(1, uidEntry.recordedCallCount);
@@ -97,9 +99,9 @@ public class BinderCallsStatsTest {
         bcs.setDetailedTracking(true);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
         assertEquals(1, uidEntries.size());
@@ -115,9 +117,9 @@ public class BinderCallsStatsTest {
         assertEquals(binder.getClass(), callStatsList.get(0).binderClass);
         assertEquals(1, callStatsList.get(0).transactionCode);
 
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 20;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         uidEntry = bcs.getUidEntries().get(WORKSOURCE_UID);
         assertEquals(2, uidEntry.callCount);
@@ -125,9 +127,9 @@ public class BinderCallsStatsTest {
         callStatsList = new ArrayList(uidEntry.getCallStatsList());
         assertEquals(1, callStatsList.size());
 
-        callSession = bcs.callStarted(binder, 2);
+        callSession = bcs.callStarted(binder, 2, WORKSOURCE_UID);
         bcs.time += 50;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
         uidEntry = bcs.getUidEntries().get(WORKSOURCE_UID);
         assertEquals(3, uidEntry.callCount);
 
@@ -141,7 +143,7 @@ public class BinderCallsStatsTest {
     public void testEnableInBetweenCall() {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         Binder binder = new Binder();
-        bcs.callEnded(null, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(null, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
         assertEquals(0, uidEntries.size());
@@ -152,7 +154,7 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         Binder binder = new Binder();
         bcs.callThrewException(null, new IllegalStateException());
-        bcs.callEnded(null, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(null, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
         assertEquals(0, uidEntries.size());
@@ -165,17 +167,17 @@ public class BinderCallsStatsTest {
         bcs.setSamplingInterval(2);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 1000;  // shoud be ignored.
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 50;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
         assertEquals(1, uidEntries.size());
@@ -202,13 +204,13 @@ public class BinderCallsStatsTest {
         bcs.setSamplingInterval(2);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 2 /* another method */);
+        callSession = bcs.callStarted(binder, 2 /* another method */, WORKSOURCE_UID);
         bcs.time += 1000;  // shoud be ignored.
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
@@ -245,9 +247,9 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(true);
         Binder binder = new BinderWithGetTransactionName();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         List<BinderCallsStats.ExportedCallStat> callStatsList =
                 bcs.getExportedCallStats();
@@ -260,18 +262,18 @@ public class BinderCallsStatsTest {
         bcs.setDetailedTracking(true);
 
         Binder binder = new AnotherBinderWithGetTransactionName();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         Binder binder2 = new BinderWithGetTransactionName();
-        callSession = bcs.callStarted(binder2, 1);
+        callSession = bcs.callStarted(binder2, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 2);
+        callSession = bcs.callStarted(binder, 2, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         List<BinderCallsStats.ExportedCallStat> callStatsList =
                 bcs.getExportedCallStats();
@@ -291,9 +293,9 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         List<BinderCallsStats.ExportedCallStat> callStatsList =
                 bcs.getExportedCallStats();
@@ -305,9 +307,9 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         List<BinderCallsStats.CallStat> callStatsList =
                 new ArrayList(bcs.getUidEntries().get(WORKSOURCE_UID).getCallStatsList());
@@ -321,13 +323,13 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 50;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         List<BinderCallsStats.CallStat> callStatsList =
                 new ArrayList(bcs.getUidEntries().get(WORKSOURCE_UID).getCallStatsList());
@@ -340,13 +342,13 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.elapsedTime += 5;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.elapsedTime += 1;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         List<BinderCallsStats.CallStat> callStatsList =
                 new ArrayList(bcs.getUidEntries().get(WORKSOURCE_UID).getCallStatsList());
@@ -367,17 +369,17 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.callThrewException(callSession, new IllegalStateException());
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.callThrewException(callSession, new IllegalStateException());
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
-        callSession = bcs.callStarted(binder, 1);
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.callThrewException(callSession, new RuntimeException());
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         ArrayMap<String, Integer> expected = new ArrayMap<>();
         expected.put("java.lang.IllegalStateException", 2);
@@ -387,13 +389,12 @@ public class BinderCallsStatsTest {
 
     @Test
     public void testNoDataCollectedBeforeInitialDeviceStateSet() {
-        TestBinderCallsStats bcs = new TestBinderCallsStats();
-        bcs.setDeviceState(null);
+        TestBinderCallsStats bcs = new TestBinderCallsStats(null);
         bcs.setDetailedTracking(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         bcs.setDeviceState(mDeviceState.getReadonlyClient());
 
@@ -408,8 +409,8 @@ public class BinderCallsStatsTest {
         mDeviceState.setCharging(true);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         assertEquals(0, bcs.getUidEntries().size());
     }
@@ -420,8 +421,8 @@ public class BinderCallsStatsTest {
         bcs.setDetailedTracking(true);
         mDeviceState.setScreenInteractive(false);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
         assertEquals(1, uidEntries.size());
@@ -437,8 +438,8 @@ public class BinderCallsStatsTest {
         bcs.setDetailedTracking(true);
         mDeviceState.setScreenInteractive(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         SparseArray<BinderCallsStats.UidEntry> uidEntries = bcs.getUidEntries();
         assertEquals(1, uidEntries.size());
@@ -455,8 +456,8 @@ public class BinderCallsStatsTest {
         mDeviceState.setCharging(true);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         assertEquals(0, bcs.getExportedCallStats().size());
     }
@@ -468,8 +469,8 @@ public class BinderCallsStatsTest {
         mDeviceState.setCharging(false);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         assertEquals(1, bcs.getExportedCallStats().size());
     }
@@ -479,12 +480,12 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(true);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.callThrewException(callSession, new IllegalStateException());
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         PrintWriter pw = new PrintWriter(new StringWriter());
-        bcs.dump(pw, new HashMap<>(), true);
+        bcs.dump(pw, new AppIdToPackageMap(new HashMap<>()), true);
     }
 
     @Test
@@ -492,8 +493,8 @@ public class BinderCallsStatsTest {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         bcs.setDetailedTracking(false);
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         assertEquals(0, bcs.getExportedCallStats().size());
     }
@@ -504,10 +505,10 @@ public class BinderCallsStatsTest {
         bcs.setDetailedTracking(true);
 
         Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
         bcs.time += 10;
         bcs.elapsedTime += 20;
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
 
         assertEquals(1, bcs.getExportedCallStats().size());
         BinderCallsStats.ExportedCallStat stat = bcs.getExportedCallStats().get(0);
@@ -528,22 +529,6 @@ public class BinderCallsStatsTest {
     }
 
     @Test
-    public void testCallingUidUsedWhenWorkSourceNotSet() {
-        TestBinderCallsStats bcs = new TestBinderCallsStats();
-        bcs.setDetailedTracking(true);
-        bcs.workSourceUid = -1;
-
-        Binder binder = new Binder();
-        CallSession callSession = bcs.callStarted(binder, 1);
-        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE);
-
-        assertEquals(1, bcs.getExportedCallStats().size());
-        BinderCallsStats.ExportedCallStat stat = bcs.getExportedCallStats().get(0);
-        assertEquals(CALLING_UID, stat.workSourceUid);
-        assertEquals(CALLING_UID, stat.callingUid);
-    }
-
-    @Test
     public void testGetExportedStatsWithoutCalls() {
         TestBinderCallsStats bcs = new TestBinderCallsStats();
         Binder binder = new Binder();
@@ -557,13 +542,131 @@ public class BinderCallsStatsTest {
         assertEquals(0, bcs.getExceptionCounts().size());
     }
 
+    @Test
+    public void testOverflow_sameEntry() {
+        TestBinderCallsStats bcs = new TestBinderCallsStats();
+        bcs.setDetailedTracking(true);
+        bcs.setSamplingInterval(1);
+        bcs.setMaxBinderCallStats(2);
+
+        Binder binder = new Binder();
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.time += 10;
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
+
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
+
+        callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
+
+        BinderCallsStats.UidEntry uidEntry = bcs.getUidEntries().get(WORKSOURCE_UID);
+        List<BinderCallsStats.CallStat> callStatsList = new ArrayList(uidEntry.getCallStatsList());
+        assertEquals(1, callStatsList.size());
+        BinderCallsStats.CallStat callStats = callStatsList.get(0);
+        assertEquals(3, callStats.callCount);
+    }
+
+    @Test
+    public void testOverflow_overflowEntry() {
+        TestBinderCallsStats bcs = new TestBinderCallsStats();
+        bcs.setDetailedTracking(true);
+        bcs.setSamplingInterval(1);
+        bcs.setMaxBinderCallStats(1);
+
+        Binder binder = new Binder();
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
+
+        callSession = bcs.callStarted(binder, 2, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
+
+        // Should use the same overflow entry.
+        callSession = bcs.callStarted(binder, 3, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
+
+        List<BinderCallsStats.ExportedCallStat> callStatsList = bcs.getExportedCallStats();
+        assertEquals(2, callStatsList.size());
+        BinderCallsStats.ExportedCallStat callStats = callStatsList.get(0);
+        assertEquals(1, callStats.callCount);
+        assertEquals("1", callStats.methodName);
+        assertEquals("android.os.Binder", callStats.className);
+        assertEquals(CALLING_UID, callStats.callingUid);
+
+        callStats = callStatsList.get(1);
+        assertEquals(2, callStats.callCount);
+        assertEquals("-1", callStats.methodName);
+        assertEquals("com.android.internal.os.BinderCallsStats$OverflowBinder",
+                callStats.className);
+        assertEquals(false , callStats.screenInteractive);
+        assertEquals(-1 , callStats.callingUid);
+    }
+
+    @Test
+    public void testOverflow_oneOverflowEntryPerUid() {
+        TestBinderCallsStats bcs = new TestBinderCallsStats();
+        bcs.setDetailedTracking(true);
+        bcs.setSamplingInterval(1);
+        bcs.setMaxBinderCallStats(1);
+
+        Binder binder = new Binder();
+        CallSession callSession = bcs.callStarted(binder, 1, WORKSOURCE_UID);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID);
+
+        callSession = bcs.callStarted(binder, 2, WORKSOURCE_UID + 1);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID + 1);
+
+        // Different uids have different overflow entries.
+        callSession = bcs.callStarted(binder, 2, WORKSOURCE_UID + 2);
+        bcs.callEnded(callSession, REQUEST_SIZE, REPLY_SIZE, WORKSOURCE_UID + 2);
+
+        List<BinderCallsStats.ExportedCallStat> callStatsList = bcs.getExportedCallStats();
+        assertEquals(3, callStatsList.size());
+
+        BinderCallsStats.ExportedCallStat callStats = callStatsList.get(1);
+        assertEquals(WORKSOURCE_UID + 1, callStats.workSourceUid);
+        assertEquals(1, callStats.callCount);
+        assertEquals("com.android.internal.os.BinderCallsStats$OverflowBinder",
+                callStats.className);
+
+        callStats = callStatsList.get(2);
+        assertEquals(WORKSOURCE_UID + 2, callStats.workSourceUid);
+        assertEquals(1, callStats.callCount);
+        assertEquals("com.android.internal.os.BinderCallsStats$OverflowBinder",
+                callStats.className);
+    }
+
+    @Test
+    public void testAddsDebugEntries() {
+        long startTime = SystemClock.elapsedRealtime();
+        TestBinderCallsStats bcs = new TestBinderCallsStats();
+        bcs.setAddDebugEntries(true);
+        ArrayList<BinderCallsStats.ExportedCallStat> callStats = bcs.getExportedCallStats();
+        assertEquals(3, callStats.size());
+        BinderCallsStats.ExportedCallStat debugEntry1 = callStats.get(0);
+        assertEquals("", debugEntry1.className);
+        assertEquals("__DEBUG_start_time_millis", debugEntry1.methodName);
+        assertTrue(startTime <= debugEntry1.latencyMicros);
+        BinderCallsStats.ExportedCallStat debugEntry2 = callStats.get(1);
+        assertEquals("", debugEntry2.className);
+        assertEquals("__DEBUG_end_time_millis", debugEntry2.methodName);
+        assertTrue(debugEntry1.latencyMicros <= debugEntry2.latencyMicros);
+        BinderCallsStats.ExportedCallStat debugEntry3 = callStats.get(2);
+        assertEquals("", debugEntry3.className);
+        assertEquals("__DEBUG_battery_time_millis", debugEntry3.methodName);
+        assertTrue(debugEntry3.latencyMicros >= 0);
+    }
+
     class TestBinderCallsStats extends BinderCallsStats {
         public int callingUid = CALLING_UID;
-        public int workSourceUid = WORKSOURCE_UID;
         public long time = 1234;
         public long elapsedTime = 0;
 
         TestBinderCallsStats() {
+            this(mDeviceState);
+        }
+
+        TestBinderCallsStats(CachedDeviceState deviceState) {
             // Make random generator not random.
             super(new Injector() {
                 public Random getRandomGenerator() {
@@ -577,7 +680,10 @@ public class BinderCallsStatsTest {
                 }
             });
             setSamplingInterval(1);
-            setDeviceState(mDeviceState.getReadonlyClient());
+            setAddDebugEntries(false);
+            if (deviceState != null) {
+                setDeviceState(deviceState.getReadonlyClient());
+            }
         }
 
         @Override
@@ -593,11 +699,6 @@ public class BinderCallsStatsTest {
         @Override
         protected int getCallingUid() {
             return callingUid;
-        }
-
-        @Override
-        protected int getWorkSourceUid() {
-            return workSourceUid;
         }
     }
 

@@ -1215,6 +1215,15 @@
     <string name="permdesc_manageOwnCalls">Allows the app to route its calls through the system in
         order to improve the calling experience.</string>
 
+    <!-- Title of an application permission. When granted the app is allowed to be enabled as
+        a companion app. [CHAR LIMIT=NONE]-->
+    <string name="permlab_callCompanionApp">see and control calls through the system.</string>
+    <!-- Description of an application permission. When granted the app is allowed to be enabled as
+        a companion app. [CHAR LIMIT=NONE]-->
+    <string name="permdesc_callCompanionApp">Allows the app to see and control ongoing calls on the
+        device. This includes information such as call numbers for calls and the state of the
+        calls.</string>
+
     <!-- Title of an application permission.  When granted the user is giving access to a third
          party app to continue a call which originated in another app.  For example, the user
          could be in a voice call over their carrier's mobile network, and a third party video
@@ -1395,6 +1404,16 @@
       keylock and any associated password security.  For example, the phone
       disables the keylock when receiving an incoming phone call, then
       re-enables the keylock when the call is finished.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permlab_getAndRequestScreenLockComplexity">get and request screen lock complexity</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permdesc_getAndRequestScreenLockComplexity">Allows the app to learn the screen
+        lock complexity level (high, medium, low or none), which indicates the possible range of
+        length and type of the screen lock. The app can also suggest to users that they update the
+        screen lock to a certain level but users can freely ignore and navigate away. Note that the
+        screen lock is not stored in plaintext so the app does not know the exact password.
+    </string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
     <string name="permlab_useBiometric">use biometric hardware</string>
@@ -1588,14 +1607,14 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_readSyncStats">Allows an app to read the sync stats for an account, including the history of sync events and how much data is synced. </string>
 
-    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=30] -->
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. "shared storage" refers to a storage space on the device that all apps with this permission can read from. [CHAR LIMIT=none] -->
     <string name="permlab_sdcardRead">read the contents of your shared storage</string>
-    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=30] -->
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. "shared storage" refers to a storage space on the device that all apps with this permission can read from. [CHAR LIMIT=none] -->
     <string name="permdesc_sdcardRead">Allows the app to read the contents of your shared storage.</string>
 
-    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=30] -->
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. "shared storage" refers to a storage space on the device that all apps with this permission can write to. [CHAR LIMIT=none] -->
     <string name="permlab_sdcardWrite">modify or delete the contents of your shared storage</string>
-    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=30] -->
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. "shared storage" refers to a storage space on the device that all apps with this permission can write to. [CHAR LIMIT=none] -->
     <string name="permdesc_sdcardWrite">Allows the app to write the contents of your shared storage.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -2986,7 +3005,7 @@
 
     <!-- Label for item in the text selection menu to translate selected text with a translation app. Should be a verb. [CHAR LIMIT=30] -->
     <string name="translate">Translate</string>
-    
+
     <!-- Accessibility description for an item in the text selection menu to translate selected text with a translation app. [CHAR LIMIT=NONE] -->
     <string name="translate_desc">Translate selected text</string>
 
@@ -3047,6 +3066,14 @@
     <string name="whichViewApplicationNamed">Open with %1$s</string>
     <!-- Label for a link to a intent resolver dialog to view something -->
     <string name="whichViewApplicationLabel">Open</string>
+    <!-- Title of intent resolver dialog when selecting a viewer application that opens URI
+         [CHAR LIMIT=128]. -->
+    <string name="whichGiveAccessToApplication">Give access to open <xliff:g id="host" example="mail.google.com">%1$s</xliff:g> links with</string>
+    <!-- Title of intent resolver dialog when selecting a viewer application that opens URI
+         and a previously used application is known [CHAR LIMIT=128]. -->
+    <string name="whichGiveAccessToApplicationNamed">Give access to open <xliff:g id="host" example="mail.google.com">%1$s</xliff:g> links with <xliff:g id="application" example="Gmail">%2$s</xliff:g></string>
+    <!-- Label for a link to an intent resolver dialog to open URI [CHAR LIMIT=18] -->
+    <string name="whichGiveAccessToApplicationLabel">Give access</string>
     <!-- Title of intent resolver dialog when selecting an editor application to run. -->
     <string name="whichEditApplication">Edit with</string>
     <!-- Title of intent resolver dialog when selecting an editor application to run
@@ -3180,6 +3207,8 @@
 
     <!-- [CHAR LIMIT=40] Title of dialog that is shown when system is starting. -->
     <string name="android_start_title" product="default">Phone is starting\u2026</string>
+    <!-- [CHAR LIMIT=40] Title of dialog that is shown when system is starting. -->
+    <string name="android_start_title" product="automotive">Android is starting\u2026</string>
     <!-- [CHAR LIMIT=40] Title of dialog that is shown when system is starting. -->
     <string name="android_start_title" product="tablet">Tablet is starting\u2026</string>
     <!-- [CHAR LIMIT=40] Title of dialog that is shown when system is starting. -->
@@ -3322,6 +3351,15 @@
     <string name="wifi_available_action_connect">Connect</string>
     <!-- Notification action name for opening the wifi picker, showing the user all the nearby networks. -->
     <string name="wifi_available_action_all_networks">All networks</string>
+
+    <!-- Notification title for a connection to a app suggested wireless network.-->
+    <string name="wifi_suggestion_title">Connected to Wi\u2011Fi network proposed by <xliff:g id="name" example="App123">%s</xliff:g></string>
+    <!-- Notification content for a connection to a app suggested wireless network.-->
+    <string name="wifi_suggestion_content">Do you want to let <xliff:g id="name" example="App123">%s</xliff:g> propose networks for you?</string>
+    <!-- Notification action for allowing app specified in the notification body.-->
+    <string name="wifi_suggestion_action_allow_app">Yes</string>
+    <!-- Notification action for disallowing app specified in the notification body.-->
+    <string name="wifi_suggestion_action_disallow_app">No</string>
 
     <!--Notification title for Wi-Fi Wake onboarding. This is displayed the first time a user disables Wi-Fi with the feature enabled. -->
     <string name="wifi_wakeup_onboarding_title">Wi\u2011Fi will turn on automatically</string>
@@ -4126,6 +4164,10 @@
          from the activity resolver to use just this once. [CHAR LIMIT=25] -->
     <string name="activity_resolver_use_once">Just once</string>
 
+    <!-- Title for a button to choose to go to
+          'Open by Default' app settings. [CHAR LIMIT=25] -->
+    <string name="activity_resolver_app_settings">Settings</string>
+
     <!-- Text for the toast that is shown when the user clicks on a launcher that
          doesn't support the work profile. [CHAR LIMIT=100] -->
     <string name="activity_resolver_work_profiles_support">%1$s doesn\'t support work profile</string>
@@ -4394,7 +4436,8 @@
         <xliff:g id="service_name" example="TalkBack">%1$s</xliff:g> off</string>
 
     <!-- Text spoken when accessibility shortcut warning dialog is shown. [CHAR LIMIT=none] -->
-    <string name="accessibility_shortcut_spoken_feedback">Use Accessibility Shortcut again to start the current accessibility feature</string>
+    <string name="accessibility_shortcut_spoken_feedback">Press and hold both volume keys for three seconds to use
+        <xliff:g id="service_name" example="TalkBack">%1$s</xliff:g></string>
 
     <!-- Text appearing in a prompt at the top of UI allowing the user to select a target service or feature to be assigned to the Accessibility button in the navigation bar. -->
     <string name="accessibility_button_prompt_text">Choose a feature to use when you tap the Accessibility button:</string>

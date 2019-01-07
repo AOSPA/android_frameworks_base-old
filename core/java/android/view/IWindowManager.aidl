@@ -107,18 +107,14 @@ interface IWindowManager
       */
     void endProlongedAnimations();
 
-    // Re-evaluate the current orientation from the caller's state.
-    // If there is a change, the new Configuration is returned and the
-    // caller must call setNewConfiguration() sometime later.
-    Configuration updateOrientationFromAppTokens(in Configuration currentConfig,
-            IBinder freezeThisOneIfNeeded, int displayId);
-
     void startFreezingScreen(int exitAnim, int enterAnim);
     void stopFreezingScreen();
 
     // these require DISABLE_KEYGUARD permission
-    void disableKeyguard(IBinder token, String tag);
-    void reenableKeyguard(IBinder token);
+    /** @deprecated use Activity.setShowWhenLocked instead. */
+    void disableKeyguard(IBinder token, String tag, int userId);
+    /** @deprecated use Activity.setShowWhenLocked instead. */
+    void reenableKeyguard(IBinder token, int userId);
     void exitKeyguardSecurely(IOnKeyguardExitResult callback);
     boolean isKeyguardLocked();
     boolean isKeyguardSecure();
@@ -304,7 +300,7 @@ interface IWindowManager
     /**
      * Get the position of the nav bar
      */
-    int getNavBarPosition();
+    int getNavBarPosition(int displayId);
 
     /**
      * Lock the device immediately with the specified options (can be null).
@@ -551,4 +547,16 @@ interface IWindowManager
      * @see KeyguardManager#isDeviceLocked()
      */
     void setShouldShowIme(int displayId, boolean shouldShow);
+
+     /**
+     * Reparent the top layers for a display to the requested surfaceControl. The display that
+     * is going to be re-parented (the displayId passed in) needs to have been created by the same
+     * process that is requesting the re-parent. This is to ensure clients can't just re-parent
+     * display content info to any SurfaceControl, as this would be a security issue.
+     *
+     * @param displayId The id of the display.
+     * @param surfaceControlHandle The SurfaceControl handle that the top level layers for the
+     *        display should be re-parented to.
+     */
+    void reparentDisplayContent(int displayId, in IBinder surfaceControlHandle);
 }

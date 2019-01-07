@@ -7,6 +7,7 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextClock;
 
 import androidx.annotation.VisibleForTesting;
@@ -17,11 +18,12 @@ import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.shared.plugins.PluginManager;
 
 import java.util.Objects;
+import java.util.TimeZone;
 
 /**
  * Switch to show plugin clock when plugin is connected, otherwise it will show default clock.
  */
-public class KeyguardClockSwitch extends FrameLayout {
+public class KeyguardClockSwitch extends RelativeLayout {
     /**
      * Optional/alternative clock injected via plugin.
      */
@@ -30,24 +32,45 @@ public class KeyguardClockSwitch extends FrameLayout {
      * Default clock.
      */
     private TextClock mClockView;
+    /**
+     * Frame for default and custom clock.
+     */
+    private FrameLayout mSmallClockFrame;
+    /**
+     * Container for big custom clock.
+     */
+    private ViewGroup mBigClockContainer;
+    /**
+     * Status area (date and other stuff) shown below the clock. Plugin can decide whether
+     * or not to show it below the alternate clock.
+     */
+    private View mKeyguardStatusArea;
 
     private final PluginListener<ClockPlugin> mClockPluginListener =
             new PluginListener<ClockPlugin>() {
                 @Override
                 public void onPluginConnected(ClockPlugin plugin, Context pluginContext) {
-                    View view = plugin.getView();
-                    if (view != null) {
-                        disconnectPlugin();
+                    disconnectPlugin();
+                    View smallClockView = plugin.getView();
+                    if (smallClockView != null) {
                         // For now, assume that the most recently connected plugin is the
                         // selected clock face. In the future, the user should be able to
                         // pick a clock face from the available plugins.
-                        mClockPlugin = plugin;
-                        addView(view, -1,
+                        mSmallClockFrame.addView(smallClockView, -1,
                                 new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                         ViewGroup.LayoutParams.WRAP_CONTENT));
                         initPluginParams();
                         mClockView.setVisibility(View.GONE);
                     }
+                    View bigClockView = plugin.getBigClockView();
+                    if (bigClockView != null && mBigClockContainer != null) {
+                        mBigClockContainer.addView(bigClockView);
+                        mBigClockContainer.setVisibility(View.VISIBLE);
+                    }
+                    if (!plugin.shouldShowStatusArea()) {
+                        mKeyguardStatusArea.setVisibility(View.GONE);
+                    }
+                    mClockPlugin = plugin;
                 }
 
                 @Override
@@ -55,6 +78,7 @@ public class KeyguardClockSwitch extends FrameLayout {
                     if (Objects.equals(plugin, mClockPlugin)) {
                         disconnectPlugin();
                         mClockView.setVisibility(View.VISIBLE);
+                        mKeyguardStatusArea.setVisibility(View.VISIBLE);
                     }
                 }
             };
@@ -71,6 +95,8 @@ public class KeyguardClockSwitch extends FrameLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
         mClockView = findViewById(R.id.default_clock_view);
+        mSmallClockFrame = findViewById(R.id.clock_view);
+        mKeyguardStatusArea = findViewById(R.id.keyguard_status_area);
     }
 
     @Override
@@ -84,6 +110,20 @@ public class KeyguardClockSwitch extends FrameLayout {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         Dependency.get(PluginManager.class).removePluginListener(mClockPluginListener);
+    }
+
+    /**
+     * Set container for big clock face appearing behind NSSL and KeyguardStatusView.
+     */
+    public void setBigClockContainer(ViewGroup container) {
+        if (mClockPlugin != null && container != null) {
+            View bigClockView = mClockPlugin.getBigClockView();
+            if (bigClockView != null) {
+                container.addView(bigClockView);
+                container.setVisibility(View.VISIBLE);
+            }
+        }
+        mBigClockContainer = container;
     }
 
     /**
@@ -162,6 +202,15 @@ public class KeyguardClockSwitch extends FrameLayout {
     }
 
     /**
+     * Notifies that the time zone has changed.
+     */
+    public void onTimeZoneChanged(TimeZone timeZone) {
+        if (mClockPlugin != null) {
+            mClockPlugin.onTimeZoneChanged(timeZone);
+        }
+    }
+
+    /**
      * When plugin changes, set all kept parameters into newer plugin.
      */
     private void initPluginParams() {
@@ -173,9 +222,13 @@ public class KeyguardClockSwitch extends FrameLayout {
 
     private void disconnectPlugin() {
         if (mClockPlugin != null) {
-            View view = mClockPlugin.getView();
-            if (view != null) {
-                removeView(view);
+            View smallClockView = mClockPlugin.getView();
+            if (smallClockView != null) {
+                mSmallClockFrame.removeView(smallClockView);
+            }
+            if (mBigClockContainer != null) {
+                mBigClockContainer.removeAllViews();
+                mBigClockContainer.setVisibility(View.GONE);
             }
             mClockPlugin = null;
         }

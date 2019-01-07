@@ -23,6 +23,7 @@ import static android.os.ParcelFileDescriptor.MODE_READ_WRITE;
 import static android.os.ParcelFileDescriptor.MODE_TRUNCATE;
 import static android.os.ParcelFileDescriptor.MODE_WRITE_ONLY;
 import static android.system.OsConstants.F_OK;
+import static android.system.OsConstants.O_ACCMODE;
 import static android.system.OsConstants.O_APPEND;
 import static android.system.OsConstants.O_CREAT;
 import static android.system.OsConstants.O_RDONLY;
@@ -49,6 +50,7 @@ import android.util.Slog;
 import android.webkit.MimeTypeMap;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.SizedInputStream;
 
 import libcore.io.IoUtils;
@@ -66,6 +68,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Objects;
@@ -106,8 +111,6 @@ public class FileUtils {
     private static class NoImagePreloadHolder {
         public static final Pattern SAFE_FILENAME_PATTERN = Pattern.compile("[\\w%+,./=_-]+");
     }
-
-    private static final File[] EMPTY = new File[0];
 
     // non-final so it can be toggled by Robolectric's ShadowFileUtils
     private static boolean sEnableCopyOptimizations = true;
@@ -717,6 +720,57 @@ public class FileUtils {
     }
 
     /**
+     * Compute the digest of the given file using the requested algorithm.
+     *
+     * @param algorithm Any valid algorithm accepted by
+     *            {@link MessageDigest#getInstance(String)}.
+     * @hide
+     */
+    public static byte[] digest(@NonNull File file, @NonNull String algorithm)
+            throws IOException, NoSuchAlgorithmException {
+        try (FileInputStream in = new FileInputStream(file)) {
+            return digest(in, algorithm);
+        }
+    }
+
+    /**
+     * Compute the digest of the given file using the requested algorithm.
+     *
+     * @param algorithm Any valid algorithm accepted by
+     *            {@link MessageDigest#getInstance(String)}.
+     * @hide
+     */
+    public static byte[] digest(@NonNull InputStream in, @NonNull String algorithm)
+            throws IOException, NoSuchAlgorithmException {
+        // TODO: implement kernel optimizations
+        return digestInternalUserspace(in, algorithm);
+    }
+
+    /**
+     * Compute the digest of the given file using the requested algorithm.
+     *
+     * @param algorithm Any valid algorithm accepted by
+     *            {@link MessageDigest#getInstance(String)}.
+     * @hide
+     */
+    public static byte[] digest(FileDescriptor fd, String algorithm)
+            throws IOException, NoSuchAlgorithmException {
+        // TODO: implement kernel optimizations
+        return digestInternalUserspace(new FileInputStream(fd), algorithm);
+    }
+
+    private static byte[] digestInternalUserspace(InputStream in, String algorithm)
+            throws IOException, NoSuchAlgorithmException {
+        final MessageDigest digest = MessageDigest.getInstance(algorithm);
+        try (DigestInputStream digestStream = new DigestInputStream(in, digest)) {
+            final byte[] buffer = new byte[8192];
+            while (digestStream.read(buffer) != -1) {
+            }
+        }
+        return digest.digest();
+    }
+
+    /**
      * Delete older files in a directory until only those matching the given
      * constraints remain.
      *
@@ -1110,35 +1164,20 @@ public class FileUtils {
 
     /** {@hide} */
     public static @NonNull String[] listOrEmpty(@Nullable File dir) {
-        if (dir == null) return EmptyArray.STRING;
-        final String[] res = dir.list();
-        if (res != null) {
-            return res;
-        } else {
-            return EmptyArray.STRING;
-        }
+        return (dir != null) ? ArrayUtils.defeatNullable(dir.list())
+                : EmptyArray.STRING;
     }
 
     /** {@hide} */
     public static @NonNull File[] listFilesOrEmpty(@Nullable File dir) {
-        if (dir == null) return EMPTY;
-        final File[] res = dir.listFiles();
-        if (res != null) {
-            return res;
-        } else {
-            return EMPTY;
-        }
+        return (dir != null) ? ArrayUtils.defeatNullable(dir.listFiles())
+                : ArrayUtils.EMPTY_FILE;
     }
 
     /** {@hide} */
     public static @NonNull File[] listFilesOrEmpty(@Nullable File dir, FilenameFilter filter) {
-        if (dir == null) return EMPTY;
-        final File[] res = dir.listFiles(filter);
-        if (res != null) {
-            return res;
-        } else {
-            return EMPTY;
-        }
+        return (dir != null) ? ArrayUtils.defeatNullable(dir.listFiles(filter))
+                : ArrayUtils.EMPTY_FILE;
     }
 
     /** {@hide} */
@@ -1221,11 +1260,11 @@ public class FileUtils {
 
         int res = 0;
         if (mode.startsWith("rw")) {
-            res |= O_RDWR | O_CREAT;
+            res = O_RDWR | O_CREAT;
         } else if (mode.startsWith("w")) {
-            res |= O_WRONLY | O_CREAT;
+            res = O_WRONLY | O_CREAT;
         } else if (mode.startsWith("r")) {
-            res |= O_RDONLY;
+            res = O_RDONLY;
         } else {
             throw new IllegalArgumentException("Bad mode: " + mode);
         }
@@ -1241,12 +1280,12 @@ public class FileUtils {
     /** {@hide} */
     public static String translateModePosixToString(int mode) {
         String res = "";
-        if ((mode & O_RDWR) == O_RDWR) {
-            res += "rw";
-        } else if ((mode & O_WRONLY) == O_WRONLY) {
-            res += "w";
-        } else if ((mode & O_RDONLY) == O_RDONLY) {
-            res += "r";
+        if ((mode & O_ACCMODE) == O_RDWR) {
+            res = "rw";
+        } else if ((mode & O_ACCMODE) == O_WRONLY) {
+            res = "w";
+        } else if ((mode & O_ACCMODE) == O_RDONLY) {
+            res = "r";
         } else {
             throw new IllegalArgumentException("Bad mode: " + mode);
         }
@@ -1262,12 +1301,12 @@ public class FileUtils {
     /** {@hide} */
     public static int translateModePosixToPfd(int mode) {
         int res = 0;
-        if ((mode & O_RDWR) == O_RDWR) {
-            res |= MODE_READ_WRITE;
-        } else if ((mode & O_WRONLY) == O_WRONLY) {
-            res |= MODE_WRITE_ONLY;
-        } else if ((mode & O_RDONLY) == O_RDONLY) {
-            res |= MODE_READ_ONLY;
+        if ((mode & O_ACCMODE) == O_RDWR) {
+            res = MODE_READ_WRITE;
+        } else if ((mode & O_ACCMODE) == O_WRONLY) {
+            res = MODE_WRITE_ONLY;
+        } else if ((mode & O_ACCMODE) == O_RDONLY) {
+            res = MODE_READ_ONLY;
         } else {
             throw new IllegalArgumentException("Bad mode: " + mode);
         }
@@ -1287,11 +1326,11 @@ public class FileUtils {
     public static int translateModePfdToPosix(int mode) {
         int res = 0;
         if ((mode & MODE_READ_WRITE) == MODE_READ_WRITE) {
-            res |= O_RDWR;
+            res = O_RDWR;
         } else if ((mode & MODE_WRITE_ONLY) == MODE_WRITE_ONLY) {
-            res |= O_WRONLY;
+            res = O_WRONLY;
         } else if ((mode & MODE_READ_ONLY) == MODE_READ_ONLY) {
-            res |= O_RDONLY;
+            res = O_RDONLY;
         } else {
             throw new IllegalArgumentException("Bad mode: " + mode);
         }
@@ -1390,4 +1429,3 @@ public class FileUtils {
         }
     }
 }
-

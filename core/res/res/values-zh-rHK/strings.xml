@@ -136,14 +136,10 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"WiFi 通話 | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"<xliff:g id="SPN">%s</xliff:g> VoWifi"</string>
-    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
-    <skip />
+    <string name="wfcSpnFormat_wifi_calling" msgid="4990486735013125329">"Wi-Fi 通話"</string>
+    <string name="wfcSpnFormat_wifi" msgid="1892673884655959773">"Wi-Fi"</string>
+    <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="1336669776254502831">"Wi-Fi 通話"</string>
+    <string name="wfcSpnFormat_vowifi" msgid="1765176406171272629">"VoWifi"</string>
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"關閉"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"首選 Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"流動數據優先"</string>
@@ -451,6 +447,8 @@
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"允許應用程式使用裝置的電話功能。這項權限允許應用程式確定手機號碼和裝置編號、是否正在通話中，以及所撥打的對方號碼。"</string>
     <string name="permlab_manageOwnCalls" msgid="1503034913274622244">"透過系統轉接來電"</string>
     <string name="permdesc_manageOwnCalls" msgid="6552974537554717418">"允許應用程式透過系統轉接來電，以改善通話體驗。"</string>
+    <string name="permlab_callCompanionApp" msgid="3599252979411970473">"透過系統查看和控制通話。"</string>
+    <string name="permdesc_callCompanionApp" msgid="4567344683275099090">"允許應用程式查看和控制裝置上正在進行的通話，當中包括通話號碼和通話狀態等資訊。"</string>
     <string name="permlab_acceptHandover" msgid="2661534649736022409">"繼續進行來自其他應用程式的通話"</string>
     <string name="permdesc_acceptHandovers" msgid="4570660484220539698">"允許應用程式繼續進行在其他應用程式中開始的通話。"</string>
     <string name="permlab_readPhoneNumbers" msgid="6108163940932852440">"讀取電話號碼"</string>
@@ -511,6 +509,8 @@
     <string name="permdesc_nfc" msgid="7120611819401789907">"允許應用程式使用近距離無線通訊 (NFC) 標記、卡片及讀取程式進行通訊。"</string>
     <string name="permlab_disableKeyguard" msgid="3598496301486439258">"停用螢幕上鎖"</string>
     <string name="permdesc_disableKeyguard" msgid="6034203065077122992">"允許應用程式停用按鍵鎖定以及其他相關的密碼安全措施。例如：手機收到來電時停用按鍵鎖定，通話結束後重新啟用按鍵鎖定。"</string>
+    <string name="permlab_getAndRequestScreenLockComplexity" msgid="3911592334192005424">"獲取並要求螢幕鎖定複雜程度"</string>
+    <string name="permdesc_getAndRequestScreenLockComplexity" msgid="9045202063228854873">"允許應用程式瞭解螢幕鎖定的複雜程度 (高、中、低或無)，這項資料說明了螢幕鎖定的可能長度範圍和類型。應用程式亦能建議使用者將螢幕鎖定更新至某個複雜程度，但使用者可以隨意忽略並離開。請注意，螢幕鎖定並非以純文字儲存，因此應用程式不知道確切的密碼。"</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"使用生物識別硬件"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"允許應用程式使用生物識別硬件驗證"</string>
     <string name="permlab_manageFingerprint" msgid="5640858826254575638">"管理指紋硬件"</string>
@@ -533,6 +533,11 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"允許應用程式讀取媒體集的位置。"</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"「<xliff:g id="APP">%s</xliff:g>」應用程式需要驗證。"</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"無法使用生物識別硬件"</string>
+    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
+    <skip />
+    <string name="biometric_not_recognized" msgid="5770511773560736082">"未能識別"</string>
+    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
+    <skip />
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"只偵測到部分指紋。請再試一次。"</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"無法處理指紋。請再試一次。"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"指紋感應器不乾淨。請清潔後再試一次。"</string>
@@ -540,7 +545,6 @@
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"手指移動太慢，請重試。"</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="biometric_not_recognized" msgid="5770511773560736082">"未能識別"</string>
     <string name="fingerprint_authenticated" msgid="5309333983002526448">"驗證咗指紋"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"面孔已經驗證"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"面孔已經驗證，請㩒一下 [確認]"</string>
@@ -596,14 +600,10 @@
     <string name="permdesc_writeSyncSettings" msgid="8956262591306369868">"允許應用程式修改帳戶的同步設定，例如讓「通訊錄」應用程式與某個帳戶保持同步。"</string>
     <string name="permlab_readSyncStats" msgid="7396577451360202448">"讀取同步處理統計資料"</string>
     <string name="permdesc_readSyncStats" msgid="1510143761757606156">"允許應用程式讀取帳戶的同步統計資料，包括同步活動記錄，以及保持同步的資料量。"</string>
-    <string name="permlab_sdcardRead" product="nosdcard" msgid="367275095159405468">"讀取您 USB 儲存裝置中的內容"</string>
-    <string name="permlab_sdcardRead" product="default" msgid="2188156462934977940">"讀取您 SD 記憶卡中的內容"</string>
-    <string name="permdesc_sdcardRead" product="nosdcard" msgid="3446988712598386079">"允許應用程式讀取 USB 儲存裝置的內容。"</string>
-    <string name="permdesc_sdcardRead" product="default" msgid="2607362473654975411">"允許應用程式讀取 SD 卡的內容。"</string>
-    <string name="permlab_sdcardWrite" product="nosdcard" msgid="8485979062254666748">"修改或刪除您 USB 儲存裝置中的內容"</string>
-    <string name="permlab_sdcardWrite" product="default" msgid="8805693630050458763">"修改或刪除您 SD 記憶卡中的內容"</string>
-    <string name="permdesc_sdcardWrite" product="nosdcard" msgid="6175406299445710888">"允許應用程式寫入 USB 儲存裝置。"</string>
-    <string name="permdesc_sdcardWrite" product="default" msgid="4337417790936632090">"允許應用程式寫入 SD 記憶卡。"</string>
+    <string name="permlab_sdcardRead" msgid="1438933556581438863">"讀取您共用儲存空間的內容"</string>
+    <string name="permdesc_sdcardRead" msgid="1804941689051236391">"允許應用程式讀取您共用儲存空間的內容。"</string>
+    <string name="permlab_sdcardWrite" msgid="9220937740184960897">"修改或刪除您共用儲存空間的內容"</string>
+    <string name="permdesc_sdcardWrite" msgid="2834431057338203959">"允許應用程式寫入您共用儲存空間的內容。"</string>
     <string name="permlab_use_sip" msgid="2052499390128979920">"撥打/接聽 SIP 電話"</string>
     <string name="permdesc_use_sip" msgid="2297804849860225257">"允許應用程式撥打及接聽 SIP 電話。"</string>
     <string name="permlab_register_sim_subscription" msgid="3166535485877549177">"註冊新的電訊 SIM 卡連接"</string>
@@ -1095,7 +1095,7 @@
     <string name="map_desc" msgid="1836995341943772348">"搵出指定地址"</string>
     <string name="browse" msgid="1245903488306147205">"開啟"</string>
     <string name="browse_desc" msgid="8220976549618935044">"打開指定網址"</string>
-    <string name="sms" msgid="4560537514610063430">"短訊"</string>
+    <string name="sms" msgid="4560537514610063430">"發短訊"</string>
     <string name="sms_desc" msgid="7526588350969638809">"Send 短訊去指定電話號碼"</string>
     <string name="add_contact" msgid="7867066569670597203">"新增"</string>
     <string name="add_contact_desc" msgid="4830217847004590345">"加入通訊錄"</string>
@@ -1105,6 +1105,10 @@
     <string name="add_calendar_event_desc" msgid="4326891793260687388">"將活動安排喺指定時間"</string>
     <string name="view_flight" msgid="7691640491425680214">"追蹤"</string>
     <string name="view_flight_desc" msgid="3876322502674253506">"追蹤指定航班"</string>
+    <string name="translate" msgid="9218619809342576858">"翻譯"</string>
+    <string name="translate_desc" msgid="4502367770068777202">"翻譯揀咗嘅文字"</string>
+    <string name="define" msgid="7394820043869954211">"定義"</string>
+    <string name="define_desc" msgid="7910883642444919726">"定義揀左嘅文字"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"儲存空間即將用盡"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"部分系統功能可能無法運作"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"系統儲存空間不足。請確認裝置有 250 MB 的可用空間，然後重新啟動。"</string>
@@ -1181,6 +1185,7 @@
     <string name="android_upgrading_title" product="tablet" msgid="4503169817302593560">"正在更新平板電腦…"</string>
     <string name="android_upgrading_title" product="device" msgid="7009520271220804517">"正在更新裝置…"</string>
     <string name="android_start_title" product="default" msgid="4536778526365907780">"手機正在啟動…"</string>
+    <string name="android_start_title" product="automotive" msgid="8418054686415318207">"Android 正在啟動…"</string>
     <string name="android_start_title" product="tablet" msgid="4929837533850340472">"平板電腦正在啟動…"</string>
     <string name="android_start_title" product="device" msgid="7467484093260449437">"裝置正在啟動…"</string>
     <string name="android_upgrading_fstrim" msgid="8036718871534640010">"正在優化儲存空間。"</string>
@@ -1239,6 +1244,10 @@
     <string name="wifi_available_content_failed_to_connect" msgid="3377406637062802645">"輕按即可查看所有網絡"</string>
     <string name="wifi_available_action_connect" msgid="2635699628459488788">"連線"</string>
     <string name="wifi_available_action_all_networks" msgid="4368435796357931006">"所有網絡"</string>
+    <string name="wifi_suggestion_title" msgid="1524719325616630906">"已連接至「<xliff:g id="NAME">%s</xliff:g>」建議的 Wi‑Fi 網絡"</string>
+    <string name="wifi_suggestion_content" msgid="4505530604935334589">"您希望「<xliff:g id="NAME">%s</xliff:g>」為您建議網絡嗎？"</string>
+    <string name="wifi_suggestion_action_allow_app" msgid="3689946344485394085">"是"</string>
+    <string name="wifi_suggestion_action_disallow_app" msgid="7977918905605931385">"否"</string>
     <string name="wifi_wakeup_onboarding_title" msgid="228772560195634292">"Wi-Fi 將會自動開啟"</string>
     <string name="wifi_wakeup_onboarding_subtext" msgid="3989697580301186973">"當您位於已儲存的高品質網絡信號範圍內時"</string>
     <string name="wifi_wakeup_onboarding_action_disable" msgid="838648204200836028">"不要重新開啟"</string>
@@ -1460,8 +1469,7 @@
       <item quantity="one">1 個相符項目</item>
     </plurals>
     <string name="action_mode_done" msgid="7217581640461922289">"完成"</string>
-    <string name="progress_erasing" product="nosdcard" msgid="4521573321524340058">"正在清除 USB 儲存裝置資料..."</string>
-    <string name="progress_erasing" product="default" msgid="6596988875507043042">"正在清除 SD 記憶卡資料..."</string>
+    <string name="progress_erasing" msgid="2569962663843586562">"正在清除共用儲存空間資料…"</string>
     <string name="share" msgid="1778686618230011964">"分享"</string>
     <string name="find" msgid="4808270900322985960">"尋找"</string>
     <string name="websearch" msgid="4337157977400211589">"Google 網頁搜尋"</string>
@@ -1833,8 +1841,7 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"SS 要求已變更為 USSD 要求"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"已變更為新的 SS 要求"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"工作設定檔"</string>
-    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
-    <skip />
+    <string name="notification_alerted_content_description" msgid="1296617716556420585">"已提醒"</string>
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"展開"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"收合"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"切換展開"</string>

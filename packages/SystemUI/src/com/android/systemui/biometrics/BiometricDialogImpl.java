@@ -140,7 +140,7 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
         createDialogs();
 
         if (!mDialogs.isEmpty()) {
-            getComponent(CommandQueue.class).addCallbacks(this);
+            getComponent(CommandQueue.class).addCallback(this);
             mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
         }
     }
@@ -240,7 +240,10 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
             mConfirmShowing = true;
             mCurrentDialog.showConfirmationButton(true /* show */);
         } else {
-            handleHideDialog(false /* userCanceled */);
+            mCurrentDialog.updateState(BiometricDialogView.STATE_AUTHENTICATED);
+            mHandler.postDelayed(() -> {
+                handleHideDialog(false /* userCanceled */);
+            }, mCurrentDialog.getDelayAfterAuthenticatedDurationMs());
         }
     }
 

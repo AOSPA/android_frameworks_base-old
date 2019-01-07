@@ -65,6 +65,7 @@ public:
     void applyColorTransform(ColorTransform transform);
 
     bool hasText() const { return mHasText; }
+    size_t usedSize() const { return fUsed; }
 
 private:
     friend class RecordingCanvas;
@@ -74,6 +75,7 @@ private:
     void save();
     void saveLayer(const SkRect*, const SkPaint*, const SkImageFilter*, const SkImage*,
                    const SkMatrix*, SkCanvas::SaveLayerFlags);
+    void saveBehind(const SkRect*);
     void restore();
 
     void concat(const SkMatrix&);
@@ -99,10 +101,6 @@ private:
     void drawDrawable(SkDrawable*, const SkMatrix*);
     void drawPicture(const SkPicture*, const SkMatrix*, const SkPaint*);
 
-    void drawText(const void*, size_t, SkScalar, SkScalar, const SkPaint&);
-    void drawPosText(const void*, size_t, const SkPoint[], const SkPaint&);
-    void drawPosTextH(const void*, size_t, const SkScalar[], SkScalar, const SkPaint&);
-    void drawTextRSXform(const void*, size_t, const SkRSXform[], const SkRect*, const SkPaint&);
     void drawTextBlob(const SkTextBlob*, SkScalar, SkScalar, const SkPaint&);
 
     void drawImage(sk_sp<const SkImage>, SkScalar, SkScalar, const SkPaint*, BitmapPalette palette);
@@ -145,6 +143,7 @@ public:
     void willSave() override;
     SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec&) override;
     void willRestore() override;
+    bool onDoSaveBehind(const SkRect*) override;
 
     void onFlush() override;
 
@@ -170,12 +169,6 @@ public:
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
     void onDrawAnnotation(const SkRect&, const char[], SkData*) override;
 
-    void onDrawText(const void*, size_t, SkScalar x, SkScalar y, const SkPaint&) override;
-    void onDrawPosText(const void*, size_t, const SkPoint[], const SkPaint&) override;
-    void onDrawPosTextH(const void*, size_t, const SkScalar[], SkScalar, const SkPaint&) override;
-
-    void onDrawTextRSXform(const void*, size_t, const SkRSXform[], const SkRect*,
-                           const SkPaint&) override;
     void onDrawTextBlob(const SkTextBlob*, SkScalar, SkScalar, const SkPaint&) override;
 
     void onDrawBitmap(const SkBitmap&, SkScalar, SkScalar, const SkPaint*) override;
@@ -216,5 +209,5 @@ private:
     DisplayListData* fDL;
 };
 
-};  // namespace uirenderer
-};  // namespace android
+}  // namespace uirenderer
+}  // namespace android

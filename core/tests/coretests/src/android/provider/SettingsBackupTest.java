@@ -183,6 +183,7 @@ public class SettingsBackupTest {
                     Settings.Global.CONNECTIVITY_METRICS_BUFFER_SIZE,
                     Settings.Global.CONNECTIVITY_SAMPLING_INTERVAL_IN_SECONDS,
                     Settings.Global.CONTACT_METADATA_SYNC_ENABLED,
+                    Settings.Global.CONTENT_CAPTURE_SERVICE_EXPLICITLY_ENABLED,
                     Settings.Global.CONVERSATION_ACTIONS_UPDATE_CONTENT_URL,
                     Settings.Global.CONVERSATION_ACTIONS_UPDATE_METADATA_URL,
                     Settings.Global.CONTACTS_DATABASE_WAL_ENABLED,
@@ -247,6 +248,7 @@ public class SettingsBackupTest {
                     Settings.Global.DYNAMIC_POWER_SAVINGS_ENABLED,
                     Settings.Global.DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD,
                     Settings.Global.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS,
+                    Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS,
                     Settings.Global.ENHANCED_4G_MODE_ENABLED,
                     Settings.Global.EPHEMERAL_COOKIE_MAX_SIZE_BYTES,
                     Settings.Global.ERROR_LOGCAT_PREFIX,
@@ -382,6 +384,7 @@ public class SettingsBackupTest {
                     Settings.Global.PRIV_APP_OOB_LIST,
                     Settings.Global.PRIVATE_DNS_DEFAULT_MODE,
                     Settings.Global.PRIVILEGED_DEVICE_IDENTIFIER_CHECK_ENABLED,
+                    Settings.Global.PRIVILEGED_DEVICE_IDENTIFIER_NON_PRIV_CHECK_RELAXED,
                     Settings.Global.PRIVILEGED_DEVICE_IDENTIFIER_TARGET_Q_BEHAVIOR_ENABLED,
                     Settings.Global.PRIVILEGED_DEVICE_IDENTIFIER_3P_CHECK_RELAXED,
                     Settings.Global.PROVISIONING_APN_ALARM_DELAY_IN_MS,
@@ -413,6 +416,7 @@ public class SettingsBackupTest {
                     Settings.Global.SHOW_NOTIFICATION_CHANNEL_WARNINGS,
                     Settings.Global.SHOW_RESTART_IN_CRASH_DIALOG,
                     Settings.Global.SHOW_TEMPERATURE_WARNING,
+                    Settings.Global.SIGNED_CONFIG_VERSION,
                     Settings.Global.SMART_SELECTION_UPDATE_CONTENT_URL,
                     Settings.Global.SMART_SELECTION_UPDATE_METADATA_URL,
                     Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED,
@@ -468,8 +472,11 @@ public class SettingsBackupTest {
                     Settings.Global.GPU_DEBUG_APP,
                     Settings.Global.GPU_DEBUG_LAYERS,
                     Settings.Global.GPU_DEBUG_LAYERS_GLES,
-                    Settings.Global.ANGLE_ENABLED_APP,
-                    Settings.Global.UPDATED_GFX_DRIVER_DEV_OPT_IN_APP,
+                    Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE,
+                    Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS,
+                    Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES,
+                    Settings.Global.GUP_DEV_OPT_IN_APPS,
+                    Settings.Global.GUP_BLACK_LIST,
                     Settings.Global.GPU_DEBUG_LAYER_APP,
                     Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING,
                     Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT,
@@ -477,6 +484,7 @@ public class SettingsBackupTest {
                     Settings.Global.USER_SWITCHER_ENABLED,
                     Settings.Global.NETWORK_ACCESS_TIMEOUT_MS,
                     Settings.Global.WARNING_TEMPERATURE,
+                    Settings.Global.USB_ALARM_TEMPERATURE,
                     Settings.Global.WEBVIEW_DATA_REDUCTION_PROXY_KEY,
                     Settings.Global.WEBVIEW_FALLBACK_LOGIC_ENABLED,
                     Settings.Global.WEBVIEW_MULTIPROCESS,
@@ -536,7 +544,10 @@ public class SettingsBackupTest {
                     Settings.Global.OVERRIDE_SETTINGS_PROVIDER_RESTORE_ANY_VERSION,
                     Settings.Global.CHAINED_BATTERY_ATTRIBUTION_ENABLED,
                     Settings.Global.HIDDEN_API_BLACKLIST_EXEMPTIONS,
-                    Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS);
+                    Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS,
+                    Settings.Global.BACKUP_MULTI_USER_ENABLED,
+                    Settings.Global.ISOLATED_STORAGE_LOCAL,
+                    Settings.Global.ISOLATED_STORAGE_REMOTE);
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
                  Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
@@ -577,6 +588,7 @@ public class SettingsBackupTest {
                  Settings.Secure.DEFAULT_INPUT_METHOD,
                  Settings.Secure.DEVICE_PAIRED,
                  Settings.Secure.DIALER_DEFAULT_APPLICATION,
+                 Settings.Secure.DISABLE_AIRPLANE_MODE_AFTER_SP_DISABLED,
                  Settings.Secure.DISABLED_PRINT_SERVICES,
                  Settings.Secure.DISABLED_SYSTEM_INPUT_METHODS,
                  Settings.Secure.DISPLAY_DENSITY_FORCED,
@@ -598,6 +610,8 @@ public class SettingsBackupTest {
                  Settings.Secure.LOCK_SCREEN_ALLOW_REMOTE_INPUT, // Candidate?
                  Settings.Secure.LOCK_SCREEN_LOCK_AFTER_TIMEOUT,
                  Settings.Secure.LOCK_TO_APP_EXIT_LOCKED,
+                 Settings.Secure.MAINTAIN_AIRPLANE_MODE_AFTER_SP_DISABLED,
+                 Settings.Secure.MAINTAIN_LOCATION_AFTER_SP_DISABLED,
                  Settings.Secure.MANAGED_PROFILE_CONTACT_REMOTE_SEARCH,
                  Settings.Secure.MULTI_PRESS_TIMEOUT,
                  Settings.Secure.NFC_PAYMENT_FOREGROUND,
@@ -609,6 +623,7 @@ public class SettingsBackupTest {
                  Settings.Secure.PARENTAL_CONTROL_LAST_UPDATE,
                  Settings.Secure.PAYMENT_SERVICE_SEARCH_URI,
                  Settings.Secure.PRINT_SERVICE_SEARCH_URI,
+                 Settings.Secure.REENABLE_LOCATION_AFTER_SP_DISABLED,
                  Settings.Secure.SCREENSAVER_DEFAULT_COMPONENT, // Candidate?
                  Settings.Secure.SEARCH_GLOBAL_SEARCH_ACTIVITY,
                  Settings.Secure.SEARCH_MAX_RESULTS_PER_SOURCE,
@@ -632,6 +647,7 @@ public class SettingsBackupTest {
                  Settings.Secure.SELECTED_INPUT_METHOD_SUBTYPE,
                  Settings.Secure.SELECTED_SPELL_CHECKER,  // Intentionally removed in Q
                  Settings.Secure.SELECTED_SPELL_CHECKER_SUBTYPE,  // Intentionally removed in Q
+                 Settings.Secure.SENSOR_PRIVACY_SENSOR_STATE,
                  Settings.Secure.SETTINGS_CLASSNAME,
                  Settings.Secure.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING, // candidate?
                  Settings.Secure.SHOW_ROTATION_SUGGESTIONS,
@@ -664,7 +680,9 @@ public class SettingsBackupTest {
                  Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE,
                  Settings.Secure.FLASHLIGHT_AVAILABLE,
                  Settings.Secure.FLASHLIGHT_ENABLED,
-                 Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED);
+                 Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED,
+                 Settings.Secure.LOCATION_ACCESS_CHECK_INTERVAL_MILLIS,
+                 Settings.Secure.LOCATION_ACCESS_CHECK_DELAY_MILLIS);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

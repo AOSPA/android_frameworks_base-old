@@ -72,14 +72,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     boolean mJustDiscovered;
 
-    private int mMessageRejectionCount;
-
     private final Collection<Callback> mCallbacks = new ArrayList<>();
-
-    // How many times user should reject the connection to make the choice persist.
-    private final static int MESSAGE_REJECTION_COUNT_LIMIT_TO_PERSIST = 2;
-
-    private final static String MESSAGE_REJECTION_COUNT_PREFS_NAME = "bluetooth_message_reject";
 
     /**
      * Last time a bt profile auto-connect was attempted.
@@ -140,8 +133,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     void onProfileStateChanged(LocalBluetoothProfile profile, int newProfileState) {
         if (BluetoothUtils.D) {
-            Log.d(TAG, "onProfileStateChanged: profile " + profile +
-                    " newProfileState " + newProfileState);
+            Log.d(TAG, "onProfileStateChanged: profile " + profile + ", device=" + mDevice
+                    + ", newProfileState " + newProfileState);
         }
         if (mLocalAdapter.getState() == BluetoothAdapter.STATE_TURNING_OFF)
         {
@@ -223,6 +216,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             Log.d(TAG, "setHiSyncId: mDevice " + mDevice + ", id " + id);
         }
         mHiSyncId = id;
+    }
+
+    public boolean isHearingAidDevice() {
+        return mHiSyncId != BluetoothHearingAid.HI_SYNC_ID_INVALID;
     }
 
     void onBondingDockConnect() {
@@ -372,7 +369,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         fetchActiveDevices();
         migratePhonebookPermissionChoice();
         migrateMessagePermissionChoice();
-        fetchMessageRejectionCount();
 
         dispatchAttributesChanged();
     }
@@ -602,7 +598,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         }
 
         if (BluetoothUtils.D) {
-            Log.e(TAG, "updating profiles for " + mDevice.getAliasName());
+            Log.e(TAG, "updating profiles for " + mDevice.getAliasName() + ", " + mDevice);
             BluetoothClass bluetoothClass = mDevice.getBluetoothClass();
 
             if (bluetoothClass != null) Log.v(TAG, "Class: " + bluetoothClass.toString());
@@ -666,8 +662,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
             mDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
             mDevice.setSimAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
-            mMessageRejectionCount = 0;
-            saveMessageRejectionCount();
         }
 
         refresh();
@@ -823,34 +817,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
         SharedPreferences.Editor editor = preferences.edit();
         editor.remove(mDevice.getAddress());
-        editor.commit();
-    }
-
-    /**
-     * @return Whether this rejection should persist.
-     */
-    public boolean checkAndIncreaseMessageRejectionCount() {
-        if (mMessageRejectionCount < MESSAGE_REJECTION_COUNT_LIMIT_TO_PERSIST) {
-            mMessageRejectionCount++;
-            saveMessageRejectionCount();
-        }
-        return mMessageRejectionCount >= MESSAGE_REJECTION_COUNT_LIMIT_TO_PERSIST;
-    }
-
-    private void fetchMessageRejectionCount() {
-        SharedPreferences preference = mContext.getSharedPreferences(
-                MESSAGE_REJECTION_COUNT_PREFS_NAME, Context.MODE_PRIVATE);
-        mMessageRejectionCount = preference.getInt(mDevice.getAddress(), 0);
-    }
-
-    private void saveMessageRejectionCount() {
-        SharedPreferences.Editor editor = mContext.getSharedPreferences(
-                MESSAGE_REJECTION_COUNT_PREFS_NAME, Context.MODE_PRIVATE).edit();
-        if (mMessageRejectionCount == 0) {
-            editor.remove(mDevice.getAddress());
-        } else {
-            editor.putInt(mDevice.getAddress(), mMessageRejectionCount);
-        }
         editor.commit();
     }
 

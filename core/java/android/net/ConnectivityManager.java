@@ -27,6 +27,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
@@ -187,13 +188,19 @@ public class ConnectivityManager {
      * is for a network to which the connectivity manager was failing over
      * following a disconnect on another network.
      * Retrieve it with {@link android.content.Intent#getBooleanExtra(String,boolean)}.
+     *
+     * @deprecated See {@link NetworkInfo}.
      */
+    @Deprecated
     public static final String EXTRA_IS_FAILOVER = "isFailover";
     /**
      * The lookup key for a {@link NetworkInfo} object. This is supplied when
      * there is another network that it may be possible to connect to. Retrieve with
      * {@link android.content.Intent#getParcelableExtra(String)}.
+     *
+     * @deprecated See {@link NetworkInfo}.
      */
+    @Deprecated
     public static final String EXTRA_OTHER_NETWORK_INFO = "otherNetwork";
     /**
      * The lookup key for a boolean that indicates whether there is a
@@ -214,7 +221,10 @@ public class ConnectivityManager {
      * may be passed up from the lower networking layers, and its
      * meaning may be specific to a particular network type. Retrieve
      * it with {@link android.content.Intent#getStringExtra(String)}.
+     *
+     * @deprecated See {@link NetworkInfo#getExtraInfo()}.
      */
+    @Deprecated
     public static final String EXTRA_EXTRA_INFO = "extraInfo";
     /**
      * The lookup key for an int that provides information about
@@ -902,7 +912,9 @@ public class ConnectivityManager {
      *
      * @return a {@link NetworkInfo} object for the current default network
      *        or {@code null} if no default network is currently active
+     * @deprecated See {@link NetworkInfo}.
      */
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.ACCESS_NETWORK_STATE)
     public NetworkInfo getActiveNetworkInfo() {
         try {
@@ -1086,7 +1098,9 @@ public class ConnectivityManager {
      * @return a {@link NetworkInfo} object for the requested
      *        network or {@code null} if the {@code Network}
      *        is not valid.
+     * @deprecated See {@link NetworkInfo}.
      */
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.ACCESS_NETWORK_STATE)
     public NetworkInfo getNetworkInfo(Network network) {
         return getNetworkInfoForUid(network, Process.myUid(), false);
@@ -2762,7 +2776,7 @@ public class ConnectivityManager {
     }
 
     /** {@hide} */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public void unregisterNetworkFactory(Messenger messenger) {
         try {
             mService.unregisterNetworkFactory(messenger);

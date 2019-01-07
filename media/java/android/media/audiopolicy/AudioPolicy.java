@@ -22,6 +22,7 @@ import android.annotation.SystemApi;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFocusInfo;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -58,12 +59,10 @@ public class AudioPolicy {
     /**
      * The status of an audio policy that is valid but cannot be used because it is not registered.
      */
-    @SystemApi
     public static final int POLICY_STATUS_UNREGISTERED = 1;
     /**
      * The status of an audio policy that is valid, successfully registered and thus active.
      */
-    @SystemApi
     public static final int POLICY_STATUS_REGISTERED = 2;
 
     private int mStatus;
@@ -75,7 +74,6 @@ public class AudioPolicy {
      * The behavior of a policy with regards to audio focus where it relies on the application
      * to do the ducking, the is the legacy and default behavior.
      */
-    @SystemApi
     public static final int FOCUS_POLICY_DUCKING_IN_APP = 0;
     public static final int FOCUS_POLICY_DUCKING_DEFAULT = FOCUS_POLICY_DUCKING_IN_APP;
     /**
@@ -85,7 +83,6 @@ public class AudioPolicy {
      * <br>Can only be used after having set a listener with
      * {@link AudioPolicy#setAudioPolicyFocusListener(AudioPolicyFocusListener)}.
      */
-    @SystemApi
     public static final int FOCUS_POLICY_DUCKING_IN_POLICY = 1;
 
     private AudioPolicyFocusListener mFocusListener;
@@ -133,7 +130,6 @@ public class AudioPolicy {
      * Builder class for {@link AudioPolicy} objects.
      * By default the policy to be created doesn't govern audio focus decisions.
      */
-    @SystemApi
     public static class Builder {
         private ArrayList<AudioMix> mMixes;
         private Context mContext;
@@ -147,7 +143,6 @@ public class AudioPolicy {
          * Constructs a new Builder with no audio mixes.
          * @param context the context for the policy
          */
-        @SystemApi
         public Builder(Context context) {
             mMixes = new ArrayList<AudioMix>();
             mContext = context;
@@ -159,7 +154,6 @@ public class AudioPolicy {
          * @return the same Builder instance.
          * @throws IllegalArgumentException
          */
-        @SystemApi
         public Builder addMix(@NonNull AudioMix mix) throws IllegalArgumentException {
             if (mix == null) {
                 throw new IllegalArgumentException("Illegal null AudioMix argument");
@@ -174,7 +168,6 @@ public class AudioPolicy {
          * @return the same Builder instance.
          * @throws IllegalArgumentException
          */
-        @SystemApi
         public Builder setLooper(@NonNull Looper looper) throws IllegalArgumentException {
             if (looper == null) {
                 throw new IllegalArgumentException("Illegal null Looper argument");
@@ -187,7 +180,6 @@ public class AudioPolicy {
          * Sets the audio focus listener for the policy.
          * @param l a {@link AudioPolicy.AudioPolicyFocusListener}
          */
-        @SystemApi
         public void setAudioPolicyFocusListener(AudioPolicyFocusListener l) {
             mFocusListener = l;
         }
@@ -201,7 +193,6 @@ public class AudioPolicy {
          * @param enforce true if the policy will govern audio focus decisions.
          * @return the same Builder instance.
          */
-        @SystemApi
         public Builder setIsAudioFocusPolicy(boolean isFocusPolicy) {
             mIsFocusPolicy = isFocusPolicy;
             return this;
@@ -211,12 +202,10 @@ public class AudioPolicy {
          * Sets the audio policy status listener.
          * @param l a {@link AudioPolicy.AudioPolicyStatusListener}
          */
-        @SystemApi
         public void setAudioPolicyStatusListener(AudioPolicyStatusListener l) {
             mStatusListener = l;
         }
 
-        @SystemApi
         /**
          * Sets the callback to receive all volume key-related events.
          * The callback will only be called if the device is configured to handle volume events
@@ -240,7 +229,6 @@ public class AudioPolicy {
          *     {@link AudioPolicy.AudioPolicyStatusListener} but the policy was configured
          *     as an audio focus policy with {@link #setIsAudioFocusPolicy(boolean)}.
          */
-        @SystemApi
         public AudioPolicy build() {
             if (mStatusListener != null) {
                 // the AudioPolicy status listener includes updates on each mix activity state
@@ -258,7 +246,6 @@ public class AudioPolicy {
     }
 
     /**
-     * @hide
      * Update the current configuration of the set of audio mixes by adding new ones, while
      * keeping the policy registered.
      * This method can only be called on a registered policy.
@@ -266,7 +253,6 @@ public class AudioPolicy {
      * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
      *    otherwise.
      */
-    @SystemApi
     public int attachMixes(@NonNull List<AudioMix> mixes) {
         if (mixes == null) {
             throw new IllegalArgumentException("Illegal null list of AudioMix");
@@ -299,7 +285,6 @@ public class AudioPolicy {
     }
 
     /**
-     * @hide
      * Update the current configuration of the set of audio mixes by removing some, while
      * keeping the policy registered.
      * This method can only be called on a registered policy.
@@ -307,7 +292,6 @@ public class AudioPolicy {
      * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
      *    otherwise.
      */
-    @SystemApi
     public int detachMixes(@NonNull List<AudioMix> mixes) {
         if (mixes == null) {
             throw new IllegalArgumentException("Illegal null list of AudioMix");
@@ -335,6 +319,80 @@ public class AudioPolicy {
                 return status;
             } catch (RemoteException e) {
                 Log.e(TAG, "Dead object in detachMixes", e);
+                return AudioManager.ERROR;
+            }
+        }
+    }
+
+    /**
+     * @hide
+     * Configures the audio framework so that all audio stream originating from the given UID
+     * can only come from a set of audio devices.
+     * For this routing to be operational, a number of {@link AudioMix} instances must have been
+     * previously registered on this policy, and routed to a super-set of the given audio devices
+     * with {@link AudioMix.Builder#setDevice(android.media.AudioDeviceInfo)}. Note that having
+     * multiple devices in the list doesn't imply the signals will be duplicated on the different
+     * audio devices, final routing will depend on the {@link AudioAttributes} of the sounds being
+     * played.
+     * @param uid UID of the application to affect.
+     * @param devices list of devices to which the audio stream of the application may be routed.
+     * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
+     *          otherwise.
+     */
+    @SystemApi
+    public int setUidDeviceAffinity(int uid, @NonNull List<AudioDeviceInfo> devices) {
+        if (devices == null) {
+            throw new IllegalArgumentException("Illegal null list of audio devices");
+        }
+        synchronized (mLock) {
+            if (mStatus != POLICY_STATUS_REGISTERED) {
+                throw new IllegalStateException("Cannot use unregistered AudioPolicy");
+            }
+            final int[] deviceTypes = new int[devices.size()];
+            final String[] deviceAdresses = new String[devices.size()];
+            int i = 0;
+            for (AudioDeviceInfo device : devices) {
+                if (device == null) {
+                    throw new IllegalArgumentException(
+                            "Illegal null AudioDeviceInfo in setUidDeviceAffinity");
+                }
+                deviceTypes[i] =
+                        AudioDeviceInfo.convertDeviceTypeToInternalDevice(device.getType());
+                deviceAdresses[i] = device.getAddress();
+                i++;
+            }
+            final IAudioService service = getService();
+            try {
+                final int status = service.setUidDeviceAffinity(this.cb(),
+                        uid, deviceTypes, deviceAdresses);
+                return status;
+            } catch (RemoteException e) {
+                Log.e(TAG, "Dead object in setUidDeviceAffinity", e);
+                return AudioManager.ERROR;
+            }
+        }
+    }
+
+    /**
+     * @hide
+     * Removes audio device affinity previously set by
+     * {@link #setUidDeviceAffinity(int, java.util.List)}.
+     * @param uid UID of the application affected.
+     * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
+     *          otherwise.
+     */
+    @SystemApi
+    public int removeUidDeviceAffinity(int uid) {
+        synchronized (mLock) {
+            if (mStatus != POLICY_STATUS_REGISTERED) {
+                throw new IllegalStateException("Cannot use unregistered AudioPolicy");
+            }
+            final IAudioService service = getService();
+            try {
+                final int status = service.removeUidDeviceAffinity(this.cb(), uid);
+                return status;
+            } catch (RemoteException e) {
+                Log.e(TAG, "Dead object in removeUidDeviceAffinity", e);
                 return AudioManager.ERROR;
             }
         }
@@ -405,7 +463,6 @@ public class AudioPolicy {
      * Returns the current behavior for audio focus-related ducking.
      * @return {@link #FOCUS_POLICY_DUCKING_IN_APP} or {@link #FOCUS_POLICY_DUCKING_IN_POLICY}
      */
-    @SystemApi
     public int getFocusDuckingBehavior() {
         return mConfig.mDuckingPolicy;
     }
@@ -422,7 +479,6 @@ public class AudioPolicy {
      * @throws IllegalArgumentException
      * @throws IllegalStateException
      */
-    @SystemApi
     public int setFocusDuckingBehavior(int behavior)
             throws IllegalArgumentException, IllegalStateException {
         if ((behavior != FOCUS_POLICY_DUCKING_IN_APP)
@@ -466,7 +522,6 @@ public class AudioPolicy {
      *     with {@link AudioManager#registerAudioPolicy(AudioPolicy)}.
      * @throws IllegalArgumentException
      */
-    @SystemApi
     public AudioRecord createAudioRecordSink(AudioMix mix) throws IllegalArgumentException {
         if (!policyReadyToUse()) {
             Log.e(TAG, "Cannot create AudioRecord sink for AudioMix");
@@ -506,7 +561,6 @@ public class AudioPolicy {
      *     with {@link AudioManager#registerAudioPolicy(AudioPolicy)}.
      * @throws IllegalArgumentException
      */
-    @SystemApi
     public AudioTrack createAudioTrackSource(AudioMix mix) throws IllegalArgumentException {
         if (!policyReadyToUse()) {
             Log.e(TAG, "Cannot create AudioTrack source for AudioMix");
@@ -528,18 +582,15 @@ public class AudioPolicy {
         return at;
     }
 
-    @SystemApi
     public int getStatus() {
         return mStatus;
     }
 
-    @SystemApi
     public static abstract class AudioPolicyStatusListener {
         public void onStatusChange() {}
         public void onMixStateUpdate(AudioMix mix) {}
     }
 
-    @SystemApi
     public static abstract class AudioPolicyFocusListener {
         public void onAudioFocusGrant(AudioFocusInfo afi, int requestResult) {}
         public void onAudioFocusLoss(AudioFocusInfo afi, boolean wasNotified) {}
@@ -563,7 +614,6 @@ public class AudioPolicy {
         public void onAudioFocusAbandon(AudioFocusInfo afi) {}
     }
 
-    @SystemApi
     /**
      * Callback class to receive volume change-related events.
      * See {@link #Builder.setAudioPolicyVolumeCallback(AudioPolicyCallback)} to configure the

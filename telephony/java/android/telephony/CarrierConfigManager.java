@@ -68,7 +68,13 @@ public class CarrierConfigManager {
      * This intent is broadcast by the system when carrier config changes. An int is specified in
      * {@link #EXTRA_SLOT_INDEX} to indicate the slot index that this is for. An optional int extra
      * {@link #EXTRA_SUBSCRIPTION_INDEX} is included to indicate the subscription index if a valid
-     * one is available for the slot index.
+     * one is available for the slot index. An optional int extra
+     * {@link TelephonyManager#EXTRA_CARRIER_ID} is included to indicate the carrier id for the
+     * changed carrier configuration. An optional int extra
+     * {@link TelephonyManager#EXTRA_PRECISE_CARRIER_ID} is included to indicate the precise
+     * carrier id for the changed carrier configuration.
+     * @see TelephonyManager#getSimCarrierId()
+     * @see TelephonyManager#getSimPreciseCarrierId()
      */
     public static final String
             ACTION_CARRIER_CONFIG_CHANGED = "android.telephony.action.CARRIER_CONFIG_CHANGED";
@@ -76,6 +82,14 @@ public class CarrierConfigManager {
     // Below are the keys used in carrier config bundles. To add a new variable, define the key and
     // give it a default value in sDefaults. If you need to ship a per-network override in the
     // system image, that can be added in packages/apps/CarrierConfig.
+
+    /**
+     * Specifies a value that identifies the version of the carrier configuration that is
+     * currently in use. This string is displayed on the UI.
+     * The format of the string is not specified.
+     */
+    public static final String KEY_CARRIER_CONFIG_VERSION_STRING =
+            "carrier_config_version_string";
 
     /**
      * This flag specifies whether VoLTE availability is based on provisioning. By default this is
@@ -401,7 +415,6 @@ public class CarrierConfigManager {
      * @see SubscriptionManager#getSubscriptionPlans(int)
      * @see SubscriptionManager#setSubscriptionPlans(int, java.util.List)
      */
-    @SystemApi
     public static final String KEY_CONFIG_PLANS_PACKAGE_OVERRIDE_STRING =
             "config_plans_package_override_string";
 
@@ -1169,20 +1182,33 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_NAME_STRING = "carrier_name_string";
 
- /**
-  * The Component Name of a carrier-provided CallScreeningService implementation. Telecom will
-  * bind to {@link android.telecom.CallScreeningService} for ALL incoming calls and provide
-  * the carrier
-  * CallScreeningService with the opportunity to allow or block calls.
-  * <p>
-  * The String includes the package name/the class name.
-  * Example:
-  * <item>com.android.carrier/com.android.carrier.callscreeningserviceimpl</item>
-  * <p>
-  * Using {@link ComponentName#flattenToString()} to convert a ComponentName object to String.
-  * Using {@link ComponentName#unflattenFromString(String)} to convert a String object to a
-  * ComponentName.
-  */
+    /**
+     * String to override sim country iso.
+     * Sim country iso is based on sim MCC which is coarse and doesn't work with dual IMSI SIM where
+     * a SIM can have multiple MCC from different countries.
+     * Instead, each sim carrier should have a single country code, apply per carrier based iso
+     * code as an override. The overridden value can be read from
+     * {@link TelephonyManager#getSimCountryIso()} and {@link SubscriptionInfo#getCountryIso()}
+     *
+     * @hide
+     */
+    public static final String KEY_SIM_COUNTRY_ISO_OVERRIDE_STRING =
+            "sim_country_iso_override_string";
+
+   /**
+    * The Component Name of a carrier-provided CallScreeningService implementation. Telecom will
+    * bind to {@link android.telecom.CallScreeningService} for ALL incoming calls and provide
+    * the carrier
+    * CallScreeningService with the opportunity to allow or block calls.
+    * <p>
+    * The String includes the package name/the class name.
+    * Example:
+    * <item>com.android.carrier/com.android.carrier.callscreeningserviceimpl</item>
+    * <p>
+    * Using {@link ComponentName#flattenToString()} to convert a ComponentName object to String.
+    * Using {@link ComponentName#unflattenFromString(String)} to convert a String object to a
+    * ComponentName.
+    */
     public static final String KEY_CARRIER_CALL_SCREENING_APP_STRING = "call_screening_app";
 
     /**
@@ -1393,9 +1419,9 @@ public class CarrierConfigManager {
      * Example: "default"
      *
      * {@code ERROR_CODE_1} is an integer defined in
-     * {@link com.android.internal.telephony.dataconnection.DcFailCause DcFailure}
+     * {@link DataFailCause DcFailure}
      * Example:
-     * {@link com.android.internal.telephony.dataconnection.DcFailCause#MISSING_UNKNOWN_APN}
+     * {@link DataFailCause#MISSING_UNKNOWN_APN}
      *
      * {@code CARRIER_ACTION_IDX_1} is an integer defined in
      * {@link com.android.carrierdefaultapp.CarrierActionUtils CarrierActionUtils}
@@ -1795,17 +1821,6 @@ public class CarrierConfigManager {
             "editable_wfc_roaming_mode_bool";
 
     /**
-     * Determine whether current lpp_mode used for E-911 needs to be kept persistently.
-     * {@code false} - not keeping the lpp_mode means using default configuration of gps.conf
-     *                 when sim is not presented.
-     * {@code true}  - current lpp_profile of carrier will be kepted persistently
-     *                 even after sim is removed.
-     *
-     * @hide
-     */
-    public static final String KEY_PERSIST_LPP_MODE_BOOL = "persist_lpp_mode_bool";
-
-    /**
      * Carrier specified WiFi networks.
      * @hide
      */
@@ -2002,6 +2017,8 @@ public class CarrierConfigManager {
      * Determine whether to use only RSRP for the number of LTE signal bars.
      * @hide
      */
+    // FIXME: this key and related keys must not be exposed without a consistent philosophy for
+    // all RATs.
     public static final String KEY_USE_ONLY_RSRP_FOR_LTE_SIGNAL_BAR_BOOL =
             "use_only_rsrp_for_lte_signal_bar_bool";
 
@@ -2242,9 +2259,11 @@ public class CarrierConfigManager {
      * e.g.) To use RSCP by default, set the value to "rscp". The signal strength level will
      * then be determined by #KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY
      * <p>
-     * Currently this only supports the value "rscp"
+     * Currently this supports the value "rscp" and "rssi".
      * @hide
      */
+    // FIXME: this key and related keys must not be exposed without a consistent philosophy for
+    // all RATs.
     public static final String KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING =
             "wcdma_default_signal_strength_measurement_string";
 
@@ -2376,11 +2395,174 @@ public class CarrierConfigManager {
     public static final String KEY_CALL_WAITING_SERVICE_CLASS_INT =
             "call_waiting_service_class_int";
 
+    /**
+     * This configuration allow the system UI to display different 5G icon for different 5G status.
+     *
+     * There are four 5G status:
+     * 1. connected_mmwave: device currently connected to 5G cell as the secondary cell and using
+     *    millimeter wave.
+     * 2. connected: device currently connected to 5G cell as the secondary cell but not using
+     *    millimeter wave.
+     * 3. not_restricted: device camped on a network that has 5G capability(not necessary to connect
+     *    a 5G cell as a secondary cell) and the use of 5G is not restricted.
+     * 4. restricted: device camped on a network that has 5G capability(not necessary to connect a
+     *    5G cell as a secondary cell) but the use of 5G is restricted.
+     *
+     * The configured string contains multiple key-value pairs separated by comma. For each pair,
+     * the key and value is separated by a colon. The key is corresponded to a 5G status above and
+     * the value is the icon name. Use "None" as the icon name if no icon should be shown in a
+     * specific 5G status.
+     *
+     * Here is an example of the configuration:
+     * "connected_mmwave:5GPlus,connected:5G,not_restricted:None,restricted:None"
+     *
+     * @hide
+     */
+    public static final String KEY_5G_ICON_CONFIGURATION_STRING =
+            "5g_icon_configuration_string";
+
+    /**
+     * Controls RSRP threshold at which AlternativeNetworkService will decide whether
+     * the opportunistic network is good enough for internet data.
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSRP_INT =
+            "opportunistic_network_entry_threshold_rsrp_int";
+
+    /**
+     * Controls RSSNR threshold at which AlternativeNetworkService will decide whether
+     * the opportunistic network is good enough for internet data.
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSSNR_INT =
+            "opportunistic_network_entry_threshold_rssnr_int";
+
+    /**
+     * Controls RSRP threshold below which AlternativeNetworkService will decide whether
+     * the opportunistic network available is not good enough for internet data.
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_EXIT_THRESHOLD_RSRP_INT =
+            "opportunistic_network_exit_threshold_rsrp_int";
+
+    /**
+     * Controls RSSNR threshold below which AlternativeNetworkService will decide whether
+     * the opportunistic network available is not good enough for internet data.
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_EXIT_THRESHOLD_RSSNR_INT =
+            "opportunistic_network_exit_threshold_rssnr_int";
+
+    /**
+     * GPS configs. See android.hardware.gnss@1.0 IGnssConfiguration.
+     * @hide
+     */
+    public static final class Gps {
+        /** Prefix of all Gps.KEY_* constants. */
+        public static final String KEY_PREFIX = "gps.";
+
+        /**
+         * Determine whether current lpp_mode used for E-911 needs to be kept persistently.
+         * {@code false} - not keeping the lpp_mode means using default configuration of gps.conf
+         *                 when sim is not presented.
+         * {@code true}  - current lpp_profile of carrier will be kepted persistently
+         *                 even after sim is removed. This is default.
+         */
+        public static final String KEY_PERSIST_LPP_MODE_BOOL = KEY_PREFIX + "persist_lpp_mode_bool";
+
+        /**
+         * SUPL server host for SET Initiated & non-ES Network-Initiated SUPL requests.
+         * Default to supl.google.com
+         */
+        public static final String KEY_SUPL_HOST_STRING = KEY_PREFIX + "supl_host";
+
+        /** SUPL server port. Default to 7275. */
+        public static final String KEY_SUPL_PORT_STRING = KEY_PREFIX + "supl_port";
+
+        /**
+         * The SUPL version requested by Carrier. This is a bit mask
+         * with bits 0:7 representing a service indicator field, bits 8:15
+         * representing the minor version and bits 16:23 representing the
+         * major version. Default to 0x20000.
+         */
+        public static final String KEY_SUPL_VER_STRING = KEY_PREFIX + "supl_ver";
+
+        /**
+         * SUPL_MODE configuration bit mask
+         * 1 - Mobile Station Based. This is default.
+         * 2 - Mobile Station Assisted.
+         */
+        public static final String KEY_SUPL_MODE_STRING = KEY_PREFIX + "supl_mode";
+
+        /**
+         * Whether to limit responses to SUPL ES mode requests only during user emergency sessions
+         * (e.g. E911), and SUPL non-ES requests to only outside of non user emergency sessions.
+         * 0 - no.
+         * 1 - yes. This is default.
+         */
+        // TODO(b/119567985): name this key properly
+        public static final String KEY_SUPL_ES_STRING = KEY_PREFIX + "supl_es";
+
+        /**
+         * LTE Positioning Profile settings bit mask.
+         * 0 - Radio Resource Location Protocol in user plane and control plane. This is default.
+         * 1 - Enable LTE Positioning Protocol in user plane.
+         * 2 - Enable LTE Positioning Protocol in control plane.
+         */
+        public static final String KEY_LPP_PROFILE_STRING = KEY_PREFIX + "lpp_profile";
+
+        /**
+         * Determine whether to use emergency PDN for emergency SUPL.
+         * 0 - no.
+         * 1 - yes. This is default.
+         */
+        public static final String KEY_USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL_STRING =
+                KEY_PREFIX + "use_emergency_pdn_for_emergency_supl";
+
+        /**
+         * A_GLONASS_POS_PROTOCOL_SELECT bit mask.
+         * 0 - Don't use A-GLONASS. This is default.
+         * 1 - Use A-GLONASS in Radio Resource Control(RRC) control-plane.
+         * 2 - Use A-GLONASS in Radio Resource Location user-plane.
+         * 4 - Use A-GLONASS in LTE Positioning Protocol User plane.
+         */
+        public static final String KEY_A_GLONASS_POS_PROTOCOL_SELECT_STRING =
+                KEY_PREFIX + "a_glonass_pos_protocol_select";
+
+        /**
+         * GPS_LOCK configuration bit mask to specify GPS device behavior toward other services,
+         * when Location Settings are off.
+         * "0" - No lock.
+         * "1" - Lock Mobile Originated GPS functionalities.
+         * "2" - Lock Network initiated GPS functionalities.
+         * "3" - Lock both. This is default.
+         */
+        public static final String KEY_GPS_LOCK_STRING = KEY_PREFIX + "gps_lock";
+
+        /**
+         * SUPL NI emergency extension time in seconds. Default to "0".
+         */
+        public static final String KEY_ES_EXTENSION_SEC = KEY_PREFIX + "es_extension_sec";
+
+        private static PersistableBundle getDefaults() {
+            PersistableBundle defaults = new PersistableBundle();
+            defaults.putBoolean(KEY_PERSIST_LPP_MODE_BOOL, true);
+            defaults.putString(KEY_SUPL_HOST_STRING, "supl.google.com");
+            defaults.putString(KEY_SUPL_PORT_STRING, "7275");
+            defaults.putString(KEY_SUPL_VER_STRING, "0x20000");
+            defaults.putString(KEY_SUPL_MODE_STRING, "1");
+            defaults.putString(KEY_SUPL_ES_STRING, "1");
+            defaults.putString(KEY_LPP_PROFILE_STRING, "0");
+            defaults.putString(KEY_USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL_STRING, "1");
+            defaults.putString(KEY_A_GLONASS_POS_PROTOCOL_SELECT_STRING, "0");
+            defaults.putString(KEY_GPS_LOCK_STRING, "3");
+            defaults.putString(KEY_ES_EXTENSION_SEC, "0");
+            return defaults;
+        }
+    }
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
     static {
         sDefaults = new PersistableBundle();
+        sDefaults.putString(KEY_CARRIER_CONFIG_VERSION_STRING, "");
         sDefaults.putBoolean(KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_ALLOW_DEFLECT_IMS_CALL_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_PLAY_REMOTE_HOLD_TONE_BOOL, false);
@@ -2563,6 +2745,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CONFIG_WIFI_DISABLE_IN_ECBM, false);
         sDefaults.putBoolean(KEY_CARRIER_NAME_OVERRIDE_BOOL, false);
         sDefaults.putString(KEY_CARRIER_NAME_STRING, "");
+        sDefaults.putString(KEY_SIM_COUNTRY_ISO_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_CALL_SCREENING_APP_STRING, "");
         sDefaults.putBoolean(KEY_CDMA_HOME_REGISTERED_PLMN_NAME_OVERRIDE_BOOL, false);
         sDefaults.putString(KEY_CDMA_HOME_REGISTERED_PLMN_NAME_STRING, "");
@@ -2634,12 +2817,9 @@ public class CarrierConfigManager {
                 //6: CARRIER_ACTION_CANCEL_ALL_NOTIFICATIONS
                 //8: CARRIER_ACTION_DISABLE_DEFAULT_URL_HANDLER
                 });
-        sDefaults.putStringArray(KEY_CARRIER_DEFAULT_ACTIONS_ON_DEFAULT_NETWORK_AVAILABLE,
-                new String[] {
-                        String.valueOf(false) + ": 7",
-                        //7: CARRIER_ACTION_ENABLE_DEFAULT_URL_HANDLER
-                        String.valueOf(true) + ": 8"
-                        //8: CARRIER_ACTION_DISABLE_DEFAULT_URL_HANDLER
+        sDefaults.putStringArray(KEY_CARRIER_DEFAULT_ACTIONS_ON_DEFAULT_NETWORK_AVAILABLE, new String[] {
+                String.valueOf(false) + ": 7", //7: CARRIER_ACTION_ENABLE_DEFAULT_URL_HANDLER
+                String.valueOf(true) + ": 8"  //8: CARRIER_ACTION_DISABLE_DEFAULT_URL_HANDLER
                 });
         sDefaults.putStringArray(KEY_CARRIER_DEFAULT_REDIRECTION_URL_STRING_ARRAY, null);
 
@@ -2672,7 +2852,6 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_FILTERED_CNAP_NAMES_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_EDITABLE_WFC_ROAMING_MODE_BOOL, false);
         sDefaults.putBoolean(KEY_STK_DISABLE_LAUNCH_BROWSER_BOOL, false);
-        sDefaults.putBoolean(KEY_PERSIST_LPP_MODE_BOOL, true);
         sDefaults.putStringArray(KEY_CARRIER_WIFI_STRING_ARRAY, null);
         sDefaults.putInt(KEY_PREF_NETWORK_NOTIFICATION_DELAY_INT, -1);
         sDefaults.putInt(KEY_EMERGENCY_NOTIFICATION_DELAY_INT, -1);
@@ -2727,7 +2906,7 @@ public class CarrierConfigManager {
                         -95, /* SIGNAL_STRENGTH_GOOD */
                         -85  /* SIGNAL_STRENGTH_GREAT */
                 });
-        sDefaults.putString(KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING, "");
+        sDefaults.putString(KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING, "rssi");
         sDefaults.putBoolean(KEY_CONFIG_SHOW_ORIG_DIAL_STRING_FOR_CDMA_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_CALL_BLOCKING_DISABLED_NOTIFICATION_ALWAYS_BOOL, false);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_OVER_UT_WARNING_BOOL, false);
@@ -2739,6 +2918,17 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_USE_CALL_FORWARDING_USSD_BOOL, false);
         sDefaults.putBoolean(KEY_USE_CALLER_ID_USSD_BOOL, false);
         sDefaults.putInt(KEY_CALL_WAITING_SERVICE_CLASS_INT, 1 /* SERVICE_CLASS_VOICE */);
+        sDefaults.putString(KEY_5G_ICON_CONFIGURATION_STRING,
+                "connected_mmwave:None,connected:5G,not_restricted:None,restricted:None");
+        /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_GOOD */
+        sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSRP_INT, -108);
+        /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_MODERATE */
+        sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_EXIT_THRESHOLD_RSRP_INT, -118);
+        /* Default value is minimum RSSNR level needed for SIGNAL_STRENGTH_GOOD */
+        sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSSNR_INT, 45);
+        /* Default value is minimum RSSNR level needed for SIGNAL_STRENGTH_MODERATE */
+        sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_EXIT_THRESHOLD_RSSNR_INT, 10);
+        sDefaults.putAll(Gps.getDefaults());
     }
 
     /**

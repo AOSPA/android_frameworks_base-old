@@ -60,7 +60,7 @@ public final class SystemTextClassifier implements TextClassifier {
         mSettings = Preconditions.checkNotNull(settings);
         mFallback = context.getSystemService(TextClassificationManager.class)
                 .getTextClassifier(TextClassifier.LOCAL);
-        mPackageName = Preconditions.checkNotNull(context.getPackageName());
+        mPackageName = Preconditions.checkNotNull(context.getOpPackageName());
     }
 
     /**
@@ -72,6 +72,7 @@ public final class SystemTextClassifier implements TextClassifier {
         Preconditions.checkNotNull(request);
         Utils.checkMainThread();
         try {
+            request.setCallingPackageName(mPackageName);
             final TextSelectionCallback callback = new TextSelectionCallback();
             mManagerService.onSuggestSelection(mSessionId, request, callback);
             final TextSelection selection = callback.mReceiver.get();
@@ -93,6 +94,7 @@ public final class SystemTextClassifier implements TextClassifier {
         Preconditions.checkNotNull(request);
         Utils.checkMainThread();
         try {
+            request.setCallingPackageName(mPackageName);
             final TextClassificationCallback callback = new TextClassificationCallback();
             mManagerService.onClassifyText(mSessionId, request, callback);
             final TextClassification classification = callback.mReceiver.get();
@@ -145,11 +147,24 @@ public final class SystemTextClassifier implements TextClassifier {
     }
 
     @Override
+    public void onTextClassifierEvent(@NonNull TextClassifierEvent event) {
+        Preconditions.checkNotNull(event);
+        Utils.checkMainThread();
+
+        try {
+            mManagerService.onTextClassifierEvent(mSessionId, event);
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "Error reporting textclassifier event.", e);
+        }
+    }
+
+    @Override
     public TextLanguage detectLanguage(TextLanguage.Request request) {
         Preconditions.checkNotNull(request);
         Utils.checkMainThread();
 
         try {
+            request.setCallingPackageName(mPackageName);
             final TextLanguageCallback callback = new TextLanguageCallback();
             mManagerService.onDetectLanguage(mSessionId, request, callback);
             final TextLanguage textLanguage = callback.mReceiver.get();
@@ -168,6 +183,7 @@ public final class SystemTextClassifier implements TextClassifier {
         Utils.checkMainThread();
 
         try {
+            request.setCallingPackageName(mPackageName);
             final ConversationActionsCallback callback = new ConversationActionsCallback();
             mManagerService.onSuggestConversationActions(mSessionId, request, callback);
             final ConversationActions conversationActions = callback.mReceiver.get();

@@ -278,7 +278,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private int mDefaultInetConditionPublished = 0;
 
     private INetworkManagementService mNMS;
-    private INetd mNetd;
+    @VisibleForTesting
+    protected INetd mNetd;
     private INetworkStatsService mStatsService;
     private INetworkPolicyManager mPolicyManager;
     private NetworkPolicyManagerInternal mPolicyManagerInternal;
@@ -909,6 +910,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // Listen to package add and removal events for all users.
         intentFilter = new IntentFilter();
         intentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        intentFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
         intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
         intentFilter.addDataScheme("package");
         mContext.registerReceiverAsUser(
@@ -1974,6 +1976,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     void systemReady() {
         mProxyTracker.loadGlobalProxy();
         registerNetdEventCallback();
+        mTethering.systemReady();
+
         synchronized (this) {
             mSystemReady = true;
             if (mInitialBroadcast != null) {
@@ -2097,7 +2101,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    private static final String DEFAULT_TCP_BUFFER_SIZES = "4096,87380,110208,4096,16384,110208";
+    @VisibleForTesting
+    protected static final String DEFAULT_TCP_BUFFER_SIZES = "4096,87380,110208,4096,16384,110208";
     private static final String DEFAULT_TCP_RWND_KEY = "net.tcp.default_init_rwnd";
 
     // Overridden for testing purposes to avoid writing to SystemProperties.
@@ -2136,15 +2141,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
         try {
             if (VDBG || DDBG) Slog.d(TAG, "Setting tx/rx TCP buffers to " + tcpBufferSizes);
 
-            final String prefix = "/sys/kernel/ipv4/tcp_";
-            FileUtils.stringToFile(prefix + "rmem_min", values[0]);
-            FileUtils.stringToFile(prefix + "rmem_def", values[1]);
-            FileUtils.stringToFile(prefix + "rmem_max", values[2]);
-            FileUtils.stringToFile(prefix + "wmem_min", values[3]);
-            FileUtils.stringToFile(prefix + "wmem_def", values[4]);
-            FileUtils.stringToFile(prefix + "wmem_max", values[5]);
+            String rmemValues = String.join(" ", values[0], values[1], values[2]);
+            String wmemValues = String.join(" ", values[3], values[4], values[5]);
+            mNetd.setTcpRWmemorySize(rmemValues, wmemValues);
             mCurrentTcpBufferSizes = tcpBufferSizes;
-        } catch (IOException e) {
+        } catch (RemoteException | ServiceSpecificException e) {
             loge("Can't set TCP buffer sizes:" + e);
         }
 
@@ -4241,12 +4242,46 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mPermissionMonitor.onPackageAdded(packageName, uid);
     }
 
-    private void onPackageRemoved(String packageName, int uid) {
+    private void onPackageReplaced(String packageName, int uid) {
+        if (TextUtils.isEmpty(packageName) || uid < 0) {
+            Slog.wtf(TAG, "Invalid package in onPackageReplaced: " + packageName + " | " + uid);
+            return;
+        }
+        final int userId = UserHandle.getUserId(uid);
+        synchronized (mVpns) {
+            final Vpn vpn = mVpns.get(userId);
+            if (vpn == null) {
+                return;
+            }
+            // Legacy always-on VPN won't be affected since the package name is not set.
+            if (TextUtils.equals(vpn.getAlwaysOnPackage(), packageName)) {
+                Slog.d(TAG, "Restarting always-on VPN package " + packageName + " for user "
+                        + userId);
+                vpn.startAlwaysOnVpn();
+            }
+        }
+    }
+
+    private void onPackageRemoved(String packageName, int uid, boolean isReplacing) {
         if (TextUtils.isEmpty(packageName) || uid < 0) {
             Slog.wtf(TAG, "Invalid package in onPackageRemoved: " + packageName + " | " + uid);
             return;
         }
         mPermissionMonitor.onPackageRemoved(uid);
+
+        final int userId = UserHandle.getUserId(uid);
+        synchronized (mVpns) {
+            final Vpn vpn = mVpns.get(userId);
+            if (vpn == null) {
+                return;
+            }
+            // Legacy always-on VPN won't be affected since the package name is not set.
+            if (TextUtils.equals(vpn.getAlwaysOnPackage(), packageName) && !isReplacing) {
+                Slog.d(TAG, "Removing always-on VPN package " + packageName + " for user "
+                        + userId);
+                vpn.setAlwaysOnPackage(null, false);
+            }
+        }
     }
 
     private void onUserUnlocked(int userId) {
@@ -4283,8 +4318,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 onUserUnlocked(userId);
             } else if (Intent.ACTION_PACKAGE_ADDED.equals(action)) {
                 onPackageAdded(packageName, uid);
+            } else if (Intent.ACTION_PACKAGE_REPLACED.equals(action)) {
+                onPackageReplaced(packageName, uid);
             } else if (Intent.ACTION_PACKAGE_REMOVED.equals(action)) {
-                onPackageRemoved(packageName, uid);
+                final boolean isReplacing = intent.getBooleanExtra(
+                        Intent.EXTRA_REPLACING, false);
+                onPackageRemoved(packageName, uid, isReplacing);
             }
         }
     };
@@ -5726,7 +5765,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 // This should never fail.  Specifying an already in use NetID will cause failure.
                 if (networkAgent.isVPN()) {
                     mNMS.createVirtualNetwork(networkAgent.network.netId,
-                            !networkAgent.linkProperties.getDnsServers().isEmpty(),
                             (networkAgent.networkMisc == null ||
                                 !networkAgent.networkMisc.allowBypass));
                 } else {

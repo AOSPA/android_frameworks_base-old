@@ -1205,10 +1205,20 @@ public final class ActiveServices {
                                 android.Manifest.permission.INSTANT_APP_FOREGROUND_SERVICE,
                                 r.app.pid, r.appInfo.uid, "startForeground");
                 }
-            } else if (r.appInfo.targetSdkVersion >= Build.VERSION_CODES.P) {
-                mAm.enforcePermission(
-                        android.Manifest.permission.FOREGROUND_SERVICE,
-                        r.app.pid, r.appInfo.uid, "startForeground");
+            } else {
+                if (r.appInfo.targetSdkVersion >= Build.VERSION_CODES.P) {
+                    mAm.enforcePermission(
+                            android.Manifest.permission.FOREGROUND_SERVICE,
+                            r.app.pid, r.appInfo.uid, "startForeground");
+                }
+                if (r.appInfo.targetSdkVersion >= Build.VERSION_CODES.Q) {
+                    if (r.serviceInfo.getForegroundServiceType()
+                            == ServiceInfo.FOREGROUND_SERVICE_TYPE_UNSPECIFIED) {
+                        // STOPSHIP(b/120611119): replace log message with SecurityException.
+                        Slog.w(TAG, "missing foregroundServiceType attribute in "
+                                + "service element of manifest file");
+                    }
+                }
             }
             boolean alreadyStartedOp = false;
             boolean stopProcStatsOp = false;
@@ -1655,7 +1665,7 @@ public final class ActiveServices {
             AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);
             ConnectionRecord c = new ConnectionRecord(b, activity,
                     connection, flags, clientLabel, clientIntent,
-                    callerApp.uid, callerApp.processName);
+                    callerApp.uid, callerApp.processName, callingPackage);
 
             IBinder binder = connection.asBinder();
             ArrayList<ConnectionRecord> clist = s.connections.get(binder);
@@ -1801,16 +1811,25 @@ public final class ActiveServices {
         for (int i = clist.size() - 1; i >= 0; i--) {
             final ConnectionRecord crec = clist.get(i);
             final ServiceRecord srec = crec.binding.service;
-            if (srec != null && srec.app != null
-                    && (srec.serviceInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0) {
-                if (group > 0) {
-                    srec.app.connectionService = srec;
-                    srec.app.connectionGroup = group;
-                    srec.app.connectionImportance = importance;
+            if (srec != null && (srec.serviceInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0) {
+                if (srec.app != null) {
+                    if (group > 0) {
+                        srec.app.connectionService = srec;
+                        srec.app.connectionGroup = group;
+                        srec.app.connectionImportance = importance;
+                    } else {
+                        srec.app.connectionService = null;
+                        srec.app.connectionGroup = 0;
+                        srec.app.connectionImportance = 0;
+                    }
                 } else {
-                    srec.app.connectionService = null;
-                    srec.app.connectionGroup = 0;
-                    srec.app.connectionImportance = 0;
+                    if (group > 0) {
+                        srec.pendingConnectionGroup = group;
+                        srec.pendingConnectionImportance = importance;
+                    } else {
+                        srec.pendingConnectionGroup = 0;
+                        srec.pendingConnectionImportance = 0;
+                    }
                 }
             }
         }
@@ -1945,7 +1964,8 @@ public final class ActiveServices {
                 + " type=" + resolvedType + " callingUid=" + callingUid);
 
         userId = mAm.mUserController.handleIncomingUser(callingPid, callingUid, userId, false,
-                ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE, "service", null);
+                ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE, "service",
+                callingPackage);
 
         ServiceMap smap = getServiceMapLocked(userId);
         final ComponentName comp;
@@ -2000,6 +2020,13 @@ public final class ActiveServices {
                 ComponentName className = new ComponentName(
                         sInfo.applicationInfo.packageName, sInfo.name);
                 ComponentName name = comp != null ? comp : className;
+                if (!mAm.validateAssociationAllowedLocked(callingPackage, callingUid,
+                        name.getPackageName(), sInfo.applicationInfo.uid)) {
+                    String msg = "association not allowed between packages "
+                            + callingPackage + " and " + name.getPackageName();
+                    Slog.w(TAG, "Service lookup failed: " + msg);
+                    return new ServiceLookupResult(null, msg);
+                }
                 if ((sInfo.flags & ServiceInfo.FLAG_EXTERNAL_SERVICE) != 0) {
                     if (isBindExternal) {
                         if (!sInfo.exported) {
@@ -2058,8 +2085,8 @@ public final class ActiveServices {
                                 sInfo.applicationInfo.uid, name.getPackageName(),
                                 name.getClassName());
                     }
-                    r = new ServiceRecord(mAm, ss, className, name, filter, sInfo, callingFromFg,
-                            res);
+                    r = new ServiceRecord(mAm, ss, className, name, filter, sInfo,
+                            callingFromFg, res);
                     res.setService(r);
                     smap.mServicesByInstanceName.put(name, r);
                     smap.mServicesByIntent.put(filter, r);
@@ -2080,6 +2107,17 @@ public final class ActiveServices {
             }
         }
         if (r != null) {
+            if (!mAm.validateAssociationAllowedLocked(callingPackage, callingUid, r.packageName,
+                    r.appInfo.uid)) {
+                String msg = "association not allowed between packages "
+                        + callingPackage + " and " + r.packageName;
+                Slog.w(TAG, "Service lookup failed: " + msg);
+                return new ServiceLookupResult(null, msg);
+            }
+            if (!mAm.mIntentFirewall.checkService(r.name, service, callingUid, callingPid,
+                    resolvedType, r.appInfo)) {
+                return new ServiceLookupResult(null, "blocked by firewall");
+            }
             if (mAm.checkComponentPermission(r.permission,
                     callingPid, callingUid, r.appInfo.uid, r.exported) != PERMISSION_GRANTED) {
                 if (!r.exported) {
@@ -2105,11 +2143,6 @@ public final class ActiveServices {
                             + " requires appop " + AppOpsManager.opToName(opCode));
                     return null;
                 }
-            }
-
-            if (!mAm.mIntentFirewall.checkService(r.name, service, callingUid, callingPid,
-                    resolvedType, r.appInfo)) {
-                return null;
             }
             return new ServiceLookupResult(r, null);
         }

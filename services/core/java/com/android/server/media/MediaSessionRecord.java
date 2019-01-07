@@ -20,10 +20,10 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
+import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.AudioManagerInternal;
 import android.media.AudioSystem;
-import android.media.MediaDescription;
 import android.media.MediaMetadata;
 import android.media.Rating;
 import android.media.VolumeProvider;
@@ -36,7 +36,6 @@ import android.media.session.MediaController.PlaybackInfo;
 import android.media.session.MediaSession;
 import android.media.session.ParcelableVolumeInfo;
 import android.media.session.PlaybackState;
-import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
@@ -94,8 +93,9 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
     private PendingIntent mLaunchIntent;
 
     // TransportPerformer fields
-
     private Bundle mExtras;
+    // Note: Avoid unparceling the bundle inside MediaMetadata since unparceling in system process
+    // may result in throwing an exception.
     private MediaMetadata mMetadata;
     private PlaybackState mPlaybackState;
     private ParceledListSlice mQueue;
@@ -116,6 +116,9 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
 
     private boolean mIsActive = false;
     private boolean mDestroyed = false;
+
+    private long mDuration;
+    private String mMetadataDescription;
 
     public MediaSessionRecord(int ownerPid, int ownerUid, int userId, String ownerPackageName,
             ISessionCallback cb, String tag, MediaSessionService service, Looper handlerLooper) {
@@ -233,6 +236,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
      * {@link AudioManager#ADJUST_SAME}.
      *
      * @param packageName The package that made the original volume request.
+     * @param opPackageName The op package that made the original volume request.
      * @param pid The pid that made the original volume request.
      * @param uid The uid that made the original volume request.
      * @param caller caller binder. can be {@code null} if it's from the volume key.
@@ -245,7 +249,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
      * @param flags Any of the flags from {@link AudioManager}.
      * @param useSuggested True to use adjustSuggestedStreamVolume instead of
      */
-    public void adjustVolume(String packageName, int pid, int uid,
+    public void adjustVolume(String packageName, String opPackageName, int pid, int uid,
             ISessionControllerCallback caller, boolean asSystemService, int direction, int flags,
             boolean useSuggested) {
         int previousFlagPlaySound = flags & AudioManager.FLAG_PLAY_SOUND;
@@ -255,8 +259,8 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         if (mVolumeType == PlaybackInfo.PLAYBACK_TYPE_LOCAL) {
             // Adjust the volume with a handler not to be blocked by other system service.
             int stream = AudioAttributes.toLegacyStreamType(mAudioAttrs);
-            postAdjustLocalVolume(stream, direction, flags, packageName, uid, asSystemService,
-                    useSuggested, previousFlagPlaySound);
+            postAdjustLocalVolume(stream, direction, flags, opPackageName, pid, uid,
+                    asSystemService, useSuggested, previousFlagPlaySound);
         } else {
             if (mVolumeControlType == VolumeProvider.VOLUME_CONTROL_FIXED) {
                 // Nothing to do, the volume cannot be changed
@@ -287,11 +291,23 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         }
     }
 
-    private void setVolumeTo(String packageName, int pid, int uid,
+    private void setVolumeTo(String packageName, String opPackageName, int pid, int uid,
             ISessionControllerCallback caller, int value, int flags) {
         if (mVolumeType == PlaybackInfo.PLAYBACK_TYPE_LOCAL) {
             int stream = AudioAttributes.toLegacyStreamType(mAudioAttrs);
-            mAudioManagerInternal.setStreamVolumeForUid(stream, value, flags, packageName, uid);
+            final int volumeValue = value;
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        mAudioManagerInternal.setStreamVolumeForUid(stream, volumeValue, flags,
+                                opPackageName, uid);
+                    } catch (IllegalArgumentException | SecurityException e) {
+                        Log.e(TAG, "Cannot set volume: stream=" + stream + ", value=" + volumeValue
+                                + ", flags=" + flags, e);
+                    }
+                }
+            });
         } else {
             if (mVolumeControlType != VolumeProvider.VOLUME_CONTROL_ABSOLUTE) {
                 // Nothing to do. The volume can't be set directly.
@@ -451,7 +467,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         pw.println(indent + "audioAttrs=" + mAudioAttrs);
         pw.println(indent + "volumeType=" + mVolumeType + ", controlType=" + mVolumeControlType
                 + ", max=" + mMaxVolume + ", current=" + mCurrentVolume);
-        pw.println(indent + "metadata:" + getShortMetadataString());
+        pw.println(indent + "metadata: " + mMetadataDescription);
         pw.println(indent + "queueTitle=" + mQueueTitle + ", size="
                 + (mQueue == null ? 0 : mQueue.getList().size()));
     }
@@ -462,11 +478,19 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
     }
 
     private void postAdjustLocalVolume(final int stream, final int direction, final int flags,
-            final String callingPackageName, final int callingUid, final boolean asSystemService,
-            final boolean useSuggested, final int previousFlagPlaySound) {
-        final String packageName = asSystemService
-                ? mContext.getOpPackageName() : callingPackageName;
-        final int uid = asSystemService ? Process.SYSTEM_UID : callingUid;
+            final String callingOpPackageName, final int callingPid, final int callingUid,
+            final boolean asSystemService, final boolean useSuggested,
+            final int previousFlagPlaySound) {
+        // Must use opPackageName for adjusting volumes with UID.
+        final String opPackageName;
+        final int uid;
+        if (asSystemService) {
+            opPackageName = mContext.getOpPackageName();
+            uid = Process.SYSTEM_UID;
+        } else {
+            opPackageName = callingOpPackageName;
+            uid = callingUid;
+        }
         mHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -474,31 +498,24 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
                     if (useSuggested) {
                         if (AudioSystem.isStreamActive(stream, 0)) {
                             mAudioManagerInternal.adjustSuggestedStreamVolumeForUid(stream,
-                                    direction, flags, packageName, uid);
+                                    direction, flags, opPackageName, uid);
                         } else {
                             mAudioManagerInternal.adjustSuggestedStreamVolumeForUid(
                                     AudioManager.USE_DEFAULT_STREAM_TYPE, direction,
-                                    flags | previousFlagPlaySound, packageName, uid);
+                                    flags | previousFlagPlaySound, opPackageName, uid);
                         }
                     } else {
                         mAudioManagerInternal.adjustStreamVolumeForUid(stream, direction, flags,
-                                packageName, uid);
+                                opPackageName, uid);
                     }
                 } catch (IllegalArgumentException | SecurityException e) {
                     Log.e(TAG, "Cannot adjust volume: direction=" + direction + ", stream="
-                            + stream + ", flags=" + flags + ", packageName=" + packageName
+                            + stream + ", flags=" + flags + ", opPackageName=" + opPackageName
                             + ", uid=" + uid + ", useSuggested=" + useSuggested
                             + ", previousFlagPlaySound=" + previousFlagPlaySound, e);
                 }
             }
         });
-    }
-
-    private String getShortMetadataString() {
-        int fields = mMetadata == null ? 0 : mMetadata.size();
-        MediaDescription description = mMetadata == null ? null : mMetadata
-                .getDescription();
-        return "size=" + fields + ", description=" + description;
     }
 
     private void logCallbackException(
@@ -670,12 +687,10 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
 
     private PlaybackState getStateWithUpdatedPosition() {
         PlaybackState state;
-        long duration = -1;
+        long duration;
         synchronized (mLock) {
             state = mPlaybackState;
-            if (mMetadata != null && mMetadata.containsKey(MediaMetadata.METADATA_KEY_DURATION)) {
-                duration = mMetadata.getLong(MediaMetadata.METADATA_KEY_DURATION);
-            }
+            duration = mDuration;
         }
         PlaybackState result = null;
         if (state != null) {
@@ -793,7 +808,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         }
 
         @Override
-        public void setMetadata(MediaMetadata metadata) {
+        public void setMetadata(MediaMetadata metadata, long duration, String metadataDescription) {
             synchronized (mLock) {
                 MediaMetadata temp = metadata == null ? null : new MediaMetadata.Builder(metadata)
                         .build();
@@ -804,6 +819,8 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
                     temp.size();
                 }
                 mMetadata = temp;
+                mDuration = duration;
+                mMetadataDescription = metadataDescription;
             }
             mHandler.post(MessageHandler.MSG_UPDATE_METADATA);
         }
@@ -1236,27 +1253,29 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         }
 
         @Override
-        public void adjustVolume(String packageName, ISessionControllerCallback caller,
-                boolean asSystemService, int direction, int flags) {
+        public void adjustVolume(String packageName, String opPackageName,
+                ISessionControllerCallback caller, boolean asSystemService, int direction,
+                int flags) {
             int pid = Binder.getCallingPid();
             int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
             try {
-                MediaSessionRecord.this.adjustVolume(packageName, pid, uid, caller, asSystemService,
-                        direction, flags, false /* useSuggested */);
+                MediaSessionRecord.this.adjustVolume(packageName, opPackageName, pid, uid, caller,
+                        asSystemService, direction, flags, false /* useSuggested */);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
         @Override
-        public void setVolumeTo(String packageName, ISessionControllerCallback caller,
-                int value, int flags) {
+        public void setVolumeTo(String packageName, String opPackageName,
+                ISessionControllerCallback caller, int value, int flags) {
             int pid = Binder.getCallingPid();
             int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
             try {
-                MediaSessionRecord.this.setVolumeTo(packageName, pid, uid, caller, value, flags);
+                MediaSessionRecord.this.setVolumeTo(packageName, opPackageName, pid, uid, caller,
+                        value, flags);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }

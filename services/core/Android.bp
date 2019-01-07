@@ -7,7 +7,6 @@ java_library_static {
             "frameworks/native/aidl/binder",
             "frameworks/native/cmds/dumpstate/binder",
             "system/core/storaged/binder",
-            "system/netd/server/binder",
             "system/vold/binder",
         ],
     },
@@ -15,8 +14,6 @@ java_library_static {
         "java/**/*.java",
         ":dumpstate_aidl",
         ":idmap2_aidl",
-        ":netd_aidl",
-        ":netd_metrics_aidl",
         ":installd_aidl",
         ":storaged_aidl",
         ":vold_aidl",
@@ -53,6 +50,7 @@ java_library_static {
         "android.hardware.contexthub-V1.0-java",
         "android.hidl.manager-V1.0-java",
         "netd_aidl_interface-java",
+        "netd_event_listener_interface-java",
     ],
 }
 

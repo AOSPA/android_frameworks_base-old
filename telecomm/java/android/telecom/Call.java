@@ -29,7 +29,6 @@ import android.os.ParcelFileDescriptor;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.lang.String;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.charset.StandardCharsets;
@@ -123,8 +122,19 @@ public final class Call {
      * The key to retrieve the optional {@code PhoneAccount}s Telecom can bundle with its Call
      * extras. Used to pass the phone accounts to display on the front end to the user in order to
      * select phone accounts to (for example) place a call.
+     * @deprecated Use the list from {@link #EXTRA_SUGGESTED_PHONE_ACCOUNTS} instead.
      */
+    @Deprecated
     public static final String AVAILABLE_PHONE_ACCOUNTS = "selectPhoneAccountAccounts";
+
+    /**
+     * Key for extra used to pass along a list of {@link PhoneAccountSuggestion}s to the in-call
+     * UI when a call enters the {@link #STATE_SELECT_PHONE_ACCOUNT} state. The list included here
+     * will have the same length and be in the same order as the list passed with
+     * {@link #AVAILABLE_PHONE_ACCOUNTS}.
+     */
+    public static final String EXTRA_SUGGESTED_PHONE_ACCOUNTS =
+            "android.telecom.extra.SUGGESTED_PHONE_ACCOUNTS";
 
     /**
      * Extra key used to indicate the time (in milliseconds since midnight, January 1, 1970 UTC)
@@ -521,6 +531,7 @@ public final class Call {
         private final Bundle mExtras;
         private final Bundle mIntentExtras;
         private final long mCreationTimeMillis;
+        private final CallIdentification mCallIdentification;
 
         /**
          * Whether the supplied capabilities  supports the specified capability.
@@ -708,6 +719,12 @@ public final class Call {
         }
 
         /**
+         * The display name for the caller.
+         * <p>
+         * This is the name as reported by the {@link ConnectionService} associated with this call.
+         * The name reported by a {@link CallScreeningService} can be retrieved using
+         * {@link CallIdentification#getName()}.
+         *
          * @return The display name for the caller.
          */
         public String getCallerDisplayName() {
@@ -823,6 +840,23 @@ public final class Call {
             return mCreationTimeMillis;
         }
 
+        /**
+         * Returns {@link CallIdentification} information provided by a
+         * {@link CallScreeningService} for this call.
+         * <p>
+         * {@link InCallService} implementations should display the {@link CallIdentification} for
+         * calls.  The name of the call screening service is provided in
+         * {@link CallIdentification#getCallScreeningAppName()} and should be used to attribute the
+         * call identification information.
+         *
+         * @return The {@link CallIdentification} if it was provided by a
+         * {@link CallScreeningService}, or {@code null} if no {@link CallScreeningService} has
+         * provided {@link CallIdentification} information for the call.
+         */
+        public @Nullable CallIdentification getCallIdentification() {
+            return mCallIdentification;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (o instanceof Details) {
@@ -843,7 +877,8 @@ public final class Call {
                         Objects.equals(mStatusHints, d.mStatusHints) &&
                         areBundlesEqual(mExtras, d.mExtras) &&
                         areBundlesEqual(mIntentExtras, d.mIntentExtras) &&
-                        Objects.equals(mCreationTimeMillis, d.mCreationTimeMillis);
+                        Objects.equals(mCreationTimeMillis, d.mCreationTimeMillis) &&
+                        Objects.equals(mCallIdentification, d.mCallIdentification);
             }
             return false;
         }
@@ -864,7 +899,8 @@ public final class Call {
                             mStatusHints,
                             mExtras,
                             mIntentExtras,
-                            mCreationTimeMillis);
+                            mCreationTimeMillis,
+                            mCallIdentification);
         }
 
         /** {@hide} */
@@ -884,7 +920,8 @@ public final class Call {
                 StatusHints statusHints,
                 Bundle extras,
                 Bundle intentExtras,
-                long creationTimeMillis) {
+                long creationTimeMillis,
+                CallIdentification callIdentification) {
             mTelecomCallId = telecomCallId;
             mHandle = handle;
             mHandlePresentation = handlePresentation;
@@ -901,6 +938,7 @@ public final class Call {
             mExtras = extras;
             mIntentExtras = intentExtras;
             mCreationTimeMillis = creationTimeMillis;
+            mCallIdentification = callIdentification;
         }
 
         /** {@hide} */
@@ -921,16 +959,23 @@ public final class Call {
                     parcelableCall.getStatusHints(),
                     parcelableCall.getExtras(),
                     parcelableCall.getIntentExtras(),
-                    parcelableCall.getCreationTimeMillis());
+                    parcelableCall.getCreationTimeMillis(),
+                    parcelableCall.getCallIdentification());
         }
 
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            sb.append("[pa: ");
+            sb.append("[id: ");
+            sb.append(mTelecomCallId);
+            sb.append(", pa: ");
             sb.append(mAccountHandle);
             sb.append(", hdl: ");
-            sb.append(Log.pii(mHandle));
+            sb.append(Log.piiHandle(mHandle));
+            sb.append(", hdlPres: ");
+            sb.append(mHandlePresentation);
+            sb.append(", videoState: ");
+            sb.append(VideoProfile.videoStateToString(mVideoState));
             sb.append(", caps: ");
             sb.append(capabilitiesToString(mCallCapabilities));
             sb.append(", props: ");

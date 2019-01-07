@@ -23,6 +23,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.platform.test.annotations.Presubmit;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -37,6 +38,7 @@ import org.junit.runner.RunWith;
  * Test whether Binder calls work source is propagated correctly.
  */
 @LargeTest
+@Presubmit
 @RunWith(AndroidJUnit4.class)
 public class BinderWorkSourceTest {
     private static Context sContext;
@@ -125,8 +127,10 @@ public class BinderWorkSourceTest {
         Binder.setCallingWorkSourceUid(UID);
         long token = Binder.clearCallingWorkSource();
         Binder.restoreCallingWorkSource(token);
+        assertEquals(UID, Binder.getCallingWorkSourceUid());
 
         assertEquals(UID, mService.getIncomingWorkSourceUid());
+        // Still the same after the binder transaction.
         assertEquals(UID, Binder.getCallingWorkSourceUid());
     }
 
@@ -162,5 +166,25 @@ public class BinderWorkSourceTest {
         assertEquals(UID_NONE, workSources[1]);
         // Initial work source restored.
         assertEquals(UID, Binder.getCallingWorkSourceUid());
+    }
+
+    @Test
+    public void workSourceProvider_default() throws Exception {
+        Binder.clearCallingWorkSource();
+        mService.clearWorkSourceProvider();
+        assertEquals(Process.myUid(), mService.getThreadLocalWorkSourceUid());
+    }
+
+    @Test
+    public void workSourceProvider_customProvider() throws Exception {
+        Binder.clearCallingWorkSource();
+        mService.clearWorkSourceProvider();
+        // Calling uid should not be used.
+        mService.setWorkSourceProvider(SECOND_UID);
+        try {
+            assertEquals(SECOND_UID, mService.getThreadLocalWorkSourceUid());
+        } finally {
+            mService.clearWorkSourceProvider();
+        }
     }
 }

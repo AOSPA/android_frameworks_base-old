@@ -57,6 +57,7 @@ import android.view.DisplayAdjustments;
 
 import com.android.internal.util.ArrayUtils;
 
+import dalvik.system.BaseDexClassLoader;
 import dalvik.system.VMRuntime;
 
 import java.io.File;
@@ -696,6 +697,23 @@ public final class LoadedApk {
         return loaders;
     }
 
+    private StrictMode.ThreadPolicy allowThreadDiskReads() {
+        if (mActivityThread == null) {
+            // When LoadedApk is used without an ActivityThread (usually in a
+            // zygote context), don't call into StrictMode, as it initializes
+            // the binder subsystem, which we don't want.
+            return null;
+        }
+
+        return StrictMode.allowThreadDiskReads();
+    }
+
+    private void setThreadPolicy(StrictMode.ThreadPolicy policy) {
+        if (mActivityThread != null && policy != null) {
+            StrictMode.setThreadPolicy(policy);
+        }
+    }
+
     private void createOrUpdateClassLoaderLocked(List<String> addedPaths) {
         if (mPackageName.equals("android")) {
             // Note: This branch is taken for system server and we don't need to setup
@@ -718,8 +736,11 @@ public final class LoadedApk {
 
         // Avoid the binder call when the package is the current application package.
         // The activity manager will perform ensure that dexopt is performed before
-        // spinning up the process.
-        if (!Objects.equals(mPackageName, ActivityThread.currentPackageName()) && mIncludeCode) {
+        // spinning up the process. Similarly, don't call into binder when we don't
+        // have an ActivityThread object.
+        if (mActivityThread != null
+                && !Objects.equals(mPackageName, ActivityThread.currentPackageName())
+                && mIncludeCode) {
             try {
                 ActivityThread.getPackageManager().notifyPackageUse(mPackageName,
                         PackageManager.NOTIFY_PACKAGE_USE_CROSS_PACKAGE);
@@ -790,12 +811,12 @@ public final class LoadedApk {
         // mIncludeCode == false).
         if (!mIncludeCode) {
             if (mDefaultClassLoader == null) {
-                StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+                StrictMode.ThreadPolicy oldPolicy = allowThreadDiskReads();
                 mDefaultClassLoader = ApplicationLoaders.getDefault().getClassLoader(
                         "" /* codePath */, mApplicationInfo.targetSdkVersion, isBundledApp,
                         librarySearchPath, libraryPermittedPath, mBaseClassLoader,
                         null /* classLoaderName */);
-                StrictMode.setThreadPolicy(oldPolicy);
+                setThreadPolicy(oldPolicy);
                 mAppComponentFactory = AppComponentFactory.DEFAULT;
             }
 
@@ -822,7 +843,7 @@ public final class LoadedApk {
         if (mDefaultClassLoader == null) {
             // Temporarily disable logging of disk reads on the Looper thread
             // as this is early and necessary.
-            StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+            StrictMode.ThreadPolicy oldPolicy = allowThreadDiskReads();
 
             List<ClassLoader> sharedLibraries = createSharedLibrariesLoaders(
                     mApplicationInfo.sharedLibraryInfos, isBundledApp, librarySearchPath,
@@ -834,18 +855,18 @@ public final class LoadedApk {
                     mApplicationInfo.classLoaderName, sharedLibraries);
             mAppComponentFactory = createAppFactory(mApplicationInfo, mDefaultClassLoader);
 
-            StrictMode.setThreadPolicy(oldPolicy);
+            setThreadPolicy(oldPolicy);
             // Setup the class loader paths for profiling.
             needToSetupJitProfiles = true;
         }
 
         if (!libPaths.isEmpty() && SystemProperties.getBoolean(PROPERTY_NAME_APPEND_NATIVE, true)) {
             // Temporarily disable logging of disk reads on the Looper thread as this is necessary
-            StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+            StrictMode.ThreadPolicy oldPolicy = allowThreadDiskReads();
             try {
                 ApplicationLoaders.getDefault().addNative(mDefaultClassLoader, libPaths);
             } finally {
-                StrictMode.setThreadPolicy(oldPolicy);
+                setThreadPolicy(oldPolicy);
             }
         }
 
@@ -879,11 +900,11 @@ public final class LoadedApk {
             extraLibPaths.add("/product/lib" + abiSuffix);
         }
         if (!extraLibPaths.isEmpty()) {
-            StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+            StrictMode.ThreadPolicy oldPolicy = allowThreadDiskReads();
             try {
                 ApplicationLoaders.getDefault().addNative(mDefaultClassLoader, extraLibPaths);
             } finally {
-                StrictMode.setThreadPolicy(oldPolicy);
+                setThreadPolicy(oldPolicy);
             }
         }
 
@@ -929,6 +950,15 @@ public final class LoadedApk {
         if (!SystemProperties.getBoolean("dalvik.vm.usejitprofiles", false)) {
             return;
         }
+
+        // If we use profiles, setup the dex reporter to notify package manager
+        // of any relevant dex loads. The idle maintenance job will use the information
+        // reported to optimize the loaded dex files.
+        // Note that we only need one global reporter per app.
+        // Make sure we do this before invoking app code for the first time so that we
+        // can capture the complete application startup.
+        BaseDexClassLoader.setReporter(DexLoadReporter.getInstance());
+
         // Only set up profile support if the loaded apk has the same uid as the
         // current process.
         // Currently, we do not support profiling across different apps.
@@ -1636,6 +1666,19 @@ public final class LoadedApk {
                 sd.validate(context, handler);
             }
             return sd.getIServiceConnection();
+        }
+    }
+
+    @UnsupportedAppUsage
+    public IServiceConnection lookupServiceDispatcher(ServiceConnection c,
+            Context context) {
+        synchronized (mServices) {
+            LoadedApk.ServiceDispatcher sd = null;
+            ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher> map = mServices.get(context);
+            if (map != null) {
+                sd = map.get(c);
+            }
+            return sd != null ? sd.getIServiceConnection() : null;
         }
     }
 

@@ -179,6 +179,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
     static final int REPORT_MULTI_WINDOW_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 14;
     static final int REPORT_PIP_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 15;
+    static final int REPORT_HOME_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 16;
 
     // Used to indicate that windows of activities should be preserved during the resize.
     static final boolean PRESERVE_WINDOWS = true;
@@ -598,7 +599,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    void reportActivityLaunchedLocked(boolean timeout, ActivityRecord r, long totalTime) {
+    void reportActivityLaunchedLocked(boolean timeout, ActivityRecord r, long totalTime,
+            @WaitResult.LaunchState int launchState) {
         boolean changed = false;
         for (int i = mWaitingActivityLaunched.size() - 1; i >= 0; i--) {
             WaitResult w = mWaitingActivityLaunched.remove(i);
@@ -609,6 +611,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     w.who = new ComponentName(r.info.packageName, r.info.name);
                 }
                 w.totalTime = totalTime;
+                w.launchState = launchState;
                 // Do not modify w.result.
             }
         }
@@ -662,31 +665,29 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
     ResolveInfo resolveIntent(Intent intent, String resolvedType, int userId, int flags,
             int filterCallingUid) {
-        synchronized (mService.mGlobalLock) {
-            try {
-                Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "resolveIntent");
-                int modifiedFlags = flags
-                        | PackageManager.MATCH_DEFAULT_ONLY | ActivityManagerService.STOCK_PM_FLAGS;
-                if (intent.isWebIntent()
-                            || (intent.getFlags() & Intent.FLAG_ACTIVITY_MATCH_EXTERNAL) != 0) {
-                    modifiedFlags |= PackageManager.MATCH_INSTANT;
-                }
-
-                // In order to allow cross-profile lookup, we clear the calling identity here.
-                // Note the binder identity won't affect the result, but filterCallingUid will.
-
-                // Cross-user/profile call check are done at the entry points
-                // (e.g. AMS.startActivityAsUser).
-                final long token = Binder.clearCallingIdentity();
-                try {
-                    return mService.getPackageManagerInternalLocked().resolveIntent(
-                            intent, resolvedType, modifiedFlags, userId, true, filterCallingUid);
-                } finally {
-                    Binder.restoreCallingIdentity(token);
-                }
-            } finally {
-                Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
+        try {
+            Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "resolveIntent");
+            int modifiedFlags = flags
+                    | PackageManager.MATCH_DEFAULT_ONLY | ActivityManagerService.STOCK_PM_FLAGS;
+            if (intent.isWebIntent()
+                        || (intent.getFlags() & Intent.FLAG_ACTIVITY_MATCH_EXTERNAL) != 0) {
+                modifiedFlags |= PackageManager.MATCH_INSTANT;
             }
+
+            // In order to allow cross-profile lookup, we clear the calling identity here.
+            // Note the binder identity won't affect the result, but filterCallingUid will.
+
+            // Cross-user/profile call check are done at the entry points
+            // (e.g. AMS.startActivityAsUser).
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return mService.getPackageManagerInternalLocked().resolveIntent(
+                        intent, resolvedType, modifiedFlags, userId, true, filterCallingUid);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        } finally {
+            Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
@@ -795,7 +796,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         System.identityHashCode(r), task.taskId, r.shortComponentName);
                 if (r.isActivityTypeHome()) {
                     // Home process is the root process of the task.
-                    mService.mHomeProcess = task.mActivities.get(0).app;
+                    updateHomeProcess(task.mActivities.get(0).app);
                 }
                 mService.getPackageManagerInternalLocked().notifyPackageUse(
                         r.intent.getComponent().getPackageName(), NOTIFY_PACKAGE_USE_ACTIVITY);
@@ -820,7 +821,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 final ClientTransaction clientTransaction = ClientTransaction.obtain(
                         proc.getThread(), r.appToken);
 
-                final DisplayWindowController dwc = r.getDisplay().getWindowContainerController();
+                final DisplayContent dc = r.getDisplay().mDisplayContent;
                 clientTransaction.addCallback(LaunchActivityItem.obtain(new Intent(r.intent),
                         System.identityHashCode(r), r.info,
                         // TODO: Have this take the merged configuration instead of separate global
@@ -829,12 +830,12 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         mergedConfiguration.getOverrideConfiguration(), r.compat,
                         r.launchedFromPackage, task.voiceInteractor, proc.getReportedProcState(),
                         r.icicle, r.persistentState, results, newIntents,
-                        dwc.isNextTransitionForward(), profilerInfo));
+                        dc.isNextTransitionForward(), profilerInfo));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
                 if (andResume) {
-                    lifecycleItem = ResumeActivityItem.obtain(dwc.isNextTransitionForward());
+                    lifecycleItem = ResumeActivityItem.obtain(dc.isNextTransitionForward());
                 } else {
                     lifecycleItem = PauseActivityItem.obtain();
                 }
@@ -915,6 +916,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
 
         return true;
+    }
+
+    void updateHomeProcess(WindowProcessController app) {
+        if (app != null && mService.mHomeProcess != app) {
+            if (!mHandler.hasMessages(REPORT_HOME_CHANGED_MSG)) {
+                mHandler.sendEmptyMessage(REPORT_HOME_CHANGED_MSG);
+            }
+            mService.mHomeProcess = app;
+        }
     }
 
     private void logIfTransactionTooLarge(Intent intent, Bundle icicle) {
@@ -1244,7 +1254,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             mHandler.removeMessages(IDLE_TIMEOUT_MSG, r);
             r.finishLaunchTickingLocked();
             if (fromTimeout) {
-                reportActivityLaunchedLocked(fromTimeout, r, INVALID_DELAY);
+                reportActivityLaunchedLocked(fromTimeout, r, INVALID_DELAY,
+                        -1 /* launchState */);
             }
 
             // This is a hack to semi-deal with a race condition
@@ -1870,7 +1881,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
         stack.addTask(task, onTop, "restoreRecentTask");
         // TODO: move call for creation here and other place into Stack.addTask()
-        task.createWindowContainer(onTop, true /* showForAllUsers */);
+        task.createTask(onTop, true /* showForAllUsers */);
         if (DEBUG_RECENTS) Slog.v(TAG_RECENTS,
                 "Added restored task=" + task + " to stack=" + stack);
         final ArrayList<ActivityRecord> activities = task.mActivities;
@@ -2042,9 +2053,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         mStoppingActivities.remove(r);
 
         final ActivityStack stack = r.getActivityStack();
-        if (mRootActivityContainer.isTopDisplayFocusedStack(stack)) {
-            mService.updateUsageStats(r, true);
-        }
         if (stack.getDisplay().allResumedActivitiesComplete()) {
             mRootActivityContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
             // Make sure activity & window visibility should be identical
@@ -2412,7 +2420,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return;
         }
 
-        scheduleUpdatePictureInPictureModeIfNeeded(task, stack.getOverrideBounds());
+        scheduleUpdatePictureInPictureModeIfNeeded(task, stack.getRequestedOverrideBounds());
     }
 
     void scheduleUpdatePictureInPictureModeIfNeeded(TaskRecord task, Rect targetStackBounds) {
@@ -2545,7 +2553,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         }
                     }
                 } break;
+                case REPORT_HOME_CHANGED_MSG: {
+                    synchronized (mService.mGlobalLock) {
+                        mHandler.removeMessages(REPORT_HOME_CHANGED_MSG);
 
+                        // Start home activities on displays with no activities.
+                        mRootActivityContainer.startHomeOnEmptyDisplays("homeChanged");
+                    }
+                }
+                break;
             }
         }
     }
@@ -2641,7 +2657,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return mService.getActivityStartController().startActivityInPackage(
                     task.mCallingUid, callingPid, callingUid, callingPackage, intent, null, null,
                     null, 0, 0, options, userId, task, "startActivityFromRecents",
-                    false /* validateIncomingUser */, null /* originatingPendingIntent */);
+                    false /* validateIncomingUser */, null /* originatingPendingIntent */,
+                    false /* allowBackgroundActivityStart */);
         } finally {
             if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY && task != null) {
                 // If we are launching the task in the docked stack, put it into resizing mode so

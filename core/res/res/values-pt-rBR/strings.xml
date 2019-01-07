@@ -136,14 +136,10 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"Wi-Fi de <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"Chamada no Wi-Fi | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"VoWifi de <xliff:g id="SPN">%s</xliff:g>"</string>
-    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
-    <skip />
-    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
-    <skip />
+    <string name="wfcSpnFormat_wifi_calling" msgid="4990486735013125329">"Chamada no Wi-Fi"</string>
+    <string name="wfcSpnFormat_wifi" msgid="1892673884655959773">"Wi-Fi"</string>
+    <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="1336669776254502831">"Chamada no Wi-Fi"</string>
+    <string name="wfcSpnFormat_vowifi" msgid="1765176406171272629">"VoWifi"</string>
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Desativado"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Wi-Fi preferido"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"Preferência pela rede móvel"</string>
@@ -451,6 +447,8 @@
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"Permite que o app acesse os recursos de telefonia do dispositivo. Esta permissão autoriza o app a determinar o número de telefone e IDs de dispositivo, quando uma chamada está ativa, e o número remoto conectado a uma chamada."</string>
     <string name="permlab_manageOwnCalls" msgid="1503034913274622244">"encaminhar chamadas pelo sistema"</string>
     <string name="permdesc_manageOwnCalls" msgid="6552974537554717418">"Permite que o app encaminhe suas chamadas por meio do sistema para melhorar a experiência com chamadas."</string>
+    <string name="permlab_callCompanionApp" msgid="3599252979411970473">"ver e controlar chamadas pelo sistema."</string>
+    <string name="permdesc_callCompanionApp" msgid="4567344683275099090">"Permite que o app veja e controle chamadas em andamento no dispositivo. Isso inclui informações como número e estado das chamadas."</string>
     <string name="permlab_acceptHandover" msgid="2661534649736022409">"continuar uma chamada de outro app"</string>
     <string name="permdesc_acceptHandovers" msgid="4570660484220539698">"Permite que o app continue uma chamada que foi iniciada em outro app."</string>
     <string name="permlab_readPhoneNumbers" msgid="6108163940932852440">"ler números de telefone"</string>
@@ -511,6 +509,8 @@
     <string name="permdesc_nfc" msgid="7120611819401789907">"Permite que o app se comunique com leitores, cartões e etiqueta NFC (comunicação a curta distância)."</string>
     <string name="permlab_disableKeyguard" msgid="3598496301486439258">"desativar o bloqueio de tela"</string>
     <string name="permdesc_disableKeyguard" msgid="6034203065077122992">"Permite que o app desative o bloqueio de teclas e qualquer segurança por senha associada. Por exemplo, o telefone desativa o bloqueio de telas ao receber uma chamada e o reativa quando a chamada é finalizada."</string>
+    <string name="permlab_getAndRequestScreenLockComplexity" msgid="3911592334192005424">"receber e solicitar complexidade de bloqueio de tela"</string>
+    <string name="permdesc_getAndRequestScreenLockComplexity" msgid="9045202063228854873">"Permite que o app saiba o nível de complexidade do bloqueio de tela (alto, médio, baixo ou nenhum), que indica o intervalo possível de comprimento e o tipo de bloqueio de tela. O app também pode sugerir a atualização do bloqueio de tela até um certo nível, mas os usuários podem ignorar a sugestão. O bloqueio de tela não é armazenado em texto simples, então o app não tem acesso à senha exata."</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"Usar hardware de biometria"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"Permite que o app use hardware de biometria para autenticação"</string>
     <string name="permlab_manageFingerprint" msgid="5640858826254575638">"gerenciar hardware de impressão digital"</string>
@@ -533,6 +533,11 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Permite que o app leia os locais na sua coleção de mídias."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"O app <xliff:g id="APP">%s</xliff:g> está solicitando autenticação."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Hardware biométrico indisponível"</string>
+    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
+    <skip />
+    <string name="biometric_not_recognized" msgid="5770511773560736082">"Não reconhecido"</string>
+    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
+    <skip />
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Impressão digital parcial detectada. Tente novamente."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Não foi possível processar a impressão digital. Tente novamente."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"O sensor de impressão digital está sujo. Limpe-o e tente novamente."</string>
@@ -540,7 +545,6 @@
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"O movimento do dedo está muito lento. Tente novamente."</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="biometric_not_recognized" msgid="5770511773560736082">"Não reconhecido"</string>
     <string name="fingerprint_authenticated" msgid="5309333983002526448">"Impressão digital autenticada"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"Rosto autenticado"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"Rosto autenticado, pressione \"Confirmar\""</string>
@@ -596,14 +600,10 @@
     <string name="permdesc_writeSyncSettings" msgid="8956262591306369868">"Permite que o app modifique as configurações de sincronização de uma conta. Por exemplo, pode ser usado para ativar a sincronização do app People com uma conta."</string>
     <string name="permlab_readSyncStats" msgid="7396577451360202448">"ler estatísticas de sincronização"</string>
     <string name="permdesc_readSyncStats" msgid="1510143761757606156">"Permite que um app acesse as estatísticas de sincronização de uma conta, incluindo a história dos eventos de sincronização e a quantidade de dados sincronizados."</string>
-    <string name="permlab_sdcardRead" product="nosdcard" msgid="367275095159405468">"ler conteúdo do armaz. USB"</string>
-    <string name="permlab_sdcardRead" product="default" msgid="2188156462934977940">"ler conteúdo do cartão SD"</string>
-    <string name="permdesc_sdcardRead" product="nosdcard" msgid="3446988712598386079">"Perm. que app leia cartão SD."</string>
-    <string name="permdesc_sdcardRead" product="default" msgid="2607362473654975411">"Permite que o app leia o conteúdo do cartão SD."</string>
-    <string name="permlab_sdcardWrite" product="nosdcard" msgid="8485979062254666748">"modificar ou excluir conteúdo do armazenamento USB"</string>
-    <string name="permlab_sdcardWrite" product="default" msgid="8805693630050458763">"modificar ou excluir o conteúdo do cartão SD"</string>
-    <string name="permdesc_sdcardWrite" product="nosdcard" msgid="6175406299445710888">"Permite gravar no armaz. USB."</string>
-    <string name="permdesc_sdcardWrite" product="default" msgid="4337417790936632090">"Permite que o app grave em seu cartão SD."</string>
+    <string name="permlab_sdcardRead" msgid="1438933556581438863">"ler conteúdo do armaz. comp."</string>
+    <string name="permdesc_sdcardRead" msgid="1804941689051236391">"Permite que o app leia o conteúdo do armaz. compartilhado."</string>
+    <string name="permlab_sdcardWrite" msgid="9220937740184960897">"alterar ou excluir conteúdo do armaz. compartilhado"</string>
+    <string name="permdesc_sdcardWrite" msgid="2834431057338203959">"Permite que o app grave o conteúdo do armaz. compartilhado."</string>
     <string name="permlab_use_sip" msgid="2052499390128979920">"fazer/receber chamadas SIP"</string>
     <string name="permdesc_use_sip" msgid="2297804849860225257">"Permite que o app faça e receba chamadas SIP."</string>
     <string name="permlab_register_sim_subscription" msgid="3166535485877549177">"registrar novas conexões SIM de telecomunicações"</string>
@@ -653,20 +653,20 @@
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Definir regras para senha"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Controla o tamanho e os caracteres permitidos nos PINs e nas senhas do bloqueio de tela."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Monitorar tentativas de desbloqueio de tela"</string>
-    <string name="policydesc_watchLogin" product="tablet" msgid="3215729294215070072">"Monitorar quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloquear o tablet ou apagar todos os dados do tablet se a senha for digitada incorretamente muitas vezes."</string>
+    <string name="policydesc_watchLogin" product="tablet" msgid="3215729294215070072">"Monitora quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloqueia o telefone ou apaga todos os dados do telefone se a senha for digitada incorretamente muitas vezes."</string>
     <string name="policydesc_watchLogin" product="TV" msgid="2707817988309890256">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia a TV ou apagar todos os dados dela se muitas senhas incorretas forem digitadas."</string>
-    <string name="policydesc_watchLogin" product="default" msgid="5712323091846761073">"Monitorar quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloquear o telefone ou apagar todos os dados do telefone se a senha for digitada incorretamente muitas vezes."</string>
+    <string name="policydesc_watchLogin" product="default" msgid="5712323091846761073">"Monitora quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloqueia o telefone ou apaga todos os dados do telefone se a senha for digitada incorretamente muitas vezes."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="4280246270601044505">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia o tablet ou limpa todos os dados do usuário se muitas senhas incorretas forem digitadas."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="TV" msgid="3484832653564483250">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia a TV ou limpa todos os dados do usuário se muitas senhas incorretas forem digitadas."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="2185480427217127147">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia o smartphone ou limpa todos os dados do usuário se muitas senhas incorretas forem digitadas."</string>
     <string name="policylab_resetPassword" msgid="4934707632423915395">"Alterar o bloqueio de tela"</string>
     <string name="policydesc_resetPassword" msgid="1278323891710619128">"Altera o bloqueio de tela."</string>
     <string name="policylab_forceLock" msgid="2274085384704248431">"Bloquear a tela"</string>
-    <string name="policydesc_forceLock" msgid="1141797588403827138">"Controlar como e quando a tela é bloqueada."</string>
+    <string name="policydesc_forceLock" msgid="1141797588403827138">"Controla como e quando a tela é bloqueada."</string>
     <string name="policylab_wipeData" msgid="3910545446758639713">"Apagar todos os dados"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="4306184096067756876">"Apague os dados do tablet sem aviso redefinindo a configuração original."</string>
     <string name="policydesc_wipeData" product="tv" msgid="5816221315214527028">"Apaga dados da TV sem aviso, fazendo uma redefinição para configuração original."</string>
-    <string name="policydesc_wipeData" product="default" msgid="5096895604574188391">"Apagar os dados do telefone sem aviso redefinindo a configuração original."</string>
+    <string name="policydesc_wipeData" product="default" msgid="5096895604574188391">"Apaga os dados do telefone sem aviso redefinindo a configuração original."</string>
     <string name="policylab_wipeData_secondaryUser" msgid="8362863289455531813">"Limpar dados do usuário"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="6336255514635308054">"Limpa os dados do usuário neste tablet sem aviso prévio."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2086473496848351810">"Limpa os dados do usuário nesta TV sem aviso prévio."</string>
@@ -676,9 +676,9 @@
     <string name="policylab_expirePassword" msgid="5610055012328825874">"Definir expiração da senha de bloqueio de tela"</string>
     <string name="policydesc_expirePassword" msgid="5367525762204416046">"Altera a frequência com que o PIN, a senha ou o padrão do bloqueio de tela deve ser alterado."</string>
     <string name="policylab_encryptedStorage" msgid="8901326199909132915">"Definir criptografia de armazenamento"</string>
-    <string name="policydesc_encryptedStorage" msgid="2637732115325316992">"Exija que os dados armazenados do app sejam criptografados."</string>
+    <string name="policydesc_encryptedStorage" msgid="2637732115325316992">"Exige que os dados armazenados do app sejam criptografados."</string>
     <string name="policylab_disableCamera" msgid="6395301023152297826">"Desativar câmeras"</string>
-    <string name="policydesc_disableCamera" msgid="2306349042834754597">"Impeça o uso de todas as câmeras do dispositivo."</string>
+    <string name="policydesc_disableCamera" msgid="2306349042834754597">"Impede o uso de todas as câmeras do dispositivo."</string>
     <string name="policylab_disableKeyguardFeatures" msgid="8552277871075367771">"Desativar recursos bloq. de tela"</string>
     <string name="policydesc_disableKeyguardFeatures" msgid="2044755691354158439">"Impede o uso de alguns recursos do bloqueio de tela."</string>
   <string-array name="phoneTypes">
@@ -1087,7 +1087,7 @@
     <string name="deleteText" msgid="6979668428458199034">"Excluir"</string>
     <string name="inputMethod" msgid="1653630062304567879">"Método de entrada"</string>
     <string name="editTextMenuTitle" msgid="4909135564941815494">"Ações de texto"</string>
-    <string name="email" msgid="4560673117055050403">"E-mail"</string>
+    <string name="email" msgid="4560673117055050403">"Mandar e-mail"</string>
     <string name="email_desc" msgid="3638665569546416795">"Enviar e-mail para endereço selecionado"</string>
     <string name="dial" msgid="1253998302767701559">"Ligar"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Ligar para o número de telefone selecionado"</string>
@@ -1105,6 +1105,10 @@
     <string name="add_calendar_event_desc" msgid="4326891793260687388">"Programar evento para a hora selecionada"</string>
     <string name="view_flight" msgid="7691640491425680214">"Rastrear"</string>
     <string name="view_flight_desc" msgid="3876322502674253506">"Rastrear voo selecionado"</string>
+    <string name="translate" msgid="9218619809342576858">"Traduzir"</string>
+    <string name="translate_desc" msgid="4502367770068777202">"Traduzir texto selecionado"</string>
+    <string name="define" msgid="7394820043869954211">"Definir"</string>
+    <string name="define_desc" msgid="7910883642444919726">"Definir texto selecionado"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"Pouco espaço de armazenamento"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"Algumas funções do sistema podem não funcionar"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"Não há armazenamento suficiente para o sistema. Certifique-se de ter 250 MB de espaço livre e reinicie."</string>
@@ -1181,6 +1185,7 @@
     <string name="android_upgrading_title" product="tablet" msgid="4503169817302593560">"O tablet está sendo atualizado…"</string>
     <string name="android_upgrading_title" product="device" msgid="7009520271220804517">"O dispositivo está sendo atualizado…"</string>
     <string name="android_start_title" product="default" msgid="4536778526365907780">"O smartphone está iniciando…"</string>
+    <string name="android_start_title" product="automotive" msgid="8418054686415318207">"O Android está iniciando..."</string>
     <string name="android_start_title" product="tablet" msgid="4929837533850340472">"O tablet está iniciando…"</string>
     <string name="android_start_title" product="device" msgid="7467484093260449437">"O dispositivo está iniciando…"</string>
     <string name="android_upgrading_fstrim" msgid="8036718871534640010">"Otimizando o armazenamento."</string>
@@ -1239,6 +1244,10 @@
     <string name="wifi_available_content_failed_to_connect" msgid="3377406637062802645">"Toque para ver todas as redes"</string>
     <string name="wifi_available_action_connect" msgid="2635699628459488788">"Conectar"</string>
     <string name="wifi_available_action_all_networks" msgid="4368435796357931006">"Todas as redes"</string>
+    <string name="wifi_suggestion_title" msgid="1524719325616630906">"Conectado à rede Wi-Fi sugerida por <xliff:g id="NAME">%s</xliff:g>"</string>
+    <string name="wifi_suggestion_content" msgid="4505530604935334589">"Permitir que o app <xliff:g id="NAME">%s</xliff:g> faça sugestões de rede?"</string>
+    <string name="wifi_suggestion_action_allow_app" msgid="3689946344485394085">"Sim"</string>
+    <string name="wifi_suggestion_action_disallow_app" msgid="7977918905605931385">"Não"</string>
     <string name="wifi_wakeup_onboarding_title" msgid="228772560195634292">"O Wi‑Fi será ativado automaticamente"</string>
     <string name="wifi_wakeup_onboarding_subtext" msgid="3989697580301186973">"Quando você estiver perto de uma rede salva de alta qualidade"</string>
     <string name="wifi_wakeup_onboarding_action_disable" msgid="838648204200836028">"Não ativar novamente"</string>
@@ -1460,8 +1469,7 @@
       <item quantity="other"><xliff:g id="INDEX">%d</xliff:g> de <xliff:g id="TOTAL">%d</xliff:g></item>
     </plurals>
     <string name="action_mode_done" msgid="7217581640461922289">"Concluído"</string>
-    <string name="progress_erasing" product="nosdcard" msgid="4521573321524340058">"Apagando o armazenamento USB..."</string>
-    <string name="progress_erasing" product="default" msgid="6596988875507043042">"Apagando cartão SD..."</string>
+    <string name="progress_erasing" msgid="2569962663843586562">"Limpando armazenamento compartilhado…"</string>
     <string name="share" msgid="1778686618230011964">"Compartilhar"</string>
     <string name="find" msgid="4808270900322985960">"Localizar"</string>
     <string name="websearch" msgid="4337157977400211589">"Pesquisa Google na Web"</string>
@@ -1833,8 +1841,7 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"Solicitação SS alterada para solicitação USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"Alterada para uma nova solicitação SS"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Perfil de trabalho"</string>
-    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
-    <skip />
+    <string name="notification_alerted_content_description" msgid="1296617716556420585">"Alertado"</string>
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"Expandir"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"Recolher"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"alternar expansão"</string>

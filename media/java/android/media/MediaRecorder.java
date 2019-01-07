@@ -16,22 +16,25 @@
 
 package android.media;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityThread;
 import android.hardware.Camera;
-import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PersistableBundle;
-import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Pair;
 import android.view.Surface;
+
+import com.android.internal.annotations.GuardedBy;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -40,8 +43,8 @@ import java.io.RandomAccessFile;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 
-import com.android.internal.annotations.GuardedBy;
 
 /**
  * Used to record audio and video. The recording control is based on a
@@ -85,7 +88,9 @@ import com.android.internal.annotations.GuardedBy;
  * <a href="{@docRoot}guide/topics/media/audio-capture.html">Audio Capture</a> developer guide.</p>
  * </div>
  */
-public class MediaRecorder implements AudioRouting
+public class MediaRecorder implements AudioRouting,
+                                      AudioRecordingMonitor,
+                                      AudioRecordingMonitorClient
 {
     static {
         System.loadLibrary("media_jni");
@@ -101,12 +106,12 @@ public class MediaRecorder implements AudioRouting
     @UnsupportedAppUsage
     private Surface mSurface;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private String mPath;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private FileDescriptor mFd;
     private File mFile;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private EventHandler mEventHandler;
     @UnsupportedAppUsage
     private OnErrorListener mOnErrorListener;
@@ -306,7 +311,7 @@ public class MediaRecorder implements AudioRouting
 
         /**
          * Audio source for preemptible, low-priority software hotword detection
-         * It presents the same gain and pre processing tuning as {@link #VOICE_RECOGNITION}.
+         * It presents the same gain and pre-processing tuning as {@link #VOICE_RECOGNITION}.
          * <p>
          * An application should use this audio source when it wishes to do
          * always-on software hotword detection, while gracefully giving in to any other application
@@ -451,12 +456,14 @@ public class MediaRecorder implements AudioRouting
         /** VP8/VORBIS data in a WEBM container */
         public static final int WEBM = 9;
 
+        /** Opus data in a Ogg container */
+        public static final int OGG = 11;
+
         /** @hide QCP file format */
         public static final int QCP = 20;
 
         /** @hide WAVE media file format*/
         public static final int WAVE = 21;
-
     };
 
     /**
@@ -479,8 +486,10 @@ public class MediaRecorder implements AudioRouting
         public static final int HE_AAC = 4;
         /** Enhanced Low Delay AAC (AAC-ELD) audio codec */
         public static final int AAC_ELD = 5;
-        /** Ogg Vorbis audio codec */
+        /** Ogg Vorbis audio codec (Support is optional) */
         public static final int VORBIS = 6;
+        /** Opus audio codec */
+        public static final int OPUS = 7;
         /** @hide EVRC audio codec */
         public static final int EVRC = 10;
         /** @hide QCELP audio codec */
@@ -962,7 +971,7 @@ public class MediaRecorder implements AudioRouting
     // native implementation
     private native void _setOutputFile(FileDescriptor fd) throws IllegalStateException, IOException;
     private native void _setNextOutputFile(FileDescriptor fd) throws IllegalStateException, IOException;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private native void _prepare() throws IllegalStateException, IOException;
 
     /**
@@ -1064,7 +1073,7 @@ public class MediaRecorder implements AudioRouting
         mEventHandler.removeCallbacksAndMessages(null);
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private native void native_reset();
 
     /**
@@ -1481,6 +1490,57 @@ public class MediaRecorder implements AudioRouting
     private native final int native_getActiveMicrophones(
             ArrayList<MicrophoneInfo> activeMicrophones);
 
+    //--------------------------------------------------------------------------
+    // Implementation of AudioRecordingMonitor interface
+    //--------------------
+
+    AudioRecordingMonitorImpl mRecordingInfoImpl =
+            new AudioRecordingMonitorImpl((AudioRecordingMonitorClient) this);
+
+    /**
+     * Register a callback to be notified of audio capture changes via a
+     * {@link AudioManager.AudioRecordingCallback}. A callback is received when the capture path
+     * configuration changes (pre-processing, format, sampling rate...) or capture is
+     * silenced/unsilenced by the system.
+     * @param executor {@link Executor} to handle the callbacks.
+     * @param cb non-null callback to register
+     */
+    public void registerAudioRecordingCallback(@NonNull @CallbackExecutor Executor executor,
+            @NonNull AudioManager.AudioRecordingCallback cb) {
+        mRecordingInfoImpl.registerAudioRecordingCallback(executor, cb);
+    }
+
+    /**
+     * Unregister an audio recording callback previously registered with
+     * {@link #registerAudioRecordingCallback(Executor, AudioManager.AudioRecordingCallback)}.
+     * @param cb non-null callback to unregister
+     */
+    public void unregisterAudioRecordingCallback(@NonNull AudioManager.AudioRecordingCallback cb) {
+        mRecordingInfoImpl.unregisterAudioRecordingCallback(cb);
+    }
+
+    /**
+     * Returns the current active audio recording for this audio recorder.
+     * @return a valid {@link AudioRecordingConfiguration} if this recorder is active
+     * or null otherwise.
+     * @see AudioRecordingConfiguration
+     */
+    public @Nullable AudioRecordingConfiguration getActiveRecordingConfiguration() {
+        return mRecordingInfoImpl.getActiveRecordingConfiguration();
+    }
+
+    //---------------------------------------------------------
+    // Implementation of AudioRecordingMonitorClient interface
+    //--------------------
+    /**
+     * @hide
+     */
+    public int getPortId() {
+        return native_getPortId();
+    }
+
+    private native int native_getPortId();
+
     /**
      * Called from native code when an interesting event happens.  This method
      * just uses the EventHandler system to post the event back to the main app thread.
@@ -1522,14 +1582,14 @@ public class MediaRecorder implements AudioRouting
      */
     public native void release();
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private static native final void native_init();
 
     @UnsupportedAppUsage
     private native final void native_setup(Object mediarecorder_this,
             String clientName, String opPackageName) throws IllegalStateException;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private native final void native_finalize();
 
     @UnsupportedAppUsage

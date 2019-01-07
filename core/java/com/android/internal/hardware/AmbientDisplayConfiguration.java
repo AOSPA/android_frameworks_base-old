@@ -16,13 +16,13 @@
 
 package com.android.internal.hardware;
 
-import com.android.internal.R;
-
 import android.content.Context;
 import android.os.Build;
 import android.os.SystemProperties;
 import android.provider.Settings;
 import android.text.TextUtils;
+
+import com.android.internal.R;
 
 public class AmbientDisplayConfiguration {
 
@@ -37,7 +37,8 @@ public class AmbientDisplayConfiguration {
     public boolean enabled(int user) {
         return pulseOnNotificationEnabled(user)
                 || pulseOnLongPressEnabled(user)
-                || alwaysOnEnabled(user);
+                || alwaysOnEnabled(user)
+                || wakeLockScreenGestureEnabled(user);
     }
 
     public boolean pulseOnNotificationEnabled(int user) {
@@ -68,10 +69,10 @@ public class AmbientDisplayConfiguration {
 
     public boolean wakeLockScreenGestureEnabled(int user) {
         return boolSettingDefaultOn(Settings.Secure.DOZE_WAKE_LOCK_SCREEN_GESTURE, user)
-                && wakeLockScreenGestureAvailable();
+                && wakeScreenGestureAvailable();
     }
 
-    public boolean wakeLockScreenGestureAvailable() {
+    public boolean wakeScreenGestureAvailable() {
         return mContext.getResources()
                 .getBoolean(R.bool.config_dozeWakeLockScreenSensorAvailable);
     }
@@ -81,20 +82,12 @@ public class AmbientDisplayConfiguration {
                 && wakeScreenGestureAvailable();
     }
 
-    public boolean wakeScreenGestureAvailable() {
-        return !TextUtils.isEmpty(wakeScreenSensorType());
-    }
-
     public String doubleTapSensorType() {
         return mContext.getResources().getString(R.string.config_dozeDoubleTapSensorType);
     }
 
     public String longPressSensorType() {
         return mContext.getResources().getString(R.string.config_dozeLongPressSensorType);
-    }
-
-    public String wakeScreenSensorType() {
-        return mContext.getResources().getString(R.string.config_dozeWakeScreenSensorType);
     }
 
     public boolean pulseOnLongPressEnabled(int user) {

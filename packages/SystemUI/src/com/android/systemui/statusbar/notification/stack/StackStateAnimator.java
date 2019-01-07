@@ -44,6 +44,7 @@ public class StackStateAnimator {
     public static final int ANIMATION_DURATION_WAKEUP = 500;
     public static final int ANIMATION_DURATION_GO_TO_FULL_SHADE = 448;
     public static final int ANIMATION_DURATION_APPEAR_DISAPPEAR = 464;
+    public static final int ANIMATION_DURATION_SWIPE = 260;
     public static final int ANIMATION_DURATION_DIMMED_ACTIVATED = 220;
     public static final int ANIMATION_DURATION_CLOSE_REMOTE_INPUT = 150;
     public static final int ANIMATION_DURATION_HEADS_UP_APPEAR = 550;
@@ -405,13 +406,8 @@ public class StackStateAnimator {
 
                 }
                 changingView.performRemoveAnimation(ANIMATION_DURATION_APPEAR_DISAPPEAR,
-                        0 /* delay */, translationDirection,  false /* isHeadsUpAppear */,
-                        0, new Runnable() {
-                    @Override
-                    public void run() {
-                        removeTransientView(changingView);
-                    }
-                }, null);
+                        0 /* delay */, translationDirection, false /* isHeadsUpAppear */,
+                        0, () -> removeTransientView(changingView), null);
             } else if (event.animationType ==
                 NotificationStackScrollLayout.AnimationEvent.ANIMATION_TYPE_REMOVE_SWIPED_OUT) {
                 if (Math.abs(changingView.getTranslation()) == changingView.getWidth()
@@ -506,10 +502,11 @@ public class StackStateAnimator {
                     // We need to add the global animation listener, since once no animations are
                     // running anymore, the panel will instantly hide itself. We need to wait until
                     // the animation is fully finished for this though.
-                    changingView.performRemoveAnimation(ANIMATION_DURATION_HEADS_UP_DISAPPEAR
-                                    + ANIMATION_DELAY_HEADS_UP, extraDelay, 0.0f,
-                            true /* isHeadsUpAppear */, targetLocation, endRunnable,
-                            getGlobalAnimationFinishedListener());
+                    long removeAnimationDelay = changingView.performRemoveAnimation(
+                            ANIMATION_DURATION_HEADS_UP_DISAPPEAR + ANIMATION_DELAY_HEADS_UP,
+                            extraDelay, 0.0f, true /* isHeadsUpAppear */, targetLocation,
+                            endRunnable, getGlobalAnimationFinishedListener());
+                    mAnimationProperties.delay += removeAnimationDelay;
                 } else if (endRunnable != null) {
                     endRunnable.run();
                 }

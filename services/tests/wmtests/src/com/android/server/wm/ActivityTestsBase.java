@@ -34,7 +34,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
@@ -346,7 +345,7 @@ class ActivityTestsBase {
                 mStack.moveToFront("test");
                 mStack.addTask(task, true, "creating test task");
                 task.setStack(mStack);
-                task.setWindowContainerController();
+                task.setTask();
             }
 
             task.touchActiveTime();
@@ -362,12 +361,12 @@ class ActivityTestsBase {
             }
 
             @Override
-            void createWindowContainer(boolean onTop, boolean showForAllUsers) {
-                setWindowContainerController();
+            void createTask(boolean onTop, boolean showForAllUsers) {
+                setTask();
             }
 
-            private void setWindowContainerController() {
-                setWindowContainerController(mock(TaskWindowContainerController.class));
+            private void setTask() {
+                setTask(mock(Task.class));
             }
         }
     }
@@ -403,13 +402,13 @@ class ActivityTestsBase {
             doReturn(true).when(this).isBackgroundActivityStartsEnabled();
         }
 
-        void setActivityManagerService(IntentFirewall intentFirewall,
-                PendingIntentController intentController, ActivityManagerInternal amInternal,
-                WindowManagerService wm) {
+        void setup(IntentFirewall intentFirewall, PendingIntentController intentController,
+                ActivityManagerInternal amInternal, WindowManagerService wm, Looper looper) {
             mAmInternal = amInternal;
-            setActivityManagerService(intentFirewall, intentController);
+            initialize(intentFirewall, intentController, looper);
             initRootActivityContainerMocks(wm);
             setWindowManager(wm);
+            createDefaultDisplay();
         }
 
         void initRootActivityContainerMocks(WindowManagerService wm) {
@@ -426,7 +425,9 @@ class ActivityTestsBase {
             // Called when moving activity to pinned stack.
             doNothing().when(mRootActivityContainer).ensureActivitiesVisible(any(), anyInt(),
                     anyBoolean());
+        }
 
+        void createDefaultDisplay() {
             // Create a default display and put a home stack on it so that we'll always have
             // something focusable.
             mDefaultDisplay = TestActivityDisplay.create(mStackSupervisor, DEFAULT_DISPLAY);
@@ -446,7 +447,11 @@ class ActivityTestsBase {
         }
 
         @Override
-        void updateUsageStats(ActivityRecord component, boolean resumed) {
+        void updateBatteryStats(ActivityRecord component, boolean resumed) {
+        }
+
+        @Override
+        void updateActivityUsageStats(ActivityRecord activity, int event) {
         }
 
         @Override
@@ -517,8 +522,8 @@ class ActivityTestsBase {
             mWindowManager = prepareMockWindowManager();
             mUgmInternal = mock(UriGrantsManagerInternal.class);
 
-            atm.setActivityManagerService(mIntentFirewall, mPendingIntentController,
-                    new LocalService(), mWindowManager);
+            atm.setup(mIntentFirewall, mPendingIntentController, new LocalService(), mWindowManager,
+                    testInjector.mHandlerThread.getLooper());
 
             mActivityTaskManager = atm;
             mAtmInternal = atm.mInternal;
@@ -600,10 +605,8 @@ class ActivityTestsBase {
         }
 
         @Override
-        protected DisplayWindowController createWindowContainerController() {
-            DisplayWindowController out = mock(DisplayWindowController.class);
-            out.mContainer = WindowTestUtils.createTestDisplayContent();
-            return out;
+        protected DisplayContent createDisplayContent() {
+            return WindowTestUtils.createTestDisplayContent();
         }
 
         void removeAllTasks() {
@@ -618,6 +621,7 @@ class ActivityTestsBase {
 
     private static WindowManagerService prepareMockWindowManager() {
         final WindowManagerService service = mock(WindowManagerService.class);
+        service.mRoot = mock(RootWindowContainer.class);
 
         doAnswer((InvocationOnMock invocationOnMock) -> {
             final Runnable runnable = invocationOnMock.<Runnable>getArgument(0);

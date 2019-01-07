@@ -18,29 +18,48 @@ package android.annotation;
 import static java.lang.annotation.ElementType.CONSTRUCTOR;
 import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.METHOD;
+import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.CLASS;
 
+import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
 /**
- * Indicates that a class member, that is not part of the SDK, is used by apps.
- * Since the member is not part of the SDK, such use is not supported.
+ * Indicates that this non-SDK interface is used by apps. A non-SDK interface is a
+ * class member (field or method) that is not part of the public SDK. Since the
+ * member is not part of the SDK, usage by apps is not supported.
  *
- * <p>This annotation acts as a heads up that changing a given method or field
+ * <h2>If you are an Android App developer</h2>
+ *
+ * This annotation indicates that you may be able to access the member, but that
+ * this access is discouraged and not supported by Android. If there is a value
+ * for {@link #maxTargetSdk()} on the annotation, access will be restricted based
+ * on the {@code targetSdkVersion} value set in your manifest.
+ *
+ * <p>Fields and methods annotated with this are likely to be restricted, changed
+ * or removed in future Android releases. If you rely on these members for
+ * functionality that is not otherwise supported by Android, consider filing a
+ * <a href="http://g.co/dev/appcompat">feature request</a>.
+ *
+ * <h2>If you are an Android OS developer</h2>
+ *
+ * This annotation acts as a heads up that changing a given method or field
  * may affect apps, potentially breaking them when the next Android version is
  * released. In some cases, for members that are heavily used, this annotation
  * may imply restrictions on changes to the member.
  *
  * <p>This annotation also results in access to the member being permitted by the
- * runtime, with a warning being generated in debug builds.
+ * runtime, with a warning being generated in debug builds. Which apps can access
+ * the member is determined by the value of {@link #maxTargetSdk()}.
  *
  * <p>For more details, see go/UnsupportedAppUsage.
  *
  * {@hide}
  */
 @Retention(CLASS)
-@Target({CONSTRUCTOR, METHOD, FIELD})
+@Target({CONSTRUCTOR, METHOD, FIELD, TYPE})
+@Repeatable(UnsupportedAppUsage.Container.class)
 public @interface UnsupportedAppUsage {
 
     /**
@@ -90,4 +109,27 @@ public @interface UnsupportedAppUsage {
      * @return A dex API signature.
      */
     String expectedSignature() default "";
+
+    /**
+     * The signature of an implicit (not present in the source) member that forms part of the
+     * hiddenapi.
+     *
+     * <p>Allows access to non-SDK API elements that are not represented in the input source to be
+     * managed.
+     *
+     * <p>This must only be used when applying the annotation to a type, using it in any other
+     * situation is an error.
+     *
+     * @return A dex API signature.
+     */
+    String implicitMember() default "";
+
+    /**
+     * Container for {@link UnsupportedAppUsage} that allows it to be applied repeatedly to types.
+     */
+    @Retention(CLASS)
+    @Target(TYPE)
+    @interface Container {
+        UnsupportedAppUsage[] value();
+    }
 }

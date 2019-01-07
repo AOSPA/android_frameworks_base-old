@@ -18,21 +18,31 @@ package android.ext.services.notification;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
+import android.app.Person;
 import android.app.RemoteAction;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.os.Process;
+import android.service.notification.NotificationAssistantService;
 import android.text.TextUtils;
-import android.util.ArrayMap;
+import android.util.LruCache;
 import android.view.textclassifier.ConversationActions;
 import android.view.textclassifier.TextClassification;
+import android.view.textclassifier.TextClassificationContext;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textclassifier.TextClassifier;
+import android.view.textclassifier.TextClassifierEvent;
 import android.view.textclassifier.TextLinks;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -40,6 +50,7 @@ public class SmartActionsHelper {
     private static final ArrayList<Notification.Action> EMPTY_ACTION_LIST = new ArrayList<>();
     private static final ArrayList<CharSequence> EMPTY_REPLY_LIST = new ArrayList<>();
 
+    private static final String KEY_ACTION_TYPE = "action_type";
     // If a notification has any of these flags set, it's inelgibile for actions being added.
     private static final int FLAG_MASK_INELGIBILE_FOR_ACTIONS =
             Notification.FLAG_ONGOING_EVENT
@@ -48,8 +59,11 @@ public class SmartActionsHelper {
                     | Notification.FLAG_NO_CLEAR;
     private static final int MAX_ACTION_EXTRACTION_TEXT_LENGTH = 400;
     private static final int MAX_ACTIONS_PER_LINK = 1;
-    private static final int MAX_SMART_ACTIONS = Notification.MAX_ACTION_BUTTONS;
+    private static final int MAX_SMART_ACTIONS = 3;
     private static final int MAX_SUGGESTED_REPLIES = 3;
+    // TODO: Make this configurable.
+    private static final int MAX_MESSAGES_TO_EXTRACT = 5;
+    private static final int MAX_RESULT_ID_TO_CACHE = 20;
 
     private static final ConversationActions.TypeConfig TYPE_CONFIG =
             new ConversationActions.TypeConfig.Builder().setIncludedTypes(
@@ -59,69 +73,184 @@ public class SmartActionsHelper {
     private static final List<String> HINTS =
             Collections.singletonList(ConversationActions.HINT_FOR_NOTIFICATION);
 
-    SmartActionsHelper() {
+    private Context mContext;
+    @Nullable
+    private TextClassifier mTextClassifier;
+    @NonNull
+    private AssistantSettings mSettings;
+    private LruCache<String, String> mNotificationKeyToResultIdCache =
+            new LruCache<>(MAX_RESULT_ID_TO_CACHE);
+
+    SmartActionsHelper(Context context, AssistantSettings settings) {
+        mContext = context;
+        TextClassificationManager textClassificationManager =
+                mContext.getSystemService(TextClassificationManager.class);
+        if (textClassificationManager != null) {
+            mTextClassifier = textClassificationManager.getTextClassifier();
+        }
+        mSettings = settings;
     }
 
     /**
      * Adds action adjustments based on the notification contents.
-     *
-     * TODO: Once we have a API in {@link TextClassificationManager} to predict smart actions
-     * from notification text / message, we can replace most of the code here by consuming that API.
      */
     @NonNull
-    ArrayList<Notification.Action> suggestActions(
-            @Nullable Context context, @NonNull NotificationEntry entry) {
+    ArrayList<Notification.Action> suggestActions(@NonNull NotificationEntry entry) {
+        if (!mSettings.mGenerateActions) {
+            return EMPTY_ACTION_LIST;
+        }
         if (!isEligibleForActionAdjustment(entry)) {
             return EMPTY_ACTION_LIST;
         }
-        if (context == null) {
+        if (mTextClassifier == null) {
             return EMPTY_ACTION_LIST;
         }
-        TextClassificationManager tcm = context.getSystemService(TextClassificationManager.class);
-        if (tcm == null) {
+        List<ConversationActions.Message> messages = extractMessages(entry.getNotification());
+        if (messages.isEmpty()) {
             return EMPTY_ACTION_LIST;
         }
-        Notification.Action[] actions = entry.getNotification().actions;
-        int numOfExistingActions = actions == null ? 0: actions.length;
-        int maxSmartActions = MAX_SMART_ACTIONS - numOfExistingActions;
+        // TODO: Move to TextClassifier.suggestConversationActions once it is ready.
         return suggestActionsFromText(
-                tcm,
-                getMostSalientActionText(entry.getNotification()), maxSmartActions);
+                messages.get(messages.size() - 1).getText(), MAX_SMART_ACTIONS);
     }
 
-    ArrayList<CharSequence> suggestReplies(
-            @Nullable Context context, @NonNull NotificationEntry entry) {
+    ArrayList<CharSequence> suggestReplies(@NonNull NotificationEntry entry) {
+        if (!mSettings.mGenerateReplies) {
+            return EMPTY_REPLY_LIST;
+        }
         if (!isEligibleForReplyAdjustment(entry)) {
             return EMPTY_REPLY_LIST;
         }
-        if (context == null) {
+        if (mTextClassifier == null) {
             return EMPTY_REPLY_LIST;
         }
-        TextClassificationManager tcm = context.getSystemService(TextClassificationManager.class);
-        if (tcm == null) {
+        List<ConversationActions.Message> messages = extractMessages(entry.getNotification());
+        if (messages.isEmpty()) {
             return EMPTY_REPLY_LIST;
         }
-        CharSequence text = getMostSalientActionText(entry.getNotification());
-        ConversationActions.Message message =
-                new ConversationActions.Message.Builder()
-                        .setText(text)
-                        .build();
-
         ConversationActions.Request request =
-                new ConversationActions.Request.Builder(Collections.singletonList(message))
+                new ConversationActions.Request.Builder(messages)
                         .setMaxSuggestions(MAX_SUGGESTED_REPLIES)
                         .setHints(HINTS)
                         .setTypeConfig(TYPE_CONFIG)
                         .build();
 
-        TextClassifier textClassifier = tcm.getTextClassifier();
+        ConversationActions conversationActionsResult =
+                mTextClassifier.suggestConversationActions(request);
         List<ConversationActions.ConversationAction> conversationActions =
-                textClassifier.suggestConversationActions(request).getConversationActions();
-
-        return conversationActions.stream()
+                conversationActionsResult.getConversationActions();
+        ArrayList<CharSequence> replies = conversationActions.stream()
                 .map(conversationAction -> conversationAction.getTextReply())
                 .filter(textReply -> !TextUtils.isEmpty(textReply))
                 .collect(Collectors.toCollection(ArrayList::new));
+
+        String resultId = conversationActionsResult.getId();
+        if (resultId != null && !replies.isEmpty()) {
+            mNotificationKeyToResultIdCache.put(entry.getSbn().getKey(), resultId);
+        }
+        return replies;
+    }
+
+    void onNotificationSeen(@NonNull NotificationEntry entry) {
+        if (entry.isExpanded()) {
+            maybeSendActionShownEvent(entry);
+        }
+    }
+
+    void onNotificationExpansionChanged(@NonNull NotificationEntry entry, boolean isUserAction,
+            boolean isExpanded) {
+        // Notification can be expanded in the background, and thus the isUserAction check.
+        if (isUserAction && isExpanded) {
+            maybeSendActionShownEvent(entry);
+        }
+    }
+
+    void onNotificationDirectReply(@NonNull String key) {
+        if (mTextClassifier == null) {
+            return;
+        }
+        String resultId = mNotificationKeyToResultIdCache.get(key);
+        if (resultId == null) {
+            return;
+        }
+        TextClassifierEvent textClassifierEvent =
+                createTextClassifierEventBuilder(TextClassifierEvent.TYPE_MANUAL_REPLY, resultId)
+                        .build();
+        mTextClassifier.onTextClassifierEvent(textClassifierEvent);
+    }
+
+    void onSuggestedReplySent(@NonNull String key, @NonNull CharSequence reply,
+            @NotificationAssistantService.Source int source) {
+        if (mTextClassifier == null) {
+            return;
+        }
+        if (source != NotificationAssistantService.SOURCE_FROM_ASSISTANT) {
+            return;
+        }
+        String resultId = mNotificationKeyToResultIdCache.get(key);
+        if (resultId == null) {
+            return;
+        }
+        TextClassifierEvent textClassifierEvent =
+                createTextClassifierEventBuilder(TextClassifierEvent.TYPE_SMART_ACTION, resultId)
+                        .setEntityType(ConversationActions.TYPE_TEXT_REPLY)
+                        .build();
+        mTextClassifier.onTextClassifierEvent(textClassifierEvent);
+    }
+
+    void onActionClicked(@NonNull String key, @NonNull Notification.Action action,
+            @NotificationAssistantService.Source int source) {
+        if (mTextClassifier == null) {
+            return;
+        }
+        if (source != NotificationAssistantService.SOURCE_FROM_ASSISTANT) {
+            return;
+        }
+        String resultId = mNotificationKeyToResultIdCache.get(key);
+        if (resultId == null) {
+            return;
+        }
+        String actionType = action.getExtras().getString(KEY_ACTION_TYPE);
+        if (actionType == null) {
+            return;
+        }
+        TextClassifierEvent textClassifierEvent =
+                createTextClassifierEventBuilder(TextClassifierEvent.TYPE_SMART_ACTION, resultId)
+                        .setEntityType(actionType)
+                        .build();
+        mTextClassifier.onTextClassifierEvent(textClassifierEvent);
+    }
+
+    private TextClassifierEvent.Builder createTextClassifierEventBuilder(
+            int eventType, @NonNull String resultId) {
+        return new TextClassifierEvent.Builder(
+                TextClassifierEvent.CATEGORY_CONVERSATION_ACTIONS, eventType)
+                .setEventTime(System.currentTimeMillis())
+                .setEventContext(
+                        new TextClassificationContext.Builder(
+                                mContext.getPackageName(), TextClassifier.WIDGET_TYPE_NOTIFICATION)
+                        .build())
+                .setResultId(resultId);
+    }
+
+    private void maybeSendActionShownEvent(@NonNull NotificationEntry entry) {
+        if (mTextClassifier == null) {
+            return;
+        }
+        String resultId = mNotificationKeyToResultIdCache.get(entry.getSbn().getKey());
+        if (resultId == null) {
+            return;
+        }
+        // Only report if this is the first time the user sees these suggestions.
+        if (entry.isShowActionEventLogged()) {
+            return;
+        }
+        entry.setShowActionEventLogged();
+        TextClassifierEvent textClassifierEvent =
+                createTextClassifierEventBuilder(TextClassifierEvent.TYPE_ACTIONS_SHOWN, resultId)
+                        .build();
+        // TODO: If possible, report which replies / actions are actually seen by user.
+        mTextClassifier.onTextClassifierEvent(textClassifierEvent);
     }
 
     /**
@@ -135,10 +264,6 @@ public class SmartActionsHelper {
         Notification notification = entry.getNotification();
         String pkg = entry.getSbn().getPackageName();
         if (!Process.myUserHandle().equals(entry.getSbn().getUser())) {
-            return false;
-        }
-        if (notification.actions != null
-                && notification.actions.length >= Notification.MAX_ACTION_BUTTONS) {
             return false;
         }
         if ((notification.flags & FLAG_MASK_INELGIBILE_FOR_ACTIONS) != 0) {
@@ -173,33 +298,50 @@ public class SmartActionsHelper {
 
     /** Returns the text most salient for action extraction in a notification. */
     @Nullable
-    private CharSequence getMostSalientActionText(@NonNull Notification notification) {
-        /* If it's messaging style, use the most recent message. */
-        // TODO: Use the last few X messages instead and take the Person object into consideration.
+    private List<ConversationActions.Message> extractMessages(@NonNull Notification notification) {
         Parcelable[] messages = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES);
-        if (messages != null && messages.length != 0) {
-            Bundle lastMessage = (Bundle) messages[messages.length - 1];
-            CharSequence lastMessageText =
-                    lastMessage.getCharSequence(Notification.MessagingStyle.Message.KEY_TEXT);
-            if (!TextUtils.isEmpty(lastMessageText)) {
-                return lastMessageText;
+        if (messages == null || messages.length == 0) {
+            return Arrays.asList(new ConversationActions.Message.Builder(
+                    ConversationActions.Message.PERSON_USER_REMOTE)
+                    .setText(notification.extras.getCharSequence(Notification.EXTRA_TEXT))
+                    .build());
+        }
+        Person localUser = notification.extras.getParcelable(Notification.EXTRA_MESSAGING_PERSON);
+        Deque<ConversationActions.Message> extractMessages = new ArrayDeque<>();
+        for (int i = messages.length - 1; i >= 0; i--) {
+            Notification.MessagingStyle.Message message =
+                    Notification.MessagingStyle.Message.getMessageFromBundle((Bundle) messages[i]);
+            if (message == null) {
+                continue;
+            }
+            Person senderPerson = message.getSenderPerson();
+            // Skip encoding once the sender is missing as it is important to distinguish
+            // local user and remote user when generating replies.
+            if (senderPerson == null) {
+                break;
+            }
+            Person author = localUser != null && localUser.equals(senderPerson)
+                    ? ConversationActions.Message.PERSON_USER_LOCAL : senderPerson;
+            extractMessages.push(new ConversationActions.Message.Builder(author)
+                    .setText(message.getText())
+                    .setReferenceTime(
+                            ZonedDateTime.ofInstant(Instant.ofEpochMilli(message.getTimestamp()),
+                                    ZoneOffset.systemDefault()))
+                    .build());
+            if (extractMessages.size() >= MAX_MESSAGES_TO_EXTRACT) {
+                break;
             }
         }
-
-        // Fall back to using the normal text.
-        return notification.extras.getCharSequence(Notification.EXTRA_TEXT);
+        return new ArrayList<>(extractMessages);
     }
 
     /** Returns a list of actions to act on entities in a given piece of text. */
     @NonNull
     private ArrayList<Notification.Action> suggestActionsFromText(
-            @NonNull TextClassificationManager tcm, @Nullable CharSequence text,
-            int maxSmartActions) {
+            @Nullable CharSequence text, int maxSmartActions) {
         if (TextUtils.isEmpty(text)) {
             return EMPTY_ACTION_LIST;
         }
-        TextClassifier textClassifier = tcm.getTextClassifier();
-
         // We want to process only text visible to the user to avoid confusing suggestions, so we
         // truncate the text to a reasonable length. This is particularly important for e.g.
         // email apps that sometimes include the text for the entire thread.
@@ -212,8 +354,8 @@ public class SmartActionsHelper {
                                 Collections.singletonList(
                                         TextClassifier.HINT_TEXT_IS_NOT_EDITABLE)))
                 .build();
-        TextLinks links = textClassifier.generateLinks(textLinksRequest);
-        ArrayMap<String, Integer> entityTypeFrequency = getEntityTypeFrequency(links);
+        TextLinks links = mTextClassifier.generateLinks(textLinksRequest);
+        EntityTypeCounter entityTypeCounter = EntityTypeCounter.fromTextLinks(links);
 
         ArrayList<Notification.Action> actions = new ArrayList<>();
         for (TextLinks.TextLink link : links.getLinks()) {
@@ -221,25 +363,32 @@ public class SmartActionsHelper {
             // case where a notification contains e.g. a list of phone numbers. In such cases, the
             // user likely wants to act on the whole list rather than an individual entity.
             if (link.getEntityCount() == 0
-                    || entityTypeFrequency.get(link.getEntity(0)) != 1) {
+                    || entityTypeCounter.getCount(link.getEntity(0)) != 1) {
                 continue;
             }
 
             // Generate the actions, and add the most prominent ones to the action bar.
             TextClassification classification =
-                    textClassifier.classifyText(
+                    mTextClassifier.classifyText(
                             new TextClassification.Request.Builder(
                                     text, link.getStart(), link.getEnd()).build());
+            if (classification.getEntityCount() == 0) {
+                continue;
+            }
             int numOfActions = Math.min(
                     MAX_ACTIONS_PER_LINK, classification.getActions().size());
             for (int i = 0; i < numOfActions; ++i) {
-                RemoteAction action = classification.getActions().get(i);
-                actions.add(
-                        new Notification.Action.Builder(
-                                action.getIcon(),
-                                action.getTitle(),
-                                action.getActionIntent())
-                                .build());
+                RemoteAction remoteAction = classification.getActions().get(i);
+                Notification.Action action = new Notification.Action.Builder(
+                        remoteAction.getIcon(),
+                        remoteAction.getTitle(),
+                        remoteAction.getActionIntent())
+                        .setSemanticAction(
+                                Notification.Action.SEMANTIC_ACTION_CONTEXTUAL_SUGGESTION)
+                        .addExtras(Bundle.forPair(KEY_ACTION_TYPE, classification.getEntity(0)))
+                        .build();
+                actions.add(action);
+
                 // We have enough smart actions.
                 if (actions.size() >= maxSmartActions) {
                     return actions;
@@ -247,26 +396,5 @@ public class SmartActionsHelper {
             }
         }
         return actions;
-    }
-
-    /**
-     * Given the links extracted from a piece of text, returns the frequency of each entity
-     * type.
-     */
-    @NonNull
-    private ArrayMap<String, Integer> getEntityTypeFrequency(@NonNull TextLinks links) {
-        ArrayMap<String, Integer> entityTypeCount = new ArrayMap<>();
-        for (TextLinks.TextLink link : links.getLinks()) {
-            if (link.getEntityCount() == 0) {
-                continue;
-            }
-            String entityType = link.getEntity(0);
-            if (entityTypeCount.containsKey(entityType)) {
-                entityTypeCount.put(entityType, entityTypeCount.get(entityType) + 1);
-            } else {
-                entityTypeCount.put(entityType, 1);
-            }
-        }
-        return entityTypeCount;
     }
 }

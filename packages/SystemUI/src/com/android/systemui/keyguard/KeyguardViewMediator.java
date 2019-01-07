@@ -406,24 +406,6 @@ public class KeyguardViewMediator extends SystemUI {
         }
 
         @Override
-        public void onPhoneStateChanged(int phoneState) {
-            synchronized (KeyguardViewMediator.this) {
-                if (TelephonyManager.CALL_STATE_IDLE == phoneState  // call ending
-                        && !mDeviceInteractive                           // screen off
-                        && mExternallyEnabled) {                // not disabled by any app
-
-                    // note: this is a way to gracefully reenable the keyguard when the call
-                    // ends and the screen is off without always reenabling the keyguard
-                    // each time the screen turns off while in call (and having an occasional ugly
-                    // flicker while turning back on the screen and disabling the keyguard again).
-                    if (DEBUG) Log.d(TAG, "screen is off and call ended, let's make sure the "
-                            + "keyguard is showing");
-                    doKeyguardLocked(null);
-                }
-            }
-        }
-
-        @Override
         public void onClockVisibilityChanged() {
             adjustStatusBarLocked();
         }
@@ -463,8 +445,7 @@ public class KeyguardViewMediator extends SystemUI {
             boolean simWasLocked;
             synchronized (KeyguardViewMediator.this) {
                 IccCardConstants.State lastState = mLastSimStates.get(slotId);
-                simWasLocked = (lastState == PIN_REQUIRED || lastState == PUK_REQUIRED)
-                    && simState == READY;
+                simWasLocked = (lastState == PIN_REQUIRED || lastState == PUK_REQUIRED);
                 mLastSimStates.append(slotId, simState);
             }
 
@@ -488,6 +469,11 @@ public class KeyguardViewMediator extends SystemUI {
                             // MVNO SIMs can become transiently NOT_READY when switching networks,
                             // so we should only lock when they are ABSENT.
                             onSimAbsentLocked();
+                            if (simWasLocked) {
+                                if (DEBUG_SIM_STATES) Log.d(TAG, "SIM moved to ABSENT when the "
+                                        + "previous state was locked. Reset the state.");
+                                resetStateLocked();
+                            }
                         }
                     }
                     break;
@@ -522,6 +508,8 @@ public class KeyguardViewMediator extends SystemUI {
                     synchronized (KeyguardViewMediator.this) {
                         if (DEBUG_SIM_STATES) Log.d(TAG, "READY, reset state? " + mShowing);
                         if (mShowing && simWasLocked) {
+                            if (DEBUG_SIM_STATES) Log.d(TAG, "SIM moved to READY when the "
+                                    + "previous state was locked. Reset the state.");
                             resetStateLocked();
                         }
                         mLockWhenSimRemoved = true;
@@ -1313,15 +1301,7 @@ public class KeyguardViewMediator extends SystemUI {
         if (!mExternallyEnabled) {
             if (DEBUG) Log.d(TAG, "doKeyguard: not showing because externally disabled");
 
-            // note: we *should* set mNeedToReshowWhenReenabled=true here, but that makes
-            // for an occasional ugly flicker in this situation:
-            // 1) receive a call with the screen on (no keyguard) or make a call
-            // 2) screen times out
-            // 3) user hits key to turn screen back on
-            // instead, we reenable the keyguard when we know the screen is off and the call
-            // ends (see the broadcast receiver below)
-            // TODO: clean this up when we have better support at the window manager level
-            // for apps that wish to be on top of the keyguard
+            mNeedToReshowWhenReenabled = true;
             return;
         }
 

@@ -6604,6 +6604,137 @@ message MetricsEvent {
     // OS: Q
     NOTIFICATION_DIRECT_REPLY_ACTION = 1590;
 
+    // OPEN: Settings > Developer options > Disable > Info dialog
+    // CATEGORY: SETTINGS
+    // OS: Q
+    DIALOG_DISABLE_DEVELOPMENT_OPTIONS = 1591;
+
+    // Tag for an ACTION: QS -> Tile click / Secondary click / long press
+    //    indicating the StatusBarState when menu was pulled down
+    // CATEGORY: QUICK_SETTINGS
+    // OS: Q
+    FIELD_STATUS_BAR_STATE = 1592;
+
+    // Tag for an ACTION: QS -> Tile click / Secondary click / long press
+    //    indicating whether current state is full QS
+    // CATEGORY: QUICK_SETTINGS
+    // OS: Q
+    FIELD_IS_FULL_QS = 1593;
+
+    // ACTION: Display folding state was changed
+    // CATEGORY: OTHER
+    //   SUBTYPE: 1 if display is folded, 0 if not.
+    // OS: Q
+    ACTION_DISPLAY_FOLD = 1594;
+
+    // OPEN: WifiDppConfiguratorActivity (android.settings.WIFI_DPP_CONFIGURATOR_XXX action intents)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    SETTINGS_WIFI_DPP_CONFIGURATOR = 1595;
+
+    // OPEN: WifiDppEnrolleeActivity (android.settings.WIFI_DPP_ENROLLEE_XXX action intents)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    SETTINGS_WIFI_DPP_ENROLLEE = 1596;
+
+    // OPEN: Settings > Apps & Notifications -> Special app access -> Financial Apps Sms Access
+    // CATEGORY: SETTINGS
+    // OS: Q
+    SETTINGS_FINANCIAL_APPS_SMS_ACCESS = 1597;
+
+    // OPEN: QS Sensor Privacy Mode tile shown
+    // ACTION: QS Sensor Privacy Mode tile tapped
+    // SUBTYPE: 0 is off, 1 is on
+    // CATEGORY: QUICK_SETTINGS
+    // OS: Q
+    QS_SENSOR_PRIVACY = 1598;
+
+    // Tagged data for SMART_REPLY_VISIBLE. Count of number of smart actions.
+    // OS: Q
+    NOTIFICATION_SMART_ACTION_COUNT = 1599;
+
+    // Tagged data for SMART_REPLY_VISIBLE and NOTIFICATION_ITEM_ACTION.
+    // Whether the notification has notification-assistant generated
+    // actions/replies.
+    // OS: Q
+    NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED = 1600;
+
+    // Tagged data for NOTIFICATION_ITEM_ACTION. Whether the action is a smart
+    // action.
+    // OS: Q
+    NOTIFICATION_ACTION_IS_SMART = 1601;
+
+    // FIELD: true if the associated ACTION_ZEN_ALLOW_* or ACTION_ZEN_BLOCK_* allows/blocks
+    // the effect/sound when DND is on.  false if set to disallow/show.
+    // OS: Q
+    FIELD_ZEN_TOGGLE_EXCEPTION = 1602;
+
+    // FIELD: rule id an ACTION_ZEN_ALLOW_* or ACTION_ZEN_BLOCK_* is associated with
+    // OS: Q
+    FIELD_ZEN_RULE_ID = 1603;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_SETTINGS = 1604;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior > Custom
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_SOUND_SETTINGS = 1605;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior > Use default Do Not Disturb behavior
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_DEFAULT_SETTINGS = 1606;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior > Custom
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_CUSTOM_SETTINGS = 1607;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior > Use default Do Not Disturb behavior
+    // > Notification restriction
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_NOTIFICATION_RESTRICTIONS = 1608;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior > Use default Do Not Disturb behavior
+    // > Notification restriction > Custom
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_VIS_EFFECTS = 1609;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior > Use default Do Not Disturb behavior
+    // > Notification restriction > Custom > Allow messages
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_MESSAGES = 1610;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Schedules > (Click on system rule)
+    // > Do Not Disturb behavior > Use default Do Not Disturb behavior
+    // > Notification restriction > Custom > Allow calls
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_RULE_CALLS = 1611;
+
+    // OPEN: Settings > Sound > Do Not Disturb > Click footer link if custom settings applied
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ZEN_CUSTOM_SETTINGS_DIALOG = 1612;
+
+    // OPEN: Settings > Developer Options > Game Update Packages
+    // CATEGORY: SETTINGS
+    // OS: Q
+    SETTINGS_GUP_DASHBOARD = 1613;
+
     // ---- End Q Constants, all Q constants go above this line ----
 
     // Add new aosp constants above this line.

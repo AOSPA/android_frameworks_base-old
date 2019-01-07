@@ -5,11 +5,12 @@ package android {
     field public static final java.lang.String ACTIVITY_EMBEDDING = "android.permission.ACTIVITY_EMBEDDING";
     field public static final java.lang.String BRIGHTNESS_SLIDER_USAGE = "android.permission.BRIGHTNESS_SLIDER_USAGE";
     field public static final java.lang.String CHANGE_APP_IDLE_STATE = "android.permission.CHANGE_APP_IDLE_STATE";
-    field public static final java.lang.String CHANGE_CONFIGURATION = "android.permission.CHANGE_CONFIGURATION";
     field public static final java.lang.String CONFIGURE_DISPLAY_BRIGHTNESS = "android.permission.CONFIGURE_DISPLAY_BRIGHTNESS";
     field public static final java.lang.String FORCE_STOP_PACKAGES = "android.permission.FORCE_STOP_PACKAGES";
     field public static final java.lang.String MANAGE_ACTIVITY_STACKS = "android.permission.MANAGE_ACTIVITY_STACKS";
     field public static final java.lang.String READ_CELL_BROADCASTS = "android.permission.READ_CELL_BROADCASTS";
+    field public static final java.lang.String REMOVE_TASKS = "android.permission.REMOVE_TASKS";
+    field public static final java.lang.String WRITE_OBB = "android.permission.WRITE_OBB";
   }
 
 }
@@ -71,6 +72,7 @@ package android.app {
     method public void resizeStack(int, android.graphics.Rect) throws java.lang.SecurityException;
     method public void resizeStack(int, android.graphics.Rect, boolean);
     method public void resizeTask(int, android.graphics.Rect);
+    method public void setDisplayToSingleTaskInstance(int);
     method public void setTaskWindowingMode(int, int, boolean) throws java.lang.SecurityException;
     method public void setTaskWindowingModeSplitScreenPrimary(int, int, boolean, boolean, android.graphics.Rect, boolean) throws java.lang.SecurityException;
     method public void startSystemLockTaskMode(int);
@@ -181,7 +183,6 @@ package android.app {
     method public int getUserLockedFields();
     method public void lockFields(int);
     method public void setBlocked(boolean);
-    field public static final int USER_LOCKED_ALLOW_APP_OVERLAY = 2; // 0x2
   }
 
   public class NotificationManager {
@@ -276,6 +277,23 @@ package android.app.backup {
 
 }
 
+package android.app.role {
+
+  public final class RoleManager {
+    method public void addRoleHolderAsUser(java.lang.String, java.lang.String, android.os.UserHandle, java.util.concurrent.Executor, android.app.role.RoleManagerCallback);
+    method public void clearRoleHoldersAsUser(java.lang.String, android.os.UserHandle, java.util.concurrent.Executor, android.app.role.RoleManagerCallback);
+    method public java.util.List<java.lang.String> getRoleHolders(java.lang.String);
+    method public java.util.List<java.lang.String> getRoleHoldersAsUser(java.lang.String, android.os.UserHandle);
+    method public void removeRoleHolderAsUser(java.lang.String, java.lang.String, android.os.UserHandle, java.util.concurrent.Executor, android.app.role.RoleManagerCallback);
+  }
+
+  public abstract interface RoleManagerCallback {
+    method public abstract void onFailure();
+    method public abstract void onSuccess();
+  }
+
+}
+
 package android.app.usage {
 
   public class NetworkStatsManager {
@@ -299,7 +317,11 @@ package android.bluetooth {
 
 package android.content {
 
-  public abstract class ContentResolver {
+  public class ContentProviderClient implements java.lang.AutoCloseable android.content.ContentInterface {
+    method public void setDetectNotResponding(long);
+  }
+
+  public abstract class ContentResolver implements android.content.ContentInterface {
     method public static java.lang.String[] getSyncAdapterPackagesForAuthorityAsUser(java.lang.String, int);
   }
 
@@ -340,6 +362,7 @@ package android.content.pm {
     method public abstract java.lang.String getPermissionControllerPackageName();
     method public abstract java.lang.String getServicesSystemSharedLibraryPackageName();
     method public abstract java.lang.String getSharedSystemSharedLibraryPackageName();
+    method public java.lang.String getWellbeingPackageName();
     method public abstract void grantRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     method public abstract void revokeRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     field public static final java.lang.String FEATURE_ADOPTABLE_STORAGE = "android.software.adoptable_storage";
@@ -351,8 +374,10 @@ package android.content.pm {
   }
 
   public class PermissionInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
+    field public static final int PROTECTION_FLAG_DOCUMENTER = 262144; // 0x40000
     field public static final int PROTECTION_FLAG_SYSTEM_TEXT_CLASSIFIER = 65536; // 0x10000
     field public static final int PROTECTION_FLAG_VENDOR_PRIVILEGED = 32768; // 0x8000
+    field public static final int PROTECTION_FLAG_WELLBEING = 131072; // 0x20000
     field public java.lang.String backgroundPermission;
   }
 
@@ -614,6 +639,11 @@ package android.media {
     method public static boolean isEncodingLinearPcm(int);
   }
 
+  public final class AudioRecordingConfiguration implements android.os.Parcelable {
+    ctor public AudioRecordingConfiguration(int, int, int, android.media.AudioFormat, android.media.AudioFormat, int, java.lang.String, int, boolean, int, android.media.audiofx.AudioEffect.Descriptor[], android.media.audiofx.AudioEffect.Descriptor[]);
+    ctor public AudioRecordingConfiguration(int, int, int, android.media.AudioFormat, android.media.AudioFormat, int, java.lang.String);
+  }
+
   public final class BufferingParams implements android.os.Parcelable {
     method public int describeContents();
     method public int getInitialMarkMs();
@@ -628,11 +658,6 @@ package android.media {
     method public android.media.BufferingParams build();
     method public android.media.BufferingParams.Builder setInitialMarkMs(int);
     method public android.media.BufferingParams.Builder setResumePlaybackMarkMs(int);
-  }
-
-  public class MediaPlayer implements android.media.AudioRouting android.media.VolumeAutomation {
-    method public android.media.BufferingParams getBufferingParams();
-    method public void setBufferingParams(android.media.BufferingParams);
   }
 
   public final class PlaybackParams implements android.os.Parcelable {
@@ -983,6 +1008,11 @@ package android.provider {
     field public static final android.net.Uri CORP_CONTENT_URI;
   }
 
+  public final class MediaStore {
+    method public static void deleteContributedMedia(android.content.Context, java.lang.String, android.os.UserHandle) throws java.io.IOException;
+    method public static long getContributedMediaSize(android.content.Context, java.lang.String, android.os.UserHandle) throws java.io.IOException;
+  }
+
   public final class Settings {
     field public static final java.lang.String ACTION_ENTERPRISE_PRIVACY_SETTINGS = "android.settings.ENTERPRISE_PRIVACY_SETTINGS";
   }
@@ -1002,6 +1032,7 @@ package android.provider {
   }
 
   public static final class Settings.Secure extends android.provider.Settings.NameValueTable {
+    method public static void resetToDefaults(android.content.ContentResolver, java.lang.String);
     field public static final java.lang.String ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED = "accessibility_display_magnification_enabled";
     field public static final java.lang.String ACCESSIBILITY_SHORTCUT_TARGET_SERVICE = "accessibility_shortcut_target_service";
     field public static final java.lang.String AUTOFILL_FEATURE_FIELD_CLASSIFICATION = "autofill_field_classification";
@@ -1013,6 +1044,8 @@ package android.provider {
     field public static final java.lang.String AUTOFILL_USER_DATA_MIN_VALUE_LENGTH = "autofill_user_data_min_value_length";
     field public static final java.lang.String DISABLED_PRINT_SERVICES = "disabled_print_services";
     field public static final deprecated java.lang.String ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES = "enabled_notification_policy_access_packages";
+    field public static final java.lang.String LOCATION_ACCESS_CHECK_DELAY_MILLIS = "location_access_check_delay_millis";
+    field public static final java.lang.String LOCATION_ACCESS_CHECK_INTERVAL_MILLIS = "location_access_check_interval_millis";
     field public static final java.lang.String SYNC_PARENT_SOUNDS = "sync_parent_sounds";
     field public static final java.lang.String USER_SETUP_COMPLETE = "user_setup_complete";
     field public static final java.lang.String VOICE_INTERACTION_SERVICE = "voice_interaction_service";
@@ -1063,8 +1096,31 @@ package android.security.keystore {
 
 package android.service.autofill {
 
+  public abstract class AutofillFieldClassificationService extends android.app.Service {
+    method public android.os.IBinder onBind(android.content.Intent);
+    field public static final java.lang.String REQUIRED_ALGORITHM_EDIT_DISTANCE = "EDIT_DISTANCE";
+    field public static final java.lang.String REQUIRED_ALGORITHM_EXACT_MATCH = "EXACT_MATCH";
+    field public static final java.lang.String SERVICE_INTERFACE = "android.service.autofill.AutofillFieldClassificationService";
+    field public static final java.lang.String SERVICE_META_DATA_KEY_AVAILABLE_ALGORITHMS = "android.autofill.field_classification.available_algorithms";
+    field public static final java.lang.String SERVICE_META_DATA_KEY_DEFAULT_ALGORITHM = "android.autofill.field_classification.default_algorithm";
+  }
+
   public final class CharSequenceTransformation extends android.service.autofill.InternalTransformation implements android.os.Parcelable android.service.autofill.Transformation {
     method public void apply(android.service.autofill.ValueFinder, android.widget.RemoteViews, int) throws java.lang.Exception;
+  }
+
+  public final class CompositeUserData implements android.os.Parcelable {
+    ctor public CompositeUserData(android.service.autofill.UserData, android.service.autofill.UserData);
+    method public int describeContents();
+    method public java.lang.String[] getCategoryIds();
+    method public android.os.Bundle getDefaultFieldClassificationArgs();
+    method public java.lang.String getFieldClassificationAlgorithm();
+    method public java.lang.String getFieldClassificationAlgorithmForCategory(java.lang.String);
+    method public android.util.ArrayMap<java.lang.String, java.lang.String> getFieldClassificationAlgorithms();
+    method public android.util.ArrayMap<java.lang.String, android.os.Bundle> getFieldClassificationArgs();
+    method public java.lang.String[] getValues();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.service.autofill.CompositeUserData> CREATOR;
   }
 
   public final class CustomDescription implements android.os.Parcelable {
@@ -1119,6 +1175,10 @@ package android.service.autofill {
     method public android.view.autofill.AutofillValue sanitize(android.view.autofill.AutofillValue);
   }
 
+  public final class UserData implements android.os.Parcelable {
+    method public android.util.ArrayMap<java.lang.String, java.lang.String> getFieldClassificationAlgorithms();
+  }
+
   public abstract interface ValueFinder {
     method public default java.lang.String findByAutofillId(android.view.autofill.AutofillId);
     method public abstract android.view.autofill.AutofillValue findRawValueByAutofillId(android.view.autofill.AutofillId);
@@ -1151,7 +1211,7 @@ package android.service.notification {
     field public static final java.lang.String KEY_USER_SENTIMENT = "key_user_sentiment";
   }
 
-  public abstract class ConditionProviderService extends android.app.Service {
+  public abstract deprecated class ConditionProviderService extends android.app.Service {
     method public boolean isBound();
   }
 
@@ -1235,6 +1295,18 @@ package android.telecom {
 
   public final class CallAudioState implements android.os.Parcelable {
     ctor public CallAudioState(boolean, int, int, android.bluetooth.BluetoothDevice, java.util.Collection<android.bluetooth.BluetoothDevice>);
+  }
+
+  public final class PhoneAccountSuggestion implements android.os.Parcelable {
+    ctor public PhoneAccountSuggestion(android.telecom.PhoneAccountHandle, int, boolean);
+  }
+
+  public class PhoneAccountSuggestionService extends android.app.Service {
+    ctor public PhoneAccountSuggestionService();
+    method public void onAccountSuggestionRequest(java.lang.String);
+    method public android.os.IBinder onBind(android.content.Intent);
+    method public final void suggestPhoneAccounts(java.lang.String, java.util.List<android.telecom.PhoneAccountSuggestion>);
+    field public static final java.lang.String SERVICE_INTERFACE = "android.telecom.PhoneAccountSuggestionService";
   }
 
 }
@@ -1658,11 +1730,6 @@ package android.view {
     method public static int getHoverTooltipHideTimeout();
     method public static int getHoverTooltipShowTimeout();
     method public static int getLongPressTooltipHideTimeout();
-  }
-
-  public final class ViewTreeObserver {
-    method public void registerFrameCommitCallback(java.lang.Runnable);
-    method public boolean unregisterFrameCommitCallback(java.lang.Runnable);
   }
 
   public abstract interface WindowManager implements android.view.ViewManager {
