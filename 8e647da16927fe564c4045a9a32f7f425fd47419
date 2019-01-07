@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9e83c169_3b439bd5",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 831,
+      "author": {
+        "id": 1000140
+      },
+      "writtenOn": "2019-01-07T17:01:03Z",
+      "side": 1,
+      "message": "This shouldn\u0027t be here at all.",
+      "revId": "8e647da16927fe564c4045a9a32f7f425fd47419",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
