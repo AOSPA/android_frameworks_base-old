@@ -67,7 +67,6 @@ import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
-import com.android.internal.os.RegionalizationEnvironment;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
@@ -105,7 +104,6 @@ import com.android.server.net.watchlist.NetworkWatchlistService;
 import com.android.server.notification.NotificationManagerService;
 import com.android.server.oemlock.OemLockService;
 import com.android.server.om.OverlayManagerService;
-import com.android.server.os.RegionalizationService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.pm.BackgroundDexOptService;
@@ -668,13 +666,6 @@ public final class SystemServer {
         } else if (ENCRYPTED_STATE.equals(cryptState)) {
             Slog.w(TAG, "Device encrypted - only parsing core apps");
             mOnlyCore = true;
-        }
-
-        // Start Carrier regionalization service
-        if (RegionalizationEnvironment.isSupported()) {
-            Slog.i(TAG, "Regionalization Service");
-            RegionalizationService regionalizationService = new RegionalizationService();
-            ServiceManager.addService("regionalization", regionalizationService);
         }
 
         // Start the package manager.
