@@ -1,0 +1,140 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "2f8add2f_78d362d5",
+        "filename": "core/java/com/android/internal/statusbar/IStatusBar.aidl",
+        "patchSetId": 2
+      },
+      "lineNbr": 141,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "The reason string provides the necessary information to make this decision. In fact, the code doesn\u0027t even use these booleans. Remove entirely.",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9a7d722c_43fe1c5a",
+        "filename": "packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsDialog.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 135,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "see pa_config.xml",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f66990a0_a9e97d0a",
+        "filename": "packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsDialog.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 465,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "All the extra code for tracking \"added\" keys isn\u0027t really necessary since the actions are loaded directly from a list. Recommend removing it entirely.",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4e81d361_da124675",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 3192,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0f8c76a6_9cdc5bea",
+        "filename": "services/core/java/com/android/server/power/ShutdownThread.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 252,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "update javadoc to be consistent with function operation.",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4b24f0f2_2dd4e300",
+        "filename": "services/core/java/com/android/server/power/ShutdownThread.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 272,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "same as above",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "73f5c3a8_e71ea6cd",
+        "filename": "services/core/java/com/android/server/power/ShutdownThread.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 386,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "Please retain the factory path for RescueParty.isAttemptingFactoryReset.",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f3868a69_3d476d31",
+        "filename": "services/core/java/com/android/server/statusbar/StatusBarManagerService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1019,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2019-01-09T03:10:04Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "cd051dc1955a5abf3e9623f6163893e0f70c5b95",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
