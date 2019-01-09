@@ -175,7 +175,7 @@ JNIMediaPlayer2Listener::JNIMediaPlayer2Listener(JNIEnv* env, jobject thiz, jobj
     // that posts events to the application thread.
     jclass clazz = env->GetObjectClass(thiz);
     if (clazz == NULL) {
-        ALOGE("Can't find android/media/MediaPlayer2Impl");
+        ALOGE("Can't find android/media/MediaPlayer2");
         jniThrowException(env, "java/lang/Exception", NULL);
         return;
     }
@@ -488,7 +488,7 @@ setVideoSurface(JNIEnv *env, jobject thiz, jobject jsurface, jboolean mediaPlaye
     env->SetLongField(thiz, fields.surface_texture, (jlong)anw);
 
     // This will fail if the media player has not been initialized yet. This
-    // can be the case if setDisplay() on MediaPlayer2Impl.java has been called
+    // can be the case if setDisplay() on MediaPlayer2.java has been called
     // before setDataSource(). The redundant call to setVideoSurfaceTexture()
     // in prepare/prepare covers for this case.
     mp->setVideoSurfaceTexture(new ANativeWindowWrapper(anw));
@@ -596,20 +596,6 @@ android_media_MediaPlayer2_pause(JNIEnv *env, jobject thiz)
         return;
     }
     process_media_player_call( env, thiz, mp->pause(), NULL, NULL );
-}
-
-static jboolean
-android_media_MediaPlayer2_isPlaying(JNIEnv *env, jobject thiz)
-{
-    sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
-    if (mp == NULL ) {
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return JNI_FALSE;
-    }
-    const jboolean is_playing = mp->isPlaying();
-
-    ALOGV("isPlaying: %d", is_playing);
-    return is_playing;
 }
 
 static void
@@ -790,40 +776,6 @@ android_media_MediaPlayer2_getState(JNIEnv *env, jobject thiz)
     return (jint)mp->getState();
 }
 
-static jint
-android_media_MediaPlayer2_getVideoWidth(JNIEnv *env, jobject thiz)
-{
-    sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
-    if (mp == NULL ) {
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return 0;
-    }
-    int w;
-    if (0 != mp->getVideoWidth(&w)) {
-        ALOGE("getVideoWidth failed");
-        w = 0;
-    }
-    ALOGV("getVideoWidth: %d", w);
-    return (jint) w;
-}
-
-static jint
-android_media_MediaPlayer2_getVideoHeight(JNIEnv *env, jobject thiz)
-{
-    sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
-    if (mp == NULL ) {
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return 0;
-    }
-    int h;
-    if (0 != mp->getVideoHeight(&h)) {
-        ALOGE("getVideoHeight failed");
-        h = 0;
-    }
-    ALOGV("getVideoHeight: %d", h);
-    return (jint) h;
-}
-
 static jobject
 android_media_MediaPlayer2_native_getMetrics(JNIEnv *env, jobject thiz)
 {
@@ -893,71 +845,30 @@ android_media_MediaPlayer2_reset(JNIEnv *env, jobject thiz)
     process_media_player_call( env, thiz, mp->reset(), NULL, NULL );
 }
 
-static jint
-android_media_MediaPlayer2_getAudioStreamType(JNIEnv *env, jobject thiz)
-{
-    sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
-    if (mp == NULL ) {
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return 0;
-    }
-    audio_stream_type_t streamtype;
-    process_media_player_call( env, thiz, mp->getAudioStreamType(&streamtype), NULL, NULL );
-    ALOGV("getAudioStreamType: %d (streamtype)", streamtype);
-    return (jint) streamtype;
-}
-
 static jboolean
-android_media_MediaPlayer2_setParameter(JNIEnv *env, jobject thiz, jint key, jobject)
+android_media_MediaPlayer2_setAudioAttributes(JNIEnv *env, jobject thiz, jobject attributes)
 {
-    ALOGV("setParameter: key %d", key);
+    ALOGV("setAudioAttributes");
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL ) {
         jniThrowException(env, "java/lang/IllegalStateException", NULL);
         return false;
     }
-
-    return false;
-    // TODO: set/getParameter is temporarily disabled to remove android_runtime.so dependency.
-    //       Once JAudioTrack migration is done, the AudioAttribute jobject
-    //       should be directly passed to AudioTrack without native parcel conversion.
-    /*
-    Parcel *request = parcelForJavaObject(env, java_request);
-    status_t err = mp->setParameter(key, *request);
-    if (err == OK) {
-        return true;
-    } else {
-        return false;
-    }
-    */
+    status_t err = mp->setAudioAttributes(attributes);
+    return err == OK;
 }
 
 static jobject
-android_media_MediaPlayer2_getParameter(JNIEnv *env, jobject thiz, jint key)
+android_media_MediaPlayer2_getAudioAttributes(JNIEnv *env, jobject thiz)
 {
-    ALOGV("getParameter: key %d", key);
+    ALOGV("getAudioAttributes");
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL) {
         jniThrowException(env, "java/lang/IllegalStateException", NULL);
         return NULL;
     }
 
-    return NULL;
-    // TODO: set/getParameter is temporarily disabled to remove android_runtime.so dependency.
-    //       Once JAudioTrack migration is done, the AudioAttribute jobject
-    //       should be directly passed to AudioTrack without native parcel conversion.
-    /*
-    jobject jParcel = createJavaParcelObject(env);
-    if (jParcel != NULL) {
-        Parcel* nativeParcel = parcelForJavaObject(env, jParcel);
-        status_t err = mp->getParameter(key, nativeParcel);
-        if (err != OK) {
-            env->DeleteLocalRef(jParcel);
-            return NULL;
-        }
-    }
-    return jParcel;
-    */
+    return mp->getAudioAttributes();
 }
 
 static void
@@ -1039,7 +950,7 @@ android_media_MediaPlayer2_native_init(JNIEnv *env)
 {
     jclass clazz;
 
-    clazz = env->FindClass("android/media/MediaPlayer2Impl");
+    clazz = env->FindClass("android/media/MediaPlayer2");
     if (clazz == NULL) {
         return;
     }
@@ -1098,10 +1009,11 @@ android_media_MediaPlayer2_native_init(JNIEnv *env)
 }
 
 static void
-android_media_MediaPlayer2_native_setup(JNIEnv *env, jobject thiz, jobject weak_this)
+android_media_MediaPlayer2_native_setup(JNIEnv *env, jobject thiz,
+        jint sessionId, jobject weak_this)
 {
     ALOGV("native_setup");
-    sp<MediaPlayer2> mp = MediaPlayer2::Create();
+    sp<MediaPlayer2> mp = MediaPlayer2::Create(sessionId);
     if (mp == NULL) {
         jniThrowException(env, "java/lang/RuntimeException", "Out of memory");
         return;
@@ -1139,9 +1051,9 @@ android_media_MediaPlayer2_native_finalize(JNIEnv *env, jobject thiz)
     android_media_MediaPlayer2_release(env, thiz);
 }
 
-static void android_media_MediaPlayer2_set_audio_session_id(JNIEnv *env,  jobject thiz,
+static void android_media_MediaPlayer2_setAudioSessionId(JNIEnv *env,  jobject thiz,
         jint sessionId) {
-    ALOGV("set_session_id(): %d", sessionId);
+    ALOGV("setAudioSessionId(): %d", sessionId);
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL ) {
         jniThrowException(env, "java/lang/IllegalStateException", NULL);
@@ -1151,8 +1063,8 @@ static void android_media_MediaPlayer2_set_audio_session_id(JNIEnv *env,  jobjec
             NULL);
 }
 
-static jint android_media_MediaPlayer2_get_audio_session_id(JNIEnv *env,  jobject thiz) {
-    ALOGV("get_session_id()");
+static jint android_media_MediaPlayer2_getAudioSessionId(JNIEnv *env,  jobject thiz) {
+    ALOGV("getAudioSessionId()");
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL ) {
         jniThrowException(env, "java/lang/IllegalStateException", NULL);
@@ -1354,33 +1266,48 @@ static void android_media_MediaPlayer2_releaseDrm(JNIEnv *env, jobject thiz)
 
 /////////////////////////////////////////////////////////////////////////////////////
 // AudioRouting begin
-static jboolean android_media_MediaPlayer2_setOutputDevice(JNIEnv *env, jobject thiz, jint device_id)
+static jboolean android_media_MediaPlayer2_setPreferredDevice(JNIEnv *env, jobject thiz, jobject device)
 {
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL) {
         return false;
     }
-    return mp->setOutputDevice(device_id) == NO_ERROR;
+    return mp->setPreferredDevice(device) == NO_ERROR;
 }
 
-static jint android_media_MediaPlayer2_getRoutedDeviceId(JNIEnv *env, jobject thiz)
+static jobject android_media_MediaPlayer2_getRoutedDevice(JNIEnv *env, jobject thiz)
 {
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL) {
-        return AUDIO_PORT_HANDLE_NONE;
+        return nullptr;
     }
-    return mp->getRoutedDeviceId();
+    return mp->getRoutedDevice();
 }
 
-static void android_media_MediaPlayer2_enableDeviceCallback(
-        JNIEnv* env, jobject thiz, jboolean enabled)
+static void android_media_MediaPlayer2_addDeviceCallback(
+        JNIEnv* env, jobject thiz, jobject routingDelegate)
 {
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL) {
         return;
     }
 
-    status_t status = mp->enableAudioDeviceCallback(enabled);
+    status_t status = mp->addAudioDeviceCallback(routingDelegate);
+    if (status != NO_ERROR) {
+        jniThrowException(env, "java/lang/IllegalStateException", NULL);
+        ALOGE("enable device callback failed: %d", status);
+    }
+}
+
+static void android_media_MediaPlayer2_removeDeviceCallback(
+        JNIEnv* env, jobject thiz, jobject listener)
+{
+    sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
+    if (mp == NULL) {
+        return;
+    }
+
+    status_t status = mp->removeAudioDeviceCallback(listener);
     if (status != NO_ERROR) {
         jniThrowException(env, "java/lang/IllegalStateException", NULL);
         ALOGE("enable device callback failed: %d", status);
@@ -1467,48 +1394,46 @@ static const JNINativeMethod gMethods[] = {
         (void *)android_media_MediaPlayer2_handleDataSourceCallback
     },
     {"nativePlayNextDataSource", "(J)V",                        (void *)android_media_MediaPlayer2_playNextDataSource},
-    {"_setVideoSurface",    "(Landroid/view/Surface;)V",        (void *)android_media_MediaPlayer2_setVideoSurface},
+    {"native_setVideoSurface", "(Landroid/view/Surface;)V",     (void *)android_media_MediaPlayer2_setVideoSurface},
     {"getBufferingParams", "()Landroid/media/BufferingParams;", (void *)android_media_MediaPlayer2_getBufferingParams},
-    {"_setBufferingParams", "(Landroid/media/BufferingParams;)V", (void *)android_media_MediaPlayer2_setBufferingParams},
-    {"_prepare",            "()V",                              (void *)android_media_MediaPlayer2_prepare},
-    {"_start",              "()V",                              (void *)android_media_MediaPlayer2_start},
+    {"native_setBufferingParams", "(Landroid/media/BufferingParams;)V", (void *)android_media_MediaPlayer2_setBufferingParams},
+    {"native_prepare",      "()V",                              (void *)android_media_MediaPlayer2_prepare},
+    {"native_start",        "()V",                              (void *)android_media_MediaPlayer2_start},
     {"native_getState",     "()I",                              (void *)android_media_MediaPlayer2_getState},
-    {"getVideoWidth",       "()I",                              (void *)android_media_MediaPlayer2_getVideoWidth},
-    {"getVideoHeight",      "()I",                              (void *)android_media_MediaPlayer2_getVideoHeight},
     {"native_getMetrics",   "()Landroid/os/PersistableBundle;", (void *)android_media_MediaPlayer2_native_getMetrics},
-    {"_setPlaybackParams", "(Landroid/media/PlaybackParams;)V", (void *)android_media_MediaPlayer2_setPlaybackParams},
-    {"getPlaybackParams", "()Landroid/media/PlaybackParams;", (void *)android_media_MediaPlayer2_getPlaybackParams},
-    {"_setSyncParams",     "(Landroid/media/SyncParams;)V",  (void *)android_media_MediaPlayer2_setSyncParams},
-    {"getSyncParams",     "()Landroid/media/SyncParams;",   (void *)android_media_MediaPlayer2_getSyncParams},
-    {"_seekTo",             "(JI)V",                            (void *)android_media_MediaPlayer2_seekTo},
-    {"_pause",              "()V",                              (void *)android_media_MediaPlayer2_pause},
-    {"isPlaying",           "()Z",                              (void *)android_media_MediaPlayer2_isPlaying},
+    {"native_setPlaybackParams", "(Landroid/media/PlaybackParams;)V", (void *)android_media_MediaPlayer2_setPlaybackParams},
+    {"getPlaybackParams", "()Landroid/media/PlaybackParams;",   (void *)android_media_MediaPlayer2_getPlaybackParams},
+    {"native_setSyncParams",     "(Landroid/media/SyncParams;)V",     (void *)android_media_MediaPlayer2_setSyncParams},
+    {"getSyncParams",     "()Landroid/media/SyncParams;",       (void *)android_media_MediaPlayer2_getSyncParams},
+    {"native_seekTo",       "(JI)V",                            (void *)android_media_MediaPlayer2_seekTo},
+    {"native_pause",        "()V",                              (void *)android_media_MediaPlayer2_pause},
     {"getCurrentPosition",  "()J",                              (void *)android_media_MediaPlayer2_getCurrentPosition},
     {"getDuration",         "()J",                              (void *)android_media_MediaPlayer2_getDuration},
-    {"_release",            "()V",                              (void *)android_media_MediaPlayer2_release},
-    {"_reset",              "()V",                              (void *)android_media_MediaPlayer2_reset},
-    {"_getAudioStreamType", "()I",                              (void *)android_media_MediaPlayer2_getAudioStreamType},
-    {"setParameter",        "(ILjava/lang/Object;)Z",          (void *)android_media_MediaPlayer2_setParameter},
-    {"getParameter",        "(I)Ljava/lang/Object;",           (void *)android_media_MediaPlayer2_getParameter},
+    {"native_release",      "()V",                              (void *)android_media_MediaPlayer2_release},
+    {"native_reset",        "()V",                              (void *)android_media_MediaPlayer2_reset},
+    {"native_setAudioAttributes", "(Landroid/media/AudioAttributes;)Z", (void *)android_media_MediaPlayer2_setAudioAttributes},
+    {"native_getAudioAttributes", "()Landroid/media/AudioAttributes;", (void *)android_media_MediaPlayer2_getAudioAttributes},
     {"setLooping",          "(Z)V",                             (void *)android_media_MediaPlayer2_setLooping},
     {"isLooping",           "()Z",                              (void *)android_media_MediaPlayer2_isLooping},
-    {"_setVolume",          "(F)V",                             (void *)android_media_MediaPlayer2_setVolume},
-    {"_invoke",             "([B)[B",                           (void *)android_media_MediaPlayer2_invoke},
+    {"native_setVolume",    "(F)V",                             (void *)android_media_MediaPlayer2_setVolume},
+    {"native_invoke",       "([B)[B",                           (void *)android_media_MediaPlayer2_invoke},
     {"native_init",         "()V",                              (void *)android_media_MediaPlayer2_native_init},
-    {"native_setup",        "(Ljava/lang/Object;)V",            (void *)android_media_MediaPlayer2_native_setup},
+    {"native_setup",        "(ILjava/lang/Object;)V",           (void *)android_media_MediaPlayer2_native_setup},
     {"native_finalize",     "()V",                              (void *)android_media_MediaPlayer2_native_finalize},
-    {"getAudioSessionId",   "()I",                              (void *)android_media_MediaPlayer2_get_audio_session_id},
-    {"_setAudioSessionId",   "(I)V",                             (void *)android_media_MediaPlayer2_set_audio_session_id},
-    {"_setAuxEffectSendLevel", "(F)V",                          (void *)android_media_MediaPlayer2_setAuxEffectSendLevel},
-    {"_attachAuxEffect",     "(I)V",                             (void *)android_media_MediaPlayer2_attachAuxEffect},
+    {"getAudioSessionId",   "()I",                              (void *)android_media_MediaPlayer2_getAudioSessionId},
+    {"native_setAudioSessionId", "(I)V",                        (void *)android_media_MediaPlayer2_setAudioSessionId},
+    {"native_setAuxEffectSendLevel", "(F)V",                    (void *)android_media_MediaPlayer2_setAuxEffectSendLevel},
+    {"native_attachAuxEffect", "(I)V",                          (void *)android_media_MediaPlayer2_attachAuxEffect},
     // Modular DRM
-    { "_prepareDrm", "([B[B)V",                                 (void *)android_media_MediaPlayer2_prepareDrm },
-    { "_releaseDrm", "()V",                                     (void *)android_media_MediaPlayer2_releaseDrm },
+    { "native_prepareDrm", "([B[B)V",                           (void *)android_media_MediaPlayer2_prepareDrm },
+    { "native_releaseDrm", "()V",                               (void *)android_media_MediaPlayer2_releaseDrm },
 
     // AudioRouting
-    {"native_setOutputDevice", "(I)Z",                          (void *)android_media_MediaPlayer2_setOutputDevice},
-    {"native_getRoutedDeviceId", "()I",                         (void *)android_media_MediaPlayer2_getRoutedDeviceId},
-    {"native_enableDeviceCallback", "(Z)V",                     (void *)android_media_MediaPlayer2_enableDeviceCallback},
+    {"native_setPreferredDevice", "(Landroid/media/AudioDeviceInfo;)Z", (void *)android_media_MediaPlayer2_setPreferredDevice},
+    {"getRoutedDevice", "()Landroid/media/AudioDeviceInfo;", (void *)android_media_MediaPlayer2_getRoutedDevice},
+    {"native_addDeviceCallback", "(Landroid/media/RoutingDelegate;)V", (void *)android_media_MediaPlayer2_addDeviceCallback},
+    {"native_removeDeviceCallback", "(Landroid/media/AudioRouting$OnRoutingChangedListener;)V",
+            (void *)android_media_MediaPlayer2_removeDeviceCallback},
 
     // StreamEventCallback for JAudioTrack
     {"native_stream_event_onTearDown",                "(JJ)V",  (void *)android_media_MediaPlayer2_native_on_tear_down},
@@ -1517,9 +1442,9 @@ static const JNINativeMethod gMethods[] = {
 };
 
 // This function only registers the native methods
-static int register_android_media_MediaPlayer2Impl(JNIEnv *env)
+static int register_android_media_MediaPlayer2(JNIEnv *env)
 {
-    return jniRegisterNativeMethods(env, "android/media/MediaPlayer2Impl", gMethods, NELEM(gMethods));
+    return jniRegisterNativeMethods(env, "android/media/MediaPlayer2", gMethods, NELEM(gMethods));
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
@@ -1533,7 +1458,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     }
     assert(env != NULL);
 
-    if (register_android_media_MediaPlayer2Impl(env) < 0) {
+    if (register_android_media_MediaPlayer2(env) < 0) {
         ALOGE("ERROR: MediaPlayer2 native registration failed\n");
         goto bail;
     }

@@ -272,6 +272,10 @@ public class UserManager {
      *
      * Specifies if all users on the device are disallowed from enabling the
      * "Unknown Sources" setting, that allows installation of apps from unknown sources.
+     *
+     * This restriction can be enabled by the profile owner, in which case all accounts and
+     * profiles will be affected.
+     *
      * The default value is <code>false</code>.
      *
      * <p>Key for user restrictions.
@@ -932,6 +936,21 @@ public class UserManager {
     public static final String DISALLOW_AUTOFILL = "no_autofill";
 
     /**
+     * Specifies if the contents of a user's screen is not allowed to be captured for artificial
+     * intelligence purposes.
+     *
+     * <p>Device owner and profile owner can set this restriction. When it is set by device owner,
+     * only the target user will be affected.
+     *
+     * <p>The default value is <code>false</code>.
+     *
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_INTELLIGENCE_CAPTURE = "no_intelligence_capture";
+
+    /**
      * Specifies if user switching is blocked on the current user.
      *
      * <p> This restriction can only be set by the device owner, it will be applied to all users.
@@ -1274,6 +1293,8 @@ public class UserManager {
      * @return whether this process is running under the primary user.
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean isPrimaryUser() {
         UserInfo user = getUserInfo(UserHandle.myUserId());
         return user != null && user.isPrimary();
@@ -1291,10 +1312,15 @@ public class UserManager {
     }
 
     /**
+     * Used to check if this process is running as an admin user. An admin user is allowed to
+     * modify or configure certain settings that aren't available to non-admin users,
+     * create and delete additional users, etc. There can be more than one admin users.
+     *
+     * @return whether this process is running under an admin user.
      * @hide
-     * Returns whether the caller is running as an admin user. There can be more than one admin
-     * user.
      */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean isAdminUser() {
         return isUserAdmin(UserHandle.myUserId());
     }
@@ -1319,12 +1345,14 @@ public class UserManager {
     }
 
     /**
-     * Returns whether the caller is running as restricted profile. Restricted profile may have
-     * a reduced number of available apps, app restrictions and account restrictions.
-     * @return whether the user making this call is a linked user
+     * Used to check if this process is running under a restricted profile. Restricted profiles
+     * may have a reduced number of available apps, app restrictions, and account restrictions.
+     *
+     * @return whether this process is running under a restricted profile.
      * @hide
      */
     @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean isRestrictedProfile() {
         try {
             return mService.isRestricted();
@@ -1370,10 +1398,13 @@ public class UserManager {
     }
 
     /**
-     * Checks if the calling app is running as a guest user.
-     * @return whether the caller is a guest user.
+     * Used to check if this process is running under a guest user. A guest user may be transient.
+     *
+     * @return whether this process is running under a guest user.
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean isGuestUser() {
         UserInfo user = getUserInfo(UserHandle.myUserId());
         return user != null && user.isGuest();

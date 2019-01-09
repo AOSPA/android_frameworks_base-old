@@ -31,6 +31,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.Dependency;
 
 /**
  * Controls the screen brightness when dozing.
@@ -82,9 +83,11 @@ public class DozeScreenBrightness extends BroadcastReceiver implements DozeMachi
         mSensorToScrimOpacity = sensorToScrimOpacity;
 
         if (mDebuggable) {
-            IntentFilter filter = new IntentFilter();
-            filter.addAction(ACTION_AOD_BRIGHTNESS);
-            mContext.registerReceiverAsUser(this, UserHandle.ALL, filter, null, null);
+            Dependency.get(Dependency.BG_HANDLER).post(()-> {
+                IntentFilter filter = new IntentFilter();
+                filter.addAction(ACTION_AOD_BRIGHTNESS);
+                mContext.registerReceiverAsUser(this, UserHandle.ALL, filter, null, handler);
+            });
         }
     }
 
@@ -123,7 +126,9 @@ public class DozeScreenBrightness extends BroadcastReceiver implements DozeMachi
     private void onDestroy() {
         setLightSensorEnabled(false);
         if (mDebuggable) {
-            mContext.unregisterReceiver(this);
+            Dependency.get(Dependency.BG_HANDLER).post(()-> {
+                mContext.unregisterReceiver(this);
+            });
         }
     }
 
@@ -141,7 +146,7 @@ public class DozeScreenBrightness extends BroadcastReceiver implements DozeMachi
     }
 
     private void updateBrightnessAndReady() {
-        if (mRegistered) {
+        if (mRegistered || mDebugBrightnessBucket != -1) {
             int sensorValue = mDebugBrightnessBucket == -1
                     ? mLastSensorValue : mDebugBrightnessBucket;
             int brightness = computeBrightness(sensorValue);

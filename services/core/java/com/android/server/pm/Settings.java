@@ -20,6 +20,7 @@ import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_WHEN_REQUESTED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INSUFFICIENT_STORAGE;
@@ -256,6 +257,7 @@ public final class Settings {
     private static final String ATTR_USER_SET = "set";
     private static final String ATTR_USER_FIXED = "fixed";
     private static final String ATTR_REVOKE_ON_UPGRADE = "rou";
+    private static final String ATTR_REVOKE_WHEN_REQUESTED = "rwr";
 
     // Flag mask of restored permission grants that are applied at install time
     private static final int USER_RUNTIME_GRANT_MASK =
@@ -2634,6 +2636,10 @@ public final class Settings {
             writeKernelMappingLPr(ps);
         }
 
+        for (final SharedUserSetting sus : mSharedUsers.values()) {
+            knownSet.remove(sus.getStorageSandboxName());
+        }
+
         // Remove any unclaimed mappings
         for (int i = 0; i < knownSet.size(); i++) {
             final String name = knownSet.valueAt(i);
@@ -2644,30 +2650,43 @@ public final class Settings {
         }
     }
 
+    void writeKernelMappingLPr(SharedUserSetting sus) {
+        if (mKernelMappingFilename == null || sus == null || sus.name == null) return;
+
+        writeKernelMappingLPr(sus.getStorageSandboxName(),
+                sus.userId, sus.getNotInstalledUserIds());
+    }
+
     void writeKernelMappingLPr(PackageSetting ps) {
         if (mKernelMappingFilename == null || ps == null || ps.name == null) return;
 
-        KernelPackageState cur = mKernelMapping.get(ps.name);
+        writeKernelMappingLPr(ps.name, ps.appId, ps.getNotInstalledUserIds());
+        if (ps.sharedUser != null) {
+            writeKernelMappingLPr(ps.sharedUser);
+        }
+    }
+
+    void writeKernelMappingLPr(String name, int appId, int[] excludedUserIds) {
+        KernelPackageState cur = mKernelMapping.get(name);
         final boolean firstTime = cur == null;
-        int[] excludedUserIds = ps.getNotInstalledUserIds();
         final boolean userIdsChanged = firstTime
                 || !Arrays.equals(excludedUserIds, cur.excludedUserIds);
 
         // Package directory
-        final File dir = new File(mKernelMappingFilename, ps.name);
+        final File dir = new File(mKernelMappingFilename, name);
 
         if (firstTime) {
             dir.mkdir();
             // Create a new mapping state
             cur = new KernelPackageState();
-            mKernelMapping.put(ps.name, cur);
+            mKernelMapping.put(name, cur);
         }
 
         // If mapping is incorrect or non-existent, write the appid file
-        if (cur.appId != ps.appId) {
+        if (cur.appId != appId) {
             final File appIdFile = new File(dir, "appid");
-            writeIntToFile(appIdFile, ps.appId);
-            if (DEBUG_KERNEL) Slog.d(TAG, "Mapping " + ps.name + " to " + ps.appId);
+            writeIntToFile(appIdFile, appId);
+            if (DEBUG_KERNEL) Slog.d(TAG, "Mapping " + name + " to " + appId);
         }
 
         if (userIdsChanged) {
@@ -2677,7 +2696,7 @@ public final class Settings {
                         excludedUserIds[i])) {
                     writeIntToFile(new File(dir, "excluded_userids"), excludedUserIds[i]);
                     if (DEBUG_KERNEL) Slog.d(TAG, "Writing " + excludedUserIds[i] + " to "
-                            + ps.name + "/excluded_userids");
+                            + name + "/excluded_userids");
                 }
             }
             // Build the inclusion list -- the ids to remove from the exclusion list
@@ -2687,7 +2706,7 @@ public final class Settings {
                         writeIntToFile(new File(dir, "clear_userid"),
                                 cur.excludedUserIds[i]);
                         if (DEBUG_KERNEL) Slog.d(TAG, "Writing " + cur.excludedUserIds[i] + " to "
-                                + ps.name + "/clear_userid");
+                                + name + "/clear_userid");
 
                     }
                 }
@@ -4995,6 +5014,9 @@ public final class Settings {
                                 if ((g.grantBits&FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0) {
                                     pw.print(" revoke_on_upgrade");
                                 }
+                                if ((g.grantBits & FLAG_PERMISSION_REVOKE_WHEN_REQUESTED) != 0) {
+                                    pw.print(" revoke_when_requested");
+                                }
                                 pw.println();
                             }
                         }
@@ -5310,6 +5332,11 @@ public final class Settings {
                                     if ((g.grantBits&FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0) {
                                         serializer.attribute(null, ATTR_REVOKE_ON_UPGRADE, "true");
                                     }
+                                    if ((g.grantBits & FLAG_PERMISSION_REVOKE_WHEN_REQUESTED)
+                                            != 0) {
+                                        serializer.attribute(null, ATTR_REVOKE_WHEN_REQUESTED,
+                                                "true");
+                                    }
                                     serializer.endTag(null, TAG_PERMISSION_ENTRY);
                                 }
                                 serializer.endTag(null, TAG_RESTORED_RUNTIME_PERMISSIONS);
@@ -5495,6 +5522,10 @@ public final class Settings {
                         }
                         if ("true".equals(parser.getAttributeValue(null, ATTR_REVOKE_ON_UPGRADE))) {
                             permBits |= FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                        }
+                        if ("true".equals(parser.getAttributeValue(null,
+                                ATTR_REVOKE_WHEN_REQUESTED))) {
+                            permBits |= FLAG_PERMISSION_REVOKE_WHEN_REQUESTED;
                         }
 
                         if (isGranted || permBits != 0) {

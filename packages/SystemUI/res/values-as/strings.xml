@@ -21,14 +21,6 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" msgid="7164937344850004466">"ছিষ্টেম ইউআই"</string>
     <string name="status_bar_clear_all_button" msgid="7774721344716731603">"মচক"</string>
-    <string name="status_bar_recent_remove_item_title" msgid="6026395868129852968">"সূচীৰ পৰা আঁতৰাওক"</string>
-    <string name="status_bar_recent_inspect_item_title" msgid="7793624864528818569">"এপ্ সম্পৰ্কীয় তথ্য"</string>
-    <string name="status_bar_no_recent_apps" msgid="7374907845131203189">"আপোনাৰ শেহতীয়া স্ক্ৰীণ ইয়াত প্ৰকট হ\'ব"</string>
-    <string name="status_bar_accessibility_dismiss_recents" msgid="4576076075226540105">"শেহতীয়া এপসমূহক আঁতৰাওক"</string>
-    <plurals name="status_bar_accessibility_recent_apps" formatted="false" msgid="9138535907802238759">
-      <item quantity="one">%d খন স্ক্ৰীণ অৱলোকনত আছে</item>
-      <item quantity="other">%d খন স্ক্ৰীণ অৱলোকনত আছে</item>
-    </plurals>
     <string name="status_bar_no_notifications_title" msgid="4755261167193833213">"কোনো জাননী নাই"</string>
     <string name="status_bar_ongoing_events_title" msgid="1682504513316879202">"চলিত"</string>
     <string name="status_bar_latest_events_title" msgid="6594767438577593172">"জাননীসমূহ"</string>
@@ -78,6 +70,22 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="3637758096565605541">"স্ক্ৰীণশ্বট আকৌ ল\'বলৈ চেষ্টা কৰক"</string>
     <string name="screenshot_failed_to_save_text" msgid="3041612585107107310">"সঞ্চয়াগাৰত সীমিত খালী ঠাই থকাৰ বাবে স্ক্ৰীণশ্বট ছেভ কৰিব পৰা নগ\'ল"</string>
     <string name="screenshot_failed_to_capture_text" msgid="173674476457581486">"এপটোৱে বা আপোনাৰ প্ৰতিষ্ঠানে স্ক্ৰীণশ্বট ল\'বলৈ অনুমতি নিদিয়ে"</string>
+    <string name="screenrecord_name" msgid="4196719243134204796">"স্ক্রীণ ৰেকৰ্ডিং"</string>
+    <string name="screenrecord_channel_description" msgid="4630777331970993858">"স্ক্রীণ ৰেকৰ্ডিং ছেশ্বন চলি থকা সময়ত পোৱা জাননী"</string>
+    <string name="screenrecord_start_label" msgid="5177739269492196055">"ৰেকৰ্ডিং কৰা আৰম্ভ কৰক"</string>
+    <string name="screenrecord_mic_label" msgid="4522870600914810019">"পাৰ্শ্ব-ধ্বনি ৰেকৰ্ড কৰক"</string>
+    <string name="screenrecord_taps_label" msgid="1776467076607964790">"টিপা ঠাইসমূহ দেখুৱাওক"</string>
+    <string name="screenrecord_stop_label" msgid="2544887572381260038">"বন্ধ কৰক"</string>
+    <string name="screenrecord_pause_label" msgid="7162476078856786227">"প\'জ কৰক"</string>
+    <string name="screenrecord_resume_label" msgid="3605818317015993314">"ৰখোৱাৰ পৰা পুনৰ আৰম্ভ কৰক"</string>
+    <string name="screenrecord_cancel_label" msgid="3385204992871088609">"বাতিল কৰক"</string>
+    <string name="screenrecord_share_label" msgid="4197867360204019389">"শ্বেয়াৰ কৰক"</string>
+    <string name="screenrecord_delete_label" msgid="7893716870917824013">"মচক"</string>
+    <string name="screenrecord_cancel_success" msgid="7768976011702614782">"স্ক্রীণ ৰেকৰ্ড কৰাটো বাতিল কৰা হ\'ল"</string>
+    <string name="screenrecord_save_message" msgid="4733982661301846778">"স্ক্রীণ ৰেকৰ্ডিং ছেভ কৰা হ\'ল, চাবলৈ টিপক"</string>
+    <string name="screenrecord_delete_description" msgid="5743190456090354585">"স্ক্রীণ ৰেকৰ্ডিং মচা হ\'ল"</string>
+    <string name="screenrecord_delete_error" msgid="8154904464563560282">"স্ক্রীণ ৰেকৰ্ডিং মচি থাকোঁতে কিবা আসোঁৱাহ হ\'ল"</string>
+    <string name="screenrecord_permission_error" msgid="1526755299469001000">"অনুমতি পাব পৰা নগ\'ল"</string>
     <string name="usb_preference_title" msgid="6551050377388882787">"ইউএছবিৰে ফাইল স্থানান্তৰণৰ বিকল্পসমূহ"</string>
     <string name="use_mtp_button_title" msgid="4333504413563023626">"মিডিয়া প্লেয়াৰ (এমটিপি) হিচাপে সংলগ্ন কৰক"</string>
     <string name="use_ptp_button_title" msgid="7517127540301625751">"কেমেৰা (পিটিপি) হিচাপে সংলগ্ন কৰক"</string>
@@ -101,7 +109,6 @@
     <string name="phone_label" msgid="2320074140205331708">"ফ\'ন খোলক"</string>
     <string name="voice_assist_label" msgid="3956854378310019854">"কণ্ঠধ্বনিৰে সহায় খোলক"</string>
     <string name="camera_label" msgid="7261107956054836961">"কেমেৰা খোলক"</string>
-    <string name="recents_caption_resize" msgid="3517056471774958200">"নতুন কাৰ্যৰ চানেকি বাছনি কৰক"</string>
     <string name="cancel" msgid="6442560571259935130">"বাতিল কৰক"</string>
     <string name="accessibility_biometric_dialog_help_area" msgid="8953787076940186847">"সহায় বাৰ্তাৰ ক্ষেত্ৰ"</string>
     <string name="biometric_dialog_confirm" msgid="6468457350041712674">"নিশ্চিত কৰক"</string>
@@ -188,11 +195,6 @@
     <skip />
     <!-- no translation found for accessibility_work_mode (702887484664647430) -->
     <skip />
-    <string name="accessibility_recents_item_will_be_dismissed" msgid="395770242498031481">"<xliff:g id="APP">%s</xliff:g>ক আঁতৰাব।"</string>
-    <string name="accessibility_recents_item_dismissed" msgid="6803574935084867070">"<xliff:g id="APP">%s</xliff:g> আঁতৰোৱা হৈছে৷"</string>
-    <string name="accessibility_recents_all_items_dismissed" msgid="4464697366179168836">"শেহতীয়া সকলো এপ্লিকেশ্বন অগ্ৰাহ্য কৰা হৈছে।"</string>
-    <string name="accessibility_recents_item_open_app_info" msgid="5107479759905883540">"<xliff:g id="APP">%s</xliff:g> এপ্লিকেশ্বনৰ তথ্য় খোলক।"</string>
-    <string name="accessibility_recents_item_launched" msgid="7616039892382525203">"<xliff:g id="APP">%s</xliff:g> আৰম্ভ কৰা হৈছে।"</string>
     <string name="accessibility_notification_dismissed" msgid="854211387186306927">"জাননী অগ্ৰাহ্য কৰা হৈছে।"</string>
     <string name="accessibility_desc_notification_shade" msgid="4690274844447504208">"জাননী পেনেল।"</string>
     <string name="accessibility_desc_quick_settings" msgid="6186378411582437046">"ক্ষিপ্ৰ ছেটিংসমূহ।"</string>
@@ -319,6 +321,7 @@
     <string name="quick_settings_cast_device_default_name" msgid="5367253104742382945">"নাম নথকা ডিভাইচ"</string>
     <string name="quick_settings_cast_device_default_description" msgid="2484573682378634413">"কাষ্টৰ বাবে সাজু"</string>
     <string name="quick_settings_cast_detail_empty_text" msgid="311785821261640623">"কোনো ডিভাইচ নাই"</string>
+    <string name="quick_settings_cast_no_wifi" msgid="2696477881905521882">"ৱাই-ফাইৰ সৈতে সংযোগ হৈ থকা নাই"</string>
     <string name="quick_settings_brightness_dialog_title" msgid="8599674057673605368">"উজ্জ্বলতা"</string>
     <string name="quick_settings_brightness_dialog_auto_brightness_label" msgid="5064982743784071218">"স্বয়ং"</string>
     <string name="quick_settings_inversion_label" msgid="8790919884718619648">"ৰং ওলোটা কৰক"</string>
@@ -354,23 +357,8 @@
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC নিষ্ক্ৰিয় হৈ আছে"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC সক্ষম হৈ আছে"</string>
-    <string name="recents_empty_message" msgid="808480104164008572">"কোনো শেহতীয়া বস্তু নাই"</string>
-    <string name="recents_empty_message_dismissed_all" msgid="2791312568666558651">"আপুনি সকলোবোৰ খালী কৰিছে"</string>
-    <string name="recents_app_info_button_label" msgid="2890317189376000030">"এপ্লিকেশ্বনৰ তথ্য"</string>
-    <string name="recents_lock_to_app_button_label" msgid="6942899049072506044">"স্ক্ৰীণ পিনিং"</string>
-    <string name="recents_search_bar_label" msgid="8074997400187836677">"সন্ধান কৰক"</string>
-    <string name="recents_launch_error_message" msgid="2969287838120550506">"<xliff:g id="APP">%s</xliff:g> আৰম্ভ কৰিব পৰা নগ\'ল৷"</string>
-    <string name="recents_launch_disabled_message" msgid="1624523193008871793">"<xliff:g id="APP">%s</xliff:g>টো সুৰক্ষিত ম\'ডত অক্ষম কৰা হ\'ল।"</string>
-    <string name="recents_stack_action_button_label" msgid="6593727103310426253">"সকলো মচক"</string>
-    <string name="recents_drag_hint_message" msgid="2649739267073203985">"বিভাজিত স্ক্ৰীণ ব্য়ৱহাৰ কৰিবলৈ ইয়ালৈ টানি আনি এৰক"</string>
     <string name="recents_swipe_up_onboarding" msgid="3824607135920170001">"আনটো এপ্ ব্য়ৱহাৰ কৰিবলৈ ওপৰলৈ ছোৱাইপ কৰক"</string>
     <string name="recents_quick_scrub_onboarding" msgid="2778062804333285789">"খৰতকীয়াকৈ আনটো এপ্ ব্য়ৱহাৰ কৰিবলৈ সোঁফালে টানক"</string>
-    <string name="recents_multistack_add_stack_dialog_split_horizontal" msgid="8848514474543427332">"আনুভূমিকভাৱে বিভাজিত কৰক"</string>
-    <string name="recents_multistack_add_stack_dialog_split_vertical" msgid="9075292233696180813">"উলম্বভাৱে বিভাজিত কৰক"</string>
-    <string name="recents_multistack_add_stack_dialog_split_custom" msgid="4177837597513701943">"উপযোগিতা অনুসৰি বিভাজিত কৰক"</string>
-    <string name="recents_accessibility_split_screen_top" msgid="9056056469282256287">"স্ক্ৰীণখনক ওপৰফাললৈ ভাগ কৰক"</string>
-    <string name="recents_accessibility_split_screen_left" msgid="8987144699630620019">"স্ক্ৰীণখনক বাওঁফাললৈ ভাগ কৰক"</string>
-    <string name="recents_accessibility_split_screen_right" msgid="275069779299592867">"স্ক্ৰীণখনক সোঁফাললৈ ভাগ কৰক"</string>
     <string name="quick_step_accessibility_toggle_overview" msgid="7171470775439860480">"অৱলোকন ট’গল কৰক"</string>
     <string name="expanded_header_battery_charged" msgid="5945855970267657951">"চ্চার্জ হ\'ল"</string>
     <string name="expanded_header_battery_charging" msgid="205623198487189724">"চ্চার্জ হৈ আছে"</string>
@@ -442,8 +430,7 @@
     <string name="media_projection_dialog_text" msgid="3071431025448218928">"আপোনাৰ স্ক্ৰীণত প্ৰদৰ্শন হোৱা সকলো <xliff:g id="APP_SEEKING_PERMISSION">%s</xliff:g> কেপশ্বাৰ কৰা আৰম্ভ কৰিব।"</string>
     <string name="media_projection_remember_text" msgid="3103510882172746752">"পুনৰাই নেদেখুৱাব"</string>
     <string name="clear_all_notifications_text" msgid="814192889771462828">"সকলো মচক"</string>
-    <!-- no translation found for manage_notifications_text (2386728145475108753) -->
-    <skip />
+    <string name="manage_notifications_text" msgid="2386728145475108753">"পৰিচালনা"</string>
     <string name="dnd_suppressing_shade_text" msgid="1904574852846769301">"অসুবিধা নিদিব-ই জাননী পজ কৰিছে"</string>
     <string name="media_projection_action_text" msgid="8470872969457985954">"এতিয়াই আৰম্ভ কৰক"</string>
     <string name="empty_shade_text" msgid="708135716272867002">"কোনো জাননী নাই"</string>
@@ -611,11 +598,19 @@
     <string name="notification_header_default_channel" msgid="7506845022070889909">"জাননীসমূহ"</string>
     <string name="notification_channel_disabled" msgid="344536703863700565">"আপোনাক এই জাননীসমূহ আৰু দেখুওৱা নহ\'ব"</string>
     <string name="notification_channel_minimized" msgid="1664411570378910931">"এই জাননীসমূহ মিনিমাইজ কৰি থোৱা হ\'ব"</string>
+    <!-- no translation found for notification_channel_silenced (2877199534497961942) -->
+    <skip />
+    <!-- no translation found for notification_channel_unsilenced (4790904571552394137) -->
+    <skip />
     <string name="inline_blocking_helper" msgid="3055064577771478591">"আপুনি সাধাৰণতে এই জাননীসমূহ অগ্ৰাহ্য কৰে। \nসেইবোৰ দেখুওৱাই থাকিব লাগিবনে?"</string>
     <string name="inline_keep_showing" msgid="8945102997083836858">"এই জাননীসমূহ দেখুওৱাই থাকিব লাগিবনে?"</string>
     <string name="inline_stop_button" msgid="4172980096860941033">"জাননী বন্ধ কৰক"</string>
     <string name="inline_keep_button" msgid="6665940297019018232">"দেখুওৱাই থাকক"</string>
     <string name="inline_minimize_button" msgid="966233327974702195">"সৰু কৰক"</string>
+    <!-- no translation found for inline_silent_button_silent (4411510650503783646) -->
+    <skip />
+    <!-- no translation found for inline_silent_button_alert (2967599358027208807) -->
+    <skip />
     <string name="inline_keep_showing_app" msgid="1723113469580031041">"এই এপটোৰ জাননী দেখুওৱাই থাকিব লাগিবনে?"</string>
     <string name="notification_unblockable_desc" msgid="1037434112919403708">"এই জাননীসমূহ বন্ধ কৰিব নোৱাৰি"</string>
     <string name="appops_camera" msgid="8100147441602585776">"এই এপে কেমেৰা ব্য়ৱহাৰ কৰি আছে।"</string>
@@ -752,6 +747,7 @@
     <item msgid="2139628951880142927">"চ্চাৰ্জ কৰি থকাৰ সময়ত শতাংশ দেখুৱাওক (ডিফ\'ল্ট)"</item>
     <item msgid="3327323682209964956">"এই আইকনটো নেদেখুৱাব"</item>
   </string-array>
+    <string name="tuner_low_priority" msgid="1325884786608312358">"কম গুৰুত্বপূৰ্ণ জাননীৰ আইকনসমূহ দেখুৱাওক"</string>
     <string name="other" msgid="4060683095962566764">"অন্যান্য"</string>
     <string name="accessibility_divider" msgid="5903423481953635044">"স্প্লিট স্ক্ৰীণৰ বিভাজক"</string>
     <string name="accessibility_action_divider_left_full" msgid="2801570521881574972">"বাওঁফালৰ স্ক্ৰীণখন সম্পূৰ্ণ স্ক্ৰীণ কৰক"</string>
@@ -783,6 +779,7 @@
     <string name="accessibility_quick_settings_user" msgid="1567445362870421770">"<xliff:g id="ID_1">%s</xliff:g> হিচাপে ছাইন ইন হ\'ল"</string>
     <string name="data_connection_no_internet" msgid="4503302451650972989">"ইণ্টাৰনেট সংযোগ নাই"</string>
     <string name="accessibility_quick_settings_open_details" msgid="4230931801728005194">"বিৱৰণসমূহ খোলক।"</string>
+    <string name="accessibility_quick_settings_not_available" msgid="4190068184294019846">"<xliff:g id="REASON">%s</xliff:g>ৰ বাবে উপলব্ধ নহয়"</string>
     <string name="accessibility_quick_settings_open_settings" msgid="7806613775728380737">"<xliff:g id="ID_1">%s</xliff:g>ৰ ছেটিংসমূহ খোলক।"</string>
     <string name="accessibility_quick_settings_edit" msgid="7839992848995240393">"ছেটিংসমূহৰ ক্ৰম সম্পাদনা কৰক।"</string>
     <string name="accessibility_quick_settings_page" msgid="5032979051755200721">"<xliff:g id="ID_2">%2$d</xliff:g>ৰ পৃষ্ঠা <xliff:g id="ID_1">%1$d</xliff:g>"</string>
@@ -830,7 +827,7 @@
     <string name="instant_apps_message" msgid="1183313016396018086">"ইনষ্ট\'ল নকৰাকৈয়েই এপটো খোলা হৈছে।"</string>
     <string name="instant_apps_message_with_help" msgid="6179830437630729747">"ইনষ্ট\'ল নকৰাকৈয়েই এপটো খোলা হৈছে। অধিক জানিবলৈ টিপক।"</string>
     <string name="app_info" msgid="6856026610594615344">"এপ্ সম্পৰ্কীয় তথ্য"</string>
-    <string name="go_to_web" msgid="1106022723459948514">"ৱেবলৈ যাওক"</string>
+    <string name="go_to_web" msgid="2650669128861626071">"ব্ৰাউজাৰলৈ যাওক"</string>
     <string name="mobile_data" msgid="7094582042819250762">"ম\'বাইল ডেটা"</string>
     <string name="mobile_data_text_format" msgid="3526214522670876454">"<xliff:g id="ID_1">%1$s</xliff:g> — <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="wifi_is_off" msgid="1838559392210456893">"ৱাই-ফাই অফ অৱস্থাত আছে"</string>
@@ -862,4 +859,16 @@
     <string name="open_saver_setting_action" msgid="8314624730997322529">"ছেটিংবোৰ"</string>
     <string name="auto_saver_okay_action" msgid="2701221740227683650">"বুজি পালোঁ"</string>
     <string name="heap_dump_tile_name" msgid="9141031328971226374">"SysUI হীপ ডাম্প কৰক"</string>
+    <string name="ongoing_privacy_chip_content_single_app" msgid="4479560741898690064">"<xliff:g id="APP">%1$s</xliff:g>এ আপোনাৰ <xliff:g id="TYPES_LIST">%2$s</xliff:g> ব্যৱহাৰ কৰি আছে।"</string>
+    <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8640691753867990511">"এপ্লিকেশ্বনসমূহে আপোনাৰ <xliff:g id="TYPES_LIST">%s</xliff:g> ব্যৱহাৰ কৰি আছে।"</string>
+    <string name="ongoing_privacy_dialog_open_app" msgid="2483886665314567948">"এপ্ খোলক"</string>
+    <string name="ongoing_privacy_dialog_cancel" msgid="5479124524931216790">"বাতিল কৰক"</string>
+    <string name="ongoing_privacy_dialog_okay" msgid="5823914553907253532">"ঠিক আছে"</string>
+    <string name="ongoing_privacy_dialog_open_settings" msgid="6382622467527049074">"ছেটিংসমূহ"</string>
+    <string name="ongoing_privacy_dialog_app_item" msgid="486085465491760739">"<xliff:g id="APP">%1$s</xliff:g>এ যোৱা <xliff:g id="TIME">%3$d</xliff:g> মিনিটৰ পৰা আপোনাৰ <xliff:g id="TYPE">%2$s</xliff:g> ব্যৱহাৰ কৰি আছে"</string>
+    <string name="ongoing_privacy_dialog_apps_item" msgid="9207187236823950491">"<xliff:g id="APPS">%1$s</xliff:g>এ আপোনাৰ <xliff:g id="TYPE">%2$s</xliff:g> ব্যৱহাৰ কৰি আছে"</string>
+    <string name="ongoing_privacy_dialog_single_app" msgid="3884812469179810924">"<xliff:g id="APP">%1$s</xliff:g>এ আপোনাৰ <xliff:g id="TYPES_LIST">%2$s</xliff:g> ব্যৱহাৰ কৰি আছে"</string>
+    <string name="privacy_type_camera" msgid="1676604631892420333">"কেমেৰা"</string>
+    <string name="privacy_type_location" msgid="6435497989657286700">"অৱস্থান"</string>
+    <string name="privacy_type_microphone" msgid="4153045784928554506">"মাইক্ৰ\'ফ\'ন"</string>
 </resources>

@@ -88,29 +88,6 @@ interface IWindowManager
     void addWindowToken(IBinder token, int type, int displayId);
     void removeWindowToken(IBinder token, int displayId);
     void prepareAppTransition(int transit, boolean alwaysKeepCurrent);
-    int getPendingAppTransition();
-    void overridePendingAppTransition(String packageName, int enterAnim, int exitAnim,
-            IRemoteCallback startedCallback);
-    void overridePendingAppTransitionScaleUp(int startX, int startY, int startWidth,
-            int startHeight);
-    void overridePendingAppTransitionClipReveal(int startX, int startY,
-            int startWidth, int startHeight);
-    void overridePendingAppTransitionThumb(in GraphicBuffer srcThumb, int startX, int startY,
-            IRemoteCallback startedCallback, boolean scaleUp);
-    void overridePendingAppTransitionAspectScaledThumb(in GraphicBuffer srcThumb, int startX,
-            int startY, int targetWidth, int targetHeight, IRemoteCallback startedCallback,
-            boolean scaleUp);
-    /**
-     * Overrides animation for app transition that exits from an application to a multi-window
-     * environment and allows specifying transition animation parameters for each window.
-     *
-     * @param specs Array of transition animation descriptions for entering windows.
-     *
-     * @hide
-     */
-    void overridePendingAppTransitionMultiThumb(in AppTransitionAnimationSpec[] specs,
-            IRemoteCallback startedCallback, IRemoteCallback finishedCallback, boolean scaleUp);
-    void overridePendingAppTransitionInPlace(String packageName, int anim);
 
     /**
      * Like overridePendingAppTransitionMultiThumb, but uses a future to supply the specs. This is
@@ -134,9 +111,6 @@ interface IWindowManager
     // caller must call setNewConfiguration() sometime later.
     Configuration updateOrientationFromAppTokens(in Configuration currentConfig,
             IBinder freezeThisOneIfNeeded, int displayId);
-    // Notify window manager of the new display override configuration. Returns an array of stack
-    // ids that were affected by the update, ActivityManager should resize these stacks.
-    int[] setNewDisplayOverrideConfiguration(in Configuration overrideConfig, int displayId);
 
     void startFreezingScreen(int exitAnim, int enterAnim);
     void stopFreezingScreen();
@@ -226,25 +200,50 @@ interface IWindowManager
     int getPreferredOptionsPanelGravity(int displayId);
 
     /**
-     * Lock the device orientation to the specified rotation, or to the
-     * current rotation if -1.  Sensor input will be ignored until
-     * thawRotation() is called.
-     * @hide
+     * Equivalent to calling {@link #freezeDisplayRotation(int, int)} with {@link
+     * android.view.Display#DEFAULT_DISPLAY} and given rotation.
      */
     void freezeRotation(int rotation);
 
     /**
-     * Release the orientation lock imposed by freezeRotation().
-     * @hide
+     * Equivalent to calling {@link #thawDisplayRotation(int)} with {@link
+     * android.view.Display#DEFAULT_DISPLAY}.
      */
     void thawRotation();
 
     /**
-     * Gets whether the rotation is frozen.
-     *
-     * @return Whether the rotation is frozen.
+     * Equivelant to call {@link #isDisplayRotationFrozen(int)} with {@link
+     * android.view.Display#DEFAULT_DISPLAY}.
      */
     boolean isRotationFrozen();
+
+    /**
+     * Lock the display orientation to the specified rotation, or to the current
+     * rotation if -1. Sensor input will be ignored until thawRotation() is called.
+     *
+     * @param displayId the ID of display which rotation should be frozen.
+     * @param rotation one of {@link android.view.Surface#ROTATION_0},
+     *        {@link android.view.Surface#ROTATION_90}, {@link android.view.Surface#ROTATION_180},
+     *        {@link android.view.Surface#ROTATION_270} or -1 to freeze it to current rotation.
+     * @hide
+     */
+    void freezeDisplayRotation(int displayId, int rotation);
+
+    /**
+     * Release the orientation lock imposed by freezeRotation() on the display.
+     *
+     * @param displayId the ID of display which rotation should be thawed.
+     * @hide
+     */
+    void thawDisplayRotation(int displayId);
+
+    /**
+     * Gets whether the rotation is frozen on the display.
+     *
+     * @param displayId the ID of display which frozen is needed.
+     * @return Whether the rotation is frozen.
+     */
+    boolean isDisplayRotationFrozen(int displayId);
 
     /**
      * Screenshot the current wallpaper layer, including the whole screen.
@@ -433,4 +432,120 @@ interface IWindowManager
      * @param displayId The id of the display.
      */
     void dontOverrideDisplayInfo(int displayId);
+
+    /**
+     * Gets the windowing mode of the display.
+     *
+     * @param displayId The id of the display.
+     * @return {@link WindowConfiguration.WindowingMode}
+     */
+    int getWindowingMode(int displayId);
+
+    /**
+     * Sets the windowing mode of the display.
+     *
+     * @param displayId The id of the display.
+     * @param mode {@link WindowConfiguration.WindowingMode}
+     */
+    void setWindowingMode(int displayId, int mode);
+
+    /**
+     * Gets current remove content mode of the display.
+     * <p>
+     * What actions should be performed with the display's content when it is removed. Default
+     * behavior for public displays in this case is to move all activities to the primary display
+     * and make it focused. For private display is to destroy all activities.
+     * </p>
+     *
+     * @param displayId The id of the display.
+     * @return The remove content mode of the display.
+     * @see WindowManager#REMOVE_CONTENT_MODE_MOVE_TO_PRIMARY
+     * @see WindowManager#REMOVE_CONTENT_MODE_DESTROY
+     */
+    int getRemoveContentMode(int displayId);
+
+    /**
+     * Sets the remove content mode of the display.
+     * <p>
+     * This mode indicates what actions should be performed with the display's content when it is
+     * removed.
+     * </p>
+     *
+     * @param displayId The id of the display.
+     * @param mode Remove content mode.
+     * @see WindowManager#REMOVE_CONTENT_MODE_MOVE_TO_PRIMARY
+     * @see WindowManager#REMOVE_CONTENT_MODE_DESTROY
+     */
+    void setRemoveContentMode(int displayId, int mode);
+
+    /**
+     * Indicates that the display should show its content when non-secure keyguard is shown.
+     * <p>
+     * This flag identifies secondary displays that will continue showing content if keyguard can be
+     * dismissed without entering credentials.
+     * </p><p>
+     * An example of usage is a virtual display which content is displayed on external hardware
+     * display that is not visible to the system directly.
+     * </p>
+     *
+     * @param displayId The id of the display.
+     * @return {@code true} if the display should show its content when non-secure keyguard is
+     *         shown.
+     * @see KeyguardManager#isDeviceSecure()
+     * @see KeyguardManager#isDeviceLocked()
+     */
+    boolean shouldShowWithInsecureKeyguard(int displayId);
+
+    /**
+     * Sets that the display should show its content when non-secure keyguard is shown.
+     *
+     * @param displayId The id of the display.
+     * @param shouldShow Indicates that the display should show its content when non-secure keyguard
+     *                  is shown.
+     * @see KeyguardManager#isDeviceSecure()
+     * @see KeyguardManager#isDeviceLocked()
+     */
+    void setShouldShowWithInsecureKeyguard(int displayId, boolean shouldShow);
+
+    /**
+     * Indicates the display should show system decors.
+     * <p>
+     * System decors include status bar, navigation bar, launcher.
+     * </p>
+     *
+     * @param displayId The id of the display.
+     * @return {@code true} if the display should show system decors.
+     */
+    boolean shouldShowSystemDecors(int displayId);
+
+    /**
+     * Sets that the display should show system decors.
+     * <p>
+     * System decors include status bar, navigation bar, launcher.
+     * </p>
+     *
+     * @param displayId The id of the display.
+     * @param shouldShow Indicates that the display should show system decors.
+     */
+    void setShouldShowSystemDecors(int displayId, boolean shouldShow);
+
+    /**
+     * Indicates that the display should show IME.
+     *
+     * @param displayId The id of the display.
+     * @return {@code true} if the display should show IME.
+     * @see KeyguardManager#isDeviceSecure()
+     * @see KeyguardManager#isDeviceLocked()
+     */
+    boolean shouldShowIme(int displayId);
+
+    /**
+     * Sets that the display should show IME.
+     *
+     * @param displayId The id of the display.
+     * @param shouldShow Indicates that the display should show IME.
+     * @see KeyguardManager#isDeviceSecure()
+     * @see KeyguardManager#isDeviceLocked()
+     */
+    void setShouldShowIme(int displayId, boolean shouldShow);
 }

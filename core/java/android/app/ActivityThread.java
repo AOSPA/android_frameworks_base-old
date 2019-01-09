@@ -23,6 +23,8 @@ import static android.app.servertransaction.ActivityLifecycleItem.ON_RESUME;
 import static android.app.servertransaction.ActivityLifecycleItem.ON_START;
 import static android.app.servertransaction.ActivityLifecycleItem.ON_STOP;
 import static android.app.servertransaction.ActivityLifecycleItem.PRE_ON_CREATE;
+import static android.content.ContentResolver.DEPRECATE_DATA_COLUMNS;
+import static android.content.ContentResolver.DEPRECATE_DATA_PREFIX;
 import static android.view.Display.INVALID_DISPLAY;
 
 import android.annotation.NonNull;
@@ -45,6 +47,7 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks2;
 import android.content.ComponentName;
 import android.content.ContentProvider;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.IContentProvider;
 import android.content.IIntentReceiver;
@@ -69,6 +72,7 @@ import android.database.sqlite.SQLiteDebug;
 import android.database.sqlite.SQLiteDebug.DbStats;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.HardwareRenderer;
 import android.graphics.ImageDecoder;
 import android.hardware.display.DisplayManagerGlobal;
 import android.net.ConnectivityManager;
@@ -84,6 +88,7 @@ import android.os.Bundle;
 import android.os.Debug;
 import android.os.DropBoxManager;
 import android.os.Environment;
+import android.os.FileUtils;
 import android.os.GraphicsEnvironment;
 import android.os.Handler;
 import android.os.HandlerExecutor;
@@ -114,6 +119,9 @@ import android.provider.Settings;
 import android.renderscript.RenderScriptCacheDir;
 import android.security.NetworkSecurityPolicy;
 import android.security.net.config.NetworkSecurityConfigProvider;
+import android.system.ErrnoException;
+import android.system.OsConstants;
+import android.system.StructStat;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
 import android.util.BoostFramework;
@@ -163,13 +171,16 @@ import dalvik.system.VMRuntime;
 
 import libcore.io.DropBox;
 import libcore.io.EventLogger;
+import libcore.io.ForwardingOs;
 import libcore.io.IoUtils;
+import libcore.io.Os;
 import libcore.net.event.NetworkEventDispatcher;
 
 import org.apache.harmony.dalvik.ddmc.DdmVmInternal;
 
 import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -393,6 +404,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         = new ArrayMap<Activity, ArrayList<OnActivityPausedListener>>();
 
     final GcIdler mGcIdler = new GcIdler();
+    final PurgeIdler mPurgeIdler = new PurgeIdler();
+
+    boolean mPurgeIdlerScheduled = false;
     boolean mGcIdlerScheduled = false;
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -1426,58 +1440,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             PrintWriter pw = new FastPrintWriter(
                     new FileOutputStream(pfd.getFileDescriptor()));
             PrintWriterPrinter printer = new PrintWriterPrinter(pw);
-            SQLiteDebug.dump(printer, args);
-
-            if (isSystem) {
-                dumpDatabaseFileSizes(pw, Environment.getDataSystemDirectory(), true);
-                dumpDatabaseFileSizes(pw, Environment.getDataSystemDeDirectory(), true);
-                dumpDatabaseFileSizes(pw, Environment.getDataSystemCeDirectory(), true);
-            } else {
-                Context context = getApplication();
-                if (context != null) {
-                    dumpDatabaseFileSizes(pw,
-                            getDatabasesDir(context.createDeviceProtectedStorageContext()),
-                            false);
-                    dumpDatabaseFileSizes(pw,
-                            getDatabasesDir(context.createCredentialProtectedStorageContext()),
-                            false);
-                }
-            }
+            SQLiteDebug.dump(printer, args, isSystem);
             pw.flush();
-        }
-
-        private void dumpDatabaseFileSizes(PrintWriter pw, File dir, boolean isSystem) {
-            final File[] files = dir.listFiles();
-            if (files == null || files.length == 0) {
-                return;
-            }
-            Arrays.sort(files, (a, b) -> a.getName().compareTo(b.getName()));
-
-            boolean needHeader = true;
-            for (File f : files) {
-                if (isSystem) {
-                    // If it's the system server, the directory contains other files too, so
-                    // filter by file extensions.
-                    // (If it's an app, just print all files because they may not use *.db
-                    // extension.)
-                    final String name = f.getName();
-                    if (!(name.endsWith(".db") || name.endsWith(".db-wal")
-                            || name.endsWith(".db-journal"))) {
-                        continue;
-                    }
-                }
-                if (needHeader) {
-                    pw.println();
-                    pw.println("Database files in " + dir.getAbsolutePath() + ":");
-                    needHeader = false;
-                }
-
-                pw.print("  ");
-                pw.print(f.getName());
-                pw.print("  ");
-                pw.print(f.length());
-                pw.println(" bytes");
-            }
         }
 
         @Override
@@ -1732,6 +1696,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int RUN_ISOLATED_ENTRY_POINT = 158;
         public static final int EXECUTE_TRANSACTION = 159;
         public static final int RELAUNCH_ACTIVITY = 160;
+        public static final int PURGE_RESOURCES = 161;
 
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
@@ -1775,6 +1740,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case RUN_ISOLATED_ENTRY_POINT: return "RUN_ISOLATED_ENTRY_POINT";
                     case EXECUTE_TRANSACTION: return "EXECUTE_TRANSACTION";
                     case RELAUNCH_ACTIVITY: return "RELAUNCH_ACTIVITY";
+                    case PURGE_RESOURCES: return "PURGE_RESOURCES";
                 }
             }
             return Integer.toString(code);
@@ -1812,6 +1778,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case UNBIND_SERVICE:
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceUnbind");
                     handleUnbindService((BindServiceData)msg.obj);
+                    schedulePurgeIdler();
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case SERVICE_ARGS:
@@ -1822,6 +1789,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case STOP_SERVICE:
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceStop");
                     handleStopService((IBinder)msg.obj);
+                    schedulePurgeIdler();
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case CONFIGURATION_CHANGED:
@@ -1955,6 +1923,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case RELAUNCH_ACTIVITY:
                     handleRelaunchActivityLocally((IBinder) msg.obj);
                     break;
+                case PURGE_RESOURCES:
+                    schedulePurgeIdler();
+                    break;
             }
             Object obj = msg.obj;
             if (obj instanceof SomeArgs) {
@@ -2007,6 +1978,17 @@ public final class ActivityThread extends ClientTransactionHandler {
         @Override
         public final boolean queueIdle() {
             doGcIfNeeded();
+            nPurgePendingResources();
+            return false;
+        }
+    }
+
+    final class PurgeIdler implements MessageQueue.IdleHandler {
+        @Override
+        public boolean queueIdle() {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "purgePendingResources");
+            nPurgePendingResources();
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
             return false;
         }
     }
@@ -2334,6 +2316,22 @@ public final class ActivityThread extends ClientTransactionHandler {
             Looper.myQueue().removeIdleHandler(mGcIdler);
         }
         mH.removeMessages(H.GC_WHEN_IDLE);
+    }
+
+    void schedulePurgeIdler() {
+        if (!mPurgeIdlerScheduled) {
+            mPurgeIdlerScheduled = true;
+            Looper.myQueue().addIdleHandler(mPurgeIdler);
+        }
+        mH.removeMessages(H.PURGE_RESOURCES);
+    }
+
+    void unschedulePurgeIdler() {
+        if (mPurgeIdlerScheduled) {
+            mPurgeIdlerScheduled = false;
+            Looper.myQueue().removeIdleHandler(mPurgeIdler);
+        }
+        mH.removeMessages(H.PURGE_RESOURCES);
     }
 
     void doGcIfNeeded() {
@@ -4637,6 +4635,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
             r.setState(ON_DESTROY);
         }
+        schedulePurgeIdler();
         mActivities.remove(token);
         StrictMode.decrementExpectedActivityCount(activityClass);
         return r;
@@ -5655,7 +5654,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     int uid = Process.myUid();
                     String[] packages = getPackageManager().getPackagesForUid(uid);
                     if (packages != null) {
-                        ThreadedRenderer.setupDiskCache(codeCacheDir);
+                        HardwareRenderer.setupDiskCache(codeCacheDir);
                         RenderScriptCacheDir.setupDiskCache(codeCacheDir);
                     }
                 } catch (RemoteException e) {
@@ -5890,13 +5889,17 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         }
 
-        // Allow application-generated systrace messages if we're debuggable.
-        boolean isAppDebuggable = (data.appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
-        Trace.setAppTracingAllowed(isAppDebuggable);
-        ThreadedRenderer.setDebuggingEnabled(isAppDebuggable || Build.IS_DEBUGGABLE);
-        if (isAppDebuggable && data.enableBinderTracking) {
+        // Allow binder tracing, and application-generated systrace messages if we're profileable.
+        boolean isAppProfileable = data.appInfo.isProfileableByShell();
+        Trace.setAppTracingAllowed(isAppProfileable);
+        if (isAppProfileable && data.enableBinderTracking) {
             Binder.enableTracing();
         }
+
+        // Allow renderer debugging features if we're debuggable.
+        boolean isAppDebuggable = (data.appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        HardwareRenderer.setDebuggingEnabled(isAppDebuggable || Build.IS_DEBUGGABLE);
+        HardwareRenderer.setPackageName(data.appInfo.packageName);
 
         /**
          * Initialize the default http proxy in this process for the reasons we set the time zone.
@@ -5972,7 +5975,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 StrictMode.setThreadPolicyMask(oldMask);
             }
         } else {
-            ThreadedRenderer.setIsolatedProcess(true);
+            HardwareRenderer.setIsolatedProcess(true);
         }
 
         // If we use profiles, setup the dex reporter to notify package manager
@@ -6827,7 +6830,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    private class DropBoxReporter implements DropBox.Reporter {
+    private static class DropBoxReporter implements DropBox.Reporter {
 
         private DropBoxManager dropBox;
 
@@ -6847,13 +6850,93 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         private synchronized void ensureInitialized() {
             if (dropBox == null) {
-                dropBox = (DropBoxManager) getSystemContext().getSystemService(Context.DROPBOX_SERVICE);
+                dropBox = currentActivityThread().getApplication()
+                        .getSystemService(DropBoxManager.class);
+            }
+        }
+    }
+
+    private static class AndroidOs extends ForwardingOs {
+        /**
+         * Install selective syscall interception. For example, this is used to
+         * implement special filesystem paths that will be redirected to
+         * {@link ContentResolver#openFileDescriptor(Uri, String)}.
+         */
+        public static void install() {
+            // If feature is disabled, we don't need to install
+            if (!DEPRECATE_DATA_COLUMNS) return;
+
+            // If app is modern enough, we don't need to install
+            if (VMRuntime.getRuntime().getTargetSdkVersion() >= Build.VERSION_CODES.Q) return;
+
+            // Install interception and make sure it sticks!
+            Os def = null;
+            do {
+                def = Os.getDefault();
+            } while (!Os.compareAndSetDefault(def, new AndroidOs(def)));
+        }
+
+        private AndroidOs(Os os) {
+            super(os);
+        }
+
+        private FileDescriptor openDeprecatedDataPath(String path, int mode) throws ErrnoException {
+            final Uri uri = ContentResolver.translateDeprecatedDataPath(path);
+            Log.v(TAG, "Redirecting " + path + " to " + uri);
+
+            final ContentResolver cr = currentActivityThread().getApplication()
+                    .getContentResolver();
+            try {
+                final FileDescriptor fd = new FileDescriptor();
+                fd.setInt$(cr.openFileDescriptor(uri,
+                        FileUtils.translateModePosixToString(mode)).detachFd());
+                return fd;
+            } catch (FileNotFoundException e) {
+                throw new ErrnoException(e.getMessage(), OsConstants.ENOENT);
+            }
+        }
+
+        @Override
+        public boolean access(String path, int mode) throws ErrnoException {
+            if (path != null && path.startsWith(DEPRECATE_DATA_PREFIX)) {
+                // If we opened it okay, then access check succeeded
+                IoUtils.closeQuietly(
+                        openDeprecatedDataPath(path, FileUtils.translateModeAccessToPosix(mode)));
+                return true;
+            } else {
+                return super.access(path, mode);
+            }
+        }
+
+        @Override
+        public FileDescriptor open(String path, int flags, int mode) throws ErrnoException {
+            if (path != null && path.startsWith(DEPRECATE_DATA_PREFIX)) {
+                return openDeprecatedDataPath(path, mode);
+            } else {
+                return super.open(path, flags, mode);
+            }
+        }
+
+        @Override
+        public StructStat stat(String path) throws ErrnoException {
+            if (path != null && path.startsWith(DEPRECATE_DATA_PREFIX)) {
+                final FileDescriptor fd = openDeprecatedDataPath(path, OsConstants.O_RDONLY);
+                try {
+                    return android.system.Os.fstat(fd);
+                } finally {
+                    IoUtils.closeQuietly(fd);
+                }
+            } else {
+                return super.stat(path);
             }
         }
     }
 
     public static void main(String[] args) {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "ActivityThreadMain");
+
+        // Install selective syscall interception
+        AndroidOs.install();
 
         // CloseGuard defaults to true and can be quite spammy.  We
         // disable it here, but selectively enable it later (via
@@ -6904,6 +6987,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     // ------------------ Regular JNI ------------------------
-
+    private native void nPurgePendingResources();
     private native void nDumpGraphicsInfo(FileDescriptor fd);
 }

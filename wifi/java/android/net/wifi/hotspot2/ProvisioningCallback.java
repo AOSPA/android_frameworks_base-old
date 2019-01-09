@@ -108,6 +108,48 @@ public abstract class ProvisioningCallback {
     public static final int OSU_FAILURE_UNEXPECTED_SOAP_MESSAGE_STATUS = 15;
 
     /**
+     * The reason code for provisioning failure when there is no PPS MO.
+     * MO.
+     */
+    public static final int OSU_FAILURE_NO_PPS_MO = 16;
+
+    /**
+     * The reason code for provisioning failure when there is no AAAServerTrustRoot node in a PPS
+     * MO.
+     */
+    public static final int OSU_FAILURE_NO_AAA_SERVER_TRUST_ROOT_NODE = 17;
+
+    /**
+     * The reason code for provisioning failure when there is no TrustRoot node for remediation
+     * server in a PPS MO.
+     */
+    public static final int OSU_FAILURE_NO_REMEDIATION_SERVER_TRUST_ROOT_NODE = 18;
+
+    /**
+     * The reason code for provisioning failure when there is no TrustRoot node for policy server in
+     * a PPS MO.
+     */
+    public static final int OSU_FAILURE_NO_POLICY_SERVER_TRUST_ROOT_NODE = 19;
+
+    /**
+     * The reason code for provisioning failure when failing to retrieve trust root certificates
+     * used for validating server certificate for AAA, Remediation and Policy server.
+     */
+    public static final int OSU_FAILURE_RETRIEVE_TRUST_ROOT_CERTIFICATES = 20;
+
+    /**
+     * The reason code for provisioning failure when there is no trust root certificate for AAA
+     * server.
+     */
+    public static final int OSU_FAILURE_NO_AAA_TRUST_ROOT_CERTIFICATE = 21;
+
+    /**
+     * The reason code for provisioning failure when a {@link PasspointConfiguration} is failed to
+     * install.
+     */
+    public static final int OSU_FAILURE_ADD_PASSPOINT_CONFIGURATION = 22;
+
+    /**
      * The status code for provisioning flow to indicate connecting to OSU AP
      */
     public static final int OSU_STATUS_AP_CONNECTING = 1;
@@ -118,9 +160,9 @@ public abstract class ProvisioningCallback {
     public static final int OSU_STATUS_AP_CONNECTED = 2;
 
     /**
-     * The status code for provisioning flow to indicate the server connection is completed.
+     * The status code for provisioning flow to indicate connecting to the server.
      */
-    public static final int OSU_STATUS_SERVER_CONNECTED = 3;
+    public static final int OSU_STATUS_SERVER_CONNECTING = 3;
 
     /**
      * The status code for provisioning flow to indicate the server certificate is validated.
@@ -128,9 +170,9 @@ public abstract class ProvisioningCallback {
     public static final int OSU_STATUS_SERVER_VALIDATED = 4;
 
     /**
-     * The status code for provisioning flow to indicate the service provider is verified.
+     * The status code for provisioning flow to indicate the server is connected
      */
-    public static final int OSU_STATUS_SERVICE_PROVIDER_VERIFIED = 5;
+    public static final int OSU_STATUS_SERVER_CONNECTED = 5;
 
     /**
      * The status code for provisioning flow to indicate starting the first SOAP exchange.
@@ -158,6 +200,12 @@ public abstract class ProvisioningCallback {
     public static final int OSU_STATUS_THIRD_SOAP_EXCHANGE = 10;
 
     /**
+     * The status code for provisioning flow to indicate starting a step retrieving trust root
+     * certs.
+     */
+    public static final int OSU_STATUS_RETRIEVING_TRUST_ROOT_CERTS = 11;
+
+    /**
      * Provisioning status for OSU failure
      *
      * @param status indicates error condition
@@ -170,5 +218,10 @@ public abstract class ProvisioningCallback {
      * @param status indicates status of OSU flow
      */
     public abstract void onProvisioningStatus(int status);
+
+    /**
+     * Provisioning complete when provisioning/remediation flow completes
+     */
+    public abstract void onProvisioningComplete();
 }
 

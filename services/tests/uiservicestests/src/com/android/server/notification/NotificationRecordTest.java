@@ -38,8 +38,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
@@ -63,7 +61,6 @@ import android.service.notification.Adjustment;
 import android.service.notification.StatusBarNotification;
 import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
-import android.util.Slog;
 
 import com.android.internal.R;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
@@ -711,14 +708,14 @@ public class NotificationRecordTest extends UiServiceTestCase {
                 true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
                 false /* lights */, false /* defaultLights */, groupId /* group */);
         NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
-        assertNull(record.getSmartActions());
+        assertNull(record.getSystemGeneratedSmartActions());
 
         ArrayList<Notification.Action> smartActions = new ArrayList<>();
         smartActions.add(new Notification.Action.Builder(
                 Icon.createWithResource(getContext(), R.drawable.btn_default),
                 "text", null).build());
-        record.setSmartActions(smartActions);
-        assertEquals(smartActions, record.getSmartActions());
+        record.setSystemGeneratedSmartActions(smartActions);
+        assertEquals(smartActions, record.getSystemGeneratedSmartActions());
     }
 
     @Test
@@ -803,5 +800,17 @@ public class NotificationRecordTest extends UiServiceTestCase {
 
         assertEquals(1.0f, record.getContactAffinity());
         assertEquals(IMPORTANCE_LOW, record.getImportance());
+    }
+
+    @Test
+    public void testSetAudiblyAlerted() {
+        StatusBarNotification sbn = getNotification(PKG_O, true /* noisy */,
+                true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
+                false /* lights */, false /* defaultLights */, groupId /* group */);
+        NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
+
+        record.setAudiblyAlerted(true);
+
+        assertTrue(record.getAudiblyAlerted());
     }
 }

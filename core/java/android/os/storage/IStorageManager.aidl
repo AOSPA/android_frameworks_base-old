@@ -188,7 +188,7 @@ interface IStorageManager {
     void allocateBytes(String volumeUuid, long bytes, int flags, String callingPackage) = 78;
     void runIdleMaintenance() = 79;
     void abortIdleMaintenance() = 80;
-    String translateAppToSystem(String path, String packageName, int userId) = 81;
-    String translateSystemToApp(String path, String packageName, int userId) = 82;
+    String translateAppToSystem(String path, int pid, int uid) = 81;
+    String translateSystemToApp(String path, int pid, int uid) = 82;
     void clearUserKeyAuth(int userId, int serialNumber, in byte[] token, in byte[] secret) = 83;
 }

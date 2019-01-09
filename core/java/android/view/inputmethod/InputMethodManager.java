@@ -30,6 +30,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.inputmethodservice.InputMethodService;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -59,7 +60,11 @@ import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.autofill.AutofillManager;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
+import com.android.internal.inputmethod.StartInputFlags;
+import com.android.internal.inputmethod.StartInputReason;
+import com.android.internal.inputmethod.UnbindReason;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.view.IInputConnectionWrapper;
 import com.android.internal.view.IInputContext;
@@ -67,7 +72,6 @@ import com.android.internal.view.IInputMethodClient;
 import com.android.internal.view.IInputMethodManager;
 import com.android.internal.view.IInputMethodSession;
 import com.android.internal.view.InputBindResult;
-import com.android.internal.view.InputMethodClient;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -291,30 +295,6 @@ public final class InputMethodManager {
     private static final SparseArray<InputMethodManager> sInstanceMap = new SparseArray<>();
 
     /**
-     * @hide Flag for IInputMethodManager.windowGainedFocus: a view in
-     * the window has input focus.
-     */
-    public static final int CONTROL_WINDOW_VIEW_HAS_FOCUS = 1<<0;
-
-    /**
-     * @hide Flag for IInputMethodManager.windowGainedFocus: the focus
-     * is a text editor.
-     */
-    public static final int CONTROL_WINDOW_IS_TEXT_EDITOR = 1<<1;
-
-    /**
-     * @hide Flag for IInputMethodManager.windowGainedFocus: this is the first
-     * time the window has gotten focus.
-     */
-    public static final int CONTROL_WINDOW_FIRST = 1<<2;
-
-    /**
-     * @hide Flag for IInputMethodManager.startInput: this is the first
-     * time the window has gotten focus.
-     */
-    public static final int CONTROL_START_INITIAL = 1<<8;
-
-    /**
      * Timeout in milliseconds for delivering a key to an IME.
      */
     static final long INPUT_METHOD_NOT_RESPONDING_TIMEOUT = 2500;
@@ -467,26 +447,53 @@ public final class InputMethodManager {
     }
 
     /**
-     * Checks the consistency between {@link InputMethodManager} state and {@link View} state.
+     * Returns fallback {@link InputMethodManager} if the called one is not likely to be compatible
+     * with the given {@code view}.
      *
-     * @param view {@link View} to be checked
-     * @return {@code true} if {@code view} is not {@code null} and there is a {@link Context}
-     *         mismatch between {@link InputMethodManager} and {@code view}
+     * @param view {@link View} to be checked.
+     * @return {@code null} when it is unnecessary (or impossible) to use fallback
+     *         {@link InputMethodManager} to which IME API calls need to be re-dispatched.
+     *          Non-{@code null} {@link InputMethodManager} if this method believes it'd be safer to
+     *          re-dispatch IME APIs calls on it.
      */
-    private boolean shouldDispatchToViewContext(@Nullable View view) {
+    @Nullable
+    private InputMethodManager getFallbackInputMethodManagerIfNecessary(@Nullable View view) {
         if (view == null) {
-            return false;
+            return null;
         }
-        final int viewDisplayId = view.getContext().getDisplayId();
-        if (viewDisplayId != mDisplayId) {
-            Log.w(TAG, "b/117267690: Context mismatch found. view=" + view + " belongs to"
-                    + " displayId=" + viewDisplayId
-                    + " but InputMethodManager belongs to displayId=" + mDisplayId
-                    + ". Use the right InputMethodManager instance to avoid performance overhead.",
-                    new Throwable());
-            return true;
+        // As evidenced in Bug 118341760, view.getViewRootImpl().getDisplayId() is supposed to be
+        // more reliable to determine with which display the given view is interacting than
+        // view.getContext().getDisplayId() / view.getContext().getSystemService(), which can be
+        // easily messed up by app developers (or library authors) by creating inconsistent
+        // ContextWrapper objects that re-dispatch those methods to other Context such as
+        // ApplicationContext.
+        final ViewRootImpl viewRootImpl = view.getViewRootImpl();
+        if (viewRootImpl == null) {
+            return null;
         }
-        return false;
+        final int viewRootDisplayId = viewRootImpl.getDisplayId();
+        if (viewRootDisplayId == mDisplayId) {
+            // Expected case.  Good to go.
+            return null;
+        }
+        final InputMethodManager fallbackImm =
+                viewRootImpl.mDisplayContext.getSystemService(InputMethodManager.class);
+        if (fallbackImm == null) {
+            Log.e(TAG, "b/117267690: Failed to get non-null fallback IMM. view=" + view);
+            return null;
+        }
+        if (fallbackImm.mDisplayId != viewRootDisplayId) {
+            Log.e(TAG, "b/117267690: Failed to get fallback IMM with expected displayId="
+                    + viewRootDisplayId + " actual IMM#displayId=" + fallbackImm.mDisplayId
+                    + " view=" + view);
+            return null;
+        }
+        Log.w(TAG, "b/117267690: Display ID mismatch found."
+                + " ViewRootImpl displayId=" + viewRootDisplayId
+                + " InputMethodManager displayId=" + mDisplayId
+                + ". Use the right InputMethodManager instance to avoid performance overhead.",
+                new Throwable());
+        return fallbackImm;
     }
 
     private static boolean canStartInput(View servedView) {
@@ -540,17 +547,16 @@ public final class InputMethodManager {
                         mCurId = res.id;
                         mBindSequence = res.sequence;
                     }
-                    startInputInner(InputMethodClient.START_INPUT_REASON_BOUND_TO_IMMS,
-                            null, 0, 0, 0);
+                    startInputInner(StartInputReason.BOUND_TO_IMMS, null, 0, 0, 0);
                     return;
                 }
                 case MSG_UNBIND: {
                     final int sequence = msg.arg1;
-                    @InputMethodClient.UnbindReason
+                    @UnbindReason
                     final int reason = msg.arg2;
                     if (DEBUG) {
                         Log.i(TAG, "handleMessage: MSG_UNBIND " + sequence +
-                                " reason=" + InputMethodClient.getUnbindReason(reason));
+                                " reason=" + InputMethodDebug.unbindReasonToString(reason));
                     }
                     final boolean startInput;
                     synchronized (mH) {
@@ -567,8 +573,7 @@ public final class InputMethodManager {
                     }
                     if (startInput) {
                         startInputInner(
-                                InputMethodClient.START_INPUT_REASON_UNBOUND_FROM_IMMS, null, 0, 0,
-                                0);
+                                StartInputReason.UNBOUND_FROM_IMMS, null, 0, 0, 0);
                     }
                     return;
                 }
@@ -597,9 +602,8 @@ public final class InputMethodManager {
                         // handling this message.
                         if (mServedView != null && canStartInput(mServedView)) {
                             if (checkFocusNoStartInput(mRestartOnNextWindowFocus)) {
-                                final int reason = active ?
-                                        InputMethodClient.START_INPUT_REASON_ACTIVATED_BY_IMMS :
-                                        InputMethodClient.START_INPUT_REASON_DEACTIVATED_BY_IMMS;
+                                final int reason = active ? StartInputReason.ACTIVATED_BY_IMMS
+                                        : StartInputReason.DEACTIVATED_BY_IMMS;
                                 startInputInner(reason, null, 0, 0, 0);
                             }
                         }
@@ -696,7 +700,7 @@ public final class InputMethodManager {
         }
 
         @Override
-        public void onUnbindMethod(int sequence, @InputMethodClient.UnbindReason int unbindReason) {
+        public void onUnbindMethod(int sequence, @UnbindReason int unbindReason) {
             mH.obtainMessage(MSG_UNBIND, sequence, unbindReason).sendToTarget();
         }
 
@@ -738,45 +742,77 @@ public final class InputMethodManager {
         return false;
     }
 
-    private static IInputMethodManager getIInputMethodManager() throws ServiceNotFoundException {
-        if (!isInEditMode()) {
-            return IInputMethodManager.Stub.asInterface(
-                    ServiceManager.getServiceOrThrow(Context.INPUT_METHOD_SERVICE));
-        }
-        // If InputMethodManager is running for layoutlib, stub out IPCs into IMMS.
-        final Class<IInputMethodManager> c = IInputMethodManager.class;
-        return (IInputMethodManager) Proxy.newProxyInstance(c.getClassLoader(),
-                new Class[]{c}, (proxy, method, args) -> {
-                    final Class<?> returnType = method.getReturnType();
-                    if (returnType == boolean.class) {
-                        return false;
-                    } else if (returnType == int.class) {
-                        return 0;
-                    } else if (returnType == long.class) {
-                        return 0L;
-                    } else if (returnType == short.class) {
-                        return 0;
-                    } else if (returnType == char.class) {
-                        return 0;
-                    } else if (returnType == byte.class) {
-                        return 0;
-                    } else if (returnType == float.class) {
-                        return 0f;
-                    } else if (returnType == double.class) {
-                        return 0.0;
-                    } else {
-                        return null;
-                    }
-                });
+    @NonNull
+    private static InputMethodManager createInstance(int displayId, Looper looper) {
+        return isInEditMode() ? createStubInstance(displayId, looper)
+                : createRealInstance(displayId, looper);
     }
 
-    InputMethodManager(int displayId, Looper looper) throws ServiceNotFoundException {
-        mService = getIInputMethodManager();
+    @NonNull
+    private static InputMethodManager createRealInstance(int displayId, Looper looper) {
+        final IInputMethodManager service;
+        try {
+            service = IInputMethodManager.Stub.asInterface(
+                    ServiceManager.getServiceOrThrow(Context.INPUT_METHOD_SERVICE));
+        } catch (ServiceNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
+        final InputMethodManager imm = new InputMethodManager(service, displayId, looper);
+        // InputMethodManagerService#addClient() relies on Binder.getCalling{Pid, Uid}() to
+        // associate PID/UID with each IME client. This means:
+        //  A. if this method call will be handled as an IPC, there is no problem.
+        //  B. if this method call will be handled as an in-proc method call, we need to
+        //     ensure that Binder.getCalling{Pid, Uid}() return Process.my{Pid, Uid}()
+        // Either ways we can always call Binder.{clear, restore}CallingIdentity() because
+        // 1) doing so has no effect for A and 2) doing so is sufficient for B.
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            service.addClient(imm.mClient, imm.mIInputContext, displayId);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+        return imm;
+    }
+
+    @NonNull
+    private static InputMethodManager createStubInstance(int displayId, Looper looper) {
+        // If InputMethodManager is running for layoutlib, stub out IPCs into IMMS.
+        final Class<IInputMethodManager> c = IInputMethodManager.class;
+        final IInputMethodManager stubInterface =
+                (IInputMethodManager) Proxy.newProxyInstance(c.getClassLoader(),
+                        new Class[]{c}, (proxy, method, args) -> {
+                            final Class<?> returnType = method.getReturnType();
+                            if (returnType == boolean.class) {
+                                return false;
+                            } else if (returnType == int.class) {
+                                return 0;
+                            } else if (returnType == long.class) {
+                                return 0L;
+                            } else if (returnType == short.class) {
+                                return 0;
+                            } else if (returnType == char.class) {
+                                return 0;
+                            } else if (returnType == byte.class) {
+                                return 0;
+                            } else if (returnType == float.class) {
+                                return 0f;
+                            } else if (returnType == double.class) {
+                                return 0.0;
+                            } else {
+                                return null;
+                            }
+                        });
+        return new InputMethodManager(stubInterface, displayId, looper);
+    }
+
+    private InputMethodManager(IInputMethodManager service, int displayId, Looper looper) {
+        mService = service;
         mMainLooper = looper;
         mH = new H(looper);
         mDisplayId = displayId;
-        mIInputContext = new ControlledInputConnectionWrapper(looper,
-                mDummyInputConnection, this);
+        mIInputContext = new ControlledInputConnectionWrapper(looper, mDummyInputConnection, this);
     }
 
     /**
@@ -786,7 +822,7 @@ public final class InputMethodManager {
      * @return {@link InputMethodManager} instance
      * @hide
      */
-    @Nullable
+    @NonNull
     public static InputMethodManager forContext(Context context) {
         final int displayId = context.getDisplayId();
         // For better backward compatibility, we always use Looper.getMainLooper() for the default
@@ -796,7 +832,7 @@ public final class InputMethodManager {
         return forContextInternal(displayId, looper);
     }
 
-    @Nullable
+    @NonNull
     private static InputMethodManager forContextInternal(int displayId, Looper looper) {
         final boolean isDefaultDisplay = displayId == Display.DEFAULT_DISPLAY;
         synchronized (sLock) {
@@ -804,12 +840,7 @@ public final class InputMethodManager {
             if (instance != null) {
                 return instance;
             }
-            try {
-                instance = new InputMethodManager(displayId, looper);
-                instance.mService.addClient(instance.mClient, instance.mIInputContext, displayId);
-            } catch (ServiceNotFoundException | RemoteException e) {
-                throw new IllegalStateException(e);
-            }
+            instance = createInstance(displayId, looper);
             // For backward compatibility, store the instance also to sInstance for default display.
             if (sInstance == null && isDefaultDisplay) {
                 sInstance = instance;
@@ -973,8 +1004,9 @@ public final class InputMethodManager {
      */
     public boolean isActive(View view) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            return view.getContext().getSystemService(InputMethodManager.class).isActive(view);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            return fallbackImm.isActive(view);
         }
 
         checkFocus();
@@ -1061,9 +1093,9 @@ public final class InputMethodManager {
 
     public void displayCompletions(View view, CompletionInfo[] completions) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class)
-                    .displayCompletions(view, completions);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.displayCompletions(view, completions);
             return;
         }
 
@@ -1086,9 +1118,9 @@ public final class InputMethodManager {
 
     public void updateExtractedText(View view, int token, ExtractedText text) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class)
-                    .updateExtractedText(view, token, text);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.updateExtractedText(view, token, text);
             return;
         }
 
@@ -1134,9 +1166,9 @@ public final class InputMethodManager {
      */
     public boolean showSoftInput(View view, int flags) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            return view.getContext().getSystemService(InputMethodManager.class)
-                    .showSoftInput(view, flags);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            return fallbackImm.showSoftInput(view, flags);
         }
 
         return showSoftInput(view, flags, null);
@@ -1202,9 +1234,9 @@ public final class InputMethodManager {
      */
     public boolean showSoftInput(View view, int flags, ResultReceiver resultReceiver) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            return view.getContext().getSystemService(InputMethodManager.class)
-                    .showSoftInput(view, flags, resultReceiver);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            return fallbackImm.showSoftInput(view, flags, resultReceiver);
         }
 
         checkFocus();
@@ -1371,8 +1403,9 @@ public final class InputMethodManager {
      */
     public void restartInput(View view) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class).restartInput(view);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.restartInput(view);
             return;
         }
 
@@ -1386,13 +1419,12 @@ public final class InputMethodManager {
             mServedConnecting = true;
         }
 
-        startInputInner(InputMethodClient.START_INPUT_REASON_APP_CALLED_RESTART_INPUT_API, null, 0,
-                0, 0);
+        startInputInner(StartInputReason.APP_CALLED_RESTART_INPUT_API, null, 0, 0, 0);
     }
 
-    boolean startInputInner(@InputMethodClient.StartInputReason final int startInputReason,
-            @Nullable IBinder windowGainingFocus, int controlFlags, int softInputMode,
-            int windowFlags) {
+    boolean startInputInner(@StartInputReason int startInputReason,
+            @Nullable IBinder windowGainingFocus, @StartInputFlags int startInputFlags,
+            @SoftInputModeFlags int softInputMode, int windowFlags) {
         final View view;
         synchronized (mH) {
             view = mServedView;
@@ -1400,7 +1432,7 @@ public final class InputMethodManager {
             // Make sure we have a window token for the served view.
             if (DEBUG) {
                 Log.v(TAG, "Starting input: view=" + dumpViewInfo(view) +
-                        " reason=" + InputMethodClient.getStartInputReason(startInputReason));
+                        " reason=" + InputMethodDebug.startInputReasonToString(startInputReason));
             }
             if (view == null) {
                 if (DEBUG) Log.v(TAG, "ABORT input: no served view!");
@@ -1414,9 +1446,9 @@ public final class InputMethodManager {
                 Log.e(TAG, "ABORT input: ServedView must be attached to a Window");
                 return false;
             }
-            controlFlags |= CONTROL_WINDOW_VIEW_HAS_FOCUS;
+            startInputFlags |= StartInputFlags.VIEW_HAS_FOCUS;
             if (view.onCheckIsTextEditor()) {
-                controlFlags |= CONTROL_WINDOW_IS_TEXT_EDITOR;
+                startInputFlags |= StartInputFlags.IS_TEXT_EDITOR;
             }
             softInputMode = view.getViewRootImpl().mWindowAttributes.softInputMode;
             windowFlags = view.getViewRootImpl().mWindowAttributes.flags;
@@ -1471,7 +1503,7 @@ public final class InputMethodManager {
             // If we already have a text box, then this view is already
             // connected so we want to restart it.
             if (mCurrentTextBoxAttribute == null) {
-                controlFlags |= CONTROL_START_INITIAL;
+                startInputFlags |= StartInputFlags.INITIAL_CONNECTION;
             }
 
             // Hook 'em up and let 'er rip.
@@ -1509,19 +1541,20 @@ public final class InputMethodManager {
 
             try {
                 if (DEBUG) Log.v(TAG, "START INPUT: view=" + dumpViewInfo(view) + " ic="
-                        + ic + " tba=" + tba + " controlFlags=#"
-                        + Integer.toHexString(controlFlags));
+                        + ic + " tba=" + tba + " startInputFlags="
+                        + InputMethodDebug.startInputFlagsToString(startInputFlags));
                 final InputBindResult res = mService.startInputOrWindowGainedFocus(
-                        startInputReason, mClient, windowGainingFocus, controlFlags, softInputMode,
-                        windowFlags, tba, servedContext, missingMethodFlags,
+                        startInputReason, mClient, windowGainingFocus, startInputFlags,
+                        softInputMode, windowFlags, tba, servedContext, missingMethodFlags,
                         view.getContext().getApplicationInfo().targetSdkVersion);
                 if (DEBUG) Log.v(TAG, "Starting input: Bind result=" + res);
                 if (res == null) {
                     Log.wtf(TAG, "startInputOrWindowGainedFocus must not return"
                             + " null. startInputReason="
-                            + InputMethodClient.getStartInputReason(startInputReason)
+                            + InputMethodDebug.startInputReasonToString(startInputReason)
                             + " editorInfo=" + tba
-                            + " controlFlags=#" + Integer.toHexString(controlFlags));
+                            + " startInputFlags="
+                            + InputMethodDebug.startInputFlagsToString(startInputFlags));
                     return false;
                 }
                 if (res.id != null) {
@@ -1654,7 +1687,7 @@ public final class InputMethodManager {
     @UnsupportedAppUsage
     public void checkFocus() {
         if (checkFocusNoStartInput(false)) {
-            startInputInner(InputMethodClient.START_INPUT_REASON_CHECK_FOCUS, null, 0, 0, 0);
+            startInputInner(StartInputReason.CHECK_FOCUS, null, 0, 0, 0);
         }
     }
 
@@ -1717,7 +1750,7 @@ public final class InputMethodManager {
         boolean forceNewFocus = false;
         synchronized (mH) {
             if (DEBUG) Log.v(TAG, "onWindowFocus: " + focusedView
-                    + " softInputMode=" + InputMethodClient.softInputModeToString(softInputMode)
+                    + " softInputMode=" + InputMethodDebug.softInputModeToString(softInputMode)
                     + " first=" + first + " flags=#"
                     + Integer.toHexString(windowFlags));
             if (mRestartOnNextWindowFocus) {
@@ -1728,15 +1761,15 @@ public final class InputMethodManager {
             focusInLocked(focusedView != null ? focusedView : rootView);
         }
 
-        int controlFlags = 0;
+        int startInputFlags = 0;
         if (focusedView != null) {
-            controlFlags |= CONTROL_WINDOW_VIEW_HAS_FOCUS;
+            startInputFlags |= StartInputFlags.VIEW_HAS_FOCUS;
             if (focusedView.onCheckIsTextEditor()) {
-                controlFlags |= CONTROL_WINDOW_IS_TEXT_EDITOR;
+                startInputFlags |= StartInputFlags.IS_TEXT_EDITOR;
             }
         }
         if (first) {
-            controlFlags |= CONTROL_WINDOW_FIRST;
+            startInputFlags |= StartInputFlags.FIRST_WINDOW_FOCUS_GAIN;
         }
 
         if (checkFocusNoStartInput(forceNewFocus)) {
@@ -1744,8 +1777,8 @@ public final class InputMethodManager {
             // should be done in conjunction with telling the system service
             // about the window gaining focus, to help make the transition
             // smooth.
-            if (startInputInner(InputMethodClient.START_INPUT_REASON_WINDOW_FOCUS_GAIN,
-                    rootView.getWindowToken(), controlFlags, softInputMode, windowFlags)) {
+            if (startInputInner(StartInputReason.WINDOW_FOCUS_GAIN, rootView.getWindowToken(),
+                    startInputFlags, softInputMode, windowFlags)) {
                 return;
             }
         }
@@ -1756,9 +1789,9 @@ public final class InputMethodManager {
             try {
                 if (DEBUG) Log.v(TAG, "Reporting focus gain, without startInput");
                 mService.startInputOrWindowGainedFocus(
-                        InputMethodClient.START_INPUT_REASON_WINDOW_FOCUS_GAIN_REPORT_ONLY, mClient,
-                        rootView.getWindowToken(), controlFlags, softInputMode, windowFlags, null,
-                        null, 0 /* missingMethodFlags */,
+                        StartInputReason.WINDOW_FOCUS_GAIN_REPORT_ONLY, mClient,
+                        rootView.getWindowToken(), startInputFlags, softInputMode, windowFlags,
+                        null, null, 0 /* missingMethodFlags */,
                         rootView.getContext().getApplicationInfo().targetSdkVersion);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -1801,9 +1834,9 @@ public final class InputMethodManager {
     public void updateSelection(View view, int selStart, int selEnd,
             int candidatesStart, int candidatesEnd) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class)
-                    .updateSelection(view, selStart, selEnd, candidatesStart, candidatesEnd);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.updateSelection(view, selStart, selEnd, candidatesStart, candidatesEnd);
             return;
         }
 
@@ -1845,8 +1878,9 @@ public final class InputMethodManager {
      */
     public void viewClicked(View view) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class).viewClicked(view);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.viewClicked(view);
             return;
         }
 
@@ -1915,9 +1949,9 @@ public final class InputMethodManager {
     @Deprecated
     public void updateCursor(View view, int left, int top, int right, int bottom) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class)
-                    .updateCursor(view, left, top, right, bottom);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.updateCursor(view, left, top, right, bottom);
             return;
         }
 
@@ -1953,9 +1987,9 @@ public final class InputMethodManager {
             return;
         }
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class)
-                    .updateCursorAnchorInfo(view, cursorAnchorInfo);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.updateCursorAnchorInfo(view, cursorAnchorInfo);
             return;
         }
 
@@ -2005,9 +2039,9 @@ public final class InputMethodManager {
      */
     public void sendAppPrivateCommand(View view, String action, Bundle data) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(view)) {
-            view.getContext().getSystemService(InputMethodManager.class)
-                    .sendAppPrivateCommand(view, action, data);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.sendAppPrivateCommand(view, action, data);
             return;
         }
 
@@ -2183,9 +2217,9 @@ public final class InputMethodManager {
     public void dispatchKeyEventFromInputMethod(@Nullable View targetView,
             @NonNull KeyEvent event) {
         // Re-dispatch if there is a context mismatch.
-        if (shouldDispatchToViewContext(targetView)) {
-            targetView.getContext().getSystemService(InputMethodManager.class)
-                    .dispatchKeyEventFromInputMethod(targetView, event);
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(targetView);
+        if (fallbackImm != null) {
+            fallbackImm.dispatchKeyEventFromInputMethod(targetView, event);
             return;
         }
 

@@ -20,8 +20,8 @@ import android.annotation.FloatRange;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
+import android.os.Bundle;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -29,8 +29,6 @@ import android.text.Spannable;
 import android.text.method.MovementMethod;
 import android.text.style.ClickableSpan;
 import android.text.style.URLSpan;
-import android.text.util.Linkify;
-import android.text.util.Linkify.LinkifyMask;
 import android.view.View;
 import android.view.textclassifier.TextClassifier.EntityType;
 import android.widget.TextView;
@@ -95,10 +93,12 @@ public final class TextLinks implements Parcelable {
 
     private final String mFullText;
     private final List<TextLink> mLinks;
+    private final Bundle mExtras;
 
-    private TextLinks(String fullText, ArrayList<TextLink> links) {
+    private TextLinks(String fullText, ArrayList<TextLink> links, Bundle extras) {
         mFullText = fullText;
         mLinks = Collections.unmodifiableList(links);
+        mExtras = extras;
     }
 
     /**
@@ -116,6 +116,18 @@ public final class TextLinks implements Parcelable {
     @NonNull
     public Collection<TextLink> getLinks() {
         return mLinks;
+    }
+
+    /**
+     * Returns the extended data.
+     *
+     * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
+     * prefer to hold a reference to the returned bundle rather than frequently calling this
+     * method.
+     */
+    @NonNull
+    public Bundle getExtras() {
+        return mExtras.deepCopy();
     }
 
     /**
@@ -161,6 +173,7 @@ public final class TextLinks implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeString(mFullText);
         dest.writeTypedList(mLinks);
+        dest.writeBundle(mExtras);
     }
 
     public static final Parcelable.Creator<TextLinks> CREATOR =
@@ -179,6 +192,7 @@ public final class TextLinks implements Parcelable {
     private TextLinks(Parcel in) {
         mFullText = in.readString();
         mLinks = in.createTypedArrayList(TextLink.CREATOR);
+        mExtras = in.readBundle();
     }
 
     /**
@@ -307,18 +321,21 @@ public final class TextLinks implements Parcelable {
         @Nullable private final TextClassifier.EntityConfig mEntityConfig;
         private final boolean mLegacyFallback;
         private String mCallingPackageName;
+        private final Bundle mExtras;
 
         private Request(
                 CharSequence text,
                 LocaleList defaultLocales,
                 TextClassifier.EntityConfig entityConfig,
                 boolean legacyFallback,
-                String callingPackageName) {
+                String callingPackageName,
+                Bundle extras) {
             mText = text;
             mDefaultLocales = defaultLocales;
             mEntityConfig = entityConfig;
             mLegacyFallback = legacyFallback;
             mCallingPackageName = callingPackageName;
+            mExtras = extras;
         }
 
         /**
@@ -365,6 +382,18 @@ public final class TextLinks implements Parcelable {
         }
 
         /**
+         * Returns the extended data.
+         *
+         * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
+         * prefer to hold a reference to the returned bundle rather than frequently calling this
+         * method.
+         */
+        @NonNull
+        public Bundle getExtras() {
+            return mExtras.deepCopy();
+        }
+
+        /**
          * A builder for building TextLinks requests.
          */
         public static final class Builder {
@@ -375,6 +404,7 @@ public final class TextLinks implements Parcelable {
             @Nullable private TextClassifier.EntityConfig mEntityConfig;
             private boolean mLegacyFallback = true; // Use legacy fall back by default.
             private String mCallingPackageName;
+            @Nullable private Bundle mExtras;
 
             public Builder(@NonNull CharSequence text) {
                 mText = Preconditions.checkNotNull(text);
@@ -434,15 +464,25 @@ public final class TextLinks implements Parcelable {
             }
 
             /**
+             * Sets the extended data.
+             *
+             * @return this builder
+             */
+            public Builder setExtras(@Nullable Bundle extras) {
+                mExtras = extras;
+                return this;
+            }
+
+            /**
              * Builds and returns the request object.
              */
             @NonNull
             public Request build() {
                 return new Request(
                         mText, mDefaultLocales, mEntityConfig,
-                        mLegacyFallback, mCallingPackageName);
+                        mLegacyFallback, mCallingPackageName,
+                        mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
             }
-
         }
 
         /**
@@ -472,6 +512,7 @@ public final class TextLinks implements Parcelable {
                 mEntityConfig.writeToParcel(dest, flags);
             }
             dest.writeString(mCallingPackageName);
+            dest.writeBundle(mExtras);
         }
 
         public static final Parcelable.Creator<Request> CREATOR =
@@ -494,6 +535,7 @@ public final class TextLinks implements Parcelable {
                     ? null : TextClassifier.EntityConfig.CREATOR.createFromParcel(in);
             mLegacyFallback = true;
             mCallingPackageName = in.readString();
+            mExtras = in.readBundle();
         }
     }
 
@@ -578,6 +620,7 @@ public final class TextLinks implements Parcelable {
     public static final class Builder {
         private final String mFullText;
         private final ArrayList<TextLink> mLinks;
+        private Bundle mExtras;
 
         /**
          * Create a new TextLinks.Builder.
@@ -625,134 +668,24 @@ public final class TextLinks implements Parcelable {
         }
 
         /**
+         * Sets the extended data.
+         *
+         * @return this builder
+         */
+        public Builder setExtras(@Nullable Bundle extras) {
+            mExtras = extras;
+            return this;
+        }
+
+        /**
          * Constructs a TextLinks instance.
          *
          * @return the constructed TextLinks
          */
         @NonNull
         public TextLinks build() {
-            return new TextLinks(mFullText, mLinks);
-        }
-    }
-
-    // TODO: Remove once apps can build against the latest sdk.
-    /**
-     * Optional input parameters for generating TextLinks.
-     * @hide
-     */
-    public static final class Options {
-
-        @Nullable private final TextClassificationSessionId mSessionId;
-        @Nullable private final Request mRequest;
-        @Nullable private LocaleList mDefaultLocales;
-        @Nullable private TextClassifier.EntityConfig mEntityConfig;
-        private boolean mLegacyFallback;
-
-        private @ApplyStrategy int mApplyStrategy;
-        private Function<TextLink, TextLinkSpan> mSpanFactory;
-
-        private String mCallingPackageName;
-
-        @UnsupportedAppUsage
-        public Options() {
-            this(null, null);
-        }
-
-        private Options(
-                @Nullable TextClassificationSessionId sessionId, @Nullable Request request) {
-            mSessionId = sessionId;
-            mRequest = request;
-        }
-
-        /** Helper to create Options from a Request. */
-        public static Options from(TextClassificationSessionId sessionId, Request request) {
-            final Options options = new Options(sessionId, request);
-            options.setDefaultLocales(request.getDefaultLocales());
-            options.setEntityConfig(request.getEntityConfig());
-            return options;
-        }
-
-        /** Returns a new options object based on the specified link mask. */
-        public static Options fromLinkMask(@LinkifyMask int mask) {
-            final List<String> entitiesToFind = new ArrayList<>();
-
-            if ((mask & Linkify.WEB_URLS) != 0) {
-                entitiesToFind.add(TextClassifier.TYPE_URL);
-            }
-            if ((mask & Linkify.EMAIL_ADDRESSES) != 0) {
-                entitiesToFind.add(TextClassifier.TYPE_EMAIL);
-            }
-            if ((mask & Linkify.PHONE_NUMBERS) != 0) {
-                entitiesToFind.add(TextClassifier.TYPE_PHONE);
-            }
-            if ((mask & Linkify.MAP_ADDRESSES) != 0) {
-                entitiesToFind.add(TextClassifier.TYPE_ADDRESS);
-            }
-
-            return new Options().setEntityConfig(
-                    TextClassifier.EntityConfig.createWithEntityList(entitiesToFind));
-        }
-
-        /** @param defaultLocales ordered list of locale preferences. */
-        public Options setDefaultLocales(@Nullable LocaleList defaultLocales) {
-            mDefaultLocales = defaultLocales;
-            return this;
-        }
-
-        /** @param entityConfig definition of which entity types to look for. */
-        public Options setEntityConfig(@Nullable TextClassifier.EntityConfig entityConfig) {
-            mEntityConfig = entityConfig;
-            return this;
-        }
-
-        /** @param applyStrategy strategy to use when resolving conflicts. */
-        public Options setApplyStrategy(@ApplyStrategy int applyStrategy) {
-            checkValidApplyStrategy(applyStrategy);
-            mApplyStrategy = applyStrategy;
-            return this;
-        }
-
-        /** @param spanFactory factory for converting TextLink to TextLinkSpan. */
-        public Options setSpanFactory(@Nullable Function<TextLink, TextLinkSpan> spanFactory) {
-            mSpanFactory = spanFactory;
-            return this;
-        }
-
-        @Nullable
-        public LocaleList getDefaultLocales() {
-            return mDefaultLocales;
-        }
-
-        @Nullable
-        public TextClassifier.EntityConfig getEntityConfig() {
-            return mEntityConfig;
-        }
-
-        @ApplyStrategy
-        public int getApplyStrategy() {
-            return mApplyStrategy;
-        }
-
-        @Nullable
-        public Function<TextLink, TextLinkSpan> getSpanFactory() {
-            return mSpanFactory;
-        }
-
-        @Nullable
-        public Request getRequest() {
-            return mRequest;
-        }
-
-        @Nullable
-        public TextClassificationSessionId getSessionId() {
-            return mSessionId;
-        }
-
-        private static void checkValidApplyStrategy(int applyStrategy) {
-            if (applyStrategy != APPLY_STRATEGY_IGNORE && applyStrategy != APPLY_STRATEGY_REPLACE) {
-                throw new IllegalArgumentException(
-                        "Invalid apply strategy. See TextLinks.ApplyStrategy for options.");
-            }
+            return new TextLinks(mFullText, mLinks,
+                    mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
         }
     }
 }

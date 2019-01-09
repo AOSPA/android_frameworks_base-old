@@ -19,6 +19,7 @@
 
 #include "android_os_Parcel.h"
 #include "android_util_Binder.h"
+#include "android_hardware_input_InputWindowHandle.h"
 #include "android/graphics/Bitmap.h"
 #include "android/graphics/GraphicsJNI.h"
 #include "android/graphics/Region.h"
@@ -166,8 +167,10 @@ static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
     }
     Rect sourceCrop = rectFromObj(env, sourceCropObj);
     sp<GraphicBuffer> buffer;
-    status_t res = ScreenshotClient::capture(displayToken, sourceCrop, width, height,
-            useIdentityTransform, rotation, &buffer);
+    status_t res = ScreenshotClient::capture(displayToken, ui::Dataspace::V0_SRGB,
+                                             ui::PixelFormat::RGBA_8888,
+                                             sourceCrop, width, height,
+                                             useIdentityTransform, rotation, &buffer);
     if (res != NO_ERROR) {
         return NULL;
     }
@@ -195,7 +198,9 @@ static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandl
     }
 
     sp<GraphicBuffer> buffer;
-    status_t res = ScreenshotClient::captureChildLayers(layerHandle, sourceCrop, frameScale, &buffer);
+    status_t res = ScreenshotClient::captureChildLayers(layerHandle, ui::Dataspace::V0_SRGB,
+                                                        ui::PixelFormat::RGBA_8888, sourceCrop,
+                                                        frameScale, &buffer);
     if (res != NO_ERROR) {
         return NULL;
     }
@@ -318,6 +323,18 @@ static void nativeSetAlpha(JNIEnv* env, jclass clazz, jlong transactionObj,
 
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     transaction->setAlpha(ctrl, alpha);
+}
+
+static void nativeSetInputWindowInfo(JNIEnv* env, jclass clazz, jlong transactionObj,
+        jlong nativeObject, jobject inputWindow) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    sp<NativeInputWindowHandle> handle = android_server_InputWindowHandle_getHandle(
+            env, inputWindow);
+    handle->updateInfo();
+
+    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
+    transaction->setInputWindowInfo(ctrl, *handle->getInfo());
 }
 
 static void nativeSetColor(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -926,6 +943,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeScreenshot },
     {"nativeCaptureLayers", "(Landroid/os/IBinder;Landroid/graphics/Rect;F)Landroid/graphics/GraphicBuffer;",
             (void*)nativeCaptureLayers },
+    {"nativeSetInputWindowInfo", "(JJLandroid/view/InputWindowHandle;)V",
+     (void*)nativeSetInputWindowInfo },
 };
 
 int register_android_view_SurfaceControl(JNIEnv* env)

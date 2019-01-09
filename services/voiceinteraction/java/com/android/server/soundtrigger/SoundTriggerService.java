@@ -434,6 +434,37 @@ public class SoundTriggerService extends SystemService {
             }
             return mSoundTriggerHelper.isRecognitionRequested(parcelUuid.getUuid());
         }
+
+        @Override
+        public int getModelState(ParcelUuid soundModelId) {
+            enforceCallingPermission(Manifest.permission.MANAGE_SOUND_TRIGGER);
+            int ret = STATUS_ERROR;
+            if (!isInitialized()) return ret;
+            if (DEBUG) {
+                Slog.i(TAG, "getModelState(): id = " + soundModelId);
+            }
+
+            synchronized (mLock) {
+                SoundModel soundModel = mLoadedModels.get(soundModelId.getUuid());
+                if (soundModel == null) {
+                    Slog.e(TAG, soundModelId + " is not loaded");
+                    return ret;
+                }
+                switch (soundModel.type) {
+                    case SoundModel.TYPE_KEYPHRASE:
+                        ret = mSoundTriggerHelper.getKeyphraseModelState(soundModel.uuid);
+                        break;
+                    case SoundModel.TYPE_GENERIC_SOUND:
+                        ret = mSoundTriggerHelper.getGenericModelState(soundModel.uuid);
+                        break;
+                    default:
+                        Slog.e(TAG, "Unknown model type");
+                        break;
+                }
+
+                return ret;
+            }
+        }
     }
 
     /**
@@ -908,7 +939,11 @@ public class SoundTriggerService extends SystemService {
             runOrAddOperation(new Operation(
                     // always execute:
                     () -> {
-                        if (!mRecognitionConfig.allowMultipleTriggers) {
+                        // Don't remove the callback if multiple triggers are allowed or
+                        // if this event was triggered by a getModelState request
+                        if (!mRecognitionConfig.allowMultipleTriggers
+                                && event.status
+                                    != SoundTrigger.RECOGNITION_STATUS_GET_STATE_RESPONSE) {
                             // Unregister this remoteService once op is done
                             synchronized (mCallbacksLock) {
                                 mCallbacks.remove(mPuuid.getUuid());

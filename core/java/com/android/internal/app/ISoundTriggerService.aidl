@@ -52,4 +52,6 @@ interface ISoundTriggerService {
 
     /** For both ...Intent and ...Service based usage */
     boolean isRecognitionActive(in ParcelUuid parcelUuid);
+
+    int getModelState(in ParcelUuid soundModelId);
 }

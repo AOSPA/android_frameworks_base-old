@@ -13,14 +13,19 @@
 
 package com.android.systemui.statusbar.notification.stack;
 
+import static android.provider.Settings.Secure.NOTIFICATION_NEW_INTERRUPTION_MODEL;
+
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertNull;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doNothing;
@@ -34,36 +39,39 @@ import android.os.Handler;
 import android.os.IPowerManager;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.provider.Settings;
 import android.service.dreams.IDreamManager;
 import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 import android.view.View;
 
+import com.android.systemui.Dependency;
 import com.android.systemui.ExpandHelper;
+import com.android.systemui.InitController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.EmptyShadeView;
-import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.NotificationPresenter;
+import com.android.systemui.statusbar.NotificationRemoteInputManager;
+import com.android.systemui.statusbar.NotificationShelf;
+import com.android.systemui.statusbar.RemoteInputController;
+import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationData.Entry;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.FooterView;
 import com.android.systemui.statusbar.notification.row.NotificationBlockingHelperManager;
-import com.android.systemui.statusbar.NotificationRemoteInputManager;
-import com.android.systemui.statusbar.NotificationShelf;
-import com.android.systemui.statusbar.RemoteInputController;
-import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ScrimController;
+import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarTest.TestableNotificationEntryManager;
 
-import java.util.ArrayList;
-
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -73,6 +81,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+
+import java.util.ArrayList;
 
 /**
  * Tests for {@link NotificationStackScrollLayout}.
@@ -97,6 +107,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private IDreamManager mDreamManager;
     private PowerManager mPowerManager;
     private TestableNotificationEntryManager mEntryManager;
+    private int mOriginalInterruptionModelSetting;
 
     @Before
     @UiThreadTest
@@ -108,6 +119,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mDependency.injectTestDependency(StatusBarStateController.class, mBarState);
         mDependency.injectTestDependency(NotificationRemoteInputManager.class,
                 mRemoteInputManager);
+        mDependency.injectMockDependency(ShadeController.class);
         when(mRemoteInputManager.getController()).thenReturn(mRemoteInputController);
 
         IPowerManager powerManagerService = mock(IPowerManager.class);
@@ -116,11 +128,13 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
 
         mEntryManager = new TestableNotificationEntryManager(mDreamManager, mPowerManager,
                 mContext);
+        mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
+        Dependency.get(InitController.class).executePostInitTasks();
         mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, null, mHeadsUpManager,
                 mNotificationData);
-        mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
 
-        NotificationShelf notificationShelf = spy(new NotificationShelf(getContext(), null));
+
+        NotificationShelf notificationShelf = mock(NotificationShelf.class);
         mStackScroller = spy(new NotificationStackScrollLayout(getContext()));
         mStackScroller.setShelf(notificationShelf);
         mStackScroller.setStatusBar(mBar);
@@ -139,7 +153,17 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         doNothing().when(mGroupManager).collapseAllGroups();
         doNothing().when(mExpandHelper).cancelImmediately();
         doNothing().when(notificationShelf).setAnimationsEnabled(anyBoolean());
-        doNothing().when(notificationShelf).fadeInTranslating();
+
+        mOriginalInterruptionModelSetting = Settings.Secure.getInt(mContext.getContentResolver(),
+                NOTIFICATION_NEW_INTERRUPTION_MODEL, 0);
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                NOTIFICATION_NEW_INTERRUPTION_MODEL, 1);
+    }
+
+    @After
+    public void tearDown() {
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                NOTIFICATION_NEW_INTERRUPTION_MODEL, mOriginalInterruptionModelSetting);
     }
 
     @Test
@@ -147,7 +171,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         when(mBarState.getState()).thenReturn(StatusBarState.SHADE);
         mStackScroller.setDimmed(true /* dimmed */, false /* animate */);
         mStackScroller.setDimmed(true /* dimmed */, true /* animate */);
-        Assert.assertFalse(mStackScroller.isDimmed());
+        assertFalse(mStackScroller.isDimmed());
     }
 
     @Test
@@ -246,7 +270,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         assertEquals(0, mNotificationData.getActiveNotifications().size());
 
         mStackScroller.updateFooter();
-        verify(mStackScroller).updateFooterView(false, false);
+        verify(mStackScroller, atLeastOnce()).updateFooterView(false, false);
     }
 
     @Test
@@ -287,7 +311,8 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         setBarStateForTest(StatusBarState.SHADE);
         ArrayList<Entry> entries = new ArrayList<>();
         entries.add(mock(Entry.class));
-        when(mNotificationData.getActiveNotifications()).thenReturn(entries);
+        when(mEntryManager.getNotificationData().getActiveNotifications()).thenReturn(entries);
+        assertTrue(mEntryManager.getNotificationData().getActiveNotifications().size() != 0);
 
         mStackScroller.updateFooter();
         verify(mStackScroller).updateFooterView(true, false);
@@ -307,6 +332,64 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
 
         // move footer to end
         verify(mStackScroller).changeViewPosition(any(FooterView.class), eq(-1 /* end */));
+    }
+
+    @Test
+    public void testUpdateGapIndex_allHighPriority() {
+        when(mStackScroller.getChildCount()).thenReturn(3);
+        for (int i = 0; i < 3; i++) {
+            ExpandableNotificationRow row = mock(ExpandableNotificationRow.class,
+                    RETURNS_DEEP_STUBS);
+            String key = Integer.toString(i);
+            when(row.getStatusBarNotification().getKey()).thenReturn(key);
+            when(mNotificationData.isHighPriority(row.getStatusBarNotification())).thenReturn(true);
+            when(mStackScroller.getChildAt(i)).thenReturn(row);
+        }
+
+        mStackScroller.updateSectionBoundaries();
+        assertEquals(-1, mStackScroller.getSectionBoundaryIndex(0));
+    }
+
+    @Test
+    public void testUpdateGapIndex_allLowPriority() {
+        when(mStackScroller.getChildCount()).thenReturn(3);
+        for (int i = 0; i < 3; i++) {
+            ExpandableNotificationRow row = mock(ExpandableNotificationRow.class,
+                    RETURNS_DEEP_STUBS);
+            String key = Integer.toString(i);
+            when(row.getStatusBarNotification().getKey()).thenReturn(key);
+            when(mNotificationData.isHighPriority(row.getStatusBarNotification()))
+                    .thenReturn(false);
+            when(mStackScroller.getChildAt(i)).thenReturn(row);
+        }
+
+        mStackScroller.updateSectionBoundaries();
+        assertEquals(-1, mStackScroller.getSectionBoundaryIndex(0));
+    }
+
+    @Test
+    public void testUpdateGapIndex_gapExists() {
+        when(mStackScroller.getChildCount()).thenReturn(6);
+        for (int i = 0; i < 6; i++) {
+            ExpandableNotificationRow row = mock(ExpandableNotificationRow.class,
+                    RETURNS_DEEP_STUBS);
+            String key = Integer.toString(i);
+            when(row.getStatusBarNotification().getKey()).thenReturn(key);
+            when(mNotificationData.isHighPriority(row.getStatusBarNotification()))
+                    .thenReturn(i < 3);
+            when(mStackScroller.getChildAt(i)).thenReturn(row);
+        }
+
+        mStackScroller.updateSectionBoundaries();
+        assertEquals(3, mStackScroller.getSectionBoundaryIndex(0));
+    }
+
+    @Test
+    public void testUpdateGapIndex_empty() {
+        when(mStackScroller.getChildCount()).thenReturn(0);
+
+        mStackScroller.updateSectionBoundaries();
+        assertEquals(-1, mStackScroller.getSectionBoundaryIndex(0));
     }
 
     @Test
@@ -348,9 +431,8 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     }
 
     private void setBarStateForTest(int state) {
-        ArgumentCaptor<StatusBarStateController.StateListener> captor =
-                ArgumentCaptor.forClass(StatusBarStateController.StateListener.class);
-        verify(mBarState, atLeastOnce()).addListener(captor.capture());
-        captor.getValue().onStateChanged(state);
+        // Can't inject this through the listener or we end up on the actual implementation
+        // rather than the mock because the spy just coppied the anonymous inner /shruggie.
+        mStackScroller.setStatusBarState(state);
     }
 }

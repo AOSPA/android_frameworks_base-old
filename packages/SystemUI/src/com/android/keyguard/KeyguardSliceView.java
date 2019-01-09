@@ -17,21 +17,20 @@
 package com.android.keyguard;
 
 import static android.app.slice.Slice.HINT_LIST_ITEM;
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.Display.INVALID_DISPLAY;
 
 import android.animation.LayoutTransition;
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
 import android.annotation.ColorInt;
 import android.app.PendingIntent;
-import androidx.lifecycle.LiveData;
-import androidx.lifecycle.Observer;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Trace;
 import android.provider.Settings;
-import android.text.Layout;
 import android.text.TextUtils;
 import android.text.TextUtils.TruncateAt;
 import android.util.AttributeSet;
@@ -41,25 +40,9 @@ import android.view.ViewGroup;
 import android.view.animation.Animation;
 import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 
-import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.graphics.ColorUtils;
-import com.android.settingslib.Utils;
-import com.android.systemui.Dependency;
-import com.android.systemui.Interpolators;
-import com.android.systemui.R;
-import com.android.systemui.keyguard.KeyguardSliceProvider;
-import com.android.systemui.statusbar.AlphaOptimizedTextView;
-import com.android.systemui.statusbar.policy.ConfigurationController;
-import com.android.systemui.tuner.TunerService;
-import com.android.systemui.util.wakelock.KeepAwakeAnimationListener;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.function.Consumer;
-
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.Observer;
 import androidx.slice.Slice;
 import androidx.slice.SliceItem;
 import androidx.slice.SliceViewManager;
@@ -68,6 +51,20 @@ import androidx.slice.widget.ListContent;
 import androidx.slice.widget.RowContent;
 import androidx.slice.widget.SliceContent;
 import androidx.slice.widget.SliceLiveData;
+
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.graphics.ColorUtils;
+import com.android.settingslib.Utils;
+import com.android.systemui.Dependency;
+import com.android.systemui.Interpolators;
+import com.android.systemui.keyguard.KeyguardSliceProvider;
+import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.tuner.TunerService;
+import com.android.systemui.util.wakelock.KeepAwakeAnimationListener;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * View visible under the clock on the lock screen and AoD.
@@ -80,19 +77,17 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
 
     private final HashMap<View, PendingIntent> mClickActions;
     private Uri mKeyguardSliceUri;
-    @VisibleForTesting
-    TextView mTitle;
     private Row mRow;
     private int mTextColor;
     private float mDarkAmount = 0;
 
     private LiveData<Slice> mLiveData;
+    private int mDisplayId = INVALID_DISPLAY;
     private int mIconSize;
     /**
      * Runnable called whenever the view contents change.
      */
     private Runnable mContentChangeListener;
-    private boolean mHasHeader;
     private Slice mSlice;
     private boolean mPulsing;
 
@@ -128,7 +123,6 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mTitle = findViewById(R.id.title);
         mRow = findViewById(R.id.row);
         mTextColor = Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColor);
         mIconSize = (int) mContext.getResources().getDimension(R.dimen.widget_icon_size);
@@ -138,6 +132,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
 
+        mDisplayId = getDisplay().getDisplayId();
         // Make sure we always have the most current slice
         mLiveData.observeForever(this);
         Dependency.get(ConfigurationController.class).addCallback(this);
@@ -147,14 +142,16 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
 
-        mLiveData.removeObserver(this);
+        // TODO(b/117344873) Remove below work around after this issue be fixed.
+        if (mDisplayId == DEFAULT_DISPLAY) {
+            mLiveData.removeObserver(this);
+        }
         Dependency.get(ConfigurationController.class).removeCallback(this);
     }
 
     private void showSlice() {
         Trace.beginSection("KeyguardSliceView#showSlice");
         if (mPulsing || mSlice == null) {
-            mTitle.setVisibility(GONE);
             mRow.setVisibility(GONE);
             if (mContentChangeListener != null) {
                 mContentChangeListener.run();
@@ -164,8 +161,9 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
 
         ListContent lc = new ListContent(getContext(), mSlice);
         SliceContent headerContent = lc.getHeader();
-        mHasHeader = headerContent != null && !headerContent.getSliceItem().hasHint(HINT_LIST_ITEM);
-        List<SliceContent> subItems = new ArrayList<SliceContent>();
+        boolean hasHeader = headerContent != null
+                && !headerContent.getSliceItem().hasHint(HINT_LIST_ITEM);
+        List<SliceContent> subItems = new ArrayList<>();
         for (int i = 0; i < lc.getRowItems().size(); i++) {
             SliceContent subItem = lc.getRowItems().get(i);
             String itemUri = subItem.getSliceItem().getSlice().getUri().toString();
@@ -174,21 +172,11 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
                 subItems.add(subItem);
             }
         }
-        if (!mHasHeader) {
-            mTitle.setVisibility(GONE);
-        } else {
-            mTitle.setVisibility(VISIBLE);
-
-            RowContent header = lc.getHeader();
-            SliceItem mainTitle = header.getTitleItem();
-            CharSequence title = mainTitle != null ? mainTitle.getText() : null;
-            mTitle.setText(title);
-        }
 
         mClickActions.clear();
         final int subItemsCount = subItems.size();
         final int blendedColor = getTextColor();
-        final int startIndex = mHasHeader ? 1 : 0; // First item is header; skip it
+        final int startIndex = hasHeader ? 1 : 0; // First item is header; skip it
         mRow.setVisibility(subItemsCount > 0 ? VISIBLE : GONE);
         for (int i = startIndex; i < subItemsCount; i++) {
             RowContent rc = (RowContent) subItems.get(i);
@@ -200,7 +188,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
                 button = new KeyguardSliceButton(mContext);
                 button.setTextColor(blendedColor);
                 button.setTag(itemTag);
-                final int viewIndex = i - (mHasHeader ? 1 : 0);
+                final int viewIndex = i - (hasHeader ? 1 : 0);
                 mRow.addView(button, viewIndex);
             }
 
@@ -255,46 +243,6 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         }
     }
 
-    /**
-     * Breaks a string in 2 lines where both have similar character count
-     * but first line is always longer.
-     *
-     * @param charSequence Original text.
-     * @return Optimal string.
-     */
-    private static CharSequence findBestLineBreak(CharSequence charSequence) {
-        if (TextUtils.isEmpty(charSequence)) {
-            return charSequence;
-        }
-
-        String source = charSequence.toString();
-        // Ignore if there is only 1 word,
-        // or if line breaks were manually set.
-        if (source.contains("\n") || !source.contains(" ")) {
-            return source;
-        }
-
-        final String[] words = source.split(" ");
-        final StringBuilder optimalString = new StringBuilder(source.length());
-        int current = 0;
-        while (optimalString.length() < source.length() - optimalString.length()) {
-            optimalString.append(words[current]);
-            if (current < words.length - 1) {
-                optimalString.append(" ");
-            }
-            current++;
-        }
-        optimalString.append("\n");
-        for (int i = current; i < words.length; i++) {
-            optimalString.append(words[i]);
-            if (current < words.length - 1) {
-                optimalString.append(" ");
-            }
-        }
-
-        return optimalString.toString();
-    }
-
     public void setDarkAmount(float darkAmount) {
         mDarkAmount = darkAmount;
         mRow.setDarkAmount(darkAmount);
@@ -303,7 +251,6 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
 
     private void updateTextColors() {
         final int blendedColor = getTextColor();
-        mTitle.setTextColor(blendedColor);
         int childCount = mRow.getChildCount();
         for (int i = 0; i < childCount; i++) {
             View v = mRow.getChildAt(i);
@@ -333,10 +280,6 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         mContentChangeListener = contentChangeListener;
     }
 
-    public boolean hasHeader() {
-        return mHasHeader;
-    }
-
     /**
      * LiveData observer lifecycle.
      * @param slice the new slice content.
@@ -352,7 +295,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         setupUri(newValue);
     }
 
-    public void setupUri(String uriString) {
+    private void setupUri(String uriString) {
         if (uriString == null) {
             uriString = KeyguardSliceProvider.KEYGUARD_SLICE_URI;
         }
@@ -564,46 +507,6 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         }
     }
 
-    /**
-     * A text view that will split its contents in 2 lines when possible.
-     */
-    static class TitleView extends AlphaOptimizedTextView {
-
-        public TitleView(Context context) {
-            super(context);
-        }
-
-        public TitleView(Context context, AttributeSet attrs) {
-            super(context, attrs);
-        }
-
-        public TitleView(Context context, AttributeSet attrs, int defStyleAttr) {
-            super(context, attrs, defStyleAttr);
-        }
-
-        public TitleView(Context context, AttributeSet attrs, int defStyleAttr,
-                int defStyleRes) {
-            super(context, attrs, defStyleAttr, defStyleRes);
-        }
-
-        @Override
-        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-
-            Layout layout = getLayout();
-            int lineCount = layout.getLineCount();
-            boolean ellipsizing = layout.getEllipsisCount(lineCount - 1) != 0;
-            if (lineCount > 0 && !ellipsizing) {
-                CharSequence title = getText();
-                CharSequence bestLineBreak = findBestLineBreak(title);
-                if (!TextUtils.equals(title, bestLineBreak)) {
-                    setText(bestLineBreak);
-                    super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-                }
-            }
-        }
-    }
-
     private class SliceViewTransitionListener implements LayoutTransition.TransitionListener {
         @Override
         public void startTransition(LayoutTransition transition, ViewGroup container, View view,
@@ -618,15 +521,6 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
                             .setDuration(DEFAULT_ANIM_DURATION)
                             .setInterpolator(Interpolators.ALPHA_IN)
                             .start();
-                    break;
-                case LayoutTransition.DISAPPEARING:
-                    if (view == mTitle) {
-                        // Translate the view to the inverse of its height, so the layout event
-                        // won't misposition it.
-                        LayoutParams params = (LayoutParams) mTitle.getLayoutParams();
-                        int margin = params.topMargin + params.bottomMargin;
-                        mTitle.setTranslationY(-mTitle.getHeight() - margin);
-                    }
                     break;
             }
         }

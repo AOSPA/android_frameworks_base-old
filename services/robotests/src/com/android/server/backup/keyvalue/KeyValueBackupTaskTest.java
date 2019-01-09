@@ -25,9 +25,12 @@ import static android.app.backup.BackupManager.SUCCESS;
 import static android.app.backup.ForwardingBackupAgent.forward;
 
 import static com.android.server.backup.testing.BackupManagerServiceTestUtils.createBackupWakeLock;
-import static com.android.server.backup.testing.BackupManagerServiceTestUtils.createInitializedBackupManagerService;
-import static com.android.server.backup.testing.BackupManagerServiceTestUtils.setUpBackupManagerServiceBasics;
-import static com.android.server.backup.testing.BackupManagerServiceTestUtils.setUpBinderCallerAndApplicationAsSystem;
+import static com.android.server.backup.testing.BackupManagerServiceTestUtils
+        .createInitializedBackupManagerService;
+import static com.android.server.backup.testing.BackupManagerServiceTestUtils
+        .setUpBackupManagerServiceBasics;
+import static com.android.server.backup.testing.BackupManagerServiceTestUtils
+        .setUpBinderCallerAndApplicationAsSystem;
 import static com.android.server.backup.testing.PackageData.PM_PACKAGE;
 import static com.android.server.backup.testing.PackageData.fullBackupPackage;
 import static com.android.server.backup.testing.PackageData.keyValuePackage;
@@ -62,8 +65,8 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 import static org.robolectric.Shadows.shadowOf;
 import static org.robolectric.shadow.api.Shadow.extract;
-import static org.testng.Assert.fail;
 import static org.testng.Assert.expectThrows;
+import static org.testng.Assert.fail;
 
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.util.Collections.emptyList;
@@ -114,9 +117,6 @@ import com.android.server.backup.testing.TestUtils.ThrowingRunnable;
 import com.android.server.backup.testing.TransportData;
 import com.android.server.backup.testing.TransportTestUtils;
 import com.android.server.backup.testing.TransportTestUtils.TransportMock;
-import com.android.server.testing.FrameworkRobolectricTestRunner;
-import com.android.server.testing.SystemLoaderClasses;
-import com.android.server.testing.SystemLoaderPackages;
 import com.android.server.testing.shadows.FrameworkShadowLooper;
 import com.android.server.testing.shadows.ShadowBackupDataInput;
 import com.android.server.testing.shadows.ShadowBackupDataOutput;
@@ -134,6 +134,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowApplication;
@@ -156,10 +157,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
 // TODO: Test agents timing out
-@RunWith(FrameworkRobolectricTestRunner.class)
+@RunWith(RobolectricTestRunner.class)
 @Config(
-        manifest = Config.NONE,
-        sdk = 26,
         shadows = {
             FrameworkShadowLooper.class,
             ShadowBackupDataInput.class,
@@ -167,8 +166,6 @@ import java.util.stream.Stream;
             ShadowEventLog.class,
             ShadowQueuedWork.class,
         })
-@SystemLoaderPackages({"com.android.server.backup", "android.app.backup"})
-@SystemLoaderClasses({IBackupTransport.class, IBackupAgent.class, PackageInfo.class})
 @Presubmit
 public class KeyValueBackupTaskTest {
     private static final PackageData PACKAGE_1 = keyValuePackage(1);
@@ -187,6 +184,7 @@ public class KeyValueBackupTaskTest {
     private Handler mBackupHandler;
     private PowerManager.WakeLock mWakeLock;
     private KeyValueBackupReporter mReporter;
+    private PackageManager mPackageManager;
     private ShadowPackageManager mShadowPackageManager;
     private FakeIBackupManager mBackupManager;
     private File mBaseStateDir;
@@ -219,8 +217,8 @@ public class KeyValueBackupTaskTest {
         mDataDir.mkdirs();
         assertThat(mDataDir.isDirectory()).isTrue();
 
-        PackageManager packageManager = mApplication.getPackageManager();
-        mShadowPackageManager = shadowOf(packageManager);
+        mPackageManager = mApplication.getPackageManager();
+        mShadowPackageManager = shadowOf(mPackageManager);
 
         mWakeLock = createBackupWakeLock(mApplication);
         mBackupManager = spy(FakeIBackupManager.class);
@@ -235,7 +233,7 @@ public class KeyValueBackupTaskTest {
                 mBackupManagerService,
                 mApplication,
                 mTransportManager,
-                packageManager,
+                mPackageManager,
                 mBackupManagerService.getBackupHandler(),
                 mWakeLock,
                 mBackupManagerService.getAgentTimeoutParameters());
@@ -330,6 +328,22 @@ public class KeyValueBackupTaskTest {
                 .isEqualTo("pmState".getBytes());
         assertThat(Files.readAllBytes(getStateFile(mTransport, PACKAGE_1)))
                 .isEqualTo("packageState".getBytes());
+    }
+
+    /**
+     * Do not update backup token if the backup queue was empty
+     */
+    @Test
+    public void testRunTask_whenQueueEmptyOnFirstBackup_doesNotUpdateCurrentToken()
+            throws Exception {
+        TransportMock transportMock = setUpInitializedTransport(mTransport);
+        KeyValueBackupTask task = createKeyValueBackupTask(transportMock, true);
+        mBackupManagerService.setCurrentToken(0L);
+        when(transportMock.transport.getCurrentRestoreSet()).thenReturn(1234L);
+
+        runTask(task);
+
+        assertThat(mBackupManagerService.getCurrentToken()).isEqualTo(0L);
     }
 
     @Test
@@ -2302,6 +2316,24 @@ public class KeyValueBackupTaskTest {
         expectThrows(IllegalArgumentException.class, () -> task.handleCancel(false));
     }
 
+    /**
+     * Do not update backup token if no data was moved.
+     */
+    @Test
+    public void testRunTask_whenNoDataToBackupOnFirstBackup_doesNotUpdateCurrentToken()
+            throws Exception {
+        TransportMock transportMock = setUpInitializedTransport(mTransport);
+        mBackupManagerService.setCurrentToken(0L);
+        when(transportMock.transport.getCurrentRestoreSet()).thenReturn(1234L);
+        // Set up agent with no data.
+        setUpAgent(PACKAGE_1);
+        KeyValueBackupTask task = createKeyValueBackupTask(transportMock, true, PACKAGE_1);
+
+        runTask(task);
+
+        assertThat(mBackupManagerService.getCurrentToken()).isEqualTo(0L);
+    }
+
     private void runTask(KeyValueBackupTask task) {
         // Pretend we are not on the main-thread to prevent RemoteCall from complaining
         mShadowMainLooper.setCurrentThread(false);
@@ -2406,7 +2438,7 @@ public class KeyValueBackupTaskTest {
 
     private AgentMock setUpAgent(PackageData packageData) {
         try {
-            mShadowPackageManager.setApplicationEnabledSetting(
+            mPackageManager.setApplicationEnabledSetting(
                     packageData.packageName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0);
             PackageInfo packageInfo = getPackageInfo(packageData);
             mShadowPackageManager.addPackage(packageInfo);
@@ -2680,9 +2712,7 @@ public class KeyValueBackupTaskTest {
         return Files.createTempFile(mContext.getCacheDir().toPath(), "backup", ".tmp");
     }
 
-    private static IterableSubject<
-                    ? extends IterableSubject<?, Path, Iterable<Path>>, Path, Iterable<Path>>
-            assertDirectory(Path directory) throws IOException {
+    private static IterableSubject assertDirectory(Path directory) throws IOException {
         return assertThat(oneTimeIterable(Files.newDirectoryStream(directory).iterator()))
                 .named("directory " + directory);
     }

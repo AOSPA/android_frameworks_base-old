@@ -22,6 +22,7 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.AppOpsManager;
 import android.app.DownloadManager;
 import android.app.SearchManager;
 import android.app.admin.DevicePolicyManager;
@@ -40,7 +41,6 @@ import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.media.RingtoneManager;
 import android.net.Uri;
-import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
@@ -344,40 +344,43 @@ public final class DefaultPermissionGrantPolicy {
     @SafeVarargs
     private final void grantIgnoringSystemPackage(String packageName, int userId,
             Set<String>... permissionGroups) {
-        grantPermissionsToSystemPackage(packageName, userId, false, true, permissionGroups);
+        grantPermissionsToPackage(
+                packageName, userId, true /* ignoreSystemPackage */, permissionGroups);
     }
 
     @SafeVarargs
     private final void grantSystemFixedPermissionsToSystemPackage(String packageName, int userId,
             Set<String>... permissionGroups) {
-        grantPermissionsToSystemPackage(packageName, userId, true, false, permissionGroups);
+        grantPermissionsToSystemPackage(
+                packageName, userId, true /* systemFixed */, permissionGroups);
     }
 
     @SafeVarargs
     private final void grantPermissionsToSystemPackage(
             String packageName, int userId, Set<String>... permissionGroups) {
-        grantPermissionsToSystemPackage(packageName, userId, false, false, permissionGroups);
+        grantPermissionsToSystemPackage(
+                packageName, userId, false /* systemFixed */, permissionGroups);
     }
 
     @SafeVarargs
     private final void grantPermissionsToSystemPackage(String packageName, int userId,
-            boolean systemFixed, boolean ignoreSystemPackage, Set<String>... permissionGroups) {
-        if (!ignoreSystemPackage && !isSystemPackage(packageName)) {
+            boolean systemFixed, Set<String>... permissionGroups) {
+        if (!isSystemPackage(packageName)) {
             return;
         }
-        grantRuntimePermissionsToPackage(getSystemPackageInfo(packageName),
-                userId, systemFixed, ignoreSystemPackage, permissionGroups);
+        grantPermissionsToPackage(getSystemPackageInfo(packageName),
+                userId, systemFixed, false /* ignoreSystemPackage */, permissionGroups);
     }
 
     @SafeVarargs
-    private final void grantRuntimePermissionsToPackage(String packageName, int userId,
-            boolean systemFixed, boolean ignoreSystemPackage, Set<String>... permissionGroups) {
-        grantRuntimePermissionsToPackage(getPackageInfo(packageName),
-                userId, systemFixed, ignoreSystemPackage, permissionGroups);
+    private final void grantPermissionsToPackage(String packageName, int userId,
+            boolean ignoreSystemPackage, Set<String>... permissionGroups) {
+        grantPermissionsToPackage(getPackageInfo(packageName),
+                userId, false /* systemFixed */, ignoreSystemPackage, permissionGroups);
     }
 
     @SafeVarargs
-    private final void grantRuntimePermissionsToPackage(PackageInfo packageName, int userId,
+    private final void grantPermissionsToPackage(PackageInfo packageName, int userId,
             boolean systemFixed, boolean ignoreSystemPackage, Set<String>... permissionGroups) {
         if (packageName == null) return;
         if (doesPackageSupportRuntimePermissions(packageName)) {
@@ -589,9 +592,8 @@ public final class DefaultPermissionGrantPolicy {
                 browserPackage = null;
             }
         }
-        grantRuntimePermissionsToPackage(browserPackage, userId,
-                false /* systemFixed */, false /* ignoreSystemPackage */,
-                LOCATION_PERMISSIONS);
+        grantPermissionsToPackage(browserPackage, userId,
+                false /* ignoreSystemPackage */, LOCATION_PERMISSIONS);
 
         // Voice interaction
         if (voiceInteractPackageNames != null) {
@@ -786,7 +788,7 @@ public final class DefaultPermissionGrantPolicy {
             return;
         }
         Log.i(TAG, "Granting permissions to sim call manager for user:" + userId);
-        grantRuntimePermissionsToPackage(packageName, userId, false, false,
+        grantPermissionsToPackage(packageName, userId, false /* ignoreSystemPackage */,
                 PHONE_PERMISSIONS, MICROPHONE_PERMISSIONS);
     }
 
@@ -878,9 +880,8 @@ public final class DefaultPermissionGrantPolicy {
     }
 
     private String getDefaultSystemHandlerActivityPackage(Intent intent, int userId) {
-        ResolveInfo handler = mServiceInternal.resolveIntent(intent,
-                intent.resolveType(mContext.getContentResolver()), DEFAULT_INTENT_QUERY_FLAGS,
-                userId, false, Binder.getCallingUid());
+        ResolveInfo handler = mContext.getPackageManager().resolveActivityAsUser(
+                intent, DEFAULT_INTENT_QUERY_FLAGS, userId);
         if (handler == null || handler.activityInfo == null) {
             return null;
         }
@@ -897,8 +898,8 @@ public final class DefaultPermissionGrantPolicy {
 
     private String getDefaultSystemHandlerServicePackage(
             Intent intent, int userId) {
-        List<ResolveInfo> handlers = mServiceInternal.queryIntentServices(
-                intent, DEFAULT_INTENT_QUERY_FLAGS, Binder.getCallingUid(), userId);
+        List<ResolveInfo> handlers = mContext.getPackageManager().queryIntentServicesAsUser(
+                intent, DEFAULT_INTENT_QUERY_FLAGS, userId);
         if (handlers == null) {
             return null;
         }
@@ -922,10 +923,8 @@ public final class DefaultPermissionGrantPolicy {
         for (String syncAdapterPackageName : syncAdapterPackageNames) {
             homeIntent.setPackage(syncAdapterPackageName);
 
-            ResolveInfo homeActivity = mServiceInternal.resolveIntent(homeIntent,
-                    homeIntent.resolveType(mContext.getContentResolver()),
-                    DEFAULT_INTENT_QUERY_FLAGS,
-                    userId, false, Binder.getCallingUid());
+            ResolveInfo homeActivity = mContext.getPackageManager().resolveActivityAsUser(
+                    homeIntent, DEFAULT_INTENT_QUERY_FLAGS, userId);
             if (homeActivity != null) {
                 continue;
             }
@@ -939,7 +938,7 @@ public final class DefaultPermissionGrantPolicy {
     }
 
     private String getDefaultProviderAuthorityPackage(String authority, int userId) {
-        ProviderInfo provider = mServiceInternal.resolveContentProvider(
+        ProviderInfo provider = mContext.getPackageManager().resolveContentProviderAsUser(
                 authority, DEFAULT_INTENT_QUERY_FLAGS, userId);
         if (provider != null) {
             return provider.packageName;
@@ -978,8 +977,9 @@ public final class DefaultPermissionGrantPolicy {
                 continue;
             }
 
-            final int flags = mServiceInternal.getPermissionFlagsTEMP(
-                    permission, packageName, userId);
+            UserHandle user = UserHandle.of(userId);
+            final int flags = mContext.getPackageManager()
+                    .getPermissionFlags(permission, packageName, user);
 
             // We didn't get this through the default grant policy. Move along.
             if ((flags & PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT) == 0) {
@@ -995,7 +995,7 @@ public final class DefaultPermissionGrantPolicy {
             if ((flags & PackageManager.FLAG_PERMISSION_SYSTEM_FIXED) != 0 && !systemFixed) {
                 continue;
             }
-            mServiceInternal.revokeRuntimePermission(packageName, permission, userId, false);
+            mContext.getPackageManager().revokeRuntimePermission(packageName, permission, user);
 
             if (DEBUG) {
                 Log.i(TAG, "revoked " + (systemFixed ? "fixed " : "not fixed ")
@@ -1005,8 +1005,43 @@ public final class DefaultPermissionGrantPolicy {
             // Remove the GRANTED_BY_DEFAULT flag without touching the others.
             // Note that we do not revoke FLAG_PERMISSION_SYSTEM_FIXED. That bit remains
             // sticky once set.
-            mServiceInternal.updatePermissionFlagsTEMP(permission, packageName,
-                    PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT, 0, userId);
+            mContext.getPackageManager().updatePermissionFlags(permission, packageName,
+                    PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT, 0, user);
+        }
+    }
+
+    /**
+     * Check if a permission is already fixed or is set by the user.
+     *
+     * <p>A permission should not be set by the default policy if the user or other policies already
+     * set the permission.
+     *
+     * @param flags The flags of the permission
+     *
+     * @return {@code true} iff the permission can be set without violating a policy of the users
+     *         intention
+     */
+    private boolean isFixedOrUserSet(int flags) {
+        return (flags & (PackageManager.FLAG_PERMISSION_USER_SET
+                | PackageManager.FLAG_PERMISSION_USER_FIXED
+                | PackageManager.FLAG_PERMISSION_POLICY_FIXED
+                | PackageManager.FLAG_PERMISSION_SYSTEM_FIXED)) != 0;
+    }
+
+    /**
+     * Return the background permission for a permission.
+     *
+     * @param permission The name of the foreground permission
+     *
+     * @return The name of the background permission or {@code null} if the permission has no
+     *         background permission
+     */
+    private @Nullable String getBackgroundPermission(@NonNull String permission) {
+        try {
+            return mContext.getPackageManager().getPermissionInfo(permission,
+                    0).backgroundPermission;
+        } catch (NameNotFoundException e) {
+            return null;
         }
     }
 
@@ -1022,8 +1057,14 @@ public final class DefaultPermissionGrantPolicy {
             return;
         }
 
+        PackageManager pm = mContext.getPackageManager();
         final ArraySet<String> permissions = new ArraySet<>(permissionsWithoutSplits);
         ApplicationInfo applicationInfo = pkg.applicationInfo;
+
+        int newFlags = PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
+        if (systemFixed) {
+            newFlags |= PackageManager.FLAG_PERMISSION_SYSTEM_FIXED;
+        }
 
         // Automatically attempt to grant split permissions to older APKs
         final List<PermissionManager.SplitPermissionInfo> splitPermissions =
@@ -1064,9 +1105,28 @@ public final class DefaultPermissionGrantPolicy {
             }
         }
 
-        final int grantablePermissionCount = requestedPermissions.length;
-        for (int i = 0; i < grantablePermissionCount; i++) {
+        final int numRequestedPermissions = requestedPermissions.length;
+
+        // Sort requested permissions so that all permissions that are a foreground permission (i.e.
+        // permisions that have background permission) are before their background permissions.
+        final String[] sortedRequestedPermissions = new String[numRequestedPermissions];
+        int numForeground = 0;
+        int numOther = 0;
+        for (int i = 0; i < numRequestedPermissions; i++) {
             String permission = requestedPermissions[i];
+            if (getBackgroundPermission(permission) != null) {
+                sortedRequestedPermissions[numForeground] = permission;
+                numForeground++;
+            } else {
+                sortedRequestedPermissions[numRequestedPermissions - 1 - numOther] =
+                        permission;
+                numOther++;
+            }
+        }
+
+        for (int requestedPermissionNum = 0; requestedPermissionNum < numRequestedPermissions;
+                requestedPermissionNum++) {
+            String permission = requestedPermissions[requestedPermissionNum];
 
             // If there is a disabled system app it may request a permission the updated
             // version ot the data partition doesn't, In this case skip the permission.
@@ -1075,16 +1135,18 @@ public final class DefaultPermissionGrantPolicy {
             }
 
             if (permissions.contains(permission)) {
-                final int flags = mServiceInternal.getPermissionFlagsTEMP(
-                        permission, pkg.packageName, userId);
+                UserHandle user = UserHandle.of(userId);
+                final int flags = mContext.getPackageManager().getPermissionFlags(
+                        permission, pkg.packageName, user);
 
-                // If any flags are set to the permission, then it is either set in
-                // its current state by the system or device/profile owner or the user.
-                // In all these cases we do not want to clobber the current state.
+                // Certain flags imply that the permission's current state by the system or
+                // device/profile owner or the user. In these cases we do not want to clobber the
+                // current state.
+                //
                 // Unless the caller wants to override user choices. The override is
                 // to make sure we can grant the needed permission to the default
                 // sms and phone apps after the user chooses this in the UI.
-                if (flags == 0 || ignoreSystemPackage) {
+                if (!isFixedOrUserSet(flags) || ignoreSystemPackage) {
                     // Never clobber policy fixed permissions.
                     // We must allow the grant of a system-fixed permission because
                     // system-fixed is sticky, but the permission itself may be revoked.
@@ -1092,20 +1154,58 @@ public final class DefaultPermissionGrantPolicy {
                         continue;
                     }
 
-                    mServiceInternal.grantRuntimePermission(
-                            pkg.packageName, permission, userId, false);
+                    int uid = UserHandle.getUid(userId,
+                            UserHandle.getAppId(pkg.applicationInfo.uid));
+                    String op = AppOpsManager.permissionToOp(permission);
+
+                    mContext.getPackageManager()
+                            .grantRuntimePermission(pkg.packageName, permission, user);
+
+                    mContext.getPackageManager().updatePermissionFlags(permission, pkg.packageName,
+                            newFlags, newFlags, user);
+
+                    List<String> fgPerms = mPermissionManager.getBackgroundPermissions()
+                            .get(permission);
+                    if (fgPerms != null) {
+                        int numFgPerms = fgPerms.size();
+                        for (int fgPermNum = 0; fgPermNum < numFgPerms; fgPermNum++) {
+                            String fgPerm = fgPerms.get(fgPermNum);
+
+                            if (pm.checkPermission(fgPerm, pkg.packageName)
+                                    == PackageManager.PERMISSION_GRANTED) {
+                                // Upgrade the app-op state of the fg permission to allow bg access
+                                mContext.getSystemService(AppOpsManager.class).setMode(
+                                        AppOpsManager.permissionToOp(fgPerm), uid,
+                                        pkg.packageName, AppOpsManager.MODE_ALLOWED);
+
+                                break;
+                            }
+                        }
+                    }
+
+                    String bgPerm = getBackgroundPermission(permission);
+                    if (bgPerm == null) {
+                        if (op != null) {
+                            mContext.getSystemService(AppOpsManager.class).setMode(op, uid,
+                                    pkg.packageName, AppOpsManager.MODE_ALLOWED);
+                        }
+                    } else {
+                        int mode;
+                        if (pm.checkPermission(bgPerm, pkg.packageName)
+                                == PackageManager.PERMISSION_GRANTED) {
+                            mode = AppOpsManager.MODE_ALLOWED;
+                        } else {
+                            mode = AppOpsManager.MODE_FOREGROUND;
+                        }
+
+                        mContext.getSystemService(AppOpsManager.class).setMode(op, uid,
+                                pkg.packageName, mode);
+                    }
+
                     if (DEBUG) {
                         Log.i(TAG, "Granted " + (systemFixed ? "fixed " : "not fixed ")
                                 + permission + " to default handler " + pkg);
                     }
-
-                    int newFlags = PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
-                    if (systemFixed) {
-                        newFlags |= PackageManager.FLAG_PERMISSION_SYSTEM_FIXED;
-                    }
-
-                    mServiceInternal.updatePermissionFlagsTEMP(permission, pkg.packageName,
-                            newFlags, newFlags, userId);
                 }
 
                 // If a component gets a permission for being the default handler A
@@ -1117,8 +1217,8 @@ public final class DefaultPermissionGrantPolicy {
                         Log.i(TAG, "Granted not fixed " + permission + " to default handler "
                                 + pkg);
                     }
-                    mServiceInternal.updatePermissionFlagsTEMP(permission, pkg.packageName,
-                            PackageManager.FLAG_PERMISSION_SYSTEM_FIXED, 0, userId);
+                    mContext.getPackageManager().updatePermissionFlags(permission, pkg.packageName,
+                            PackageManager.FLAG_PERMISSION_SYSTEM_FIXED, 0, user);
                 }
             }
         }
@@ -1135,10 +1235,12 @@ public final class DefaultPermissionGrantPolicy {
 
     private PackageInfo getPackageInfo(String pkg,
             @PackageManager.PackageInfoFlags int extraFlags) {
-        return mServiceInternal.getPackageInfo(pkg,
-                DEFAULT_PACKAGE_INFO_QUERY_FLAGS | extraFlags,
-                //TODO is this the right filterCallingUid?
-                UserHandle.USER_SYSTEM, UserHandle.USER_SYSTEM);
+        try {
+            return mContext.getPackageManager().getPackageInfo(pkg,
+                    DEFAULT_PACKAGE_INFO_QUERY_FLAGS | extraFlags);
+        } catch (NameNotFoundException e) {
+            return null;
+        }
     }
 
     private boolean isSysComponentOrPersistentPlatformSignedPrivApp(PackageInfo pkg) {
@@ -1194,6 +1296,7 @@ public final class DefaultPermissionGrantPolicy {
                 } else {
                     permissions.clear();
                 }
+                permissions.add(permissionGrant.name);
                 grantRuntimePermissions(pkg, permissions, permissionGrant.fixed, userId);
             }
         }
@@ -1359,7 +1462,7 @@ public final class DefaultPermissionGrantPolicy {
     private boolean isPermissionDangerous(String name) {
         try {
             final PermissionInfo pi = mContext.getPackageManager().getPermissionInfo(name, 0);
-            return (pi.getProtectionFlags() & PermissionInfo.PROTECTION_DANGEROUS) != 0;
+            return (pi.getProtection() == PermissionInfo.PROTECTION_DANGEROUS);
         } catch (NameNotFoundException e) {
             // When unknown assume it's dangerous to be on the safe side
             return true;

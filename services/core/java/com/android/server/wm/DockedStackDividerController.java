@@ -27,14 +27,15 @@ import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.DOCKED_LEFT;
 import static android.view.WindowManager.DOCKED_RIGHT;
 import static android.view.WindowManager.DOCKED_TOP;
+import static android.view.WindowManager.TRANSIT_NONE;
+
 import static com.android.server.wm.AppTransition.DEFAULT_APP_TRANSITION_DURATION;
 import static com.android.server.wm.AppTransition.TOUCH_RESPONSE_INTERPOLATOR;
-import static android.view.WindowManager.TRANSIT_NONE;
+import static com.android.server.wm.DockedStackDividerControllerProto.MINIMIZED_DOCK;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.NOTIFY_DOCKED_STACK_MINIMIZED_CHANGED;
 import static com.android.server.wm.WindowManagerService.LAYER_OFFSET_DIM;
-import static com.android.server.wm.DockedStackDividerControllerProto.MINIMIZED_DOCK;
 
 import android.content.Context;
 import android.content.res.Configuration;
@@ -170,7 +171,7 @@ public class DockedStackDividerController {
             final int orientation = mTmpRect2.width() <= mTmpRect2.height()
                     ? ORIENTATION_PORTRAIT
                     : ORIENTATION_LANDSCAPE;
-            final int dockSide = getDockSide(mTmpRect, mTmpRect2, orientation);
+            final int dockSide = getDockSide(mTmpRect, mTmpRect2, orientation, rotation);
             final int position = DockedDividerUtils.calculatePositionForBounds(mTmpRect, dockSide,
                     getContentWidth());
 
@@ -201,7 +202,7 @@ public class DockedStackDividerController {
      * @param orientation the origination of device
      * @return current docked side
      */
-    int getDockSide(Rect bounds, Rect displayRect, int orientation) {
+    int getDockSide(Rect bounds, Rect displayRect, int orientation, int rotation) {
         if (orientation == Configuration.ORIENTATION_PORTRAIT) {
             // Portrait mode, docked either at the top or the bottom.
             final int diff = (displayRect.bottom - bounds.bottom) - (bounds.top - displayRect.top);
@@ -210,7 +211,8 @@ public class DockedStackDividerController {
             } else if (diff < 0) {
                 return DOCKED_BOTTOM;
             }
-            return canPrimaryStackDockTo(DOCKED_TOP) ? DOCKED_TOP : DOCKED_BOTTOM;
+            return canPrimaryStackDockTo(DOCKED_TOP, displayRect, rotation)
+                    ? DOCKED_TOP : DOCKED_BOTTOM;
         } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
             // Landscape mode, docked either on the left or on the right.
             final int diff = (displayRect.right - bounds.right) - (bounds.left - displayRect.left);
@@ -219,7 +221,8 @@ public class DockedStackDividerController {
             } else if (diff < 0) {
                 return DOCKED_RIGHT;
             }
-            return canPrimaryStackDockTo(DOCKED_LEFT) ? DOCKED_LEFT : DOCKED_RIGHT;
+            return canPrimaryStackDockTo(DOCKED_LEFT, displayRect, rotation)
+                    ? DOCKED_LEFT : DOCKED_RIGHT;
         }
         return DOCKED_INVALID;
     }
@@ -462,10 +465,9 @@ public class DockedStackDividerController {
      * @param dockSide the side to see if it is valid
      * @return true if the side provided is valid
      */
-    boolean canPrimaryStackDockTo(int dockSide) {
-        final DisplayInfo di = mDisplayContent.getDisplayInfo();
-        return mService.mPolicy.isDockSideAllowed(dockSide, mOriginalDockedSide, di.logicalWidth,
-                di.logicalHeight, di.rotation);
+    boolean canPrimaryStackDockTo(int dockSide, Rect parentRect, int rotation) {
+        return mService.mPolicy.isDockSideAllowed(dockSide, mOriginalDockedSide,
+                parentRect.width(), parentRect.height(), rotation);
     }
 
     void notifyDockedStackExistsChanged(boolean exists) {
@@ -531,7 +533,7 @@ public class DockedStackDividerController {
             final TaskStack stack =
                     mDisplayContent.getSplitScreenPrimaryStackIgnoringVisibility();
             final long transitionDuration = isAnimationMaximizing()
-                    ? mService.mAppTransition.getLastClipRevealTransitionDuration()
+                    ? mDisplayContent.mAppTransition.getLastClipRevealTransitionDuration()
                     : DEFAULT_APP_TRANSITION_DURATION;
             mAnimationDuration = (long)
                     (transitionDuration * mService.getTransitionAnimationScaleLocked());
@@ -820,7 +822,7 @@ public class DockedStackDividerController {
                 mService.mWaitingForDrawnCallback.run();
             }
             mService.mWaitingForDrawnCallback = () -> {
-                synchronized (mService.mWindowMap) {
+                synchronized (mService.mGlobalLock) {
                     mAnimationStartDelayed = false;
                     if (mDelayedImeWin != null) {
                         mDelayedImeWin.endDelayingAnimationStart();
@@ -950,7 +952,7 @@ public class DockedStackDividerController {
             return naturalAmount;
         }
         final int minimizeDistance = stack.getMinimizeDistance();
-        float startPrime = mService.mAppTransition.getLastClipRevealMaxTranslation()
+        final float startPrime = mDisplayContent.mAppTransition.getLastClipRevealMaxTranslation()
                 / (float) minimizeDistance;
         final float amountPrime = t * mAnimationTarget + (1 - t) * startPrime;
         final float t2 = Math.min(t / mMaximizeMeetFraction, 1);
@@ -963,12 +965,12 @@ public class DockedStackDividerController {
      */
     private float getClipRevealMeetFraction(TaskStack stack) {
         if (!isAnimationMaximizing() || stack == null ||
-                !mService.mAppTransition.hadClipRevealAnimation()) {
+                !mDisplayContent.mAppTransition.hadClipRevealAnimation()) {
             return 1f;
         }
         final int minimizeDistance = stack.getMinimizeDistance();
-        final float fraction = Math.abs(mService.mAppTransition.getLastClipRevealMaxTranslation())
-                / (float) minimizeDistance;
+        final float fraction = Math.abs(mDisplayContent.mAppTransition
+                .getLastClipRevealMaxTranslation()) / (float) minimizeDistance;
         final float t = Math.max(0, Math.min(1, (fraction - CLIP_REVEAL_MEET_FRACTION_MIN)
                 / (CLIP_REVEAL_MEET_FRACTION_MAX - CLIP_REVEAL_MEET_FRACTION_MIN)));
         return CLIP_REVEAL_MEET_EARLIEST

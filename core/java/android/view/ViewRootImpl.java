@@ -46,13 +46,17 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.FrameInfo;
+import android.graphics.HardwareRenderer.FrameDrawingCallback;
 import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.PorterDuff;
+import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.graphics.RenderNode;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.DisplayListener;
@@ -83,7 +87,6 @@ import android.util.TypedValue;
 import android.util.BoostFramework;
 import android.view.Surface.OutOfResourcesException;
 import android.view.SurfaceControl.Transaction;
-import android.view.ThreadedRenderer.FrameDrawingCallback;
 import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
 import android.view.View.MeasureSpec;
@@ -245,9 +248,10 @@ public final class ViewRootImpl implements ViewParent,
     final Context mContext;
     /**
      * TODO(b/116349163): Check if we can merge this into {@link #mContext}.
+     * @hide
      */
     @NonNull
-    private Context mDisplayContext;
+    public Context mDisplayContext;
 
     @UnsupportedAppUsage
     final IWindowSession mWindowSession;
@@ -1102,15 +1106,21 @@ public final class ViewRootImpl implements ViewParent,
     private void updateForceDarkMode() {
         if (mAttachInfo.mThreadedRenderer == null) return;
 
-        boolean nightMode = getNightMode() == Configuration.UI_MODE_NIGHT_YES;
-        TypedArray a = mContext.obtainStyledAttributes(R.styleable.Theme);
-        boolean isLightTheme = a.getBoolean(R.styleable.Theme_isLightTheme, false);
-        a.recycle();
+        boolean useAutoDark = getNightMode() == Configuration.UI_MODE_NIGHT_YES;
 
-        boolean changed = mAttachInfo.mThreadedRenderer.setForceDark(nightMode);
-        changed |= mAttachInfo.mThreadedRenderer.getRootNode().setAllowForceDark(isLightTheme);
+        // Allow debug.hwui.force_dark to override the target SDK check
+        if (useAutoDark && !SystemProperties.getBoolean("debug.hwui.force_dark", false)) {
+            useAutoDark = mContext.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.Q;
+        }
 
-        if (changed) {
+        if (useAutoDark) {
+            TypedArray a = mContext.obtainStyledAttributes(R.styleable.Theme);
+            useAutoDark = a.getBoolean(R.styleable.Theme_isLightTheme, true)
+                    && a.getBoolean(R.styleable.Theme_forceDarkAllowed, true);
+            a.recycle();
+        }
+
+        if (mAttachInfo.mThreadedRenderer.setForceDark(useAutoDark)) {
             // TODO: Don't require regenerating all display lists to apply this setting
             invalidateWorld(mView);
         }
@@ -1447,6 +1457,9 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             if (mStopped) {
+                if (mSurfaceHolder != null) {
+                    notifySurfaceDestroyed();
+                }
                 destroySurface();
             }
         }
@@ -2147,7 +2160,7 @@ public final class ViewRootImpl implements ViewParent,
                     // relayoutWindow may decide to destroy mSurface. As that decision
                     // happens in WindowManager service, we need to be defensive here
                     // and stop using the surface in case it gets destroyed.
-                    if (mAttachInfo.mThreadedRenderer.pauseSurface(mSurface)) {
+                    if (mAttachInfo.mThreadedRenderer.pause()) {
                         // Animations were running so we need to push a frame
                         // to resume them
                         mDirty.set(0, 0, mWidth, mHeight);
@@ -2265,7 +2278,7 @@ public final class ViewRootImpl implements ViewParent,
                                         & View.PFLAG_REQUEST_TRANSPARENT_REGIONS) == 0) {
                                     // Don't pre-allocate if transparent regions
                                     // are requested as they may not be needed
-                                    mAttachInfo.mThreadedRenderer.allocateBuffers(mSurface);
+                                    mAttachInfo.mThreadedRenderer.allocateBuffers();
                                 }
                             } catch (OutOfResourcesException e) {
                                 handleOutOfResourcesException(e);
@@ -2322,10 +2335,12 @@ public final class ViewRootImpl implements ViewParent,
                         mResizeMode = freeformResizing
                                 ? RESIZE_MODE_FREEFORM
                                 : RESIZE_MODE_DOCKED_DIVIDER;
+                        final boolean backdropSizeMatchesFrame =
+                                mWinFrame.width() == mPendingBackDropFrame.width()
+                                        && mWinFrame.height() == mPendingBackDropFrame.height();
                         // TODO: Need cutout?
-                        startDragResizing(mPendingBackDropFrame,
-                                mWinFrame.equals(mPendingBackDropFrame), mPendingVisibleInsets,
-                                mPendingStableInsets, mResizeMode);
+                        startDragResizing(mPendingBackDropFrame, !backdropSizeMatchesFrame,
+                                mPendingVisibleInsets, mPendingStableInsets, mResizeMode);
                     } else {
                         // We shouldn't come here, but if we come we should end the resize.
                         endDragResizing();
@@ -2389,13 +2404,7 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     mIsCreating = false;
                 } else if (hadSurface) {
-                    mSurfaceHolder.ungetCallbacks();
-                    SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
-                    if (callbacks != null) {
-                        for (SurfaceHolder.Callback c : callbacks) {
-                            c.surfaceDestroyed(mSurfaceHolder);
-                        }
-                    }
+                    notifySurfaceDestroyed();
                     mSurfaceHolder.mSurfaceLock.lock();
                     try {
                         mSurfaceHolder.mSurface = new Surface();
@@ -2663,6 +2672,16 @@ public final class ViewRootImpl implements ViewParent,
         mIsInTraversal = false;
     }
 
+    private void notifySurfaceDestroyed() {
+        mSurfaceHolder.ungetCallbacks();
+        SurfaceHolder.Callback[] callbacks = mSurfaceHolder.getCallbacks();
+        if (callbacks != null) {
+            for (SurfaceHolder.Callback c : callbacks) {
+                c.surfaceDestroyed(mSurfaceHolder);
+            }
+        }
+    }
+
     private void maybeHandleWindowMove(Rect frame) {
 
         // TODO: Well, we are checking whether the frame has changed similarly
@@ -2691,7 +2710,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    private void handleWindowFocusChanged() {
+    private void handleWindowFocusChanged(boolean reportToClient) {
         final boolean hasWindowFocus;
         final boolean inTouchMode;
         synchronized (this) {
@@ -2726,8 +2745,9 @@ public final class ViewRootImpl implements ViewParent,
                         } catch (RemoteException ex) {
                         }
                         // Retry in a bit.
-                        mHandler.sendMessageDelayed(mHandler.obtainMessage(
-                                MSG_WINDOW_FOCUS_CHANGED), 500);
+                        final Message msg = mHandler.obtainMessage(MSG_WINDOW_FOCUS_CHANGED);
+                        msg.arg1 = reportToClient ? 1 : 0;
+                        mHandler.sendMessageDelayed(msg, 500);
                         return;
                     }
                 }
@@ -2744,9 +2764,15 @@ public final class ViewRootImpl implements ViewParent,
             }
             if (mView != null) {
                 mAttachInfo.mKeyDispatchState.reset();
-                mView.dispatchWindowFocusChanged(hasWindowFocus);
-                mAttachInfo.mTreeObserver.dispatchOnWindowFocusChange(hasWindowFocus);
-
+                // We dispatch onWindowFocusChanged to child view only when window is gaining /
+                // losing focus.
+                // If the focus is updated from top display change but window focus on the display
+                // remains unchanged, will not callback onWindowFocusChanged again since it may
+                // be redundant & can affect the state when it callbacks.
+                if (reportToClient) {
+                    mView.dispatchWindowFocusChanged(hasWindowFocus);
+                    mAttachInfo.mTreeObserver.dispatchOnWindowFocusChange(hasWindowFocus);
+                }
                 if (mAttachInfo.mTooltipHost != null) {
                     mAttachInfo.mTooltipHost.hideTooltip();
                 }
@@ -3128,7 +3154,7 @@ public final class ViewRootImpl implements ViewParent,
     int mHardwareYOffset;
 
     @Override
-    public void onPreDraw(DisplayListCanvas canvas) {
+    public void onPreDraw(RecordingCanvas canvas) {
         // If mCurScrollY is not 0 then this influences the hardwareYOffset. The end result is we
         // can apply offsets that are not handled by anything else, resulting in underdraw as
         // the View is shifted (thus shifting the window background) exposing unpainted
@@ -3142,7 +3168,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     @Override
-    public void onPostDraw(DisplayListCanvas canvas) {
+    public void onPostDraw(RecordingCanvas canvas) {
         drawAccessibilityFocusedDrawableIfNeeded(canvas);
         if (mUseMTRenderer) {
             for (int i = mWindowCallbacks.size() - 1; i >= 0; i--) {
@@ -4343,7 +4369,7 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     break;
                 case MSG_WINDOW_FOCUS_CHANGED: {
-                    handleWindowFocusChanged();
+                    handleWindowFocusChanged(msg.arg1 != 0 /* reportToClient */);
                 } break;
                 case MSG_DIE:
                     doDie();
@@ -6890,7 +6916,7 @@ public final class ViewRootImpl implements ViewParent,
         RenderNode renderNode = view.mRenderNode;
         info[0]++;
         if (renderNode != null) {
-            info[1] += renderNode.getDebugSize();
+            info[1] += renderNode.computeApproximateMemoryUsage();
         }
 
         if (view instanceof ViewGroup) {
@@ -7275,7 +7301,7 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         if (stage != null) {
-            handleWindowFocusChanged();
+            handleWindowFocusChanged(true /* reportToClient */);
             stage.deliver(q);
         } else {
             finishInputEvent(q);
@@ -7592,6 +7618,11 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {
+        windowFocusChanged(hasFocus, inTouchMode, true /* reportToClient */);
+    }
+
+    public void windowFocusChanged(boolean hasFocus, boolean inTouchMode,
+            boolean reportToClient) {
         synchronized (this) {
             mWindowFocusChanged = true;
             mUpcomingWindowFocus = hasFocus;
@@ -7599,6 +7630,7 @@ public final class ViewRootImpl implements ViewParent,
         }
         Message msg = Message.obtain();
         msg.what = MSG_WINDOW_FOCUS_CHANGED;
+        msg.arg1 = reportToClient ? 1 : 0;
         mHandler.sendMessage(msg);
     }
 
@@ -8143,10 +8175,11 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {
+        public void windowFocusChanged(boolean hasFocus, boolean inTouchMode,
+                boolean reportToClient) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
-                viewAncestor.windowFocusChanged(hasFocus, inTouchMode);
+                viewAncestor.windowFocusChanged(hasFocus, inTouchMode, reportToClient);
             }
         }
 

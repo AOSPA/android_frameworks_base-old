@@ -54,6 +54,7 @@ import android.service.notification.ConditionProviderService;
 import android.service.notification.ZenModeConfig;
 import android.service.notification.ZenModeConfig.ZenRule;
 import android.service.notification.ZenModeProto;
+import android.service.notification.ZenPolicy;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -95,7 +96,7 @@ public class ZenModeHelper {
     private final SettingsObserver mSettingsObserver;
     @VisibleForTesting protected final AppOpsManager mAppOps;
     @VisibleForTesting protected final NotificationManager mNotificationManager;
-    protected ZenModeConfig mDefaultConfig;
+    @VisibleForTesting protected ZenModeConfig mDefaultConfig;
     private final ArrayList<Callback> mCallbacks = new ArrayList<Callback>();
     private final ZenModeFiltering mFiltering;
     protected final RingerModeDelegate mRingerModeDelegate = new
@@ -106,6 +107,7 @@ public class ZenModeHelper {
     private final ConditionProviders.Config mServiceConfig;
 
     @VisibleForTesting protected int mZenMode;
+    @VisibleForTesting protected NotificationManager.Policy mConsolidatedPolicy;
     private int mUser = UserHandle.USER_SYSTEM;
     @VisibleForTesting protected ZenModeConfig mConfig;
     @VisibleForTesting protected AudioManagerInternal mAudioManager;
@@ -150,8 +152,8 @@ public class ZenModeHelper {
     public boolean matchesCallFilter(UserHandle userHandle, Bundle extras,
             ValidateNotificationPeople validator, int contactsTimeoutMs, float timeoutAffinity) {
         synchronized (mConfig) {
-            return ZenModeFiltering.matchesCallFilter(mContext, mZenMode, mConfig, userHandle,
-                    extras, validator, contactsTimeoutMs, timeoutAffinity);
+            return ZenModeFiltering.matchesCallFilter(mContext, mZenMode, mConsolidatedPolicy,
+                    userHandle, extras, validator, contactsTimeoutMs, timeoutAffinity);
         }
     }
 
@@ -165,7 +167,7 @@ public class ZenModeHelper {
 
     public boolean shouldIntercept(NotificationRecord record) {
         synchronized (mConfig) {
-            return mFiltering.shouldIntercept(mZenMode, mConfig, record);
+            return mFiltering.shouldIntercept(mZenMode, mConsolidatedPolicy, record);
         }
     }
 
@@ -307,9 +309,6 @@ public class ZenModeHelper {
             newConfig = mConfig.copy();
             ZenRule rule = new ZenRule();
             populateZenRule(automaticZenRule, rule, true);
-            if (newConfig.automaticRules.put(rule.id, rule) != null) {
-                rule.modified = true;
-            }
             if (setConfigLocked(newConfig, reason, rule.component, true)) {
                 return rule.id;
             } else {
@@ -339,9 +338,6 @@ public class ZenModeHelper {
                 }
             }
             populateZenRule(automaticZenRule, rule, false);
-            if (newConfig.automaticRules.put(ruleId, rule) != null) {
-                rule.modified = true;
-            }
             return setConfigLocked(newConfig, reason, rule.component, true);
         }
     }
@@ -429,13 +425,16 @@ public class ZenModeHelper {
         updateDefaultAutomaticRuleNames();
         for (ZenRule defaultRule : mDefaultConfig.automaticRules.values()) {
             ZenRule currRule = mConfig.automaticRules.get(defaultRule.id);
-            // if default rule wasn't modified, use localized name instead of previous
-            if (currRule != null && !currRule.modified && !defaultRule.name.equals(currRule.name)) {
-                if (canManageAutomaticZenRule(defaultRule)) {
+            // if default rule wasn't user-modified nor enabled, use localized name
+            // instead of previous system name
+            if (currRule != null && !currRule.modified && !currRule.enabled
+                    && !defaultRule.name.equals(currRule.name)) {
+                if (canManageAutomaticZenRule(currRule)) {
                     if (DEBUG) Slog.d(TAG, "Locale change - updating default zen rule name "
                             + "from " + currRule.name + " to " + defaultRule.name);
                     // update default rule (if locale changed, name of rule will change)
-                    updateAutomaticZenRule(defaultRule.id, createAutomaticZenRule(defaultRule),
+                    currRule.name = defaultRule.name;
+                    updateAutomaticZenRule(defaultRule.id, createAutomaticZenRule(currRule),
                             "locale changed");
                 }
             }
@@ -479,6 +478,10 @@ public class ZenModeHelper {
         rule.condition = null;
         rule.conditionId = automaticZenRule.getConditionId();
         rule.enabled = automaticZenRule.isEnabled();
+        rule.modified = automaticZenRule.isModified();
+        if (automaticZenRule.getZenPolicy() != null) {
+            rule.zenPolicy = automaticZenRule.getZenPolicy();
+        }
         rule.zenMode = NotificationManager.zenModeFromInterruptionFilter(
                 automaticZenRule.getInterruptionFilter(), Global.ZEN_MODE_OFF);
     }
@@ -549,6 +552,7 @@ public class ZenModeHelper {
     public void dump(PrintWriter pw, String prefix) {
         pw.print(prefix); pw.print("mZenMode=");
         pw.println(Global.zenModeToString(mZenMode));
+        pw.print("mConsolidatedPolicy=" + mConsolidatedPolicy.toString());
         final int N = mConfigs.size();
         for (int i = 0; i < N; i++) {
             dump(pw, prefix, "mConfigs[u=" + mConfigs.keyAt(i) + "]", mConfigs.valueAt(i));
@@ -713,6 +717,16 @@ public class ZenModeHelper {
         }
     }
 
+    /**
+     * @return a copy of the zen mode consolidated policy
+     */
+    public Policy getConsolidatedNotificationPolicy() {
+        if (mConsolidatedPolicy == null) {
+            return null;
+        }
+        return mConsolidatedPolicy.copy();
+    }
+
     public boolean setConfigLocked(ZenModeConfig config, ComponentName triggeringComponent,
             String reason) {
         return setConfigLocked(config, reason, triggeringComponent, true /*setRingerMode*/);
@@ -747,6 +761,7 @@ public class ZenModeHelper {
                     getNotificationPolicy(config));
             if (!config.equals(mConfig)) {
                 dispatchOnConfigChanged();
+                updateConsolidatedPolicy(reason);
             }
             if (policyChanged) {
                 dispatchOnPolicyChanged();
@@ -794,13 +809,18 @@ public class ZenModeHelper {
     @VisibleForTesting
     protected void evaluateZenMode(String reason, boolean setRingerMode) {
         if (DEBUG) Log.d(TAG, "evaluateZenMode");
+        if (mConfig == null) return;
+        final int policyHashBefore = mConsolidatedPolicy == null ? 0
+                : mConsolidatedPolicy.hashCode();
         final int zenBefore = mZenMode;
         final int zen = computeZenMode();
         ZenLog.traceSetZenMode(zen, reason);
         mZenMode = zen;
         setZenModeSetting(mZenMode);
+        updateConsolidatedPolicy(reason);
         updateRingerModeAffectedStreams();
-        if (setRingerMode && zen != zenBefore) {
+        if (setRingerMode && (zen != zenBefore || (zen == Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS
+                && policyHashBefore != mConsolidatedPolicy.hashCode()))) {
             applyZenToRingerMode();
         }
         applyRestrictions();
@@ -815,9 +835,7 @@ public class ZenModeHelper {
         }
     }
 
-
     private int computeZenMode() {
-        // TODO: use mConfig.zenPolicy
         if (mConfig == null) return Global.ZEN_MODE_OFF;
         synchronized (mConfig) {
             if (mConfig.manualRule != null) return mConfig.manualRule.zenMode;
@@ -839,6 +857,24 @@ public class ZenModeHelper {
         }
     }
 
+    private void updateConsolidatedPolicy(String reason) {
+        if (mConfig == null) return;
+        synchronized (mConfig) {
+            ZenPolicy policy = new ZenPolicy();
+            for (ZenRule automaticRule : mConfig.automaticRules.values()) {
+                if (automaticRule.isAutomaticActive()) {
+                    policy.apply(automaticRule.zenPolicy);
+                }
+            }
+            Policy newPolicy = mConfig.toNotificationPolicy(policy);
+            if (!Objects.equals(mConsolidatedPolicy, newPolicy)) {
+                mConsolidatedPolicy = newPolicy;
+                dispatchOnConsolidatedPolicyChanged();
+                ZenLog.traceSetConsolidatedZenPolicy(mConsolidatedPolicy, reason);
+            }
+        }
+    }
+
     private void updateDefaultAutomaticRuleNames() {
         for (ZenRule rule : mDefaultConfig.automaticRules.values()) {
             if (ZenModeConfig.EVENTS_DEFAULT_RULE_ID.equals(rule.id)) {
@@ -856,23 +892,28 @@ public class ZenModeHelper {
         final boolean zenPriorityOnly = mZenMode == Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
         final boolean zenSilence = mZenMode == Global.ZEN_MODE_NO_INTERRUPTIONS;
         final boolean zenAlarmsOnly = mZenMode == Global.ZEN_MODE_ALARMS;
+        final boolean allowCalls = mConsolidatedPolicy.allowCalls();
+        final boolean allowRepeatCallers = mConsolidatedPolicy.allowRepeatCallers();
+        final boolean allowSystem = mConsolidatedPolicy.allowSystem();
+        final boolean allowMedia = mConsolidatedPolicy.allowMedia();
+        final boolean allowAlarms = mConsolidatedPolicy.allowAlarms();
 
         // notification restrictions
         final boolean muteNotifications =
                 (mSuppressedEffects & SUPPRESSED_EFFECT_NOTIFICATIONS) != 0;
         // call restrictions
         final boolean muteCalls = zenAlarmsOnly
-                || (zenPriorityOnly && !mConfig.allowCalls && !mConfig.allowRepeatCallers)
+                || (zenPriorityOnly && !allowCalls && !allowRepeatCallers)
                 || (mSuppressedEffects & SUPPRESSED_EFFECT_CALLS) != 0;
         // alarm restrictions
-        final boolean muteAlarms = zenPriorityOnly && !mConfig.allowAlarms;
+        final boolean muteAlarms = zenPriorityOnly && !allowAlarms;
         // media restrictions
-        final boolean muteMedia = zenPriorityOnly && !mConfig.allowMedia;
+        final boolean muteMedia = zenPriorityOnly && !allowMedia;
         // system restrictions
-        final boolean muteSystem = zenAlarmsOnly || (zenPriorityOnly && !mConfig.allowSystem);
+        final boolean muteSystem = zenAlarmsOnly || (zenPriorityOnly && !allowSystem);
         // total silence restrictions
-        final boolean muteEverything = zenSilence
-                || (zenPriorityOnly && ZenModeConfig.areAllZenBehaviorSoundsMuted(mConfig));
+        final boolean muteEverything = zenSilence || (zenPriorityOnly
+                && ZenModeConfig.areAllZenBehaviorSoundsMuted(mConsolidatedPolicy));
 
         for (int usage : AudioAttributes.SDK_USAGES) {
             final int suppressionBehavior = AudioAttributes.SUPPRESSIBLE_USAGES.get(usage);
@@ -965,6 +1006,12 @@ public class ZenModeHelper {
     private void dispatchOnPolicyChanged() {
         for (Callback callback : mCallbacks) {
             callback.onPolicyChanged();
+        }
+    }
+
+    private void dispatchOnConsolidatedPolicyChanged() {
+        for (Callback callback : mCallbacks) {
+            callback.onConsolidatedPolicyChanged();
         }
     }
 
@@ -1188,7 +1235,7 @@ public class ZenModeHelper {
         int content = R.string.zen_upgrade_notification_content;
         int drawable = R.drawable.ic_zen_24dp;
         if (NotificationManager.Policy.areAllVisualEffectsSuppressed(
-                getNotificationPolicy().suppressedVisualEffects)) {
+                getConsolidatedNotificationPolicy().suppressedVisualEffects)) {
             title = R.string.zen_upgrade_notification_visd_title;
             content = R.string.zen_upgrade_notification_visd_content;
             drawable = R.drawable.ic_dnd_block_notifications;
@@ -1212,27 +1259,89 @@ public class ZenModeHelper {
     }
 
     private final class Metrics extends Callback {
-        private static final String COUNTER_PREFIX = "dnd_mode_";
+        private static final String COUNTER_MODE_PREFIX = "dnd_mode_";
+        private static final String COUNTER_TYPE_PREFIX = "dnd_type_";
+        private static final int DND_OFF = 0;
+        private static final int DND_ON_MANUAL = 1;
+        private static final int DND_ON_AUTOMATIC = 2;
+        private static final String COUNTER_RULE = "dnd_rule_count";
         private static final long MINIMUM_LOG_PERIOD_MS = 60 * 1000;
 
+        // Total silence, alarms only, priority only
         private int mPreviousZenMode = -1;
-        private long mBeginningMs = 0L;
+        private long mModeLogTimeMs = 0L;
+
+        private int mNumZenRules = -1;
+        private long mRuleCountLogTime = 0L;
+
+        // automatic (1) vs manual (0) vs dnd off (2)
+        private int mPreviousZenType = -1;
+        private long mTypeLogTimeMs = 0L;
 
         @Override
         void onZenModeChanged() {
             emit();
         }
 
+        @Override
+        void onConfigChanged() {
+            emit();
+        }
+
         private void emit() {
             mHandler.postMetricsTimer();
+            emitZenMode();
+            emitRules();
+            emitDndType();
+        }
+
+        private void emitZenMode() {
             final long now = SystemClock.elapsedRealtime();
-            final long since = (now - mBeginningMs);
+            final long since = (now - mModeLogTimeMs);
             if (mPreviousZenMode != mZenMode || since > MINIMUM_LOG_PERIOD_MS) {
                 if (mPreviousZenMode != -1) {
-                    MetricsLogger.count(mContext, COUNTER_PREFIX + mPreviousZenMode, (int) since);
+                    MetricsLogger.count(
+                            mContext, COUNTER_MODE_PREFIX + mPreviousZenMode, (int) since);
                 }
                 mPreviousZenMode = mZenMode;
-                mBeginningMs = now;
+                mModeLogTimeMs = now;
+            }
+        }
+
+        private void emitRules() {
+            final long now = SystemClock.elapsedRealtime();
+            final long since = (now - mRuleCountLogTime);
+            synchronized (mConfig) {
+                int numZenRules = mConfig.automaticRules.size();
+                if (mNumZenRules != numZenRules
+                        || since > MINIMUM_LOG_PERIOD_MS) {
+                    if (mNumZenRules != -1) {
+                        MetricsLogger.count(mContext, COUNTER_RULE,
+                                numZenRules - mNumZenRules);
+                    }
+                    mNumZenRules = numZenRules;
+
+                    mRuleCountLogTime = since;
+                }
+            }
+        }
+
+        private void emitDndType() {
+            final long now = SystemClock.elapsedRealtime();
+            final long since = (now - mTypeLogTimeMs);
+            synchronized (mConfig) {
+                boolean dndOn = mZenMode != Global.ZEN_MODE_OFF;
+                int zenType = !dndOn ? DND_OFF
+                        : (mConfig.manualRule != null) ? DND_ON_MANUAL : DND_ON_AUTOMATIC;
+                if (zenType != mPreviousZenType
+                        || since > MINIMUM_LOG_PERIOD_MS) {
+                    if (mPreviousZenType != -1) {
+                        MetricsLogger.count(
+                                mContext, COUNTER_TYPE_PREFIX + mPreviousZenType, (int) since);
+                    }
+                    mTypeLogTimeMs = now;
+                    mPreviousZenType = zenType;
+                }
             }
         }
     }
@@ -1300,6 +1409,6 @@ public class ZenModeHelper {
         void onConfigChanged() {}
         void onZenModeChanged() {}
         void onPolicyChanged() {}
+        void onConsolidatedPolicyChanged() {}
     }
-
 }

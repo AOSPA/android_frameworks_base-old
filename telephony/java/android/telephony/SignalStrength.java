@@ -17,12 +17,12 @@
 package android.telephony;
 
 import android.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.CarrierConfigManager;
 import android.util.Log;
-import android.content.res.Resources;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,25 +37,25 @@ public class SignalStrength implements Parcelable {
     private static final boolean DBG = false;
 
     /** @hide */
-    @UnsupportedAppUsage
-    public static final int SIGNAL_STRENGTH_NONE_OR_UNKNOWN
-            = TelephonyProtoEnums.SIGNAL_STRENGTH_NONE_OR_UNKNOWN; // = 0
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    public static final int SIGNAL_STRENGTH_NONE_OR_UNKNOWN =
+            CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN; // = 0
     /** @hide */
-    @UnsupportedAppUsage
-    public static final int SIGNAL_STRENGTH_POOR
-            = TelephonyProtoEnums.SIGNAL_STRENGTH_POOR; // = 1
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    public static final int SIGNAL_STRENGTH_POOR =
+            CellSignalStrength.SIGNAL_STRENGTH_POOR; // = 1
     /** @hide */
-    @UnsupportedAppUsage
-    public static final int SIGNAL_STRENGTH_MODERATE
-            = TelephonyProtoEnums.SIGNAL_STRENGTH_MODERATE; // = 2
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    public static final int SIGNAL_STRENGTH_MODERATE =
+            CellSignalStrength.SIGNAL_STRENGTH_MODERATE; // = 2
     /** @hide */
-    @UnsupportedAppUsage
-    public static final int SIGNAL_STRENGTH_GOOD
-            = TelephonyProtoEnums.SIGNAL_STRENGTH_GOOD; // = 3
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    public static final int SIGNAL_STRENGTH_GOOD =
+            CellSignalStrength.SIGNAL_STRENGTH_GOOD; // = 3
     /** @hide */
-    @UnsupportedAppUsage
-    public static final int SIGNAL_STRENGTH_GREAT
-            = TelephonyProtoEnums.SIGNAL_STRENGTH_GREAT; // = 4
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    public static final int SIGNAL_STRENGTH_GREAT =
+            CellSignalStrength.SIGNAL_STRENGTH_GREAT; // = 4
     /** @hide */
     @UnsupportedAppUsage
     public static final int NUM_SIGNAL_STRENGTH_BINS = 5;
@@ -65,8 +65,9 @@ public class SignalStrength implements Parcelable {
     };
 
     /**
-     * Use Integer.MAX_VALUE because -1 is a valid value in signal strength.
-     * @hide
+     * Indicates the invalid measures of signal strength.
+     *
+     * For example, this can be returned by {@link #getEvdoDbm()} or {@link #getCdmaDbm()}
      */
     public static final int INVALID = Integer.MAX_VALUE;
 
@@ -173,9 +174,9 @@ public class SignalStrength implements Parcelable {
     public SignalStrength(boolean gsmFlag) {
         mGsmSignalStrength = 99;
         mGsmBitErrorRate = -1;
-        mCdmaDbm = -1;
+        mCdmaDbm = INVALID;
         mCdmaEcio = -1;
-        mEvdoDbm = -1;
+        mEvdoDbm = INVALID;
         mEvdoEcio = -1;
         mEvdoSnr = -1;
         mLteSignalStrength = 99;
@@ -542,6 +543,8 @@ public class SignalStrength implements Parcelable {
 
     /**
      * Get the CDMA RSSI value in dBm
+     *
+     * @return the CDMA RSSI value or {@link #INVALID} if invalid
      */
     public int getCdmaDbm() {
         return this.mCdmaDbm;
@@ -556,6 +559,8 @@ public class SignalStrength implements Parcelable {
 
     /**
      * Get the EVDO RSSI value in dBm
+     *
+     * @return the EVDO RSSI value or {@link #INVALID} if invalid
      */
     public int getEvdoDbm() {
         return this.mEvdoDbm;

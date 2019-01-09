@@ -24,7 +24,7 @@
 #include "RenderNode.h"
 #include "pipeline/skia/AnimatedDrawables.h"
 #include "pipeline/skia/GLFunctorDrawable.h"
-#include "pipeline/skia/VkFunctorDrawable.h"
+#include "pipeline/skia/VkInteropFunctorDrawable.h"
 
 namespace android {
 namespace uirenderer {
@@ -81,6 +81,11 @@ void SkiaRecordingCanvas::drawCircle(uirenderer::CanvasPropertyPrimitive* x,
 }
 
 void SkiaRecordingCanvas::insertReorderBarrier(bool enableReorder) {
+    if (mCurrentBarrier && enableReorder) {
+        // Already in a re-order section, nothing to do
+        return;
+    }
+
     if (nullptr != mCurrentBarrier) {
         // finish off the existing chunk
         SkDrawable* drawable =
@@ -89,9 +94,8 @@ void SkiaRecordingCanvas::insertReorderBarrier(bool enableReorder) {
         drawDrawable(drawable);
     }
     if (enableReorder) {
-        mCurrentBarrier = (StartReorderBarrierDrawable*)
-                                  mDisplayList->allocateDrawable<StartReorderBarrierDrawable>(
-                                          mDisplayList.get());
+        mCurrentBarrier = mDisplayList->allocateDrawable<StartReorderBarrierDrawable>(
+                mDisplayList.get());
         drawDrawable(mCurrentBarrier);
     }
 }
@@ -120,8 +124,8 @@ void SkiaRecordingCanvas::callDrawGLFunction(Functor* functor,
                                              uirenderer::GlFunctorLifecycleListener* listener) {
     FunctorDrawable* functorDrawable;
     if (Properties::getRenderPipelineType() == RenderPipelineType::SkiaVulkan) {
-        functorDrawable = mDisplayList->allocateDrawable<VkFunctorDrawable>(functor, listener,
-                asSkCanvas());
+        functorDrawable = mDisplayList->allocateDrawable<VkInteropFunctorDrawable>(functor,
+                listener, asSkCanvas());
     } else {
         functorDrawable = mDisplayList->allocateDrawable<GLFunctorDrawable>(functor, listener,
                 asSkCanvas());

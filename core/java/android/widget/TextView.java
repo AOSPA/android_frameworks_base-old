@@ -63,10 +63,11 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
-import android.graphics.fonts.Font;
+import android.graphics.fonts.FontStyle;
 import android.graphics.fonts.FontVariationAxis;
 import android.icu.text.DecimalFormatSymbols;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.LocaleList;
@@ -165,6 +166,7 @@ import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
+import android.view.intelligence.IntelligenceManager;
 import android.view.textclassifier.TextClassification;
 import android.view.textclassifier.TextClassificationContext;
 import android.view.textclassifier.TextClassificationManager;
@@ -799,17 +801,21 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     // they are defined by the TextView's style and are theme-dependent.
     @UnsupportedAppUsage
     int mCursorDrawableRes;
-    // These six fields, could be moved to Editor, since we know their default values and we
-    // could condition the creation of the Editor to a non standard value. This is however
-    // brittle since the hardcoded values here (such as
-    // com.android.internal.R.drawable.text_select_handle_left) would have to be updated if the
-    // default style is modified.
-    @UnsupportedAppUsage
+    // Note: this might be stale if setTextSelectHandleLeft is used. We could simplify the code
+    // by removing it, but we would break apps targeting <= P that use it by reflection.
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     int mTextSelectHandleLeftRes;
-    @UnsupportedAppUsage
+    private Drawable mTextSelectHandleLeft;
+    // Note: this might be stale if setTextSelectHandleRight is used. We could simplify the code
+    // by removing it, but we would break apps targeting <= P that use it by reflection.
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     int mTextSelectHandleRightRes;
-    @UnsupportedAppUsage
+    private Drawable mTextSelectHandleRight;
+    // Note: this might be stale if setTextSelectHandle is used. We could simplify the code
+    // by removing it, but we would break apps targeting <= P that use it by reflection.
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     int mTextSelectHandleRes;
+    private Drawable mTextSelectHandle;
     int mTextEditSuggestionItemLayout;
     int mTextEditSuggestionContainerLayout;
     int mTextEditSuggestionHighlightStyle;
@@ -942,6 +948,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // TextView is important by default, unless app developer overrode attribute.
         if (getImportantForAutofill() == IMPORTANT_FOR_AUTOFILL_AUTO) {
             setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
+        }
+        if (getImportantForContentCapture() == IMPORTANT_FOR_CONTENT_CAPTURE_AUTO) {
+            setImportantForContentCapture(IMPORTANT_FOR_CONTENT_CAPTURE_YES);
         }
 
         setTextInternal("");
@@ -2073,7 +2082,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     private void setTypefaceFromAttrs(@Nullable Typeface typeface, @Nullable String familyName,
             @XMLTypefaceAttr int typefaceIndex, @Typeface.Style int style,
-            @IntRange(from = -1, to = Font.FONT_WEIGHT_MAX) int weight) {
+            @IntRange(from = -1, to = FontStyle.FONT_WEIGHT_MAX) int weight) {
         if (typeface == null && familyName != null) {
             // Lookup normal Typeface from system font map.
             final Typeface normalTypeface = Typeface.create(familyName, Typeface.NORMAL);
@@ -2100,9 +2109,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     private void resolveStyleAndSetTypeface(@NonNull Typeface typeface, @Typeface.Style int style,
-            @IntRange(from = -1, to = Font.FONT_WEIGHT_MAX) int weight) {
+            @IntRange(from = -1, to = FontStyle.FONT_WEIGHT_MAX) int weight) {
         if (weight >= 0) {
-            weight = Math.min(Font.FONT_WEIGHT_MAX, weight);
+            weight = Math.min(FontStyle.FONT_WEIGHT_MAX, weight);
             final boolean italic = (style & Typeface.ITALIC) != 0;
             setTypeface(Typeface.create(typeface, weight, italic));
         } else {
@@ -3474,6 +3483,175 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public final int getAutoLinkMask() {
         return mAutoLinkMask;
+    }
+
+    /**
+     * Sets the Drawable corresponding to the selection handle used for
+     * positioning the cursor within text. The Drawable defaults to the value
+     * of the textSelectHandle attribute.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @see #setTextSelectHandle(int)
+     * @attr ref android.R.styleable#TextView_textSelectHandle
+     */
+    @android.view.RemotableViewMethod
+    public void setTextSelectHandle(@NonNull Drawable textSelectHandle) {
+        Preconditions.checkNotNull(textSelectHandle,
+                "The text select handle should not be null.");
+        mTextSelectHandle = textSelectHandle;
+        mTextSelectHandleRes = 0;
+        if (mEditor != null) {
+            mEditor.loadHandleDrawables(true /* overwrite */);
+        }
+    }
+
+    /**
+     * Sets the Drawable corresponding to the selection handle used for
+     * positioning the cursor within text. The Drawable defaults to the value
+     * of the textSelectHandle attribute.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @see #setTextSelectHandle(Drawable)
+     * @attr ref android.R.styleable#TextView_textSelectHandle
+     */
+    @android.view.RemotableViewMethod
+    public void setTextSelectHandle(@DrawableRes int textSelectHandle) {
+        Preconditions.checkArgumentPositive(textSelectHandle,
+                "The text select handle should be a valid drawable resource id.");
+        setTextSelectHandle(mContext.getDrawable(textSelectHandle));
+    }
+
+    /**
+     * Returns the Drawable corresponding to the selection handle used
+     * for positioning the cursor within text.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @return the text select handle drawable
+     *
+     * @see #setTextSelectHandle(Drawable)
+     * @see #setTextSelectHandle(int)
+     * @attr ref android.R.styleable#TextView_textSelectHandle
+     */
+    @Nullable public Drawable getTextSelectHandle() {
+        if (mTextSelectHandle == null && mTextSelectHandleRes != 0) {
+            mTextSelectHandle = mContext.getDrawable(mTextSelectHandleRes);
+        }
+        return mTextSelectHandle;
+    }
+
+    /**
+     * Sets the Drawable corresponding to the left handle used
+     * for selecting text. The Drawable defaults to the value of the
+     * textSelectHandleLeft attribute.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @see #setTextSelectHandleLeft(int)
+     * @attr ref android.R.styleable#TextView_textSelectHandleLeft
+     */
+    @android.view.RemotableViewMethod
+    public void setTextSelectHandleLeft(@NonNull Drawable textSelectHandleLeft) {
+        Preconditions.checkNotNull(textSelectHandleLeft,
+                "The left text select handle should not be null.");
+        mTextSelectHandleLeft = textSelectHandleLeft;
+        mTextSelectHandleLeftRes = 0;
+        if (mEditor != null) {
+            mEditor.loadHandleDrawables(true /* overwrite */);
+        }
+    }
+
+    /**
+     * Sets the Drawable corresponding to the left handle used
+     * for selecting text. The Drawable defaults to the value of the
+     * textSelectHandleLeft attribute.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @see #setTextSelectHandleLeft(Drawable)
+     * @attr ref android.R.styleable#TextView_textSelectHandleLeft
+     */
+    @android.view.RemotableViewMethod
+    public void setTextSelectHandleLeft(@DrawableRes int textSelectHandleLeft) {
+        Preconditions.checkArgumentPositive(textSelectHandleLeft,
+                "The text select left handle should be a valid drawable resource id.");
+        setTextSelectHandleLeft(mContext.getDrawable(textSelectHandleLeft));
+    }
+
+    /**
+     * Returns the Drawable corresponding to the left handle used
+     * for selecting text.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @return the left text selection handle drawable
+     *
+     * @see #setTextSelectHandleLeft(Drawable)
+     * @see #setTextSelectHandleLeft(int)
+     * @attr ref android.R.styleable#TextView_textSelectHandleLeft
+     */
+    @Nullable public Drawable getTextSelectHandleLeft() {
+        if (mTextSelectHandleLeft == null && mTextSelectHandleLeftRes != 0) {
+            mTextSelectHandleLeft = mContext.getDrawable(mTextSelectHandleLeftRes);
+        }
+        return mTextSelectHandleLeft;
+    }
+
+    /**
+     * Sets the Drawable corresponding to the right handle used
+     * for selecting text. The Drawable defaults to the value of the
+     * textSelectHandleRight attribute.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @see #setTextSelectHandleRight(int)
+     * @attr ref android.R.styleable#TextView_textSelectHandleRight
+     */
+    @android.view.RemotableViewMethod
+    public void setTextSelectHandleRight(@NonNull Drawable textSelectHandleRight) {
+        Preconditions.checkNotNull(textSelectHandleRight,
+                "The right text select handle should not be null.");
+        mTextSelectHandleRight = textSelectHandleRight;
+        mTextSelectHandleRightRes = 0;
+        if (mEditor != null) {
+            mEditor.loadHandleDrawables(true /* overwrite */);
+        }
+    }
+
+    /**
+     * Sets the Drawable corresponding to the right handle used
+     * for selecting text. The Drawable defaults to the value of the
+     * textSelectHandleRight attribute.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
+     *
+     * @see #setTextSelectHandleRight(Drawable)
+     * @attr ref android.R.styleable#TextView_textSelectHandleRight
+     */
+    @android.view.RemotableViewMethod
+    public void setTextSelectHandleRight(@DrawableRes int textSelectHandleRight) {
+        Preconditions.checkArgumentPositive(textSelectHandleRight,
+                "The text select right handle should be a valid drawable resource id.");
+        setTextSelectHandleRight(mContext.getDrawable(textSelectHandleRight));
+    }
+
+    /**
+     * Returns the Drawable corresponding to the right handle used
+     * for selecting text.
+     *
+     * @return the right text selection handle drawable
+     *
+     * @see #setTextSelectHandleRight(Drawable)
+     * @see #setTextSelectHandleRight(int)
+     * @attr ref android.R.styleable#TextView_textSelectHandleRight
+     */
+    @Nullable public Drawable getTextSelectHandleRight() {
+        if (mTextSelectHandleRight == null && mTextSelectHandleRightRes != 0) {
+            mTextSelectHandleRight = mContext.getDrawable(mTextSelectHandleRightRes);
+        }
+        return mTextSelectHandleRight;
     }
 
     /**
@@ -5898,7 +6076,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (needEditableForNotification) {
             sendAfterTextChanged((Editable) text);
         } else {
-            notifyAutoFillManagerAfterTextChanged();
+            notifyListeningManagersAfterTextChanged();
         }
 
         // SelectionModifierCursorController depends on textCanBeSelected, which depends on text
@@ -9946,24 +10124,37 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         }
 
-        // Always notify AutoFillManager - it will return right away if autofill is disabled.
-        notifyAutoFillManagerAfterTextChanged();
+        notifyListeningManagersAfterTextChanged();
 
         hideErrorIfUnchanged();
     }
 
-    private void notifyAutoFillManagerAfterTextChanged() {
-        // It is important to not check whether the view is important for autofill
-        // since the user can trigger autofill manually on not important views.
-        if (!isAutofillable()) {
-            return;
-        }
-        final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
-        if (afm != null) {
-            if (android.view.autofill.Helper.sVerbose) {
-                Log.v(LOG_TAG, "notifyAutoFillManagerAfterTextChanged");
+    /**
+     * Notify managers (such as {@link AutofillManager} and {@link IntelligenceManager}) that are
+     * interested on text changes.
+     */
+    private void notifyListeningManagersAfterTextChanged() {
+
+        // Autofill
+        if (isAutofillable()) {
+            // It is important to not check whether the view is important for autofill
+            // since the user can trigger autofill manually on not important views.
+            final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
+            if (afm != null) {
+                if (android.view.autofill.Helper.sVerbose) {
+                    Log.v(LOG_TAG, "notifyAutoFillManagerAfterTextChanged");
+                }
+                afm.notifyValueChanged(TextView.this);
             }
-            afm.notifyValueChanged(TextView.this);
+        }
+
+        // ContentCapture
+        if (isImportantForContentCapture() && isTextEditable()) {
+            final IntelligenceManager im = mContext.getSystemService(IntelligenceManager.class);
+            if (im != null && im.isContentCaptureEnabled()) {
+                // TODO(b/111276913): pass flags when edited by user / add CTS test
+                im.notifyViewTextChanged(getAutofillId(), getText(), /* flags= */ 0);
+            }
         }
     }
 
@@ -10723,24 +10914,19 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return TextView.class.getName();
     }
 
+    /** @hide */
     @Override
-    public void onProvideStructure(ViewStructure structure) {
-        super.onProvideStructure(structure);
-        onProvideAutoStructureForAssistOrAutofill(structure, false);
-    }
+    protected void onProvideStructure(@NonNull ViewStructure structure,
+            @ViewStructureType int viewFor, int flags) {
+        super.onProvideStructure(structure, viewFor, flags);
 
-    @Override
-    public void onProvideAutofillStructure(ViewStructure structure, int flags) {
-        super.onProvideAutofillStructure(structure, flags);
-        onProvideAutoStructureForAssistOrAutofill(structure, true);
-    }
-
-    private void onProvideAutoStructureForAssistOrAutofill(ViewStructure structure,
-            boolean forAutofill) {
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
-        if (forAutofill) {
-            structure.setDataIsSensitive(!mTextSetFromXmlOrResourceId);
+        if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
+                || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+            if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
+                structure.setDataIsSensitive(!mTextSetFromXmlOrResourceId);
+            }
             if (mTextId != ResourceId.ID_NULL) {
                 try {
                     structure.setTextIdEntry(getResources().getResourceEntryName(mTextId));
@@ -10753,7 +10939,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         }
 
-        if (!isPassword || forAutofill) {
+        if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
+                || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
             if (mLayout == null) {
                 assumeLayout();
             }
@@ -10762,7 +10949,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (lineCount <= 1) {
                 // Simple case: this is a single line.
                 final CharSequence text = getText();
-                if (forAutofill) {
+                if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
                     structure.setText(text);
                 } else {
                     structure.setText(text, getSelectionStart(), getSelectionEnd());
@@ -10826,7 +11013,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     text = text.subSequence(expandedTopChar, expandedBottomChar);
                 }
 
-                if (forAutofill) {
+                if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
                     structure.setText(text);
                 } else {
                     structure.setText(text, selStart - expandedTopChar, selEnd - expandedTopChar);
@@ -10842,7 +11029,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 }
             }
 
-            if (!forAutofill) {
+            if (viewFor == VIEW_STRUCTURE_FOR_ASSIST
+                    || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
                 // Extract style information that applies to the TextView as a whole.
                 int style = 0;
                 int typefaceStyle = getTypefaceStyle();
@@ -10869,7 +11057,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 // of the View (and can be any drawable) or a BackgroundColorSpan inside the text.
                 structure.setTextStyle(getTextSize(), getCurrentTextColor(),
                         AssistStructure.ViewNode.TEXT_COLOR_UNDEFINED /* bgColor */, style);
-            } else {
+            }
+            if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
+                    || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
                 structure.setMinTextEms(getMinEms());
                 structure.setMaxTextEms(getMaxEms());
                 int maxLength = -1;

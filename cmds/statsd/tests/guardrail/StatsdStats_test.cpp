@@ -126,7 +126,7 @@ TEST(StatsdStatsTest, TestSubStats) {
     stats.noteBroadcastSent(key);
 
     // data drop -> 1
-    stats.noteDataDropped(key);
+    stats.noteDataDropped(key, 123);
 
     // dump report -> 3
     stats.noteMetricsReportSent(key, 0);
@@ -142,6 +142,8 @@ TEST(StatsdStatsTest, TestSubStats) {
     const auto& configReport = report.config_stats(0);
     EXPECT_EQ(2, configReport.broadcast_sent_time_sec_size());
     EXPECT_EQ(1, configReport.data_drop_time_sec_size());
+    EXPECT_EQ(1, configReport.data_drop_bytes_size());
+    EXPECT_EQ(123, configReport.data_drop_bytes(0));
     EXPECT_EQ(3, configReport.dump_report_time_sec_size());
     EXPECT_EQ(3, configReport.dump_report_data_size_size());
     EXPECT_EQ(1, configReport.annotation_size());
@@ -242,6 +244,39 @@ TEST(StatsdStatsTest, TestAtomLog) {
     EXPECT_TRUE(sensorAtomGood);
 }
 
+TEST(StatsdStatsTest, TestPullAtomStats) {
+    StatsdStats stats;
+
+    stats.updateMinPullIntervalSec(android::util::DISK_SPACE, 3333L);
+    stats.updateMinPullIntervalSec(android::util::DISK_SPACE, 2222L);
+    stats.updateMinPullIntervalSec(android::util::DISK_SPACE, 4444L);
+
+    stats.notePull(android::util::DISK_SPACE);
+    stats.notePullTime(android::util::DISK_SPACE, 1111L);
+    stats.notePullDelay(android::util::DISK_SPACE, 1111L);
+    stats.notePull(android::util::DISK_SPACE);
+    stats.notePullTime(android::util::DISK_SPACE, 3333L);
+    stats.notePullDelay(android::util::DISK_SPACE, 3335L);
+    stats.notePull(android::util::DISK_SPACE);
+    stats.notePullFromCache(android::util::DISK_SPACE);
+
+    vector<uint8_t> output;
+    stats.dumpStats(&output, false);
+    StatsdStatsReport report;
+    bool good = report.ParseFromArray(&output[0], output.size());
+    EXPECT_TRUE(good);
+
+    EXPECT_EQ(1, report.pulled_atom_stats_size());
+
+    EXPECT_EQ(android::util::DISK_SPACE, report.pulled_atom_stats(0).atom_id());
+    EXPECT_EQ(3, report.pulled_atom_stats(0).total_pull());
+    EXPECT_EQ(1, report.pulled_atom_stats(0).total_pull_from_cache());
+    EXPECT_EQ(2222L, report.pulled_atom_stats(0).min_pull_interval_sec());
+    EXPECT_EQ(2222L, report.pulled_atom_stats(0).average_pull_time_nanos());
+    EXPECT_EQ(3333L, report.pulled_atom_stats(0).max_pull_time_nanos());
+    EXPECT_EQ(2223L, report.pulled_atom_stats(0).average_pull_delay_nanos());
+    EXPECT_EQ(3335L, report.pulled_atom_stats(0).max_pull_delay_nanos());
+}
 
 TEST(StatsdStatsTest, TestAnomalyMonitor) {
     StatsdStats stats;
@@ -275,7 +310,7 @@ TEST(StatsdStatsTest, TestTimestampThreshold) {
     int32_t newTimestamp = 10000;
 
     // now it should trigger removing oldest timestamp
-    stats.noteDataDropped(key, 10000);
+    stats.noteDataDropped(key, 123, 10000);
     stats.noteBroadcastSent(key, 10000);
     stats.noteMetricsReportSent(key, 0, 10000);
 
@@ -295,6 +330,7 @@ TEST(StatsdStatsTest, TestTimestampThreshold) {
     // the last timestamp is the newest timestamp.
     EXPECT_EQ(newTimestamp, configStats->broadcast_sent_time_sec.back());
     EXPECT_EQ(newTimestamp, configStats->data_drop_time_sec.back());
+    EXPECT_EQ(123, configStats->data_drop_bytes.back());
     EXPECT_EQ(newTimestamp, configStats->dump_report_stats.back().first);
 }
 

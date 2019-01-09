@@ -21,7 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="wifi_fail_to_scan" msgid="1265540342578081461">"Haiwezi kutambaza mitandao"</string>
-    <string name="wifi_security_none" msgid="7985461072596594400">"Hamna"</string>
     <string name="wifi_remembered" msgid="4955746899347821096">"Imehifadhiwa"</string>
     <string name="wifi_disabled_generic" msgid="4259794910584943386">"Imezimwa"</string>
     <string name="wifi_disabled_network_failure" msgid="2364951338436007124">"Haikuweza Kusanidi IP"</string>
@@ -415,7 +414,7 @@
     <string name="screen_zoom_summary_custom" msgid="5611979864124160447">"Kiwango maalum (<xliff:g id="DENSITYDPI">%d</xliff:g>)"</string>
     <string name="content_description_menu_button" msgid="8182594799812351266">"Menyu"</string>
     <string name="retail_demo_reset_message" msgid="118771671364131297">"Weka nenosiri ili urejeshe mipangilio ya kiwandani ikiwa katika hali ya onyesho."</string>
-    <string name="retail_demo_reset_next" msgid="8356731459226304963">"Inayofuata"</string>
+    <string name="retail_demo_reset_next" msgid="8356731459226304963">"Endelea"</string>
     <string name="retail_demo_reset_title" msgid="696589204029930100">"Nenosiri linahitajika"</string>
     <string name="active_input_method_subtypes" msgid="3596398805424733238">"Mbinu zinazotumika"</string>
     <string name="use_system_language_to_select_input_method_subtypes" msgid="5747329075020379587">"Tumia lugha za mfumo"</string>

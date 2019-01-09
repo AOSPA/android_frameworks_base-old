@@ -285,14 +285,21 @@ class AlarmManagerService extends SystemService {
     @VisibleForTesting
     final class Constants extends ContentObserver {
         // Key names stored in the settings value.
-        private static final String KEY_MIN_FUTURITY = "min_futurity";
-        private static final String KEY_MIN_INTERVAL = "min_interval";
-        private static final String KEY_MAX_INTERVAL = "max_interval";
-        private static final String KEY_ALLOW_WHILE_IDLE_SHORT_TIME = "allow_while_idle_short_time";
-        private static final String KEY_ALLOW_WHILE_IDLE_LONG_TIME = "allow_while_idle_long_time";
-        private static final String KEY_ALLOW_WHILE_IDLE_WHITELIST_DURATION
+        @VisibleForTesting
+        static final String KEY_MIN_FUTURITY = "min_futurity";
+        @VisibleForTesting
+        static final String KEY_MIN_INTERVAL = "min_interval";
+        @VisibleForTesting
+        static final String KEY_MAX_INTERVAL = "max_interval";
+        @VisibleForTesting
+        static final String KEY_ALLOW_WHILE_IDLE_SHORT_TIME = "allow_while_idle_short_time";
+        @VisibleForTesting
+        static final String KEY_ALLOW_WHILE_IDLE_LONG_TIME = "allow_while_idle_long_time";
+        @VisibleForTesting
+        static final String KEY_ALLOW_WHILE_IDLE_WHITELIST_DURATION
                 = "allow_while_idle_whitelist_duration";
-        private static final String KEY_LISTENER_TIMEOUT = "listener_timeout";
+        @VisibleForTesting
+        static final String KEY_LISTENER_TIMEOUT = "listener_timeout";
 
         // Keys for specifying throttling delay based on app standby bucketing
         private final String[] KEYS_APP_STANDBY_DELAY = {
@@ -1455,6 +1462,10 @@ class AlarmManagerService extends SystemService {
         TimeZone.setDefault(null);
 
         if (timeZoneWasChanged) {
+            // Don't wait for broadcasts to update our midnight alarm
+            mClockReceiver.scheduleDateChangedEvent();
+
+            // And now let everyone else know
             Intent intent = new Intent(Intent.ACTION_TIMEZONE_CHANGED);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING
                     | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND

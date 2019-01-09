@@ -18,6 +18,8 @@ package android.view;
 import android.annotation.UnsupportedAppUsage;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.RecordingCanvas;
+import android.graphics.RenderNode;
 import android.widget.FrameLayout;
 
 import java.util.ArrayList;
@@ -46,11 +48,11 @@ public class GhostView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (canvas instanceof DisplayListCanvas) {
-            DisplayListCanvas dlCanvas = (DisplayListCanvas) canvas;
+        if (canvas instanceof RecordingCanvas) {
+            RecordingCanvas dlCanvas = (RecordingCanvas) canvas;
             mView.mRecreateDisplayList = true;
             RenderNode renderNode = mView.updateDisplayListIfDirty();
-            if (renderNode.isValid()) {
+            if (renderNode.hasDisplayList()) {
                 dlCanvas.insertReorderBarrier(); // enable shadow for this rendernode
                 dlCanvas.drawRenderNode(renderNode);
                 dlCanvas.insertInorderBarrier(); // re-disable reordering/shadows

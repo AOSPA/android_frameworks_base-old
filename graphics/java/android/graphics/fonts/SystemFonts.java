@@ -192,7 +192,8 @@ public final class SystemFonts {
             try {
                 font = new Font.Builder(buffer, new File(fullPath), languageTags)
                         .setWeight(fontConfig.getWeight())
-                        .setItalic(fontConfig.isItalic())
+                        .setSlant(fontConfig.isItalic() ? FontStyle.FONT_SLANT_ITALIC
+                                : FontStyle.FONT_SLANT_UPRIGHT)
                         .setTtcIndex(fontConfig.getTtcIndex())
                         .setFontVariationSettings(fontConfig.getAxes())
                         .build();
@@ -207,7 +208,7 @@ public final class SystemFonts {
                 b.addFont(font);
             }
         }
-        return b == null ? null : b.build(languageTags, variant);
+        return b == null ? null : b.build(languageTags, variant, false /* isCustomFallback */);
     }
 
     private static void appendNamedFamily(@NonNull FontConfig.Family xmlFamily,

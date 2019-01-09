@@ -163,7 +163,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
     public static final int SECURITY_EAP = 3;
     public static final int SECURITY_OWE = 4;
     public static final int SECURITY_SAE = 5;
-    public static final int SECURITY_DPP = 6;
+    public static final int SECURITY_EAP_SUITE_B = 6;
+    public static final int SECURITY_DPP = 7;
 
     private static final int PSK_UNKNOWN = 0;
     private static final int PSK_WPA = 1;
@@ -436,7 +437,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (isConnectable()) {
             builder.append(',').append("connectable");
         }
-        if (security != SECURITY_NONE) {
+        if ((security != SECURITY_NONE) && (security != SECURITY_OWE)) {
             builder.append(',').append(securityToString(security, pskType));
         }
         builder.append(",level=").append(getLevel());
@@ -791,6 +792,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
             case SECURITY_EAP:
                 return concise ? context.getString(R.string.wifi_security_short_eap) :
                     context.getString(R.string.wifi_security_eap);
+            case SECURITY_EAP_SUITE_B:
+                return concise ? context.getString(R.string.wifi_security_short_eap_suiteb) :
+                        context.getString(R.string.wifi_security_eap_suiteb);
             case SECURITY_PSK:
                 switch (pskType) {
                     case PSK_WPA:
@@ -1060,13 +1064,20 @@ public class AccessPoint implements Comparable<AccessPoint> {
      * Can only be called for unsecured networks.
      */
     public void generateOpenNetworkConfig() {
-        if (security != SECURITY_NONE)
+        if ((security != SECURITY_NONE) && (security != SECURITY_OWE)) {
             throw new IllegalStateException();
+        }
         if (mConfig != null)
             return;
         mConfig = new WifiConfiguration();
         mConfig.SSID = AccessPoint.convertToQuotedString(ssid);
-        mConfig.allowedKeyManagement.set(KeyMgmt.NONE);
+
+        if (security == SECURITY_NONE) {
+            mConfig.allowedKeyManagement.set(KeyMgmt.NONE);
+        } else {
+            mConfig.allowedKeyManagement.set(KeyMgmt.OWE);
+            mConfig.requirePMF = true;
+        }
     }
 
     public void saveWifiState(Bundle savedState) {
@@ -1374,17 +1385,30 @@ public class AccessPoint implements Comparable<AccessPoint> {
             return SECURITY_OWE;
         } else if (result.capabilities.contains("WEP")) {
             return SECURITY_WEP;
+        } else if (result.capabilities.contains("SAE")) {
+            return SECURITY_SAE;
         } else if (result.capabilities.contains("PSK")) {
             return SECURITY_PSK;
+        } else if (result.capabilities.contains("EAP_SUITE_B_192")) {
+            return SECURITY_EAP_SUITE_B;
         } else if (result.capabilities.contains("EAP")) {
             return SECURITY_EAP;
+        } else if (result.capabilities.contains("OWE")) {
+            return SECURITY_OWE;
         }
+
         return SECURITY_NONE;
     }
 
     static int getSecurity(WifiConfiguration config) {
+        if (config.allowedKeyManagement.get(KeyMgmt.SAE)) {
+            return SECURITY_SAE;
+        }
         if (config.allowedKeyManagement.get(KeyMgmt.WPA_PSK)) {
             return SECURITY_PSK;
+        }
+        if (config.allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
+            return SECURITY_EAP_SUITE_B;
         }
         if (config.allowedKeyManagement.get(KeyMgmt.WPA_EAP) ||
                 config.allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
@@ -1392,9 +1416,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
         if (config.allowedKeyManagement.get(KeyMgmt.DPP)) {
             return SECURITY_DPP;
-        }
-        if (config.allowedKeyManagement.get(KeyMgmt.SAE)) {
-            return SECURITY_SAE;
         }
         if (config.allowedKeyManagement.get(KeyMgmt.OWE)) {
             return SECURITY_OWE;
@@ -1420,6 +1441,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
             return "DPP";
         } else if (security == SECURITY_SAE) {
             return "SAE";
+        } else if (security == SECURITY_EAP_SUITE_B) {
+            return "SUITE_B";
         } else if (security == SECURITY_OWE) {
             return "OWE";
         }
