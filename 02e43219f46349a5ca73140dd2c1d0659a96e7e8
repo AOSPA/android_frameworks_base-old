@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b861ef3d_590cfc20",
+        "filename": "packages/Shell/AndroidManifest.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 180,
+      "author": {
+        "id": 1000140
+      },
+      "writtenOn": "2019-01-09T00:25:43Z",
+      "side": 1,
+      "message": "will this patch work if we don\u0027t make any changes to this file?",
+      "revId": "02e43219f46349a5ca73140dd2c1d0659a96e7e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "386fa0f3_c1f86489",
+        "filename": "services/core/java/com/android/server/am/ActivityManagerService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 12966,
+      "author": {
+        "id": 1000140
+      },
+      "writtenOn": "2019-01-09T00:25:43Z",
+      "side": 1,
+      "message": "Can you check whether only this line needs to be changed? I don\u0027t think that the above lines need to be commented out. \n\nMight have issues after merges if there is substantial reshuffling of code.",
+      "revId": "02e43219f46349a5ca73140dd2c1d0659a96e7e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
