@@ -34,6 +34,8 @@ import com.android.systemui.qs.QSHost;
 import com.android.systemui.plugins.qs.QSTile.BooleanState;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 
+import android.service.quicksettings.Tile;
+
 /** Quick settings tile: Enable/Disable NFC **/
 public class NfcTile extends QSTileImpl<BooleanState> {
 
@@ -101,6 +103,7 @@ public class NfcTile extends QSTileImpl<BooleanState> {
 
         if (getAdapter() == null) return;
         state.value = getAdapter().isEnabled();
+        state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.label = mContext.getString(R.string.quick_settings_nfc_label);
         state.icon = new DrawableIcon(state.value ? mEnable : mDisable);
         state.expandedAccessibilityClassName = Switch.class.getName();
