@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3523deea_298da323",
+        "filename": "packages/SystemUI/res/values/pa_config.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2019-01-12T16:48:55Z",
+      "side": 1,
+      "message": "Thats wrong",
+      "revId": "438199f3e69de24e12c1b2f08da202ab3d668fad",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
