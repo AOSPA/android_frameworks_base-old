@@ -52,6 +52,24 @@
       "revId": "438199f3e69de24e12c1b2f08da202ab3d668fad",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ee01a59a_b77b2eb1",
+        "filename": "packages/SystemUI/res/values/pa_config.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2019-01-13T16:24:35Z",
+      "side": 1,
+      "message": "It has to be \"Copyright 2019 Paranoid Android\"",
+      "parentUuid": "9e389078_498bd991",
+      "revId": "438199f3e69de24e12c1b2f08da202ab3d668fad",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
     }
   ]
 }
