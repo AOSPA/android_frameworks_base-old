@@ -77,6 +77,13 @@ public class CarrierIdentifier implements Parcelable {
      */
     public CarrierIdentifier(String mcc, String mnc, @Nullable String spn,
                              @Nullable String imsi, @Nullable String gid1, @Nullable String gid2,
+                             int carrierid, int preciseCarrierId) {
+        this(mcc, mnc, spn, imsi, gid1, gid2, null, carrierid, preciseCarrierId);
+    }
+
+    /** @hide */
+    public CarrierIdentifier(String mcc, String mnc, @Nullable String spn,
+                             @Nullable String imsi, @Nullable String gid1, @Nullable String gid2,
                              @Nullable String iccid, int carrierid, int preciseCarrierId) {
         mMcc = mcc;
         mMnc = mnc;
