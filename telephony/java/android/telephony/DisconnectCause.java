@@ -333,52 +333,99 @@ public class DisconnectCause {
      */
     public static final int OTASP_PROVISIONING_IN_PROCESS = 76;
 
+    /** @hide */
     public static final int QOS_UNAVAILABLE = 77;
+    /** @hide */
     public static final int REQUESTED_FACILITY_NOT_SUBSCRIBED = 78;
+    /** @hide */
     public static final int INCOMING_CALLS_BARRED_WITHIN_CUG = 79;
+    /** @hide */
     public static final int BEARER_CAPABILITY_UNAVAILABLE = 80;
+    /** @hide */
     public static final int SERVICE_OPTION_NOT_AVAILABLE = 81;
+    /** @hide */
     public static final int BEARER_SERVICE_NOT_IMPLEMENTED = 82;
+    /** @hide */
     public static final int REQUESTED_FACILITY_NOT_IMPLEMENTED = 83;
+    /** @hide */
     public static final int ONLY_DIGITAL_INFORMATION_BEARER_AVAILABLE = 84;
+    /** @hide */
     public static final int SERVICE_OR_OPTION_NOT_IMPLEMENTED = 85;
+    /** @hide */
     public static final int INVALID_TRANSACTION_IDENTIFIER = 86;
+    /** @hide */
     public static final int USER_NOT_MEMBER_OF_CUG = 87;
+    /** @hide */
     public static final int INCOMPATIBLE_DESTINATION = 88;
+    /** @hide */
     public static final int INVALID_TRANSIT_NW_SELECTION = 89;
+    /** @hide */
     public static final int SEMANTICALLY_INCORRECT_MESSAGE = 90;
+    /** @hide */
     public static final int INVALID_MANDATORY_INFORMATION = 91;
+    /** @hide */
     public static final int MESSAGE_TYPE_NON_IMPLEMENTED = 92;
+    /** @hide */
     public static final int MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 93;
+    /** @hide */
     public static final int INFORMATION_ELEMENT_NON_EXISTENT = 94;
+    /** @hide */
     public static final int CONDITIONAL_IE_ERROR = 95;
+    /** @hide */
     public static final int MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 96;
+    /** @hide */
     public static final int RECOVERY_ON_TIMER_EXPIRED = 97;
+    /** @hide */
     public static final int PROTOCOL_ERROR_UNSPECIFIED = 98;
+    /** @hide */
     public static final int INTERWORKING_UNSPECIFIED = 99;
+    /** @hide */
     public static final int LOCAL_LOW_BATTERY = 100;
+    /** @hide */
     public static final int NO_CIRCUIT_AVAIL = 101;
+    /** @hide */
     public static final int NO_ROUTE_TO_DESTINATION = 102;
+    /** @hide */
     public static final int OPERATOR_DETERMINED_BARRING = 103;
+    /** @hide */
     public static final int CALL_FAIL_NO_USER_RESPONDING = 104;
+    /** @hide */
     public static final int CALL_FAIL_NO_ANSWER_FROM_USER = 105;
+    /** @hide */
     public static final int CALL_FAIL_DESTINATION_OUT_OF_ORDER = 106;
+    /** @hide */
     public static final int BEARER_CAPABILITY_NOT_AUTHORIZED = 107;
+    /** @hide */
     public static final int CHANNEL_UNACCEPTABLE = 108;
+    /** @hide */
     public static final int CALL_REJECTED = 109;
+    /** @hide */
     public static final int NUMBER_CHANGED = 110;
+    /** @hide */
     public static final int PREEMPTION = 111;
+    /** @hide */
     public static final int FACILITY_REJECTED = 112;
+    /** @hide */
     public static final int RESP_TO_STATUS_ENQUIRY = 113;
+    /** @hide */
     public static final int NETWORK_OUT_OF_ORDER = 114;
+    /** @hide */
     public static final int TEMPORARY_FAILURE = 115;
+    /** @hide */
     public static final int SWITCHING_EQUIPMENT_CONGESTION = 116;
+    /** @hide */
     public static final int ACCESS_INFORMATION_DISCARDED = 117;
+    /** @hide */
     public static final int REQUESTED_CIRCUIT_OR_CHANNEL_NOT_AVAILABLE = 118;
+    /** @hide */
     public static final int RESOURCES_UNAVAILABLE_OR_UNSPECIFIED = 119;
 
-    /** call failed due to LTE to 3G/2G handover not feasible */
+    /**
+     * call failed due to LTE to 3G/2G handover not feasible
+     * @hide
+     */
     public static final int HO_NOT_FEASIBLE = 120;
+    /** @hide */
     public static final int NON_SELECTED_USER_CLEARING = 121;
 
     //*********************************************************************************************
@@ -392,10 +439,16 @@ public class DisconnectCause {
     // NextId: 122
     //*********************************************************************************************
 
-    /** Smallest valid value for call disconnect codes. */
+    /**
+     * Smallest valid value for call disconnect codes.
+     * @hide
+     */
     public static final int MINIMUM_VALID_VALUE = NOT_DISCONNECTED;
 
-    /** Largest valid value for call disconnect codes. */
+    /**
+     * Largest valid value for call disconnect codes.
+     * @hide
+     */
     public static final int MAXIMUM_VALID_VALUE = NON_SELECTED_USER_CLEARING;
 
     /** Private constructor to avoid class instantiation. */
