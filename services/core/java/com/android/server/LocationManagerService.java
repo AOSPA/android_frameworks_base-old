@@ -3265,14 +3265,18 @@ public class LocationManagerService extends ILocationManager.Stub {
         if (isMockProvider(LocationManager.NETWORK_PROVIDER)) {
             return location;
         }
-        LocationProviderProxy providerProxy =
-                (LocationProviderProxy)mProvidersByName.get(LocationManager.NETWORK_PROVIDER);
-        if (mComboNlpPackageName == null || providerProxy == null ||
+        LocationProvider networkProvider =
+                mProvidersByName.get(LocationManager.NETWORK_PROVIDER);
+        if (mComboNlpPackageName == null ||
+            networkProvider == null ||
+            networkProvider.mProvider == null ||
+            !(networkProvider.mProvider instanceof LocationProviderProxy) ||
             false == provider.equals(LocationManager.NETWORK_PROVIDER) ||
             isMockProvider(LocationManager.NETWORK_PROVIDER)) {
             return location;
         }
 
+        LocationProviderProxy providerProxy = (LocationProviderProxy)networkProvider.mProvider;
         String connectedNlpPackage = providerProxy.getConnectedPackageName();
         if (connectedNlpPackage == null || !connectedNlpPackage.equals(mComboNlpPackageName)) {
             return location;
@@ -3339,7 +3343,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         synchronized (mLock) {
-            if (isAllowedByCurrentUserSettingsLocked(provider)) {
+            if (isAllowedByUserSettingsLockedForUser(provider, mCurrentUserId)) {
                 if (!passive) {
                     location = screenLocationLocked(location, provider);
                     if (location == null) {
