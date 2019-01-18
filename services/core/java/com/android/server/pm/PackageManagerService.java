@@ -14474,7 +14474,12 @@ public class PackageManagerService extends IPackageManager.Stub
                                     mHandler.sendMessageDelayed(msg, getVerificationTimeout());
                                 }
                             }, null, 0, null, null);
-                            mArgs = null;
+
+                            /*
+                             * We don't want the copy to proceed until
+                             * verification succeeds.
+                             */
+                            mVerificationCompleted = false;
                         }
                     }
                     if (ret == PackageManager.INSTALL_SUCCEEDED
