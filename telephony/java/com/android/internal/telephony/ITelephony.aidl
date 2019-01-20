@@ -35,6 +35,7 @@ import android.telephony.ICellInfoCallback;
 import android.telephony.ModemActivityInfo;
 import android.telephony.NeighboringCellInfo;
 import android.telephony.NetworkScanRequest;
+import android.telephony.PhoneNumberRange;
 import android.telephony.RadioAccessFamily;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
@@ -49,11 +50,13 @@ import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ims.aidl.IImsRegistrationCallback;
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.telephony.CellNetworkScanResult;
+import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.OperatorInfo;
 
 import java.util.List;
 import java.util.Map;
 
+import android.telephony.UiccCardInfo;
 import android.telephony.UiccSlotInfo;
 
 /**
@@ -393,16 +396,11 @@ interface ITelephony {
     int getDataActivationState(int subId, String callingPackage);
 
     /**
-      * Returns the unread count of voicemails
-      */
-    int getVoiceMessageCount();
-
-    /**
      * Returns the unread count of voicemails for a subId.
      * @param subId user preferred subId.
      * Returns the unread count of voicemails
      */
-    int getVoiceMessageCountForSubscriber(int subId);
+    int getVoiceMessageCountForSubscriber(int subId, String callingPackage);
 
     /**
       * Returns true if current state supports both voice and data
@@ -876,6 +874,17 @@ interface ITelephony {
     String getCdmaMin(int subId);
 
     /**
+     * Request that the next incoming call from a number matching {@code range} be intercepted.
+     * @param range The range of phone numbers the caller expects a phone call from.
+     * @param timeoutMillis The amount of time to wait for such a call, or
+     *                      {@link #MAX_NUMBER_VERIFICATION_TIMEOUT_MILLIS}, whichever is lesser.
+     * @param callback the callback aidl
+     * @param callingPackage the calling package name.
+     */
+    void requestNumberVerification(in PhoneNumberRange range, long timeoutMillis,
+            in INumberVerificationCallback callback, String callingPackage);
+
+    /**
      * Has the calling application been granted special privileges by the carrier.
      *
      * If any of the packages in the calling UID has carrier privileges, the
@@ -1329,18 +1338,6 @@ interface ITelephony {
     String getSubscriptionCarrierName(int subId);
 
     /**
-     * Returns MNO carrier id of the current subscription’s MCCMNC.
-     * <p>MNO carrier id can be solely identified by subscription mccmnc. This is mainly used
-     * for MNO fallback when exact carrier id {@link #getSimCarrierId()}
-     * configurations are not found.
-     *
-     * @return MNO carrier id of the current subscription. Return the value same as carrier id
-     * {@link #getSimCarrierId()}, if MNO carrier id cannot be identified.
-     * @hide
-     */
-    int getSubscriptionMNOCarrierId(int subId);
-
-    /**
      * Returns fine-grained carrier id of the current subscription.
      *
      * <p>The precise carrier id can be used to further differentiate a carrier by different
@@ -1375,10 +1372,13 @@ interface ITelephony {
      * Returns carrier id based on MCCMNC only. This will return a MNO carrier id used for fallback
      * check when exact carrier id {@link #getSimCarrierId()} configurations are not found
      *
+     * @param isSubscriptionMccMnc. If {@true} it means this is a query for subscription mccmnc
+     * {@false} otherwise.
+     *
      * @return carrier id from passing mccmnc.
      * @hide
      */
-    int getCarrierIdFromMccMnc(int slotIndex, String mccmnc);
+    int getCarrierIdFromMccMnc(int slotIndex, String mccmnc, boolean isSubscriptionMccMnc);
 
     /**
      * Action set from carrier signalling broadcast receivers to enable/disable metered apns
@@ -1407,6 +1407,14 @@ interface ITelephony {
      * @hide
      */
     void carrierActionReportDefaultNetworkStatus(int subId, boolean report);
+
+    /**
+     * Action set from carrier signalling broadcast receivers to reset all carrier actions.
+     * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
+     * @param subId the subscription ID that this action applies to.
+     * @hide
+     */
+    void carrierActionResetAll(int subId);
 
     /**
      * Get aggregated video call data usage since boot.
@@ -1472,6 +1480,30 @@ interface ITelephony {
      * @hide
      */
     SignalStrength getSignalStrength(int subId);
+
+    /**
+     * Get the card ID of the default eUICC card. If there is no eUICC, returns
+     * {@link #INVALID_CARD_ID}.
+     *
+     * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     *
+     * @param subId subscription ID used for authentication
+     * @param callingPackage package making the call
+     * @return card ID of the default eUICC card.
+     * @hide
+     */
+    int getCardIdForDefaultEuicc(int subId, String callingPackage); 
+
+    /**
+     * Gets information about currently inserted UICCs and eUICCs. See {@link UiccCardInfo} for more
+     * details on the kind of information available.
+     *
+     * @return UiccCardInfo an array of UiccCardInfo objects, representing information on the
+     * currently inserted UICCs and eUICCs.
+     *
+     * @hide
+     */
+    UiccCardInfo[] getUiccCardsInfo();
 
     /**
      * Get slot info for all the UICC slots.
@@ -1708,7 +1740,7 @@ interface ITelephony {
     /**
      * Identify if the number is emergency number, based on all the active subscriptions.
      */
-    boolean isCurrentEmergencyNumber(String number);
+    boolean isCurrentEmergencyNumber(String number, boolean exactMatch);
 
     /**
      * Return a list of certs in hex string from loaded carrier privileges access rules.

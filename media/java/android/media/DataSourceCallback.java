@@ -21,7 +21,6 @@ import java.io.Closeable;
 import java.io.IOException;
 
 /**
- * @hide
  * For supplying media data to the framework. Implement this if your app has
  * special requirements for the way media data is obtained.
  *
@@ -48,7 +47,7 @@ public abstract class DataSourceCallback implements Closeable {
      * @param offset the offset within buffer to read the data into.
      * @param size the number of bytes to read.
      * @throws IOException on fatal errors.
-     * @return the number of bytes read, or -1 if there was an error.
+     * @return the number of bytes read, or -1 if end of stream is reached.
      */
     public abstract int readAt(long position, byte[] buffer, int offset, int size)
             throws IOException;

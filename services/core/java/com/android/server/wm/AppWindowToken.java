@@ -91,6 +91,7 @@ import android.graphics.GraphicBuffer;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Debug;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -733,6 +734,17 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     boolean windowsAreFocusable() {
+        if (mTargetSdk < Build.VERSION_CODES.Q) {
+            final int pid = mActivityRecord != null
+                    ? (mActivityRecord.app != null ? mActivityRecord.app.getPid() : 0) : 0;
+            final AppWindowToken topFocusedAppOfMyProcess =
+                    mWmService.mRoot.mTopFocusedAppByProcess.get(pid);
+            if (topFocusedAppOfMyProcess != null && topFocusedAppOfMyProcess != this) {
+                // For the apps below Q, there can be only one app which has the focused window per
+                // process, because legacy apps may not be ready for a multi-focus system.
+                return false;
+            }
+        }
         return getWindowConfiguration().canReceiveKeys() || mAlwaysFocusable;
     }
 
@@ -746,6 +758,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     @Override
     void removeImmediately() {
         onRemovedFromDisplay();
+        if (mActivityRecord != null) {
+            mActivityRecord.unregisterConfigurationChangeListener(this);
+        }
         super.removeImmediately();
     }
 
@@ -1175,21 +1190,14 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         }
     }
 
-    void reparent(TaskWindowContainerController taskController, int position) {
+    void reparent(Task task, int position) {
         if (DEBUG_ADD_REMOVE) {
             Slog.i(TAG_WM, "reparent: moving app token=" + this
-                    + " to task=" + taskController + " at " + position);
+                    + " to task=" + task.mTaskId + " at " + position);
         }
-        final Task task = taskController.mContainer;
         if (task == null) {
-            throw new IllegalArgumentException("reparent: could not find task="
-                    + taskController);
+            throw new IllegalArgumentException("reparent: could not find task");
         }
-        reparent(task, position);
-        getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
-    }
-
-    void reparent(Task task, int position) {
         final Task currentTask = getTask();
         if (task == currentTask) {
             throw new IllegalArgumentException(
@@ -1220,6 +1228,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             onDisplayChanged(displayContent);
             prevDisplayContent.setLayoutNeeded();
         }
+        getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
     }
 
     @Override
@@ -1828,23 +1837,23 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     return false;
                 }
             }
-
-            if (transferStartingWindow(transferFrom)) {
-                return true;
-            }
-
-            // There is no existing starting window, and we don't want to create a splash screen, so
-            // that's it!
-            if (type != STARTING_WINDOW_TYPE_SPLASH_SCREEN) {
-                return false;
-            }
-
-            if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Creating SplashScreenStartingData");
-            startingData = new SplashScreenStartingData(mWmService, pkg,
-                    theme, compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
-                    getMergedOverrideConfiguration());
-            scheduleAddStartingWindow();
         }
+
+        if (transferStartingWindow(transferFrom)) {
+            return true;
+        }
+
+        // There is no existing starting window, and we don't want to create a splash screen, so
+        // that's it!
+        if (type != STARTING_WINDOW_TYPE_SPLASH_SCREEN) {
+            return false;
+        }
+
+        if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Creating SplashScreenStartingData");
+        startingData = new SplashScreenStartingData(mWmService, pkg,
+                theme, compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
+                getMergedOverrideConfiguration());
+        scheduleAddStartingWindow();
         return true;
     }
 
@@ -1940,6 +1949,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         } else if (newTask || !processRunning || (taskSwitch && !activityCreated)) {
             return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
         } else if (taskSwitch && allowTaskSnapshot) {
+            if (mWmService.mLowRamTaskSnapshots) {
+                // For low RAM devices, we use the splash screen starting window instead of the
+                // task snapshot starting window.
+                return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
+            }
             return snapshot == null ? STARTING_WINDOW_TYPE_NONE
                     : snapshotOrientationSameAsTask(snapshot) || fromRecents
                             ? STARTING_WINDOW_TYPE_SNAPSHOT : STARTING_WINDOW_TYPE_SPLASH_SCREEN;
@@ -2178,9 +2192,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         final TaskStack stack = getStack();
         final Task task = getTask();
         if (task != null && task.inFreeformWindowingMode()) {
-            task.getRelativePosition(outPosition);
+            task.getRelativeDisplayedPosition(outPosition);
         } else if (stack != null) {
-            stack.getRelativePosition(outPosition);
+            stack.getRelativeDisplayedPosition(outPosition);
         }
 
         // Always use stack bounds in order to have the ability to animate outside the task region.
@@ -2191,6 +2205,18 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         }
         // We have the relative position so the local position can be removed from bounds.
         outBounds.offsetTo(0, 0);
+    }
+
+    @Override
+    Rect getDisplayedBounds() {
+        final Task task = getTask();
+        if (task != null) {
+            final Rect overrideDisplayedBounds = task.getOverrideDisplayedBounds();
+            if (!overrideDisplayedBounds.isEmpty()) {
+                return overrideDisplayedBounds;
+            }
+        }
+        return getBounds();
     }
 
     boolean applyAnimationLocked(WindowManager.LayoutParams lp, int transit, boolean enter,

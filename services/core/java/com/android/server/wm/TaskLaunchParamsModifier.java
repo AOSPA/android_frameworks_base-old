@@ -44,12 +44,14 @@ import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Build;
 import android.util.Slog;
 import android.view.Gravity;
 import android.view.View;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.wm.LaunchParamsController.LaunchParams;
 import com.android.server.wm.LaunchParamsController.LaunchParamsModifier;
 
@@ -101,19 +103,27 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         mSupervisor = supervisor;
     }
 
+    @VisibleForTesting
+    int onCalculate(TaskRecord task, ActivityInfo.WindowLayout layout, ActivityRecord activity,
+            ActivityRecord source, ActivityOptions options, LaunchParams currentParams,
+            LaunchParams outParams) {
+        return onCalculate(task, layout, activity, source, options, PHASE_BOUNDS, currentParams,
+                outParams);
+    }
+
     @Override
     public int onCalculate(TaskRecord task, ActivityInfo.WindowLayout layout,
                            ActivityRecord activity, ActivityRecord source, ActivityOptions options,
-                           LaunchParams currentParams, LaunchParams outParams) {
+                           int phase, LaunchParams currentParams, LaunchParams outParams) {
         initLogBuilder(task, activity);
-        final int result = calculate(task, layout, activity, source, options, currentParams,
+        final int result = calculate(task, layout, activity, source, options, phase, currentParams,
                 outParams);
         outputLog();
         return result;
     }
 
     private int calculate(TaskRecord task, ActivityInfo.WindowLayout layout,
-            ActivityRecord activity, ActivityRecord source, ActivityOptions options,
+            ActivityRecord activity, ActivityRecord source, ActivityOptions options, int phase,
             LaunchParams currentParams, LaunchParams outParams) {
         final ActivityRecord root;
         if (task != null) {
@@ -142,6 +152,10 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         if (DEBUG) {
             appendLog("display-id=" + outParams.mPreferredDisplayId + " display-windowing-mode="
                     + display.getWindowingMode());
+        }
+
+        if (phase == PHASE_DISPLAY) {
+            return RESULT_CONTINUE;
         }
 
         // STEP 2: Resolve launch windowing mode.
@@ -205,10 +219,16 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
                 }
             }
 
-            if (launchMode == WINDOWING_MODE_FREEFORM && !currentParams.mBounds.isEmpty()) {
+            if (!currentParams.mBounds.isEmpty()) {
+                // Carry over bounds from callers regardless of launch mode because bounds is still
+                // used to restore last non-fullscreen bounds when launch mode is not freeform.
+                // Therefore it's not a resolution step for non-freeform launch mode and only
+                // consider it fully resolved only when launch mode is freeform.
                 outParams.mBounds.set(currentParams.mBounds);
-                fullyResolvedCurrentParam = true;
-                if (DEBUG) appendLog("inherit-bounds=" + outParams.mBounds);
+                if (launchMode == WINDOWING_MODE_FREEFORM) {
+                    fullyResolvedCurrentParam = true;
+                    if (DEBUG) appendLog("inherit-bounds=" + outParams.mBounds);
+                }
             }
         }
 
@@ -245,6 +265,10 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         // If launch mode matches display windowing mode, let it inherit from display.
         outParams.mWindowingMode = launchMode == display.getWindowingMode()
                 ? WINDOWING_MODE_UNDEFINED : launchMode;
+
+        if (phase == PHASE_WINDOWING_MODE) {
+            return RESULT_CONTINUE;
+        }
 
         // STEP 3: Determine final launch bounds based on resolved windowing mode and activity
         // requested orientation. We set bounds to empty for fullscreen mode and keep bounds as is
@@ -287,10 +311,11 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
             displayId = optionLaunchId;
         }
 
-        if (displayId == INVALID_DISPLAY && source != null) {
-            final int sourceDisplayId = source.getDisplayId();
-            if (DEBUG) appendLog("display-from-source=" + sourceDisplayId);
-            displayId = sourceDisplayId;
+        // If the source activity is a no-display activity, pass on the launch display id from
+        // source activity as currently preferred.
+        if (displayId == INVALID_DISPLAY && source != null && source.noDisplay) {
+            displayId = source.mHandoverLaunchDisplayId;
+            if (DEBUG) appendLog("display-from-no-display-source=" + displayId);
         }
 
         ActivityStack stack =
@@ -298,6 +323,12 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         if (stack != null) {
             if (DEBUG) appendLog("display-from-task=" + stack.mDisplayId);
             displayId = stack.mDisplayId;
+        }
+
+        if (displayId == INVALID_DISPLAY && source != null) {
+            final int sourceDisplayId = source.getDisplayId();
+            if (DEBUG) appendLog("display-from-source=" + sourceDisplayId);
+            displayId = sourceDisplayId;
         }
 
         if (displayId != INVALID_DISPLAY
@@ -526,12 +557,24 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         adjustBoundsToAvoidConflict(display, inOutBounds);
     }
 
+    private int convertOrientationToScreenOrientation(int orientation) {
+        switch (orientation) {
+            case Configuration.ORIENTATION_LANDSCAPE:
+                return SCREEN_ORIENTATION_LANDSCAPE;
+            case Configuration.ORIENTATION_PORTRAIT:
+                return SCREEN_ORIENTATION_PORTRAIT;
+            default:
+                return SCREEN_ORIENTATION_UNSPECIFIED;
+        }
+    }
+
     private int resolveOrientation(@NonNull ActivityRecord root, @NonNull ActivityDisplay display,
             @NonNull Rect bounds) {
         int orientation = resolveOrientation(root);
 
         if (orientation == SCREEN_ORIENTATION_LOCKED) {
-            orientation = bounds.isEmpty() ? display.getConfiguration().orientation
+            orientation = bounds.isEmpty()
+                    ? convertOrientationToScreenOrientation(display.getConfiguration().orientation)
                     : orientationFromBounds(bounds);
             if (DEBUG) {
                 appendLog(bounds.isEmpty() ? "locked-orientation-from-display=" + orientation

@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -51,13 +52,31 @@ public final class CellInfoLte extends CellInfo implements Parcelable {
         this.mCellConfig = new CellConfigLte(ci.mCellConfig);
     }
 
+    /** @hide */
+    public CellInfoLte(android.hardware.radio.V1_0.CellInfo ci) {
+        super(ci);
+        final android.hardware.radio.V1_0.CellInfoLte cil = ci.lte.get(0);
+        mCellIdentityLte = new CellIdentityLte(cil.cellIdentityLte);
+        mCellSignalStrengthLte = new CellSignalStrengthLte(cil.signalStrengthLte);
+        mCellConfig = new CellConfigLte();
+    }
+
+    /** @hide */
+    public CellInfoLte(android.hardware.radio.V1_2.CellInfo ci) {
+        super(ci);
+        final android.hardware.radio.V1_2.CellInfoLte cil = ci.lte.get(0);
+        mCellIdentityLte = new CellIdentityLte(cil.cellIdentityLte);
+        mCellSignalStrengthLte = new CellSignalStrengthLte(cil.signalStrengthLte);
+        mCellConfig = new CellConfigLte();
+    }
+
     @Override
     public CellIdentityLte getCellIdentity() {
         if (DBG) log("getCellIdentity: " + mCellIdentityLte);
         return mCellIdentityLte;
     }
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public void setCellIdentity(CellIdentityLte cid) {
         if (DBG) log("setCellIdentity: " + cid);
         mCellIdentityLte = cid;
@@ -69,7 +88,7 @@ public final class CellInfoLte extends CellInfo implements Parcelable {
         return mCellSignalStrengthLte;
     }
     /** @hide */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public void setCellSignalStrength(CellSignalStrengthLte css) {
         if (DBG) log("setCellSignalStrength: " + css);
         mCellSignalStrengthLte = css;

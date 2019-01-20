@@ -24,6 +24,7 @@
 #include "hwui/PaintFilter.h"
 #include "pipeline/skia/AnimatedDrawables.h"
 
+#include <SkAndroidFrameworkUtils.h>
 #include <SkAnimatedImage.h>
 #include <SkCanvasStateUtils.h>
 #include <SkColorFilter.h>
@@ -183,6 +184,11 @@ int SkiaCanvas::saveLayerAlpha(float left, float top, float right, float bottom,
         return this->saveLayer(left, top, right, bottom, &alphaPaint, flags);
     }
     return this->saveLayer(left, top, right, bottom, nullptr, flags);
+}
+
+int SkiaCanvas::saveUnclippedLayer(int left, int top, int right, int bottom) {
+    SkRect bounds = SkRect::MakeLTRB(left, top, right, bottom);
+    return SkAndroidFrameworkUtils::SaveBehind(mCanvas, &bounds);
 }
 
 class SkiaCanvas::Clip {
@@ -681,7 +687,7 @@ void SkiaCanvas::drawGlyphs(ReadGlyphFunc glyphFunc, int count, const SkPaint& p
     if (mPaintFilter) {
         mPaintFilter->filter(&paintCopy);
     }
-    SkASSERT(paintCopy.getTextEncoding() == SkPaint::kGlyphID_TextEncoding);
+    SkASSERT(paintCopy.getTextEncoding() == kGlyphID_SkTextEncoding);
     // Stroke with a hairline is drawn on HW with a fill style for compatibility with Android O and
     // older.
     if (!mCanvasOwned && sApiLevel <= 27 && paintCopy.getStrokeWidth() <= 0 &&
@@ -704,16 +710,18 @@ void SkiaCanvas::drawGlyphs(ReadGlyphFunc glyphFunc, int count, const SkPaint& p
 void SkiaCanvas::drawLayoutOnPath(const minikin::Layout& layout, float hOffset, float vOffset,
                                   const SkPaint& paint, const SkPath& path, size_t start,
                                   size_t end) {
+    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
     SkPaint paintCopy(paint);
     if (mPaintFilter) {
         mPaintFilter->filter(&paintCopy);
     }
-    SkASSERT(paintCopy.getTextEncoding() == SkPaint::kGlyphID_TextEncoding);
+    SkASSERT(paintCopy.getTextEncoding() == kGlyphID_SkTextEncoding);
 
     const int N = end - start;
-    SkAutoSTMalloc<1024, uint8_t> storage(N * (sizeof(uint16_t) + sizeof(SkRSXform)));
-    SkRSXform* xform = (SkRSXform*)storage.get();
-    uint16_t* glyphs = (uint16_t*)(xform + N);
+    SkTextBlobBuilder builder;
+    auto rec = builder.allocRunRSXform(font, N);
+    SkRSXform* xform = (SkRSXform*)rec.pos;
+    uint16_t* glyphs = rec.glyphs;
     SkPathMeasure meas(path, false);
 
     for (size_t i = start; i < end; i++) {
@@ -734,7 +742,7 @@ void SkiaCanvas::drawLayoutOnPath(const minikin::Layout& layout, float hOffset, 
         xform[i - start].fTy = pos.y() + tan.x() * y - halfWidth * tan.y();
     }
 
-    this->asSkCanvas()->drawTextRSXform(glyphs, sizeof(uint16_t) * N, xform, nullptr, paintCopy);
+    this->asSkCanvas()->drawTextBlob(builder.make(), 0, 0, paintCopy);
 }
 
 // ----------------------------------------------------------------------------

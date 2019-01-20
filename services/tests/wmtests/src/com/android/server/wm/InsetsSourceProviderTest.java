@@ -19,16 +19,23 @@ package com.android.server.wm;
 import static android.view.InsetsState.TYPE_TOP_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 
+import static junit.framework.Assert.assertFalse;
+import static junit.framework.Assert.assertNull;
+import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.view.InsetsSource;
+import android.view.InsetsState;
 
+import org.junit.Before;
 import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
+import org.junit.Before;
 import org.junit.Test;
 
 @SmallTest
@@ -36,8 +43,15 @@ import org.junit.Test;
 @Presubmit
 public class InsetsSourceProviderTest extends WindowTestsBase {
 
-    private InsetsSourceProvider mProvider = new InsetsSourceProvider(
-            new InsetsSource(TYPE_TOP_BAR));
+    private InsetsSource mSource = new InsetsSource(TYPE_TOP_BAR);
+    private InsetsSourceProvider mProvider;
+
+    @Before
+    public void setUp() throws Exception {
+        mSource.setVisible(true);
+        mProvider = new InsetsSourceProvider(mSource,
+                mDisplayContent.getInsetsStateController(), mDisplayContent);
+    }
 
     @Test
     public void testPostLayout() {
@@ -72,5 +86,42 @@ public class InsetsSourceProviderTest extends WindowTestsBase {
                 });
         mProvider.onPostLayout();
         assertEquals(new Rect(10, 10, 20, 20), mProvider.getSource().getFrame());
+    }
+
+    @Test
+    public void testUpdateControlForTarget() {
+        final WindowState topBar = createWindow(null, TYPE_APPLICATION, "parentWindow");
+        final WindowState target = createWindow(null, TYPE_APPLICATION, "target");
+        topBar.getFrameLw().set(0, 0, 500, 100);
+        mProvider.setWindow(topBar, null);
+        mProvider.updateControlForTarget(target);
+        assertNotNull(mProvider.getControl());
+        mProvider.updateControlForTarget(null);
+        assertNull(mProvider.getControl());
+    }
+
+    @Test
+    public void testInsetsModified() {
+        final WindowState topBar = createWindow(null, TYPE_APPLICATION, "parentWindow");
+        final WindowState target = createWindow(null, TYPE_APPLICATION, "target");
+        topBar.getFrameLw().set(0, 0, 500, 100);
+        mProvider.setWindow(topBar, null);
+        mProvider.updateControlForTarget(target);
+        InsetsState state = new InsetsState();
+        state.getSource(TYPE_TOP_BAR).setVisible(false);
+        mProvider.onInsetsModified(target, state.getSource(TYPE_TOP_BAR));
+        assertFalse(mSource.isVisible());
+    }
+
+    @Test
+    public void testInsetsModified_noControl() {
+        final WindowState topBar = createWindow(null, TYPE_APPLICATION, "parentWindow");
+        final WindowState target = createWindow(null, TYPE_APPLICATION, "target");
+        topBar.getFrameLw().set(0, 0, 500, 100);
+        mProvider.setWindow(topBar, null);
+        InsetsState state = new InsetsState();
+        state.getSource(TYPE_TOP_BAR).setVisible(false);
+        mProvider.onInsetsModified(target, state.getSource(TYPE_TOP_BAR));
+        assertTrue(mSource.isVisible());
     }
 }

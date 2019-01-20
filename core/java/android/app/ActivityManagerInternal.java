@@ -73,6 +73,12 @@ public abstract class ActivityManagerInternal {
             IBinder whitelistToken, long duration);
 
     /**
+     * Allows for a {@link PendingIntent} to be whitelisted to start activities from background.
+     */
+    public abstract void setPendingIntentAllowBgActivityStarts(
+            IIntentSender target, IBinder whitelistToken, int flags);
+
+    /**
      * Allow DeviceIdleController to tell us about what apps are whitelisted.
      */
     public abstract void setDeviceIdleWhitelist(int[] allAppids, int[] exceptIdleAppids);
@@ -196,8 +202,26 @@ public abstract class ActivityManagerInternal {
 
     public abstract void updateOomAdj();
     public abstract void updateCpuStats();
-    public abstract void updateUsageStats(
+
+    /**
+     * Update battery stats on activity usage.
+     * @param activity
+     * @param uid
+     * @param userId
+     * @param started
+     */
+    public abstract void updateBatteryStats(
             ComponentName activity, int uid, int userId, boolean resumed);
+
+    /**
+     * Update UsageStats of the activity.
+     * @param activity
+     * @param userId
+     * @param event
+     * @param appToken ActivityRecord's appToken.
+     */
+    public abstract void updateActivityUsageStats(
+            ComponentName activity, int userId, int event, IBinder appToken);
     public abstract void updateForegroundTimeIfOnBattery(
             String packageName, int uid, long cpuTimeDiff);
     public abstract void sendForegroundProfileChanged(int userId);
@@ -232,7 +256,7 @@ public abstract class ActivityManagerInternal {
     public abstract int broadcastIntentInPackage(String packageName, int uid, Intent intent,
             String resolvedType, IIntentReceiver resultTo, int resultCode, String resultData,
             Bundle resultExtras, String requiredPermission, Bundle bOptions, boolean serialized,
-            boolean sticky, int userId);
+            boolean sticky, int userId, boolean allowBackgroundActivityStarts);
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
             String resolvedType, boolean fgRequired, String callingPackage, int userId)
             throws TransactionTooLargeException;
@@ -288,6 +312,6 @@ public abstract class ActivityManagerInternal {
     public abstract void setDebugFlagsForStartingActivity(ActivityInfo aInfo, int startFlags,
             ProfilerInfo profilerInfo, Object wmLock);
 
-    /** Checks if process running with given pid has access to full external storage or not */
-    public abstract boolean isAppStorageSandboxed(int pid, int uid);
+    /** Returns mount mode for process running with given pid */
+    public abstract int getStorageMountMode(int pid, int uid);
 }

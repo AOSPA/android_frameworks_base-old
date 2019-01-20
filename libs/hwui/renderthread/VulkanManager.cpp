@@ -472,8 +472,11 @@ SkSurface* VulkanManager::getBackbufferSurface(VulkanSurface** surfaceOut) {
     window->query(window, NATIVE_WINDOW_HEIGHT, &windowHeight);
     if (windowWidth != surface->mWindowWidth || windowHeight != surface->mWindowHeight) {
         ColorMode colorMode = surface->mColorMode;
+        sk_sp<SkColorSpace> colorSpace = surface->mColorSpace;
+        SkColorSpace::Gamut colorGamut = surface->mColorGamut;
+        SkColorType colorType = surface->mColorType;
         destroySurface(surface);
-        *surfaceOut = createSurface(window, colorMode);
+        *surfaceOut = createSurface(window, colorMode, colorSpace, colorGamut, colorType);
         surface = *surfaceOut;
     }
 
@@ -646,8 +649,7 @@ void VulkanManager::createBuffers(VulkanSurface* surface, VkFormat format, VkExt
         VulkanSurface::ImageInfo& imageInfo = surface->mImageInfos[i];
         imageInfo.mSurface = SkSurface::MakeFromBackendRenderTarget(
                 mRenderThread.getGrContext(), backendRT, kTopLeft_GrSurfaceOrigin,
-                surface->mColorMode == ColorMode::WideColorGamut ? kRGBA_F16_SkColorType
-                : kRGBA_8888_SkColorType, nullptr, &props);
+                surface->mColorType, surface->mColorSpace, &props);
     }
 
     SkASSERT(mCommandPool != VK_NULL_HANDLE);
@@ -744,7 +746,7 @@ bool VulkanManager::createSwapchain(VulkanSurface* surface) {
     surface->mWindowWidth = extent.width;
     surface->mWindowHeight = extent.height;
 
-    uint32_t imageCount = caps.minImageCount + 2;
+    uint32_t imageCount = std::max<uint32_t>(3, caps.minImageCount);
     if (caps.maxImageCount > 0 && imageCount > caps.maxImageCount) {
         // Application must settle for fewer images than desired:
         imageCount = caps.maxImageCount;
@@ -766,10 +768,20 @@ bool VulkanManager::createSwapchain(VulkanSurface* surface) {
 
     VkFormat surfaceFormat = VK_FORMAT_R8G8B8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-    if (surface->mColorMode == ColorMode::WideColorGamut) {
+    if (surface->mColorType == SkColorType::kRGBA_F16_SkColorType) {
         surfaceFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-        colorSpace = VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT;
     }
+
+    if (surface->mColorMode == ColorMode::WideColorGamut) {
+        if (surface->mColorGamut == SkColorSpace::Gamut::kSRGB_Gamut) {
+            colorSpace = VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT;
+        } else if (surface->mColorGamut == SkColorSpace::Gamut::kDCIP3_D65_Gamut) {
+            colorSpace = VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT;
+        } else {
+            LOG_ALWAYS_FATAL("Unreachable: unsupported wide color space.");
+        }
+    }
+
     bool foundSurfaceFormat = false;
     for (uint32_t i = 0; i < surfaceFormatCount; ++i) {
         if (surfaceFormat == surfaceFormats[i].format
@@ -830,17 +842,26 @@ bool VulkanManager::createSwapchain(VulkanSurface* surface) {
 
     createBuffers(surface, surfaceFormat, extent);
 
+    // The window content is not updated (frozen) until a buffer of the window size is received.
+    // This prevents temporary stretching of the window after it is resized, but before the first
+    // buffer with new size is enqueued.
+    native_window_set_scaling_mode(surface->mNativeWindow, NATIVE_WINDOW_SCALING_MODE_FREEZE);
+
     return true;
 }
 
-VulkanSurface* VulkanManager::createSurface(ANativeWindow* window, ColorMode colorMode) {
+VulkanSurface* VulkanManager::createSurface(ANativeWindow* window, ColorMode colorMode,
+                                            sk_sp<SkColorSpace> surfaceColorSpace,
+                                            SkColorSpace::Gamut surfaceColorGamut,
+                                            SkColorType surfaceColorType) {
     initialize();
 
     if (!window) {
         return nullptr;
     }
 
-    VulkanSurface* surface = new VulkanSurface(colorMode, window);
+    VulkanSurface* surface = new VulkanSurface(colorMode, window, surfaceColorSpace,
+                                               surfaceColorGamut, surfaceColorType);
 
     VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo;
     memset(&surfaceCreateInfo, 0, sizeof(VkAndroidSurfaceCreateInfoKHR));

@@ -3130,6 +3130,10 @@ public class Notification implements Parcelable
         return mAppOverlayIntent;
     }
 
+    /**
+     * Returns whether the platform is allowed (by the app developer) to generate contextual actions
+     * for this notification.
+     */
     public boolean getAllowSystemGeneratedContextualActions() {
         return mAllowSystemGeneratedContextualActions;
     }
@@ -3867,6 +3871,9 @@ public class Notification implements Parcelable
          * The system UI may choose to display a heads-up notification, instead of
          * launching this intent, while the user is using the device.
          * </p>
+         * <p>Apps targeting {@link Build.VERSION_CODES#Q} and above will have to request
+         * a permission ({@link android.Manifest.permission#USE_FULL_SCREEN_INTENT}) in order to
+         * use full screen intents.</p>
          *
          * @param intent The pending intent to launch.
          * @param highPriority Passing true will cause this notification to be sent
@@ -4468,6 +4475,14 @@ public class Notification implements Parcelable
             }
         }
 
+        private void bindAlertedIcon(RemoteViews contentView, StandardTemplateParams p) {
+            contentView.setDrawableTint(
+                    R.id.alerted_icon,
+                    false /* targetBackground */,
+                    getNeutralColor(p),
+                    PorterDuff.Mode.SRC_ATOP);
+        }
+
         /**
          * @hide
          */
@@ -4759,14 +4774,16 @@ public class Notification implements Parcelable
                 TemplateBindResult result) {
             boolean largeIconShown = bindLargeIcon(contentView, p);
             boolean replyIconShown = bindReplyIcon(contentView, p);
+            boolean iconContainerVisible = largeIconShown || replyIconShown;
             contentView.setViewVisibility(R.id.right_icon_container,
-                    largeIconShown || replyIconShown ? View.VISIBLE : View.GONE);
+                    iconContainerVisible ? View.VISIBLE : View.GONE);
             int marginEnd = calculateMarginEnd(largeIconShown, replyIconShown);
             contentView.setViewLayoutMarginEnd(R.id.line1, marginEnd);
             contentView.setViewLayoutMarginEnd(R.id.text, marginEnd);
             contentView.setViewLayoutMarginEnd(R.id.progress, marginEnd);
             if (result != null) {
                 result.setIconMarginEnd(marginEnd);
+                result.setRightIconContainerVisible(iconContainerVisible);
             }
         }
 
@@ -4870,6 +4887,7 @@ public class Notification implements Parcelable
                 bindHeaderTextSecondary(contentView, p);
                 bindHeaderChronometerAndTime(contentView, p);
                 bindProfileBadge(contentView, p);
+                bindAlertedIcon(contentView, p);
             }
             bindActivePermissions(contentView, p);
             bindExpandButton(contentView, p);
@@ -6765,7 +6783,8 @@ public class Notification implements Parcelable
             mBuilder.setTextViewColorSecondary(contentView, R.id.big_text, p);
             contentView.setViewVisibility(R.id.big_text,
                     TextUtils.isEmpty(bigTextText) ? View.GONE : View.VISIBLE);
-            contentView.setBoolean(R.id.big_text, "setHasImage", mBuilder.mN.hasLargeIcon());
+            contentView.setBoolean(R.id.big_text, "setHasImage",
+                    result.isRightIconContainerVisible());
 
             return contentView;
         }
@@ -8251,7 +8270,7 @@ public class Notification implements Parcelable
                 customContent = customContent.clone();
                 remoteViews.removeAllViewsExceptId(R.id.notification_main_column, R.id.progress);
                 remoteViews.addView(R.id.notification_main_column, customContent, 0 /* index */);
-                remoteViews.setReapplyDisallowed();
+                remoteViews.addFlags(RemoteViews.FLAG_REAPPLY_DISALLOWED);
             }
             // also update the end margin if there is an image
             Resources resources = mBuilder.mContext.getResources();
@@ -8382,7 +8401,7 @@ public class Notification implements Parcelable
                 customContent.overrideTextColors(mBuilder.getPrimaryTextColor(mBuilder.mParams));
                 remoteViews.removeAllViews(id);
                 remoteViews.addView(id, customContent);
-                remoteViews.setReapplyDisallowed();
+                remoteViews.addFlags(RemoteViews.FLAG_REAPPLY_DISALLOWED);
             }
             return remoteViews;
         }
@@ -9902,6 +9921,7 @@ public class Notification implements Parcelable
      */
     private static class TemplateBindResult {
         int mIconMarginEnd;
+        boolean mRightIconContainerVisible;
 
         /**
          * Get the margin end that needs to be added to any fields that may overlap
@@ -9911,8 +9931,20 @@ public class Notification implements Parcelable
             return mIconMarginEnd;
         }
 
+        /**
+         * Is the icon container visible on the right size because of the reply button or the
+         * right icon.
+         */
+        public boolean isRightIconContainerVisible() {
+            return mRightIconContainerVisible;
+        }
+
         public void setIconMarginEnd(int iconMarginEnd) {
             this.mIconMarginEnd = iconMarginEnd;
+        }
+
+        public void setRightIconContainerVisible(boolean iconContainerVisible) {
+            mRightIconContainerVisible = iconContainerVisible;
         }
     }
 

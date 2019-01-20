@@ -21,7 +21,6 @@ import android.text.TextPaint;
 import android.text.method.TransformationMethod;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.util.Size;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -35,12 +34,14 @@ import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
+import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 
 import java.text.BreakIterator;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
@@ -61,6 +62,7 @@ public class SmartReplyView extends ViewGroup {
 
     private final SmartReplyConstants mConstants;
     private final KeyguardDismissUtil mKeyguardDismissUtil;
+    private final NotificationRemoteInputManager mRemoteInputManager;
 
     /**
      * The upper bound for the height of this view in pixels. Notifications are automatically
@@ -109,6 +111,7 @@ public class SmartReplyView extends ViewGroup {
         super(context, attrs);
         mConstants = Dependency.get(SmartReplyConstants.class);
         mKeyguardDismissUtil = Dependency.get(KeyguardDismissUtil.class);
+        mRemoteInputManager = Dependency.get(NotificationRemoteInputManager.class);
 
         mHeightUpperLimit = NotificationUtils.getFontScaledHeight(mContext,
             R.dimen.smart_reply_button_max_height);
@@ -209,13 +212,15 @@ public class SmartReplyView extends ViewGroup {
      * notification are shown.
      */
     public void addSmartActions(SmartActions smartActions,
-            SmartReplyController smartReplyController, NotificationData.Entry entry) {
+            SmartReplyController smartReplyController, NotificationData.Entry entry,
+            HeadsUpManager headsUpManager) {
         int numSmartActions = smartActions.actions.size();
         for (int n = 0; n < numSmartActions; n++) {
             Notification.Action action = smartActions.actions.get(n);
             if (action.actionIntent != null) {
                 Button actionButton = inflateActionButton(
-                        getContext(), this, n, smartActions, smartReplyController, entry);
+                        getContext(), this, n, smartActions, smartReplyController, entry,
+                        headsUpManager);
                 addView(actionButton);
             }
         }
@@ -237,12 +242,22 @@ public class SmartReplyView extends ViewGroup {
         b.setText(choice);
 
         OnDismissAction action = () -> {
+            // TODO(b/111437455): Also for EDIT_CHOICES_BEFORE_SENDING_AUTO, depending on flags.
+            if (smartReplies.remoteInput.getEditChoicesBeforeSending()
+                    == RemoteInput.EDIT_CHOICES_BEFORE_SENDING_ENABLED) {
+                entry.remoteInputText = choice;
+                mRemoteInputManager.activateRemoteInput(b,
+                        new RemoteInput[] { smartReplies.remoteInput }, smartReplies.remoteInput,
+                        smartReplies.pendingIntent);
+                return false;
+            }
+
             smartReplyController.smartReplySent(
                     entry, replyIndex, b.getText(), smartReplies.fromAssistant);
             Bundle results = new Bundle();
             results.putString(smartReplies.remoteInput.getResultKey(), choice.toString());
             Intent intent = new Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-            RemoteInput.addResultsToIntent(new RemoteInput[]{smartReplies.remoteInput}, intent,
+            RemoteInput.addResultsToIntent(new RemoteInput[] { smartReplies.remoteInput }, intent,
                     results);
             RemoteInput.setResultsSource(intent, RemoteInput.SOURCE_CHOICE);
             entry.setHasSentReply();
@@ -274,7 +289,7 @@ public class SmartReplyView extends ViewGroup {
     @VisibleForTesting
     Button inflateActionButton(Context context, ViewGroup root, int actionIndex,
             SmartActions smartActions, SmartReplyController smartReplyController,
-            NotificationData.Entry entry) {
+            NotificationData.Entry entry, HeadsUpManager headsUpManager) {
         Notification.Action action = smartActions.actions.get(actionIndex);
         Button button = (Button) LayoutInflater.from(context).inflate(
                 R.layout.smart_action_button, root, false);
@@ -282,41 +297,26 @@ public class SmartReplyView extends ViewGroup {
 
         Drawable iconDrawable = action.getIcon().loadDrawable(context);
         // Add the action icon to the Smart Action button.
-        Size newIconSize = calculateIconSizeFromSingleLineButton(context, root,
-                new Size(iconDrawable.getIntrinsicWidth(), iconDrawable.getIntrinsicHeight()));
-        iconDrawable.setBounds(0, 0, newIconSize.getWidth(), newIconSize.getHeight());
+        int newIconSize = context.getResources().getDimensionPixelSize(
+                R.dimen.smart_action_button_icon_size);
+        iconDrawable.setBounds(0, 0, newIconSize, newIconSize);
         button.setCompoundDrawables(iconDrawable, null, null, null);
 
         button.setOnClickListener(view ->
                 getActivityStarter().startPendingIntentDismissingKeyguard(
                         action.actionIntent,
-                        () -> smartReplyController.smartActionClicked(
-                                entry, actionIndex, action, smartActions.fromAssistant)));
+                        () -> {
+                            smartReplyController.smartActionClicked(
+                                    entry, actionIndex, action, smartActions.fromAssistant);
+                            headsUpManager.removeNotification(entry.key, true);
+                        }));
 
         // TODO(b/119010281): handle accessibility
 
+        // Mark this as an Action button
+        final LayoutParams lp = (LayoutParams) button.getLayoutParams();
+        lp.buttonType = SmartButtonType.ACTION;
         return button;
-    }
-
-    private static Size calculateIconSizeFromSingleLineButton(Context context, ViewGroup root,
-            Size originalIconSize) {
-        Button button = (Button) LayoutInflater.from(context).inflate(
-                R.layout.smart_action_button, root, false);
-        // Add simple text here to ensure the button displays one line of text.
-        button.setText("a");
-        return calculateIconSizeFromButtonHeight(button, originalIconSize);
-    }
-
-    // Given a button with text on a single line - we want to add an icon to that button. This
-    // method calculates the icon height to use to avoid making the button grow in height.
-    private static Size calculateIconSizeFromButtonHeight(Button button, Size originalIconSize) {
-        // A completely permissive measure spec should make the button text single-line.
-        button.measure(MEASURE_SPEC_ANY_LENGTH, MEASURE_SPEC_ANY_LENGTH);
-        int buttonHeight = button.getMeasuredHeight();
-        int newIconHeight = buttonHeight / 2;
-        int newIconWidth = (int) (originalIconSize.getWidth()
-                * ((double) newIconHeight) / originalIconSize.getHeight());
-        return new Size(newIconWidth, newIconHeight);
     }
 
     @Override
@@ -352,17 +352,25 @@ public class SmartReplyView extends ViewGroup {
         int displayedChildCount = 0;
         int buttonPaddingHorizontal = mSingleLineButtonPaddingHorizontal;
 
-        final int childCount = getChildCount();
-        for (int i = 0; i < childCount; i++) {
-            final View child = getChildAt(i);
+        // Set up a list of suggestions where actions come before replies. Note that the Buttons
+        // themselves have already been added to the view hierarchy in an order such that Smart
+        // Replies are shown before Smart Actions. The order of the list below determines which
+        // suggestions will be shown at all - only the first X elements are shown (where X depends
+        // on how much space each suggestion button needs).
+        List<View> smartActions = filterActionsOrReplies(SmartButtonType.ACTION);
+        List<View> smartReplies = filterActionsOrReplies(SmartButtonType.REPLY);
+        List<View> smartSuggestions = new ArrayList<>(smartActions);
+        smartSuggestions.addAll(smartReplies);
+        List<View> coveredSuggestions = new ArrayList<>();
+
+        for (View child : smartSuggestions) {
             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
-            if (child.getVisibility() != View.VISIBLE || !(child instanceof Button)) {
-                continue;
-            }
 
             child.setPadding(buttonPaddingHorizontal, child.getPaddingTop(),
                     buttonPaddingHorizontal, child.getPaddingBottom());
             child.measure(MEASURE_SPEC_ANY_LENGTH, heightMeasureSpec);
+
+            coveredSuggestions.add(child);
 
             final int lineCount = ((Button) child).getLineCount();
             if (lineCount < 1 || lineCount > 2) {
@@ -417,7 +425,8 @@ public class SmartReplyView extends ViewGroup {
 
                     // Mark all buttons from the last squeezing round as "failed to squeeze", so
                     // that they're re-measured without squeezing later.
-                    markButtonsWithPendingSqueezeStatusAs(LayoutParams.SQUEEZE_STATUS_FAILED, i);
+                    markButtonsWithPendingSqueezeStatusAs(
+                            LayoutParams.SQUEEZE_STATUS_FAILED, coveredSuggestions);
 
                     // The current button doesn't fit, so there's no point in measuring further
                     // buttons.
@@ -426,7 +435,8 @@ public class SmartReplyView extends ViewGroup {
 
                 // The current button fits, so mark all squeezed buttons as "successfully squeezed"
                 // to prevent them from being un-squeezed in a subsequent squeezing round.
-                markButtonsWithPendingSqueezeStatusAs(LayoutParams.SQUEEZE_STATUS_SUCCESSFUL, i);
+                markButtonsWithPendingSqueezeStatusAs(
+                        LayoutParams.SQUEEZE_STATUS_SUCCESSFUL, coveredSuggestions);
             }
 
             lp.show = true;
@@ -443,6 +453,22 @@ public class SmartReplyView extends ViewGroup {
                 resolveSize(Math.max(getSuggestedMinimumWidth(), measuredWidth), widthMeasureSpec),
                 resolveSize(Math.max(getSuggestedMinimumHeight(),
                         mPaddingTop + maxChildHeight + mPaddingBottom), heightMeasureSpec));
+    }
+
+    private List<View> filterActionsOrReplies(SmartButtonType buttonType) {
+        List<View> actions = new ArrayList<>();
+        final int childCount = getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            final View child = getChildAt(i);
+            final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+            if (child.getVisibility() != View.VISIBLE || !(child instanceof Button)) {
+                continue;
+            }
+            if (lp.buttonType == buttonType) {
+                actions.add(child);
+            }
+        }
+        return actions;
     }
 
     private void resetButtonsLayoutParams() {
@@ -615,9 +641,9 @@ public class SmartReplyView extends ViewGroup {
         }
     }
 
-    private void markButtonsWithPendingSqueezeStatusAs(int squeezeStatus, int maxChildIndex) {
-        for (int i = 0; i <= maxChildIndex; i++) {
-            final View child = getChildAt(i);
+    private void markButtonsWithPendingSqueezeStatusAs(
+            int squeezeStatus, List<View> coveredChildren) {
+        for (View child : coveredChildren) {
             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
             if (lp.squeezeStatus == LayoutParams.SQUEEZE_STATUS_PENDING) {
                 lp.squeezeStatus = squeezeStatus;
@@ -712,6 +738,11 @@ public class SmartReplyView extends ViewGroup {
         return mActivityStarter;
     }
 
+    private enum SmartButtonType {
+        REPLY,
+        ACTION
+    }
+
     @VisibleForTesting
     static class LayoutParams extends ViewGroup.LayoutParams {
 
@@ -737,6 +768,7 @@ public class SmartReplyView extends ViewGroup {
 
         private boolean show = false;
         private int squeezeStatus = SQUEEZE_STATUS_NONE;
+        private SmartButtonType buttonType = SmartButtonType.REPLY;
 
         private LayoutParams(Context c, AttributeSet attrs) {
             super(c, attrs);

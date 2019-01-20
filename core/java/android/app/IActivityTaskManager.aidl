@@ -119,6 +119,8 @@ interface IActivityTaskManager {
             in Intent intent, in String resolvedType, in IBinder resultTo, in String resultWho,
             int requestCode, int flags, in ProfilerInfo profilerInfo, in Bundle options,
             IBinder permissionToken, boolean ignoreTargetSecurity, int userId);
+    boolean isActivityStartAllowedOnDisplay(int displayId, in Intent intent, in String resolvedType,
+            int userId);
 
     void unhandledBack();
     boolean finishActivity(in IBinder token, int code, in Intent data, int finishTask);
@@ -450,4 +452,10 @@ interface IActivityTaskManager {
      * Clears launch params for given packages.
      */
     void clearLaunchParamsForPackages(in List<String> packageNames);
+
+    /**
+     * Makes the display with the given id a single task instance display. I.e the display can only
+     * contain one task.
+     */
+    void setDisplayToSingleTaskInstance(int displayId);
 }

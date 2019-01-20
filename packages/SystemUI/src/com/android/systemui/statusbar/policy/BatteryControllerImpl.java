@@ -30,7 +30,6 @@ import android.util.Log;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.fuelgauge.BatterySaverUtils;
 import com.android.settingslib.utils.PowerUtil;
-import com.android.systemui.Dependency;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.Estimate;
 
@@ -39,10 +38,14 @@ import java.io.PrintWriter;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Default implementation of a {@link BatteryController}. This controller monitors for battery
  * level change events that are broadcasted by the system.
  */
+@Singleton
 public class BatteryControllerImpl extends BroadcastReceiver implements BatteryController {
     private static final String TAG = "BatteryController";
 
@@ -51,7 +54,7 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private static final int UPDATE_GRANULARITY_MSEC = 1000 * 60;
 
-    private final EnhancedEstimates mEstimates = Dependency.get(EnhancedEstimates.class);
+    private final EnhancedEstimates mEstimates;
     private final ArrayList<BatteryController.BatteryStateChangeCallback> mChangeCallbacks = new ArrayList<>();
     private final PowerManager mPowerManager;
     private final Handler mHandler;
@@ -68,15 +71,18 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
     private Estimate mEstimate;
     private long mLastEstimateTimestamp = -1;
 
-    public BatteryControllerImpl(Context context) {
-        this(context, context.getSystemService(PowerManager.class));
+    @Inject
+    public BatteryControllerImpl(Context context, EnhancedEstimates enhancedEstimates) {
+        this(context, enhancedEstimates, context.getSystemService(PowerManager.class));
     }
 
     @VisibleForTesting
-    BatteryControllerImpl(Context context, PowerManager powerManager) {
+    BatteryControllerImpl(Context context, EnhancedEstimates enhancedEstimates,
+            PowerManager powerManager) {
         mContext = context;
         mHandler = new Handler();
         mPowerManager = powerManager;
+        mEstimates = enhancedEstimates;
 
         registerReceiver();
         updatePowerSave();

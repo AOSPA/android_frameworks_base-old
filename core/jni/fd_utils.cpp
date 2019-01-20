@@ -152,7 +152,7 @@ class FileDescriptorInfo {
   const bool is_sock;
 
  private:
-  FileDescriptorInfo(int fd);
+  explicit FileDescriptorInfo(int fd);
 
   FileDescriptorInfo(struct stat stat, const std::string& file_path, int fd, int open_flags,
                      int fd_flags, int fs_flags, off_t offset);
@@ -331,11 +331,13 @@ bool FileDescriptorInfo::ReopenOrDetach(std::string* error_msg) const {
     return false;
   }
 
-  if (TEMP_FAILURE_RETRY(dup2(new_fd, fd)) == -1) {
+  int dupFlags = (fd_flags & FD_CLOEXEC) ? O_CLOEXEC : 0;
+  if (TEMP_FAILURE_RETRY(dup3(new_fd, fd, dupFlags)) == -1) {
     close(new_fd);
-    *error_msg = android::base::StringPrintf("Failed dup2(%d, %d) (%s): %s",
+    *error_msg = android::base::StringPrintf("Failed dup3(%d, %d, %d) (%s): %s",
                                              fd,
                                              new_fd,
+                                             dupFlags,
                                              file_path.c_str(),
                                              strerror(errno));
     return false;

@@ -312,7 +312,7 @@ public final class MediaSessionManager {
     private void dispatchMediaKeyEventInternal(boolean asSystemService, @NonNull KeyEvent keyEvent,
             boolean needWakeLock) {
         try {
-            mService.dispatchMediaKeyEvent(mContext.getOpPackageName(), asSystemService, keyEvent,
+            mService.dispatchMediaKeyEvent(mContext.getPackageName(), asSystemService, keyEvent,
                     needWakeLock);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send key event.", e);
@@ -348,8 +348,8 @@ public final class MediaSessionManager {
     private void dispatchVolumeKeyEventInternal(boolean asSystemService, @NonNull KeyEvent keyEvent,
             int stream, boolean musicOnly) {
         try {
-            mService.dispatchVolumeKeyEvent(mContext.getOpPackageName(), asSystemService, keyEvent,
-                    stream, musicOnly);
+            mService.dispatchVolumeKeyEvent(mContext.getPackageName(), mContext.getOpPackageName(),
+                    asSystemService, keyEvent, stream, musicOnly);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send volume key event.", e);
         }
@@ -369,8 +369,8 @@ public final class MediaSessionManager {
      */
     public void dispatchAdjustVolume(int suggestedStream, int direction, int flags) {
         try {
-            mService.dispatchAdjustVolume(mContext.getOpPackageName(), suggestedStream, direction,
-                    flags);
+            mService.dispatchAdjustVolume(mContext.getPackageName(), mContext.getOpPackageName(),
+                    suggestedStream, direction, flags);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send adjust volume.", e);
         }
@@ -620,12 +620,24 @@ public final class MediaSessionManager {
         private final int mUid;
         private final IBinder mCallerBinder;
 
+        /**
+         * Create a new remote user information.
+         *
+         * @param packageName The package name of the remote user
+         * @param pid The pid of the remote user
+         * @param uid The uid of the remote user
+         */
         public RemoteUserInfo(@NonNull String packageName, int pid, int uid) {
             this(packageName, pid, uid, null);
         }
 
         /**
-         * @hide
+         * Create a new remote user information.
+         *
+         * @param packageName The package name of the remote user
+         * @param pid The pid of the remote user
+         * @param uid The uid of the remote user
+         * @param callerBinder The binder of the remote user. Can be {@code null}.
          */
         public RemoteUserInfo(String packageName, int pid, int uid, IBinder callerBinder) {
             mPackageName = packageName;

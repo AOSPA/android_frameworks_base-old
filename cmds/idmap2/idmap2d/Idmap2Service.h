@@ -25,8 +25,8 @@
 
 #include "android/os/BnIdmap2.h"
 
-namespace android {
-namespace os {
+namespace android::os {
+
 class Idmap2Service : public BinderService<Idmap2Service>, public BnIdmap2 {
  public:
   static char const* getServiceName() {
@@ -39,11 +39,14 @@ class Idmap2Service : public BinderService<Idmap2Service>, public BnIdmap2 {
   binder::Status removeIdmap(const std::string& overlay_apk_path, int32_t user_id,
                              bool* _aidl_return);
 
+  binder::Status verifyIdmap(const std::string& overlay_apk_path, int32_t user_id,
+                             bool* _aidl_return);
+
   binder::Status createIdmap(const std::string& target_apk_path,
                              const std::string& overlay_apk_path, int32_t user_id,
                              std::unique_ptr<std::string>* _aidl_return);
 };
-}  // namespace os
-}  // namespace android
+
+}  // namespace android::os
 
 #endif  // IDMAP2_IDMAP2D_IDMAP2SERVICE_H_

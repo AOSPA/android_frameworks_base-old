@@ -408,11 +408,14 @@
     <!-- Content description of the data connection type LTE+. [CHAR LIMIT=NONE] -->
     <string name="data_connection_lte_plus">LTE+</string>
 
+    <!-- Content description of the data connection type 5G. [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5g" translate="false">5G</string>
+
+    <!-- Content description of the data connection type 5G+. [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5g_plus" translate="false">5G+</string>
+
     <!-- Content description of the data connection type CDMA. [CHAR LIMIT=NONE] -->
     <string name="data_connection_cdma">1X</string>
-
-    <!-- Content description of the data connection type 5G. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g">5G</string>
 
     <!-- Content description of the data connection type 5G Basic. [CHAR LIMIT=NONE] -->
     <string name="data_connection_5g_basic">5GBasic</string>
@@ -612,6 +615,10 @@
     <string name="accessibility_quick_settings_data_saver_changed_off">Data Saver turned off.</string>
     <!-- Announcement made when the Data Saver changes to on (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_data_saver_changed_on">Data Saver turned on.</string>
+    <!-- Announcement made when the Sensor Privacy changes to off (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_sensor_privacy_changed_off">Sensor Privacy turned off.</string>
+    <!-- Announcement made when the Sensor Privacy changes to on (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_sensor_privacy_changed_on">Sensor Privacy turned on.</string>
 
     <!-- Content description of the display brightness slider (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_brightness">Display brightness</string>
@@ -716,6 +723,8 @@
     <string name="quick_settings_bluetooth_secondary_label_headset">Headset</string>
     <!-- QuickSettings: Bluetooth secondary label for an input/IO device being connected [CHAR LIMIT=20]-->
     <string name="quick_settings_bluetooth_secondary_label_input">Input</string>
+    <!-- QuickSettings: Bluetooth secondary label for a Hearing Aids device being connected [CHAR LIMIT=20]-->
+    <string name="quick_settings_bluetooth_secondary_label_hearing_aids">Hearing Aids</string>
     <!-- QuickSettings: Bluetooth secondary label shown when bluetooth is being enabled [CHAR LIMIT=NONE] -->
     <string name="quick_settings_bluetooth_secondary_label_transient">Turning on&#8230;</string>
     <!-- QuickSettings: Brightness [CHAR LIMIT=NONE] -->
@@ -2337,4 +2346,12 @@
         <item quantity="one"><xliff:g id="num_apps" example="1">%d</xliff:g> other app</item>
         <item quantity="other"><xliff:g id="num_apps" example="3">%d</xliff:g> other apps</item>
     </plurals>
+    <!-- Text for the quick setting tile for sensor privacy [CHAR LIMIT=30] -->
+    <string name="sensor_privacy_mode">Sensors off</string>
+
+    <!-- Name for device services grouping system uid apps in Ongoing Privacy Dialog [CHAR_LIMIT=NONE] -->
+    <string name="device_services">Device Services</string>
+
+    <!-- What to show on the ambient display player when song doesn't have a title. [CHAR LIMIT=20] -->
+    <string name="music_controls_no_title">No title</string>
 </resources>

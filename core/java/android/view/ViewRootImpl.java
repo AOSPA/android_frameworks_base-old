@@ -125,6 +125,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 
@@ -171,7 +172,12 @@ public final class ViewRootImpl implements ViewParent,
      * fully migrated over.
      */
     private static final String USE_NEW_INSETS_PROPERTY = "persist.wm.new_insets";
-    private static final boolean USE_NEW_INSETS =
+
+    /**
+     * @see #USE_NEW_INSETS_PROPERTY
+     * @hide
+     */
+    public static final boolean USE_NEW_INSETS =
             SystemProperties.getBoolean(USE_NEW_INSETS_PROPERTY, false);
 
     /**
@@ -198,8 +204,6 @@ public final class ViewRootImpl implements ViewParent,
 
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList();
     static boolean sFirstDrawComplete = false;
-
-    private FrameDrawingCallback mNextRtFrameCallback;
 
     /**
      * Callback for notifying about global configuration changes.
@@ -463,7 +467,7 @@ public final class ViewRootImpl implements ViewParent,
     final DisplayCutout.ParcelableWrapper mPendingDisplayCutout =
             new DisplayCutout.ParcelableWrapper(DisplayCutout.NO_CUTOUT);
     boolean mPendingAlwaysConsumeNavBar;
-    private InsetsState mPendingInsets = new InsetsState();
+    private InsetsState mTempInsets = new InsetsState();
     final ViewTreeObserver.InternalInsetsInfo mLastGivenInsets
             = new ViewTreeObserver.InternalInsetsInfo();
 
@@ -544,6 +548,8 @@ public final class ViewRootImpl implements ViewParent,
 
     private boolean mNeedsRendererSetup;
 
+    private final InputEventCompatProcessor mInputCompatProcessor;
+
     /**
      * Consistency verifier for debugging purposes.
      */
@@ -551,7 +557,7 @@ public final class ViewRootImpl implements ViewParent,
             InputEventConsistencyVerifier.isInstrumentationEnabled() ?
                     new InputEventConsistencyVerifier(this, 0) : null;
 
-    private final InsetsController mInsetsController = new InsetsController();
+    private final InsetsController mInsetsController = new InsetsController(this);
 
     static final class SystemUiVisibilityInfo {
         int seq;
@@ -601,6 +607,25 @@ public final class ViewRootImpl implements ViewParent,
         mFallbackEventHandler = new PhoneFallbackEventHandler(context);
         mChoreographer = Choreographer.getInstance();
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
+
+        String processorOverrideName = context.getResources().getString(
+                                    R.string.config_inputEventCompatProcessorOverrideClassName);
+        if (processorOverrideName.isEmpty()) {
+            // No compatibility processor override, using default.
+            mInputCompatProcessor = new InputEventCompatProcessor(context);
+        } else {
+            InputEventCompatProcessor compatProcessor = null;
+            try {
+                final Class<? extends InputEventCompatProcessor> klass =
+                        (Class<? extends InputEventCompatProcessor>) Class.forName(
+                                processorOverrideName);
+                compatProcessor = klass.getConstructor(Context.class).newInstance(context);
+            } catch (Exception e) {
+                Log.e(TAG, "Unable to create the InputEventCompatProcessor. ", e);
+            } finally {
+                mInputCompatProcessor = compatProcessor;
+            }
+        }
 
         if (!sCompatibilityDone) {
             sAlwaysAssignFocus = mTargetSdkVersion < Build.VERSION_CODES.P;
@@ -826,7 +851,7 @@ public final class ViewRootImpl implements ViewParent,
                             getHostVisibility(), mDisplay.getDisplayId(), mTmpFrame,
                             mAttachInfo.mContentInsets, mAttachInfo.mStableInsets,
                             mAttachInfo.mOutsets, mAttachInfo.mDisplayCutout, mInputChannel,
-                            mInsetsController.getState());
+                            mTempInsets);
                     setFrame(mTmpFrame);
                 } catch (RemoteException e) {
                     mAdded = false;
@@ -854,7 +879,7 @@ public final class ViewRootImpl implements ViewParent,
                 mAttachInfo.mAlwaysConsumeNavBar =
                         (res & WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_NAV_BAR) != 0;
                 mPendingAlwaysConsumeNavBar = mAttachInfo.mAlwaysConsumeNavBar;
-                mPendingInsets = mInsetsController.getState();
+                mInsetsController.onStateChanged(mTempInsets);
                 if (DEBUG_LAYOUT) Log.v(mTag, "Added window " + mWindow);
                 if (res < WindowManagerGlobal.ADD_OKAY) {
                     mAttachInfo.mRootView = null;
@@ -1055,7 +1080,9 @@ public final class ViewRootImpl implements ViewParent,
      * @param callback The callback to register.
      */
     public void registerRtFrameCallback(FrameDrawingCallback callback) {
-        mNextRtFrameCallback = callback;
+        if (mAttachInfo.mThreadedRenderer != null) {
+            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(callback);
+        }
     }
 
     @UnsupportedAppUsage
@@ -1343,6 +1370,19 @@ public final class ViewRootImpl implements ViewParent,
         checkThread();
         mApplyInsetsRequested = true;
         scheduleTraversals();
+    }
+
+    void notifyInsetsChanged() {
+        if (!USE_NEW_INSETS) {
+            return;
+        }
+        mApplyInsetsRequested = true;
+
+        // If this changes during traversal, no need to schedule another one as it will dispatch it
+        // during the current traversal.
+        if (!mIsInTraversal) {
+            scheduleTraversals();
+        }
     }
 
     @Override
@@ -1844,6 +1884,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void dispatchApplyInsets(View host) {
+        Trace.traceBegin(Trace.TRACE_TAG_VIEW, "dispatchApplyInsets");
         WindowInsets insets = getWindowInsets(true /* forceConstruct */);
         final boolean dispatchCutout = (mWindowAttributes.layoutInDisplayCutoutMode
                 == LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS);
@@ -1853,6 +1894,11 @@ public final class ViewRootImpl implements ViewParent,
             insets = insets.consumeDisplayCutout();
         }
         host.dispatchApplyWindowInsets(insets);
+        Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+    }
+
+    InsetsController getInsetsController() {
+        return mInsetsController;
     }
 
     private static boolean shouldUseDisplaySize(final WindowManager.LayoutParams lp) {
@@ -1943,7 +1989,6 @@ public final class ViewRootImpl implements ViewParent,
             // PixelFormat.hasAlpha(lp.format) || lp.format == PixelFormat.RGBX_8888
             // However, windows are now always 32 bits by default, so choose 32 bits
             mAttachInfo.mUse32BitDrawingCache = true;
-            mAttachInfo.mHasWindowFocus = false;
             mAttachInfo.mWindowVisibility = viewVisibility;
             mAttachInfo.mRecomputeGlobalAttributes = false;
             mLastConfigurationFromResources.setTo(config);
@@ -2025,9 +2070,6 @@ public final class ViewRootImpl implements ViewParent,
                     insetsChanged = true;
                 }
                 if (mPendingAlwaysConsumeNavBar != mAttachInfo.mAlwaysConsumeNavBar) {
-                    insetsChanged = true;
-                }
-                if (!mPendingInsets.equals(mInsetsController.getState())) {
                     insetsChanged = true;
                 }
                 if (lp.width == ViewGroup.LayoutParams.WRAP_CONTENT
@@ -2223,8 +2265,6 @@ public final class ViewRootImpl implements ViewParent,
                         mAttachInfo.mStableInsets);
                 final boolean cutoutChanged = !mPendingDisplayCutout.equals(
                         mAttachInfo.mDisplayCutout);
-                final boolean insetsStateChanged = !mPendingInsets.equals(
-                        mInsetsController.getState());
                 final boolean outsetsChanged = !mPendingOutsets.equals(mAttachInfo.mOutsets);
                 final boolean surfaceSizeChanged = (relayoutResult
                         & WindowManagerGlobal.RELAYOUT_RES_SURFACE_RESIZED) != 0;
@@ -2260,10 +2300,6 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 if (alwaysConsumeNavBarChanged) {
                     mAttachInfo.mAlwaysConsumeNavBar = mPendingAlwaysConsumeNavBar;
-                    contentInsetsChanged = true;
-                }
-                if (insetsStateChanged) {
-                    mInsetsController.setState(mPendingInsets);
                     contentInsetsChanged = true;
                 }
                 if (contentInsetsChanged || mLastSystemUiVisibility !=
@@ -2737,7 +2773,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    private void handleWindowFocusChanged(boolean reportToClient) {
+    private void handleWindowFocusChanged() {
         final boolean hasWindowFocus;
         final boolean inTouchMode;
         synchronized (this) {
@@ -2772,9 +2808,8 @@ public final class ViewRootImpl implements ViewParent,
                         } catch (RemoteException ex) {
                         }
                         // Retry in a bit.
-                        final Message msg = mHandler.obtainMessage(MSG_WINDOW_FOCUS_CHANGED);
-                        msg.arg1 = reportToClient ? 1 : 0;
-                        mHandler.sendMessageDelayed(msg, 500);
+                        mHandler.sendMessageDelayed(mHandler.obtainMessage(
+                                MSG_WINDOW_FOCUS_CHANGED), 500);
                         return;
                     }
                 }
@@ -2791,15 +2826,8 @@ public final class ViewRootImpl implements ViewParent,
             }
             if (mView != null) {
                 mAttachInfo.mKeyDispatchState.reset();
-                // We dispatch onWindowFocusChanged to child view only when window is gaining /
-                // losing focus.
-                // If the focus is updated from top display change but window focus on the display
-                // remains unchanged, will not callback onWindowFocusChanged again since it may
-                // be redundant & can affect the state when it callbacks.
-                if (reportToClient) {
-                    mView.dispatchWindowFocusChanged(hasWindowFocus);
-                    mAttachInfo.mTreeObserver.dispatchOnWindowFocusChange(hasWindowFocus);
-                }
+                mView.dispatchWindowFocusChanged(hasWindowFocus);
+                mAttachInfo.mTreeObserver.dispatchOnWindowFocusChange(hasWindowFocus);
                 if (mAttachInfo.mTooltipHost != null) {
                     mAttachInfo.mTooltipHost.hideTooltip();
                 }
@@ -3541,10 +3569,7 @@ public final class ViewRootImpl implements ViewParent,
 
                 useAsyncReport = true;
 
-                // draw(...) might invoke post-draw, which might register the next callback already.
-                final FrameDrawingCallback callback = mNextRtFrameCallback;
-                mNextRtFrameCallback = null;
-                mAttachInfo.mThreadedRenderer.draw(mView, mAttachInfo, this, callback);
+                mAttachInfo.mThreadedRenderer.draw(mView, mAttachInfo, this);
             } else {
                 // If we get here with a disabled & requested hardware renderer, something went
                 // wrong (an invalidate posted right before we destroyed the hardware surface
@@ -4223,6 +4248,7 @@ public final class ViewRootImpl implements ViewParent,
     private final static int MSG_POINTER_CAPTURE_CHANGED = 28;
     private final static int MSG_DRAW_FINISHED = 29;
     private final static int MSG_INSETS_CHANGED = 30;
+    private final static int MSG_INSETS_CONTROL_CHANGED = 31;
 
     final class ViewRootHandler extends Handler {
         @Override
@@ -4384,13 +4410,14 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     break;
                 case MSG_INSETS_CHANGED:
-                    mPendingInsets = (InsetsState) msg.obj;
-
-                    // TODO: Full traversal not needed here
-                    if (USE_NEW_INSETS) {
-                        requestLayout();
-                    }
+                    mInsetsController.onStateChanged((InsetsState) msg.obj);
                     break;
+                case MSG_INSETS_CONTROL_CHANGED: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    mInsetsController.onControlsChanged((InsetsSourceControl[]) args.arg2);
+                    mInsetsController.onStateChanged((InsetsState) args.arg1);
+                    break;
+                }
                 case MSG_WINDOW_MOVED:
                     if (mAdded) {
                         final int w = mWinFrame.width();
@@ -4408,7 +4435,7 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     break;
                 case MSG_WINDOW_FOCUS_CHANGED: {
-                    handleWindowFocusChanged(msg.arg1 != 0 /* reportToClient */);
+                    handleWindowFocusChanged();
                 } break;
                 case MSG_DIE:
                     doDie();
@@ -6798,7 +6825,7 @@ public final class ViewRootImpl implements ViewParent,
                 insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0, frameNumber,
                 mTmpFrame, mPendingOverscanInsets, mPendingContentInsets, mPendingVisibleInsets,
                 mPendingStableInsets, mPendingOutsets, mPendingBackDropFrame, mPendingDisplayCutout,
-                mPendingMergedConfiguration, mSurface, mPendingInsets);
+                mPendingMergedConfiguration, mSurface, mTempInsets);
 
         mPendingAlwaysConsumeNavBar =
                 (relayoutResult & WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_NAV_BAR) != 0;
@@ -6815,7 +6842,7 @@ public final class ViewRootImpl implements ViewParent,
             mTranslator.translateRectInScreenToAppWindow(mPendingStableInsets);
         }
         setFrame(mTmpFrame);
-
+        mInsetsController.onStateChanged(mTempInsets);
         return relayoutResult;
     }
 
@@ -7140,6 +7167,14 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.obtainMessage(MSG_INSETS_CHANGED, insetsState).sendToTarget();
     }
 
+    private void dispatchInsetsControlChanged(InsetsState insetsState,
+            InsetsSourceControl[] activeControls) {
+        SomeArgs args = SomeArgs.obtain();
+        args.arg1 = insetsState;
+        args.arg2 = activeControls;
+        mHandler.obtainMessage(MSG_INSETS_CONTROL_CHANGED, args).sendToTarget();
+    }
+
     public void dispatchMoved(int newX, int newY) {
         if (DEBUG_LAYOUT) Log.v(mTag, "Window moved " + this + ": newX=" + newX + " newY=" + newY);
         if (mTranslator != null) {
@@ -7171,6 +7206,7 @@ public final class ViewRootImpl implements ViewParent,
         public static final int FLAG_FINISHED_HANDLED = 1 << 3;
         public static final int FLAG_RESYNTHESIZED = 1 << 4;
         public static final int FLAG_UNHANDLED = 1 << 5;
+        public static final int FLAG_MODIFIED_FOR_COMPATIBILITY = 1 << 6;
 
         public QueuedInputEvent mNext;
 
@@ -7263,7 +7299,6 @@ public final class ViewRootImpl implements ViewParent,
     @UnsupportedAppUsage
     void enqueueInputEvent(InputEvent event,
             InputEventReceiver receiver, int flags, boolean processImmediately) {
-        adjustInputEventForCompatibility(event);
         QueuedInputEvent q = obtainQueuedInputEvent(event, receiver, flags);
 
         // Always enqueue the input event in order, regardless of its time stamp.
@@ -7353,7 +7388,7 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         if (stage != null) {
-            handleWindowFocusChanged(true /* reportToClient */);
+            handleWindowFocusChanged();
             stage.deliver(q);
         } else {
             finishInputEvent(q);
@@ -7366,25 +7401,27 @@ public final class ViewRootImpl implements ViewParent,
 
         if (q.mReceiver != null) {
             boolean handled = (q.mFlags & QueuedInputEvent.FLAG_FINISHED_HANDLED) != 0;
-            q.mReceiver.finishInputEvent(q.mEvent, handled);
+            boolean modified = (q.mFlags & QueuedInputEvent.FLAG_MODIFIED_FOR_COMPATIBILITY) != 0;
+            if (modified) {
+                Trace.traceBegin(Trace.TRACE_TAG_VIEW, "processInputEventBeforeFinish");
+                InputEvent processedEvent;
+                try {
+                    processedEvent =
+                            mInputCompatProcessor.processInputEventBeforeFinish(q.mEvent);
+                } finally {
+                    Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                }
+                if (processedEvent != null) {
+                    q.mReceiver.finishInputEvent(processedEvent, handled);
+                }
+            } else {
+                q.mReceiver.finishInputEvent(q.mEvent, handled);
+            }
         } else {
             q.mEvent.recycleIfNeededAfterDispatch();
         }
 
         recycleQueuedInputEvent(q);
-    }
-
-    private void adjustInputEventForCompatibility(InputEvent e) {
-        if (mTargetSdkVersion < Build.VERSION_CODES.M && e instanceof MotionEvent) {
-            MotionEvent motion = (MotionEvent) e;
-            final int mask =
-                MotionEvent.BUTTON_STYLUS_PRIMARY | MotionEvent.BUTTON_STYLUS_SECONDARY;
-            final int buttonState = motion.getButtonState();
-            final int compatButtonState = (buttonState & mask) >> 4;
-            if (compatButtonState != 0) {
-                motion.setButtonState(buttonState | compatButtonState);
-            }
-        }
     }
 
     static boolean isTerminalInputEvent(InputEvent event) {
@@ -7457,7 +7494,28 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         public void onInputEvent(InputEvent event) {
-            enqueueInputEvent(event, this, 0, true);
+            Trace.traceBegin(Trace.TRACE_TAG_VIEW, "processInputEventForCompatibility");
+            List<InputEvent> processedEvents;
+            try {
+                processedEvents =
+                    mInputCompatProcessor.processInputEventForCompatibility(event);
+            } finally {
+                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+            }
+            if (processedEvents != null) {
+                if (processedEvents.isEmpty()) {
+                    // InputEvent consumed by mInputCompatProcessor
+                    finishInputEvent(event, true);
+                } else {
+                    for (int i = 0; i < processedEvents.size(); i++) {
+                        enqueueInputEvent(
+                                processedEvents.get(i), this,
+                                QueuedInputEvent.FLAG_MODIFIED_FOR_COMPATIBILITY, true);
+                    }
+                }
+            } else {
+                enqueueInputEvent(event, this, 0, true);
+            }
         }
 
         @Override
@@ -7670,11 +7728,6 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {
-        windowFocusChanged(hasFocus, inTouchMode, true /* reportToClient */);
-    }
-
-    public void windowFocusChanged(boolean hasFocus, boolean inTouchMode,
-            boolean reportToClient) {
         synchronized (this) {
             mWindowFocusChanged = true;
             mUpcomingWindowFocus = hasFocus;
@@ -7682,7 +7735,6 @@ public final class ViewRootImpl implements ViewParent,
         }
         Message msg = Message.obtain();
         msg.what = MSG_WINDOW_FOCUS_CHANGED;
-        msg.arg1 = reportToClient ? 1 : 0;
         mHandler.sendMessage(msg);
     }
 
@@ -8211,6 +8263,15 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
+        public void insetsControlChanged(InsetsState insetsState,
+                InsetsSourceControl[] activeControls) {
+            final ViewRootImpl viewAncestor = mViewAncestor.get();
+            if (viewAncestor != null) {
+                viewAncestor.dispatchInsetsControlChanged(insetsState, activeControls);
+            }
+        }
+
+        @Override
         public void moved(int newX, int newY) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
@@ -8235,11 +8296,10 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void windowFocusChanged(boolean hasFocus, boolean inTouchMode,
-                boolean reportToClient) {
+        public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
-                viewAncestor.windowFocusChanged(hasFocus, inTouchMode, reportToClient);
+                viewAncestor.windowFocusChanged(hasFocus, inTouchMode);
             }
         }
 

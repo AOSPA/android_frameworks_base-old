@@ -33,6 +33,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.content.ContentResolver;
@@ -52,7 +53,6 @@ import android.platform.test.annotations.Presubmit;
 import android.provider.Settings;
 import android.view.Surface;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.util.test.FakeSettingsProvider;
@@ -81,7 +81,6 @@ import java.util.concurrent.TimeUnit;
  */
 @SmallTest
 @Presubmit
-@FlakyTest(detail = "Confirm stable in post-submit before removing")
 public class DisplayRotationTests {
     private static final long UI_HANDLER_WAIT_TIMEOUT_MS = 50;
 
@@ -236,7 +235,7 @@ public class DisplayRotationTests {
     }
 
     @Test
-    public void testReturnsSidesays_UserRotationLocked_IncompatibleAppRequest()
+    public void testReturnsSideways_UserRotationLocked_IncompatibleAppRequest()
             throws Exception {
         mBuilder.build();
         configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false, false);
@@ -604,6 +603,26 @@ public class DisplayRotationTests {
 
         assertEquals(Surface.ROTATION_90, mTarget.rotationForOrientation(
                 SCREEN_ORIENTATION_UNSPECIFIED, Surface.ROTATION_0));
+    }
+
+    // ========================
+    // Non-rotation API Tests
+    // ========================
+    @Test
+    public void testRespectsAppRequestedOrientationByDefault() throws Exception {
+        mBuilder.build();
+
+        assertTrue("Display rotation should respect app requested orientation by"
+                + " default.", mTarget.respectAppRequestedOrientation());
+    }
+
+    @Test
+    public void testNotRespectAppRequestedOrientation_FixedToUserRotation() throws Exception {
+        mBuilder.build();
+        mTarget.setFixedToUserRotation(true);
+
+        assertFalse("Display rotation shouldn't respect app requested orientation if"
+                + " fixed to user rotation.", mTarget.respectAppRequestedOrientation());
     }
 
     /**

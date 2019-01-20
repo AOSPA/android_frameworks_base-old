@@ -16,6 +16,7 @@
 
 package android.net.wifi;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -26,11 +27,13 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.net.wifi.WifiScanner.PnoSettings;
 import android.net.wifi.WifiScanner.PnoSettings.PnoNetwork;
+import android.net.wifi.WifiScanner.ScanData;
 import android.net.wifi.WifiScanner.ScanSettings;
 import android.os.Handler;
 import android.os.Parcel;
 import android.os.test.TestLooper;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.util.test.BidirectionalAsyncChannelServer;
 
@@ -41,7 +44,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Arrays;
-
 
 /**
  * Unit tests for {@link android.net.wifi.WifiScanner}.
@@ -203,4 +205,29 @@ public class WifiScannerTest {
         assertNotNull(pnoNetwork.frequencies);
     }
 
+    /**
+     * Verify parcel read/write for ScanData.
+     */
+    @Test
+    public void verifyScanDataParcel() throws Exception {
+        ScanData writeScanData = new ScanData(2, 0, 3,
+                WifiScanner.WIFI_BAND_BOTH_WITH_DFS, new ScanResult[0]);
+
+        ScanData readScanData = parcelWriteRead(writeScanData);
+        assertEquals(writeScanData.getId(), readScanData.getId());
+        assertEquals(writeScanData.getFlags(), readScanData.getFlags());
+        assertEquals(writeScanData.getBucketsScanned(), readScanData.getBucketsScanned());
+        assertEquals(writeScanData.getBandScanned(), readScanData.getBandScanned());
+        assertArrayEquals(writeScanData.getResults(), readScanData.getResults());
+    }
+
+    /**
+     * Write the provided {@link ScanData} to a parcel and deserialize it.
+     */
+    private static ScanData parcelWriteRead(ScanData writeScanData) throws Exception {
+        Parcel parcel = Parcel.obtain();
+        writeScanData.writeToParcel(parcel, 0);
+        parcel.setDataPosition(0);    // Rewind data position back to the beginning for read.
+        return ScanData.CREATOR.createFromParcel(parcel);
+    }
 }

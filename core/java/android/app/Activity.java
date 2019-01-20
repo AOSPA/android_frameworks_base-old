@@ -121,8 +121,7 @@ import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.autofill.AutofillPopupWindow;
 import android.view.autofill.IAutofillWindowPresenter;
-import android.view.intelligence.ContentCaptureEvent;
-import android.view.intelligence.IntelligenceManager;
+import android.view.contentcapture.ContentCaptureManager;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
@@ -824,8 +823,8 @@ public class Activity extends ContextThemeWrapper
     /** The autofill manager. Always access via {@link #getAutofillManager()}. */
     @Nullable private AutofillManager mAutofillManager;
 
-    /** The screen observation manager. Always access via {@link #getIntelligenceManager()}. */
-    @Nullable private IntelligenceManager mIntelligenceManager;
+    /** The content capture manager. Always access via {@link #getContentCaptureManager()}. */
+    @Nullable private ContentCaptureManager mContentCaptureManager;
 
     private final ArrayList<Application.ActivityLifecycleCallbacks> mActivityLifecycleCallbacks =
             new ArrayList<Application.ActivityLifecycleCallbacks>();
@@ -849,7 +848,7 @@ public class Activity extends ContextThemeWrapper
     @UnsupportedAppUsage
     /*package*/ boolean mWindowAdded = false;
     /*package*/ boolean mVisibleFromServer = false;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     /*package*/ boolean mVisibleFromClient = true;
     /*package*/ ActionBar mActionBar = null;
     private boolean mEnableDefaultActionBarUp;
@@ -924,6 +923,9 @@ public class Activity extends ContextThemeWrapper
     private int mLastAutofillId = View.LAST_APP_AUTOFILL_ID;
 
     private AutofillPopupWindow mAutofillPopupWindow;
+
+    /** @hide */
+    boolean mEnterAnimationComplete;
 
     private static native String getDlWarning();
 
@@ -1016,39 +1018,50 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * (Creates, sets, and ) returns the intelligence manager
+     * (Creates, sets, and ) returns the content capture manager
      *
-     * @return The intelligence manager
+     * @return The content capture manager
      */
-    @NonNull private IntelligenceManager getIntelligenceManager() {
-        if (mIntelligenceManager == null) {
-            mIntelligenceManager = getSystemService(IntelligenceManager.class);
+    @NonNull private ContentCaptureManager getContentCaptureManager() {
+        if (mContentCaptureManager == null) {
+            mContentCaptureManager = getSystemService(ContentCaptureManager.class);
         }
-        return mIntelligenceManager;
+        return mContentCaptureManager;
     }
 
-    private void notifyIntelligenceManagerIfNeeded(@ContentCaptureEvent.EventType int event) {
-        final IntelligenceManager im = getIntelligenceManager();
-        if (im == null || !im.isContentCaptureEnabled()) {
+    /** @hide */ private static final int CONTENT_CAPTURE_START = 1;
+    /** @hide */ private static final int CONTENT_CAPTURE_FLUSH = 2;
+    /** @hide */ private static final int CONTENT_CAPTURE_STOP = 3;
+
+    /** @hide */
+    @IntDef(prefix = { "CONTENT_CAPTURE_" }, value = {
+            CONTENT_CAPTURE_START,
+            CONTENT_CAPTURE_FLUSH,
+            CONTENT_CAPTURE_STOP
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface ContentCaptureNotificationType{}
+
+
+    private void notifyContentCaptureManagerIfNeeded(@ContentCaptureNotificationType int type) {
+        final ContentCaptureManager cm = getContentCaptureManager();
+        if (cm == null || !cm.isContentCaptureEnabled()) {
             return;
         }
-        switch (event) {
-            case ContentCaptureEvent.TYPE_ACTIVITY_CREATED:
+        switch (type) {
+            case CONTENT_CAPTURE_START:
                 //TODO(b/111276913): decide whether the InteractionSessionId should be
-                // saved / restored in the activity bundle.
-                im.onActivityCreated(mToken, getComponentName());
+                // saved / restored in the activity bundle - probably not
+                cm.onActivityStarted(mToken, getComponentName());
                 break;
-            case ContentCaptureEvent.TYPE_ACTIVITY_DESTROYED:
-                im.onActivityDestroyed();
+            case CONTENT_CAPTURE_FLUSH:
+                cm.flush();
                 break;
-            case ContentCaptureEvent.TYPE_ACTIVITY_STARTED:
-            case ContentCaptureEvent.TYPE_ACTIVITY_RESUMED:
-            case ContentCaptureEvent.TYPE_ACTIVITY_PAUSED:
-            case ContentCaptureEvent.TYPE_ACTIVITY_STOPPED:
-                im.onActivityLifecycleEvent(event);
+            case CONTENT_CAPTURE_STOP:
+                cm.onActivityStopped();
                 break;
             default:
-                Log.w(TAG, "notifyIntelligenceManagerIfNeeded(): invalid type " + event);
+                Log.wtf(TAG, "Invalid @ContentCaptureNotificationType: " + type);
         }
     }
 
@@ -1057,6 +1070,7 @@ public class Activity extends ContextThemeWrapper
         super.attachBaseContext(newBase);
         if (newBase != null) {
             newBase.setAutofillClient(this);
+            newBase.setContentCaptureSupported(true);
         }
     }
 
@@ -1064,6 +1078,12 @@ public class Activity extends ContextThemeWrapper
     @Override
     public final AutofillClient getAutofillClient() {
         return this;
+    }
+
+    /** @hide */
+    @Override
+    public boolean isContentCaptureSupported() {
+        return true;
     }
 
     /**
@@ -1410,7 +1430,6 @@ public class Activity extends ContextThemeWrapper
         mRestoredFromBundle = savedInstanceState != null;
         mCalled = true;
 
-        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_CREATED);
     }
 
     /**
@@ -1644,7 +1663,7 @@ public class Activity extends ContextThemeWrapper
         if (mAutoFillResetNeeded) {
             getAutofillManager().onVisibleForAutofill();
         }
-        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_STARTED);
+        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_START);
     }
 
     /**
@@ -1716,15 +1735,7 @@ public class Activity extends ContextThemeWrapper
         if (mAutoFillResetNeeded) {
             if (!mAutoFillIgnoreFirstResumePause) {
                 View focus = getCurrentFocus();
-                // On Activity rotation situation (mRestoredFromBundle is true),
-                // we should not call on AutofillManager in onResume()
-                // since the next Layout pass will do that.
-                // However, there are both cases where Activity#getCurrentFocus()
-                // will return null (window not preserved) and not null (window IS
-                // preserved), so we need to explicitly check for mRestoredFromBundle
-                // here.
-                if (!mRestoredFromBundle && focus != null
-                        && focus.canNotifyAutofillEnterExitEvent()) {
+                if (focus != null && focus.canNotifyAutofillEnterExitEvent()) {
                     // TODO: in Activity killed/recreated case, i.e. SessionLifecycleTest#
                     // testDatasetVisibleWhileAutofilledAppIsLifecycled: the View's initial
                     // window visibility after recreation is INVISIBLE in onResume() and next frame
@@ -1735,8 +1746,8 @@ public class Activity extends ContextThemeWrapper
                 }
             }
         }
-        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_RESUMED);
         mCalled = true;
+        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_FLUSH);
     }
 
     /**
@@ -2129,8 +2140,8 @@ public class Activity extends ContextThemeWrapper
                 mAutoFillIgnoreFirstResumePause = false;
             }
         }
-        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_PAUSED);
         mCalled = true;
+        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_FLUSH);
     }
 
     /**
@@ -2318,8 +2329,9 @@ public class Activity extends ContextThemeWrapper
                 getAutofillManager().onPendingSaveUi(AutofillManager.PENDING_UI_OPERATION_CANCEL,
                         mIntent.getIBinderExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN));
             }
-            notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_STOPPED);
+            notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_STOP);
         }
+        mEnterAnimationComplete = false;
     }
 
     /**
@@ -2389,9 +2401,6 @@ public class Activity extends ContextThemeWrapper
         }
 
         dispatchActivityDestroyed();
-
-        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_DESTROYED);
-
     }
 
     /**
@@ -2546,7 +2555,7 @@ public class Activity extends ContextThemeWrapper
      * picture-in-picture.
      *
      * @return true if the system successfully put this activity into picture-in-picture mode or was
-     * already in picture-in-picture mode (@see {@link #isInPictureInPictureMode()). If the device
+     * already in picture-in-picture mode (see {@link #isInPictureInPictureMode()}). If the device
      * does not support picture-in-picture, return false.
      */
     public boolean enterPictureInPictureMode(@NonNull PictureInPictureParams params) {
@@ -6756,8 +6765,8 @@ public class Activity extends ContextThemeWrapper
                 case "--autofill":
                     dumpAutofillManager(prefix, writer);
                     return;
-                case "--intelligence":
-                    dumpIntelligenceManager(prefix, writer);
+                case "--contentcapture":
+                    dumpContentCaptureManager(prefix, writer);
                     return;
             }
         }
@@ -6789,7 +6798,7 @@ public class Activity extends ContextThemeWrapper
         mHandler.getLooper().dump(new PrintWriterPrinter(writer), prefix);
 
         dumpAutofillManager(prefix, writer);
-        dumpIntelligenceManager(prefix, writer);
+        dumpContentCaptureManager(prefix, writer);
 
         ResourcesManager.getInstance().dump(prefix, writer);
     }
@@ -6805,12 +6814,12 @@ public class Activity extends ContextThemeWrapper
         }
     }
 
-    void dumpIntelligenceManager(String prefix, PrintWriter writer) {
-        final IntelligenceManager im = getIntelligenceManager();
-        if (im != null) {
-            im.dump(prefix, writer);
+    void dumpContentCaptureManager(String prefix, PrintWriter writer) {
+        final ContentCaptureManager cm = getContentCaptureManager();
+        if (cm != null) {
+            cm.dump(prefix, writer);
         } else {
-            writer.print(prefix); writer.println("No IntelligenceManager");
+            writer.print(prefix); writer.println("No ContentCaptureManager");
         }
     }
 
@@ -7080,6 +7089,8 @@ public class Activity extends ContextThemeWrapper
      * @hide
      */
     public void dispatchEnterAnimationComplete() {
+        mEnterAnimationComplete = true;
+        mInstrumentation.onEnterAnimationComplete();
         onEnterAnimationComplete();
         if (getWindow() != null && getWindow().getDecorView() != null) {
             getWindow().getDecorView().getViewTreeObserver().dispatchOnEnterAnimationComplete();

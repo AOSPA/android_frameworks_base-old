@@ -28,13 +28,15 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * LocalMediaManager provide interface to get MediaDevice list and transfer media to MediaDevice.
  */
 public class LocalMediaManager implements BluetoothCallback {
-
+    private static final Comparator<MediaDevice> COMPARATOR = Comparator.naturalOrder();
     private static final String TAG = "LocalMediaManager";
 
     @Retention(RetentionPolicy.SOURCE)
@@ -153,6 +155,7 @@ public class LocalMediaManager implements BluetoothCallback {
 
     void dispatchDeviceListUpdate() {
         synchronized (mCallbacks) {
+            Collections.sort(mMediaDevices, COMPARATOR);
             for (DeviceCallback callback : mCallbacks) {
                 callback.onDeviceListUpdate(new ArrayList<>(mMediaDevices));
             }
@@ -167,6 +170,23 @@ public class LocalMediaManager implements BluetoothCallback {
         mInfoMediaManager.unregisterCallback(mMediaDeviceCallback);
         mBluetoothMediaManager.stopScan();
         mInfoMediaManager.stopScan();
+    }
+
+    /**
+     * Find the MediaDevice through id.
+     *
+     * @param devices the list of MediaDevice
+     * @param id the unique id of MediaDevice
+     * @return MediaDevice
+     */
+    public MediaDevice getMediaDeviceById(List<MediaDevice> devices, String id) {
+        for (MediaDevice mediaDevice : devices) {
+            if (mediaDevice.getId().equals(id)) {
+                return mediaDevice;
+            }
+        }
+        Log.i(TAG, "getMediaDeviceById() can't found device");
+        return null;
     }
 
     class MediaDeviceCallback implements MediaManager.MediaDeviceCallback {

@@ -17,6 +17,8 @@ package com.android.systemui.qs;
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
 import static android.provider.Settings.System.SHOW_BATTERY_PERCENT;
 
+import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.ColorInt;
@@ -58,10 +60,11 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.settingslib.Utils;
 import com.android.systemui.BatteryMeterView;
-import com.android.systemui.Dependency;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.plugins.DarkIconDispatcher;
+import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.privacy.OngoingPrivacyChip;
 import com.android.systemui.privacy.OngoingPrivacyDialog;
 import com.android.systemui.privacy.PrivacyItem;
@@ -74,8 +77,6 @@ import com.android.systemui.statusbar.phone.StatusIconContainer;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.Clock;
-import com.android.systemui.statusbar.policy.DarkIconDispatcher;
-import com.android.systemui.statusbar.policy.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.statusbar.policy.DateView;
 import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -83,6 +84,9 @@ import com.android.systemui.statusbar.policy.ZenModeController;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+
+import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * View that contains the top-most bits of the screen (primarily the status bar with date, time, and
@@ -102,6 +106,11 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     public static final int MAX_TOOLTIP_SHOWN_COUNT = 2;
 
     private final Handler mHandler = new Handler();
+    private final BatteryController mBatteryController;
+    private final NextAlarmController mAlarmController;
+    private final ZenModeController mZenController;
+    private final StatusBarIconController mStatusBarIconController;
+    private final ActivityStarter mActivityStarter;
 
     private QSPanel mQsPanel;
 
@@ -141,8 +150,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private TextView mBatteryRemainingText;
     private boolean mShowBatteryPercentAndEstimate;
 
-    private NextAlarmController mAlarmController;
-    private ZenModeController mZenController;
     private PrivacyItemController mPrivacyItemController;
     /** Counts how many times the long press tooltip has been shown to the user. */
     private int mShownCount;
@@ -172,10 +179,17 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         }
     };
 
-    public QuickStatusBarHeader(Context context, AttributeSet attrs) {
+    @Inject
+    public QuickStatusBarHeader(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
+            NextAlarmController nextAlarmController, ZenModeController zenModeController,
+            BatteryController batteryController, StatusBarIconController statusBarIconController,
+            ActivityStarter activityStarter) {
         super(context, attrs);
-        mAlarmController = Dependency.get(NextAlarmController.class);
-        mZenController = Dependency.get(ZenModeController.class);
+        mAlarmController = nextAlarmController;
+        mZenController = zenModeController;
+        mBatteryController = batteryController;
+        mStatusBarIconController = statusBarIconController;
+        mActivityStarter = activityStarter;
         mPrivacyItemController = new PrivacyItemController(context, mPICCallback);
         mShownCount = getStoredShownCount();
     }
@@ -232,6 +246,8 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         // Tint for the battery icons are handled in setupHost()
         mBatteryRemainingIcon = findViewById(R.id.batteryRemainingIcon);
         mBatteryRemainingIcon.setPercentShowMode(BatteryMeterView.MODE_OFF);
+        // Don't need to worry about tuner settings for this icon
+        mBatteryRemainingIcon.setIgnoreTunerUpdates(true);
 
         mBatteryRemainingText = findViewById(R.id.batteryRemainingText);
         mBatteryRemainingText.setTextColor(fillColor);
@@ -403,15 +419,13 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         if (!mShowBatteryPercentAndEstimate) {
             return;
         }
-        mBatteryRemainingText.setText(
-                Dependency.get(BatteryController.class).getEstimatedTimeRemainingString());
+        mBatteryRemainingText.setText(mBatteryController.getEstimatedTimeRemainingString());
     }
 
     public void setExpanded(boolean expanded) {
         if (mExpanded == expanded) return;
         mExpanded = expanded;
         mHeaderQsPanel.setExpanded(expanded);
-        updateEverything();
     }
 
     /**
@@ -470,7 +484,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
-        Dependency.get(StatusBarIconController.class).addIconGroup(mIconManager);
+        mStatusBarIconController.addIconGroup(mIconManager);
         requestApplyInsets();
         mContext.getContentResolver().registerContentObserver(
                 Settings.System.getUriFor(SHOW_BATTERY_PERCENT), false, mPercentSettingObserver,
@@ -513,7 +527,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     @VisibleForTesting
     public void onDetachedFromWindow() {
         setListening(false);
-        Dependency.get(StatusBarIconController.class).removeIconGroup(mIconManager);
+        mStatusBarIconController.removeIconGroup(mIconManager);
         mContext.getContentResolver().unregisterContentObserver(mPercentSettingObserver);
         super.onDetachedFromWindow();
     }
@@ -542,10 +556,10 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     @Override
     public void onClick(View v) {
         if (v == mClockView) {
-            Dependency.get(ActivityStarter.class).postStartActivityDismissingKeyguard(new Intent(
+            mActivityStarter.postStartActivityDismissingKeyguard(new Intent(
                     AlarmClock.ACTION_SHOW_ALARMS),0);
         } else if (v == mBatteryMeterView) {
-            Dependency.get(ActivityStarter.class).postStartActivityDismissingKeyguard(new Intent(
+            mActivityStarter.postStartActivityDismissingKeyguard(new Intent(
                     Intent.ACTION_POWER_USAGE_SUMMARY),0);
         } else if (v == mPrivacyChip) {
             Handler mUiHandler = new Handler(Looper.getMainLooper());
@@ -681,10 +695,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
                 .alpha(0f)
                 .setDuration(FADE_ANIMATION_DURATION_MS)
                 .start();
-    }
-
-    public void updateEverything() {
-        post(() -> setClickable(false));
     }
 
     public void setQSPanel(final QSPanel qsPanel) {

@@ -79,6 +79,7 @@ import com.android.server.EventLogTags;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.function.Consumer;
 
 /** Root {@link WindowContainer} for the device. */
@@ -122,7 +123,10 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 
     // The ID of the display which is responsible for receiving display-unspecified key and pointer
     // events.
-    int mTopFocusedDisplayId = INVALID_DISPLAY;
+    private int mTopFocusedDisplayId = INVALID_DISPLAY;
+
+    // Map from the PID to the top most app which has a focused window of the process.
+    final HashMap<Integer, AppWindowToken> mTopFocusedAppByProcess = new HashMap<>();
 
     // Only a separate transaction until we separate the apply surface changes
     // transaction from the global transaction.
@@ -157,50 +161,33 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {
+        mTopFocusedAppByProcess.clear();
         boolean changed = false;
         int topFocusedDisplayId = INVALID_DISPLAY;
-
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final DisplayContent dc = mChildren.get(i);
-            changed |= dc.updateFocusedWindowLocked(mode, updateInputWindows,
-                    topFocusedDisplayId != INVALID_DISPLAY /* focusFound */);
-            if (topFocusedDisplayId == INVALID_DISPLAY && dc.mCurrentFocus != null) {
-                topFocusedDisplayId = dc.getDisplayId();
+            changed |= dc.updateFocusedWindowLocked(mode, updateInputWindows);
+            final WindowState newFocus = dc.mCurrentFocus;
+            if (newFocus != null) {
+                final int pidOfNewFocus = newFocus.mSession.mPid;
+                if (mTopFocusedAppByProcess.get(pidOfNewFocus) == null) {
+                    mTopFocusedAppByProcess.put(pidOfNewFocus, newFocus.mAppToken);
+                }
+                if (topFocusedDisplayId == INVALID_DISPLAY) {
+                    topFocusedDisplayId = dc.getDisplayId();
+                }
             }
         }
         if (topFocusedDisplayId == INVALID_DISPLAY) {
             topFocusedDisplayId = DEFAULT_DISPLAY;
         }
-        // TODO(b/118865114): Review if need callback top focus display change to view component.
-        // (i.e. Activity or View)
-        // Currently we only tracked topFocusedDisplayChanged for notifying InputMethodManager via
-        // ViewRootImpl.windowFocusChanged to refocus IME window when top display focus changed
-        // but window focus remain the same case.
-        // It may need to review if any use case that need to add new callback for reporting
-        // this change.
-        final boolean topFocusedDisplayChanged =
-                mTopFocusedDisplayId != topFocusedDisplayId && mode == UPDATE_FOCUS_NORMAL;
         if (mTopFocusedDisplayId != topFocusedDisplayId) {
             mTopFocusedDisplayId = topFocusedDisplayId;
-            mWmService.mInputManager.setFocusedDisplay(mTopFocusedDisplayId);
+            mWmService.mInputManager.setFocusedDisplay(topFocusedDisplayId);
+            mWmService.mPolicy.setTopFocusedDisplay(topFocusedDisplayId);
             if (DEBUG_FOCUS_LIGHT) Slog.v(TAG_WM, "New topFocusedDisplayId="
-                    + mTopFocusedDisplayId);
+                    + topFocusedDisplayId);
         }
-
-        // Report window focus or top display focus changed through REPORT_FOCUS_CHANGE.
-        forAllDisplays((dc) -> {
-            final boolean windowFocusChanged =
-                    dc.mCurrentFocus != null && dc.mCurrentFocus != dc.mLastFocus;
-            final boolean isTopFocusedDisplay =
-                    topFocusedDisplayChanged && dc.getDisplayId() == mTopFocusedDisplayId;
-            if (windowFocusChanged || isTopFocusedDisplay) {
-                final Message msg = mWmService.mH.obtainMessage(
-                        WindowManagerService.H.REPORT_FOCUS_CHANGE, dc);
-                msg.arg1 = topFocusedDisplayChanged ? 1 : 0;
-                mWmService.mH.sendMessage(msg);
-            }
-        });
-
         return changed;
     }
 
@@ -211,7 +198,8 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @Override
     void onChildPositionChanged() {
-        mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false /* updateInputWindows */);
+        mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
+                !mWmService.mPerDisplayFocusEnabled /* updateInputWindows */);
     }
 
     DisplayContent getDisplayContent(int displayId) {
@@ -224,7 +212,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
         return null;
     }
 
-    DisplayContent createDisplayContent(final Display display, DisplayWindowController controller) {
+    DisplayContent createDisplayContent(final Display display, ActivityDisplay activityDisplay) {
         final int displayId = display.getDisplayId();
 
         // In select scenarios, it is possible that a DisplayContent will be created on demand
@@ -233,17 +221,17 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
         final DisplayContent existing = getDisplayContent(displayId);
 
         if (existing != null) {
-            initializeDisplayOverrideConfiguration(controller, existing);
-            existing.setController(controller);
+            existing.mAcitvityDisplay = activityDisplay;
+            existing.initializeDisplayOverrideConfiguration();
             return existing;
         }
 
-        final DisplayContent dc = new DisplayContent(display, mWmService, controller);
+        final DisplayContent dc = new DisplayContent(display, mWmService, activityDisplay);
 
         if (DEBUG_DISPLAY) Slog.v(TAG_WM, "Adding display=" + display);
 
         mWmService.mDisplayWindowSettings.applySettingsToDisplayLocked(dc);
-        initializeDisplayOverrideConfiguration(controller, dc);
+        dc.initializeDisplayOverrideConfiguration();
 
         if (mWmService.mDisplayManagerInternal != null) {
             mWmService.mDisplayManagerInternal.setDisplayInfoOverrideFromWindowManager(
@@ -254,19 +242,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
         mWmService.reconfigureDisplayLocked(dc);
 
         return dc;
-    }
-
-    /**
-     * The display content may have configuration set from {@link #DisplayWindowSettings}. This
-     * callback let the owner of container know there is existing configuration to prevent the
-     * values from being replaced by the initializing {@link #ActivityDisplay}.
-     */
-    private void initializeDisplayOverrideConfiguration(DisplayWindowController controller,
-            DisplayContent displayContent) {
-        if (controller != null && controller.mListener != null) {
-            controller.mListener.onInitializeOverrideConfiguration(
-                    displayContent.getOverrideConfiguration());
-        }
     }
 
     boolean isLayoutNeeded() {
@@ -356,13 +331,13 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     void setDisplayOverrideConfigurationIfNeeded(Configuration newConfiguration,
             @NonNull DisplayContent displayContent) {
 
-        final Configuration currentConfig = displayContent.getOverrideConfiguration();
+        final Configuration currentConfig = displayContent.getRequestedOverrideConfiguration();
         final boolean configChanged = currentConfig.diff(newConfiguration) != 0;
         if (!configChanged) {
             return;
         }
 
-        displayContent.onOverrideConfigurationChanged(newConfiguration);
+        displayContent.onRequestedOverrideConfigurationChanged(newConfiguration);
 
         if (displayContent.getDisplayId() == DEFAULT_DISPLAY) {
             // Override configuration of the default display duplicates global config. In this case
@@ -820,8 +795,9 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     private void handleResizingWindows() {
         for (int i = mWmService.mResizingWindows.size() - 1; i >= 0; i--) {
             WindowState win = mWmService.mResizingWindows.get(i);
-            if (win.mAppFreezing) {
-                // Don't remove this window until rotation has completed.
+            if (win.mAppFreezing || win.getDisplayContent().mWaitingForConfig) {
+                // Don't remove this window until rotation has completed and is not waiting for the
+                // complete configuration.
                 continue;
             }
             win.reportResized();
@@ -1040,7 +1016,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     void positionChildAt(int position, DisplayContent child, boolean includingParents) {
         super.positionChildAt(position, child, includingParents);
         if (mRootActivityContainer != null) {
-            mRootActivityContainer.onChildPositionChanged(child.getController(), position);
+            mRootActivityContainer.onChildPositionChanged(child.mAcitvityDisplay, position);
         }
     }
 

@@ -20,6 +20,7 @@ import static junit.framework.Assert.assertTrue;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -35,6 +36,7 @@ import android.widget.LinearLayout;
 import com.android.systemui.Dependency;
 import com.android.systemui.InitController;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationData.Entry;
@@ -46,6 +48,7 @@ import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.systemui.util.Assert;
 
 import com.google.android.collect.Lists;
 
@@ -60,7 +63,7 @@ import java.util.List;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@TestableLooper.RunWithLooper(setAsMainLooper = true)
+@TestableLooper.RunWithLooper
 public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
     @Mock private NotificationPresenter mPresenter;
     @Mock private NotificationData mNotificationData;
@@ -79,6 +82,7 @@ public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        Assert.sMainLooper = TestableLooper.get(this).getLooper();
         mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
         mDependency.injectTestDependency(NotificationLockscreenUserManager.class,
                 mLockscreenUserManager);
@@ -88,7 +92,10 @@ public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
 
         when(mEntryManager.getNotificationData()).thenReturn(mNotificationData);
 
-        mViewHierarchyManager = new NotificationViewHierarchyManager(mContext);
+        mViewHierarchyManager = new NotificationViewHierarchyManager(mContext,
+                mLockscreenUserManager, mGroupManager, mVisualStabilityManager,
+                mock(StatusBarStateController.class), mEntryManager, mock(BubbleController.class),
+                () -> mShadeController);
         Dependency.get(InitController.class).executePostInitTasks();
         mViewHierarchyManager.setUpWithPresenter(mPresenter, mListContainer);
     }

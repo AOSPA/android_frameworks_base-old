@@ -27,7 +27,6 @@ import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.app.AppOpsManager.OP_NONE;
 import static android.app.AppOpsManager.permissionToOp;
 import static android.app.AppOpsManager.permissionToOpCode;
-import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_PRIVILEGED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
@@ -947,7 +946,8 @@ public class PermissionManagerService {
                                     // how to disable the API to simulate revocation as legacy
                                     // apps don't expect to run with revoked permissions.
                                     if (PLATFORM_PACKAGE_NAME.equals(bp.getSourcePackageName())) {
-                                        if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0) {
+                                        if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0
+                                                && !bp.isRemoved()) {
                                             flags |= FLAG_PERMISSION_REVIEW_REQUIRED;
                                             // We changed the flags, hence have to write.
                                             updatedUserIds = ArrayUtils.appendInt(
@@ -1072,9 +1072,8 @@ public class PermissionManagerService {
         AppOpsManagerInternal appOpsInternal = LocalServices.getService(
                 AppOpsManagerInternal.class);
 
-        appOpsInternal.setMode(permissionToOpCode(permission),
-                getUid(userId, getAppId(pkg.applicationInfo.uid)), pkg.packageName, mode,
-                (pkg.applicationInfo.privateFlags & PRIVATE_FLAG_PRIVILEGED) != 0);
+        appOpsInternal.setUidMode(permissionToOpCode(permission),
+                getUid(userId, getAppId(pkg.applicationInfo.uid)), mode);
     }
 
     /**
@@ -1344,8 +1343,12 @@ public class PermissionManagerService {
                                     sourcePermNum++) {
                                 String sourcePerm = sourcePerms.valueAt(sourcePermNum);
 
-                                if (appOpsManager.unsafeCheckOpNoThrow(permissionToOp(sourcePerm),
-                                        getUid(userId, getAppId(pkg.applicationInfo.uid)), pkgName)
+                                if (ps.hasRuntimePermission(sourcePerm, userId)
+                                        && ps.getRuntimePermissionState(sourcePerm, userId)
+                                        .isGranted()
+                                        && appOpsManager.unsafeCheckOpNoThrow(
+                                                permissionToOp(sourcePerm), getUid(userId,
+                                                getAppId(pkg.applicationInfo.uid)), pkgName)
                                         == MODE_ALLOWED) {
                                     setAppOpMode(sourcePerm, pkg, userId, MODE_FOREGROUND);
                                 }
@@ -1635,6 +1638,19 @@ public class PermissionManagerService {
                             PackageManagerInternal.PACKAGE_SYSTEM_TEXT_CLASSIFIER,
                             UserHandle.USER_SYSTEM))) {
                 // Special permissions for the system default text classifier.
+                allowed = true;
+            }
+            if (!allowed && bp.isWellbeing()
+                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                    PackageManagerInternal.PACKAGE_WELLBEING, UserHandle.USER_SYSTEM))) {
+                // Special permission granted only to the OEM specified wellbeing app
+                allowed = true;
+            }
+            if (!allowed && bp.isDocumenter()
+                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                            PackageManagerInternal.PACKAGE_DOCUMENTER, UserHandle.USER_SYSTEM))) {
+                // If this permission is to be granted to the documenter and
+                // this app is the documenter, then it gets the permission.
                 allowed = true;
             }
         }

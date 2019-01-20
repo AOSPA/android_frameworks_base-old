@@ -49,16 +49,20 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
+import android.content.rollback.IRollbackManager;
+import android.content.rollback.RollbackManager;
 import android.debug.AdbManager;
 import android.debug.IAdbManager;
 import android.hardware.ConsumerIrManager;
 import android.hardware.ISerialManager;
 import android.hardware.SensorManager;
+import android.hardware.SensorPrivacyManager;
 import android.hardware.SerialManager;
 import android.hardware.SystemSensorManager;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.IBiometricService;
 import android.hardware.camera2.CameraManager;
+import android.hardware.display.ColorDisplayManager;
 import android.hardware.display.DisplayManager;
 import android.hardware.face.FaceManager;
 import android.hardware.face.IFaceService;
@@ -96,6 +100,7 @@ import android.net.INetworkPolicyManager;
 import android.net.IpSecManager;
 import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
+import android.net.NetworkStack;
 import android.net.NetworkWatchlistManager;
 import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
@@ -139,6 +144,7 @@ import android.os.UserManager;
 import android.os.Vibrator;
 import android.os.health.SystemHealthManager;
 import android.os.storage.StorageManager;
+import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
 import android.print.IPrintManager;
 import android.print.PrintManager;
@@ -153,7 +159,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.euicc.EuiccCardManager;
 import android.telephony.euicc.EuiccManager;
-import android.telephony.rcs.RcsManager;
+import android.telephony.ims.RcsManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -164,9 +170,9 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.CaptioningManager;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.IAutoFillManager;
+import android.view.contentcapture.ContentCaptureManager;
+import android.view.contentcapture.IContentCaptureManager;
 import android.view.inputmethod.InputMethodManager;
-import android.view.intelligence.IIntelligenceManager;
-import android.view.intelligence.IntelligenceManager;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textservice.TextServicesManager;
 
@@ -199,6 +205,7 @@ final class SystemServiceRegistry {
     private SystemServiceRegistry() { }
 
     static {
+        //CHECKSTYLE:OFF IndentationCheck
         registerService(Context.ACCESSIBILITY_SERVICE, AccessibilityManager.class,
                 new CachedServiceFetcher<AccessibilityManager>() {
             @Override
@@ -312,6 +319,13 @@ final class SystemServiceRegistry {
                 return new ConnectivityManager(context, service);
             }});
 
+        registerService(Context.NETWORK_STACK_SERVICE, NetworkStack.class,
+                new StaticServiceFetcher<NetworkStack>() {
+                @Override
+                public NetworkStack createService() {
+                    return new NetworkStack();
+                }});
+
         registerService(Context.IPSEC_SERVICE, IpSecManager.class,
                 new CachedServiceFetcher<IpSecManager>() {
             @Override
@@ -384,6 +398,14 @@ final class SystemServiceRegistry {
             public DisplayManager createService(ContextImpl ctx) {
                 return new DisplayManager(ctx.getOuterContext());
             }});
+
+        registerService(Context.COLOR_DISPLAY_SERVICE, ColorDisplayManager.class,
+                new CachedServiceFetcher<ColorDisplayManager>() {
+                    @Override
+                    public ColorDisplayManager createService(ContextImpl ctx) {
+                        return new ColorDisplayManager();
+                    }
+                });
 
         // InputMethodManager has its own cache strategy based on display id to support apps that
         // still assume InputMethodManager is a per-process singleton and it's safe to directly
@@ -492,6 +514,13 @@ final class SystemServiceRegistry {
                 return new SystemSensorManager(ctx.getOuterContext(),
                   ctx.mMainThread.getHandler().getLooper());
             }});
+
+        registerService(Context.SENSOR_PRIVACY_SERVICE, SensorPrivacyManager.class,
+                new CachedServiceFetcher<SensorPrivacyManager>() {
+                    @Override
+                    public SensorPrivacyManager createService(ContextImpl ctx) {
+                        return SensorPrivacyManager.getInstance(ctx);
+                    }});
 
         registerService(Context.STATS_MANAGER, StatsManager.class,
                 new CachedServiceFetcher<StatsManager>() {
@@ -1050,15 +1079,20 @@ final class SystemServiceRegistry {
                 return new AutofillManager(ctx.getOuterContext(), service);
             }});
 
-        registerService(Context.INTELLIGENCE_MANAGER_SERVICE, IntelligenceManager.class,
-                new CachedServiceFetcher<IntelligenceManager>() {
+        registerService(Context.CONTENT_CAPTURE_MANAGER_SERVICE, ContentCaptureManager.class,
+                new CachedServiceFetcher<ContentCaptureManager>() {
             @Override
-            public IntelligenceManager createService(ContextImpl ctx)
+            public ContentCaptureManager createService(ContextImpl ctx)
                     throws ServiceNotFoundException {
                 // Get the services without throwing as this is an optional feature
-                IBinder b = ServiceManager.getService(Context.INTELLIGENCE_MANAGER_SERVICE);
-                IIntelligenceManager service = IIntelligenceManager.Stub.asInterface(b);
-                return new IntelligenceManager(ctx.getOuterContext(), service);
+                Context outerContext = ctx.getOuterContext();
+                if (outerContext.isContentCaptureSupported()) {
+                    IBinder b = ServiceManager
+                            .getService(Context.CONTENT_CAPTURE_MANAGER_SERVICE);
+                    IContentCaptureManager service = IContentCaptureManager.Stub.asInterface(b);
+                    return new ContentCaptureManager(outerContext, service);
+                }
+                return null;
             }});
 
         registerService(Context.VR_SERVICE, VrManager.class, new CachedServiceFetcher<VrManager>() {
@@ -1131,6 +1165,13 @@ final class SystemServiceRegistry {
                         return new PermissionManager(ctx.getOuterContext());
                     }});
 
+        registerService(Context.PERMISSION_CONTROLLER_SERVICE, PermissionControllerManager.class,
+                new CachedServiceFetcher<PermissionControllerManager>() {
+                    @Override
+                    public PermissionControllerManager createService(ContextImpl ctx) {
+                        return new PermissionControllerManager(ctx.getOuterContext());
+                    }});
+
         registerService(Context.ROLE_SERVICE, RoleManager.class,
                 new CachedServiceFetcher<RoleManager>() {
                     @Override
@@ -1138,6 +1179,17 @@ final class SystemServiceRegistry {
                             throws ServiceNotFoundException {
                         return new RoleManager(ctx.getOuterContext());
                     }});
+
+        registerService(Context.ROLLBACK_SERVICE, RollbackManager.class,
+                new CachedServiceFetcher<RollbackManager>() {
+                    @Override
+                    public RollbackManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(Context.ROLLBACK_SERVICE);
+                        return new RollbackManager(ctx.getOuterContext(),
+                                IRollbackManager.Stub.asInterface(b));
+                    }});
+        //CHECKSTYLE:ON IndentationCheck
     }
 
     /**

@@ -16,10 +16,17 @@
 
 package android.view;
 
+import static android.view.InsetsState.INSET_SIDE_BOTTOM;
+import static android.view.InsetsState.INSET_SIDE_TOP;
 import static android.view.InsetsState.TYPE_IME;
 import static android.view.InsetsState.TYPE_NAVIGATION_BAR;
+import static android.view.InsetsState.TYPE_SIDE_BAR_1;
+import static android.view.InsetsState.TYPE_SIDE_BAR_2;
+import static android.view.InsetsState.TYPE_SIDE_BAR_3;
 import static android.view.InsetsState.TYPE_TOP_BAR;
 import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertFalse;
+import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertNotEquals;
 
 import android.graphics.Rect;
@@ -27,6 +34,7 @@ import android.os.Parcel;
 import android.platform.test.annotations.Presubmit;
 import android.support.test.filters.FlakyTest;
 import android.support.test.runner.AndroidJUnit4;
+import android.util.SparseIntArray;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,9 +53,12 @@ public class InsetsStateTest {
         mState.getSource(TYPE_TOP_BAR).setVisible(true);
         mState.getSource(TYPE_IME).setFrame(new Rect(0, 200, 100, 300));
         mState.getSource(TYPE_IME).setVisible(true);
+        SparseIntArray typeSideMap = new SparseIntArray();
         WindowInsets insets = mState.calculateInsets(new Rect(0, 0, 100, 300), false, false,
-                DisplayCutout.NO_CUTOUT);
+                DisplayCutout.NO_CUTOUT, typeSideMap);
         assertEquals(new Rect(0, 100, 0, 100), insets.getSystemWindowInsets());
+        assertEquals(INSET_SIDE_TOP, typeSideMap.get(TYPE_TOP_BAR));
+        assertEquals(INSET_SIDE_BOTTOM, typeSideMap.get(TYPE_IME));
     }
 
     @Test
@@ -57,7 +68,7 @@ public class InsetsStateTest {
         mState.getSource(TYPE_IME).setFrame(new Rect(0, 100, 100, 300));
         mState.getSource(TYPE_IME).setVisible(true);
         WindowInsets insets = mState.calculateInsets(new Rect(0, 0, 100, 300), false, false,
-                DisplayCutout.NO_CUTOUT);
+                DisplayCutout.NO_CUTOUT, null);
         assertEquals(100, insets.getStableInsetBottom());
         assertEquals(new Rect(0, 0, 0, 200), insets.getSystemWindowInsets());
     }
@@ -69,7 +80,7 @@ public class InsetsStateTest {
         mState.getSource(TYPE_NAVIGATION_BAR).setFrame(new Rect(80, 0, 100, 300));
         mState.getSource(TYPE_NAVIGATION_BAR).setVisible(true);
         WindowInsets insets = mState.calculateInsets(new Rect(0, 0, 100, 300), false, false,
-                DisplayCutout.NO_CUTOUT);
+                DisplayCutout.NO_CUTOUT, null);
         assertEquals(new Rect(0, 100, 20, 0), insets.getSystemWindowInsets());
     }
 
@@ -81,7 +92,7 @@ public class InsetsStateTest {
         mState.getSource(TYPE_IME).setVisible(true);
         mState.removeSource(TYPE_IME);
         WindowInsets insets = mState.calculateInsets(new Rect(0, 0, 100, 300), false, false,
-                DisplayCutout.NO_CUTOUT);
+                DisplayCutout.NO_CUTOUT, null);
         assertEquals(0, insets.getSystemWindowInsetBottom());
     }
 
@@ -126,5 +137,14 @@ public class InsetsStateTest {
         mState2.readFromParcel(p);
         p.recycle();
         assertEquals(mState, mState2);
+    }
+
+    @Test
+    public void testGetDefaultVisibility() {
+        assertTrue(InsetsState.getDefaultVisibly(TYPE_TOP_BAR));
+        assertTrue(InsetsState.getDefaultVisibly(TYPE_SIDE_BAR_1));
+        assertTrue(InsetsState.getDefaultVisibly(TYPE_SIDE_BAR_2));
+        assertTrue(InsetsState.getDefaultVisibly(TYPE_SIDE_BAR_3));
+        assertFalse(InsetsState.getDefaultVisibly(TYPE_IME));
     }
 }

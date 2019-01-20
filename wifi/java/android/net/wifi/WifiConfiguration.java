@@ -28,6 +28,7 @@ import android.net.ProxyInfo;
 import android.net.StaticIpConfiguration;
 import android.net.Uri;
 import android.net.wifi.WifiInfo;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.SystemClock;
@@ -663,7 +664,7 @@ public class WifiConfiguration implements Parcelable {
      *  the network we need to be before autojoin kicks in
      */
     /** @hide **/
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public static int INVALID_RSSI = -127;
 
     // States for the userApproved field
@@ -737,6 +738,12 @@ public class WifiConfiguration implements Parcelable {
     public boolean isNoInternetAccessExpected() {
         return noInternetAccessExpected;
     }
+
+    /**
+     * This Wifi configuration is expected for OSU(Online Sign Up) of Passpoint Release 2.
+     * @hide
+     */
+    public boolean osu;
 
     /**
      * @hide
@@ -1700,6 +1707,7 @@ public class WifiConfiguration implements Parcelable {
         selfAdded = false;
         didSelfAdd = false;
         ephemeral = false;
+        osu = false;
         trusted = true; // Networks are considered trusted by default.
         meteredHint = false;
         meteredOverride = METERED_OVERRIDE_NONE;
@@ -1814,6 +1822,7 @@ public class WifiConfiguration implements Parcelable {
         if (this.selfAdded) sbuf.append(" selfAdded");
         if (this.validatedInternetAccess) sbuf.append(" validatedInternetAccess");
         if (this.ephemeral) sbuf.append(" ephemeral");
+        if (this.osu) sbuf.append(" osu");
         if (this.trusted) sbuf.append(" trusted");
         if (this.meteredHint) sbuf.append(" meteredHint");
         if (this.useExternalScores) sbuf.append(" useExternalScores");
@@ -2322,6 +2331,7 @@ public class WifiConfiguration implements Parcelable {
             validatedInternetAccess = source.validatedInternetAccess;
             isLegacyPasspointConfig = source.isLegacyPasspointConfig;
             ephemeral = source.ephemeral;
+            osu = source.osu;
             trusted = source.trusted;
             meteredHint = source.meteredHint;
             meteredOverride = source.meteredOverride;
@@ -2428,6 +2438,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(dppNetAccessKeyExpiry);
         dest.writeString(dppCsign);
         dest.writeInt(macRandomizationSetting);
+        dest.writeInt(osu ? 1 : 0);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -2503,6 +2514,7 @@ public class WifiConfiguration implements Parcelable {
                 config.dppNetAccessKeyExpiry = in.readInt();
                 config.dppCsign = in.readString();
                 config.macRandomizationSetting = in.readInt();
+                config.osu = in.readInt() != 0;
                 return config;
             }
 

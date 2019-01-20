@@ -53,6 +53,12 @@ public class DozeTriggers implements DozeMachine.Part {
     /** adb shell am broadcast -a com.android.systemui.doze.pulse com.android.systemui */
     private static final String PULSE_ACTION = "com.android.systemui.doze.pulse";
 
+    /**
+     * Last value sent by the wake-display sensor.
+     * Assuming that the screen should start on.
+     */
+    private static boolean sWakeDisplaySensorState = true;
+
     private final Context mContext;
     private final DozeMachine mMachine;
     private final DozeSensors mDozeSensors;
@@ -128,13 +134,13 @@ public class DozeTriggers implements DozeMachine.Part {
         boolean isDoubleTap = pulseReason == DozeLog.PULSE_REASON_SENSOR_DOUBLE_TAP;
         boolean isPickup = pulseReason == DozeLog.PULSE_REASON_SENSOR_PICKUP;
         boolean isLongPress = pulseReason == DozeLog.PULSE_REASON_SENSOR_LONG_PRESS;
-        boolean isWakeLockScreen = pulseReason == DozeLog.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN;
         boolean isWakeDisplay = pulseReason == DozeLog.REASON_SENSOR_WAKE_UP;
+        boolean isWakeLockScreen = pulseReason == DozeLog.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN;
         boolean wakeEvent = rawValues != null && rawValues.length > 0 && rawValues[0] != 0;
 
         if (isWakeDisplay) {
             onWakeScreen(wakeEvent);
-        } else if (isLongPress) {
+        } else if (isLongPress || isWakeLockScreen) {
             requestPulse(pulseReason, sensorPerformedProxCheck);
         } else {
             proximityCheckThenCall((result) -> {
@@ -145,22 +151,12 @@ public class DozeTriggers implements DozeMachine.Part {
                 if (isDoubleTap) {
                     mDozeHost.onDoubleTap(screenX, screenY);
                     mMachine.wakeUp();
-                } else if (isWakeLockScreen) {
-                    if (wakeEvent) {
-                        mDozeHost.setPassiveInterrupt(true);
-                        mMachine.wakeUp();
-                        DozeLog.traceLockScreenWakeUp(wakeEvent);
-                    } else {
-                        if (DEBUG) Log.d(TAG, "Unpulsing");
-                    }
                 } else if (isPickup) {
-                    mDozeHost.setPassiveInterrupt(true);
                     mMachine.wakeUp();
                 } else {
                     mDozeHost.extendPulse();
                 }
             }, sensorPerformedProxCheck, pulseReason);
-            return;
         }
 
         if (isPickup) {
@@ -184,6 +180,7 @@ public class DozeTriggers implements DozeMachine.Part {
             if (DEBUG) Log.i(TAG, "Prox changed, ignore touch = " + ignoreTouch);
             mDozeHost.onIgnoreTouchWhilePulsing(ignoreTouch);
         }
+
         if (far && (paused || pausing)) {
             if (DEBUG) Log.i(TAG, "Prox FAR, unpausing AOD");
             mMachine.requestState(DozeMachine.State.DOZE_AOD);
@@ -198,6 +195,7 @@ public class DozeTriggers implements DozeMachine.Part {
         DozeMachine.State state = mMachine.getState();
         boolean paused = (state == DozeMachine.State.DOZE_AOD_PAUSED);
         boolean pausing = (state == DozeMachine.State.DOZE_AOD_PAUSING);
+        sWakeDisplaySensorState = wake;
 
         if (wake) {
             proximityCheckThenCall((result) -> {
@@ -205,13 +203,13 @@ public class DozeTriggers implements DozeMachine.Part {
                     // In pocket, drop event.
                     return;
                 }
-                if (pausing || paused) {
+                if (mMachine.getState() == DozeMachine.State.DOZE) {
                     mMachine.requestState(DozeMachine.State.DOZE_AOD);
                 }
             }, false /* alreadyPerformedProxCheck */, DozeLog.REASON_SENSOR_WAKE_UP);
         } else {
             if (!pausing && !paused) {
-                mMachine.requestState(DozeMachine.State.DOZE_AOD_PAUSING);
+                mMachine.requestState(DozeMachine.State.DOZE);
             }
         }
     }
@@ -222,7 +220,6 @@ public class DozeTriggers implements DozeMachine.Part {
             case INITIALIZED:
                 mBroadcastReceiver.register(mContext);
                 mDozeHost.addCallback(mHostCallback);
-                mDozeHost.setPassiveInterrupt(false);
                 checkTriggersAtInit();
                 break;
             case DOZE:
@@ -232,7 +229,9 @@ public class DozeTriggers implements DozeMachine.Part {
                     mDozeSensors.reregisterAllSensors();
                 }
                 mDozeSensors.setListening(true);
-                mDozeHost.setPassiveInterrupt(false);
+                if (newState == DozeMachine.State.DOZE_AOD && !sWakeDisplaySensorState) {
+                    onWakeScreen(false);
+                }
                 break;
             case DOZE_AOD_PAUSED:
             case DOZE_AOD_PAUSING:

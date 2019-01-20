@@ -16,12 +16,22 @@
 
 package com.android.server.usb;
 
+import static android.hardware.usb.UsbPortStatus.DATA_ROLE_DEVICE;
+import static android.hardware.usb.UsbPortStatus.DATA_ROLE_HOST;
+import static android.hardware.usb.UsbPortStatus.MODE_DFP;
+import static android.hardware.usb.UsbPortStatus.MODE_DUAL;
+import static android.hardware.usb.UsbPortStatus.MODE_UFP;
+import static android.hardware.usb.UsbPortStatus.POWER_ROLE_SINK;
+import static android.hardware.usb.UsbPortStatus.POWER_ROLE_SOURCE;
+
 import static com.android.internal.usb.DumpUtils.writePort;
 import static com.android.internal.usb.DumpUtils.writePortStatus;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.content.Context;
 import android.content.Intent;
+import android.hardware.usb.ParcelableUsbPort;
 import android.hardware.usb.UsbManager;
 import android.hardware.usb.UsbPort;
 import android.hardware.usb.UsbPortStatus;
@@ -41,12 +51,14 @@ import android.os.Message;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.service.usb.UsbPortInfoProto;
 import android.service.usb.UsbPortManagerProto;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
+import android.util.StatsLog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.IndentingPrintWriter;
@@ -54,6 +66,7 @@ import com.android.internal.util.dump.DualDumpOutputStream;
 import com.android.server.FgThread;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.NoSuchElementException;
 
 /**
@@ -75,13 +88,13 @@ public class UsbPortManager {
 
     // All non-trivial role combinations.
     private static final int COMBO_SOURCE_HOST =
-            UsbPort.combineRolesAsBit(UsbPort.POWER_ROLE_SOURCE, UsbPort.DATA_ROLE_HOST);
-    private static final int COMBO_SOURCE_DEVICE =
-            UsbPort.combineRolesAsBit(UsbPort.POWER_ROLE_SOURCE, UsbPort.DATA_ROLE_DEVICE);
+            UsbPort.combineRolesAsBit(POWER_ROLE_SOURCE, DATA_ROLE_HOST);
+    private static final int COMBO_SOURCE_DEVICE = UsbPort.combineRolesAsBit(
+            POWER_ROLE_SOURCE, DATA_ROLE_DEVICE);
     private static final int COMBO_SINK_HOST =
-            UsbPort.combineRolesAsBit(UsbPort.POWER_ROLE_SINK, UsbPort.DATA_ROLE_HOST);
-    private static final int COMBO_SINK_DEVICE =
-            UsbPort.combineRolesAsBit(UsbPort.POWER_ROLE_SINK, UsbPort.DATA_ROLE_DEVICE);
+            UsbPort.combineRolesAsBit(POWER_ROLE_SINK, DATA_ROLE_HOST);
+    private static final int COMBO_SINK_DEVICE = UsbPort.combineRolesAsBit(
+            POWER_ROLE_SINK, DATA_ROLE_DEVICE);
 
     // The system context.
     private final Context mContext;
@@ -116,6 +129,10 @@ public class UsbPortManager {
     // List of all simulated ports, indexed by id.
     private final ArrayMap<String, RawPortInfo> mSimulatedPorts =
             new ArrayMap<>();
+
+    // Maintains the current connected status of the port.
+    // Uploads logs only when the connection status is changes.
+    private final HashMap<String, Boolean> mConnected = new HashMap<>();
 
     public UsbPortManager(Context context) {
         mContext = context;
@@ -210,12 +227,12 @@ public class UsbPortManager {
             final int newMode;
             if ((!canChangePowerRole && currentPowerRole != newPowerRole)
                     || (!canChangeDataRole && currentDataRole != newDataRole)) {
-                if (canChangeMode && newPowerRole == UsbPort.POWER_ROLE_SOURCE
-                        && newDataRole == UsbPort.DATA_ROLE_HOST) {
-                    newMode = UsbPort.MODE_DFP;
-                } else if (canChangeMode && newPowerRole == UsbPort.POWER_ROLE_SINK
-                        && newDataRole == UsbPort.DATA_ROLE_DEVICE) {
-                    newMode = UsbPort.MODE_UFP;
+                if (canChangeMode && newPowerRole == POWER_ROLE_SOURCE
+                        && newDataRole == DATA_ROLE_HOST) {
+                    newMode = MODE_DFP;
+                } else if (canChangeMode && newPowerRole == POWER_ROLE_SINK
+                        && newDataRole == DATA_ROLE_DEVICE) {
+                    newMode = MODE_UFP;
                 } else {
                     logAndPrint(Log.ERROR, pw, "Found mismatch in supported USB role combinations "
                             + "while attempting to change role: " + portInfo
@@ -600,7 +617,7 @@ public class UsbPortManager {
             IndentingPrintWriter pw) {
         // Only allow mode switch capability for dual role ports.
         // Validate that the current mode matches the supported modes we expect.
-        if ((supportedModes & UsbPort.MODE_DUAL) != UsbPort.MODE_DUAL) {
+        if ((supportedModes & MODE_DUAL) != MODE_DUAL) {
             canChangeMode = false;
             if (currentMode != 0 && currentMode != supportedModes) {
                 logAndPrint(Log.WARN, pw, "Ignoring inconsistent current mode from USB "
@@ -626,16 +643,16 @@ public class UsbPortManager {
                 // Can only change power role.
                 // Assume data role must remain at its current value.
                 supportedRoleCombinations |= UsbPort.combineRolesAsBit(
-                        UsbPort.POWER_ROLE_SOURCE, currentDataRole);
+                        POWER_ROLE_SOURCE, currentDataRole);
                 supportedRoleCombinations |= UsbPort.combineRolesAsBit(
-                        UsbPort.POWER_ROLE_SINK, currentDataRole);
+                        POWER_ROLE_SINK, currentDataRole);
             } else if (canChangeDataRole) {
                 // Can only change data role.
                 // Assume power role must remain at its current value.
                 supportedRoleCombinations |= UsbPort.combineRolesAsBit(
-                        currentPowerRole, UsbPort.DATA_ROLE_HOST);
+                        currentPowerRole, DATA_ROLE_HOST);
                 supportedRoleCombinations |= UsbPort.combineRolesAsBit(
-                        currentPowerRole, UsbPort.DATA_ROLE_DEVICE);
+                        currentPowerRole, DATA_ROLE_DEVICE);
             } else if (canChangeMode) {
                 // Can only change the mode.
                 // Assume both standard UFP and DFP configurations will become available
@@ -647,7 +664,8 @@ public class UsbPortManager {
         // Update the port data structures.
         PortInfo portInfo = mPorts.get(portId);
         if (portInfo == null) {
-            portInfo = new PortInfo(portId, supportedModes);
+            portInfo = new PortInfo(mContext.getSystemService(UsbManager.class), portId,
+                    supportedModes);
             portInfo.setStatus(currentMode, canChangeMode,
                     currentPowerRole, canChangePowerRole,
                     currentDataRole, canChangeDataRole,
@@ -694,12 +712,25 @@ public class UsbPortManager {
         intent.addFlags(
                 Intent.FLAG_RECEIVER_FOREGROUND |
                         Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        intent.putExtra(UsbManager.EXTRA_PORT, portInfo.mUsbPort);
+        intent.putExtra(UsbManager.EXTRA_PORT, ParcelableUsbPort.of(portInfo.mUsbPort));
         intent.putExtra(UsbManager.EXTRA_PORT_STATUS, portInfo.mUsbPortStatus);
 
         // Guard against possible reentrance by posting the broadcast from the handler
         // instead of from within the critical section.
-        mHandler.post(() -> mContext.sendBroadcastAsUser(intent, UserHandle.ALL));
+        mHandler.post(() -> mContext.sendBroadcastAsUser(intent, UserHandle.ALL,
+                Manifest.permission.MANAGE_USB));
+
+        // Log to statsd
+        if (!mConnected.containsKey(portInfo.mUsbPort.getId())
+                || (mConnected.get(portInfo.mUsbPort.getId())
+                != portInfo.mUsbPortStatus.isConnected())) {
+            mConnected.put(portInfo.mUsbPort.getId(), portInfo.mUsbPortStatus.isConnected());
+            StatsLog.write(StatsLog.USB_CONNECTOR_STATE_CHANGED,
+                    portInfo.mUsbPortStatus.isConnected()
+                    ? StatsLog.USB_CONNECTOR_STATE_CHANGED__STATE__STATE_CONNECTED :
+                    StatsLog.USB_CONNECTOR_STATE_CHANGED__STATE__STATE_DISCONNECTED,
+                    portInfo.mUsbPort.getId(), portInfo.mLastConnectDurationMillis);
+        }
     }
 
     private static void logAndPrint(int priority, IndentingPrintWriter pw, String msg) {
@@ -746,16 +777,23 @@ public class UsbPortManager {
         public boolean mCanChangeMode;
         public boolean mCanChangePowerRole;
         public boolean mCanChangeDataRole;
-        public int mDisposition; // default initialized to 0 which means added
+        // default initialized to 0 which means added
+        public int mDisposition;
+        // Tracks elapsedRealtime() of when the port was connected
+        public long mConnectedAtMillis;
+        // 0 when port is connected. Else reports the last connected duration
+        public long mLastConnectDurationMillis;
 
-        public PortInfo(String portId, int supportedModes) {
-            mUsbPort = new UsbPort(portId, supportedModes);
+        PortInfo(@NonNull UsbManager usbManager, @NonNull String portId, int supportedModes) {
+            mUsbPort = new UsbPort(usbManager, portId, supportedModes);
         }
 
         public boolean setStatus(int currentMode, boolean canChangeMode,
                 int currentPowerRole, boolean canChangePowerRole,
                 int currentDataRole, boolean canChangeDataRole,
                 int supportedRoleCombinations) {
+            boolean dispositionChanged = false;
+
             mCanChangeMode = canChangeMode;
             mCanChangePowerRole = canChangePowerRole;
             mCanChangeDataRole = canChangeDataRole;
@@ -767,9 +805,18 @@ public class UsbPortManager {
                     != supportedRoleCombinations) {
                 mUsbPortStatus = new UsbPortStatus(currentMode, currentPowerRole, currentDataRole,
                         supportedRoleCombinations);
-                return true;
+                dispositionChanged = true;
             }
-            return false;
+
+            if (mUsbPortStatus.isConnected() && mConnectedAtMillis == 0) {
+                mConnectedAtMillis = SystemClock.elapsedRealtime();
+                mLastConnectDurationMillis = 0;
+            } else if (!mUsbPortStatus.isConnected() && mConnectedAtMillis != 0) {
+                mLastConnectDurationMillis = SystemClock.elapsedRealtime() - mConnectedAtMillis;
+                mConnectedAtMillis = 0;
+            }
+
+            return dispositionChanged;
         }
 
         void dump(@NonNull DualDumpOutputStream dump, @NonNull String idName, long id) {
@@ -782,6 +829,10 @@ public class UsbPortManager {
                     mCanChangePowerRole);
             dump.write("can_change_data_role", UsbPortInfoProto.CAN_CHANGE_DATA_ROLE,
                     mCanChangeDataRole);
+            dump.write("connected_at_millis",
+                    UsbPortInfoProto.CONNECTED_AT_MILLIS, mConnectedAtMillis);
+            dump.write("last_connect_duration_millis",
+                    UsbPortInfoProto.LAST_CONNECT_DURATION_MILLIS, mLastConnectDurationMillis);
 
             dump.end(token);
         }
@@ -791,7 +842,9 @@ public class UsbPortManager {
             return "port=" + mUsbPort + ", status=" + mUsbPortStatus
                     + ", canChangeMode=" + mCanChangeMode
                     + ", canChangePowerRole=" + mCanChangePowerRole
-                    + ", canChangeDataRole=" + mCanChangeDataRole;
+                    + ", canChangeDataRole=" + mCanChangeDataRole
+                    + ", connectedAtMillis=" + mConnectedAtMillis
+                    + ", lastConnectDurationMillis=" + mLastConnectDurationMillis;
         }
     }
 

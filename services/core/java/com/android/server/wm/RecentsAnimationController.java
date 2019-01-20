@@ -504,10 +504,12 @@ public class RecentsAnimationController implements DeathRecipient {
     public void binderDied() {
         cancelAnimation(REORDER_MOVE_TO_ORIGINAL_POSITION, "binderDied");
 
-        // Clear associated input consumers on runner death
-        final InputMonitor inputMonitor =
-                mService.mRoot.getDisplayContent(mDisplayId).getInputMonitor();
-        inputMonitor.destroyInputConsumer(INPUT_CONSUMER_RECENTS_ANIMATION);
+        synchronized (mService.getWindowManagerLock()) {
+            // Clear associated input consumers on runner death
+            final InputMonitor inputMonitor =
+                    mService.mRoot.getDisplayContent(mDisplayId).getInputMonitor();
+            inputMonitor.destroyInputConsumer(INPUT_CONSUMER_RECENTS_ANIMATION);
+        }
     }
 
     void checkAnimationReady(WallpaperController wallpaperController) {
@@ -603,8 +605,8 @@ public class RecentsAnimationController implements DeathRecipient {
             mTask = task;
             mIsRecentTaskInvisible = isRecentTaskInvisible;
             final WindowContainer container = mTask.getParent();
-            container.getRelativePosition(mPosition);
-            container.getBounds(mBounds);
+            container.getRelativeDisplayedPosition(mPosition);
+            mBounds.set(container.getDisplayedBounds());
         }
 
         RemoteAnimationTarget createRemoteAnimationApp() {

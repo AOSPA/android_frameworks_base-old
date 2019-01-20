@@ -19,12 +19,9 @@ import static android.app.NotificationChannel.USER_LOCKED_IMPORTANCE;
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 import static android.app.NotificationManager.IMPORTANCE_HIGH;
 import static android.app.NotificationManager.IMPORTANCE_LOW;
-import static android.service.notification.NotificationListenerService.Ranking
-        .USER_SENTIMENT_NEGATIVE;
-import static android.service.notification.NotificationListenerService.Ranking
-        .USER_SENTIMENT_NEUTRAL;
-import static android.service.notification.NotificationListenerService.Ranking
-        .USER_SENTIMENT_POSITIVE;
+import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEGATIVE;
+import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL;
+import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_POSITIVE;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
@@ -760,6 +757,7 @@ public class NotificationRecordTest extends UiServiceTestCase {
         NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
 
         record.setAssistantImportance(IMPORTANCE_LOW);
+        record.calculateImportance();
         assertEquals(IMPORTANCE_LOW, record.getImportance());
 
         // assistant ignored if user expressed preference
@@ -767,6 +765,7 @@ public class NotificationRecordTest extends UiServiceTestCase {
         channel.lockFields(USER_LOCKED_IMPORTANCE);
 
         record.setAssistantImportance(IMPORTANCE_LOW);
+        record.calculateImportance();
         assertEquals(channel.getImportance(), record.getImportance());
     }
 
@@ -779,6 +778,7 @@ public class NotificationRecordTest extends UiServiceTestCase {
         NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
 
         record.setAssistantImportance(IMPORTANCE_LOW);
+        record.calculateImportance();
         assertEquals(IMPORTANCE_LOW, record.getImportance());
 
         record.updateNotificationChannel(
@@ -803,6 +803,18 @@ public class NotificationRecordTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testSetDidNotAudiblyAlert() {
+        StatusBarNotification sbn = getNotification(PKG_O, true /* noisy */,
+                true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
+                false /* lights */, false /* defaultLights */, groupId /* group */);
+        NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
+
+        record.setAudiblyAlerted(false);
+
+        assertEquals(-1, record.getLastAudiblyAlertedMs());
+    }
+
+    @Test
     public void testSetAudiblyAlerted() {
         StatusBarNotification sbn = getNotification(PKG_O, true /* noisy */,
                 true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
@@ -811,6 +823,6 @@ public class NotificationRecordTest extends UiServiceTestCase {
 
         record.setAudiblyAlerted(true);
 
-        assertTrue(record.getAudiblyAlerted());
+        assertNotEquals(-1, record.getLastAudiblyAlertedMs());
     }
 }

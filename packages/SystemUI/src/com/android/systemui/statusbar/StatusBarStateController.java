@@ -26,17 +26,23 @@ import android.view.animation.Interpolator;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.systemui.Interpolators;
+import com.android.systemui.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.policy.CallbackController;
 
 import java.lang.annotation.Retention;
 import java.util.ArrayList;
 import java.util.Comparator;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Tracks and reports on {@link StatusBarState}.
  */
-public class StatusBarStateController {
+@Singleton
+public class StatusBarStateController implements CallbackController<StateListener> {
     private static final String TAG = "SbStateController";
 
     private static final int MAX_STATE = StatusBarState.FULLSCREEN_USER_SWITCHER;
@@ -98,6 +104,10 @@ public class StatusBarStateController {
     public static final int RANK_STATUS_BAR_WINDOW_CONTROLLER = 1;
     public static final int RANK_STACK_SCROLLER = 2;
     public static final int RANK_SHELF = 3;
+
+    @Inject
+    public StatusBarStateController() {
+    }
 
     public int getState() {
         return mState;
@@ -228,7 +238,7 @@ public class StatusBarStateController {
         return mLastState == StatusBarState.SHADE_LOCKED;
     }
 
-    public void addListener(StateListener listener) {
+    public void addCallback(StateListener listener) {
         synchronized (mListeners) {
             addListenerInternalLocked(listener, Integer.MAX_VALUE);
         }
@@ -244,7 +254,7 @@ public class StatusBarStateController {
      * StatusBarState out of StatusBar.java. Any new listeners should be built not to need ranking
      * (i.e., they are non-dependent on the order of operations of StatusBarState listeners).
      */
-    public void addListener(StateListener listener, @SbStateListenerRank int rank) {
+    public void addCallback(StateListener listener, @SbStateListenerRank int rank) {
         synchronized (mListeners) {
             addListenerInternalLocked(listener, rank);
         }
@@ -264,7 +274,7 @@ public class StatusBarStateController {
         mListeners.sort(mComparator);
     }
 
-    public void removeListener(StateListener listener) {
+    public void removeCallback(StateListener listener) {
         synchronized (mListeners) {
             mListeners.removeIf((it) -> it.listener.equals(listener));
         }

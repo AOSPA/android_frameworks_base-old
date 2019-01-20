@@ -24,6 +24,7 @@
 #include "RenderNode.h"
 #include "pipeline/skia/AnimatedDrawables.h"
 #include "pipeline/skia/GLFunctorDrawable.h"
+#include "pipeline/skia/VkFunctorDrawable.h"
 #include "pipeline/skia/VkInteropFunctorDrawable.h"
 
 namespace android {
@@ -94,8 +95,8 @@ void SkiaRecordingCanvas::insertReorderBarrier(bool enableReorder) {
         drawDrawable(drawable);
     }
     if (enableReorder) {
-        mCurrentBarrier = mDisplayList->allocateDrawable<StartReorderBarrierDrawable>(
-                mDisplayList.get());
+        mCurrentBarrier =
+                mDisplayList->allocateDrawable<StartReorderBarrierDrawable>(mDisplayList.get());
         drawDrawable(mCurrentBarrier);
     }
 }
@@ -124,11 +125,27 @@ void SkiaRecordingCanvas::callDrawGLFunction(Functor* functor,
                                              uirenderer::GlFunctorLifecycleListener* listener) {
     FunctorDrawable* functorDrawable;
     if (Properties::getRenderPipelineType() == RenderPipelineType::SkiaVulkan) {
-        functorDrawable = mDisplayList->allocateDrawable<VkInteropFunctorDrawable>(functor,
-                listener, asSkCanvas());
+        // TODO(cblume) use VkFunctorDrawable instead of VkInteropFunctorDrawable here when the
+        // interop is disabled/moved.
+        functorDrawable = mDisplayList->allocateDrawable<VkInteropFunctorDrawable>(
+                functor, listener, asSkCanvas());
     } else {
-        functorDrawable = mDisplayList->allocateDrawable<GLFunctorDrawable>(functor, listener,
-                asSkCanvas());
+        functorDrawable =
+                mDisplayList->allocateDrawable<GLFunctorDrawable>(functor, listener, asSkCanvas());
+    }
+    mDisplayList->mChildFunctors.push_back(functorDrawable);
+    drawDrawable(functorDrawable);
+}
+
+void SkiaRecordingCanvas::drawWebViewFunctor(int functor) {
+    FunctorDrawable* functorDrawable;
+    if (Properties::getRenderPipelineType() == RenderPipelineType::SkiaVulkan) {
+        // TODO(cblume) use VkFunctorDrawable instead of VkInteropFunctorDrawable here when the
+        // interop is disabled.
+        functorDrawable =
+                mDisplayList->allocateDrawable<VkInteropFunctorDrawable>(functor, asSkCanvas());
+    } else {
+        functorDrawable = mDisplayList->allocateDrawable<GLFunctorDrawable>(functor, asSkCanvas());
     }
     mDisplayList->mChildFunctors.push_back(functorDrawable);
     drawDrawable(functorDrawable);
@@ -164,7 +181,7 @@ SkiaCanvas::PaintCoW&& SkiaRecordingCanvas::filterBitmap(PaintCoW&& paint,
         if (colorSpaceFilter) {
             if (tmpPaint.getColorFilter()) {
                 tmpPaint.setColorFilter(SkColorFilter::MakeComposeFilter(
-                       tmpPaint.refColorFilter(), std::move(colorSpaceFilter)));
+                        tmpPaint.refColorFilter(), std::move(colorSpaceFilter)));
             } else {
                 tmpPaint.setColorFilter(std::move(colorSpaceFilter));
             }
@@ -245,8 +262,7 @@ void SkiaRecordingCanvas::drawNinePatch(Bitmap& bitmap, const Res_png_9patch& ch
         filteredPaint.writeable().setFilterQuality(kLow_SkFilterQuality);
     }
     sk_sp<SkImage> image = bitmap.makeImage();
-    mRecorder.drawImageLattice(image, lattice, dst,
-                               filterPaint(std::move(filteredPaint)),
+    mRecorder.drawImageLattice(image, lattice, dst, filterPaint(std::move(filteredPaint)),
                                bitmap.palette());
     if (!bitmap.isImmutable() && image.get() && !image->unique() && !dst.isEmpty()) {
         mDisplayList->mMutableImages.push_back(image.get());
@@ -259,6 +275,6 @@ double SkiaRecordingCanvas::drawAnimatedImage(AnimatedImageDrawable* animatedIma
     return 0;
 }
 
-};  // namespace skiapipeline
-};  // namespace uirenderer
-};  // namespace android
+}  // namespace skiapipeline
+}  // namespace uirenderer
+}  // namespace android

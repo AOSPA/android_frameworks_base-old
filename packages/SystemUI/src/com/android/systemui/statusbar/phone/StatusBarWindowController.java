@@ -54,9 +54,13 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Encapsulates all logic for the status bar window state management.
  */
+@Singleton
 public class StatusBarWindowController implements Callback, Dumpable, ConfigurationListener {
 
     private static final String TAG = "StatusBarWindowController";
@@ -78,13 +82,14 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
 
     private final SysuiColorExtractor mColorExtractor = Dependency.get(SysuiColorExtractor.class);
 
+    @Inject
     public StatusBarWindowController(Context context) {
         this(context, context.getSystemService(WindowManager.class), ActivityManager.getService(),
                 DozeParameters.getInstance(context));
     }
 
     @VisibleForTesting
-    StatusBarWindowController(Context context, WindowManager windowManager,
+    public StatusBarWindowController(Context context, WindowManager windowManager,
             IActivityManager activityManager, DozeParameters dozeParameters) {
         mContext = context;
         mWindowManager = windowManager;
@@ -92,7 +97,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
         mKeyguardScreenRotation = shouldEnableKeyguardScreenRotation();
         mDozeParameters = dozeParameters;
         mScreenBrightnessDoze = mDozeParameters.getScreenBrightnessDoze();
-        Dependency.get(StatusBarStateController.class).addListener(
+        Dependency.get(StatusBarStateController.class).addCallback(
                 mStateListener, StatusBarStateController.RANK_STATUS_BAR_WINDOW_CONTROLLER);
         Dependency.get(ConfigurationController.class).addCallback(this);
     }

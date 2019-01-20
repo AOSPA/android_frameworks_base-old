@@ -222,6 +222,7 @@ public class DisplayPolicy {
     private volatile int mDockMode = Intent.EXTRA_DOCK_STATE_UNDOCKED;
     private volatile boolean mHdmiPlugged;
 
+    private volatile boolean mHasStatusBar;
     private volatile boolean mHasNavigationBar;
     // Can the navigation bar ever move to the side?
     private volatile boolean mNavigationBarCanMove;
@@ -504,6 +505,23 @@ public class DisplayPolicy {
         // TODO: Make it can take screenshot on external display
         mScreenshotHelper = displayContent.isDefaultDisplay
                 ? new ScreenshotHelper(mContext) : null;
+
+        if (mDisplayContent.isDefaultDisplay) {
+            mHasStatusBar = true;
+            mHasNavigationBar = mContext.getResources().getBoolean(R.bool.config_showNavigationBar);
+
+            // Allow a system property to override this. Used by the emulator.
+            // See also hasNavigationBar().
+            String navBarOverride = SystemProperties.get("qemu.hw.mainkeys");
+            if ("1".equals(navBarOverride)) {
+                mHasNavigationBar = false;
+            } else if ("0".equals(navBarOverride)) {
+                mHasNavigationBar = true;
+            }
+        } else {
+            mHasStatusBar = false;
+            mHasNavigationBar = mDisplayContent.getDisplay().supportsSystemDecorations();
+        }
     }
 
     void systemReady() {
@@ -521,21 +539,6 @@ public class DisplayPolicy {
     void configure(int width, int height, int shortSizeDp) {
         // Allow the navigation bar to move on non-square small devices (phones).
         mNavigationBarCanMove = width != height && shortSizeDp < 600;
-
-        if (mDisplayContent.isDefaultDisplay) {
-            mHasNavigationBar = mContext.getResources().getBoolean(R.bool.config_showNavigationBar);
-
-            // Allow a system property to override this. Used by the emulator.
-            // See also hasNavigationBar().
-            String navBarOverride = SystemProperties.get("qemu.hw.mainkeys");
-            if ("1".equals(navBarOverride)) {
-                mHasNavigationBar = false;
-            } else if ("0".equals(navBarOverride)) {
-                mHasNavigationBar = true;
-            }
-        } else {
-            mHasNavigationBar = mDisplayContent.getDisplay().supportsSystemDecorations();
-        }
     }
 
     void updateConfigurationDependentBehaviors() {
@@ -587,6 +590,10 @@ public class DisplayPolicy {
 
     public boolean hasNavigationBar() {
         return mHasNavigationBar;
+    }
+
+    public boolean hasStatusBar() {
+        return mHasStatusBar;
     }
 
     public boolean navigationBarCanMove() {
@@ -756,6 +763,12 @@ public class DisplayPolicy {
                         || attrs.hideTimeoutMilliseconds > TOAST_WINDOW_TIMEOUT) {
                     attrs.hideTimeoutMilliseconds = TOAST_WINDOW_TIMEOUT;
                 }
+                // Accessibility users may need longer timeout duration. This api compares
+                // original timeout with user's preference and return longer one. It returns
+                // original timeout if there's no preference.
+                attrs.hideTimeoutMilliseconds = mAccessibilityManager.getRecommendedTimeoutMillis(
+                        (int) attrs.hideTimeoutMilliseconds,
+                        AccessibilityManager.FLAG_CONTENT_TEXT);
                 attrs.windowAnimations = com.android.internal.R.style.Animation_Toast;
                 break;
         }
@@ -2493,12 +2506,19 @@ public class DisplayPolicy {
         final int landscapeRotation = displayRotation.getLandscapeRotation();
         final int seascapeRotation = displayRotation.getSeascapeRotation();
 
-        mStatusBarHeightForRotation[portraitRotation] =
-        mStatusBarHeightForRotation[upsideDownRotation] =
-                res.getDimensionPixelSize(R.dimen.status_bar_height_portrait);
-        mStatusBarHeightForRotation[landscapeRotation] =
-        mStatusBarHeightForRotation[seascapeRotation] =
-                res.getDimensionPixelSize(R.dimen.status_bar_height_landscape);
+        if (hasStatusBar()) {
+            mStatusBarHeightForRotation[portraitRotation] =
+                    mStatusBarHeightForRotation[upsideDownRotation] =
+                            res.getDimensionPixelSize(R.dimen.status_bar_height_portrait);
+            mStatusBarHeightForRotation[landscapeRotation] =
+                    mStatusBarHeightForRotation[seascapeRotation] =
+                            res.getDimensionPixelSize(R.dimen.status_bar_height_landscape);
+        } else {
+            mStatusBarHeightForRotation[portraitRotation] =
+                    mStatusBarHeightForRotation[upsideDownRotation] =
+                            mStatusBarHeightForRotation[landscapeRotation] =
+                                    mStatusBarHeightForRotation[seascapeRotation] = 0;
+        }
 
         // Height of the navigation bar when presented horizontally at bottom
         mNavigationBarHeightForRotationDefault[portraitRotation] =
@@ -2833,6 +2853,9 @@ public class DisplayPolicy {
             // will quickly lose focus once it correctly gets hidden.
             return 0;
         }
+
+        mDisplayContent.getInsetsStateController().onBarControllingWindowChanged(
+                mTopFullscreenOpaqueWindowState);
 
         int tmpVisibility = PolicyControl.getSystemUiVisibility(win, null)
                 & ~mResettingSystemUiFlags

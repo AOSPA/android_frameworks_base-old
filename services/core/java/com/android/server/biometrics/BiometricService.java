@@ -373,6 +373,13 @@ public class BiometricService extends SystemService {
             public void onAuthenticationSucceeded(boolean requireConfirmation, byte[] token)
                     throws RemoteException {
                 try {
+                    // Should never happen, log this to catch bad HAL behavior (e.g. auth succeeded
+                    // after user dismissed/canceled dialog).
+                    if (mCurrentAuthSession == null) {
+                        Slog.e(TAG, "onAuthenticationSucceeded(): Auth session is null");
+                        return;
+                    }
+
                     if (!requireConfirmation) {
                         mActivityTaskManager.unregisterTaskStackListener(mTaskStackListener);
                         KeyStore.getInstance().addAuthToken(token);
@@ -398,6 +405,13 @@ public class BiometricService extends SystemService {
             public void onAuthenticationFailed(int cookie, boolean requireConfirmation)
                     throws RemoteException {
                 try {
+                    // Should never happen, log this to catch bad HAL behavior (e.g. auth succeeded
+                    // after user dismissed/canceled dialog).
+                    if (mCurrentAuthSession == null) {
+                        Slog.e(TAG, "onAuthenticationFailed(): Auth session is null");
+                        return;
+                    }
+
                     mStatusBarService.onBiometricHelp(getContext().getResources().getString(
                             com.android.internal.R.string.biometric_not_recognized));
                     if (requireConfirmation) {
@@ -486,6 +500,13 @@ public class BiometricService extends SystemService {
 
             @Override
             public void onAcquired(int acquiredInfo, String message) throws RemoteException {
+                // Should never happen, log this to catch bad HAL behavior (e.g. auth succeeded
+                // after user dismissed/canceled dialog).
+                if (mCurrentAuthSession == null) {
+                    Slog.e(TAG, "onAcquired(): Auth session is null");
+                    return;
+                }
+
                 if (acquiredInfo != BiometricConstants.BIOMETRIC_ACQUIRED_GOOD) {
                     try {
                         mStatusBarService.onBiometricHelp(message);
@@ -653,7 +674,7 @@ public class BiometricService extends SystemService {
             }
 
             mHandler.post(() -> {
-                final Pair<Integer, Integer> result = checkAndGetBiometricModality(callingUserId);
+                final Pair<Integer, Integer> result = checkAndGetBiometricModality(userId);
                 final int modality = result.first;
                 final int error = result.second;
 
@@ -813,6 +834,24 @@ public class BiometricService extends SystemService {
             }
         }
 
+        @Override // Binder call
+        public void resetTimeout(byte[] token) {
+            checkInternalPermission();
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                if (mFingerprintService != null) {
+                    mFingerprintService.resetTimeout(token);
+                }
+                if (mFaceService != null) {
+                    mFaceService.resetTimeout(token);
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Remote exception", e);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
         void cancelInternal(IBinder token, String opPackageName, boolean fromClient) {
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
@@ -932,7 +971,7 @@ public class BiometricService extends SystemService {
      * {@link BiometricAuthenticator#TYPE_FACE}
      * and the error containing one of the {@link BiometricConstants} errors.
      */
-    private Pair<Integer, Integer> checkAndGetBiometricModality(int callingUid) {
+    private Pair<Integer, Integer> checkAndGetBiometricModality(int userId) {
         int modality = TYPE_NONE;
 
         // No biometric features, send error
@@ -961,7 +1000,7 @@ public class BiometricService extends SystemService {
                     // order.
                     firstHwAvailable = modality;
                 }
-                if (authenticator.hasEnrolledTemplates(callingUid)) {
+                if (authenticator.hasEnrolledTemplates(userId)) {
                     hasTemplatesEnrolled = true;
                     if (isEnabledForApp(modality)) {
                         // TODO(b/110907543): When face settings (and other settings) have both a

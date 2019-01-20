@@ -29,8 +29,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
-import static android.app.WindowConfiguration.activityTypeToString;
-import static android.app.WindowConfiguration.windowingModeToString;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
@@ -90,17 +88,18 @@ import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.power.V1_0.PowerHint;
-import android.os.Build;
 import android.os.FactoryTest;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.IntArray;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
@@ -110,6 +109,7 @@ import android.view.Display;
 import android.view.DisplayInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.ResolverActivity;
 import com.android.server.LocalServices;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.AppTimeTracker;
@@ -336,36 +336,63 @@ class RootActivityContainer extends ConfigurationContainer
         return homeStarted;
     }
 
+    void startHomeOnEmptyDisplays(String reason) {
+        for (int i = mActivityDisplays.size() - 1; i >= 0; i--) {
+            final ActivityDisplay display = mActivityDisplays.get(i);
+            if (display.topRunningActivity() == null) {
+                startHomeOnDisplay(mCurrentUser, reason, display.mDisplayId);
+            }
+        }
+    }
+
     /**
-     * This starts home activity on displays that can have system decorations and only if the
-     * home activity can have multiple instances.
+     * This starts home activity on displays that can have system decorations based on displayId -
+     * Default display always use primary home component.
+     * For Secondary displays, the home activity must have category SECONDARY_HOME and then resolves
+     * according to the priorities listed below.
+     *  - If default home is not set, always use the secondary home defined in the config.
+     *  - Use currently selected primary home activity.
+     *  - Use the activity in the same package as currently selected primary home activity.
+     *    If there are multiple activities matched, use first one.
+     *  - Use the secondary home defined in the config.
      */
     boolean startHomeOnDisplay(int userId, String reason, int displayId) {
-        final Intent homeIntent = mService.getHomeIntent();
-        final ActivityInfo aInfo = resolveHomeActivity(userId, homeIntent);
+        Intent homeIntent;
+        ActivityInfo aInfo;
+        if (displayId == DEFAULT_DISPLAY) {
+            homeIntent = mService.getHomeIntent();
+            aInfo = resolveHomeActivity(userId, homeIntent);
+        } else {
+            Pair<ActivityInfo, Intent> info = resolveSecondaryHomeActivity(userId, displayId);
+            aInfo = info.first;
+            homeIntent = info.second;
+        }
         if (aInfo == null) {
             return false;
         }
 
-        if (!canStartHomeOnDisplay(aInfo, displayId,
-                false /* allowInstrumenting */)) {
+        if (!canStartHomeOnDisplay(aInfo, displayId, false /* allowInstrumenting */)) {
             return false;
         }
 
+        // Updates the home component of the intent.
+        homeIntent.setComponent(new ComponentName(aInfo.applicationInfo.packageName, aInfo.name));
+        homeIntent.setFlags(homeIntent.getFlags() | FLAG_ACTIVITY_NEW_TASK);
         // Update the reason for ANR debugging to verify if the user activity is the one that
         // actually launched.
         final String myReason = reason + ":" + userId + ":" + UserHandle.getUserId(
-                aInfo.applicationInfo.uid);
+                aInfo.applicationInfo.uid) + ":" + displayId;
         mService.getActivityStartController().startHomeActivity(homeIntent, aInfo, myReason,
                 displayId);
         return true;
     }
 
     /**
-     * This resolves the home activity info and updates the home component of the given intent.
+     * This resolves the home activity info.
      * @return the home activity info if any.
      */
-    private ActivityInfo resolveHomeActivity(int userId, Intent homeIntent) {
+    @VisibleForTesting
+    ActivityInfo resolveHomeActivity(int userId, Intent homeIntent) {
         final int flags = ActivityManagerService.STOCK_PM_FLAGS;
         final ComponentName comp = homeIntent.getComponent();
         ActivityInfo aInfo = null;
@@ -391,11 +418,80 @@ class RootActivityContainer extends ConfigurationContainer
             return null;
         }
 
-        homeIntent.setComponent(new ComponentName(aInfo.applicationInfo.packageName, aInfo.name));
         aInfo = new ActivityInfo(aInfo);
         aInfo.applicationInfo = mService.getAppInfoForUser(aInfo.applicationInfo, userId);
-        homeIntent.setFlags(homeIntent.getFlags() | FLAG_ACTIVITY_NEW_TASK);
         return aInfo;
+    }
+
+    @VisibleForTesting
+    Pair<ActivityInfo, Intent> resolveSecondaryHomeActivity(int userId, int displayId) {
+        if (displayId == DEFAULT_DISPLAY) {
+            throw new IllegalArgumentException(
+                    "resolveSecondaryHomeActivity: Should not be DEFAULT_DISPLAY");
+        }
+        // Resolve activities in the same package as currently selected primary home activity.
+        Intent homeIntent = mService.getHomeIntent();
+        ActivityInfo aInfo = resolveHomeActivity(userId, homeIntent);
+        if (aInfo != null) {
+            if (ResolverActivity.class.getName().equals(aInfo.name)) {
+                // Always fallback to secondary home component if default home is not set.
+                aInfo = null;
+            } else {
+                // Look for secondary home activities in the currently selected default home
+                // package.
+                homeIntent = mService.getSecondaryHomeIntent(aInfo.applicationInfo.packageName);
+                final List<ResolveInfo> resolutions = resolveActivities(userId, homeIntent);
+                final int size = resolutions.size();
+                final String targetName = aInfo.name;
+                aInfo = null;
+                for (int i = 0; i < size; i++) {
+                    ResolveInfo resolveInfo = resolutions.get(i);
+                    // We need to traverse all resolutions to check if the currently selected
+                    // default home activity is present.
+                    if (resolveInfo.activityInfo.name.equals(targetName)) {
+                        aInfo = resolveInfo.activityInfo;
+                        break;
+                    }
+                }
+                if (aInfo == null && size > 0) {
+                    // First one is the best.
+                    aInfo = resolutions.get(0).activityInfo;
+                }
+            }
+        }
+
+        if (aInfo != null) {
+            if (!canStartHomeOnDisplay(aInfo, displayId, false /* allowInstrumenting */)) {
+                aInfo = null;
+            }
+        }
+
+        // Fallback to secondary home component.
+        if (aInfo == null) {
+            homeIntent = mService.getSecondaryHomeIntent(null);
+            aInfo = resolveHomeActivity(userId, homeIntent);
+        }
+        return Pair.create(aInfo, homeIntent);
+    }
+
+    /**
+     * Retrieve all activities that match the given intent.
+     * The list should already ordered from best to worst matched.
+     * {@link android.content.pm.PackageManager#queryIntentActivities}
+     */
+    @VisibleForTesting
+    List<ResolveInfo> resolveActivities(int userId, Intent homeIntent) {
+        List<ResolveInfo> resolutions;
+        try {
+            final String resolvedType =
+                    homeIntent.resolveTypeIfNeeded(mService.mContext.getContentResolver());
+            resolutions = AppGlobals.getPackageManager().queryIntentActivities(homeIntent,
+                    resolvedType, ActivityManagerService.STOCK_PM_FLAGS, userId).getList();
+
+        } catch (RemoteException e) {
+            resolutions = new ArrayList<>();
+        }
+        return resolutions;
     }
 
     boolean resumeHomeActivity(ActivityRecord prev, String reason, int displayId) {
@@ -448,6 +544,14 @@ class RootActivityContainer extends ConfigurationContainer
             return true;
         }
 
+        final boolean deviceProvisioned = Settings.Global.getInt(
+                mService.mContext.getContentResolver(),
+                Settings.Global.DEVICE_PROVISIONED, 0) != 0;
+        if (displayId != DEFAULT_DISPLAY && displayId != INVALID_DISPLAY && !deviceProvisioned) {
+            // Can't launch home on secondary display before device is provisioned.
+            return false;
+        }
+
         final ActivityDisplay display = getActivityDisplay(displayId);
         if (display == null || display.isRemoved() || !display.supportsSystemDecorations()) {
             // Can't launch home on display that doesn't support system decorations.
@@ -455,13 +559,9 @@ class RootActivityContainer extends ConfigurationContainer
         }
 
         final boolean supportMultipleInstance = homeInfo.launchMode != LAUNCH_SINGLE_TASK
-                && homeInfo.launchMode != LAUNCH_SINGLE_INSTANCE
-                && homeInfo.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q;
+                && homeInfo.launchMode != LAUNCH_SINGLE_INSTANCE;
         if (!supportMultipleInstance) {
-            // Can't launch home on other displays if it requested to be single instance. Also we
-            // don't allow home applications that target before Q to have multiple home activity
-            // instances because they may not be expected to have multiple home scenario and
-            // haven't explicitly request for single instance.
+            // Can't launch home on secondary displays if it requested to be single instance.
             return false;
         }
 
@@ -495,11 +595,15 @@ class RootActivityContainer extends ConfigurationContainer
 
         // Force-update the orientation from the WindowManager, since we need the true configuration
         // to send to the client now.
-        final Configuration config = mWindowManager.updateOrientationFromAppTokens(
-                getDisplayOverrideConfiguration(displayId),
-                starting != null && starting.mayFreezeScreenLocked(starting.app)
-                        ? starting.appToken : null,
-                displayId, true /* forceUpdate */);
+        final DisplayContent displayContent = mRootWindowContainer.getDisplayContent(displayId);
+        Configuration config = null;
+        if (displayContent != null) {
+            config = displayContent.updateOrientationFromAppTokens(
+                    getDisplayOverrideConfiguration(displayId),
+                    starting != null && starting.mayFreezeScreenLocked(starting.app)
+                            ? starting.appToken : null,
+                    true /* forceUpdate */);
+        }
         if (starting != null && markFrozenIfConfigChanged && config != null) {
             starting.frozenBeforeDestroy = true;
         }
@@ -809,6 +913,13 @@ class RootActivityContainer extends ConfigurationContainer
                     + " to its current displayId=" + displayId);
         }
 
+        if (activityDisplay.isSingleTaskInstance() && activityDisplay.getChildCount() > 0) {
+            // We don't allow moving stacks to single instance display that already has a child.
+            Slog.e(TAG, "Can not move stack=" + stack
+                    + " to single task instance display=" + activityDisplay);
+            return;
+        }
+
         stack.reparent(activityDisplay, onTop, false /* displayRemoved */);
         // TODO(multi-display): resize stacks properly if moved from split-screen.
     }
@@ -864,7 +975,7 @@ class RootActivityContainer extends ConfigurationContainer
             // Resize the pinned stack to match the current size of the task the activity we are
             // going to be moving is currently contained in. We do this to have the right starting
             // animation bounds for the pinned stack to the desired bounds the caller wants.
-            resizeStack(stack, task.getOverrideBounds(), null /* tempTaskBounds */,
+            resizeStack(stack, task.getRequestedOverrideBounds(), null /* tempTaskBounds */,
                     null /* tempTaskInsetBounds */, !PRESERVE_WINDOWS,
                     true /* allowResizeInDockedMode */, !DEFER_RESUME);
 
@@ -914,7 +1025,7 @@ class RootActivityContainer extends ConfigurationContainer
     void executeAppTransitionForAllDisplay() {
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
             final ActivityDisplay display = mActivityDisplays.get(displayNdx);
-            display.getWindowContainerController().executeAppTransition();
+            display.mDisplayContent.executeAppTransition();
         }
     }
 
@@ -1254,9 +1365,8 @@ class RootActivityContainer extends ConfigurationContainer
     }
 
     // TODO: remove after object merge with RootWindowContainer
-    void onChildPositionChanged(DisplayWindowController childController, int position) {
+    void onChildPositionChanged(ActivityDisplay display, int position) {
         // Assume AM lock is held from positionChildAt of controller in each hierarchy.
-        final ActivityDisplay display = getActivityDisplay(childController.getDisplayId());
         if (display != null) {
             positionChildAt(display, position);
         }
@@ -1281,8 +1391,7 @@ class RootActivityContainer extends ConfigurationContainer
     @VisibleForTesting
     void addChild(ActivityDisplay activityDisplay, int position) {
         positionChildAt(activityDisplay, position);
-        mRootWindowContainer.positionChildAt(position,
-                activityDisplay.getWindowContainerController().mContainer);
+        mRootWindowContainer.positionChildAt(position, activityDisplay.mDisplayContent);
     }
 
     void removeChild(ActivityDisplay activityDisplay) {
@@ -1297,7 +1406,7 @@ class RootActivityContainer extends ConfigurationContainer
             throw new IllegalArgumentException("No display found with id: " + displayId);
         }
 
-        return activityDisplay.getOverrideConfiguration();
+        return activityDisplay.getRequestedOverrideConfiguration();
     }
 
     void setDisplayOverrideConfiguration(Configuration overrideConfiguration, int displayId) {
@@ -1306,7 +1415,7 @@ class RootActivityContainer extends ConfigurationContainer
             throw new IllegalArgumentException("No display found with id: " + displayId);
         }
 
-        activityDisplay.onOverrideConfigurationChanged(overrideConfiguration);
+        activityDisplay.onRequestedOverrideConfigurationChanged(overrideConfiguration);
     }
 
     void prepareForShutdown() {
@@ -1419,6 +1528,13 @@ class RootActivityContainer extends ConfigurationContainer
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
             final ActivityDisplay display = mActivityDisplays.get(displayNdx);
             for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
+                // Stacks and activities could be removed while putting activities to sleep if
+                // the app process was gone. This prevents us getting exception by accessing an
+                // invalid stack index.
+                if (stackNdx >= display.getChildCount()) {
+                    continue;
+                }
+
                 final ActivityStack stack = display.getChildAt(stackNdx);
                 if (allowDelay) {
                     allSleep &= stack.goToSleepIfPossible(shuttingDown);
@@ -1608,33 +1724,35 @@ class RootActivityContainer extends ConfigurationContainer
             return candidateTask.getStack();
         }
 
+        int windowingMode;
+        if (launchParams != null) {
+            // When launch params is not null, we always defer to its windowing mode. Sometimes
+            // it could be unspecified, which indicates it should inherit windowing mode from
+            // display.
+            windowingMode = launchParams.mWindowingMode;
+        } else {
+            windowingMode = options != null ? options.getLaunchWindowingMode()
+                    : r.getWindowingMode();
+        }
+        windowingMode = activityDisplay.validateWindowingMode(windowingMode, r, candidateTask,
+                r.getActivityType());
+
         // Return the topmost valid stack on the display.
         for (int i = activityDisplay.getChildCount() - 1; i >= 0; --i) {
             final ActivityStack stack = activityDisplay.getChildAt(i);
-            if (isValidLaunchStack(stack, r)) {
+            if (isValidLaunchStack(stack, r, windowingMode)) {
                 return stack;
             }
         }
 
         // If there is no valid stack on the external display - check if new dynamic stack will do.
         if (displayId != DEFAULT_DISPLAY) {
-            final int windowingMode;
-            if (launchParams != null) {
-                // When launch params is not null, we always defer to its windowing mode. Sometimes
-                // it could be unspecified, which indicates it should inherit windowing mode from
-                // display.
-                windowingMode = launchParams.mWindowingMode;
-            } else {
-                windowingMode = options != null ? options.getLaunchWindowingMode()
-                        : r.getWindowingMode();
-            }
             final int activityType =
                     options != null && options.getLaunchActivityType() != ACTIVITY_TYPE_UNDEFINED
                             ? options.getLaunchActivityType() : r.getActivityType();
             return activityDisplay.createStack(windowingMode, activityType, true /*onTop*/);
         }
 
-        Slog.w(TAG, "getValidLaunchStackOnDisplay: can't launch on displayId " + displayId);
         return null;
     }
 
@@ -1646,7 +1764,7 @@ class RootActivityContainer extends ConfigurationContainer
     }
 
     // TODO: Can probably be consolidated into getLaunchStack()...
-    private boolean isValidLaunchStack(ActivityStack stack, ActivityRecord r) {
+    private boolean isValidLaunchStack(ActivityStack stack, ActivityRecord r, int windowingMode) {
         switch (stack.getActivityType()) {
             case ACTIVITY_TYPE_HOME: return r.isActivityTypeHome();
             case ACTIVITY_TYPE_RECENTS: return r.isActivityTypeRecents();
@@ -1654,11 +1772,13 @@ class RootActivityContainer extends ConfigurationContainer
         }
         // There is a 1-to-1 relationship between stack and task when not in
         // primary split-windowing mode.
-        if (stack.getWindowingMode() != WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-            return false;
-        } else {
-            return r.supportsSplitScreenWindowingMode();
+        if (stack.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
+                && r.supportsSplitScreenWindowingMode()
+                && (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
+                || windowingMode == WINDOWING_MODE_UNDEFINED)) {
+            return true;
         }
+        return false;
     }
 
     int resolveActivityType(@Nullable ActivityRecord r, @Nullable ActivityOptions options,
@@ -2161,7 +2281,7 @@ class RootActivityContainer extends ConfigurationContainer
         for (int i = 0; i < displayCount; i++) {
             final ActivityDisplay activityDisplay = mActivityDisplays.get(i);
             pw.print(prefix); pw.print("  "); pw.print(activityDisplay.mDisplayId); pw.print(": ");
-            pw.println(activityDisplay.getOverrideConfiguration());
+            pw.println(activityDisplay.getRequestedOverrideConfiguration());
         }
     }
 
@@ -2186,42 +2306,7 @@ class RootActivityContainer extends ConfigurationContainer
             for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
                 final ActivityStack stack = display.getChildAt(stackNdx);
                 pw.println();
-                pw.println("  Stack #" + stack.mStackId
-                        + ": type=" + activityTypeToString(stack.getActivityType())
-                        + " mode=" + windowingModeToString(stack.getWindowingMode()));
-                pw.println("  isSleeping=" + stack.shouldSleepActivities());
-                pw.println("  mBounds=" + stack.getOverrideBounds());
-
-                printed |= stack.dumpActivitiesLocked(fd, pw, dumpAll, dumpClient, dumpPackage,
-                        needSep);
-
-                printed |= dumpHistoryList(fd, pw, stack.mLRUActivities, "    ", "Run", false,
-                        !dumpAll, false, dumpPackage, true,
-                        "    Running activities (most recent first):", null);
-
-                needSep = printed;
-                boolean pr = printThisActivity(pw, stack.mPausingActivity, dumpPackage, needSep,
-                        "    mPausingActivity: ");
-                if (pr) {
-                    printed = true;
-                    needSep = false;
-                }
-                pr = printThisActivity(pw, stack.getResumedActivity(), dumpPackage, needSep,
-                        "    mResumedActivity: ");
-                if (pr) {
-                    printed = true;
-                    needSep = false;
-                }
-                if (dumpAll) {
-                    pr = printThisActivity(pw, stack.mLastPausedActivity, dumpPackage, needSep,
-                            "    mLastPausedActivity: ");
-                    if (pr) {
-                        printed = true;
-                        needSep = true;
-                    }
-                    printed |= printThisActivity(pw, stack.mLastNoHistoryActivity, dumpPackage,
-                            needSep, "    mLastNoHistoryActivity: ");
-                }
+                printed = stack.dump(fd, pw, dumpAll, dumpClient, dumpPackage, needSep);
                 needSep = printed;
             }
             printThisActivity(pw, activityDisplay.getResumedActivity(), dumpPackage, needSep,

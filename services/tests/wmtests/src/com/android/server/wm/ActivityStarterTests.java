@@ -136,8 +136,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         final Rect bounds = new Rect(10, 10, 100, 100);
 
         mStarter.updateBounds(task, bounds);
-        assertEquals(bounds, task.getOverrideBounds());
-        assertEquals(new Rect(), task.getStack().getOverrideBounds());
+        assertEquals(bounds, task.getRequestedOverrideBounds());
+        assertEquals(new Rect(), task.getStack().getRequestedOverrideBounds());
 
         // When in a resizeable stack, the stack bounds should be updated as well.
         final TaskRecord task2 = new TaskBuilder(mService.mStackSupervisor)
@@ -152,10 +152,10 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         // In the case of no animation, the stack and task bounds should be set immediately.
         if (!ANIMATE) {
-            assertEquals(bounds, task2.getStack().getOverrideBounds());
-            assertEquals(bounds, task2.getOverrideBounds());
+            assertEquals(bounds, task2.getStack().getRequestedOverrideBounds());
+            assertEquals(bounds, task2.getRequestedOverrideBounds());
         } else {
-            assertEquals(new Rect(), task2.getOverrideBounds());
+            assertEquals(new Rect(), task2.getRequestedOverrideBounds());
         }
     }
 
@@ -416,10 +416,10 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 .setActivityOptions(new SafeActivityOptions(options))
                 .execute();
 
-        // verify that values are passed to the modifier. Values are passed twice -- once for
+        // verify that values are passed to the modifier. Values are passed thrice -- two for
         // setting initial state, another when task is created.
-        verify(modifier, times(2)).onCalculate(any(), eq(windowLayout), any(), any(), eq(options),
-                any(), any());
+        verify(modifier, times(3)).onCalculate(any(), eq(windowLayout), any(), any(), eq(options),
+                anyInt(), any(), any());
     }
 
     /**
@@ -570,7 +570,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
         runAndVerifyBackgroundActivityStartsSubtest("allowed_noStartsAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                false, false);
+                false, false, false);
     }
 
     /**
@@ -585,7 +585,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 "disallowed_unsupportedUsecase_aborted", true,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                false, false);
+                false, false, false);
     }
 
     /**
@@ -600,47 +600,53 @@ public class ActivityStarterTests extends ActivityTestsBase {
         runAndVerifyBackgroundActivityStartsSubtest("disallowed_rootUid_notAborted", false,
                 Process.ROOT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                false, false);
+                false, false, false);
         runAndVerifyBackgroundActivityStartsSubtest("disallowed_systemUid_notAborted", false,
                 Process.SYSTEM_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                false, false);
+                false, false, false);
         runAndVerifyBackgroundActivityStartsSubtest(
                 "disallowed_callingUidHasVisibleWindow_notAborted", false,
                 UNIMPORTANT_UID, true, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                false, false);
+                false, false, false);
         runAndVerifyBackgroundActivityStartsSubtest(
                 "disallowed_callingUidProcessStateTop_notAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                false, false);
+                false, false, false);
         runAndVerifyBackgroundActivityStartsSubtest(
                 "disallowed_realCallingUidHasVisibleWindow_notAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, true, PROCESS_STATE_TOP + 1,
-                false, false);
+                false, false, false);
         runAndVerifyBackgroundActivityStartsSubtest(
                 "disallowed_realCallingUidProcessStateTop_notAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP,
-                false, false);
+                false, false, false);
         runAndVerifyBackgroundActivityStartsSubtest(
                 "disallowed_hasForegroundActivities_notAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                true, false);
+                true, false, false);
         runAndVerifyBackgroundActivityStartsSubtest(
                 "disallowed_callerIsRecents_notAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
-                false, true);
+                false, true, false);
+        runAndVerifyBackgroundActivityStartsSubtest(
+                "disallowed_callerIsWhitelisted_notAborted", false,
+                UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
+                UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
+                false, false, true);
     }
 
     private void runAndVerifyBackgroundActivityStartsSubtest(String name, boolean shouldHaveAborted,
             int callingUid, boolean callingUidHasVisibleWindow, int callingUidProcState,
             int realCallingUid, boolean realCallingUidHasVisibleWindow, int realCallingUidProcState,
-            boolean hasForegroundActivities, boolean callerIsRecents) {
+            boolean hasForegroundActivities, boolean callerIsRecents,
+            boolean callerIsTempWhitelisted) {
         // window visibility
         doReturn(callingUidHasVisibleWindow).when(mService.mWindowManager).isAnyWindowVisibleForUid(
                 callingUid);
@@ -661,6 +667,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         RecentTasks recentTasks = mock(RecentTasks.class);
         mService.mStackSupervisor.setRecentTasks(recentTasks);
         doReturn(callerIsRecents).when(recentTasks).isCallerRecents(callingUid);
+        // caller is temp whitelisted
+        callerApp.setAllowBackgroundActivityStarts(callerIsTempWhitelisted);
 
         final ActivityOptions options = spy(ActivityOptions.makeBasic());
         ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_NEW_TASK)

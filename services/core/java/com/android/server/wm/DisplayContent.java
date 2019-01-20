@@ -29,12 +29,12 @@ import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
+import static android.view.InsetsState.TYPE_IME;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_180;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
 import static android.view.View.GONE;
-import static android.view.InsetsState.TYPE_IME;
 import static android.view.WindowManager.DOCKED_BOTTOM;
 import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.DOCKED_TOP;
@@ -59,7 +59,10 @@ import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
+import static android.view.WindowManager.TRANSIT_TASK_OPEN;
+import static android.view.WindowManager.TRANSIT_TASK_TO_FRONT;
 
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_CONFIG;
@@ -100,6 +103,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.CUSTOM_SCREEN_ROTATION;
+import static com.android.server.wm.WindowManagerService.H.REPORT_FOCUS_CHANGE;
 import static com.android.server.wm.WindowManagerService.H.REPORT_HARD_KEYBOARD_STATUS_CHANGE;
 import static com.android.server.wm.WindowManagerService.H.REPORT_LOSING_FOCUS;
 import static com.android.server.wm.WindowManagerService.H.SEND_NEW_CONFIGURATION;
@@ -166,6 +170,7 @@ import android.view.WindowManagerPolicyConstants.PointerEventListener;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.TriConsumer;
+import com.android.server.AnimationThread;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.utils.DisplayRotationUtil;
 import com.android.server.wm.utils.RotationCache;
@@ -207,6 +212,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     /** Unique identifier of this stack. */
     private final int mDisplayId;
 
+    // TODO: Remove once unification is complete.
+    ActivityDisplay mAcitvityDisplay;
+
     /** The containers below are the only child containers the display can have. */
     // Contains all window containers that are related to apps (Activities)
     private final TaskStackContainers mTaskStackContainers = new TaskStackContainers(mWmService);
@@ -227,7 +235,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
     private WindowState mTmpWindow;
     private WindowState mTmpWindow2;
-    private WindowAnimator mTmpWindowAnimator;
     private boolean mTmpRecoveringMemory;
     private boolean mUpdateImeTarget;
     private boolean mTmpInitial;
@@ -390,9 +397,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private final Matrix mTmpMatrix = new Matrix();
     private final Region mTmpRegion = new Region();
 
-
     /** Used for handing back size of display */
     private final Rect mTmpBounds = new Rect();
+
+    private final Configuration mTmpConfiguration = new Configuration();
 
     /** Remove this display when animation on it has completed. */
     private boolean mDeferredRemoval;
@@ -827,12 +835,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * initialize direct children.
      * @param display May not be null.
      * @param service You know.
-     * @param controller The controller for the display container.
+     * @param activityDisplay The ActivityDisplay for the display container.
      */
     DisplayContent(Display display, WindowManagerService service,
-            DisplayWindowController controller) {
+            ActivityDisplay activityDisplay) {
         super(service);
-        setController(controller);
+        mAcitvityDisplay = activityDisplay;
         if (service.mRoot.getDisplayContent(display.getDisplayId()) != null) {
             throw new IllegalArgumentException("Display with ID=" + display.getDisplayId()
                     + " already exists=" + service.mRoot.getDisplayContent(display.getDisplayId())
@@ -856,7 +864,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         AnimationHandler animationHandler = new AnimationHandler();
         mBoundsAnimationController = new BoundsAnimationController(service.mContext,
-                mAppTransition, SurfaceAnimationThread.getHandler(), animationHandler);
+                mAppTransition, AnimationThread.getHandler(), animationHandler);
 
         if (mWmService.mInputManager != null) {
             final InputChannel inputChannel = mWmService.mInputManager.monitorInput("Display "
@@ -1020,11 +1028,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     @Override
-    DisplayWindowController getController() {
-        return (DisplayWindowController) super.getController();
-    }
-
-    @Override
     public Display getDisplay() {
         return mDisplay;
     }
@@ -1138,9 +1141,50 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return true;
     }
 
+    /**
+     * The display content may have configuration set from {@link #DisplayWindowSettings}. This
+     * callback let the owner of container know there is existing configuration to prevent the
+     * values from being replaced by the initializing {@link #ActivityDisplay}.
+     */
+    void initializeDisplayOverrideConfiguration() {
+        if (mAcitvityDisplay != null) {
+            mAcitvityDisplay.onInitializeOverrideConfiguration(getRequestedOverrideConfiguration());
+        }
+    }
+
     /** Notify the configuration change of this display. */
     void sendNewConfiguration() {
         mWmService.mH.obtainMessage(SEND_NEW_CONFIGURATION, this).sendToTarget();
+    }
+
+    @Override
+    boolean onDescendantOrientationChanged(IBinder freezeDisplayToken,
+            ConfigurationContainer requestingContainer) {
+        final Configuration config = updateOrientationFromAppTokens(
+                getRequestedOverrideConfiguration(), freezeDisplayToken, false);
+        // If display rotation class tells us that it doesn't consider app requested orientation,
+        // this display won't rotate just because of an app changes its requested orientation. Thus
+        // it indicates that this display chooses not to handle this request.
+        final boolean handled = getDisplayRotation().respectAppRequestedOrientation();
+        if (config == null) {
+            return handled;
+        }
+
+        if (handled && requestingContainer instanceof ActivityRecord) {
+            final ActivityRecord activityRecord = (ActivityRecord) requestingContainer;
+            final boolean kept = mWmService.mAtmService.updateDisplayOverrideConfigurationLocked(
+                    config, activityRecord, false /* deferResume */, getDisplayId());
+            activityRecord.frozenBeforeDestroy = true;
+            if (!kept) {
+                mWmService.mAtmService.mRootActivityContainer.resumeFocusedStacksTopActivities();
+            }
+        } else {
+            // We have a new configuration to push so we need to update ATMS for now.
+            // TODO: Clean up display configuration push between ATMS and WMS after unification.
+            mWmService.mAtmService.updateDisplayOverrideConfigurationLocked(
+                    config, null /* starting */, false /* deferResume */, getDisplayId());
+        }
+        return handled;
     }
 
     /**
@@ -1156,7 +1200,56 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return updateOrientationFromAppTokens(false /* forceUpdate */);
     }
 
-    boolean updateOrientationFromAppTokens(boolean forceUpdate) {
+    /**
+     * Update orientation of the target display, returning a non-null new Configuration if it has
+     * changed from the current orientation. If a non-null configuration is returned, someone must
+     * call {@link WindowManagerService#setNewDisplayOverrideConfiguration(Configuration,
+     * DisplayContent)} to tell the window manager it can unfreeze the screen. This will typically
+     * be done by calling {@link WindowManagerService#sendNewConfiguration(int)}.
+     */
+    Configuration updateOrientationFromAppTokens(Configuration currentConfig,
+            IBinder freezeDisplayToken, boolean forceUpdate) {
+        if (!mDisplayReady) {
+            return null;
+        }
+
+        Configuration config = null;
+        if (updateOrientationFromAppTokens(forceUpdate)) {
+            // If we changed the orientation but mOrientationChangeComplete is already true,
+            // we used seamless rotation, and we don't need to freeze the screen.
+            if (freezeDisplayToken != null && !mWmService.mRoot.mOrientationChangeComplete) {
+                final AppWindowToken atoken = getAppWindowToken(freezeDisplayToken);
+                if (atoken != null) {
+                    atoken.startFreezingScreen();
+                }
+            }
+            config = new Configuration();
+            computeScreenConfiguration(config);
+        } else if (currentConfig != null) {
+            // No obvious action we need to take, but if our current state mismatches the
+            // activity manager's, update it, disregarding font scale, which should remain set
+            // to the value of the previous configuration.
+            // Here we're calling Configuration#unset() instead of setToDefaults() because we
+            // need to keep override configs clear of non-empty values (e.g. fontSize).
+            mTmpConfiguration.unset();
+            mTmpConfiguration.updateFrom(currentConfig);
+            computeScreenConfiguration(mTmpConfiguration);
+            if (currentConfig.diff(mTmpConfiguration) != 0) {
+                mWaitingForConfig = true;
+                setLayoutNeeded();
+                int[] anim = new int[2];
+                getDisplayPolicy().selectRotationAnimationLw(anim);
+
+                mWmService.startFreezingDisplayLocked(anim[0], anim[1], this);
+                config = new Configuration(mTmpConfiguration);
+            }
+        }
+
+        return config;
+    }
+
+
+    private boolean updateOrientationFromAppTokens(boolean forceUpdate) {
         final int req = getOrientation();
         if (req != mLastOrientation || forceUpdate) {
             mLastOrientation = req;
@@ -1546,6 +1639,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final int dh = displayInfo.logicalHeight;
         config.orientation = (dw <= dh) ? ORIENTATION_PORTRAIT : ORIENTATION_LANDSCAPE;
         config.windowConfiguration.setWindowingMode(getWindowingMode());
+        config.windowConfiguration.setDisplayWindowingMode(getWindowingMode());
         config.windowConfiguration.setRotation(displayInfo.rotation);
 
         final float density = mDisplayMetrics.density;
@@ -1951,6 +2045,17 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     void onAppTransitionDone() {
         super.onAppTransitionDone();
         mWmService.mWindowsChanged = true;
+    }
+
+    @Override
+    public void setWindowingMode(int windowingMode) {
+        super.setWindowingMode(windowingMode);
+        super.setDisplayWindowingMode(windowingMode);
+    }
+
+    @Override
+    void setDisplayWindowingMode(int windowingMode) {
+        setWindowingMode(windowingMode);
     }
 
     /**
@@ -2401,6 +2506,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mWmService.mAnimator.removeDisplayLocked(mDisplayId);
             mWindowingLayer.release();
             mOverlayLayer.release();
+            mInputMonitor.onDisplayRemoved();
         } finally {
             mDisplayReady = false;
             mRemovingDisplay = false;
@@ -2809,6 +2915,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         forAllWindows(mScheduleToastTimeout, false /* traverseTopToBottom */);
     }
 
+    WindowState findFocusedWindowIfNeeded() {
+        return (mWmService.mPerDisplayFocusEnabled
+                || mWmService.mRoot.mTopFocusedAppByProcess.isEmpty()) ? findFocusedWindow() : null;
+    }
+
     WindowState findFocusedWindow() {
         mTmpWindow = null;
 
@@ -2821,7 +2932,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return mTmpWindow;
     }
 
-
     /**
      * Update the focused window and make some adjustments if the focus has changed.
      *
@@ -2833,31 +2943,31 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * @param updateInputWindows Whether to sync the window information to the input module.
      * @return {@code true} if the focused window has changed.
      */
-    boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows, boolean focusFound) {
-        final WindowState newFocus = findFocusedWindow();
+    boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {
+        WindowState newFocus = findFocusedWindowIfNeeded();
         if (mCurrentFocus == newFocus) {
             return false;
         }
         boolean imWindowChanged = false;
-        // TODO (b/111080190): Multi-Session IME
-        if (!focusFound) {
-            final WindowState imWindow = mInputMethodWindow;
-            if (imWindow != null) {
-                final WindowState prevTarget = mInputMethodTarget;
+        final WindowState imWindow = mInputMethodWindow;
+        if (imWindow != null) {
+            final WindowState prevTarget = mInputMethodTarget;
+            final WindowState newTarget = computeImeTarget(true /* updateImeTarget*/);
+            imWindowChanged = prevTarget != newTarget;
 
-                final WindowState newTarget = computeImeTarget(true /* updateImeTarget*/);
-                imWindowChanged = prevTarget != newTarget;
-
-                if (mode != UPDATE_FOCUS_WILL_ASSIGN_LAYERS
-                        && mode != UPDATE_FOCUS_WILL_PLACE_SURFACES) {
-                    assignWindowLayers(false /* setLayoutNeeded */);
-                }
+            if (mode != UPDATE_FOCUS_WILL_ASSIGN_LAYERS
+                    && mode != UPDATE_FOCUS_WILL_PLACE_SURFACES) {
+                assignWindowLayers(false /* setLayoutNeeded */);
             }
         }
 
         if (imWindowChanged) {
             mWmService.mWindowsChanged = true;
             setLayoutNeeded();
+            newFocus = findFocusedWindowIfNeeded();
+        }
+        if (mCurrentFocus != newFocus) {
+            mWmService.mH.obtainMessage(REPORT_FOCUS_CHANGE, this).sendToTarget();
         }
 
         if (DEBUG_FOCUS_LIGHT || mWmService.localLOGV) Slog.v(TAG_WM, "Changing focus from "
@@ -4674,6 +4784,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     void prepareAppTransition(@WindowManager.TransitionType int transit,
+            boolean alwaysKeepCurrent) {
+        prepareAppTransition(transit, alwaysKeepCurrent, 0 /* flags */, false /* forceOverride */);
+    }
+
+    void prepareAppTransition(@WindowManager.TransitionType int transit,
             boolean alwaysKeepCurrent, @WindowManager.TransitionFlags int flags,
             boolean forceOverride) {
         final boolean prepared = mAppTransition.prepareAppTransitionLocked(
@@ -4725,6 +4840,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         pendingLayoutChanges |= changes;
     }
 
+    /** Check if pending app transition is for activity / task launch. */
+    boolean isNextTransitionForward() {
+        final int transit = mAppTransition.getAppTransition();
+        return transit == TRANSIT_ACTIVITY_OPEN
+                || transit == TRANSIT_TASK_OPEN
+                || transit == TRANSIT_TASK_TO_FRONT;
+    }
+
     /**
      * @see Display#FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
      */
@@ -4735,5 +4858,17 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 // (b/114338689) whenever vr 2d display id is set.
                 || mDisplayId == mWmService.mVr2dDisplayId
                 || mWmService.mForceDesktopModeOnExternalDisplays;
+    }
+
+     /**
+     * Re-parent the DisplayContent's top surfaces, {@link #mWindowingLayer} and
+     * {@link #mOverlayLayer} to the specified surfaceControl.
+     *
+     * @param surfaceControlHandle The handle for the new SurfaceControl, where the DisplayContent's
+     *                             surfaces will be re-parented to.
+     */
+    void reparentDisplayContent(IBinder surfaceControlHandle) {
+        mPendingTransaction.reparent(mWindowingLayer, surfaceControlHandle)
+                .reparent(mOverlayLayer, surfaceControlHandle);
     }
 }

@@ -49,7 +49,9 @@ public class LooperStats implements Looper.Observer {
     private final int mEntriesSizeCap;
     private int mSamplingInterval;
     private CachedDeviceState.Readonly mDeviceState;
-    private long mStartTime = System.currentTimeMillis();
+    private CachedDeviceState.TimeInStateStopwatch mBatteryStopwatch;
+    private long mStartCurrentTime = System.currentTimeMillis();
+    private long mStartElapsedTime = SystemClock.elapsedRealtime();
     private boolean mAddDebugEntries = false;
 
     public LooperStats(int samplingInterval, int entriesSizeCap) {
@@ -58,7 +60,12 @@ public class LooperStats implements Looper.Observer {
     }
 
     public void setDeviceState(@NonNull CachedDeviceState.Readonly deviceState) {
+        if (mBatteryStopwatch != null) {
+            mBatteryStopwatch.close();
+        }
+
         mDeviceState = deviceState;
+        mBatteryStopwatch = deviceState.createTimeOnBatteryStopwatch();
     }
 
     public void setAddDebugEntries(boolean addDebugEntries) {
@@ -148,9 +155,11 @@ public class LooperStats implements Looper.Observer {
         maybeAddSpecialEntry(exportedEntries, mOverflowEntry);
         maybeAddSpecialEntry(exportedEntries, mHashCollisionEntry);
         // Debug entries added to help validate the data.
-        if (mAddDebugEntries) {
-            exportedEntries.add(createDebugEntry("start_time_millis", mStartTime));
-            exportedEntries.add(createDebugEntry("end_time_millis", System.currentTimeMillis()));
+        if (mAddDebugEntries && mBatteryStopwatch != null) {
+            exportedEntries.add(createDebugEntry("start_time_millis", mStartElapsedTime));
+            exportedEntries.add(createDebugEntry("end_time_millis", SystemClock.elapsedRealtime()));
+            exportedEntries.add(
+                    createDebugEntry("battery_time_millis", mBatteryStopwatch.getMillis()));
         }
         return exportedEntries;
     }
@@ -159,13 +168,21 @@ public class LooperStats implements Looper.Observer {
         final Entry entry = new Entry("__DEBUG_" + variableName);
         entry.messageCount = 1;
         entry.recordedMessageCount = 1;
-        entry.maxDelayMillis = value;
+        entry.totalLatencyMicro = value;
         return new ExportedEntry(entry);
     }
 
     /** Returns a timestamp indicating when the statistics were last reset. */
     public long getStartTimeMillis() {
-        return mStartTime;
+        return mStartCurrentTime;
+    }
+
+    public long getStartElapsedTimeMillis() {
+        return mStartElapsedTime;
+    }
+
+    public long getBatteryTimeMillis() {
+        return mBatteryStopwatch != null ? mBatteryStopwatch.getMillis() : 0;
     }
 
     private void maybeAddSpecialEntry(List<ExportedEntry> exportedEntries, Entry specialEntry) {
@@ -187,7 +204,11 @@ public class LooperStats implements Looper.Observer {
         synchronized (mOverflowEntry) {
             mOverflowEntry.reset();
         }
-        mStartTime = System.currentTimeMillis();
+        mStartCurrentTime = System.currentTimeMillis();
+        mStartElapsedTime = SystemClock.elapsedRealtime();
+        if (mBatteryStopwatch != null) {
+            mBatteryStopwatch.reset();
+        }
     }
 
     public void setSamplingInterval(int samplingInterval) {

@@ -121,13 +121,13 @@ public class NotificationShelf extends ActivatableNotificationView implements
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         Dependency.get(StatusBarStateController.class)
-                .addListener(mStateListener, StatusBarStateController.RANK_SHELF);
+                .addCallback(mStateListener, StatusBarStateController.RANK_SHELF);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        Dependency.get(StatusBarStateController.class).removeListener(mStateListener);
+        Dependency.get(StatusBarStateController.class).removeCallback(mStateListener);
     }
 
     public void bind(AmbientState ambientState, NotificationStackScrollLayout hostLayout) {
@@ -225,7 +225,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
             }
             viewState.hasItemsInStableShelf = lastViewState.inShelf;
             viewState.hidden = !mAmbientState.isShadeExpanded()
-                    || mAmbientState.isQsCustomizerShowing();
+                    || mAmbientState.isQsCustomizerShowing() || mAmbientState.isFullyDark();
             viewState.maxShelfEnd = maxShelfEnd;
         } else {
             viewState.hidden = true;
@@ -914,6 +914,10 @@ public class NotificationShelf extends ActivatableNotificationView implements
     public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft,
             int oldTop, int oldRight, int oldBottom) {
         updateRelativeOffset();
+    }
+
+    public void onUiModeChanged() {
+        updateBackgroundColors();
     }
 
     private class ShelfState extends ExpandableViewState {

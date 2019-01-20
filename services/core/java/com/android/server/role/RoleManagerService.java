@@ -18,11 +18,14 @@ package com.android.server.role;
 
 import android.Manifest;
 import android.annotation.CheckResult;
+import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.annotation.WorkerThread;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
+import android.app.role.IOnRoleHoldersChangedListener;
 import android.app.role.IRoleManager;
 import android.app.role.IRoleManagerCallback;
 import android.app.role.RoleManager;
@@ -32,6 +35,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.Signature;
+import android.os.Handler;
+import android.os.RemoteCallbackList;
+import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
@@ -41,20 +47,29 @@ import android.util.ArraySet;
 import android.util.PackageUtils;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.BitUtils;
 import com.android.internal.util.CollectionUtils;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FunctionalUtils;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.dump.DualDumpOutputStream;
+import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 
 import java.io.ByteArrayOutputStream;
 import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -65,7 +80,7 @@ import java.util.concurrent.TimeoutException;
  *
  * @see RoleManager
  */
-public class RoleManagerService extends SystemService {
+public class RoleManagerService extends SystemService implements RoleUserState.Callback {
 
     private static final String LOG_TAG = RoleManagerService.class.getSimpleName();
 
@@ -92,6 +107,17 @@ public class RoleManagerService extends SystemService {
     private final SparseArray<RemoteRoleControllerService> mControllerServices =
             new SparseArray<>();
 
+    /**
+     * Maps user id to its list of listeners.
+     */
+    @GuardedBy("mLock")
+    @NonNull
+    private final SparseArray<RemoteCallbackList<IOnRoleHoldersChangedListener>> mListeners =
+            new SparseArray<>();
+
+    @NonNull
+    private final Handler mListenerHandler = FgThread.getHandler();
+
     public RoleManagerService(@NonNull Context context) {
         super(context);
 
@@ -106,7 +132,7 @@ public class RoleManagerService extends SystemService {
         intentFilter.addAction(Intent.ACTION_USER_REMOVED);
         getContext().registerReceiverAsUser(new BroadcastReceiver() {
             @Override
-            public void onReceive(Context context, Intent intent) {
+            public void onReceive(@NonNull Context context, @NonNull Intent intent) {
                 if (TextUtils.equals(intent.getAction(), Intent.ACTION_USER_REMOVED)) {
                     int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
                     onRemoveUser(userId);
@@ -118,33 +144,51 @@ public class RoleManagerService extends SystemService {
     @Override
     public void onStart() {
         publishBinderService(Context.ROLE_SERVICE, new Stub());
+
         //TODO add watch for new user creation and run default grants for them
-        //TODO add package update watch to detect PermissionController upgrade and run def. grants
+
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        intentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        intentFilter.addDataScheme("package");
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+        getContext().registerReceiverAsUser(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                int userId = UserHandle.getUserId(intent.getIntExtra(Intent.EXTRA_UID, -1));
+                if (RemoteRoleControllerService.DEBUG) {
+                    Slog.i(LOG_TAG,
+                            "Packages changed - re-running initial grants for user " + userId);
+                }
+                performInitialGrantsIfNecessary(userId);
+            }
+        }, UserHandle.SYSTEM, intentFilter, null /* broadcastPermission */, null /* handler */);
     }
 
     @Override
     public void onStartUser(@UserIdInt int userId) {
+        performInitialGrantsIfNecessary(userId);
+    }
+
+    @MainThread
+    private void performInitialGrantsIfNecessary(@UserIdInt int userId) {
         RoleUserState userState;
-        synchronized (mLock) {
-            userState = getUserStateLocked(userId);
-        }
+        userState = getOrCreateUserState(userId);
         String packagesHash = computeComponentStateHash(userId);
-        boolean needGrant;
-        synchronized (mLock) {
-            needGrant = !packagesHash.equals(userState.getLastGrantPackagesHashLocked());
-        }
+        String oldPackagesHash = userState.getPackagesHash();
+        boolean needGrant = !Objects.equals(packagesHash, oldPackagesHash);
         if (needGrant) {
             // Some vital packages state has changed since last role grant
             // Run grants again
             Slog.i(LOG_TAG, "Granting default permissions...");
             CompletableFuture<Void> result = new CompletableFuture<>();
-            getControllerService(userId).onGrantDefaultRoles(
+            getOrCreateControllerService(userId).onGrantDefaultRoles(
                     new IRoleManagerCallback.Stub() {
                         @Override
                         public void onSuccess() {
                             result.complete(null);
                         }
-
                         @Override
                         public void onFailure() {
                             result.completeExceptionally(new RuntimeException());
@@ -152,9 +196,7 @@ public class RoleManagerService extends SystemService {
                     });
             try {
                 result.get(5, TimeUnit.SECONDS);
-                synchronized (mLock) {
-                    userState.setLastGrantPackagesHashLocked(packagesHash);
-                }
+                userState.setPackagesHash(packagesHash);
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 Slog.e(LOG_TAG, "Failed to grant defaults for user " + userId, e);
             }
@@ -163,7 +205,8 @@ public class RoleManagerService extends SystemService {
         }
     }
 
-    private String computeComponentStateHash(int userId) {
+    @Nullable
+    private static String computeComponentStateHash(@UserIdInt int userId) {
         PackageManagerInternal pm = LocalServices.getService(PackageManagerInternal.class);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
@@ -193,36 +236,91 @@ public class RoleManagerService extends SystemService {
         return PackageUtils.computeSha256Digest(out.toByteArray());
     }
 
-    @GuardedBy("mLock")
     @NonNull
-    private RoleUserState getUserStateLocked(@UserIdInt int userId) {
-        RoleUserState userState = mUserStates.get(userId);
-        if (userState == null) {
-            userState = new RoleUserState(userId);
-            userState.readSyncLocked();
-            mUserStates.put(userId, userState);
+    private RoleUserState getOrCreateUserState(@UserIdInt int userId) {
+        synchronized (mLock) {
+            RoleUserState userState = mUserStates.get(userId);
+            if (userState == null) {
+                userState = new RoleUserState(userId, this);
+                mUserStates.put(userId, userState);
+            }
+            return userState;
         }
-        return userState;
     }
 
-    @GuardedBy("mLock")
     @NonNull
-    private RemoteRoleControllerService getControllerService(@UserIdInt int userId) {
-        RemoteRoleControllerService controllerService = mControllerServices.get(userId);
-        if (controllerService == null) {
-            controllerService = new RemoteRoleControllerService(userId, getContext());
-            mControllerServices.put(userId, controllerService);
+    private RemoteRoleControllerService getOrCreateControllerService(@UserIdInt int userId) {
+        synchronized (mLock) {
+            RemoteRoleControllerService controllerService = mControllerServices.get(userId);
+            if (controllerService == null) {
+                controllerService = new RemoteRoleControllerService(userId, getContext());
+                mControllerServices.put(userId, controllerService);
+            }
+            return controllerService;
         }
-        return controllerService;
+    }
+
+    @Nullable
+    private RemoteCallbackList<IOnRoleHoldersChangedListener> getListeners(@UserIdInt int userId) {
+        synchronized (mLock) {
+            return mListeners.get(userId);
+        }
+    }
+
+    @NonNull
+    private RemoteCallbackList<IOnRoleHoldersChangedListener> getOrCreateListeners(
+            @UserIdInt int userId) {
+        synchronized (mLock) {
+            RemoteCallbackList<IOnRoleHoldersChangedListener> listeners = mListeners.get(userId);
+            if (listeners == null) {
+                listeners = new RemoteCallbackList<>();
+                mListeners.put(userId, listeners);
+            }
+            return listeners;
+        }
     }
 
     private void onRemoveUser(@UserIdInt int userId) {
+        RemoteCallbackList<IOnRoleHoldersChangedListener> listeners;
+        RoleUserState userState;
         synchronized (mLock) {
+            listeners = mListeners.removeReturnOld(userId);
             mControllerServices.remove(userId);
-            RoleUserState userState = mUserStates.removeReturnOld(userId);
-            if (userState != null) {
-                userState.destroySyncLocked();
+            userState = mUserStates.removeReturnOld(userId);
+        }
+        if (listeners != null) {
+            listeners.kill();
+        }
+        if (userState != null) {
+            userState.destroy();
+        }
+    }
+
+    @Override
+    public void onRoleHoldersChanged(@NonNull String roleName, @UserIdInt int userId) {
+        mListenerHandler.sendMessage(PooledLambda.obtainMessage(
+                RoleManagerService::notifyRoleHoldersChanged, this, roleName, userId));
+    }
+
+    @WorkerThread
+    private void notifyRoleHoldersChanged(@NonNull String roleName, @UserIdInt int userId) {
+        RemoteCallbackList<IOnRoleHoldersChangedListener> listeners = getListeners(userId);
+        if (listeners == null) {
+            return;
+        }
+
+        int broadcastCount = listeners.beginBroadcast();
+        try {
+            for (int i = 0; i < broadcastCount; i++) {
+                IOnRoleHoldersChangedListener listener = listeners.getBroadcastItem(i);
+                try {
+                    listener.onRoleHoldersChanged(roleName, userId);
+                } catch (RemoteException e) {
+                    Slog.e(LOG_TAG, "Error calling OnRoleHoldersChangedListener", e);
+                }
             }
+        } finally {
+            listeners.finishBroadcast();
         }
     }
 
@@ -233,10 +331,8 @@ public class RoleManagerService extends SystemService {
             Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
 
             int userId = UserHandle.getUserId(getCallingUid());
-            synchronized (mLock) {
-                RoleUserState userState = getUserStateLocked(userId);
-                return userState.isRoleAvailableLocked(roleName);
-            }
+            RoleUserState userState = getOrCreateUserState(userId);
+            return userState.isRoleAvailable(roleName);
         }
 
         @Override
@@ -276,10 +372,8 @@ public class RoleManagerService extends SystemService {
         @Nullable
         private ArraySet<String> getRoleHoldersInternal(@NonNull String roleName,
                 @UserIdInt int userId) {
-            synchronized (mLock) {
-                RoleUserState userState = getUserStateLocked(userId);
-                return userState.getRoleHoldersLocked(roleName);
-            }
+            RoleUserState userState = getOrCreateUserState(userId);
+            return userState.getRoleHolders(roleName);
         }
 
         @Override
@@ -296,7 +390,7 @@ public class RoleManagerService extends SystemService {
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "addRoleHolderAsUser");
 
-            getControllerService(userId).onAddRoleHolder(roleName, packageName, callback);
+            getOrCreateControllerService(userId).onAddRoleHolder(roleName, packageName, callback);
         }
 
         @Override
@@ -313,7 +407,7 @@ public class RoleManagerService extends SystemService {
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "removeRoleHolderAsUser");
 
-            getControllerService(userId).onRemoveRoleHolder(roleName, packageName,
+            getOrCreateControllerService(userId).onRemoveRoleHolder(roleName, packageName,
                     callback);
         }
 
@@ -330,7 +424,43 @@ public class RoleManagerService extends SystemService {
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "clearRoleHoldersAsUser");
 
-            getControllerService(userId).onClearRoleHolders(roleName, callback);
+            getOrCreateControllerService(userId).onClearRoleHolders(roleName, callback);
+        }
+
+        @Override
+        public void addOnRoleHoldersChangedListenerAsUser(
+                @NonNull IOnRoleHoldersChangedListener listener, @UserIdInt int userId) {
+            Preconditions.checkNotNull(listener, "listener cannot be null");
+            if (!mUserManagerInternal.exists(userId)) {
+                Slog.e(LOG_TAG, "user " + userId + " does not exist");
+                return;
+            }
+            userId = handleIncomingUser(userId, "addOnRoleHoldersChangedListenerAsUser");
+            getContext().enforceCallingOrSelfPermission(Manifest.permission.OBSERVE_ROLE_HOLDERS,
+                    "addOnRoleHoldersChangedListenerAsUser");
+
+            RemoteCallbackList<IOnRoleHoldersChangedListener> listeners = getOrCreateListeners(
+                    userId);
+            listeners.register(listener);
+        }
+
+        @Override
+        public void removeOnRoleHoldersChangedListenerAsUser(
+                @NonNull IOnRoleHoldersChangedListener listener, @UserIdInt int userId) {
+            Preconditions.checkNotNull(listener, "listener cannot be null");
+            if (!mUserManagerInternal.exists(userId)) {
+                Slog.e(LOG_TAG, "user " + userId + " does not exist");
+                return;
+            }
+            userId = handleIncomingUser(userId, "removeOnRoleHoldersChangedListenerAsUser");
+            getContext().enforceCallingOrSelfPermission(Manifest.permission.OBSERVE_ROLE_HOLDERS,
+                    "removeOnRoleHoldersChangedListenerAsUser");
+
+            RemoteCallbackList<IOnRoleHoldersChangedListener> listeners = getListeners(userId);
+            if (listener == null) {
+                return;
+            }
+            listeners.unregister(listener);
         }
 
         @Override
@@ -341,10 +471,8 @@ public class RoleManagerService extends SystemService {
                     "setRoleNamesFromController");
 
             int userId = UserHandle.getCallingUserId();
-            synchronized (mLock) {
-                RoleUserState userState = getUserStateLocked(userId);
-                userState.setRoleNamesLocked(roleNames);
-            }
+            RoleUserState userState = getOrCreateUserState(userId);
+            userState.setRoleNames(roleNames);
         }
 
         @Override
@@ -357,10 +485,8 @@ public class RoleManagerService extends SystemService {
                     "addRoleHolderFromController");
 
             int userId = UserHandle.getCallingUserId();
-            synchronized (mLock) {
-                RoleUserState userState = getUserStateLocked(userId);
-                return userState.addRoleHolderLocked(roleName, packageName);
-            }
+            RoleUserState userState = getOrCreateUserState(userId);
+            return userState.addRoleHolder(roleName, packageName);
         }
 
         @Override
@@ -373,10 +499,20 @@ public class RoleManagerService extends SystemService {
                     "removeRoleHolderFromController");
 
             int userId = UserHandle.getCallingUserId();
-            synchronized (mLock) {
-                RoleUserState userState = getUserStateLocked(userId);
-                return userState.removeRoleHolderLocked(roleName, packageName);
-            }
+            RoleUserState userState = getOrCreateUserState(userId);
+            return userState.removeRoleHolder(roleName, packageName);
+        }
+
+        @Override
+        public List<String> getHeldRolesFromController(@NonNull String packageName) {
+            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
+            getContext().enforceCallingOrSelfPermission(
+                    RoleManager.PERMISSION_MANAGE_ROLES_FROM_CONTROLLER,
+                    "getRolesHeldFromController");
+
+            int userId = UserHandle.getCallingUserId();
+            RoleUserState userState = getOrCreateUserState(userId);
+            return userState.getHeldRoles(packageName);
         }
 
         @CheckResult
@@ -386,11 +522,40 @@ public class RoleManagerService extends SystemService {
         }
 
         @Override
-        public void onShellCommand(FileDescriptor in, FileDescriptor out,
-                FileDescriptor err, String[] args, ShellCallback callback,
-                ResultReceiver resultReceiver) {
-            (new RoleManagerShellCommand(this)).exec(
-                    this, in, out, err, args, callback, resultReceiver);
+        public void onShellCommand(@Nullable FileDescriptor in, @Nullable FileDescriptor out,
+                @Nullable FileDescriptor err, @NonNull String[] args,
+                @Nullable ShellCallback callback, @NonNull ResultReceiver resultReceiver) {
+            new RoleManagerShellCommand(this).exec(this, in, out, err, args, callback,
+                    resultReceiver);
+        }
+
+        @Override
+        protected void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter fout,
+                @Nullable String[] args) {
+            if (!DumpUtils.checkDumpPermission(getContext(), LOG_TAG, fout)) {
+                return;
+            }
+
+            boolean dumpAsProto = args != null && ArrayUtils.contains(args, "--proto");
+            DualDumpOutputStream dumpOutputStream;
+            if (dumpAsProto) {
+                dumpOutputStream = new DualDumpOutputStream(new ProtoOutputStream(fd));
+            } else {
+                fout.println("ROLE MANAGER STATE (dumpsys role):");
+                dumpOutputStream = new DualDumpOutputStream(new IndentingPrintWriter(fout, "  "));
+            }
+
+            int[] userIds = mUserManagerInternal.getUserIds();
+            int userIdsLength = userIds.length;
+            for (int i = 0; i < userIdsLength; i++) {
+                int userId = userIds[i];
+
+                RoleUserState userState = getOrCreateUserState(userId);
+                userState.dump(dumpOutputStream, "user_states",
+                        RoleManagerServiceDumpProto.USER_STATES);
+            }
+
+            dumpOutputStream.flush();
         }
     }
 }

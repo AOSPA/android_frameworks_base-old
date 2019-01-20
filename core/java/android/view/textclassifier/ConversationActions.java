@@ -30,6 +30,7 @@ import android.os.Parcelable;
 import android.text.SpannedString;
 import android.util.ArraySet;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
@@ -138,17 +139,21 @@ public final class ConversationActions implements Parcelable {
      */
     public static final String HINT_FOR_NOTIFICATION = "notification";
 
-    private List<ConversationAction> mConversationActions;
+    private final List<ConversationAction> mConversationActions;
+    private final String mId;
 
     /** Constructs a {@link ConversationActions} object. */
-    public ConversationActions(@NonNull List<ConversationAction> conversationActions) {
+    public ConversationActions(
+            @NonNull List<ConversationAction> conversationActions, @Nullable String id) {
         mConversationActions =
                 Collections.unmodifiableList(Preconditions.checkNotNull(conversationActions));
+        mId = id;
     }
 
     private ConversationActions(Parcel in) {
         mConversationActions =
                 Collections.unmodifiableList(in.createTypedArrayList(ConversationAction.CREATOR));
+        mId = in.readString();
     }
 
     @Override
@@ -159,12 +164,24 @@ public final class ConversationActions implements Parcelable {
     @Override
     public void writeToParcel(Parcel parcel, int flags) {
         parcel.writeTypedList(mConversationActions);
+        parcel.writeString(mId);
     }
 
-    /** Returns an immutable list of {@link ConversationAction} objects. */
+    /**
+     * Returns an immutable list of {@link ConversationAction} objects, which are ordered from high
+     * confidence to low confidence.
+     */
     @NonNull
     public List<ConversationAction> getConversationActions() {
         return mConversationActions;
+    }
+
+    /**
+     * Returns the id, if one exists, for this object.
+     */
+    @Nullable
+    public String getId() {
+        return mId;
     }
 
     /** Represents the action suggested by a {@link TextClassifier} on a given conversation. */
@@ -348,17 +365,31 @@ public final class ConversationActions implements Parcelable {
         /**
          * Represents the local user.
          *
-         * @see Builder#setAuthor(Person)
+         * @see Builder#Builder(Person)
          */
         public static final Person PERSON_USER_LOCAL =
                 new Person.Builder()
                         .setKey("text-classifier-conversation-actions-local-user")
                         .build();
 
+        /**
+         * Represents the remote user.
+         * <p>
+         * If possible, you are suggested to create a {@link Person} object that can identify
+         * the remote user better, so that the underlying model could differentiate between
+         * different remote users.
+         *
+         * @see Builder#Builder(Person)
+         */
+        public static final Person PERSON_USER_REMOTE =
+                new Person.Builder()
+                        .setKey("text-classifier-conversation-actions-remote-user")
+                        .build();
+
         @Nullable
         private final Person mAuthor;
         @Nullable
-        private final ZonedDateTime mComposeTime;
+        private final ZonedDateTime mReferenceTime;
         @Nullable
         private final CharSequence mText;
         @NonNull
@@ -366,18 +397,18 @@ public final class ConversationActions implements Parcelable {
 
         private Message(
                 @Nullable Person author,
-                @Nullable ZonedDateTime composeTime,
+                @Nullable ZonedDateTime referenceTime,
                 @Nullable CharSequence text,
                 @NonNull Bundle bundle) {
             mAuthor = author;
-            mComposeTime = composeTime;
+            mReferenceTime = referenceTime;
             mText = text;
             mExtras = Preconditions.checkNotNull(bundle);
         }
 
         private Message(Parcel in) {
             mAuthor = in.readParcelable(null);
-            mComposeTime =
+            mReferenceTime =
                     in.readInt() == 0
                             ? null
                             : ZonedDateTime.parse(
@@ -389,9 +420,9 @@ public final class ConversationActions implements Parcelable {
         @Override
         public void writeToParcel(Parcel parcel, int flags) {
             parcel.writeParcelable(mAuthor, flags);
-            parcel.writeInt(mComposeTime != null ? 1 : 0);
-            if (mComposeTime != null) {
-                parcel.writeString(mComposeTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
+            parcel.writeInt(mReferenceTime != null ? 1 : 0);
+            if (mReferenceTime != null) {
+                parcel.writeString(mReferenceTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
             }
             parcel.writeCharSequence(mText);
             parcel.writeBundle(mExtras);
@@ -416,15 +447,18 @@ public final class ConversationActions implements Parcelable {
                 };
 
         /** Returns the person that composed the message. */
-        @Nullable
+        @NonNull
         public Person getAuthor() {
             return mAuthor;
         }
 
-        /** Returns the compose time of the message. */
+        /**
+         * Returns the reference time of the message, for example it could be the compose or send
+         * time of this message.
+         */
         @Nullable
-        public ZonedDateTime getTime() {
-            return mComposeTime;
+        public ZonedDateTime getReferenceTime() {
+            return mReferenceTime;
         }
 
         /** Returns the text of the message. */
@@ -450,34 +484,38 @@ public final class ConversationActions implements Parcelable {
             @Nullable
             private Person mAuthor;
             @Nullable
-            private ZonedDateTime mComposeTime;
+            private ZonedDateTime mReferenceTime;
             @Nullable
             private CharSequence mText;
             @Nullable
             private Bundle mExtras;
 
             /**
-             * Sets the person who composed this message.
-             * <p>
-             * Use {@link #PERSON_USER_LOCAL} to represent the local user.
+             * Constructs a builder.
+             *
+             * @param author the person that composed the message, use {@link #PERSON_USER_LOCAL}
+             *               to represent the local user. If it is not possible to identify the
+             *               remote user that the local user is conversing with, use
+             *               {@link #PERSON_USER_REMOTE} to represent a remote user.
              */
-            @NonNull
-            public Builder setAuthor(@Nullable Person author) {
-                mAuthor = author;
-                return this;
+            public Builder(@NonNull Person author) {
+                mAuthor = Preconditions.checkNotNull(author);
             }
 
-            /** Sets the text of this message */
+            /** Sets the text of this message. */
             @NonNull
             public Builder setText(@Nullable CharSequence text) {
                 mText = text;
                 return this;
             }
 
-            /** Sets the compose time of this message */
+            /**
+             * Sets the reference time of this message, for example it could be the compose or send
+             * time of this message.
+             */
             @NonNull
-            public Builder setComposeTime(@Nullable ZonedDateTime composeTime) {
-                mComposeTime = composeTime;
+            public Builder setReferenceTime(@Nullable ZonedDateTime referenceTime) {
+                mReferenceTime = referenceTime;
                 return this;
             }
 
@@ -493,7 +531,7 @@ public final class ConversationActions implements Parcelable {
             public Message build() {
                 return new Message(
                         mAuthor,
-                        mComposeTime,
+                        mReferenceTime,
                         mText == null ? null : new SpannedString(mText),
                         mExtras == null ? new Bundle() : mExtras.deepCopy());
             }
@@ -654,27 +692,42 @@ public final class ConversationActions implements Parcelable {
         @NonNull
         @Hint
         private final List<String> mHints;
+        @Nullable
+        private String mCallingPackageName;
+        @Nullable
+        private final String mConversationId;
 
         private Request(
                 @NonNull List<Message> conversation,
                 @NonNull TypeConfig typeConfig,
                 int maxSuggestions,
+                String conversationId,
                 @Nullable @Hint List<String> hints) {
             mConversation = Preconditions.checkNotNull(conversation);
             mTypeConfig = Preconditions.checkNotNull(typeConfig);
             mMaxSuggestions = maxSuggestions;
+            mConversationId = conversationId;
             mHints = hints;
         }
 
-        private Request(Parcel in) {
+        private static Request readFromParcel(Parcel in) {
             List<Message> conversation = new ArrayList<>();
             in.readParcelableList(conversation, null);
-            mConversation = Collections.unmodifiableList(conversation);
-            mTypeConfig = in.readParcelable(null);
-            mMaxSuggestions = in.readInt();
+            TypeConfig typeConfig = in.readParcelable(null);
+            int maxSuggestions = in.readInt();
+            String conversationId = in.readString();
             List<String> hints = new ArrayList<>();
             in.readStringList(hints);
-            mHints = Collections.unmodifiableList(hints);
+            String callingPackageName = in.readString();
+
+            Request request = new Request(
+                    conversation,
+                    typeConfig,
+                    maxSuggestions,
+                    conversationId,
+                    hints);
+            request.setCallingPackageName(callingPackageName);
+            return request;
         }
 
         @Override
@@ -682,7 +735,9 @@ public final class ConversationActions implements Parcelable {
             parcel.writeParcelableList(mConversation, flags);
             parcel.writeParcelable(mTypeConfig, flags);
             parcel.writeInt(mMaxSuggestions);
+            parcel.writeString(mConversationId);
             parcel.writeStringList(mHints);
+            parcel.writeString(mCallingPackageName);
         }
 
         @Override
@@ -694,7 +749,7 @@ public final class ConversationActions implements Parcelable {
                 new Creator<Request>() {
                     @Override
                     public Request createFromParcel(Parcel in) {
-                        return new Request(in);
+                        return readFromParcel(in);
                     }
 
                     @Override
@@ -723,11 +778,41 @@ public final class ConversationActions implements Parcelable {
             return mMaxSuggestions;
         }
 
+        /**
+         * Return an unique identifier of the conversation that is generating actions for. This
+         * identifier is unique within the calling package only, so use it with
+         * {@link #getCallingPackageName()}.
+         */
+        @Nullable
+        public String getConversationId() {
+            return mConversationId;
+        }
+
         /** Returns an immutable list of hints */
         @Nullable
         @Hint
         public List<String> getHints() {
             return mHints;
+        }
+
+        /**
+         * Sets the name of the package that is sending this request.
+         * <p>
+         * Package-private for SystemTextClassifier's use.
+         * @hide
+         */
+        @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+        public void setCallingPackageName(@Nullable String callingPackageName) {
+            mCallingPackageName = callingPackageName;
+        }
+
+        /**
+         * Returns the name of the package that sent this request.
+         * This returns {@code null} if no calling package name is set.
+         */
+        @Nullable
+        public String getCallingPackageName() {
+            return mCallingPackageName;
         }
 
         /** Builder object to construct the {@link Request} object. */
@@ -737,6 +822,8 @@ public final class ConversationActions implements Parcelable {
             @Nullable
             private TypeConfig mTypeConfig;
             private int mMaxSuggestions;
+            @Nullable
+            private String mConversationId;
             @Nullable
             @Hint
             private List<String> mHints;
@@ -767,13 +854,23 @@ public final class ConversationActions implements Parcelable {
                 return this;
             }
 
-            /** Sets the maximum number of suggestions you want.
+            /**
+             * Sets the maximum number of suggestions you want.
              * <p>
              * Value 0 means no restriction.
              */
             @NonNull
             public Builder setMaxSuggestions(@IntRange(from = 0) int maxSuggestions) {
                 mMaxSuggestions = Preconditions.checkArgumentNonnegative(maxSuggestions);
+                return this;
+            }
+
+            /**
+             * Sets an unique identifier of the conversation that is generating actions for.
+             */
+            @NonNull
+            public Builder setConversationId(@Nullable String conversationId) {
+                mConversationId = conversationId;
                 return this;
             }
 
@@ -784,6 +881,7 @@ public final class ConversationActions implements Parcelable {
                         Collections.unmodifiableList(mConversation),
                         mTypeConfig == null ? new TypeConfig.Builder().build() : mTypeConfig,
                         mMaxSuggestions,
+                        mConversationId,
                         mHints == null
                                 ? Collections.emptyList()
                                 : Collections.unmodifiableList(mHints));
