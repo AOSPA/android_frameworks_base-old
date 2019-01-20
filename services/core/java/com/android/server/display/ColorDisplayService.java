@@ -16,6 +16,9 @@
 
 package com.android.server.display;
 
+import static com.android.server.display.DisplayTransformManager.LEVEL_COLOR_MATRIX_DISPLAY_WHITE_BALANCE;
+import static com.android.server.display.DisplayTransformManager.LEVEL_COLOR_MATRIX_NIGHT_DISPLAY;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.TypeEvaluator;
@@ -29,35 +32,40 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.ContentObserver;
+import android.hardware.display.ColorDisplayManager;
+import android.hardware.display.IColorDisplayManager;
 import android.net.Uri;
 import android.opengl.Matrix;
+import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.provider.Settings.Secure;
+import android.provider.Settings.System;
 import android.util.MathUtils;
 import android.util.Slog;
 import android.view.animation.AnimationUtils;
 
+import com.android.internal.R;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.ColorDisplayController;
+import com.android.server.DisplayThread;
 import com.android.server.SystemService;
 import com.android.server.twilight.TwilightListener;
 import com.android.server.twilight.TwilightManager;
 import com.android.server.twilight.TwilightState;
 
+import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-
-import com.android.internal.R;
-
-import static com.android.server.display.DisplayTransformManager.LEVEL_COLOR_MATRIX_NIGHT_DISPLAY;
+import java.time.format.DateTimeParseException;
 
 /**
- * Tints the display at night.
+ * Controls the display's color transforms.
  */
-public final class ColorDisplayService extends SystemService
-        implements ColorDisplayController.Callback {
+public final class ColorDisplayService extends SystemService {
 
     private static final String TAG = "ColorDisplayService";
 
@@ -70,6 +78,7 @@ public final class ColorDisplayService extends SystemService
      * The identity matrix, used if one of the given matrices is {@code null}.
      */
     private static final float[] MATRIX_IDENTITY = new float[16];
+
     static {
         Matrix.setIdentityM(MATRIX_IDENTITY, 0);
     }
@@ -79,20 +88,93 @@ public final class ColorDisplayService extends SystemService
      */
     private static final ColorMatrixEvaluator COLOR_MATRIX_EVALUATOR = new ColorMatrixEvaluator();
 
+    private final TintController mNightDisplayTintController = new TintController() {
+
+        private float[] mMatrixNightDisplay = new float[16];
+        private final float[] mColorTempCoefficients = new float[9];
+
+        /**
+         * Set coefficients based on whether the color matrix is linear or not.
+         */
+        @Override
+        public void setUp(Context context, boolean needsLinear) {
+            final String[] coefficients = context.getResources().getStringArray(needsLinear
+                    ? R.array.config_nightDisplayColorTemperatureCoefficients
+                    : R.array.config_nightDisplayColorTemperatureCoefficientsNative);
+            for (int i = 0; i < 9 && i < coefficients.length; i++) {
+                mColorTempCoefficients[i] = Float.parseFloat(coefficients[i]);
+            }
+        }
+
+        @Override
+        public void setMatrix(int cct) {
+            if (mMatrixNightDisplay.length != 16) {
+                Slog.d(TAG, "The display transformation matrix must be 4x4");
+                return;
+            }
+
+            Matrix.setIdentityM(mMatrixNightDisplay, 0);
+
+            final float squareTemperature = cct * cct;
+            final float red = squareTemperature * mColorTempCoefficients[0]
+                    + cct * mColorTempCoefficients[1] + mColorTempCoefficients[2];
+            final float green = squareTemperature * mColorTempCoefficients[3]
+                    + cct * mColorTempCoefficients[4] + mColorTempCoefficients[5];
+            final float blue = squareTemperature * mColorTempCoefficients[6]
+                    + cct * mColorTempCoefficients[7] + mColorTempCoefficients[8];
+            mMatrixNightDisplay[0] = red;
+            mMatrixNightDisplay[5] = green;
+            mMatrixNightDisplay[10] = blue;
+        }
+
+        @Override
+        public float[] getMatrix() {
+            return isActivated() ? mMatrixNightDisplay : MATRIX_IDENTITY;
+        }
+
+        @Override
+        public int getLevel() {
+            return LEVEL_COLOR_MATRIX_NIGHT_DISPLAY;
+        }
+    };
+
+    private final TintController mDisplayWhiteBalanceTintController = new TintController() {
+
+        private float[] mMatrixDisplayWhiteBalance = new float[16];
+
+        @Override
+        public void setUp(Context context, boolean needsLinear) {
+        }
+
+        @Override
+        public float[] getMatrix() {
+            return isActivated() ? mMatrixDisplayWhiteBalance : MATRIX_IDENTITY;
+        }
+
+        @Override
+        public void setMatrix(int cct) {
+        }
+
+        @Override
+        public int getLevel() {
+            return LEVEL_COLOR_MATRIX_DISPLAY_WHITE_BALANCE;
+        }
+    };
+
     private final Handler mHandler;
-
-    private float[] mMatrixNight = new float[16];
-
-    private final float[] mColorTempCoefficients = new float[9];
 
     private int mCurrentUser = UserHandle.USER_NULL;
     private ContentObserver mUserSetupObserver;
     private boolean mBootCompleted;
 
-    private ColorDisplayController mController;
-    private ValueAnimator mColorMatrixAnimator;
-    private Boolean mIsActivated;
-    private AutoMode mAutoMode;
+    private ColorDisplayController mNightDisplayController;
+    private ContentObserver mContentObserver;
+
+    private DisplayWhiteBalanceListener mDisplayWhiteBalanceListener;
+
+    private NightDisplayAutoMode mNightDisplayAutoMode;
+
+    private Integer mDisplayWhiteBalanceColorTemperature;
 
     public ColorDisplayService(Context context) {
         super(context);
@@ -101,7 +183,8 @@ public final class ColorDisplayService extends SystemService
 
     @Override
     public void onStart() {
-        // Nothing to publish.
+        publishBinderService(Context.COLOR_DISPLAY_SERVICE, new BinderService());
+        publishLocalService(ColorDisplayServiceInternal.class, new ColorDisplayServiceInternal());
     }
 
     @Override
@@ -171,7 +254,7 @@ public final class ColorDisplayService extends SystemService
                     }
                 };
                 cr.registerContentObserver(Secure.getUriFor(Secure.USER_SETUP_COMPLETE),
-                        false /* notifyForDescendents */, mUserSetupObserver, mCurrentUser);
+                        false /* notifyForDescendants */, mUserSetupObserver, mCurrentUser);
             } else if (mBootCompleted) {
                 setUp();
             }
@@ -185,176 +268,238 @@ public final class ColorDisplayService extends SystemService
     private void setUp() {
         Slog.d(TAG, "setUp: currentUser=" + mCurrentUser);
 
-        // Create a new controller for the current user and start listening for changes.
-        mController = new ColorDisplayController(getContext(), mCurrentUser);
-        mController.setListener(this);
+        mNightDisplayController = new ColorDisplayController(getContext(), mCurrentUser);
+
+        // Listen for external changes to any of the settings.
+        if (mContentObserver == null) {
+            mContentObserver = new ContentObserver(new Handler(DisplayThread.get().getLooper())) {
+                @Override
+                public void onChange(boolean selfChange, Uri uri) {
+                    super.onChange(selfChange, uri);
+
+                    final String setting = uri == null ? null : uri.getLastPathSegment();
+                    if (setting != null) {
+                        switch (setting) {
+                            case Secure.NIGHT_DISPLAY_ACTIVATED:
+                                onNightDisplayActivated(mNightDisplayController.isActivated());
+                                break;
+                            case Secure.NIGHT_DISPLAY_COLOR_TEMPERATURE:
+                                onNightDisplayColorTemperatureChanged(
+                                        mNightDisplayController.getColorTemperature());
+                                break;
+                            case Secure.NIGHT_DISPLAY_AUTO_MODE:
+                                onNightDisplayAutoModeChanged(
+                                        mNightDisplayController.getAutoMode());
+                                break;
+                            case Secure.NIGHT_DISPLAY_CUSTOM_START_TIME:
+                                onNightDisplayCustomStartTimeChanged(
+                                        mNightDisplayController.getCustomStartTime());
+                                break;
+                            case Secure.NIGHT_DISPLAY_CUSTOM_END_TIME:
+                                onNightDisplayCustomEndTimeChanged(
+                                        mNightDisplayController.getCustomEndTime());
+                                break;
+                            case System.DISPLAY_COLOR_MODE:
+                                onDisplayColorModeChanged(mNightDisplayController.getColorMode());
+                                break;
+                            case Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED:
+                            case Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED:
+                                onAccessibilityTransformChanged();
+                                break;
+                            case Secure.DISPLAY_WHITE_BALANCE_ENABLED:
+                                onDisplayWhiteBalanceEnabled(isDisplayWhiteBalanceSettingEnabled());
+                                break;
+                        }
+                    }
+                }
+            };
+        }
+        final ContentResolver cr = getContext().getContentResolver();
+        cr.registerContentObserver(Secure.getUriFor(Secure.NIGHT_DISPLAY_ACTIVATED),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(Secure.getUriFor(Secure.NIGHT_DISPLAY_COLOR_TEMPERATURE),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(Secure.getUriFor(Secure.NIGHT_DISPLAY_AUTO_MODE),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(Secure.getUriFor(Secure.NIGHT_DISPLAY_CUSTOM_START_TIME),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(Secure.getUriFor(Secure.NIGHT_DISPLAY_CUSTOM_END_TIME),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(System.getUriFor(System.DISPLAY_COLOR_MODE),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(
+                Secure.getUriFor(Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(
+                Secure.getUriFor(Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(Secure.getUriFor(Secure.DISPLAY_WHITE_BALANCE_ENABLED),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
 
         // Set the color mode, if valid, and immediately apply the updated tint matrix based on the
         // existing activated state. This ensures consistency of tint across the color mode change.
-        onDisplayColorModeChanged(mController.getColorMode());
+        onDisplayColorModeChanged(mNightDisplayController.getColorMode());
 
-        // Reset the activated state.
-        mIsActivated = null;
+        if (ColorDisplayManager.isNightDisplayAvailable(getContext())) {
+            // Reset the activated state.
+            mNightDisplayTintController.setActivated(null);
 
-        setCoefficientMatrix(getContext(), DisplayTransformManager.needsLinearColorMatrix());
+            // Prepare the night display color transformation matrix.
+            mNightDisplayTintController
+                    .setUp(getContext(), DisplayTransformManager.needsLinearColorMatrix());
+            mNightDisplayTintController.setMatrix(mNightDisplayController.getColorTemperature());
 
-        // Prepare color transformation matrix.
-        setMatrix(mController.getColorTemperature(), mMatrixNight);
+            // Initialize the current auto mode.
+            onNightDisplayAutoModeChanged(mNightDisplayController.getAutoMode());
 
-        // Initialize the current auto mode.
-        onAutoModeChanged(mController.getAutoMode());
+            // Force the initialization current activated state.
+            if (mNightDisplayTintController.isActivatedStateNotSet()) {
+                onNightDisplayActivated(mNightDisplayController.isActivated());
+            }
+        }
 
-        // Force the initialization current activated state.
-        if (mIsActivated == null) {
-            onActivated(mController.isActivated());
+        if (ColorDisplayManager.isDisplayWhiteBalanceAvailable(getContext())) {
+            // Prepare the display white balance transform matrix.
+            mDisplayWhiteBalanceTintController
+                    .setUp(getContext(), DisplayTransformManager.needsLinearColorMatrix());
+            if (mDisplayWhiteBalanceColorTemperature != null) {
+                mDisplayWhiteBalanceTintController
+                        .setMatrix(mDisplayWhiteBalanceColorTemperature);
+            }
+
+            onDisplayWhiteBalanceEnabled(isDisplayWhiteBalanceSettingEnabled());
         }
     }
 
     private void tearDown() {
         Slog.d(TAG, "tearDown: currentUser=" + mCurrentUser);
 
-        if (mController != null) {
-            mController.setListener(null);
-            mController = null;
+        getContext().getContentResolver().unregisterContentObserver(mContentObserver);
+
+        if (mNightDisplayController != null) {
+            mNightDisplayController = null;
         }
 
-        if (mAutoMode != null) {
-            mAutoMode.onStop();
-            mAutoMode = null;
+        if (ColorDisplayManager.isNightDisplayAvailable(getContext())) {
+            if (mNightDisplayAutoMode != null) {
+                mNightDisplayAutoMode.onStop();
+                mNightDisplayAutoMode = null;
+            }
+            mNightDisplayTintController.endAnimator();
         }
 
-        if (mColorMatrixAnimator != null) {
-            mColorMatrixAnimator.end();
-            mColorMatrixAnimator = null;
+        if (ColorDisplayManager.isDisplayWhiteBalanceAvailable(getContext())) {
+            mDisplayWhiteBalanceTintController.endAnimator();
         }
     }
 
-    @Override
-    public void onActivated(boolean activated) {
-        if (mIsActivated == null || mIsActivated != activated) {
+    private void onNightDisplayActivated(boolean activated) {
+        if (mNightDisplayTintController.isActivatedStateNotSet()
+                || mNightDisplayTintController.isActivated() != activated) {
             Slog.i(TAG, activated ? "Turning on night display" : "Turning off night display");
 
-            mIsActivated = activated;
+            mNightDisplayTintController.setActivated(activated);
 
-            if (mAutoMode != null) {
-                mAutoMode.onActivated(activated);
+            if (mNightDisplayAutoMode != null) {
+                mNightDisplayAutoMode.onActivated(activated);
             }
 
-            applyTint(false);
+            applyTint(mNightDisplayTintController, false);
         }
     }
 
-    @Override
-    public void onAutoModeChanged(int autoMode) {
-        Slog.d(TAG, "onAutoModeChanged: autoMode=" + autoMode);
+    private void onNightDisplayAutoModeChanged(int autoMode) {
+        Slog.d(TAG, "onNightDisplayAutoModeChanged: autoMode=" + autoMode);
 
-        if (mAutoMode != null) {
-            mAutoMode.onStop();
-            mAutoMode = null;
+        if (mNightDisplayAutoMode != null) {
+            mNightDisplayAutoMode.onStop();
+            mNightDisplayAutoMode = null;
         }
 
         if (autoMode == ColorDisplayController.AUTO_MODE_CUSTOM) {
-            mAutoMode = new CustomAutoMode();
+            mNightDisplayAutoMode = new CustomNightDisplayAutoMode();
         } else if (autoMode == ColorDisplayController.AUTO_MODE_TWILIGHT) {
-            mAutoMode = new TwilightAutoMode();
+            mNightDisplayAutoMode = new TwilightNightDisplayAutoMode();
         }
 
-        if (mAutoMode != null) {
-            mAutoMode.onStart();
-        }
-    }
-
-    @Override
-    public void onCustomStartTimeChanged(LocalTime startTime) {
-        Slog.d(TAG, "onCustomStartTimeChanged: startTime=" + startTime);
-
-        if (mAutoMode != null) {
-            mAutoMode.onCustomStartTimeChanged(startTime);
+        if (mNightDisplayAutoMode != null) {
+            mNightDisplayAutoMode.onStart();
         }
     }
 
-    @Override
-    public void onCustomEndTimeChanged(LocalTime endTime) {
-        Slog.d(TAG, "onCustomEndTimeChanged: endTime=" + endTime);
+    private void onNightDisplayCustomStartTimeChanged(LocalTime startTime) {
+        Slog.d(TAG, "onNightDisplayCustomStartTimeChanged: startTime=" + startTime);
 
-        if (mAutoMode != null) {
-            mAutoMode.onCustomEndTimeChanged(endTime);
+        if (mNightDisplayAutoMode != null) {
+            mNightDisplayAutoMode.onCustomStartTimeChanged(startTime);
         }
     }
 
-    @Override
-    public void onColorTemperatureChanged(int colorTemperature) {
-        setMatrix(colorTemperature, mMatrixNight);
-        applyTint(true);
+    private void onNightDisplayCustomEndTimeChanged(LocalTime endTime) {
+        Slog.d(TAG, "onNightDisplayCustomEndTimeChanged: endTime=" + endTime);
+
+        if (mNightDisplayAutoMode != null) {
+            mNightDisplayAutoMode.onCustomEndTimeChanged(endTime);
+        }
     }
 
-    @Override
-    public void onDisplayColorModeChanged(int mode) {
+    private void onNightDisplayColorTemperatureChanged(int colorTemperature) {
+        mNightDisplayTintController.setMatrix(colorTemperature);
+        applyTint(mNightDisplayTintController, true);
+    }
+
+    private void onDisplayColorModeChanged(int mode) {
         if (mode == -1) {
             return;
         }
 
-        // Cancel the night display tint animator if it's running.
-        if (mColorMatrixAnimator != null) {
-            mColorMatrixAnimator.cancel();
-        }
+        mNightDisplayTintController.cancelAnimator();
+        mDisplayWhiteBalanceTintController.cancelAnimator();
 
-        setCoefficientMatrix(getContext(), DisplayTransformManager.needsLinearColorMatrix(mode));
-        setMatrix(mController.getColorTemperature(), mMatrixNight);
+        mNightDisplayTintController
+                .setUp(getContext(), DisplayTransformManager.needsLinearColorMatrix(mode));
+        mNightDisplayTintController.setMatrix(mNightDisplayController.getColorTemperature());
+
+        mDisplayWhiteBalanceTintController
+                .setUp(getContext(), DisplayTransformManager.needsLinearColorMatrix(mode));
+        if (mDisplayWhiteBalanceColorTemperature != null) {
+            mDisplayWhiteBalanceTintController.setMatrix(mDisplayWhiteBalanceColorTemperature);
+        }
 
         final DisplayTransformManager dtm = getLocalService(DisplayTransformManager.class);
-        dtm.setColorMode(mode, (mIsActivated != null && mIsActivated) ? mMatrixNight
-                : MATRIX_IDENTITY);
+        dtm.setColorMode(mode, mNightDisplayTintController.getMatrix());
     }
 
-    @Override
-    public void onAccessibilityTransformChanged(boolean state) {
-        onDisplayColorModeChanged(mController.getColorMode());
+    private void onAccessibilityTransformChanged() {
+        onDisplayColorModeChanged(mNightDisplayController.getColorMode());
     }
 
-    /**
-     * Set coefficients based on whether the color matrix is linear or not.
-     */
-    private void setCoefficientMatrix(Context context, boolean needsLinear) {
-        final String[] coefficients = context.getResources().getStringArray(needsLinear
-                ? R.array.config_nightDisplayColorTemperatureCoefficients
-                : R.array.config_nightDisplayColorTemperatureCoefficientsNative);
-        for (int i = 0; i < 9 && i < coefficients.length; i++) {
-            mColorTempCoefficients[i] = Float.parseFloat(coefficients[i]);
-        }
-    }
 
     /**
      * Applies current color temperature matrix, or removes it if deactivated.
      *
      * @param immediate {@code true} skips transition animation
      */
-    private void applyTint(boolean immediate) {
-        // Cancel the old animator if still running.
-        if (mColorMatrixAnimator != null) {
-            mColorMatrixAnimator.cancel();
-        }
+    private void applyTint(TintController tintController, boolean immediate) {
+        tintController.cancelAnimator();
 
         final DisplayTransformManager dtm = getLocalService(DisplayTransformManager.class);
-        final float[] from = dtm.getColorMatrix(LEVEL_COLOR_MATRIX_NIGHT_DISPLAY);
-        final float[] to = mIsActivated ? mMatrixNight : MATRIX_IDENTITY;
+        final float[] from = dtm.getColorMatrix(tintController.getLevel());
+        final float[] to = tintController.getMatrix();
 
         if (immediate) {
-            dtm.setColorMatrix(LEVEL_COLOR_MATRIX_NIGHT_DISPLAY, to);
+            dtm.setColorMatrix(tintController.getLevel(), to);
         } else {
-            mColorMatrixAnimator = ValueAnimator.ofObject(COLOR_MATRIX_EVALUATOR,
-                    from == null ? MATRIX_IDENTITY : from, to);
-            mColorMatrixAnimator.setDuration(TRANSITION_DURATION);
-            mColorMatrixAnimator.setInterpolator(AnimationUtils.loadInterpolator(
+            tintController.setAnimator(ValueAnimator.ofObject(COLOR_MATRIX_EVALUATOR,
+                    from == null ? MATRIX_IDENTITY : from, to));
+            tintController.getAnimator().setDuration(TRANSITION_DURATION);
+            tintController.getAnimator().setInterpolator(AnimationUtils.loadInterpolator(
                     getContext(), android.R.interpolator.fast_out_slow_in));
-            mColorMatrixAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                @Override
-                public void onAnimationUpdate(ValueAnimator animator) {
-                    final float[] value = (float[]) animator.getAnimatedValue();
-                    dtm.setColorMatrix(LEVEL_COLOR_MATRIX_NIGHT_DISPLAY, value);
-                }
+            tintController.getAnimator().addUpdateListener((ValueAnimator animator) -> {
+                final float[] value = (float[]) animator.getAnimatedValue();
+                dtm.setColorMatrix(tintController.getLevel(), value);
             });
-            mColorMatrixAnimator.addListener(new AnimatorListenerAdapter() {
+            tintController.getAnimator().addListener(new AnimatorListenerAdapter() {
 
                 private boolean mIsCancelled;
 
@@ -369,49 +514,24 @@ public final class ColorDisplayService extends SystemService
                         // Ensure final color matrix is set at the end of the animation. If the
                         // animation is cancelled then don't set the final color matrix so the new
                         // animator can pick up from where this one left off.
-                        dtm.setColorMatrix(LEVEL_COLOR_MATRIX_NIGHT_DISPLAY, to);
+                        dtm.setColorMatrix(tintController.getLevel(), to);
                     }
-                    mColorMatrixAnimator = null;
+                    tintController.setAnimator(null);
                 }
             });
-            mColorMatrixAnimator.start();
+            tintController.getAnimator().start();
         }
     }
 
     /**
-     * Set the color transformation {@code MATRIX_NIGHT} to the given color temperature.
-     *
-     * @param colorTemperature color temperature in Kelvin
-     * @param outTemp          the 4x4 display transformation matrix for that color temperature
-     */
-    private void setMatrix(int colorTemperature, float[] outTemp) {
-        if (outTemp.length != 16) {
-            Slog.d(TAG, "The display transformation matrix must be 4x4");
-            return;
-        }
-
-        Matrix.setIdentityM(mMatrixNight, 0);
-
-        final float squareTemperature = colorTemperature * colorTemperature;
-        final float red = squareTemperature * mColorTempCoefficients[0]
-                + colorTemperature * mColorTempCoefficients[1] + mColorTempCoefficients[2];
-        final float green = squareTemperature * mColorTempCoefficients[3]
-                + colorTemperature * mColorTempCoefficients[4] + mColorTempCoefficients[5];
-        final float blue = squareTemperature * mColorTempCoefficients[6]
-                + colorTemperature * mColorTempCoefficients[7] + mColorTempCoefficients[8];
-        outTemp[0] = red;
-        outTemp[5] = green;
-        outTemp[10] = blue;
-    }
-
-    /**
-     * Returns the first date time corresponding to the local time that occurs before the
-     * provided date time.
+     * Returns the first date time corresponding to the local time that occurs before the provided
+     * date time.
      *
      * @param compareTime the LocalDateTime to compare against
      * @return the prior LocalDateTime corresponding to this local time
      */
-    public static LocalDateTime getDateTimeBefore(LocalTime localTime, LocalDateTime compareTime) {
+    @VisibleForTesting
+    static LocalDateTime getDateTimeBefore(LocalTime localTime, LocalDateTime compareTime) {
         final LocalDateTime ldt = LocalDateTime.of(compareTime.getYear(), compareTime.getMonth(),
                 compareTime.getDayOfMonth(), localTime.getHour(), localTime.getMinute());
 
@@ -420,13 +540,14 @@ public final class ColorDisplayService extends SystemService
     }
 
     /**
-     * Returns the first date time corresponding to this local time that occurs after the
-     * provided date time.
+     * Returns the first date time corresponding to this local time that occurs after the provided
+     * date time.
      *
      * @param compareTime the LocalDateTime to compare against
      * @return the next LocalDateTime corresponding to this local time
      */
-    public static LocalDateTime getDateTimeAfter(LocalTime localTime, LocalDateTime compareTime) {
+    @VisibleForTesting
+    static LocalDateTime getDateTimeAfter(LocalTime localTime, LocalDateTime compareTime) {
         final LocalDateTime ldt = LocalDateTime.of(compareTime.getYear(), compareTime.getMonth(),
                 compareTime.getDayOfMonth(), localTime.getHour(), localTime.getMinute());
 
@@ -434,13 +555,64 @@ public final class ColorDisplayService extends SystemService
         return ldt.isBefore(compareTime) ? ldt.plusDays(1) : ldt;
     }
 
-    private abstract class AutoMode implements ColorDisplayController.Callback {
+    private void onDisplayWhiteBalanceEnabled(boolean enabled) {
+        mDisplayWhiteBalanceTintController.setActivated(enabled);
+        if (mDisplayWhiteBalanceListener != null) {
+            mDisplayWhiteBalanceListener.onDisplayWhiteBalanceStatusChanged(enabled);
+        }
+    }
+
+    private boolean isDisplayWhiteBalanceSettingEnabled() {
+        return Secure.getIntForUser(getContext().getContentResolver(),
+                Secure.DISPLAY_WHITE_BALANCE_ENABLED, 0, mCurrentUser) == 1;
+    }
+
+    private boolean isDeviceColorManagedInternal() {
+        final DisplayTransformManager dtm = getLocalService(DisplayTransformManager.class);
+        return dtm.isDeviceColorManaged();
+    }
+
+    /**
+     * Returns the last time the night display transform activation state was changed, or {@link
+     * LocalDateTime#MIN} if night display has never been activated.
+     */
+    private LocalDateTime getNightDisplayLastActivatedTimeSetting() {
+        final ContentResolver cr = getContext().getContentResolver();
+        final String lastActivatedTime = Secure.getStringForUser(
+                cr, Secure.NIGHT_DISPLAY_LAST_ACTIVATED_TIME, getContext().getUserId());
+        if (lastActivatedTime != null) {
+            try {
+                return LocalDateTime.parse(lastActivatedTime);
+            } catch (DateTimeParseException ignored) {
+            }
+            // Uses the old epoch time.
+            try {
+                return LocalDateTime.ofInstant(
+                        Instant.ofEpochMilli(Long.parseLong(lastActivatedTime)),
+                        ZoneId.systemDefault());
+            } catch (DateTimeException | NumberFormatException ignored) {
+            }
+        }
+        return LocalDateTime.MIN;
+    }
+
+    private abstract class NightDisplayAutoMode {
+
+        public abstract void onActivated(boolean activated);
+
         public abstract void onStart();
 
         public abstract void onStop();
+
+        public void onCustomStartTimeChanged(LocalTime startTime) {
+        }
+
+        public void onCustomEndTimeChanged(LocalTime endTime) {
+        }
     }
 
-    private class CustomAutoMode extends AutoMode implements AlarmManager.OnAlarmListener {
+    private final class CustomNightDisplayAutoMode extends NightDisplayAutoMode implements
+            AlarmManager.OnAlarmListener {
 
         private final AlarmManager mAlarmManager;
         private final BroadcastReceiver mTimeChangedReceiver;
@@ -450,7 +622,7 @@ public final class ColorDisplayService extends SystemService
 
         private LocalDateTime mLastActivatedTime;
 
-        CustomAutoMode() {
+        CustomNightDisplayAutoMode() {
             mAlarmManager = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
             mTimeChangedReceiver = new BroadcastReceiver() {
                 @Override
@@ -470,15 +642,16 @@ public final class ColorDisplayService extends SystemService
                 // Maintain the existing activated state if within the current period.
                 if (mLastActivatedTime.isBefore(now) && mLastActivatedTime.isAfter(start)
                         && (mLastActivatedTime.isAfter(end) || now.isBefore(end))) {
-                    activate = mController.isActivated();
+                    activate = mNightDisplayController.isActivated();
                 }
             }
 
-            if (mIsActivated == null || mIsActivated != activate) {
-                mController.setActivated(activate);
+            if (mNightDisplayTintController.isActivatedStateNotSet() || (
+                    mNightDisplayTintController.isActivated() != activate)) {
+                mNightDisplayController.setActivated(activate);
             }
 
-            updateNextAlarm(mIsActivated, now);
+            updateNextAlarm(mNightDisplayTintController.isActivated(), now);
         }
 
         private void updateNextAlarm(@Nullable Boolean activated, @NonNull LocalDateTime now) {
@@ -496,10 +669,10 @@ public final class ColorDisplayService extends SystemService
             intentFilter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
             getContext().registerReceiver(mTimeChangedReceiver, intentFilter);
 
-            mStartTime = mController.getCustomStartTime();
-            mEndTime = mController.getCustomEndTime();
+            mStartTime = mNightDisplayController.getCustomStartTime();
+            mEndTime = mNightDisplayController.getCustomEndTime();
 
-            mLastActivatedTime = mController.getLastActivatedTime();
+            mLastActivatedTime = getNightDisplayLastActivatedTimeSetting();
 
             // Force an update to initialize state.
             updateActivated();
@@ -515,7 +688,7 @@ public final class ColorDisplayService extends SystemService
 
         @Override
         public void onActivated(boolean activated) {
-            mLastActivatedTime = mController.getLastActivatedTime();
+            mLastActivatedTime = getNightDisplayLastActivatedTimeSetting();
             updateNextAlarm(activated, LocalDateTime.now());
         }
 
@@ -540,11 +713,13 @@ public final class ColorDisplayService extends SystemService
         }
     }
 
-    private class TwilightAutoMode extends AutoMode implements TwilightListener {
+    private final class TwilightNightDisplayAutoMode extends NightDisplayAutoMode implements
+            TwilightListener {
 
         private final TwilightManager mTwilightManager;
+        private LocalDateTime mLastActivatedTime;
 
-        TwilightAutoMode() {
+        TwilightNightDisplayAutoMode() {
             mTwilightManager = getLocalService(TwilightManager.class);
         }
 
@@ -556,26 +731,32 @@ public final class ColorDisplayService extends SystemService
             }
 
             boolean activate = state.isNight();
-            final LocalDateTime lastActivatedTime = mController.getLastActivatedTime();
-            if (lastActivatedTime != null) {
+            if (mLastActivatedTime != null) {
                 final LocalDateTime now = LocalDateTime.now();
                 final LocalDateTime sunrise = state.sunrise();
                 final LocalDateTime sunset = state.sunset();
                 // Maintain the existing activated state if within the current period.
-                if (lastActivatedTime.isBefore(now) && (lastActivatedTime.isBefore(sunrise)
-                        ^ lastActivatedTime.isBefore(sunset))) {
-                    activate = mController.isActivated();
+                if (mLastActivatedTime.isBefore(now) && (mLastActivatedTime.isBefore(sunrise)
+                        ^ mLastActivatedTime.isBefore(sunset))) {
+                    activate = mNightDisplayController.isActivated();
                 }
             }
 
-            if (mIsActivated == null || mIsActivated != activate) {
-                mController.setActivated(activate);
+            if (mNightDisplayTintController.isActivatedStateNotSet() || (
+                    mNightDisplayTintController.isActivated() != activate)) {
+                mNightDisplayController.setActivated(activate);
             }
+        }
+
+        @Override
+        public void onActivated(boolean activated) {
+            mLastActivatedTime = getNightDisplayLastActivatedTimeSetting();
         }
 
         @Override
         public void onStart() {
             mTwilightManager.registerListener(this, mHandler);
+            mLastActivatedTime = getNightDisplayLastActivatedTimeSetting();
 
             // Force an update to initialize state.
             updateActivated(mTwilightManager.getLastTwilightState());
@@ -584,10 +765,7 @@ public final class ColorDisplayService extends SystemService
         @Override
         public void onStop() {
             mTwilightManager.unregisterListener(this);
-        }
-
-        @Override
-        public void onActivated(boolean activated) {
+            mLastActivatedTime = null;
         }
 
         @Override
@@ -614,6 +792,128 @@ public final class ColorDisplayService extends SystemService
                 mResultMatrix[i] = MathUtils.lerp(startValue[i], endValue[i], fraction);
             }
             return mResultMatrix;
+        }
+    }
+
+    private abstract static class TintController {
+
+        private ValueAnimator mAnimator;
+        private Boolean mIsActivated;
+
+        public ValueAnimator getAnimator() {
+            return mAnimator;
+        }
+
+        public void setAnimator(ValueAnimator animator) {
+            mAnimator = animator;
+        }
+
+        /**
+         * Cancel the animator if it's still running.
+         */
+        public void cancelAnimator() {
+            if (mAnimator != null) {
+                mAnimator.cancel();
+            }
+        }
+
+        /**
+         * End the animator if it's still running, jumping to the end state.
+         */
+        public void endAnimator() {
+            if (mAnimator != null) {
+                mAnimator.end();
+                mAnimator = null;
+            }
+        }
+
+        public void setActivated(Boolean isActivated) {
+            mIsActivated = isActivated;
+        }
+
+        public boolean isActivated() {
+            return mIsActivated != null && mIsActivated;
+        }
+
+        public boolean isActivatedStateNotSet() {
+            return mIsActivated == null;
+        }
+
+        /**
+         * Set up any constants needed for computing the matrix.
+         */
+        public abstract void setUp(Context context, boolean needsLinear);
+
+        /**
+         * Sets the 4x4 matrix to apply.
+         */
+        public abstract void setMatrix(int value);
+
+        /**
+         * Get the 4x4 matrix to apply.
+         */
+        public abstract float[] getMatrix();
+
+        /**
+         * Get the color transform level to apply the matrix.
+         */
+        public abstract int getLevel();
+    }
+
+    /**
+     * Local service that allows color transforms to be enabled from other system services.
+     */
+    public final class ColorDisplayServiceInternal {
+
+        /**
+         * Set the current CCT value for the display white balance transform, and if the transform
+         * is enabled, apply it.
+         *
+         * @param cct the color temperature in Kelvin.
+         */
+        public boolean setDisplayWhiteBalanceColorTemperature(int cct) {
+            // Update the transform matrix even if it can't be applied.
+            mDisplayWhiteBalanceColorTemperature = cct;
+            mDisplayWhiteBalanceTintController.setMatrix(cct);
+
+            if (mDisplayWhiteBalanceTintController.isActivated()) {
+                applyTint(mDisplayWhiteBalanceTintController, true);
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * Sets the listener and returns whether display white balance is currently enabled.
+         */
+        public boolean setDisplayWhiteBalanceListener(DisplayWhiteBalanceListener listener) {
+            mDisplayWhiteBalanceListener = listener;
+            return mDisplayWhiteBalanceTintController.isActivated();
+        }
+    }
+
+    /**
+     * Listener for changes in display white balance status.
+     */
+    public interface DisplayWhiteBalanceListener {
+
+        /**
+         * Notify that the display white balance status has changed, either due to preemption by
+         * another transform or the feature being turned off.
+         */
+        void onDisplayWhiteBalanceStatusChanged(boolean enabled);
+    }
+
+    private final class BinderService extends IColorDisplayManager.Stub {
+
+        @Override
+        public boolean isDeviceColorManaged() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return isDeviceColorManagedInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
     }
 }

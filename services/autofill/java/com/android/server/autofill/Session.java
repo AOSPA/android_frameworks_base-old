@@ -64,9 +64,11 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.service.autofill.AutofillFieldClassificationService.Scores;
 import android.service.autofill.AutofillService;
+import android.service.autofill.CompositeUserData;
 import android.service.autofill.Dataset;
 import android.service.autofill.FieldClassification;
 import android.service.autofill.FieldClassification.Match;
+import android.service.autofill.FieldClassificationUserData;
 import android.service.autofill.FillContext;
 import android.service.autofill.FillRequest;
 import android.service.autofill.FillResponse;
@@ -95,12 +97,9 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.ArrayUtils;
-import com.android.server.AbstractRemoteService;
 import com.android.server.autofill.AutofillManagerService.SmartSuggestionMode;
 import com.android.server.autofill.ui.AutoFillUI;
 import com.android.server.autofill.ui.PendingUi;
-import com.android.server.intelligence.IntelligenceManagerInternal;
-import com.android.server.intelligence.IntelligenceManagerInternal.AugmentedAutofillCallback;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -248,9 +247,18 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @GuardedBy("mLock")
     private final SparseArray<LogMaker> mRequestLogs = new SparseArray<>(1);
 
+    /**
+     * Destroys the augmented Autofill UI.
+     */
+    // TODO(b/111330312): this runnable is called when the Autofill session is destroyed, the
+    // main reason being the cases where user tap HOME.
+    // Right now it's completely destroying the UI, but we need to decide whether / how to
+    // properly recover it later (for example, if the user switches back to the activity,
+    // should it be restored? Right not it kind of is, because Autofill's Session trigger a
+    // new FillRequest, which in turn triggers the Augmented Autofill request again)
     @GuardedBy("mLock")
     @Nullable
-    private AugmentedAutofillCallback mAugmentedAutofillCallback;
+    private Runnable mAugmentedAutofillDestroyer;
 
     /**
      * Receiver of assist data from the app's {@link Activity}.
@@ -902,7 +910,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
     // VultureCallback
     @Override
-    public void onServiceDied(AbstractRemoteService service) {
+    public void onServiceDied(@NonNull RemoteFillService service) {
         Slog.w(TAG, "removing session because service died");
         forceRemoveSelfLocked();
     }
@@ -1231,7 +1239,20 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             return;
         }
 
-        final UserData userData = mService.getUserData();
+        // Merge UserData if necessary.
+        // Fields in packageUserData will override corresponding fields in genericUserData.
+        final UserData genericUserData = mService.getUserData();
+        final UserData packageUserData = lastResponse.getUserData();
+        final FieldClassificationUserData userData;
+        if (packageUserData == null && genericUserData == null) {
+            userData = null;
+        } else if (packageUserData != null && genericUserData != null) {
+            userData = new CompositeUserData(genericUserData, packageUserData);
+        } else if (packageUserData != null) {
+            userData = packageUserData;
+        } else {
+            userData = mService.getUserData();
+        }
 
         for (int i = 0; i < mViewStates.size(); i++) {
             final ViewState viewState = mViewStates.valueAt(i);
@@ -1382,10 +1403,17 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             @NonNull ArrayList<String> changedDatasetIds,
             @NonNull ArrayList<AutofillId> manuallyFilledFieldIds,
             @NonNull ArrayList<ArrayList<String>> manuallyFilledDatasetIds,
-            @NonNull UserData userData, @NonNull Collection<ViewState> viewStates) {
+            @NonNull FieldClassificationUserData userData,
+            @NonNull Collection<ViewState> viewStates) {
 
         final String[] userValues = userData.getValues();
         final String[] categoryIds = userData.getCategoryIds();
+
+        final String defaultAlgorithm = userData.getFieldClassificationAlgorithm();
+        final Bundle defaultArgs = userData.getDefaultFieldClassificationArgs();
+
+        final ArrayMap<String, String> algorithms = userData.getFieldClassificationAlgorithms();
+        final ArrayMap<String, Bundle> args = userData.getFieldClassificationArgs();
 
         // Sanity check
         if (userValues == null || categoryIds == null || userValues.length != categoryIds.length) {
@@ -1402,8 +1430,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         final ArrayList<FieldClassification> detectedFieldClassifications = new ArrayList<>(
                 maxFieldsSize);
 
-        final String algorithm = userData.getFieldClassificationAlgorithm();
-        final Bundle algorithmArgs = userData.getAlgorithmArgs();
         final int viewsSize = viewStates.size();
 
         // First, we get all scores.
@@ -1490,7 +1516,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     mComponentName, mCompatMode);
         });
 
-        fcStrategy.getScores(callback, algorithm, algorithmArgs, currentValues, userValues);
+        fcStrategy.calculateScores(callback, currentValues, userValues, categoryIds,
+                defaultAlgorithm, defaultArgs, algorithms, args);
     }
 
     /**
@@ -2516,8 +2543,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
         // The default autofill service cannot fullfill the request, let's check if the intelligence
         // service can.
-        mAugmentedAutofillCallback = triggerAugmentedAutofillLocked();
-        if (mAugmentedAutofillCallback == null) {
+        mAugmentedAutofillDestroyer = triggerAugmentedAutofillLocked();
+        if (mAugmentedAutofillDestroyer == null) {
             if (sVerbose) {
                 Slog.v(TAG, "canceling session " + id + " when server returned null and there is no"
                         + " AugmentedAutofill for user");
@@ -2539,21 +2566,22 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     /**
      * Tries to trigger Augmented Autofill when the standard service could not fulfill a request.
      *
-     * @return callback to the Augmented Autofill service, or {@code null} if not supported.
+     * @return callback to destroy the autofill UI, or {@code null} if not supported.
      */
     // TODO(b/111330312): might need to call it in other places, like when the service returns a
     // non-null response but without datasets (for example, just SaveInfo)
     @GuardedBy("mLock")
-    private AugmentedAutofillCallback triggerAugmentedAutofillLocked() {
+    private Runnable triggerAugmentedAutofillLocked() {
         // Check if Smart Suggestions is supported...
         final @SmartSuggestionMode int supportedModes = mService
                 .getSupportedSmartSuggestionModesLocked();
         if (supportedModes == 0) return null;
 
         // ...then if the service is set for the user
-        final IntelligenceManagerInternal intelligenceManagerInternal = mService
-                .getMaster().mIntelligenceManagerInternal;
-        if (intelligenceManagerInternal == null) return null;
+
+        final RemoteAugmentedAutofillService remoteService = mService
+                .getRemoteAugmentedAutofillServiceLocked();
+        if (remoteService == null) return null;
 
         // Define which mode will be used
         final int mode;
@@ -2579,11 +2607,18 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     + " when server returned null for session " + this.id);
         }
 
+        final AutofillValue currentValue = mViewStates.get(mCurrentViewId).getCurrentValue();
+
         // TODO(b/111330312): we might need to add a new state in the AutofillManager to optimize
         // furgher AFM -> AFMS calls.
         // TODO(b/119638958): add CTS tests
-        return intelligenceManagerInternal.requestAutofill(mService.getUserId(), mClient,
-                mActivityToken, this.id, mCurrentViewId);
+        remoteService.onRequestAutofillLocked(id, mClient, taskId, mComponentName, mCurrentViewId,
+                currentValue);
+
+        if (mAugmentedAutofillDestroyer == null) {
+            mAugmentedAutofillDestroyer = () -> remoteService.onDestroyAutofillWindowsRequest(id);
+        }
+        return mAugmentedAutofillDestroyer;
     }
 
     @GuardedBy("mLock")
@@ -2864,8 +2899,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         pw.print(prefix); pw.print("mSaveOnAllViewsInvisible: "); pw.println(
                 mSaveOnAllViewsInvisible);
         pw.print(prefix); pw.print("mSelectedDatasetIds: "); pw.println(mSelectedDatasetIds);
-        if (mAugmentedAutofillCallback != null) {
-            pw.print(prefix); pw.println("has AugmentedAutofillCallback");
+        if (mAugmentedAutofillDestroyer != null) {
+            pw.print(prefix); pw.println("has mAugmentedAutofillDestroyer");
         }
         mRemoteFillService.dump(prefix, pw);
     }
@@ -3043,8 +3078,9 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
     @GuardedBy("mLock")
     void destroyAugmentedAutofillWindowsLocked() {
-        if (mAugmentedAutofillCallback != null) {
-            mAugmentedAutofillCallback.destroy();
+        if (mAugmentedAutofillDestroyer != null) {
+            mAugmentedAutofillDestroyer.run();
+            mAugmentedAutofillDestroyer = null;
         }
     }
 

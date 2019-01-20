@@ -19,8 +19,8 @@ package com.android.internal.os;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Binder;
+import android.os.Process;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.text.format.DateFormat;
 import android.util.ArrayMap;
 import android.util.Pair;
@@ -52,17 +52,27 @@ public class BinderCallsStats implements BinderInternal.Observer {
     public static final boolean ENABLED_DEFAULT = false;
     public static final boolean DETAILED_TRACKING_DEFAULT = true;
     public static final int PERIODIC_SAMPLING_INTERVAL_DEFAULT = 100;
+    public static final int MAX_BINDER_CALL_STATS_COUNT_DEFAULT = 5000;
+
+    private static class OverflowBinder extends Binder {}
 
     private static final String TAG = "BinderCallsStats";
     private static final int CALL_SESSIONS_POOL_SIZE = 100;
     private static final int MAX_EXCEPTION_COUNT_SIZE = 50;
     private static final String EXCEPTION_COUNT_OVERFLOW_NAME = "overflow";
+    // Default values for overflow entry. The work source uid does not use a default value in order
+    // to have on overflow entry per work source uid.
+    private static final Class<? extends Binder> OVERFLOW_BINDER = OverflowBinder.class;
+    private static final boolean OVERFLOW_SCREEN_INTERACTIVE = false;
+    private static final int OVERFLOW_DIRECT_CALLING_UID = -1;
+    private static final int OVERFLOW_TRANSACTION_CODE = -1;
 
     // Whether to collect all the data: cpu + exceptions + reply/request sizes.
     private boolean mDetailedTracking = DETAILED_TRACKING_DEFAULT;
     // Sampling period to control how often to track CPU usage. 1 means all calls, 100 means ~1 out
     // of 100 requests.
     private int mPeriodicSamplingInterval = PERIODIC_SAMPLING_INTERVAL_DEFAULT;
+    private int mMaxBinderCallStatsCount = MAX_BINDER_CALL_STATS_COUNT_DEFAULT;
     @GuardedBy("mLock")
     private final SparseArray<UidEntry> mUidEntries = new SparseArray<>();
     @GuardedBy("mLock")
@@ -70,9 +80,13 @@ public class BinderCallsStats implements BinderInternal.Observer {
     private final Queue<CallSession> mCallSessionsPool = new ConcurrentLinkedQueue<>();
     private final Object mLock = new Object();
     private final Random mRandom;
-    private long mStartTime = System.currentTimeMillis();
+    private long mStartCurrentTime = System.currentTimeMillis();
+    private long mStartElapsedTime = SystemClock.elapsedRealtime();
+    private long mCallStatsCount = 0;
+    private boolean mAddDebugEntries = false;
 
     private CachedDeviceState.Readonly mDeviceState;
+    private CachedDeviceState.TimeInStateStopwatch mBatteryStopwatch;
 
     /** Injector for {@link BinderCallsStats}. */
     public static class Injector {
@@ -86,12 +100,16 @@ public class BinderCallsStats implements BinderInternal.Observer {
     }
 
     public void setDeviceState(@NonNull CachedDeviceState.Readonly deviceState) {
+        if (mBatteryStopwatch != null) {
+            mBatteryStopwatch.close();
+        }
         mDeviceState = deviceState;
+        mBatteryStopwatch = deviceState.createTimeOnBatteryStopwatch();
     }
 
     @Override
     @Nullable
-    public CallSession callStarted(Binder binder, int code) {
+    public CallSession callStarted(Binder binder, int code, int workSourceUid) {
         if (mDeviceState == null || mDeviceState.isCharging()) {
             return null;
         }
@@ -115,19 +133,21 @@ public class BinderCallsStats implements BinderInternal.Observer {
     }
 
     @Override
-    public void callEnded(@Nullable CallSession s, int parcelRequestSize, int parcelReplySize) {
+    public void callEnded(@Nullable CallSession s, int parcelRequestSize,
+            int parcelReplySize, int workSourceUid) {
         if (s == null) {
             return;
         }
 
-        processCallEnded(s, parcelRequestSize, parcelReplySize);
+        processCallEnded(s, parcelRequestSize, parcelReplySize, workSourceUid);
 
         if (mCallSessionsPool.size() < CALL_SESSIONS_POOL_SIZE) {
             mCallSessionsPool.add(s);
         }
     }
 
-    private void processCallEnded(CallSession s, int parcelRequestSize, int parcelReplySize) {
+    private void processCallEnded(CallSession s,
+            int parcelRequestSize, int parcelReplySize, int workSourceUid) {
         // Non-negative time signals we need to record data for this call.
         final boolean recordCall = s.cpuTimeStarted >= 0;
         final long duration;
@@ -140,7 +160,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
             latencyDuration = 0;
         }
         final int callingUid = getCallingUid();
-        final int workSourceUid = getWorkSourceUid();
 
         synchronized (mLock) {
             // This was already checked in #callStart but check again while synchronized.
@@ -148,8 +167,7 @@ public class BinderCallsStats implements BinderInternal.Observer {
                 return;
             }
 
-            final boolean isWorkSourceSet = workSourceUid >= 0;
-            final UidEntry uidEntry = getUidEntry(isWorkSourceSet ? workSourceUid : callingUid);
+            final UidEntry uidEntry = getUidEntry(workSourceUid);
             uidEntry.callCount++;
 
             if (recordCall) {
@@ -158,7 +176,13 @@ public class BinderCallsStats implements BinderInternal.Observer {
 
                 final CallStat callStat = uidEntry.getOrCreate(
                         callingUid, s.binderClass, s.transactionCode,
-                        mDeviceState.isScreenInteractive());
+                        mDeviceState.isScreenInteractive(),
+                        mCallStatsCount >= mMaxBinderCallStatsCount);
+                final boolean isNewCallStat = callStat.callCount == 0;
+                if (isNewCallStat) {
+                    mCallStatsCount++;
+                }
+
                 callStat.callCount++;
                 callStat.recordedCallCount++;
                 callStat.cpuTimeMicros += duration;
@@ -304,7 +328,28 @@ public class BinderCallsStats implements BinderInternal.Observer {
             exported.methodName = methodName;
         }
 
+        // Debug entries added to help validate the data.
+        if (mAddDebugEntries && mBatteryStopwatch != null) {
+            resultCallStats.add(createDebugEntry("start_time_millis", mStartElapsedTime));
+            resultCallStats.add(createDebugEntry("end_time_millis", SystemClock.elapsedRealtime()));
+            resultCallStats.add(
+                    createDebugEntry("battery_time_millis", mBatteryStopwatch.getMillis()));
+        }
+
         return resultCallStats;
+    }
+
+    private ExportedCallStat createDebugEntry(String variableName, long value) {
+        final int uid = Process.myUid();
+        final ExportedCallStat callStat = new ExportedCallStat();
+        callStat.className = "";
+        callStat.workSourceUid = uid;
+        callStat.callingUid = uid;
+        callStat.recordedCallCount = 1;
+        callStat.callCount = 1;
+        callStat.methodName = "__DEBUG_" + variableName;
+        callStat.latencyMicros = value;
+        return callStat;
     }
 
     /** @hide */
@@ -315,19 +360,20 @@ public class BinderCallsStats implements BinderInternal.Observer {
     }
 
     /** Writes the collected statistics to the supplied {@link PrintWriter}.*/
-    public void dump(PrintWriter pw, Map<Integer, String> appIdToPkgNameMap, boolean verbose) {
+    public void dump(PrintWriter pw, AppIdToPackageMap packageMap, boolean verbose) {
         synchronized (mLock) {
-            dumpLocked(pw, appIdToPkgNameMap, verbose);
+            dumpLocked(pw, packageMap, verbose);
         }
     }
 
-    private void dumpLocked(PrintWriter pw, Map<Integer, String> appIdToPkgNameMap,
-            boolean verbose) {
+    private void dumpLocked(PrintWriter pw, AppIdToPackageMap packageMap, boolean verbose) {
         long totalCallsCount = 0;
         long totalRecordedCallsCount = 0;
         long totalCpuTime = 0;
         pw.print("Start time: ");
-        pw.println(DateFormat.format("yyyy-MM-dd HH:mm:ss", mStartTime));
+        pw.println(DateFormat.format("yyyy-MM-dd HH:mm:ss", mStartCurrentTime));
+        pw.print("On battery time (ms): ");
+        pw.println(mBatteryStopwatch != null ? mBatteryStopwatch.getMillis() : 0);
         pw.println("Sampling interval period: " + mPeriodicSamplingInterval);
         final List<UidEntry> entries = new ArrayList<>();
 
@@ -354,9 +400,9 @@ public class BinderCallsStats implements BinderInternal.Observer {
         for (ExportedCallStat e : exportedCallStats) {
             sb.setLength(0);
             sb.append("    ")
-                    .append(uidToString(e.callingUid, appIdToPkgNameMap))
+                    .append(packageMap.mapUid(e.callingUid))
                     .append(',')
-                    .append(uidToString(e.workSourceUid, appIdToPkgNameMap))
+                    .append(packageMap.mapUid(e.workSourceUid))
                     .append(',').append(e.className)
                     .append('#').append(e.methodName)
                     .append(',').append(e.screenInteractive)
@@ -377,7 +423,7 @@ public class BinderCallsStats implements BinderInternal.Observer {
         final List<UidEntry> summaryEntries = verbose ? entries
                 : getHighestValues(entries, value -> value.cpuTimeMicros, 0.9);
         for (UidEntry entry : summaryEntries) {
-            String uidStr = uidToString(entry.workSourceUid, appIdToPkgNameMap);
+            String uidStr = packageMap.mapUid(entry.workSourceUid);
             pw.println(String.format("  %10d %3.0f%% %8d %8d %s",
                     entry.cpuTimeMicros, 100d * entry.cpuTimeMicros / totalCpuTime,
                     entry.recordedCallCount, entry.callCount, uidStr));
@@ -405,23 +451,12 @@ public class BinderCallsStats implements BinderInternal.Observer {
         }
     }
 
-    private static String uidToString(int uid, Map<Integer, String> pkgNameMap) {
-        final int appId = UserHandle.getAppId(uid);
-        final String pkgName = pkgNameMap == null ? null : pkgNameMap.get(appId);
-        final String uidStr = UserHandle.formatUid(uid);
-        return pkgName == null ? uidStr : pkgName + '/' + uidStr;
-    }
-
     protected long getThreadTimeMicro() {
         return SystemClock.currentThreadTimeMicro();
     }
 
     protected int getCallingUid() {
         return Binder.getCallingUid();
-    }
-
-    protected int getWorkSourceUid() {
-        return Binder.getCallingWorkSourceUid();
     }
 
     protected long getElapsedRealtimeMicro() {
@@ -444,6 +479,28 @@ public class BinderCallsStats implements BinderInternal.Observer {
         }
     }
 
+    public void setAddDebugEntries(boolean addDebugEntries) {
+        mAddDebugEntries = addDebugEntries;
+    }
+
+    /**
+     * Sets the maximum number of items to track.
+     */
+    public void setMaxBinderCallStats(int maxKeys) {
+        if (maxKeys <= 0) {
+            Slog.w(TAG, "Ignored invalid max value (value must be positive): "
+                    + maxKeys);
+            return;
+        }
+
+        synchronized (mLock) {
+            if (maxKeys != mMaxBinderCallStatsCount) {
+                mMaxBinderCallStatsCount = maxKeys;
+                reset();
+            }
+        }
+    }
+
     public void setSamplingInterval(int samplingInterval) {
         if (samplingInterval <= 0) {
             Slog.w(TAG, "Ignored invalid sampling interval (value must be positive): "
@@ -461,9 +518,14 @@ public class BinderCallsStats implements BinderInternal.Observer {
 
     public void reset() {
         synchronized (mLock) {
+            mCallStatsCount = 0;
             mUidEntries.clear();
             mExceptionCounts.clear();
-            mStartTime = System.currentTimeMillis();
+            mStartCurrentTime = System.currentTimeMillis();
+            mStartElapsedTime = SystemClock.elapsedRealtime();
+            if (mBatteryStopwatch != null) {
+                mBatteryStopwatch.reset();
+            }
         }
     }
 
@@ -595,10 +657,23 @@ public class BinderCallsStats implements BinderInternal.Observer {
         }
 
         CallStat getOrCreate(int callingUid, Class<? extends Binder> binderClass,
-                int transactionCode, boolean screenInteractive) {
+                int transactionCode, boolean screenInteractive, boolean maxCallStatsReached) {
             CallStat mapCallStat = get(callingUid, binderClass, transactionCode, screenInteractive);
-            // Only create CallStat if it's a new entry, otherwise update existing instance
+            // Only create CallStat if it's a new entry, otherwise update existing instance.
             if (mapCallStat == null) {
+                if (maxCallStatsReached) {
+                    mapCallStat = get(OVERFLOW_DIRECT_CALLING_UID, OVERFLOW_BINDER,
+                            OVERFLOW_TRANSACTION_CODE, OVERFLOW_SCREEN_INTERACTIVE);
+                    if (mapCallStat != null) {
+                        return mapCallStat;
+                    }
+
+                    callingUid = OVERFLOW_DIRECT_CALLING_UID;
+                    binderClass = OVERFLOW_BINDER;
+                    transactionCode = OVERFLOW_TRANSACTION_CODE;
+                    screenInteractive = OVERFLOW_SCREEN_INTERACTIVE;
+                }
+
                 mapCallStat = new CallStat(callingUid, binderClass, transactionCode,
                         screenInteractive);
                 CallStatKey key = new CallStatKey();

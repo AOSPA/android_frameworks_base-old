@@ -20,6 +20,12 @@
 
 namespace android::uirenderer::renderthread {
 
+// TODO: Re-enable after addressing more of the TODO's
+// With this disabled we won't have a good up-front signal that the surface is no longer valid,
+// however we can at least handle that reactively post-draw. There's just not a good mechanism
+// to propagate this error back to the caller
+constexpr bool DISABLE_BUFFER_PREFETCH = true;
+
 // TODO: Make surface less protected
 // This exists because perform is a varargs, and ANativeWindow has no va_list perform.
 // So wrapping/chaining that is hard. Telling the compiler to ignore protected is easy, so we do
@@ -55,6 +61,10 @@ ReliableSurface::ReliableSurface(sp<Surface>&& surface) : mSurface(std::move(sur
     ANativeWindow::queueBuffer_DEPRECATED = hook_queueBuffer_DEPRECATED;
 }
 
+ReliableSurface::~ReliableSurface() {
+    clearReservedBuffer();
+}
+
 void ReliableSurface::perform(int operation, va_list args) {
     std::lock_guard _lock{mMutex};
 
@@ -86,7 +96,18 @@ int ReliableSurface::reserveNext() {
         if (mInErrorState) {
             return UNKNOWN_ERROR;
         }
+        if (mHasDequeuedBuffer) {
+            return OK;
+        }
+        if constexpr (DISABLE_BUFFER_PREFETCH) {
+            return OK;
+        }
     }
+
+    // TODO: Update this to better handle when requested dimensions have changed
+    // Currently the driver does this via query + perform but that's after we've already
+    // reserved a buffer. Should we do that logic instead? Or should we drop
+    // the backing Surface to the ground and go full manual on the IGraphicBufferProducer instead?
 
     int fenceFd = -1;
     ANativeWindowBuffer* buffer = nullptr;
@@ -97,21 +118,28 @@ int ReliableSurface::reserveNext() {
         LOG_ALWAYS_FATAL_IF(mReservedBuffer, "race condition in reserveNext");
         mReservedBuffer = buffer;
         mReservedFenceFd.reset(fenceFd);
-        if (result != OK) {
-            ALOGW("reserveNext failed, error %d", result);
-        }
     }
 
     return result;
 }
 
 void ReliableSurface::clearReservedBuffer() {
-    std::lock_guard _lock{mMutex};
-    if (mReservedBuffer) {
-        ALOGW("Reserved buffer %p was never used", mReservedBuffer);
+    ANativeWindowBuffer* buffer = nullptr;
+    int releaseFd = -1;
+    {
+        std::lock_guard _lock{mMutex};
+        if (mReservedBuffer) {
+            ALOGW("Reserved buffer %p was never used", mReservedBuffer);
+            buffer = mReservedBuffer;
+            releaseFd = mReservedFenceFd.release();
+        }
+        mReservedBuffer = nullptr;
+        mReservedFenceFd.reset();
+        mHasDequeuedBuffer = false;
     }
-    mReservedBuffer = nullptr;
-    mReservedFenceFd.reset();
+    if (buffer) {
+        callProtected(mSurface, cancelBuffer, buffer, releaseFd);
+    }
 }
 
 int ReliableSurface::cancelBuffer(ANativeWindowBuffer* buffer, int fenceFd) {
@@ -143,6 +171,9 @@ int ReliableSurface::dequeueBuffer(ANativeWindowBuffer** buffer, int* fenceFd) {
         *buffer = acquireFallbackBuffer();
         *fenceFd = -1;
         return *buffer ? OK : INVALID_OPERATION;
+    } else {
+        std::lock_guard _lock{mMutex};
+        mHasDequeuedBuffer = true;
     }
     return OK;
 }
@@ -260,6 +291,10 @@ int ReliableSurface::hook_query(const ANativeWindow* window, int what, int* valu
 }
 
 int ReliableSurface::hook_perform(ANativeWindow* window, int operation, ...) {
+    // Drop the reserved buffer if there is one since this (probably) mutated buffer dimensions
+    // TODO: Filter to things that only affect the reserved buffer
+    // TODO: Can we mutate the reserved buffer in some cases?
+    getSelf(window)->clearReservedBuffer();
     va_list args;
     va_start(args, operation);
     int result = callProtected(getWrapped(window), perform, operation, args);

@@ -19,7 +19,6 @@ package com.android.systemui.statusbar.phone;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 
-import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInOffset;
 import static com.android.systemui.tuner.LockscreenFragment.LOCKSCREEN_LEFT_BUTTON;
 import static com.android.systemui.tuner.LockscreenFragment.LOCKSCREEN_LEFT_UNLOCK;
 import static com.android.systemui.tuner.LockscreenFragment.LOCKSCREEN_RIGHT_BUTTON;
@@ -54,7 +53,6 @@ import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.util.MathUtils;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -174,8 +172,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private boolean mDozing;
     private int mIndicationBottomMargin;
     private float mDarkAmount;
-    private int mBurnInXOffset;
-    private int mBurnInYOffset;
 
     public KeyguardBottomAreaView(Context context) {
         this(context, null);
@@ -253,8 +249,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mIndicationText = findViewById(R.id.keyguard_indication_text);
         mIndicationBottomMargin = getResources().getDimensionPixelSize(
                 R.dimen.keyguard_indication_margin_bottom);
-        mBurnInYOffset = getResources().getDimensionPixelSize(
-                R.dimen.default_burn_in_prevention_offset);
         updateCameraVisibility();
         mUnlockMethodCache = UnlockMethodCache.getInstance(getContext());
         mUnlockMethodCache.addListener(this);
@@ -326,8 +320,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         super.onConfigurationChanged(newConfig);
         mIndicationBottomMargin = getResources().getDimensionPixelSize(
                 R.dimen.keyguard_indication_margin_bottom);
-        mBurnInYOffset = getResources().getDimensionPixelSize(
-                R.dimen.default_burn_in_prevention_offset);
         MarginLayoutParams mlp = (MarginLayoutParams) mIndicationArea.getLayoutParams();
         if (mlp.bottomMargin != mIndicationBottomMargin) {
             mlp.bottomMargin = mIndicationBottomMargin;
@@ -574,7 +566,15 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mDarkAmount = darkAmount;
         mIndicationController.setDarkAmount(darkAmount);
         mLockIcon.setDarkAmount(darkAmount);
-        dozeTimeTick();
+    }
+
+    /**
+     * When keyguard is in pulsing (AOD2) state.
+     * @param pulsing {@code true} when pulsing.
+     * @param animated if transition should be animated.
+     */
+    public void setPulsing(boolean pulsing, boolean animated) {
+        mLockIcon.setPulsing(pulsing, animated);
     }
 
     private static boolean isSuccessfulLaunch(int result) {
@@ -835,6 +835,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
         updateCameraVisibility();
         updateLeftAffordanceIcon();
+        mLockIcon.setDozing(dozing);
 
         if (dozing) {
             mOverlayContainer.setVisibility(INVISIBLE);
@@ -844,21 +845,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
                 startFinishDozeAnimation();
             }
         }
-    }
-
-    public void dozeTimeTick() {
-        // Move views every minute to avoid burn-in
-        int burnInYOffset = -getBurnInOffset(mBurnInYOffset, false /* xAxis */);
-        burnInYOffset = (int) MathUtils.lerp(0, burnInYOffset, mDarkAmount);
-        mLockIcon.setTranslationY(burnInYOffset);
-    }
-
-    public void setBurnInXOffset(int burnInXOffset) {
-        if (mBurnInXOffset == burnInXOffset) {
-            return;
-        }
-        mBurnInXOffset = burnInXOffset;
-        mLockIcon.setTranslationX(burnInXOffset);
     }
 
     private class DefaultLeftButton implements IntentButton {

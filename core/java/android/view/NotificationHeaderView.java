@@ -195,28 +195,26 @@ public class NotificationHeaderView extends ViewGroup {
             }
             int childHeight = child.getMeasuredHeight();
             MarginLayoutParams params = (MarginLayoutParams) child.getLayoutParams();
-            left += params.getMarginStart();
-            int right = left + child.getMeasuredWidth();
+            int layoutLeft;
+            int layoutRight;
             int top = (int) (getPaddingTop() + (ownHeight - childHeight) / 2.0f);
             int bottom = top + childHeight;
-            int layoutLeft = left;
-            int layoutRight = right;
-            if (child == mExpandButton && mShowExpandButtonAtEnd) {
-                layoutRight = end - mContentEndMargin;
-                end = layoutLeft = layoutRight - child.getMeasuredWidth();
-            }
-            if (child == mProfileBadge) {
-                int paddingEnd = getPaddingEnd();
-                if (mShowWorkBadgeAtEnd) {
-                    paddingEnd = mContentEndMargin;
+            if ((child == mExpandButton && mShowExpandButtonAtEnd)
+                    || child == mProfileBadge
+                    || child == mAppOps) {
+                if (end == getMeasuredWidth()) {
+                    layoutRight = end - mContentEndMargin;
+                } else {
+                    layoutRight = end - params.getMarginEnd();
                 }
-                layoutRight = end - paddingEnd;
-                end = layoutLeft = layoutRight - child.getMeasuredWidth();
-            }
-            if (child == mAppOps) {
-                int paddingEnd = mContentEndMargin;
-                layoutRight = end - paddingEnd;
-                end = layoutLeft = layoutRight - child.getMeasuredWidth();
+                layoutLeft = layoutRight - child.getMeasuredWidth();
+                end = layoutLeft - params.getMarginStart();
+            } else {
+                left += params.getMarginStart();
+                int right = left + child.getMeasuredWidth();
+                layoutLeft = left;
+                layoutRight = right;
+                left = right + params.getMarginEnd();
             }
             if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
                 int ltrLeft = layoutLeft;
@@ -224,7 +222,6 @@ public class NotificationHeaderView extends ViewGroup {
                 layoutRight = getWidth() - ltrLeft;
             }
             child.layout(layoutLeft, top, layoutRight, bottom);
-            left = right + params.getMarginEnd();
         }
         updateTouchListener();
     }
@@ -340,7 +337,7 @@ public class NotificationHeaderView extends ViewGroup {
     }
 
     /** Updates icon visibility based on the noisiness of the notification. */
-    public void setAudiblyAlerted(boolean audiblyAlerted) {
+    public void setRecentlyAudiblyAlerted(boolean audiblyAlerted) {
         mAudiblyAlertedIcon.setVisibility(audiblyAlerted ? View.VISIBLE : View.GONE);
     }
 

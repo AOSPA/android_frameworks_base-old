@@ -27,6 +27,7 @@ import android.content.Context;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Environment;
 import android.os.SystemProperties;
 import android.util.DisplayMetrics;
@@ -633,6 +634,28 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public static final int PRIVATE_FLAG_PROFILEABLE_BY_SHELL = 1 << 23;
 
+    /**
+     * Indicates whether this package requires access to non-SDK APIs.
+     * Only system apps and tests are allowed to use this property.
+     * @hide
+     */
+    public static final int PRIVATE_FLAG_HAS_FRAGILE_USER_DATA = 1 << 24;
+
+    /**
+     * Indicate whether this application prefers code integrity, that is, run only code that is
+     * signed. This requires android:extractNativeLibs to be "false", as well as .dex and .so (if
+     * any) stored uncompressed inside the APK, which is signed. At run time, the implications
+     * include:
+     *
+     * <ul>
+     * <li>ART will JIT the dex code directly from the APK. There may be performance characteristic
+     * changes depend on the actual workload.
+     * </ul>
+     *
+     * @hide
+     */
+    public static final int PRIVATE_FLAG_PREFER_CODE_INTEGRITY = 1 << 25;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "PRIVATE_FLAG_" }, value = {
             PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE,
@@ -648,6 +671,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             PRIVATE_FLAG_ISOLATED_SPLIT_LOADING,
             PRIVATE_FLAG_OEM,
             PRIVATE_FLAG_PARTIALLY_DIRECT_BOOT_AWARE,
+            PRIVATE_FLAG_PREFER_CODE_INTEGRITY,
             PRIVATE_FLAG_PRIVILEGED,
             PRIVATE_FLAG_PRODUCT,
             PRIVATE_FLAG_PRODUCT_SERVICES,
@@ -657,6 +681,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             PRIVATE_FLAG_STATIC_SHARED_LIBRARY,
             PRIVATE_FLAG_VENDOR,
             PRIVATE_FLAG_VIRTUAL_PRELOAD,
+            PRIVATE_FLAG_HAS_FRAGILE_USER_DATA,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ApplicationInfoPrivateFlags {}
@@ -718,6 +743,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * @hide
      */
     public float maxAspectRatio;
+
+    /**
+     * Value indicating the minimum aspect ratio the application supports.
+     * <p>
+     * 0 means unset.
+     * @see {@link android.R.attr#minAspectRatio}.
+     * @hide
+     */
+    public float minAspectRatio;
 
     /** @removed */
     @Deprecated
@@ -1318,7 +1352,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** {@hide} */
     public void writeToProto(ProtoOutputStream proto, long fieldId, int dumpFlags) {
         long token = proto.start(fieldId);
-        super.writeToProto(proto, ApplicationInfoProto.PACKAGE);
+        super.writeToProto(proto, ApplicationInfoProto.PACKAGE, dumpFlags);
         proto.write(ApplicationInfoProto.PERMISSION, permission);
         proto.write(ApplicationInfoProto.PROCESS_NAME, processName);
         proto.write(ApplicationInfoProto.UID, uid);
@@ -1447,9 +1481,9 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             return sCollator.compare(sa.toString(), sb.toString());
         }
 
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         private final Collator   sCollator = Collator.getInstance();
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         private PackageManager   mPM;
     }
 
@@ -1697,7 +1731,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * 
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public void disableCompatibilityMode() {
         flags |= (FLAG_SUPPORTS_LARGE_SCREENS | FLAG_SUPPORTS_NORMAL_SCREENS |
                 FLAG_SUPPORTS_SMALL_SCREENS | FLAG_RESIZEABLE_FOR_SCREENS |
@@ -1751,6 +1785,17 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         return (privateFlags & PRIVATE_FLAG_USES_NON_SDK_API) != 0;
     }
 
+    /**
+     * Whether an app needs to keep the app data on uninstall.
+     *
+     * @return {@code true} if the app indicates that it needs to keep the app data
+     *
+     * @hide
+     */
+    public boolean hasFragileUserData() {
+        return (privateFlags & PRIVATE_FLAG_HAS_FRAGILE_USER_DATA) != 0;
+    }
+
     private boolean isAllowedToUseHiddenApis() {
         if (isSignedWithPlatformKey()) {
             return true;
@@ -1791,7 +1836,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * is on the package whitelist.
      *
      * @param policy configured policy for this app, or {@link #HIDDEN_API_ENFORCEMENT_DEFAULT}
-     *               if nothing configured.
+     *        if nothing configured.
      * @hide
      */
     public void maybeUpdateHiddenApiEnforcementPolicy(@HiddenApiEnforcementPolicy int policy) {
@@ -1822,7 +1867,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         return pm.getDefaultActivityIcon();
     }
     
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private boolean isPackageUnavailable(PackageManager pm) {
         try {
             return pm.getPackageInfo(packageName, 0) == null;

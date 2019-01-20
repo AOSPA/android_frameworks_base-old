@@ -17,6 +17,7 @@
 package com.android.systemui.util.leak;
 
 import static com.android.internal.logging.MetricsLogger.VIEW_UNKNOWN;
+import static com.android.systemui.Dependency.BG_LOOPER_NAME;
 
 import android.app.ActivityManager;
 import android.content.Context;
@@ -42,15 +43,22 @@ import android.text.format.DateUtils;
 import android.util.Log;
 import android.util.LongSparseArray;
 
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
+import com.android.systemui.SystemUIFactory;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 
 import java.util.ArrayList;
 
+import javax.inject.Inject;
+import javax.inject.Named;
+import javax.inject.Singleton;
+
+/**
+ */
+@Singleton
 public class GarbageMonitor {
     private static final boolean LEAK_REPORTING_ENABLED =
             Build.IS_DEBUGGABLE
@@ -85,9 +93,12 @@ public class GarbageMonitor {
 
     private long mHeapLimit;
 
+    /**
+     */
+    @Inject
     public GarbageMonitor(
             Context context,
-            Looper bgLooper,
+            @Named(BG_LOOPER_NAME) Looper bgLooper,
             LeakDetector leakDetector,
             LeakReporter leakReporter) {
         mContext = context.getApplicationContext();
@@ -335,9 +346,10 @@ public class GarbageMonitor {
         private final GarbageMonitor gm;
         private ProcessMemInfo pmi;
 
+        @Inject
         public MemoryTile(QSHost host) {
             super(host);
-            gm = Dependency.get(GarbageMonitor.class);
+            gm = SystemUIFactory.getInstance().getRootComponent().createGarbageMonitor();
         }
 
         @Override
@@ -442,7 +454,8 @@ public class GarbageMonitor {
                     Settings.Secure.getInt(
                                     mContext.getContentResolver(), FORCE_ENABLE_LEAK_REPORTING, 0)
                             != 0;
-            mGarbageMonitor = Dependency.get(GarbageMonitor.class);
+            mGarbageMonitor = SystemUIFactory.getInstance().getRootComponent()
+                   .createGarbageMonitor();
             if (LEAK_REPORTING_ENABLED || forceEnable) {
                 mGarbageMonitor.startLeakMonitor();
             }

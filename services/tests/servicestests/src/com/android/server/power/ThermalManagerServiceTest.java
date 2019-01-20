@@ -268,10 +268,10 @@ public class ThermalManagerServiceTest {
 
     @Test
     public void testGetCurrentStatus() throws RemoteException {
-        int status = Temperature.THROTTLING_WARNING;
+        int status = Temperature.THROTTLING_EMERGENCY;
         Temperature newSkin = new Temperature(100, Temperature.TYPE_SKIN, "skin1", status);
         mFakeHal.mCallback.onValues(newSkin);
-        assertEquals(status, mService.mService.getCurrentStatus());
+        assertEquals(status, mService.mService.getCurrentThermalStatus());
     }
 
     @Test
@@ -281,6 +281,10 @@ public class ThermalManagerServiceTest {
         mFakeHal.mCallback.onValues(newSkin);
         verify(mIPowerManagerMock, timeout(CALLBACK_TIMEOUT_MILLI_SEC)
                 .times(1)).shutdown(false, PowerManager.SHUTDOWN_THERMAL_STATE, false);
+        Temperature newBattery = new Temperature(60, Temperature.TYPE_BATTERY, "batt", status);
+        mFakeHal.mCallback.onValues(newBattery);
+        verify(mIPowerManagerMock, timeout(CALLBACK_TIMEOUT_MILLI_SEC)
+                .times(1)).shutdown(false, PowerManager.SHUTDOWN_BATTERY_THERMAL_STATE, false);
     }
 
     @Test
@@ -294,6 +298,6 @@ public class ThermalManagerServiceTest {
         assertEquals(0, mService.mService.getCurrentTemperatures().size());
         assertEquals(0,
                 mService.mService.getCurrentTemperaturesWithType(Temperature.TYPE_SKIN).size());
-        assertEquals(Temperature.THROTTLING_NONE, mService.mService.getCurrentStatus());
+        assertEquals(Temperature.THROTTLING_NONE, mService.mService.getCurrentThermalStatus());
     }
 }

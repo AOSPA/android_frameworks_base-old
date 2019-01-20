@@ -82,6 +82,7 @@ message ActivityDisplayProto {
     repeated ActivityStackProto stacks = 3;
     optional int32 focused_stack_id = 4;
     optional .com.android.server.wm.IdentifierProto resumed_activity = 5;
+    optional bool single_task_instance = 6;
 }
 
 message ActivityStackProto {
@@ -185,6 +186,7 @@ message ProcessRecordProto {
     optional int32 app_id = 5;
     optional int32 isolated_app_id = 6;
     optional bool persistent = 7;
+    optional int32 lru_index = 8;
 }
 
 message BroadcastRecordProto {

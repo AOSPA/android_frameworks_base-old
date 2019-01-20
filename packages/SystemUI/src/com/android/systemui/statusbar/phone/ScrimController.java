@@ -93,12 +93,12 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
      * A scrim varies its opacity based on a busyness factor, for example
      * how many notifications are currently visible.
      */
-    public static final float GRADIENT_SCRIM_ALPHA_BUSY = 0.70f;
+    public static final float GRADIENT_SCRIM_ALPHA_BUSY = 0.7f;
     /**
-     * A scrim varies its opacity based on a busyness factor, for example
-     * how many notifications are currently visible.
+     * Scrim opacity when a wallpaper doesn't support ambient mode.
      */
-    public static final float GRADIENT_SCRIM_DARK_KEYGUARD = 0.80f;
+    public static final float PULSING_WALLPAPER_SCRIM_ALPHA = 0.6f;
+
     /**
      * The most common scrim, the one under the keyguard.
      */
@@ -282,8 +282,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
                 mTimeTicker.schedule(mDozeParameters.getWallpaperAodDuration(),
                         AlarmTimeout.MODE_IGNORE_IF_SCHEDULED);
             }
-        // Do not re-schedule timeout when pulsing, let's save some extra battery.
-        } else if (mState != ScrimState.PULSING) {
+        } else {
             mTimeTicker.cancel();
             mWallpaperVisibilityTimedOut = false;
         }
@@ -365,7 +364,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             mExpansionFraction = fraction;
 
             final boolean keyguardOrUnlocked = mState == ScrimState.UNLOCKED
-                    || mState == ScrimState.KEYGUARD || mState == ScrimState.DARK_KEYGUARD;
+                    || mState == ScrimState.KEYGUARD;
             if (!keyguardOrUnlocked || !mExpansionAffectsAlpha) {
                 return;
             }

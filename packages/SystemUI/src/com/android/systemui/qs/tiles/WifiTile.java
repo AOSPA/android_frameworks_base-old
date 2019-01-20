@@ -30,7 +30,6 @@ import android.widget.Switch;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.wifi.AccessPoint;
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.DetailAdapter;
@@ -47,8 +46,11 @@ import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NetworkController.AccessPointController;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
+import com.android.systemui.statusbar.policy.WifiIcons;
 
 import java.util.List;
+
+import javax.inject.Inject;
 
 /** Quick settings tile: Wifi **/
 public class WifiTile extends QSTileImpl<SignalState> {
@@ -63,12 +65,15 @@ public class WifiTile extends QSTileImpl<SignalState> {
     private final ActivityStarter mActivityStarter;
     private boolean mExpectDisabled;
 
-    public WifiTile(QSHost host) {
+    @Inject
+    public WifiTile(QSHost host, NetworkController networkController,
+            ActivityStarter activityStarter) {
         super(host);
-        mController = Dependency.get(NetworkController.class);
+        mController = networkController;
         mWifiController = mController.getAccessPointController();
         mDetailAdapter = (WifiDetailAdapter) createDetailAdapter();
-        mActivityStarter = Dependency.get(ActivityStarter.class);
+        mActivityStarter = activityStarter;
+        mController.observe(getLifecycle(), mSignalCallback);
     }
 
     @Override
@@ -78,11 +83,6 @@ public class WifiTile extends QSTileImpl<SignalState> {
 
     @Override
     public void handleSetListening(boolean listening) {
-        if (listening) {
-            mController.addCallback(mSignalCallback);
-        } else {
-            mController.removeCallback(mSignalCallback);
-        }
     }
 
     @Override
@@ -190,7 +190,7 @@ public class WifiTile extends QSTileImpl<SignalState> {
         } else if (!state.value) {
             state.slash.isSlashed = true;
             state.state = Tile.STATE_INACTIVE;
-            state.icon = ResourceIcon.get(R.drawable.ic_qs_wifi_disabled);
+            state.icon = ResourceIcon.get(WifiIcons.QS_WIFI_DISABLED);
             state.label = r.getString(R.string.quick_settings_wifi_label);
         } else if (wifiConnected) {
             state.icon = ResourceIcon.get(cb.wifiSignalIconId);

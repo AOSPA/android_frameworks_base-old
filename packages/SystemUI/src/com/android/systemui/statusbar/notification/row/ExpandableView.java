@@ -21,7 +21,6 @@ import android.content.Context;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -48,6 +47,8 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     private int mActualHeight;
     protected int mClipTopAmount;
     protected int mClipBottomAmount;
+    protected int mMinimumHeightForClipping = 0;
+    protected float mExtraWidthForClipping = 0;
     private boolean mDark;
     private ArrayList<View> mMatchParentViews = new ArrayList<View>();
     private static Rect mClipRect = new Rect();
@@ -58,10 +59,11 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     private ViewGroup mTransientContainer;
     private boolean mInShelf;
     private boolean mTransformingInShelf;
-    @Nullable private ExpandableViewState mViewState;
+    private final ExpandableViewState mViewState;
 
     public ExpandableView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mViewState = createExpandableViewState();
     }
 
     @Override
@@ -310,16 +312,19 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
      * @param duration The duration of the remove animation.
      * @param delay The delay of the animation
      * @param translationDirection The direction value from [-1 ... 1] indicating in which the
- *                             animation should be performed. A value of -1 means that The
- *                             remove animation should be performed upwards,
- *                             such that the  child appears to be going away to the top. 1
- *                             Should mean the opposite.
+     *                             animation should be performed. A value of -1 means that The
+     *                             remove animation should be performed upwards,
+     *                             such that the  child appears to be going away to the top. 1
+     *                             Should mean the opposite.
      * @param isHeadsUpAnimation Is this a headsUp animation.
      * @param endLocation The location where the horizonal heads up disappear animation should end.
      * @param onFinishedRunnable A runnable which should be run when the animation is finished.
      * @param animationListener An animation listener to add to the animation.
+     *
+     * @return The additional delay, in milliseconds, that this view needs to add before the
+     * animation starts.
      */
-    public abstract void performRemoveAnimation(long duration,
+    public abstract long performRemoveAnimation(long duration,
             long delay, float translationDirection, boolean isHeadsUpAnimation, float endLocation,
             Runnable onFinishedRunnable,
             AnimatorListenerAdapter animationListener);
@@ -398,12 +403,24 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     protected void updateClipping() {
         if (mClipToActualHeight && shouldClipToActualHeight()) {
             int top = getClipTopAmount();
-            mClipRect.set(0, top, getWidth(), Math.max(getActualHeight() + getExtraBottomPadding()
-                    - mClipBottomAmount, top));
+            int bottom = Math.max(Math.max(getActualHeight() + getExtraBottomPadding()
+                    - mClipBottomAmount, top), mMinimumHeightForClipping);
+            int halfExtraWidth = (int) (mExtraWidthForClipping / 2.0f);
+            mClipRect.set(-halfExtraWidth, top, getWidth() + halfExtraWidth, bottom);
             setClipBounds(mClipRect);
         } else {
             setClipBounds(null);
         }
+    }
+
+    public void setMinimumHeightForClipping(int minimumHeightForClipping) {
+        mMinimumHeightForClipping = minimumHeightForClipping;
+        updateClipping();
+    }
+
+    public void setExtraWidthForClipping(float extraWidthForClipping) {
+        mExtraWidthForClipping = extraWidthForClipping;
+        updateClipping();
     }
 
     public float getHeaderVisibleAmount() {
@@ -522,11 +539,6 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
 
     /** Sets {@link ExpandableViewState} to default state. */
     public ExpandableViewState resetViewState() {
-        // TODO(http://b/119762423): Move the null check to getViewState().
-        if (mViewState == null) {
-            mViewState = createExpandableViewState();
-        }
-
         // initialize with the default values of the view
         mViewState.height = getIntrinsicHeight();
         mViewState.gone = getVisibility() == View.GONE;
@@ -559,9 +571,7 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
 
     /** Applies internal {@link ExpandableViewState} to this view. */
     public void applyViewState() {
-        if (mViewState == null) {
-            Log.wtf(TAG, "No child state was found when applying this state to the hostView");
-        } else if (!mViewState.gone) {
+        if (!mViewState.gone) {
             mViewState.applyToView(this);
         }
     }

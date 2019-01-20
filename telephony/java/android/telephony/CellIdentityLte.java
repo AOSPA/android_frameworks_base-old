@@ -16,7 +16,9 @@
 
 package android.telephony;
 
+import android.annotation.Nullable;
 import android.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.Parcel;
 import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
@@ -37,7 +39,6 @@ public final class CellIdentityLte extends CellIdentity {
     // 16-bit tracking area code
     private final int mTac;
     // 18-bit Absolute RF Channel Number
-    @UnsupportedAppUsage
     private final int mEarfcn;
     // cell bandwidth, in kHz
     private final int mBandwidth;
@@ -65,26 +66,10 @@ public final class CellIdentityLte extends CellIdentity {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public CellIdentityLte(int mcc, int mnc, int ci, int pci, int tac) {
         this(ci, pci, tac, CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE, String.valueOf(mcc),
                 String.valueOf(mnc), null, null);
-    }
-
-    /**
-     *
-     * @param mcc 3-digit Mobile Country Code, 0..999
-     * @param mnc 2 or 3-digit Mobile Network Code, 0..999
-     * @param ci 28-bit Cell Identity
-     * @param pci Physical Cell Id 0..503
-     * @param tac 16-bit Tracking Area Code
-     * @param earfcn 18-bit LTE Absolute RF Channel Number
-     *
-     * @hide
-     */
-    public CellIdentityLte(int mcc, int mnc, int ci, int pci, int tac, int earfcn) {
-        this(ci, pci, tac, earfcn, CellInfo.UNAVAILABLE, String.valueOf(mcc), String.valueOf(mnc),
-                null, null);
     }
 
     /**
@@ -109,6 +94,18 @@ public final class CellIdentityLte extends CellIdentity {
         mTac = tac;
         mEarfcn = earfcn;
         mBandwidth = bandwidth;
+    }
+
+    /** @hide */
+    public CellIdentityLte(android.hardware.radio.V1_0.CellIdentityLte cid) {
+        this(cid.ci, cid.pci, cid.tac, cid.earfcn, CellInfo.UNAVAILABLE, cid.mcc, cid.mnc, "", "");
+    }
+
+    /** @hide */
+    public CellIdentityLte(android.hardware.radio.V1_2.CellIdentityLte cid) {
+        this(cid.base.ci, cid.base.pci, cid.base.tac, cid.base.earfcn, cid.bandwidth,
+                cid.base.mcc, cid.base.mnc, cid.operatorNames.alphaLong,
+                cid.operatorNames.alphaShort);
     }
 
     private CellIdentityLte(CellIdentityLte cid) {
@@ -197,6 +194,7 @@ public final class CellIdentityLte extends CellIdentity {
     /**
      * @return a 5 or 6 character string (MCC+MNC), null if any field is unknown.
      */
+    @Nullable
     public String getMobileNetworkOperator() {
         return (mMccStr == null || mMncStr == null) ? null : mMccStr + mMncStr;
     }

@@ -19,6 +19,8 @@ package com.android.server.wm;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.os.Build.VERSION_CODES.P;
+import static android.os.Build.VERSION_CODES.Q;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.DisplayCutout.BOUNDS_POSITION_LEFT;
 import static android.view.DisplayCutout.BOUNDS_POSITION_TOP;
@@ -29,7 +31,13 @@ import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.eq;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.same;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
@@ -58,9 +66,11 @@ import android.view.Surface;
 import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
+import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -227,7 +237,8 @@ public class DisplayContentTests extends WindowTestsBase {
      */
     @Test
     public void testDisplayOverrideConfigUpdate() {
-        final Configuration currentOverrideConfig = mDisplayContent.getOverrideConfiguration();
+        final Configuration currentOverrideConfig =
+                mDisplayContent.getRequestedOverrideConfiguration();
 
         // Create new, slightly changed override configuration and apply it to the display.
         final Configuration newOverrideConfig = new Configuration(currentOverrideConfig);
@@ -237,7 +248,7 @@ public class DisplayContentTests extends WindowTestsBase {
         mWm.setNewDisplayOverrideConfiguration(newOverrideConfig, mDisplayContent);
 
         // Check that override config is applied.
-        assertEquals(newOverrideConfig, mDisplayContent.getOverrideConfiguration());
+        assertEquals(newOverrideConfig, mDisplayContent.getRequestedOverrideConfiguration());
     }
 
     /**
@@ -308,9 +319,27 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testFocusedWindowMultipleDisplays() {
+        doTestFocusedWindowMultipleDisplays(false /* perDisplayFocusEnabled */, Q);
+    }
+
+    @Test
+    public void testFocusedWindowMultipleDisplaysPerDisplayFocusEnabled() {
+        doTestFocusedWindowMultipleDisplays(true /* perDisplayFocusEnabled */, Q);
+    }
+
+    @Test
+    public void testFocusedWindowMultipleDisplaysPerDisplayFocusEnabledLegacyApp() {
+        doTestFocusedWindowMultipleDisplays(true /* perDisplayFocusEnabled */, P);
+    }
+
+    private void doTestFocusedWindowMultipleDisplays(boolean perDisplayFocusEnabled,
+            int targetSdk) {
+        mWm.mPerDisplayFocusEnabled = perDisplayFocusEnabled;
+
         // Create a focusable window and check that focus is calculated correctly
         final WindowState window1 =
                 createWindow(null, TYPE_BASE_APPLICATION, mDisplayContent, "window1");
+        window1.mAppToken.mTargetSdk = targetSdk;
         updateFocusedWindow();
         assertTrue(window1.isFocused());
         assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
@@ -323,16 +352,17 @@ public class DisplayContentTests extends WindowTestsBase {
 
         // Add a window to the second display, and it should be focused
         final WindowState window2 = createWindow(null, TYPE_BASE_APPLICATION, dc, "window2");
+        window2.mAppToken.mTargetSdk = targetSdk;
         updateFocusedWindow();
-        assertTrue(window1.isFocused());
         assertTrue(window2.isFocused());
+        assertEquals(perDisplayFocusEnabled && targetSdk >= Q, window1.isFocused());
         assertEquals(window2, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
 
-        // Move the first window to the to including parents, and make sure focus is updated
+        // Move the first window to top including parents, and make sure focus is updated
         window1.getParent().positionChildAt(POSITION_TOP, window1, true);
         updateFocusedWindow();
         assertTrue(window1.isFocused());
-        assertTrue(window2.isFocused());
+        assertEquals(perDisplayFocusEnabled && targetSdk >= Q, window2.isFocused());
         assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
     }
 
@@ -453,6 +483,13 @@ public class DisplayContentTests extends WindowTestsBase {
     @SuppressLint("InlinedApi")
     public void testOrientationDefinedByKeyguard() {
         final DisplayContent dc = createNewDisplay();
+
+        // When display content is created its configuration is not yet initialized, which could
+        // cause unnecessary configuration propagation, so initialize it here.
+        final Configuration config = new Configuration();
+        dc.computeScreenConfiguration(config);
+        dc.onRequestedOverrideConfigurationChanged(config);
+
         // Create a window that requests landscape orientation. It will define device orientation
         // by default.
         final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
@@ -543,6 +580,52 @@ public class DisplayContentTests extends WindowTestsBase {
         assertTrue("appWin1 should be IME target window",
                 appWin1.equals(newDisplay.mInputMethodTarget));
         assertNull("default display Ime target: ", mDisplayContent.mInputMethodTarget);
+    }
+
+    @Test
+    public void testOnDescendantOrientationRequestChanged() {
+        final DisplayContent dc = createNewDisplay();
+        mWm.mAtmService.mRootActivityContainer = mock(RootActivityContainer.class);
+        final int newOrientation = dc.getLastOrientation() == SCREEN_ORIENTATION_LANDSCAPE
+                ? SCREEN_ORIENTATION_PORTRAIT
+                : SCREEN_ORIENTATION_LANDSCAPE;
+
+        final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
+        window.getTask().mTaskRecord = mock(TaskRecord.class, ExtendedMockito.RETURNS_DEEP_STUBS);
+        window.mAppToken.setOrientation(newOrientation);
+
+        ActivityRecord activityRecord = mock(ActivityRecord.class);
+
+        assertTrue("Display should rotate to handle orientation request by default.",
+                dc.onDescendantOrientationChanged(window.mToken.token, activityRecord));
+
+        final ArgumentCaptor<Configuration> captor = ArgumentCaptor.forClass(Configuration.class);
+        verify(mWm.mAtmService).updateDisplayOverrideConfigurationLocked(captor.capture(),
+                same(activityRecord), anyBoolean(), eq(dc.getDisplayId()));
+        final Configuration newDisplayConfig = captor.getValue();
+        assertEquals(Configuration.ORIENTATION_PORTRAIT, newDisplayConfig.orientation);
+    }
+
+    @Test
+    public void testOnDescendantOrientationRequestChanged_FrozenToUserRotation() {
+        final DisplayContent dc = createNewDisplay();
+        dc.getDisplayRotation().setFixedToUserRotation(true);
+        mWm.mAtmService.mRootActivityContainer = mock(RootActivityContainer.class);
+        final int newOrientation = dc.getLastOrientation() == SCREEN_ORIENTATION_LANDSCAPE
+                ? SCREEN_ORIENTATION_PORTRAIT
+                : SCREEN_ORIENTATION_LANDSCAPE;
+
+        final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
+        window.getTask().mTaskRecord = mock(TaskRecord.class, ExtendedMockito.RETURNS_DEEP_STUBS);
+        window.mAppToken.setOrientation(newOrientation);
+
+        ActivityRecord activityRecord = mock(ActivityRecord.class);
+
+        assertFalse("Display shouldn't rotate to handle orientation request if fixed to"
+                        + " user rotation.",
+                dc.onDescendantOrientationChanged(window.mToken.token, activityRecord));
+        verify(mWm.mAtmService, never()).updateDisplayOverrideConfigurationLocked(any(),
+                eq(activityRecord), anyBoolean(), eq(dc.getDisplayId()));
     }
 
     private boolean isOptionsPanelAtRight(int displayId) {

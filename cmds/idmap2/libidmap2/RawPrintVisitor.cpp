@@ -16,7 +16,6 @@
 
 #include <cstdarg>
 #include <string>
-#include <utility>
 
 #include "android-base/macros.h"
 #include "android-base/stringprintf.h"
@@ -24,11 +23,11 @@
 
 #include "idmap2/RawPrintVisitor.h"
 #include "idmap2/ResourceUtils.h"
+#include "idmap2/Result.h"
 
 using android::ApkAssets;
 
-namespace android {
-namespace idmap2 {
+namespace android::idmap2 {
 
 // verbatim copy fomr PrettyPrintVisitor.cpp, move to common utils
 #define RESID(pkg, type, entry) (((pkg) << 24) | ((type) << 16) | (entry))
@@ -59,30 +58,30 @@ void RawPrintVisitor::visit(const IdmapData::Header& header) {
   last_seen_package_id_ = header.GetTargetPackageId();
 }
 
-void RawPrintVisitor::visit(const IdmapData::TypeEntry& te) {
+void RawPrintVisitor::visit(const IdmapData::TypeEntry& type_entry) {
   const bool target_package_loaded = !target_am_.GetApkAssets().empty();
 
-  print(static_cast<uint16_t>(te.GetTargetTypeId()), "target type");
-  print(static_cast<uint16_t>(te.GetOverlayTypeId()), "overlay type");
-  print(static_cast<uint16_t>(te.GetEntryCount()), "entry count");
-  print(static_cast<uint16_t>(te.GetEntryOffset()), "entry offset");
+  print(static_cast<uint16_t>(type_entry.GetTargetTypeId()), "target type");
+  print(static_cast<uint16_t>(type_entry.GetOverlayTypeId()), "overlay type");
+  print(static_cast<uint16_t>(type_entry.GetEntryCount()), "entry count");
+  print(static_cast<uint16_t>(type_entry.GetEntryOffset()), "entry offset");
 
-  for (uint16_t i = 0; i < te.GetEntryCount(); i++) {
-    const EntryId entry = te.GetEntry(i);
+  for (uint16_t i = 0; i < type_entry.GetEntryCount(); i++) {
+    const EntryId entry = type_entry.GetEntry(i);
     if (entry == kNoEntry) {
       print(kPadding, "no entry");
     } else {
-      const ResourceId target_resid =
-          RESID(last_seen_package_id_, te.GetTargetTypeId(), te.GetEntryOffset() + i);
-      const ResourceId overlay_resid = RESID(last_seen_package_id_, te.GetOverlayTypeId(), entry);
-      bool lookup_ok = false;
-      std::string name;
+      const ResourceId target_resid = RESID(last_seen_package_id_, type_entry.GetTargetTypeId(),
+                                            type_entry.GetEntryOffset() + i);
+      const ResourceId overlay_resid =
+          RESID(last_seen_package_id_, type_entry.GetOverlayTypeId(), entry);
+      Result<std::string> name;
       if (target_package_loaded) {
-        std::tie(lookup_ok, name) = utils::ResToTypeEntryName(target_am_, target_resid);
+        name = utils::ResToTypeEntryName(target_am_, target_resid);
       }
-      if (lookup_ok) {
+      if (name) {
         print(static_cast<uint32_t>(entry), "0x%08x -> 0x%08x %s", target_resid, overlay_resid,
-              name.c_str());
+              name->c_str());
       } else {
         print(static_cast<uint32_t>(entry), "0x%08x -> 0x%08x", target_resid, overlay_resid);
       }
@@ -127,5 +126,4 @@ void RawPrintVisitor::print(const std::string& value, const char* fmt, ...) {
   offset_ += kIdmapStringLength;
 }
 
-}  // namespace idmap2
-}  // namespace android
+}  // namespace android::idmap2

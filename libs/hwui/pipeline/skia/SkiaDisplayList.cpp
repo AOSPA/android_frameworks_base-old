@@ -27,9 +27,9 @@ namespace android {
 namespace uirenderer {
 namespace skiapipeline {
 
-void SkiaDisplayList::syncContents() {
+void SkiaDisplayList::syncContents(const WebViewSyncData& data) {
     for (auto& functor : mChildFunctors) {
-        functor->syncFunctor();
+        functor->syncFunctor(data);
     }
     for (auto& animatedImage : mAnimatedImages) {
         animatedImage->syncProperties();
@@ -141,6 +141,6 @@ void SkiaDisplayList::output(std::ostream& output, uint32_t level) {
     mDisplayList.draw(&canvas);
 }
 
-};  // namespace skiapipeline
-};  // namespace uirenderer
-};  // namespace android
+}  // namespace skiapipeline
+}  // namespace uirenderer
+}  // namespace android

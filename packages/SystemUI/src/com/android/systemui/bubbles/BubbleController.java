@@ -32,7 +32,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
-import com.android.systemui.Dependency;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
@@ -41,12 +41,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Bubbles are a special type of content that can "float" on top of other apps or System UI.
  * Bubbles can be expanded to show more content.
  *
  * The controller manages addition, removal, and visible state of bubbles on screen.
  */
+@Singleton
 public class BubbleController {
     private static final int MAX_BUBBLES = 5; // TODO: actually enforce this
 
@@ -72,7 +76,8 @@ public class BubbleController {
     private Point mDisplaySize;
 
     // Bubbles get added to the status bar view
-    private StatusBarWindowController mStatusBarWindowController;
+    @VisibleForTesting
+    protected StatusBarWindowController mStatusBarWindowController;
 
     // Used for determining view rect for touch interaction
     private Rect mTempRect = new Rect();
@@ -115,12 +120,13 @@ public class BubbleController {
         void onBubbleExpandChanged(boolean isExpanding, float amount);
     }
 
-    public BubbleController(Context context) {
+    @Inject
+    public BubbleController(Context context, StatusBarWindowController statusBarWindowController) {
         mContext = context;
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         mDisplaySize = new Point();
         wm.getDefaultDisplay().getSize(mDisplaySize);
-        mStatusBarWindowController = Dependency.get(StatusBarWindowController.class);
+        mStatusBarWindowController = statusBarWindowController;
     }
 
     /**
@@ -302,6 +308,11 @@ public class BubbleController {
         return mTempRect;
     }
 
+    @VisibleForTesting
+    public BubbleStackView getStackView() {
+        return mStackView;
+    }
+
     // TODO: factor in PIP location / maybe last place user had it
     /**
      * Gets an appropriate starting point to position the bubble stack.
@@ -342,13 +353,16 @@ public class BubbleController {
                 }
             }
         }
+        boolean isCall = Notification.CATEGORY_CALL.equals(n.getNotification().category)
+                && n.isOngoing();
+        boolean isMusic = n.getNotification().hasMediaSession();
+        boolean isImportantOngoing = isMusic || isCall;
 
         Class<? extends Notification.Style> style = n.getNotification().getNotificationStyle();
-        boolean isMessageType = Notification.MessagingStyle.class.equals(style)
-                || Notification.CATEGORY_MESSAGE.equals(n.getNotification().category)
-                || hasRemoteInput;
-        return (isMessageType && autoBubbleMessages)
-                || (n.isOngoing() && autoBubbleOngoing)
+        boolean isMessageType = Notification.CATEGORY_MESSAGE.equals(n.getNotification().category);
+        boolean isMessageStyle = Notification.MessagingStyle.class.equals(style);
+        return (((isMessageType && hasRemoteInput) || isMessageStyle) && autoBubbleMessages)
+                || (isImportantOngoing && autoBubbleOngoing)
                 || autoBubbleAll;
     }
 

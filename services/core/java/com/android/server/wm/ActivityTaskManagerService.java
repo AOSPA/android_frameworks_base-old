@@ -190,6 +190,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.IUserManager;
 import android.os.LocaleList;
+import android.os.Looper;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
@@ -246,7 +247,6 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.AppOpsService;
 import com.android.server.AttributeCache;
-import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
@@ -753,9 +753,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return mGlobalLock;
     }
 
-    public void setActivityManagerService(IntentFirewall intentFirewall,
-            PendingIntentController intentController) {
-        mH = new H();
+    public void initialize(IntentFirewall intentFirewall, PendingIntentController intentController,
+            Looper looper) {
+        mH = new H(looper);
         mUiHandler = new UiHandler();
         mIntentFirewall = intentFirewall;
         final File systemDir = SystemServiceManager.ensureSystemDir();
@@ -863,6 +863,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     Configuration getGlobalConfigurationForCallingPid() {
         final int pid = Binder.getCallingPid();
+        return getGlobalConfigurationForPid(pid);
+    }
+
+    /**
+     * Return the global configuration used by the process corresponding to the given pid.
+     */
+    Configuration getGlobalConfigurationForPid(int pid) {
         if (pid == MY_PID || pid < 0) {
             return getGlobalConfiguration();
         }
@@ -953,7 +960,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // TODO: Switch to user app stacks here.
         return getActivityStartController().startActivities(caller, -1, callingPackage, intents,
                 resolvedTypes, resultTo, SafeActivityOptions.fromBundle(bOptions), userId, reason,
-                null /* originatingPendingIntent */);
+                null /* originatingPendingIntent */, false /* allowBackgroundActivityStart */);
     }
 
     @Override
@@ -1419,6 +1426,42 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     /**
+     * Public API to check if the client is allowed to start an activity on specified display.
+     *
+     * If the target display is private or virtual, some restrictions will apply.
+     *
+     * @param displayId Target display id.
+     * @param intent Intent used to launch the activity.
+     * @param resolvedType The MIME type of the intent.
+     * @param userId The id of the user for whom the call is made.
+     * @return {@code true} if a call to start an activity on the target display should succeed and
+     *         no {@link SecurityException} will be thrown, {@code false} otherwise.
+     */
+    @Override
+    public final boolean isActivityStartAllowedOnDisplay(int displayId, Intent intent,
+            String resolvedType, int userId) {
+        final int callingUid = Binder.getCallingUid();
+        final int callingPid = Binder.getCallingPid();
+        final long origId = Binder.clearCallingIdentity();
+
+        try {
+            // Collect information about the target of the Intent.
+            ActivityInfo aInfo = mStackSupervisor.resolveActivity(intent, resolvedType,
+                    0 /* startFlags */, null /* profilerInfo */, userId,
+                    ActivityStarter.computeResolveFilterUid(callingUid, callingUid,
+                            UserHandle.USER_NULL));
+            aInfo = mAmInternal.getActivityInfoForUser(aInfo, userId);
+
+            synchronized (mGlobalLock) {
+                return mStackSupervisor.canPlaceEntityOnDisplay(displayId, callingPid, callingUid,
+                        aInfo);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+
+    /**
      * This is the internal entry point for handling Activity.finish().
      *
      * @param token The Binder token referencing the Activity we want to finish.
@@ -1731,7 +1774,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
             if (self.isState(
                     ActivityStack.ActivityState.RESUMED, ActivityStack.ActivityState.PAUSING)) {
-                self.getDisplay().getWindowContainerController().overridePendingAppTransition(
+                self.getDisplay().mDisplayContent.mAppTransition.overridePendingAppTransition(
                         packageName, enterAnim, exitAnim, null);
             }
 
@@ -3066,12 +3109,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // Get top display of front most application.
         final ActivityStack focusedStack = getTopDisplayFocusedStack();
         if (focusedStack != null) {
-            final DisplayWindowController dwc =
-                    focusedStack.getDisplay().getWindowContainerController();
-            dwc.prepareAppTransition(TRANSIT_TASK_IN_PLACE, false);
-            dwc.overridePendingAppTransitionInPlace(activityOptions.getPackageName(),
+            final DisplayContent dc = focusedStack.getDisplay().mDisplayContent;
+            dc.prepareAppTransition(TRANSIT_TASK_IN_PLACE, false);
+            dc.mAppTransition.overrideInPlaceAppTransition(activityOptions.getPackageName(),
                     activityOptions.getCustomInPlaceResId());
-            dwc.executeAppTransition();
+            dc.executeAppTransition();
         }
     }
 
@@ -3793,7 +3835,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // changed, so we should reflect that check here as well.
         final PinnedActivityStack stack = r.getActivityStack();
         final PinnedStackWindowController windowController = stack.getWindowContainerController();
-        return !windowController.isAnimatingBoundsToFullscreen();
+        return !windowController.mContainer.isAnimatingBoundsToFullscreen();
     }
 
     @Override
@@ -4527,6 +4569,26 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    /**
+     * Makes the display with the given id a single task instance display. I.e the display can only
+     * contain one task.
+     */
+    @Override
+    public void setDisplayToSingleTaskInstance(int displayId) {
+        mAmInternal.enforceCallingPermission(Manifest.permission.MANAGE_ACTIVITY_STACKS,
+                "setDisplayToSingleTaskInstance");
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            final ActivityDisplay display =
+                    mRootActivityContainer.getActivityDisplayOrCreate(displayId);
+            if (display != null) {
+                display.setDisplayToSingleTaskInstance();
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+
     void dumpLastANRLocked(PrintWriter pw) {
         pw.println("ACTIVITY MANAGER LAST ANR (dumpsys activity lastanr)");
         if (mLastANRState == null) {
@@ -4701,26 +4763,21 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
-    void writeSleepStateToProto(ProtoOutputStream proto) {
+    private void writeSleepStateToProto(ProtoOutputStream proto, int wakeFullness,
+            boolean testPssMode) {
+        final long sleepToken = proto.start(ActivityManagerServiceDumpProcessesProto.SLEEP_STATUS);
+        proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.WAKEFULNESS,
+                PowerManagerInternal.wakefulnessToProtoEnum(wakeFullness));
         for (ActivityTaskManagerInternal.SleepToken st : mRootActivityContainer.mSleepTokens) {
             proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.SLEEP_TOKENS,
                     st.toString());
         }
-
-        if (mRunningVoice != null) {
-            final long vrToken = proto.start(
-                    ActivityManagerServiceDumpProcessesProto.RUNNING_VOICE);
-            proto.write(ActivityManagerServiceDumpProcessesProto.Voice.SESSION,
-                    mRunningVoice.toString());
-            mVoiceWakeLock.writeToProto(
-                    proto, ActivityManagerServiceDumpProcessesProto.Voice.WAKELOCK);
-            proto.end(vrToken);
-        }
-
         proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.SLEEPING, mSleeping);
         proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.SHUTTING_DOWN,
                 mShuttingDown);
-        mVrController.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.VR_CONTROLLER);
+        proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.TEST_PSS_MODE,
+                testPssMode);
+        proto.end(sleepToken);
     }
 
     int getCurrentUserId() {
@@ -5233,10 +5290,17 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         mH.post(mAmInternal::updateCpuStats);
     }
 
-    void updateUsageStats(ActivityRecord component, boolean resumed) {
-        final Message m = PooledLambda.obtainMessage(ActivityManagerInternal::updateUsageStats,
+    void updateBatteryStats(ActivityRecord component, boolean resumed) {
+        final Message m = PooledLambda.obtainMessage(ActivityManagerInternal::updateBatteryStats,
                 mAmInternal, component.mActivityComponent, component.app.mUid, component.mUserId,
                 resumed);
+        mH.sendMessage(m);
+    }
+
+    void updateActivityUsageStats(ActivityRecord activity, int event) {
+        final Message m = PooledLambda.obtainMessage(
+                ActivityManagerInternal::updateActivityUsageStats, mAmInternal,
+                activity.mActivityComponent, activity.mUserId, event, activity.appToken);
         mH.sendMessage(m);
     }
 
@@ -5467,6 +5531,31 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return intent;
     }
 
+    /**
+     * Return the intent set with {@link Intent#CATEGORY_SECONDARY_HOME} to resolve secondary home
+     * activities.
+     *
+     * @param preferredPackage Specify a preferred package name, otherwise use secondary home
+     *                        component defined in config_secondaryHomeComponent.
+     * @return the intent set with {@link Intent#CATEGORY_SECONDARY_HOME}
+     */
+    Intent getSecondaryHomeIntent(String preferredPackage) {
+        final Intent intent = new Intent(mTopAction, mTopData != null ? Uri.parse(mTopData) : null);
+        if (preferredPackage == null) {
+            // Using the component stored in config if no package name.
+            final String secondaryHomeComponent = mContext.getResources().getString(
+                    com.android.internal.R.string.config_secondaryHomeComponent);
+            intent.setComponent(ComponentName.unflattenFromString(secondaryHomeComponent));
+        } else {
+            intent.setPackage(preferredPackage);
+        }
+        intent.addFlags(Intent.FLAG_DEBUG_TRIAGED_MISSING);
+        if (mFactoryTest != FactoryTest.FACTORY_TEST_LOW_LEVEL) {
+            intent.addCategory(Intent.CATEGORY_SECONDARY_HOME);
+        }
+        return intent;
+    }
+
     ApplicationInfo getAppInfoForUser(ApplicationInfo info, int userId) {
         if (info == null) return null;
         ApplicationInfo newInfo = new ApplicationInfo(info);
@@ -5593,8 +5682,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         static final int FIRST_ACTIVITY_STACK_MSG = 100;
         static final int FIRST_SUPERVISOR_STACK_MSG = 200;
 
-        public H() {
-            super(DisplayThread.get().getLooper());
+        H(Looper looper) {
+            super(looper);
         }
 
         @Override
@@ -5718,18 +5807,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         packageUid, packageName,
                         intents, resolvedTypes, null /* resultTo */,
                         SafeActivityOptions.fromBundle(bOptions), userId,
-                        false /* validateIncomingUser */, null /* originatingPendingIntent */);
+                        false /* validateIncomingUser */, null /* originatingPendingIntent */,
+                        false /* allowBackgroundActivityStart */);
             }
         }
 
         @Override
         public int startActivitiesInPackage(int uid, String callingPackage, Intent[] intents,
                 String[] resolvedTypes, IBinder resultTo, SafeActivityOptions options, int userId,
-                boolean validateIncomingUser, PendingIntentRecord originatingPendingIntent) {
+                boolean validateIncomingUser, PendingIntentRecord originatingPendingIntent,
+                boolean allowBackgroundActivityStart) {
             synchronized (mGlobalLock) {
                 return getActivityStartController().startActivitiesInPackage(uid, callingPackage,
                         intents, resolvedTypes, resultTo, options, userId, validateIncomingUser,
-                        originatingPendingIntent);
+                        originatingPendingIntent, allowBackgroundActivityStart);
             }
         }
 
@@ -5738,12 +5829,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 String callingPackage, Intent intent, String resolvedType, IBinder resultTo,
                 String resultWho, int requestCode, int startFlags, SafeActivityOptions options,
                 int userId, TaskRecord inTask, String reason, boolean validateIncomingUser,
-                PendingIntentRecord originatingPendingIntent) {
+                PendingIntentRecord originatingPendingIntent,
+                boolean allowBackgroundActivityStart) {
             synchronized (mGlobalLock) {
                 return getActivityStartController().startActivityInPackage(uid, realCallingPid,
                         realCallingUid, callingPackage, intent, resolvedType, resultTo, resultWho,
                         requestCode, startFlags, options, userId, inTask, reason,
-                        validateIncomingUser, originatingPendingIntent);
+                        validateIncomingUser, originatingPendingIntent,
+                        allowBackgroundActivityStart);
             }
         }
 
@@ -5768,17 +5861,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 if (activityDisplay == null) {
                     return;
                 }
-                final DisplayWindowController dwc = activityDisplay.getWindowContainerController();
-                final boolean wasTransitionSet = dwc.getPendingAppTransition() != TRANSIT_NONE;
+                final DisplayContent dc = activityDisplay.mDisplayContent;
+                final boolean wasTransitionSet =
+                        dc.mAppTransition.getAppTransition() != TRANSIT_NONE;
                 if (!wasTransitionSet) {
-                    dwc.prepareAppTransition(TRANSIT_NONE, false /* alwaysKeepCurrent */);
+                    dc.prepareAppTransition(TRANSIT_NONE, false /* alwaysKeepCurrent */);
                 }
                 mRootActivityContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
 
                 // If there was a transition set already we don't want to interfere with it as we
                 // might be starting it too early.
                 if (!wasTransitionSet) {
-                    dwc.executeAppTransition();
+                    dc.executeAppTransition();
                 }
             }
             if (callback != null) {
@@ -6268,18 +6362,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     finishInstrumentationCallback.run();
                 }
 
-                mWindowManager.deferSurfaceLayout();
-                try {
-                    if (!restarting && hasVisibleActivities
-                            && !mRootActivityContainer.resumeFocusedStacksTopActivities()) {
-                        // If there was nothing to resume, and we are not already restarting this
-                        // process, but there is a visible activity that is hosted by the process...
-                        // then make sure all visible activities are running, taking care of
-                        // restarting this process.
-                        mRootActivityContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
+                if (!restarting && hasVisibleActivities) {
+                    mWindowManager.deferSurfaceLayout();
+                    try {
+                        if (!mRootActivityContainer.resumeFocusedStacksTopActivities()) {
+                            // If there was nothing to resume, and we are not already restarting
+                            // this process, but there is a visible activity that is hosted by the
+                            // process...then make sure all visible activities are running, taking
+                            // care of restarting this process.
+                            mRootActivityContainer.ensureActivitiesVisible(null, 0,
+                                    !PRESERVE_WINDOWS);
+                        }
+                    } finally {
+                        mWindowManager.continueSurfaceLayout();
                     }
-                } finally {
-                    mWindowManager.continueSurfaceLayout();
                 }
             }
         }
@@ -6599,12 +6695,24 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public void writeProcessesToProto(ProtoOutputStream proto, String dumpPackage) {
+        public void writeProcessesToProto(ProtoOutputStream proto, String dumpPackage,
+                int wakeFullness, boolean testPssMode) {
             synchronized (mGlobalLock) {
                 if (dumpPackage == null) {
                     getGlobalConfiguration().writeToProto(proto, GLOBAL_CONFIGURATION);
                     proto.write(CONFIG_WILL_CHANGE, getTopDisplayFocusedStack().mConfigWillChange);
-                    writeSleepStateToProto(proto);
+                    writeSleepStateToProto(proto, wakeFullness, testPssMode);
+                    if (mRunningVoice != null) {
+                        final long vrToken = proto.start(
+                                ActivityManagerServiceDumpProcessesProto.RUNNING_VOICE);
+                        proto.write(ActivityManagerServiceDumpProcessesProto.Voice.SESSION,
+                                mRunningVoice.toString());
+                        mVoiceWakeLock.writeToProto(
+                                proto, ActivityManagerServiceDumpProcessesProto.Voice.WAKELOCK);
+                        proto.end(vrToken);
+                    }
+                    mVrController.writeToProto(proto,
+                            ActivityManagerServiceDumpProcessesProto.VR_CONTROLLER);
                     if (mController != null) {
                         final long token = proto.start(CONTROLLER);
                         proto.write(CONTROLLER, mController.toString());

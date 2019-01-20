@@ -33,29 +33,37 @@
 
 #include "idmap2/Idmap.h"
 #include "idmap2/ResourceUtils.h"
+#include "idmap2/Result.h"
 #include "idmap2/ZipFile.h"
 
-namespace android {
-namespace idmap2 {
+namespace android::idmap2 {
+
+namespace {
 
 #define EXTRACT_TYPE(resid) ((0x00ff0000 & (resid)) >> 16)
 
 #define EXTRACT_ENTRY(resid) (0x0000ffff & (resid))
 
-struct MatchingResources {
+class MatchingResources {
+ public:
   void Add(ResourceId target_resid, ResourceId overlay_resid) {
     TypeId target_typeid = EXTRACT_TYPE(target_resid);
-    if (map.find(target_typeid) == map.end()) {
-      map.emplace(target_typeid, std::set<std::pair<ResourceId, ResourceId>>());
+    if (map_.find(target_typeid) == map_.end()) {
+      map_.emplace(target_typeid, std::set<std::pair<ResourceId, ResourceId>>());
     }
-    map[target_typeid].insert(std::make_pair(target_resid, overlay_resid));
+    map_[target_typeid].insert(std::make_pair(target_resid, overlay_resid));
   }
 
+  inline const std::map<TypeId, std::set<std::pair<ResourceId, ResourceId>>>& Map() const {
+    return map_;
+  }
+
+ private:
   // target type id -> set { pair { overlay entry id, overlay entry id } }
-  std::map<TypeId, std::set<std::pair<ResourceId, ResourceId>>> map;
+  std::map<TypeId, std::set<std::pair<ResourceId, ResourceId>>> map_;
 };
 
-static bool WARN_UNUSED Read16(std::istream& stream, uint16_t* out) {
+bool WARN_UNUSED Read16(std::istream& stream, uint16_t* out) {
   uint16_t value;
   if (stream.read(reinterpret_cast<char*>(&value), sizeof(uint16_t))) {
     *out = dtohl(value);
@@ -64,7 +72,7 @@ static bool WARN_UNUSED Read16(std::istream& stream, uint16_t* out) {
   return false;
 }
 
-static bool WARN_UNUSED Read32(std::istream& stream, uint32_t* out) {
+bool WARN_UNUSED Read32(std::istream& stream, uint32_t* out) {
   uint32_t value;
   if (stream.read(reinterpret_cast<char*>(&value), sizeof(uint32_t))) {
     *out = dtohl(value);
@@ -74,7 +82,7 @@ static bool WARN_UNUSED Read32(std::istream& stream, uint32_t* out) {
 }
 
 // a string is encoded as a kIdmapStringLength char array; the array is always null-terminated
-static bool WARN_UNUSED ReadString(std::istream& stream, char out[kIdmapStringLength]) {
+bool WARN_UNUSED ReadString(std::istream& stream, char out[kIdmapStringLength]) {
   char buf[kIdmapStringLength];
   memset(buf, 0, sizeof(buf));
   if (!stream.read(buf, sizeof(buf))) {
@@ -87,7 +95,7 @@ static bool WARN_UNUSED ReadString(std::istream& stream, char out[kIdmapStringLe
   return true;
 }
 
-static ResourceId NameToResid(const AssetManager2& am, const std::string& name) {
+ResourceId NameToResid(const AssetManager2& am, const std::string& name) {
   return am.GetResourceId(name);
 }
 
@@ -100,7 +108,7 @@ static ResourceId NameToResid(const AssetManager2& am, const std::string& name) 
 // relying on a hard-coded index. This however requires storing the package name in the idmap
 // header, which in turn requires incrementing the idmap version. Because the initial version of
 // idmap2 is compatible with idmap, this will have to wait for now.
-static const LoadedPackage* GetPackageAtIndex0(const LoadedArsc& loaded_arsc) {
+const LoadedPackage* GetPackageAtIndex0(const LoadedArsc& loaded_arsc) {
   const std::vector<std::unique_ptr<const LoadedPackage>>& packages = loaded_arsc.GetPackages();
   if (packages.empty()) {
     return nullptr;
@@ -108,6 +116,8 @@ static const LoadedPackage* GetPackageAtIndex0(const LoadedArsc& loaded_arsc) {
   int id = packages[0]->GetPackageId();
   return loaded_arsc.GetPackageById(id);
 }
+
+}  // namespace
 
 std::unique_ptr<const IdmapHeader> IdmapHeader::FromBinaryStream(std::istream& stream) {
   std::unique_ptr<IdmapHeader> idmap_header(new IdmapHeader());
@@ -143,18 +153,16 @@ bool IdmapHeader::IsUpToDate(std::ostream& out_error) const {
     return false;
   }
 
-  bool status;
-  uint32_t target_crc;
-  std::tie(status, target_crc) = target_zip->Crc("resources.arsc");
-  if (!status) {
+  Result<uint32_t> target_crc = target_zip->Crc("resources.arsc");
+  if (!target_crc) {
     out_error << "error: failed to get target crc" << std::endl;
     return false;
   }
 
-  if (target_crc_ != target_crc) {
+  if (target_crc_ != *target_crc) {
     out_error << base::StringPrintf(
                      "error: bad target crc: idmap version 0x%08x, file system version 0x%08x",
-                     target_crc_, target_crc)
+                     target_crc_, *target_crc)
               << std::endl;
     return false;
   }
@@ -165,17 +173,16 @@ bool IdmapHeader::IsUpToDate(std::ostream& out_error) const {
     return false;
   }
 
-  uint32_t overlay_crc;
-  std::tie(status, overlay_crc) = overlay_zip->Crc("resources.arsc");
-  if (!status) {
+  Result<uint32_t> overlay_crc = overlay_zip->Crc("resources.arsc");
+  if (!overlay_crc) {
     out_error << "error: failed to get overlay crc" << std::endl;
     return false;
   }
 
-  if (overlay_crc_ != overlay_crc) {
+  if (overlay_crc_ != *overlay_crc) {
     out_error << base::StringPrintf(
                      "error: bad overlay crc: idmap version 0x%08x, file system version 0x%08x",
-                     overlay_crc_, overlay_crc)
+                     overlay_crc_, *overlay_crc)
               << std::endl;
     return false;
   }
@@ -198,8 +205,9 @@ std::unique_ptr<const IdmapData::Header> IdmapData::Header::FromBinaryStream(std
 std::unique_ptr<const IdmapData::TypeEntry> IdmapData::TypeEntry::FromBinaryStream(
     std::istream& stream) {
   std::unique_ptr<IdmapData::TypeEntry> data(new IdmapData::TypeEntry());
-
-  uint16_t target_type16, overlay_type16, entry_count;
+  uint16_t target_type16;
+  uint16_t overlay_type16;
+  uint16_t entry_count;
   if (!Read16(stream, &target_type16) || !Read16(stream, &overlay_type16) ||
       !Read16(stream, &entry_count) || !Read16(stream, &data->entry_offset_)) {
     return nullptr;
@@ -284,25 +292,25 @@ std::unique_ptr<const Idmap> Idmap::FromApkAssets(const std::string& target_apk_
   }
 
   const LoadedArsc* target_arsc = target_apk_assets.GetLoadedArsc();
-  if (!target_arsc) {
+  if (target_arsc == nullptr) {
     out_error << "error: failed to load target resources.arsc" << std::endl;
     return nullptr;
   }
 
   const LoadedArsc* overlay_arsc = overlay_apk_assets.GetLoadedArsc();
-  if (!overlay_arsc) {
+  if (overlay_arsc == nullptr) {
     out_error << "error: failed to load overlay resources.arsc" << std::endl;
     return nullptr;
   }
 
   const LoadedPackage* target_pkg = GetPackageAtIndex0(*target_arsc);
-  if (!target_pkg) {
+  if (target_pkg == nullptr) {
     out_error << "error: failed to load target package from resources.arsc" << std::endl;
     return nullptr;
   }
 
   const LoadedPackage* overlay_pkg = GetPackageAtIndex0(*overlay_arsc);
-  if (!overlay_pkg) {
+  if (overlay_pkg == nullptr) {
     out_error << "error: failed to load overlay package from resources.arsc" << std::endl;
     return nullptr;
   }
@@ -322,17 +330,20 @@ std::unique_ptr<const Idmap> Idmap::FromApkAssets(const std::string& target_apk_
   std::unique_ptr<IdmapHeader> header(new IdmapHeader());
   header->magic_ = kIdmapMagic;
   header->version_ = kIdmapCurrentVersion;
-  bool crc_status;
-  std::tie(crc_status, header->target_crc_) = target_zip->Crc("resources.arsc");
-  if (!crc_status) {
+
+  Result<uint32_t> crc = target_zip->Crc("resources.arsc");
+  if (!crc) {
     out_error << "error: failed to get zip crc for target" << std::endl;
     return nullptr;
   }
-  std::tie(crc_status, header->overlay_crc_) = overlay_zip->Crc("resources.arsc");
-  if (!crc_status) {
+  header->target_crc_ = *crc;
+
+  crc = overlay_zip->Crc("resources.arsc");
+  if (!crc) {
     out_error << "error: failed to get zip crc for overlay" << std::endl;
     return nullptr;
   }
+  header->overlay_crc_ = *crc;
 
   if (target_apk_path.size() > sizeof(header->target_path_)) {
     out_error << "error: target apk path \"" << target_apk_path << "\" longer that maximum size "
@@ -358,15 +369,14 @@ std::unique_ptr<const Idmap> Idmap::FromApkAssets(const std::string& target_apk_
   const auto end = overlay_pkg->end();
   for (auto iter = overlay_pkg->begin(); iter != end; ++iter) {
     const ResourceId overlay_resid = *iter;
-    bool lookup_ok;
-    std::string name;
-    std::tie(lookup_ok, name) = utils::ResToTypeEntryName(overlay_asset_manager, overlay_resid);
-    if (!lookup_ok) {
+    Result<std::string> name = utils::ResToTypeEntryName(overlay_asset_manager, overlay_resid);
+    if (!name) {
       continue;
     }
     // prepend "<package>:" to turn name into "<package>:<type>/<name>"
-    name = base::StringPrintf("%s:%s", target_pkg->GetPackageName().c_str(), name.c_str());
-    const ResourceId target_resid = NameToResid(target_asset_manager, name);
+    const std::string full_name =
+        base::StringPrintf("%s:%s", target_pkg->GetPackageName().c_str(), name->c_str());
+    const ResourceId target_resid = NameToResid(target_asset_manager, full_name);
     if (target_resid == 0) {
       continue;
     }
@@ -375,8 +385,8 @@ std::unique_ptr<const Idmap> Idmap::FromApkAssets(const std::string& target_apk_
 
   // encode idmap data
   std::unique_ptr<IdmapData> data(new IdmapData());
-  const auto types_end = matching_resources.map.cend();
-  for (auto ti = matching_resources.map.cbegin(); ti != types_end; ++ti) {
+  const auto types_end = matching_resources.Map().cend();
+  for (auto ti = matching_resources.Map().cbegin(); ti != types_end; ++ti) {
     auto ei = ti->second.cbegin();
     std::unique_ptr<IdmapData::TypeEntry> type(new IdmapData::TypeEntry());
     type->target_type_id_ = EXTRACT_TYPE(ei->first);
@@ -439,5 +449,4 @@ void Idmap::accept(Visitor* v) const {
   }
 }
 
-}  // namespace idmap2
-}  // namespace android
+}  // namespace android::idmap2

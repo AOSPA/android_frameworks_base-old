@@ -17,15 +17,22 @@
 package android.view;
 
 import android.annotation.IntDef;
+import android.annotation.Nullable;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.ArrayMap;
+import android.util.ArraySet;
+import android.util.SparseArray;
+import android.util.SparseIntArray;
+import android.view.WindowInsets.Type;
+import android.view.WindowInsets.Type.InsetType;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
 
 /**
  * Holder for state of system windows that cause window insets for all other windows in the system.
@@ -74,9 +81,28 @@ public class InsetsState implements Parcelable {
     /** A shelf is the same as the navigation bar. */
     public static final int TYPE_SHELF = TYPE_NAVIGATION_BAR;
 
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = "INSET_SIDE", value = {
+            INSET_SIDE_LEFT,
+            INSET_SIDE_TOP,
+            INSET_SIDE_RIGHT,
+            INSET_SIDE_BOTTOM,
+            INSET_SIDE_UNKNWON
+    })
+    public @interface InsetSide {}
+    static final int INSET_SIDE_LEFT = 0;
+    static final int INSET_SIDE_TOP = 1;
+    static final int INSET_SIDE_RIGHT = 2;
+    static final int INSET_SIDE_BOTTOM = 3;
+    static final int INSET_SIDE_UNKNWON = 4;
+
     private final ArrayMap<Integer, InsetsSource> mSources = new ArrayMap<>();
 
     public InsetsState() {
+    }
+
+    public InsetsState(InsetsState copy) {
+        set(copy);
     }
 
     /**
@@ -86,7 +112,8 @@ public class InsetsState implements Parcelable {
      * @return The calculated insets.
      */
     public WindowInsets calculateInsets(Rect frame, boolean isScreenRound,
-            boolean alwaysConsumeNavBar, DisplayCutout cutout) {
+            boolean alwaysConsumeNavBar, DisplayCutout cutout,
+            @Nullable @InsetSide SparseIntArray typeSideMap) {
         Insets systemInsets = Insets.NONE;
         Insets maxInsets = Insets.NONE;
         final Rect relativeFrame = new Rect(frame);
@@ -97,13 +124,13 @@ public class InsetsState implements Parcelable {
                 continue;
             }
             systemInsets = processSource(source, systemInsets, relativeFrame,
-                    false /* ignoreVisibility */);
+                    false /* ignoreVisibility */, typeSideMap);
 
             // IME won't be reported in max insets as the size depends on the EditorInfo of the IME
             // target.
             if (source.getType() != TYPE_IME) {
                 maxInsets = processSource(source, maxInsets, relativeFrameMax,
-                        true /* ignoreVisibility */);
+                        true /* ignoreVisibility */, null /* typeSideMap */);
             }
         }
         return new WindowInsets(new Rect(systemInsets), null, new Rect(maxInsets), isScreenRound,
@@ -111,11 +138,37 @@ public class InsetsState implements Parcelable {
     }
 
     private Insets processSource(InsetsSource source, Insets insets, Rect relativeFrame,
-            boolean ignoreVisibility) {
+            boolean ignoreVisibility, @Nullable @InsetSide SparseIntArray typeSideMap) {
         Insets currentInsets = source.calculateInsets(relativeFrame, ignoreVisibility);
         insets = Insets.add(currentInsets, insets);
         relativeFrame.inset(insets);
+        if (typeSideMap != null && !Insets.NONE.equals(currentInsets)) {
+            @InsetSide int insetSide = getInsetSide(currentInsets);
+            if (insetSide != INSET_SIDE_UNKNWON) {
+                typeSideMap.put(source.getType(), getInsetSide(currentInsets));
+            }
+        }
         return insets;
+    }
+
+    /**
+     * Retrieves the side for a certain {@code insets}. It is required that only one field l/t/r/b
+     * is set in order that this method returns a meaningful result.
+     */
+    private @InsetSide int getInsetSide(Insets insets) {
+        if (insets.left != 0) {
+            return INSET_SIDE_LEFT;
+        }
+        if (insets.top != 0) {
+            return INSET_SIDE_TOP;
+        }
+        if (insets.right != 0) {
+            return INSET_SIDE_RIGHT;
+        }
+        if (insets.bottom != 0) {
+            return INSET_SIDE_BOTTOM;
+        }
+        return INSET_SIDE_UNKNWON;
     }
 
     public InsetsSource getSource(@InternalInsetType int type) {
@@ -148,6 +201,48 @@ public class InsetsState implements Parcelable {
         }
     }
 
+    public void addSource(InsetsSource source) {
+        mSources.put(source.getType(), source);
+    }
+
+    public int getSourcesCount() {
+        return mSources.size();
+    }
+
+    public InsetsSource sourceAt(int index) {
+        return mSources.valueAt(index);
+    }
+
+    public static @InternalInsetType ArraySet<Integer> toInternalType(@InsetType int insetTypes) {
+        final ArraySet<Integer> result = new ArraySet<>();
+        if ((insetTypes & Type.TOP_BAR) != 0) {
+            result.add(TYPE_TOP_BAR);
+        }
+        if ((insetTypes & Type.SIDE_BARS) != 0) {
+            result.add(TYPE_SIDE_BAR_1);
+            result.add(TYPE_SIDE_BAR_2);
+            result.add(TYPE_SIDE_BAR_3);
+        }
+        if ((insetTypes & Type.IME) != 0) {
+            result.add(TYPE_IME);
+        }
+        return result;
+    }
+
+    public static boolean getDefaultVisibly(@InsetType int type) {
+        switch (type) {
+            case TYPE_TOP_BAR:
+            case TYPE_SIDE_BAR_1:
+            case TYPE_SIDE_BAR_2:
+            case TYPE_SIDE_BAR_3:
+                return true;
+            case TYPE_IME:
+                return false;
+            default:
+                return true;
+        }
+    }
+
     public void dump(String prefix, PrintWriter pw) {
         pw.println(prefix + "InsetsState");
         for (int i = mSources.size() - 1; i >= 0; i--) {
@@ -155,7 +250,7 @@ public class InsetsState implements Parcelable {
         }
     }
 
-    static String typeToString(int type) {
+    public static String typeToString(int type) {
         switch (type) {
             case TYPE_TOP_BAR:
                 return "TYPE_TOP_BAR";

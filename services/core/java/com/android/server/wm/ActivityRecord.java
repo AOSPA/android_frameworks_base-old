@@ -42,6 +42,7 @@ import static android.app.WindowConfiguration.activityTypeToString;
 import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_HOME;
 import static android.content.Intent.CATEGORY_LAUNCHER;
+import static android.content.Intent.CATEGORY_SECONDARY_HOME;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NO_HISTORY;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
@@ -86,6 +87,7 @@ import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_RIGHT;
 
 import static com.android.server.am.ActivityRecordProto.CONFIGURATION_CONTAINER;
 import static com.android.server.am.ActivityRecordProto.FRONT_OF_TASK;
@@ -96,6 +98,7 @@ import static com.android.server.am.ActivityRecordProto.TRANSLUCENT;
 import static com.android.server.am.ActivityRecordProto.VISIBLE;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_ACTIVITY;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_RESUME_ACTIVITY;
+import static com.android.server.wm.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.wm.ActivityStack.ActivityState.INITIALIZING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
@@ -122,8 +125,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_FREE_RESIZE;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
-import static com.android.server.wm.ActivityTaskManagerService
-        .RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
+import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
 import static com.android.server.wm.IdentifierProto.USER_ID;
@@ -145,6 +147,7 @@ import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
 import android.app.ResultInfo;
+import android.app.WaitResult.LaunchState;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityRelaunchItem;
@@ -157,6 +160,7 @@ import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.PipModeChangeItem;
 import android.app.servertransaction.ResumeActivityItem;
 import android.app.servertransaction.WindowVisibilityItem;
+import android.app.usage.UsageEvents.Event;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -267,7 +271,10 @@ final class ActivityRecord extends ConfigurationContainer {
     boolean fullscreen; // The activity is opaque and fills the entire space of this task.
     // TODO: See if it possible to combine this with the fullscreen field.
     final boolean hasWallpaper; // Has a wallpaper window as a background.
-    final boolean noDisplay;  // activity is not displayed?
+    @VisibleForTesting
+    boolean noDisplay;  // activity is not displayed?
+    @VisibleForTesting
+    int mHandoverLaunchDisplayId = INVALID_DISPLAY; // Handover launch display id to next activity.
     private final boolean componentSpecified;  // did caller specify an explicit component?
     final boolean rootVoiceInteraction;  // was this the root activity of a voice interaction?
 
@@ -441,8 +448,13 @@ final class ActivityRecord extends ConfigurationContainer {
         mLastReportedConfiguration.dump(pw, prefix + " ");
 
         pw.print(prefix); pw.print("CurrentConfiguration="); pw.println(getConfiguration());
-        if (!getOverrideConfiguration().equals(EMPTY)) {
-            pw.println(prefix + "OverrideConfiguration=" + getOverrideConfiguration());
+        if (!getRequestedOverrideConfiguration().equals(EMPTY)) {
+            pw.println(prefix + "RequestedOverrideConfiguration="
+                    + getRequestedOverrideConfiguration());
+        }
+        if (!getResolvedOverrideConfiguration().equals(getRequestedOverrideConfiguration())) {
+            pw.println(prefix + "ResolvedOverrideConfiguration="
+                    + getResolvedOverrideConfiguration());
         }
         if (!matchParentBounds()) {
             pw.println(prefix + "bounds=" + getBounds());
@@ -575,6 +587,9 @@ final class ActivityRecord extends ConfigurationContainer {
             }
             if (info.maxAspectRatio != 0) {
                 pw.println(prefix + "maxAspectRatio=" + info.maxAspectRatio);
+            }
+            if (info.minAspectRatio != 0) {
+                pw.println(prefix + "minAspectRatio=" + info.minAspectRatio);
             }
         }
     }
@@ -711,8 +726,12 @@ final class ActivityRecord extends ConfigurationContainer {
             // to forcing the update of the picture-in-picture mode as a part of the PiP animation.
             mLastReportedPictureInPictureMode = inPictureInPictureMode;
             mLastReportedMultiWindowMode = inPictureInPictureMode;
-            final Configuration newConfig = task.computeNewOverrideConfigurationForBounds(
-                    targetStackBounds, null);
+            final Configuration newConfig = new Configuration();
+            if (targetStackBounds != null && !targetStackBounds.isEmpty()) {
+                task.computeResolvedOverrideConfiguration(newConfig,
+                        task.getParent().getConfiguration(),
+                        task.getRequestedOverrideConfiguration());
+            }
             schedulePictureInPictureModeChanged(newConfig);
             scheduleMultiWindowModeChanged(newConfig);
         }
@@ -1003,6 +1022,8 @@ final class ActivityRecord extends ConfigurationContainer {
             if (useLockTask && lockTaskLaunchMode == LOCK_TASK_LAUNCH_MODE_DEFAULT) {
                 lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED;
             }
+            // Gets launch display id from options. It returns INVALID_DISPLAY if not set.
+            mHandoverLaunchDisplayId = options.getLaunchDisplayId();
         }
     }
 
@@ -1030,8 +1051,6 @@ final class ActivityRecord extends ConfigurationContainer {
 
         inHistory = true;
 
-        final TaskWindowContainerController taskController = task.getWindowContainerController();
-
         // TODO(b/36505427): Maybe this call should be moved inside updateOverrideConfiguration()
         task.updateOverrideConfigurationFromLaunchBounds();
         // Make sure override configuration is up-to-date before using to create window controller.
@@ -1043,10 +1062,9 @@ final class ActivityRecord extends ConfigurationContainer {
             // TODO: Should this throw an exception instead?
             Slog.w(TAG, "Attempted to add existing app token: " + appToken);
         } else {
-            final Task container = taskController.mContainer;
+            final Task container = task.getTask();
             if (container == null) {
-                throw new IllegalArgumentException("AppWindowContainerController: invalid "
-                        + " controller=" + taskController);
+                throw new IllegalArgumentException("createAppWindowToken: invalid task =" + task);
             }
             mAppWindowToken = createAppWindow(mAtmService.mWindowManager, appToken,
                     task.voiceSession != null, container.getDisplayContent(),
@@ -1057,7 +1075,7 @@ final class ActivityRecord extends ConfigurationContainer {
                     mLaunchTaskBehind, isAlwaysFocusable());
             if (DEBUG_TOKEN_MOVEMENT || DEBUG_ADD_REMOVE) {
                 Slog.v(TAG, "addAppToken: "
-                        + mAppWindowToken + " controller=" + taskController + " at "
+                        + mAppWindowToken + " task=" + container + " at "
                         + Integer.MAX_VALUE);
             }
             container.addChild(mAppWindowToken, Integer.MAX_VALUE /* add on top */);
@@ -1084,6 +1102,12 @@ final class ActivityRecord extends ConfigurationContainer {
         }
         if (mAppWindowToken == null) {
             Slog.w(TAG_WM, "Attempted to set icon of non-existing app token: " + appToken);
+            return false;
+        }
+        if (mAppWindowToken.getTask() == null) {
+            // Can be removed after unification of Task and TaskRecord.
+            Slog.w(TAG_WM, "Attempted to start a window to an app token not having attached to any"
+                    + " task: " + appToken);
             return false;
         }
         return mAppWindowToken.addStartingWindow(pkg, theme, compatInfo, nonLocalizedLabel,
@@ -1143,7 +1167,7 @@ final class ActivityRecord extends ConfigurationContainer {
                     + " r=" + this + " (" + prevTask.getStackId() + ")");
         }
 
-        mAppWindowToken.reparent(newTask.getWindowContainerController(), position);
+        mAppWindowToken.reparent(newTask.getTask(), position);
 
         // Reparenting prevents informing the parent stack of activity removal in the case that
         // the new stack has the same parent. we must manually signal here if this is not the case.
@@ -1160,7 +1184,8 @@ final class ActivityRecord extends ConfigurationContainer {
 
     private boolean isHomeIntent(Intent intent) {
         return ACTION_MAIN.equals(intent.getAction())
-                && intent.hasCategory(CATEGORY_HOME)
+                && (intent.hasCategory(CATEGORY_HOME)
+                || intent.hasCategory(CATEGORY_SECONDARY_HOME))
                 && intent.getCategories().size() == 1
                 && intent.getData() == null
                 && intent.getType() == null;
@@ -1640,7 +1665,6 @@ final class ActivityRecord extends ConfigurationContainer {
                 final IAppTransitionAnimationSpecsFuture specsFuture =
                         pendingOptions.getSpecsFuture();
                 if (specsFuture != null) {
-                    // TODO(multidisplay): Shouldn't be really used anymore from next CL.
                     displayContent.mAppTransition.overridePendingAppTransitionMultiThumbFuture(
                             specsFuture, pendingOptions.getOnAnimationStartListener(),
                             animationType == ANIM_THUMBNAIL_ASPECT_SCALE_UP);
@@ -1669,7 +1693,6 @@ final class ActivityRecord extends ConfigurationContainer {
                         .overridePendingAppTransitionStartCrossProfileApps();
                 break;
             case ANIM_REMOTE_ANIMATION:
-                // TODO(multidisplay): Will pass displayId and adjust dependencies from next CL.
                 displayContent.mAppTransition.overridePendingAppTransitionRemote(
                         pendingOptions.getRemoteAnimationAdapter());
                 break;
@@ -1797,6 +1820,18 @@ final class ActivityRecord extends ConfigurationContainer {
                 return;
             }
             mAppWindowToken.detachChildren();
+        }
+
+        if (state == RESUMED) {
+            mAtmService.updateBatteryStats(this, true);
+            mAtmService.updateActivityUsageStats(this, Event.ACTIVITY_RESUMED);
+        } else if (state == PAUSED) {
+            mAtmService.updateBatteryStats(this, false);
+            mAtmService.updateActivityUsageStats(this, Event.ACTIVITY_PAUSED);
+        } else if (state == STOPPED) {
+            mAtmService.updateActivityUsageStats(this, Event.ACTIVITY_STOPPED);
+        } else if (state == DESTROYED) {
+            mAtmService.updateActivityUsageStats(this, Event.ACTIVITY_DESTROYED);
         }
     }
 
@@ -1993,10 +2028,7 @@ final class ActivityRecord extends ConfigurationContainer {
         stopped = false;
 
         if (isActivityTypeHome()) {
-            WindowProcessController app = task.mActivities.get(0).app;
-            if (hasProcess() && app != mAtmService.mHomeProcess) {
-                mAtmService.mHomeProcess = app;
-            }
+            mStackSupervisor.updateHomeProcess(task.mActivities.get(0).app);
         }
 
         if (nowVisible) {
@@ -2160,7 +2192,7 @@ final class ActivityRecord extends ConfigurationContainer {
                 .getActivityMetricsLogger().logAppTransitionReportedDrawn(this, restoredFromBundle);
         if (info != null) {
             mStackSupervisor.reportActivityLaunchedLocked(false /* timeout */, this,
-                    info.windowsFullyDrawnDelayMs);
+                    info.windowsFullyDrawnDelayMs, info.getLaunchState());
         }
     }
 
@@ -2184,8 +2216,9 @@ final class ActivityRecord extends ConfigurationContainer {
             final WindowingModeTransitionInfoSnapshot info = mStackSupervisor
                     .getActivityMetricsLogger().notifyWindowsDrawn(getWindowingMode(), timestamp);
             final int windowsDrawnDelayMs = info != null ? info.windowsDrawnDelayMs : INVALID_DELAY;
+            final @LaunchState int launchState = info != null ? info.getLaunchState() : -1;
             mStackSupervisor.reportActivityLaunchedLocked(false /* timeout */, this,
-                    windowsDrawnDelayMs);
+                    windowsDrawnDelayMs, launchState);
             mStackSupervisor.sendWaitingVisibleReportLocked(this);
             finishLaunchTickingLocked();
             if (task != null) {
@@ -2458,36 +2491,20 @@ final class ActivityRecord extends ConfigurationContainer {
     }
 
     void setRequestedOrientation(int requestedOrientation) {
-        final int displayId = getDisplayId();
-        final Configuration displayConfig =
-                mRootActivityContainer.getDisplayOverrideConfiguration(displayId);
-
-        final Configuration config = setOrientation(requestedOrientation,
-                displayId, displayConfig, mayFreezeScreenLocked(app));
-        if (config != null) {
-            frozenBeforeDestroy = true;
-            if (!mAtmService.updateDisplayOverrideConfigurationLocked(config, this,
-                    false /* deferResume */, displayId)) {
-                mRootActivityContainer.resumeFocusedStacksTopActivities();
-            }
-        }
+        setOrientation(requestedOrientation, mayFreezeScreenLocked(app));
         mAtmService.getTaskChangeNotificationController().notifyActivityRequestedOrientationChanged(
                 task.taskId, requestedOrientation);
     }
 
-    Configuration setOrientation(int requestedOrientation, int displayId,
-            Configuration displayConfig, boolean freezeScreenIfNeeded) {
+    private void setOrientation(int requestedOrientation, boolean freezeScreenIfNeeded) {
         if (mAppWindowToken == null) {
             Slog.w(TAG_WM,
                     "Attempted to set orientation of non-existing app token: " + appToken);
-            return null;
+            return;
         }
 
-        mAppWindowToken.setOrientation(requestedOrientation);
-
         final IBinder binder = freezeScreenIfNeeded ? appToken.asBinder() : null;
-        return mAtmService.mWindowManager.updateOrientationFromAppTokens(displayConfig, binder,
-                displayId);
+        mAppWindowToken.setOrientation(requestedOrientation, binder, this);
     }
 
     int getOrientation() {
@@ -2533,21 +2550,19 @@ final class ActivityRecord extends ConfigurationContainer {
         mTmpConfig.unset();
         computeBounds(mTmpBounds);
 
-        if (mTmpBounds.equals(getOverrideBounds())) {
+        if (mTmpBounds.equals(getRequestedOverrideBounds())) {
             return;
         }
 
         setBounds(mTmpBounds);
 
-        final Rect updatedBounds = getOverrideBounds();
-
         // Bounds changed...update configuration to match.
         if (!matchParentBounds()) {
-            task.computeOverrideConfiguration(mTmpConfig, updatedBounds, null /* insetBounds */,
-                    false /* overrideWidth */, false /* overrideHeight */);
+            task.computeResolvedOverrideConfiguration(mTmpConfig,
+                    task.getParent().getConfiguration(), getRequestedOverrideConfiguration());
         }
 
-        onOverrideConfigurationChanged(mTmpConfig);
+        onRequestedOverrideConfigurationChanged(mTmpConfig);
     }
 
     /** Returns true if the configuration is compatible with this activity. */
@@ -2573,7 +2588,10 @@ final class ActivityRecord extends ConfigurationContainer {
         outBounds.setEmpty();
         final float maxAspectRatio = info.maxAspectRatio;
         final ActivityStack stack = getActivityStack();
-        if (task == null || stack == null || task.inMultiWindowMode() || maxAspectRatio == 0
+        final float minAspectRatio = info.minAspectRatio;
+
+        if (task == null || stack == null || task.inMultiWindowMode()
+                || (maxAspectRatio == 0 && minAspectRatio == 0)
                 || isInVrUiMode(getConfiguration())) {
             // We don't set override configuration if that activity task isn't fullscreen. I.e. the
             // activity is in multi-window mode. Or, there isn't a max aspect ratio specified for
@@ -2588,27 +2606,42 @@ final class ActivityRecord extends ConfigurationContainer {
         final Rect appBounds = getParent().getWindowConfiguration().getAppBounds();
         final int containingAppWidth = appBounds.width();
         final int containingAppHeight = appBounds.height();
-        int maxActivityWidth = containingAppWidth;
-        int maxActivityHeight = containingAppHeight;
+        final float containingRatio = Math.max(containingAppWidth, containingAppHeight)
+                / (float) Math.min(containingAppWidth, containingAppHeight);
 
-        if (containingAppWidth < containingAppHeight) {
-            // Width is the shorter side, so we use that to figure-out what the max. height
-            // should be given the aspect ratio.
-            maxActivityHeight = (int) ((maxActivityWidth * maxAspectRatio) + 0.5f);
-        } else {
-            // Height is the shorter side, so we use that to figure-out what the max. width
-            // should be given the aspect ratio.
-            maxActivityWidth = (int) ((maxActivityHeight * maxAspectRatio) + 0.5f);
+        int activityWidth = containingAppWidth;
+        int activityHeight = containingAppHeight;
+
+        if (containingRatio > maxAspectRatio && maxAspectRatio != 0) {
+            if (containingAppWidth < containingAppHeight) {
+                // Width is the shorter side, so we use that to figure-out what the max. height
+                // should be given the aspect ratio.
+                activityHeight = (int) ((activityWidth * maxAspectRatio) + 0.5f);
+            } else {
+                // Height is the shorter side, so we use that to figure-out what the max. width
+                // should be given the aspect ratio.
+                activityWidth = (int) ((activityHeight * maxAspectRatio) + 0.5f);
+            }
+        } else if (containingRatio < minAspectRatio && minAspectRatio != 0) {
+            if (containingAppWidth < containingAppHeight) {
+                // Width is the shorter side, so we use the height to figure-out what the max. width
+                // should be given the aspect ratio.
+                activityWidth = (int) ((activityHeight / minAspectRatio) + 0.5f);
+            } else {
+                // Height is the shorter side, so we use the width to figure-out what the max.
+                // height should be given the aspect ratio.
+                activityHeight = (int) ((activityWidth / minAspectRatio) + 0.5f);
+            }
         }
 
-        if (containingAppWidth <= maxActivityWidth && containingAppHeight <= maxActivityHeight) {
+        if (containingAppWidth <= activityWidth && containingAppHeight <= activityHeight) {
             // The display matches or is less than the activity aspect ratio, so nothing else to do.
             // Return the existing bounds. If this method is running for the first time,
-            // {@link #getOverrideBounds()} will be empty (representing no override). If the method has run
-            // before, then effect of {@link #getOverrideBounds()} will already have been applied to the
-            // value returned from {@link getConfiguration}. Refer to
-            // {@link TaskRecord#computeOverrideConfiguration}.
-            outBounds.set(getOverrideBounds());
+            // {@link #getRequestedOverrideBounds()} will be empty (representing no override). If
+            // the method has run before, then effect of {@link #getRequestedOverrideBounds()} will
+            // already have been applied to the value returned from {@link getConfiguration}. Refer
+            // to {@link TaskRecord#computeOverrideConfiguration}.
+            outBounds.set(getRequestedOverrideBounds());
             return;
         }
 
@@ -2616,12 +2649,21 @@ final class ActivityRecord extends ConfigurationContainer {
         // Also account for the left / top insets (e.g. from display cutouts), which will be clipped
         // away later in StackWindowController.adjustConfigurationForBounds(). Otherwise, the app
         // bounds would end up too small.
-        outBounds.set(0, 0, maxActivityWidth + appBounds.left, maxActivityHeight + appBounds.top);
+        outBounds.set(0, 0, activityWidth + appBounds.left, activityHeight + appBounds.top);
 
-        if (mAtmService.mWindowManager.getNavBarPosition(getDisplayId()) == NAV_BAR_LEFT) {
+        final int navBarPosition = mAtmService.mWindowManager.getNavBarPosition(getDisplayId());
+        if (navBarPosition == NAV_BAR_LEFT) {
             // Position the activity frame on the opposite side of the nav bar.
-            outBounds.left = appBounds.right - maxActivityWidth;
+            outBounds.left = appBounds.right - activityWidth;
             outBounds.right = appBounds.right;
+        } else if (navBarPosition == NAV_BAR_RIGHT) {
+            // Position the activity frame on the opposite side of the nav bar.
+            outBounds.left = 0;
+            outBounds.right = activityWidth + appBounds.left;
+        } else {
+            // Horizontally center the frame.
+            outBounds.left = appBounds.left + (containingAppWidth - activityWidth) / 2;
+            outBounds.right = outBounds.left + activityWidth;
         }
     }
 
@@ -2771,7 +2813,7 @@ final class ActivityRecord extends ConfigurationContainer {
             final boolean hasResizeChange = hasResizeChange(changes & ~info.getRealConfigChanged());
             if (hasResizeChange) {
                 final boolean isDragResizing =
-                        getTaskRecord().getWindowContainerController().isDragResizing();
+                        getTaskRecord().getTask().isDragResizing();
                 mRelaunchReason = isDragResizing ? RELAUNCH_REASON_FREE_RESIZE
                         : RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
             } else {
@@ -2939,7 +2981,7 @@ final class ActivityRecord extends ConfigurationContainer {
             final ActivityLifecycleItem lifecycleItem;
             if (andResume) {
                 lifecycleItem = ResumeActivityItem.obtain(
-                        getDisplay().getWindowContainerController().isNextTransitionForward());
+                        getDisplay().mDisplayContent.isNextTransitionForward());
             } else {
                 lifecycleItem = PauseActivityItem.obtain();
             }

@@ -790,6 +790,18 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     @Override
+    public Rect getDisplayedBounds() {
+        final Task task = getTask();
+        if (task != null) {
+            Rect bounds = task.getOverrideDisplayedBounds();
+            if (!bounds.isEmpty()) {
+                return bounds;
+            }
+        }
+        return super.getDisplayedBounds();
+    }
+
+    @Override
     public void computeFrameLw() {
         if (mWillReplaceWindow && (mAnimatingExit || !mReplacingRemoveRequested)) {
             // This window is being replaced and either already got information that it's being
@@ -805,16 +817,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final boolean windowsAreFloating = task != null && task.isFloating();
         final DisplayContent dc = getDisplayContent();
 
-        // If the task has temp inset bounds set, we have to make sure all its windows uses
-        // the temp inset frame. Otherwise different display frames get applied to the main
-        // window and the child window, making them misaligned.
-        // Otherwise we need to clear the inset frame, to avoid using a stale frame after leaving
-        // multi window mode.
-        if (task != null && isInMultiWindowMode()) {
-            task.getTempInsetBounds(mInsetFrame);
-        } else {
-            mInsetFrame.setEmpty();
-        }
+        mInsetFrame.set(getBounds());
 
         // Denotes the actual frame used to calculate the insets and to perform the layout. When
         // resizing in docked mode, we'd like to freeze the layout, so we also need to freeze the
@@ -834,7 +837,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             layoutXDiff = 0;
             layoutYDiff = 0;
         } else {
-            getBounds(mWindowFrames.mContainingFrame);
+            mWindowFrames.mContainingFrame.set(getDisplayedBounds());
             if (mAppToken != null && !mAppToken.mFrozenBounds.isEmpty()) {
 
                 // If the bounds are frozen, we still want to translate the window freely and only
@@ -884,14 +887,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
             layoutDisplayFrame = new Rect(mWindowFrames.mDisplayFrame);
             mWindowFrames.mDisplayFrame.set(mWindowFrames.mContainingFrame);
-            layoutXDiff =
-                    !mInsetFrame.isEmpty() ? mInsetFrame.left - mWindowFrames.mContainingFrame.left
-                            : 0;
-            layoutYDiff =
-                    !mInsetFrame.isEmpty() ? mInsetFrame.top - mWindowFrames.mContainingFrame.top
-                            : 0;
-            layoutContainingFrame =
-                    !mInsetFrame.isEmpty() ? mInsetFrame : mWindowFrames.mContainingFrame;
+            layoutXDiff = mInsetFrame.left - mWindowFrames.mContainingFrame.left;
+            layoutYDiff = mInsetFrame.top - mWindowFrames.mContainingFrame.top;
+            layoutContainingFrame = mInsetFrame;
             mTmpRect.set(0, 0, dc.getDisplayInfo().logicalWidth, dc.getDisplayInfo().logicalHeight);
             subtractInsets(mWindowFrames.mDisplayFrame, layoutContainingFrame, layoutDisplayFrame,
                     mTmpRect);
@@ -1375,12 +1373,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     boolean isVisible() {
-        return wouldBeVisibleIfPolicyIgnored() && mPolicyVisibility;
+        return wouldBeVisibleIfPolicyIgnored() && mPolicyVisibility
+                // If we don't have a provider, this window isn't used as a window generating
+                // insets, so nobody can hide it over the inset APIs.
+                && (mInsetProvider == null || mInsetProvider.isClientVisible());
     }
 
     /**
-     * @return True if the window would be visible if we'd ignore policy visibility, false
-     *         otherwise.
+     * @return {@code true} if the window would be visible if we'd ignore policy visibility,
+     *         {@code false} otherwise.
      */
     boolean wouldBeVisibleIfPolicyIgnored() {
         return mHasSurface && !isParentWindowHidden()
@@ -2145,7 +2146,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-    int getTouchableRegion(Region region, int flags) {
+    int getSurfaceTouchableRegion(Region region, int flags) {
         final boolean modal = (flags & (FLAG_NOT_TOUCH_MODAL | FLAG_NOT_FOCUSABLE)) == 0;
         if (modal && mAppToken != null) {
             // Limit the outer touch to the activity stack region.
@@ -2170,14 +2171,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mTmpRect.inset(-delta, -delta);
             }
             region.set(mTmpRect);
-            region.translate(-mWindowFrames.mFrame.left, -mWindowFrames.mFrame.top);
+            cropRegionToStackBoundsIfNeeded(region);
         } else {
             // Not modal or full screen modal
             getTouchableRegion(region);
         }
-
-        // The area containing the shadows is not touchable.
-        region.translate(mAttrs.surfaceInsets.left, mAttrs.surfaceInsets.top);
+        // Translate to surface based coordinates.
+        region.translate(-mWindowFrames.mFrame.left, -mWindowFrames.mFrame.top);
 
         return flags;
     }
@@ -2268,8 +2268,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // For child windows we want to use the pid for the parent window in case the the child
         // window was added from another process.
         final int pid = getParentWindow() != null ? getParentWindow().mSession.mPid : mSession.mPid;
-        mTempConfiguration.setTo(mWmService.mProcessConfigurations.get(
-                pid, mWmService.mRoot.getConfiguration()));
+        final Configuration processConfig =
+                mWmService.mAtmService.getGlobalConfigurationForPid(pid);
+        mTempConfiguration.setTo(processConfig == null
+                ? mWmService.mRoot.getConfiguration() : processConfig);
         return mTempConfiguration;
     }
 
@@ -2810,33 +2812,27 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 frame.right - inset.right, frame.bottom - inset.bottom);
     }
 
+    /** Get the touchable region in global coordinates. */
     void getTouchableRegion(Region outRegion) {
-        if (inPinnedWindowingMode() && !isFocused()) {
-            outRegion.setEmpty();
-            return;
-        }
-
         final Rect frame = mWindowFrames.mFrame;
         switch (mTouchableInsets) {
             default:
             case TOUCHABLE_INSETS_FRAME:
                 outRegion.set(frame);
-                outRegion.translate(-frame.left, -frame.top);
                 break;
             case TOUCHABLE_INSETS_CONTENT:
                 applyInsets(outRegion, frame, mGivenContentInsets);
-                outRegion.translate(-frame.left, -frame.top);
                 break;
             case TOUCHABLE_INSETS_VISIBLE:
                 applyInsets(outRegion, frame, mGivenVisibleInsets);
-                outRegion.translate(-frame.left, -frame.top);
                 break;
             case TOUCHABLE_INSETS_REGION: {
                 outRegion.set(mGivenTouchableRegion);
+                outRegion.translate(frame.left, frame.top);
                 break;
             }
         }
-        outRegion.translate(mAttrs.surfaceInsets.left, mAttrs.surfaceInsets.top);
+        cropRegionToStackBoundsIfNeeded(outRegion);
     }
 
     private void cropRegionToStackBoundsIfNeeded(Region region) {
@@ -2858,13 +2854,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * Report a focus change.  Must be called with no locks held, and consistently
      * from the same serialized thread (such as dispatched from a handler).
      */
-    void reportFocusChangedSerialized(boolean focused, boolean inTouchMode,
-            boolean reportToClient) {
+    void reportFocusChangedSerialized(boolean focused, boolean inTouchMode) {
         try {
-            mClient.windowFocusChanged(focused, inTouchMode, reportToClient);
+            mClient.windowFocusChanged(focused, inTouchMode);
         } catch (RemoteException e) {
         }
-        if (mFocusCallbacks != null && reportToClient) {
+        if (mFocusCallbacks != null) {
             final int N = mFocusCallbacks.beginBroadcast();
             for (int i=0; i<N; i++) {
                 IWindowFocusObserver obs = mFocusCallbacks.getBroadcastItem(i);
@@ -2967,6 +2962,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         try {
             mClient.insetsChanged(
                     getDisplayContent().getInsetsStateController().getInsetsForDispatch(this));
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Failed to deliver inset state change", e);
+        }
+    }
+
+    void notifyInsetsControlChanged() {
+        final InsetsStateController stateController =
+                getDisplayContent().getInsetsStateController();
+        try {
+            mClient.insetsControlChanged(stateController.getInsetsForDispatch(this),
+                    stateController.getControlsForDispatch(this));
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to deliver inset state change", e);
         }
@@ -4603,7 +4609,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             outPoint.offset(-parent.mWindowFrames.mFrame.left + parent.mAttrs.surfaceInsets.left,
                     -parent.mWindowFrames.mFrame.top + parent.mAttrs.surfaceInsets.top);
         } else if (parentWindowContainer != null) {
-            final Rect parentBounds = parentWindowContainer.getBounds();
+            final Rect parentBounds = parentWindowContainer.getDisplayedBounds();
             outPoint.offset(-parentBounds.left, -parentBounds.top);
         }
 

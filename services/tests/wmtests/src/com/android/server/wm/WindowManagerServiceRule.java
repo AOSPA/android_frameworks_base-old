@@ -30,6 +30,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 import android.app.ActivityManagerInternal;
 import android.content.Context;
@@ -125,11 +126,12 @@ public class WindowManagerServiceRule implements TestRule {
                 if (input != null && input.length > 1) {
                     doReturn(input[1]).when(ims).monitorInput(anyString(), anyInt());
                 }
+                ActivityTaskManagerService atms = mock(ActivityTaskManagerService.class);
+                when(atms.getGlobalLock()).thenReturn(new WindowManagerGlobalLock());
 
                 mService = WindowManagerService.main(context, ims, false, false,
                         mPolicy = new TestWindowManagerPolicy(
-                                WindowManagerServiceRule.this::getWindowManagerService),
-                        new WindowManagerGlobalLock());
+                                WindowManagerServiceRule.this::getWindowManagerService), atms);
                 mService.mTransactionFactory = () -> {
                     final SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
                     mSurfaceTransactions.add(new WeakReference<>(transaction));
@@ -147,10 +149,9 @@ public class WindowManagerServiceRule implements TestRule {
                 mService.onInitReady();
 
                 final Display display = mService.mDisplayManager.getDisplay(DEFAULT_DISPLAY);
-                final DisplayWindowController dcw = new DisplayWindowController(display, mService);
                 // Display creation is driven by the ActivityManagerService via
                 // ActivityStackSupervisor. We emulate those steps here.
-                mService.mRoot.createDisplayContent(display, dcw);
+                mService.mRoot.createDisplayContent(display, mock(ActivityDisplay.class));
             }
 
             private void removeServices() {
@@ -163,6 +164,7 @@ public class WindowManagerServiceRule implements TestRule {
             }
 
             private void tearDown() {
+                cancelAllPendingAnimations();
                 waitUntilWindowManagerHandlersIdle();
                 destroyAllSurfaceTransactions();
                 destroyAllSurfaceControls();
@@ -173,21 +175,30 @@ public class WindowManagerServiceRule implements TestRule {
         };
     }
 
-    public WindowManagerService getWindowManagerService() {
+    WindowManagerService getWindowManagerService() {
         return mService;
     }
 
-    public TestWindowManagerPolicy getWindowManagerPolicy() {
-        return mPolicy;
+    private void cancelAllPendingAnimations() {
+        for (final WeakReference<SurfaceControl> reference : mSurfaceControls) {
+            final SurfaceControl sc = reference.get();
+            if (sc != null) {
+                mService.mSurfaceAnimationRunner.onAnimationCancelled(sc);
+            }
+        }
     }
 
-    public void waitUntilWindowManagerHandlersIdle() {
+    void waitUntilWindowManagerHandlersIdle() {
         final WindowManagerService wm = getWindowManagerService();
-        if (wm != null) {
-            wm.mH.runWithScissors(() -> { }, 0);
-            wm.mAnimationHandler.runWithScissors(() -> { }, 0);
-            SurfaceAnimationThread.getHandler().runWithScissors(() -> { }, 0);
+        if (wm == null) {
+            return;
         }
+        wm.mH.removeCallbacksAndMessages(null);
+        wm.mAnimationHandler.removeCallbacksAndMessages(null);
+        SurfaceAnimationThread.getHandler().removeCallbacksAndMessages(null);
+        wm.mH.runWithScissors(() -> { }, 0);
+        wm.mAnimationHandler.runWithScissors(() -> { }, 0);
+        SurfaceAnimationThread.getHandler().runWithScissors(() -> { }, 0);
     }
 
     private void destroyAllSurfaceTransactions() {

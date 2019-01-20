@@ -22,6 +22,7 @@ import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_NORMAL;
 import static android.os.IServiceManager.DUMP_FLAG_PROTO;
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import android.annotation.NonNull;
 import android.app.ActivityThread;
 import android.app.INotificationManager;
 import android.app.usage.UsageStatsManagerInternal;
@@ -35,7 +36,6 @@ import android.content.res.Configuration;
 import android.content.res.Resources.Theme;
 import android.database.sqlite.SQLiteCompatibilityWalFlags;
 import android.database.sqlite.SQLiteGlobal;
-import android.hardware.display.ColorDisplayManager;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
@@ -56,11 +56,15 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.IStorageManager;
+import android.provider.Settings;
+import android.sysprop.VoldProperties;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.TimingsTraceLog;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodSystemProperty;
 
 import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
@@ -107,6 +111,7 @@ import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.CrossProfileAppsService;
+import com.android.server.pm.DynamicCodeLoggingService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.LauncherAppsService;
 import com.android.server.pm.OtaDexoptService;
@@ -119,8 +124,10 @@ import com.android.server.power.ShutdownThread;
 import com.android.server.power.ThermalManagerService;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.role.RoleManagerService;
+import com.android.server.rollback.RollbackManagerService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
+import com.android.server.signedconfig.SignedConfigService;
 import com.android.server.soundtrigger.SoundTriggerService;
 import com.android.server.stats.StatsCompanionService;
 import com.android.server.statusbar.StatusBarManagerService;
@@ -238,8 +245,8 @@ public final class SystemServer {
             "com.android.server.wallpaper.WallpaperManagerService$Lifecycle";
     private static final String AUTO_FILL_MANAGER_SERVICE_CLASS =
             "com.android.server.autofill.AutofillManagerService";
-    private static final String INTELLIGENCE_MANAGER_SERVICE_CLASS =
-            "com.android.server.intelligence.IntelligenceManagerService";
+    private static final String CONTENT_CAPTURE_MANAGER_SERVICE_CLASS =
+            "com.android.server.contentcapture.ContentCaptureManagerService";
     private static final String TIME_ZONE_RULES_MANAGER_SERVICE_CLASS =
             "com.android.server.timezone.RulesManagerService$Lifecycle";
     private static final String IOT_SERVICE_CLASS =
@@ -658,7 +665,7 @@ public final class SystemServer {
         traceEnd();
 
         // Only run "core" apps if we're encrypting the device.
-        String cryptState = SystemProperties.get("vold.decrypt");
+        String cryptState = VoldProperties.decrypt().orElse("");
         if (ENCRYPTING_STATE.equals(cryptState)) {
             Slog.w(TAG, "Detected encryption in progress - only parsing core apps");
             mOnlyCore = true;
@@ -723,6 +730,10 @@ public final class SystemServer {
         mSystemServiceManager.startService(new OverlayManagerService(mSystemContext, installer));
         traceEnd();
 
+        traceBeginAndSlog("StartSensorPrivacyService");
+        mSystemServiceManager.startService(new SensorPrivacyService(mSystemContext));
+        traceEnd();
+
         // The sensor service needs access to package manager service, app ops
         // service, and permissions service, therefore we start it after them.
         // Start sensor service in a separate thread. Completion should be checked
@@ -773,6 +784,11 @@ public final class SystemServer {
         traceBeginAndSlog("StartLooperStatsService");
         mSystemServiceManager.startService(LooperStatsService.Lifecycle.class);
         traceEnd();
+
+        // Manages apk rollbacks.
+        traceBeginAndSlog("StartRollbackManagerService");
+        mSystemServiceManager.startService(RollbackManagerService.class);
+        traceEnd();
     }
 
     /**
@@ -802,10 +818,6 @@ public final class SystemServer {
         boolean disableSystemTextClassifier = SystemProperties.getBoolean(
                 "config.disable_systemtextclassifier", false);
 
-        //TODO(b/111276913): temporarily disabled until the manager is properly implemented to
-        // ignore events when disabled and buffer when enabled
-        boolean disableIntelligence = SystemProperties.getBoolean(
-                "config.disable_intelligence", true);
         boolean disableNetworkTime = SystemProperties.getBoolean("config.disable_networktime",
                 false);
         boolean disableCameraService = SystemProperties.getBoolean("config.disable_cameraservice",
@@ -932,7 +944,7 @@ public final class SystemServer {
             ConcurrentUtils.waitForFutureNoInterrupt(mSensorServiceStart, START_SENSOR_SERVICE);
             mSensorServiceStart = null;
             wm = WindowManagerService.main(context, inputManager, !mFirstBoot, mOnlyCore,
-                    new PhoneWindowManager(), mWindowManagerGlobalLock);
+                    new PhoneWindowManager(), mActivityManagerService.mActivityTaskManager);
             ServiceManager.addService(Context.WINDOW_SERVICE, wm, /* allowIsolated= */ false,
                     DUMP_FLAG_PRIORITY_CRITICAL | DUMP_FLAG_PROTO);
             ServiceManager.addService(Context.INPUT_SERVICE, inputManager,
@@ -1001,6 +1013,11 @@ public final class SystemServer {
             traceBeginAndSlog("PinnerService");
             mSystemServiceManager.startService(PinnerService.class);
             traceEnd();
+
+            traceBeginAndSlog("SignedConfigService");
+            SignedConfigService.registerUpdateReceiver(mSystemContext);
+            traceEnd();
+
         } catch (RuntimeException e) {
             Slog.e("System", "******************************************");
             Slog.e("System", "************ Failure starting core service", e);
@@ -1016,7 +1033,7 @@ public final class SystemServer {
         // Bring up services needed for UI.
         if (mFactoryTestMode != FactoryTest.FACTORY_TEST_LOW_LEVEL) {
             traceBeginAndSlog("StartInputMethodManagerLifecycle");
-            if (MultiClientInputMethodManagerService.isConfiguredToUse()) {
+            if (InputMethodSystemProperty.MULTI_CLIENT_IME_ENABLED) {
                 mSystemServiceManager.startService(
                         MultiClientInputMethodManagerService.Lifecycle.class);
             } else {
@@ -1137,13 +1154,7 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            if (!disableIntelligence) {
-                traceBeginAndSlog("StartIntelligenceService");
-                mSystemServiceManager.startService(INTELLIGENCE_MANAGER_SERVICE_CLASS);
-                traceEnd();
-            } else {
-                Slog.d(TAG, "IntelligenceService disabled");
-            }
+            startContentCaptureService(context);
 
             // NOTE: ClipboardService indirectly depends on IntelligenceService
             traceBeginAndSlog("StartClipboardService");
@@ -1293,6 +1304,16 @@ public final class SystemServer {
             }
             traceEnd();
 
+            traceBeginAndSlog("StartNetworkStack");
+            try {
+                final android.net.NetworkStack networkStack =
+                        context.getSystemService(android.net.NetworkStack.class);
+                networkStack.start(context);
+            } catch (Throwable e) {
+                reportWtf("starting Network Stack", e);
+            }
+            traceEnd();
+
             traceBeginAndSlog("StartNsdService");
             try {
                 serviceDiscovery = NsdService.create(context);
@@ -1432,6 +1453,15 @@ public final class SystemServer {
                 traceEnd();
             }
 
+            // Start ADB Debugging Service
+            traceBeginAndSlog("StartAdbService");
+            try {
+                mSystemServiceManager.startService(ADB_SERVICE_CLASS);
+            } catch (Throwable e) {
+                Slog.e(TAG, "Failure starting AdbService");
+            }
+            traceEnd();
+
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
                     || mPackageManager.hasSystemFeature(
                     PackageManager.FEATURE_USB_ACCESSORY)
@@ -1441,15 +1471,6 @@ public final class SystemServer {
                 mSystemServiceManager.startService(USB_SERVICE_CLASS);
                 traceEnd();
             }
-
-            // Start ADB Debugging Service
-            traceBeginAndSlog("StartAdbService");
-            try {
-                mSystemServiceManager.startService(ADB_SERVICE_CLASS);
-            } catch (Throwable e) {
-                Slog.e(TAG, "Failure starting AdbService");
-            }
-            traceEnd();
 
             if (!isWatch) {
                 traceBeginAndSlog("StartSerialService");
@@ -1477,11 +1498,9 @@ public final class SystemServer {
             mSystemServiceManager.startService(TwilightService.class);
             traceEnd();
 
-            if (ColorDisplayManager.isNightDisplayAvailable(context)) {
-                traceBeginAndSlog("StartColorDisplay");
-                mSystemServiceManager.startService(ColorDisplayService.class);
-                traceEnd();
-            }
+            traceBeginAndSlog("StartColorDisplay");
+            mSystemServiceManager.startService(ColorDisplayService.class);
+            traceEnd();
 
             traceBeginAndSlog("StartJobScheduler");
             mSystemServiceManager.startService(JobSchedulerService.class);
@@ -1534,6 +1553,14 @@ public final class SystemServer {
                 ServiceManager.addService("diskstats", new DiskStatsService(context));
             } catch (Throwable e) {
                 reportWtf("starting DiskStats Service", e);
+            }
+            traceEnd();
+
+            traceBeginAndSlog("RuntimeService");
+            try {
+                ServiceManager.addService("runtime", new RuntimeService(context));
+            } catch (Throwable e) {
+                reportWtf("starting RuntimeService", e);
             }
             traceEnd();
 
@@ -1694,6 +1721,18 @@ public final class SystemServer {
                 reportWtf("starting StartBackgroundDexOptService", e);
             }
             traceEnd();
+
+            if (!isWatch) {
+                // We don't run this on watches as there are no plans to use the data logged
+                // on watch devices.
+                traceBeginAndSlog("StartDynamicCodeLoggingService");
+                try {
+                    DynamicCodeLoggingService.schedule(context);
+                } catch (Throwable e) {
+                    reportWtf("starting DynamicCodeLoggingService", e);
+                }
+                traceEnd();
+            }
 
             if (!isWatch) {
                 traceBeginAndSlog("StartPruneInstantAppsJobService");
@@ -2144,6 +2183,40 @@ public final class SystemServer {
             }
             traceEnd();
         }, BOOT_TIMINGS_TRACE_LOG);
+    }
+
+    private void startContentCaptureService(@NonNull Context context) {
+
+        // Check if it was explicitly enabled by Settings
+        final String settings = Settings.Global.getString(context.getContentResolver(),
+                Settings.Global.CONTENT_CAPTURE_SERVICE_EXPLICITLY_ENABLED);
+        if (settings == null) {
+            // Better be safe than sorry...
+            Slog.d(TAG, "ContentCaptureService disabled because its not set by OEM");
+            return;
+        }
+        switch (settings) {
+            case "always":
+                // Should be used only during development
+                Slog.d(TAG, "ContentCaptureService explicitly enabled by Settings");
+                break;
+            case "default":
+                // Default case: check if OEM overlaid the resource that defines the service.
+                final String serviceName = context.getString(
+                        com.android.internal.R.string.config_defaultContentCaptureService);
+                if (TextUtils.isEmpty(serviceName)) {
+                    Slog.d(TAG, "ContentCaptureService disabled because resource is not overlaid");
+                    return;
+                }
+                break;
+            default:
+                // Kill switch for OEMs
+                Slog.d(TAG, "ContentCaptureService disabled because its set to: " + settings);
+                return;
+        }
+        traceBeginAndSlog("StartContentCaptureService");
+        mSystemServiceManager.startService(CONTENT_CAPTURE_MANAGER_SERVICE_CLASS);
+        traceEnd();
     }
 
     static final void startSystemUi(Context context, WindowManagerService windowManager) {

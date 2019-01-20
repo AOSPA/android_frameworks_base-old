@@ -18,7 +18,9 @@ package android.net;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
@@ -49,7 +51,7 @@ import java.util.StringJoiner;
  */
 public final class LinkProperties implements Parcelable {
     // The interface described by the network link.
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private String mIfaceName;
     private ArrayList<LinkAddress> mLinkAddresses = new ArrayList<>();
     private ArrayList<InetAddress> mDnses = new ArrayList<>();
@@ -161,7 +163,7 @@ public final class LinkProperties implements Parcelable {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public LinkProperties() {
     }
 
@@ -195,7 +197,7 @@ public final class LinkProperties implements Parcelable {
      * @param iface The name of the network interface used for this link.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public void setInterfaceName(String iface) {
         mIfaceName = iface;
         ArrayList<RouteInfo> newRoutes = new ArrayList<>(mRoutes.size());
@@ -346,7 +348,7 @@ public final class LinkProperties implements Parcelable {
      *                  object.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public void setLinkAddresses(Collection<LinkAddress> addresses) {
         mLinkAddresses.clear();
         for (LinkAddress address: addresses) {
@@ -392,7 +394,7 @@ public final class LinkProperties implements Parcelable {
      * @param dnsServers The {@link Collection} of DNS servers to set in this object.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public void setDnsServers(Collection<InetAddress> dnsServers) {
         mDnses.clear();
         for (InetAddress dnsServer: dnsServers) {
@@ -529,7 +531,7 @@ public final class LinkProperties implements Parcelable {
      *                domains to search when resolving host names on this link.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public void setDomains(String domains) {
         mDomains = domains;
     }
@@ -552,7 +554,7 @@ public final class LinkProperties implements Parcelable {
      * @param mtu The MTU to use for this link.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public void setMtu(int mtu) {
         mMtu = mtu;
     }
@@ -562,9 +564,7 @@ public final class LinkProperties implements Parcelable {
      * this will return 0.
      *
      * @return The mtu value set for this link.
-     * @hide
      */
-    @UnsupportedAppUsage
     public int getMtu() {
         return mMtu;
     }
@@ -613,7 +613,7 @@ public final class LinkProperties implements Parcelable {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public boolean addRoute(RouteInfo route) {
         if (route != null) {
             String routeIface = route.getInterface();
@@ -688,7 +688,7 @@ public final class LinkProperties implements Parcelable {
      * @param proxy A {@link ProxyInfo} defining the HTTP Proxy to use on this link.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public void setHttpProxy(ProxyInfo proxy) {
         mHttpProxy = proxy;
     }
@@ -760,7 +760,7 @@ public final class LinkProperties implements Parcelable {
      * Clears this object to its initial state.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public void clear() {
         mIfaceName = null;
         mLinkAddresses.clear();
@@ -1137,7 +1137,7 @@ public final class LinkProperties implements Parcelable {
      * @return {@code true} if both are identical, {@code false} otherwise.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public boolean isIdenticalHttpProxy(LinkProperties target) {
         return getHttpProxy() == null ? target.getHttpProxy() == null :
                 getHttpProxy().equals(target.getHttpProxy());

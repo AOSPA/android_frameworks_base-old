@@ -14,11 +14,11 @@
 
 package com.android.systemui.statusbar.policy;
 
-import static com.google.common.truth.Truth.assertThat;
-
 import static junit.framework.TestCase.assertTrue;
+
 import static org.junit.Assert.assertFalse;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -29,6 +29,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.policy.ConfigurationController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -49,7 +50,8 @@ public class RemoteInputQuickSettingsDisablerTest extends SysuiTestCase {
         mCommandQueue = mock(CommandQueue.class);
         mContext.putComponent(CommandQueue.class, mCommandQueue);
 
-        mRemoteInputQuickSettingsDisabler = new RemoteInputQuickSettingsDisabler(mContext);
+        mRemoteInputQuickSettingsDisabler = new RemoteInputQuickSettingsDisabler(mContext,
+                mock(ConfigurationController.class));
     }
 
     @Test
@@ -57,7 +59,7 @@ public class RemoteInputQuickSettingsDisablerTest extends SysuiTestCase {
         mRemoteInputQuickSettingsDisabler.setRemoteInputActive(Boolean.TRUE);
         mRemoteInputQuickSettingsDisabler.setRemoteInputActive(Boolean.FALSE);
         assertFalse(mRemoteInputQuickSettingsDisabler.mRemoteInputActive);
-        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyBoolean());
+        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyInt(), anyBoolean());
     }
 
     @Test
@@ -65,7 +67,7 @@ public class RemoteInputQuickSettingsDisablerTest extends SysuiTestCase {
         mRemoteInputQuickSettingsDisabler.setRemoteInputActive(Boolean.FALSE);
         mRemoteInputQuickSettingsDisabler.setRemoteInputActive(Boolean.TRUE);
         assertTrue(mRemoteInputQuickSettingsDisabler.mRemoteInputActive);
-        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyBoolean());
+        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyInt(), anyBoolean());
     }
 
     @Test
@@ -76,7 +78,7 @@ public class RemoteInputQuickSettingsDisablerTest extends SysuiTestCase {
         c.orientation = Configuration.ORIENTATION_LANDSCAPE;
         mRemoteInputQuickSettingsDisabler.onConfigChanged(c);
         assertTrue(mRemoteInputQuickSettingsDisabler.misLandscape);
-        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyBoolean());
+        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyInt(), anyBoolean());
     }
 
     @Test
@@ -87,7 +89,7 @@ public class RemoteInputQuickSettingsDisablerTest extends SysuiTestCase {
         c.orientation = Configuration.ORIENTATION_PORTRAIT;
         mRemoteInputQuickSettingsDisabler.onConfigChanged(c);
         assertFalse(mRemoteInputQuickSettingsDisabler.misLandscape);
-        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyBoolean());
+        verify(mCommandQueue, atLeastOnce()).recomputeDisableFlags(anyInt(), anyBoolean());
     }
 
 }

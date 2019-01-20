@@ -16,8 +16,8 @@
 
 package android.view.textclassifier;
 
-import android.annotation.NonNull;
 import android.app.Person;
+import android.content.Context;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 
@@ -29,7 +29,11 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.StringJoiner;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -57,9 +61,9 @@ public final class ActionsSuggestionsHelper {
      * </ul>
      * User A will be encoded as 2, user B will be encoded as 1 and local user will be encoded as 0.
      */
-    @NonNull
     public static ActionsSuggestionsModel.ConversationMessage[] toNativeMessages(
-            @NonNull List<ConversationActions.Message> messages) {
+            List<ConversationActions.Message> messages,
+            Function<CharSequence, String> languageDetector) {
         List<ConversationActions.Message> messagesWithText =
                 messages.stream()
                         .filter(message -> !TextUtils.isEmpty(message.getText()))
@@ -67,32 +71,44 @@ public final class ActionsSuggestionsHelper {
         if (messagesWithText.isEmpty()) {
             return new ActionsSuggestionsModel.ConversationMessage[0];
         }
-        int size = messagesWithText.size();
-        // If the last message (the most important one) does not have the Person object, we will
-        // just use the last message and consider this message is sent from a remote user.
-        ConversationActions.Message lastMessage = messages.get(size - 1);
-        boolean useLastMessageOnly = lastMessage.getAuthor() == null;
-        if (useLastMessageOnly) {
-            return new ActionsSuggestionsModel.ConversationMessage[]{
-                    new ActionsSuggestionsModel.ConversationMessage(
-                            FIRST_NON_LOCAL_USER,
-                            lastMessage.getText().toString())};
-        }
-
-        // Encode the messages in the reverse order, stop whenever the Person object is missing.
         Deque<ActionsSuggestionsModel.ConversationMessage> nativeMessages = new ArrayDeque<>();
         PersonEncoder personEncoder = new PersonEncoder();
+        int size = messagesWithText.size();
         for (int i = size - 1; i >= 0; i--) {
             ConversationActions.Message message = messagesWithText.get(i);
-            if (message.getAuthor() == null) {
-                break;
-            }
+            long referenceTime = message.getReferenceTime() == null
+                    ? 0
+                    : message.getReferenceTime().toInstant().toEpochMilli();
             nativeMessages.push(new ActionsSuggestionsModel.ConversationMessage(
                     personEncoder.encode(message.getAuthor()),
-                    message.getText().toString()));
+                    message.getText().toString(), referenceTime,
+                    languageDetector.apply(message.getText())));
         }
         return nativeMessages.toArray(
                 new ActionsSuggestionsModel.ConversationMessage[nativeMessages.size()]);
+    }
+
+    /**
+     * Returns the result id for logging.
+     */
+    public static String createResultId(
+            Context context,
+            List<ConversationActions.Message> messages,
+            int modelVersion,
+            List<Locale> modelLocales) {
+        final StringJoiner localesJoiner = new StringJoiner(",");
+        for (Locale locale : modelLocales) {
+            localesJoiner.add(locale.toLanguageTag());
+        }
+        final String modelName = String.format(
+                Locale.US, "%s_v%d", localesJoiner.toString(), modelVersion);
+        final int hash = Objects.hash(
+                messages.stream()
+                        .map(ConversationActions.Message::getText)
+                        .collect(Collectors.toList()),
+                context.getPackageName());
+        return SelectionSessionLogger.SignatureParser.createSignature(
+                SelectionSessionLogger.CLASSIFIER_ID, modelName, hash);
     }
 
     private static final class PersonEncoder {

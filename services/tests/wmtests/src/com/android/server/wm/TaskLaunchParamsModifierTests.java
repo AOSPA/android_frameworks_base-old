@@ -22,7 +22,10 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_NOSENSOR;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.util.DisplayMetrics.DENSITY_DEFAULT;
 import static android.view.Display.DEFAULT_DISPLAY;
 
@@ -44,7 +47,6 @@ import android.platform.test.annotations.Presubmit;
 import android.view.Display;
 import android.view.Gravity;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.server.wm.LaunchParamsController.LaunchParams;
@@ -61,7 +63,6 @@ import java.util.Locale;
  *  atest WmTests:TaskLaunchParamsModifierTests
  */
 @SmallTest
-@FlakyTest(detail = "Confirm stable in post-submit before removing")
 @Presubmit
 public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
 
@@ -170,6 +171,23 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
     }
 
     @Test
+    public void testUsesTasksDisplayIdPriorToSourceIfSet() {
+        final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FREEFORM);
+        final TestActivityDisplay fullscreenDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FULLSCREEN);
+
+        mCurrent.mPreferredDisplayId = freeformDisplay.mDisplayId;
+        ActivityRecord reusableActivity = createSourceActivity(fullscreenDisplay);
+        ActivityRecord source = createSourceActivity(freeformDisplay);
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(reusableActivity.getTaskRecord(),
+                /* layout */ null, mActivity, source, /* options */ null, mCurrent, mResult));
+
+        assertEquals(fullscreenDisplay.mDisplayId, mResult.mPreferredDisplayId);
+    }
+
+    @Test
     public void testUsesTaskDisplayIdIfSet() {
         final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
                 WINDOWING_MODE_FREEFORM);
@@ -177,6 +195,25 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
 
         assertEquals(RESULT_CONTINUE, mTarget.onCalculate(source.getTaskRecord(), null /* layout */,
                 null /* activity */, null /* source */, null /* options */, mCurrent, mResult));
+
+        assertEquals(freeformDisplay.mDisplayId, mResult.mPreferredDisplayId);
+    }
+
+    @Test
+    public void testUsesNoDisplaySourceHandoverDisplayIdIfSet() {
+        final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FREEFORM);
+        final TestActivityDisplay fullscreenDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FULLSCREEN);
+
+        mCurrent.mPreferredDisplayId = fullscreenDisplay.mDisplayId;
+        ActivityRecord reusableActivity = createSourceActivity(fullscreenDisplay);
+        ActivityRecord source = createSourceActivity(freeformDisplay);
+        source.mHandoverLaunchDisplayId = freeformDisplay.mDisplayId;
+        source.noDisplay = true;
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(reusableActivity.getTaskRecord(),
+                null /* layout */, mActivity, source, null /* options */, mCurrent, mResult));
 
         assertEquals(freeformDisplay.mDisplayId, mResult.mPreferredDisplayId);
     }
@@ -750,6 +787,79 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
     }
 
     @Test
+    public void testReturnBoundsForFullscreenWindowingMode() {
+        final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FREEFORM);
+
+        mCurrent.mPreferredDisplayId = freeformDisplay.mDisplayId;
+        mCurrent.mWindowingMode = WINDOWING_MODE_FULLSCREEN;
+        mCurrent.mBounds.set(0, 0, 200, 100);
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(/* task */ null, /* layout */ null,
+                mActivity, /* source */ null, /* options */ null, mCurrent, mResult));
+
+        assertEquals(new Rect(0, 0, 200, 100), mResult.mBounds);
+    }
+
+    @Test
+    public void testUsesDisplayOrientationForNoSensorOrientation() {
+        final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FREEFORM);
+
+        final ActivityOptions options = ActivityOptions.makeBasic();
+        options.setLaunchDisplayId(freeformDisplay.mDisplayId);
+        options.setLaunchWindowingMode(WINDOWING_MODE_FREEFORM);
+
+        mActivity.info.screenOrientation = SCREEN_ORIENTATION_NOSENSOR;
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(/* task */ null, /* layout */ null,
+                mActivity, /* source */ null, options, mCurrent, mResult));
+
+        final int orientationForDisplay = orientationFromBounds(freeformDisplay.getBounds());
+        final int orientationForTask = orientationFromBounds(mResult.mBounds);
+        assertEquals("Launch bounds orientation should be the same as the display, but"
+                        + " display orientation is "
+                        + ActivityInfo.screenOrientationToString(orientationForDisplay)
+                        + " launch bounds orientation is "
+                        + ActivityInfo.screenOrientationToString(orientationForTask),
+                orientationForDisplay, orientationForTask);
+    }
+
+    @Test
+    public void testRespectsAppRequestedOrientation_Landscape() {
+        final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FREEFORM);
+
+        final ActivityOptions options = ActivityOptions.makeBasic();
+        options.setLaunchDisplayId(freeformDisplay.mDisplayId);
+        options.setLaunchWindowingMode(WINDOWING_MODE_FREEFORM);
+
+        mActivity.info.screenOrientation = SCREEN_ORIENTATION_LANDSCAPE;
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(/* task */ null, /* layout */ null,
+                mActivity, /* source */ null, options, mCurrent, mResult));
+
+        assertEquals(SCREEN_ORIENTATION_LANDSCAPE, orientationFromBounds(mResult.mBounds));
+    }
+
+    @Test
+    public void testRespectsAppRequestedOrientation_Portrait() {
+        final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
+                WINDOWING_MODE_FREEFORM);
+
+        final ActivityOptions options = ActivityOptions.makeBasic();
+        options.setLaunchDisplayId(freeformDisplay.mDisplayId);
+        options.setLaunchWindowingMode(WINDOWING_MODE_FREEFORM);
+
+        mActivity.info.screenOrientation = SCREEN_ORIENTATION_PORTRAIT;
+
+        assertEquals(RESULT_CONTINUE, mTarget.onCalculate(/* task */ null, /* layout */ null,
+                mActivity, /* source */ null, options, mCurrent, mResult));
+
+        assertEquals(SCREEN_ORIENTATION_PORTRAIT, orientationFromBounds(mResult.mBounds));
+    }
+
+    @Test
     public void testDefaultSizeSmallerThanBigScreen() {
         final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
                 WINDOWING_MODE_FREEFORM);
@@ -888,10 +998,11 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
 
     @Test
     public void testAdjustBoundsToFitNewDisplay_LargerThanDisplay_RTL() {
-        final Configuration overrideConfig = mRootActivityContainer.getOverrideConfiguration();
+        final Configuration overrideConfig =
+                mRootActivityContainer.getRequestedOverrideConfiguration();
         // Egyptian Arabic is a RTL language.
         overrideConfig.setLayoutDirection(new Locale("ar", "EG"));
-        mRootActivityContainer.onOverrideConfigurationChanged(overrideConfig);
+        mRootActivityContainer.onRequestedOverrideConfigurationChanged(overrideConfig);
 
         final TestActivityDisplay freeformDisplay = createNewActivityDisplay(
                 WINDOWING_MODE_FREEFORM);
@@ -1090,6 +1201,7 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
         display.setWindowingMode(windowingMode);
         display.setBounds(/* left */ 0, /* top */ 0, /* right */ 1920, /* bottom */ 1080);
         display.getConfiguration().densityDpi = DENSITY_DEFAULT;
+        display.getConfiguration().orientation = ORIENTATION_LANDSCAPE;
         return display;
     }
 
@@ -1113,6 +1225,11 @@ public class TaskLaunchParamsModifierTests extends ActivityTestsBase {
         } else {
             assertEquals(WINDOWING_MODE_UNDEFINED, actual);
         }
+    }
+
+    private int orientationFromBounds(Rect bounds) {
+        return bounds.width() > bounds.height() ? SCREEN_ORIENTATION_LANDSCAPE
+                : SCREEN_ORIENTATION_PORTRAIT;
     }
 
     private static class WindowLayoutBuilder {

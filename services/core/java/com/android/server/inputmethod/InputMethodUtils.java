@@ -38,11 +38,11 @@ import android.util.Slog;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodSubtype;
 import android.view.textservice.SpellCheckerInfo;
-import android.view.textservice.TextServicesManager;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.inputmethod.StartInputFlags;
+import com.android.server.textservices.TextServicesManagerInternal;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,7 +63,6 @@ final class InputMethodUtils {
     public static final int NOT_A_SUBTYPE_ID = -1;
     public static final String SUBTYPE_MODE_ANY = null;
     public static final String SUBTYPE_MODE_KEYBOARD = "keyboard";
-    public static final String SUBTYPE_MODE_VOICE = "voice";
     private static final String TAG = "InputMethodUtils";
     private static final Locale ENGLISH_LOCALE = new Locale("en");
     private static final String NOT_A_SUBTYPE_ID_STR = String.valueOf(NOT_A_SUBTYPE_ID);
@@ -375,19 +374,6 @@ final class InputMethodUtils {
         return subtypes;
     }
 
-    public static ArrayList<InputMethodSubtype> getOverridingImplicitlyEnabledSubtypes(
-            InputMethodInfo imi, String mode) {
-        ArrayList<InputMethodSubtype> subtypes = new ArrayList<>();
-        final int subtypeCount = imi.getSubtypeCount();
-        for (int i = 0; i < subtypeCount; ++i) {
-            final InputMethodSubtype subtype = imi.getSubtypeAt(i);
-            if (subtype.overridesImplicitlyEnabledSubtype() && subtype.getMode().equals(mode)) {
-                subtypes.add(subtype);
-            }
-        }
-        return subtypes;
-    }
-
     public static InputMethodInfo getMostApplicableDefaultIME(List<InputMethodInfo> enabledImes) {
         if (enabledImes == null || enabledImes.isEmpty()) {
             return null;
@@ -641,7 +627,7 @@ final class InputMethodUtils {
         }
         // Only the current spell checker should be treated as an enabled one.
         final SpellCheckerInfo currentSpellChecker =
-                TextServicesManager.getInstance().getCurrentSpellChecker();
+                TextServicesManagerInternal.get().getCurrentSpellCheckerForUser(userId);
         for (final String packageName : systemImesDisabledUntilUsed) {
             if (DEBUG) {
                 Slog.d(TAG, "check " + packageName);

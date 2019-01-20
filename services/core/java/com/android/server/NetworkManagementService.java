@@ -164,8 +164,6 @@ public class NetworkManagementService extends INetworkManagementService.Stub
 
     private static final int MAX_UID_RANGES_PER_COMMAND = 10;
 
-    private static final  String[] EMPTY_STRING_ARRAY = new String[0];
-
     /**
      * Name representing {@link #setGlobalAlert(long)} limit when delivered to
      * {@link INetworkManagementEventObserver#limitReached(String, String)}.
@@ -956,23 +954,10 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     // INetworkManagementService members
     //
     @Override
-    public INetd getNetdService() throws RemoteException {
-        final CountDownLatch connectedSignal = mConnectedSignal;
-        if (connectedSignal != null) {
-            try {
-                connectedSignal.await();
-            } catch (InterruptedException ignored) {}
-        }
-
-        return mNetdService;
-    }
-
-    @Override
     public String[] listInterfaces() {
         mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
         try {
-            final List<String> result = mNetdService.interfaceGetList();
-            return result.toArray(EMPTY_STRING_ARRAY);
+            return mNetdService.interfaceGetList();
         } catch (RemoteException | ServiceSpecificException e) {
             throw new IllegalStateException(e);
         }
@@ -1264,8 +1249,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     public String[] listTetheredInterfaces() {
         mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
         try {
-            final List<String> result = mNetdService.tetherInterfaceList();
-            return result.toArray(EMPTY_STRING_ARRAY);
+            return mNetdService.tetherInterfaceList();
         } catch (RemoteException | ServiceSpecificException e) {
             throw new IllegalStateException(e);
         }
@@ -1288,8 +1272,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     public String[] getDnsForwarders() {
         mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
         try {
-            final List<String> result = mNetdService.tetherDnsList();
-            return result.toArray(EMPTY_STRING_ARRAY);
+            return mNetdService.tetherDnsList();
         } catch (RemoteException | ServiceSpecificException e) {
             throw new IllegalStateException(e);
         }
@@ -2331,11 +2314,11 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     }
 
     @Override
-    public void createVirtualNetwork(int netId, boolean hasDNS, boolean secure) {
+    public void createVirtualNetwork(int netId, boolean secure) {
         mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
 
         try {
-            mNetdService.networkCreateVpn(netId, hasDNS, secure);
+            mNetdService.networkCreateVpn(netId, secure);
         } catch (RemoteException | ServiceSpecificException e) {
             throw new IllegalStateException(e);
         }

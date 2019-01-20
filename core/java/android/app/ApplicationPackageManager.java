@@ -44,6 +44,7 @@ import android.content.pm.InstantAppInfo;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.KeySet;
+import android.content.pm.ModuleInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageItemInfo;
@@ -789,6 +790,29 @@ public class ApplicationPackageManager extends PackageManager {
             throw e.rethrowFromSystemServer();
         }
         throw new NameNotFoundException("No shared userid for user:"+sharedUserName);
+    }
+
+    @Override
+    public List<ModuleInfo> getInstalledModules(int flags) {
+        try {
+            return mPM.getInstalledModules(flags);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public ModuleInfo getModuleInfo(String packageName, int flags) throws NameNotFoundException {
+        try {
+            ModuleInfo mi = mPM.getModuleInfo(packageName, flags);
+            if (mi != null) {
+                return mi;
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
+        throw new NameNotFoundException("No module info for package: " + packageName);
     }
 
     @SuppressWarnings("unchecked")
@@ -2275,9 +2299,9 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public boolean canSuspendPackage(String packageName) {
+    public String[] getUnsuspendablePackages(String[] packageNames) {
         try {
-            return mPM.canSuspendPackageForUser(packageName, mContext.getUserId());
+            return mPM.getUnsuspendablePackagesForUser(packageNames, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2974,6 +2998,15 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public String getWellbeingPackageName() {
+        try {
+            return mPM.getWellbeingPackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
     public boolean isPackageStateProtected(String packageName, int userId) {
         try {
             return mPM.isPackageStateProtected(packageName, userId);
@@ -2982,7 +3015,6 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
-    @Override
     public void sendDeviceCustomizationReadyBroadcast() {
         try {
             mPM.sendDeviceCustomizationReadyBroadcast();

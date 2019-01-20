@@ -19,21 +19,18 @@ package com.android.server.wm;
 import static android.app.AppOpsManager.OP_NONE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyFloat;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyInt;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.res.Configuration;
-import android.graphics.Rect;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.view.Display;
 import android.view.IApplicationToken;
@@ -41,8 +38,6 @@ import android.view.IWindow;
 import android.view.Surface;
 import android.view.SurfaceControl.Transaction;
 import android.view.WindowManager;
-
-import org.mockito.invocation.InvocationOnMock;
 
 /**
  * A collection of static functions that can be referenced by other test packages to provide access
@@ -55,8 +50,8 @@ public class WindowTestUtils {
     public static class TestDisplayContent extends DisplayContent {
 
         private TestDisplayContent(Display display, WindowManagerService service,
-                DisplayWindowController controller) {
-            super(display, service, controller);
+                ActivityDisplay activityDisplay) {
+            super(display, service, activityDisplay);
         }
 
         /**
@@ -113,17 +108,6 @@ public class WindowTestUtils {
     public static StackWindowController createMockStackWindowContainerController() {
         StackWindowController controller = mock(StackWindowController.class);
         controller.mContainer = mock(TestTaskStack.class);
-
-        // many components rely on the {@link StackWindowController#adjustConfigurationForBounds}
-        // to properly set bounds values in the configuration. We must mimick those actions here.
-        doAnswer((InvocationOnMock invocationOnMock) -> {
-            final Configuration config = invocationOnMock.<Configuration>getArgument(7);
-            final Rect bounds = invocationOnMock.<Rect>getArgument(0);
-            config.windowConfiguration.setBounds(bounds);
-            return null;
-        }).when(controller).adjustConfigurationForBounds(any(), any(), any(), any(),
-                anyBoolean(), anyBoolean(), anyFloat(), any(), any(), anyInt());
-
         return controller;
     }
 
@@ -136,6 +120,13 @@ public class WindowTestUtils {
             stack.addTask(newTask, POSITION_TOP);
             return newTask;
         }
+    }
+
+    /** Creates an {@link AppWindowToken} and adds it to the specified {@link Task}. */
+    public static TestAppWindowToken createAppWindowTokenInTask(DisplayContent dc, Task task) {
+        final TestAppWindowToken newToken = createTestAppWindowToken(dc);
+        task.addChild(newToken, POSITION_TOP);
+        return newToken;
     }
 
     /**
@@ -171,6 +162,7 @@ public class WindowTestUtils {
                     return null;
                 }
             }, new ComponentName("", ""), false, dc, true /* fillsParent */);
+            mTargetSdk = Build.VERSION_CODES.CUR_DEVELOPMENT;
         }
 
         TestAppWindowToken(WindowManagerService service, IApplicationToken token,
@@ -261,9 +253,10 @@ public class WindowTestUtils {
 
         TestTask(int taskId, TaskStack stack, int userId, WindowManagerService service,
                 int resizeMode, boolean supportsPictureInPicture,
-                TaskWindowContainerController controller) {
+                TaskRecord taskRecord) {
             super(taskId, stack, userId, service, resizeMode, supportsPictureInPicture,
-                    new ActivityManager.TaskDescription(), controller);
+                    new ActivityManager.TaskDescription(), taskRecord);
+            stack.addTask(this, POSITION_TOP);
         }
 
         boolean shouldDeferRemoval() {
@@ -290,49 +283,10 @@ public class WindowTestUtils {
         }
     }
 
-    /**
-     * Used so we can gain access to some protected members of {@link TaskWindowContainerController}
-     * class.
-     */
-    public static class TestTaskWindowContainerController extends TaskWindowContainerController {
-
-        static final TaskWindowContainerListener NOP_LISTENER = new TaskWindowContainerListener() {
-            @Override
-            public void registerConfigurationChangeListener(
-                    ConfigurationContainerListener listener) {
-            }
-
-            @Override
-            public void unregisterConfigurationChangeListener(
-                    ConfigurationContainerListener listener) {
-            }
-
-            @Override
-            public void onSnapshotChanged(ActivityManager.TaskSnapshot snapshot) {
-            }
-
-            @Override
-            public void requestResize(Rect bounds, int resizeMode) {
-            }
-        };
-
-        TestTaskWindowContainerController(WindowTestsBase testsBase) {
-            this(testsBase.createStackControllerOnDisplay(testsBase.mDisplayContent));
-        }
-
-        TestTaskWindowContainerController(StackWindowController stackController) {
-            super(sNextTaskId++, NOP_LISTENER, stackController, 0 /* userId */, null /* bounds */,
-                    RESIZE_MODE_UNRESIZEABLE, false /* supportsPictureInPicture */, true /* toTop*/,
-                    true /* showForAllUsers */, new ActivityManager.TaskDescription(),
-                    stackController.mService);
-        }
-
-        @Override
-        TestTask createTask(int taskId, TaskStack stack, int userId, int resizeMode,
-                boolean supportsPictureInPicture, ActivityManager.TaskDescription taskDescription) {
-            return new TestTask(taskId, stack, userId, mService, resizeMode,
-                    supportsPictureInPicture, this);
-        }
+    public static TestTask createTestTask(StackWindowController stackWindowController) {
+        return new TestTask(sNextTaskId++, stackWindowController.mContainer, 0,
+                stackWindowController.mService, RESIZE_MODE_UNRESIZEABLE, false,
+                mock(TaskRecord.class));
     }
 
     public static class TestIApplicationToken implements IApplicationToken {
