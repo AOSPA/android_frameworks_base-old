@@ -60,6 +60,7 @@ import org.codeaurora.internal.SignalStrength;
 import org.codeaurora.internal.Status;
 import org.codeaurora.internal.Token;
 import org.codeaurora.internal.UpperLayerIndInfo;
+import org.codeaurora.internal.NetworkCallbackBase;
 
 import com.android.systemui.R;
 import com.android.systemui.statusbar.policy.MobileSignalController.MobileIconGroup;
@@ -543,7 +544,7 @@ public class FiveGServiceClient {
     };
 
     @VisibleForTesting
-    INetworkCallback mCallback = new INetworkCallback.Stub() {
+    INetworkCallback mCallback = new NetworkCallbackBase() {
         @Override
         public void on5gStatus(int slotId, Token token, Status status, boolean enableStatus) throws
                 RemoteException {
