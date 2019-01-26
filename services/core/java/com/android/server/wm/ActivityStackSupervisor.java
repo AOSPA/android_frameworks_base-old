@@ -51,6 +51,7 @@ import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
+import static com.android.server.wm.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_MOVING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
@@ -130,6 +131,7 @@ import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+import android.util.BoostFramework;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -176,6 +178,12 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     static final int RESUME_TOP_ACTIVITY_MSG = FIRST_SUPERVISOR_STACK_MSG + 2;
     static final int SLEEP_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 3;
     static final int LAUNCH_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 4;
+
+    public static boolean mPerfSendTapHint = false;
+    public static boolean mIsPerfBoostAcquired = false;
+    public static int mPerfHandle = -1;
+    public BoostFramework mPerfBoost = null;
+
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
     static final int REPORT_MULTI_WINDOW_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 14;
     static final int REPORT_PIP_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 15;
@@ -239,7 +247,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     private static final int MAX_TASK_IDS_PER_USER = UserHandle.PER_USER_RANGE;
 
     final ActivityTaskManagerService mService;
-    RootActivityContainer mRootActivityContainer;
+    public RootActivityContainer mRootActivityContainer;
 
     /** The historial list of recent tasks including inactive tasks */
     RecentTasks mRecentTasks;
@@ -691,7 +699,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    ActivityInfo resolveActivity(Intent intent, String resolvedType, int startFlags,
+    public ActivityInfo resolveActivity(Intent intent, String resolvedType, int startFlags,
             ProfilerInfo profilerInfo, int userId, int filterCallingUid) {
         final ResolveInfo rInfo = resolveIntent(intent, resolvedType, userId, 0, filterCallingUid);
         return resolveActivity(intent, rInfo, startFlags, profilerInfo);
@@ -1364,6 +1372,16 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     void findTaskToMoveToFront(TaskRecord task, int flags, ActivityOptions options, String reason,
             boolean forceNonResizeable) {
         ActivityStack currentStack = task.getStack();
+
+        ActivityStack focusedStack = mRootActivityContainer.getTopDisplayFocusedStack();
+        ActivityRecord top_activity = focusedStack != null ? focusedStack.getTopActivity() : null;
+
+        //top_activity = task.stack.topRunningActivityLocked();
+        /* App is launching from recent apps and it's a new process */
+        if((top_activity != null) && (top_activity.getState() == DESTROYED)) {
+            acquireAppLaunchPerfLock(top_activity);
+        }
+
         if (currentStack == null) {
             Slog.e(TAG, "findTaskToMoveToFront: can't move task="
                     + task + " to front. Stack is null");
@@ -2006,6 +2024,30 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
         return timedout;
     }
+
+    void acquireAppLaunchPerfLock(ActivityRecord r) {
+       /* Acquire perf lock during new app launch */
+       if (mPerfBoost == null) {
+           mPerfBoost = new BoostFramework();
+       }
+       if (mPerfBoost != null) {
+           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
+           mPerfSendTapHint = true;
+           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
+
+           if(mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) == BoostFramework.WorkloadType.GAME)
+           {
+               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+           } else {
+               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+           }
+           if (mPerfHandle > 0)
+               mIsPerfBoostAcquired = true;
+           // Start IOP
+           mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+               r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
+       }
+   }
 
     void comeOutOfSleepIfNeededLocked() {
         removeSleepTimeouts();

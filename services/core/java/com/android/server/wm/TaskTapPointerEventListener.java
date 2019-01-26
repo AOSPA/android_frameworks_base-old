@@ -30,6 +30,10 @@ import android.view.MotionEvent;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.server.wm.WindowManagerService.H;
+import com.android.server.am.ActivityManagerService;
+import com.android.server.wm.ActivityStackSupervisor;
+import com.android.server.wm.ActivityDisplay;
+import android.util.BoostFramework;
 
 public class TaskTapPointerEventListener implements PointerEventListener {
 
@@ -43,6 +47,7 @@ public class TaskTapPointerEventListener implements PointerEventListener {
     private int mPointerIconType = TYPE_NOT_SPECIFIED;
     private int mLastDownX;
     private int mLastDownY;
+    public BoostFramework mPerfObj = null;
 
     public TaskTapPointerEventListener(WindowManagerService service,
             DisplayContent displayContent) {
@@ -73,6 +78,9 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                 }
             }
         };
+        if (mPerfObj == null) {
+            mPerfObj = new BoostFramework();
+        }
     }
 
     @Override
@@ -133,6 +141,28 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                 }
             }
             break;
+        }
+        if (ActivityStackSupervisor.mIsPerfBoostAcquired && (mPerfObj != null)) {
+            if (ActivityStackSupervisor.mPerfHandle > 0) {
+                mPerfObj.perfLockReleaseHandler(ActivityStackSupervisor.mPerfHandle);
+                ActivityStackSupervisor.mPerfHandle = -1;
+            }
+            ActivityStackSupervisor.mIsPerfBoostAcquired = false;
+        }
+        if (ActivityStackSupervisor.mPerfSendTapHint && (mPerfObj != null)) {
+            mPerfObj.perfHint(BoostFramework.VENDOR_HINT_TAP_EVENT, null);
+            ActivityStackSupervisor.mPerfSendTapHint = false;
+        }
+        if (ActivityDisplay.mIsPerfBoostAcquired && (mPerfObj != null)) {
+            if (ActivityDisplay.mPerfHandle > 0) {
+                mPerfObj.perfLockReleaseHandler(ActivityDisplay.mPerfHandle);
+                ActivityDisplay.mPerfHandle = -1;
+            }
+            ActivityDisplay.mIsPerfBoostAcquired = false;
+        }
+        if (ActivityDisplay.mPerfSendTapHint && (mPerfObj != null)) {
+            mPerfObj.perfHint(BoostFramework.VENDOR_HINT_TAP_EVENT, null);
+            ActivityDisplay.mPerfSendTapHint = false;
         }
     }
 
