@@ -3202,11 +3202,8 @@ public final class MediaCodecInfo {
         public static final int AVCLevel5       = 0x4000;
         public static final int AVCLevel51      = 0x8000;
         public static final int AVCLevel52      = 0x10000;
-        /** @hide */
         public static final int AVCLevel6       = 0x20000;
-        /** @hide */
         public static final int AVCLevel61      = 0x40000;
-        /** @hide */
         public static final int AVCLevel62      = 0x80000;
 
         public static final int H263ProfileBaseline             = 0x01;

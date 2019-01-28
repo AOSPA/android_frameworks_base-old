@@ -137,7 +137,6 @@ cc_library_shared {
         "libmediandk_utils",
         "libmediautils",
         "libprotobuf-cpp-lite",
-        "libstagefright",
         "libstagefright_esds",
         "libstagefright_foundation",
         "libstagefright_httplive",
