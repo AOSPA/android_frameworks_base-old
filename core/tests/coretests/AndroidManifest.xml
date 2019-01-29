@@ -91,6 +91,8 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-permission android:name="android.permission.KILL_UID" />
 
+    <uses-permission android:name="android.permission.ACCESS_SURFACE_FLINGER" />
+
     <!-- location test permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION"/>
@@ -1315,6 +1317,12 @@
         <!-- Used by BinderThreadPriorityTest -->
         <service android:name="android.os.BinderThreadPriorityService"
                 android:process=":BinderThreadPriorityService" />
+
+        <!-- Used by BinderWorkSourceTest -->
+        <service android:name="android.os.BinderWorkSourceService"
+                android:process=":BinderWorkSourceService" />
+        <service android:name="android.os.BinderWorkSourceNestedService"
+                android:process=":BinderWorkSourceNestedService" />
 
         <!-- Application components used for search manager tests -->
 

@@ -20,19 +20,25 @@ import android.view.View;
 
 import androidx.collection.ArraySet;
 
+import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 
 import java.util.ArrayList;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * A manager that ensures that notifications are visually stable. It will suppress reorderings
  * and reorder at the right time when they are out of view.
  */
+@Singleton
 public class VisualStabilityManager implements OnHeadsUpChangedListener {
 
     private final ArrayList<Callback> mCallbacks =  new ArrayList<>();
 
+    private NotificationPresenter mPresenter;
     private boolean mPanelExpanded;
     private boolean mScreenOn;
     private boolean mReorderingAllowed;
@@ -41,6 +47,25 @@ public class VisualStabilityManager implements OnHeadsUpChangedListener {
     private ArraySet<View> mLowPriorityReorderingViews = new ArraySet<>();
     private ArraySet<View> mAddedChildren = new ArraySet<>();
     private boolean mPulsing;
+
+    @Inject
+    public VisualStabilityManager(NotificationEntryManager notificationEntryManager) {
+        notificationEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
+            @Override
+            public void onEntryReinflated(NotificationData.Entry entry) {
+                if (entry.hasLowPriorityStateUpdated()) {
+                    onLowPriorityUpdated(entry);
+                    if (mPresenter != null) {
+                        mPresenter.updateNotificationViews();
+                    }
+                }
+            }
+        });
+    }
+
+    public void setUpWithPresenter(NotificationPresenter presenter) {
+        mPresenter = presenter;
+    }
 
     /**
      * Add a callback to invoke when reordering is allowed again.
@@ -120,7 +145,7 @@ public class VisualStabilityManager implements OnHeadsUpChangedListener {
             return true;
         }
         if (mAllowedReorderViews.contains(row)
-                && !mVisibilityLocationProvider.isInVisibleLocation(row)) {
+                && !mVisibilityLocationProvider.isInVisibleLocation(row.getEntry())) {
             return true;
         }
         return false;
@@ -142,12 +167,12 @@ public class VisualStabilityManager implements OnHeadsUpChangedListener {
         if (isHeadsUp) {
             // Heads up notifications should in general be allowed to reorder if they are out of
             // view and stay at the current location if they aren't.
-            mAllowedReorderViews.add(entry.row);
+            mAllowedReorderViews.add(entry.getRow());
         }
     }
 
-    public void onLowPriorityUpdated(NotificationData.Entry entry) {
-        mLowPriorityReorderingViews.add(entry.row);
+    private void onLowPriorityUpdated(NotificationData.Entry entry) {
+        mLowPriorityReorderingViews.add(entry.getRow());
     }
 
     /**

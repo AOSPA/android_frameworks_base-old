@@ -100,6 +100,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.TimeZone;
 
 /**
  * Watches for updates that may be interesting to the keyguard, and provides
@@ -153,6 +154,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_BIOMETRIC_AUTHENTICATION_CONTINUE = 336;
     private static final int MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED = 337;
     private static final int MSG_TELEPHONY_CAPABLE = 338;
+    private static final int MSG_TIMEZONE_UPDATE = 339;
     private static final int MSG_LOCALE_CHANGED = 500;
 
     /** Biometric authentication state: Not listening. */
@@ -262,6 +264,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             switch (msg.what) {
                 case MSG_TIME_UPDATE:
                     handleTimeUpdate();
+                    break;
+                case MSG_TIMEZONE_UPDATE:
+                    handleTimeZoneUpdate((String) msg.obj);
                     break;
                 case MSG_BATTERY_UPDATE:
                     handleBatteryUpdate((BatteryStatus) msg.obj);
@@ -980,9 +985,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             if (DEBUG) Log.d(TAG, "received broadcast " + action);
 
             if (Intent.ACTION_TIME_TICK.equals(action)
-                    || Intent.ACTION_TIME_CHANGED.equals(action)
-                    || Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
+                    || Intent.ACTION_TIME_CHANGED.equals(action)) {
                 mHandler.sendEmptyMessage(MSG_TIME_UPDATE);
+            } else if (Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
+                final Message msg = mHandler.obtainMessage(
+                        MSG_TIMEZONE_UPDATE, intent.getStringExtra("time-zone"));
+                mHandler.sendMessage(msg);
             } else if (Intent.ACTION_BATTERY_CHANGED.equals(action)) {
                 final int status = intent.getIntExtra(EXTRA_STATUS, BATTERY_STATUS_UNKNOWN);
                 final int plugged = intent.getIntExtra(EXTRA_PLUGGED, 0);
@@ -1550,10 +1558,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
         mHandler.removeCallbacks(mRetryFingerprintAuthentication);
         boolean shouldListenForFingerprint = shouldListenForFingerprint();
-        if (mFingerprintRunningState == BIOMETRIC_STATE_RUNNING && !shouldListenForFingerprint) {
+        boolean runningOrRestarting = mFingerprintRunningState == BIOMETRIC_STATE_RUNNING
+                || mFingerprintRunningState == BIOMETRIC_STATE_CANCELLING_RESTARTING;
+        if (runningOrRestarting && !shouldListenForFingerprint) {
             stopListeningForFingerprint();
-        } else if (mFingerprintRunningState != BIOMETRIC_STATE_RUNNING
-                && shouldListenForFingerprint) {
+        } else if (!runningOrRestarting && shouldListenForFingerprint) {
             startListeningForFingerprint();
         }
     }
@@ -1606,6 +1615,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private void startListeningForFingerprint() {
         if (mFingerprintRunningState == BIOMETRIC_STATE_CANCELLING) {
             setFingerprintRunningState(BIOMETRIC_STATE_CANCELLING_RESTARTING);
+            return;
+        }
+        if (mFingerprintRunningState == BIOMETRIC_STATE_CANCELLING_RESTARTING) {
+            // Waiting for restart via handleFingerprintError().
             return;
         }
         if (DEBUG) Log.v(TAG, "startListeningForFingerprint()");
@@ -1886,6 +1899,21 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     /**
+     * Handle (@line #MSG_TIMEZONE_UPDATE}
+     */
+    private void handleTimeZoneUpdate(String timeZone) {
+        if (DEBUG) Log.d(TAG, "handleTimeZoneUpdate");
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
+            if (cb != null) {
+                cb.onTimeZoneChanged(TimeZone.getTimeZone(timeZone));
+                // Also notify callbacks about time change to remain compatible.
+                cb.onTimeChanged();
+            }
+        }
+    }
+
+    /**
      * Handle {@link #MSG_BATTERY_UPDATE}
      */
     private void handleBatteryUpdate(BatteryStatus status) {
@@ -1930,13 +1958,25 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     + slotId + ", state=" + state +")");
         }
 
+        boolean becameAbsent = false;
         if (!SubscriptionManager.isValidSubscriptionId(subId)) {
             Log.w(TAG, "invalid subId in handleSimStateChange()");
             /* Only handle No SIM(ABSENT) due to handleServiceStateChange() handle other case */
             if (state == State.ABSENT) {
                 updateTelephonyCapable(true);
+                // Even though the subscription is not valid anymore, we need to notify that the
+                // SIM card was removed so we can update the UI.
+                becameAbsent = true;
+                for (SimData data : mSimDatas.values()) {
+                    // Set the SIM state of all SimData associated with that slot to ABSENT se we
+                    // do not move back into PIN/PUK locked and not detect the change below.
+                    if (data.slotId == slotId) {
+                        data.simState = State.ABSENT;
+                    }
+                }
+            } else {
+                return;
             }
-            return;
         }
 
         SimData data = mSimDatas.get(subId);
@@ -1951,7 +1991,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             data.subId = subId;
             data.slotId = slotId;
         }
-        if (changed && state != State.UNKNOWN) {
+        if ((changed || becameAbsent) && state != State.UNKNOWN) {
             for (int i = 0; i < mCallbacks.size(); i++) {
                 KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
                 if (cb != null) {
@@ -2480,6 +2520,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     + getStrongAuthTracker().hasUserAuthenticatedSinceBoot());
             pw.println("    disabled(DPM)=" + isFingerprintDisabled(userId));
             pw.println("    possible=" + isUnlockWithFingerprintPossible(userId));
+            pw.println("    listening: actual=" + mFingerprintRunningState
+                    + " expected=" + (shouldListenForFingerprint() ? 1 : 0));
             pw.println("    strongAuthFlags=" + Integer.toHexString(strongAuthFlags));
             pw.println("    trustManaged=" + getUserTrustIsManaged(userId));
         }

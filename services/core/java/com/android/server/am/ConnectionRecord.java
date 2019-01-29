@@ -43,12 +43,13 @@ final class ConnectionRecord {
     final PendingIntent clientIntent; // How to launch the client.
     final int clientUid;            // The identity of this connection's client
     final String clientProcessName; // The source process of this connection's client
+    final String clientPackageName; // The source package of this connection's client
     public AssociationState.SourceState association; // Association tracking
     String stringName;              // Caching of toString.
     boolean serviceDead;            // Well is it?
 
     // Please keep the following two enum list synced.
-    private static int[] BIND_ORIG_ENUMS = new int[] {
+    private static final int[] BIND_ORIG_ENUMS = new int[] {
             Context.BIND_AUTO_CREATE,
             Context.BIND_DEBUG_UNBIND,
             Context.BIND_NOT_FOREGROUND,
@@ -65,7 +66,7 @@ final class ConnectionRecord {
             Context.BIND_SHOWING_UI,
             Context.BIND_NOT_VISIBLE,
     };
-    private static int[] BIND_PROTO_ENUMS = new int[] {
+    private static final int[] BIND_PROTO_ENUMS = new int[] {
             ConnectionRecordProto.AUTO_CREATE,
             ConnectionRecordProto.DEBUG_UNBIND,
             ConnectionRecordProto.NOT_FG,
@@ -96,7 +97,7 @@ final class ConnectionRecord {
             ActivityServiceConnectionsHolder<ConnectionRecord> _activity,
             IServiceConnection _conn, int _flags,
             int _clientLabel, PendingIntent _clientIntent,
-            int _clientUid, String _clientProcessName) {
+            int _clientUid, String _clientProcessName, String _clientPackageName) {
         binding = _binding;
         activity = _activity;
         conn = _conn;
@@ -105,6 +106,7 @@ final class ConnectionRecord {
         clientIntent = _clientIntent;
         clientUid = _clientUid;
         clientProcessName = _clientProcessName;
+        clientPackageName = _clientPackageName;
     }
 
     public void startAssociationIfNeeded() {
@@ -125,7 +127,7 @@ final class ConnectionRecord {
             } else {
                 association = holder.pkg.getAssociationStateLocked(holder.state,
                         binding.service.instanceName.getClassName()).startSource(clientUid,
-                        clientProcessName);
+                        clientProcessName, clientPackageName);
 
             }
         }

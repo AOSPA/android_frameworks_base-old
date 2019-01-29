@@ -65,7 +65,16 @@ public:
      */
     explicit LogEvent(log_msg& msg);
 
-    explicit LogEvent(const StatsLogEventWrapper& statsLogEventWrapper);
+    /**
+     * Creates LogEvent from StatsLogEventWrapper.
+     */
+    static void createLogEvents(const StatsLogEventWrapper& statsLogEventWrapper,
+                                std::vector<std::shared_ptr<LogEvent>>& logEvents);
+
+    /**
+     * Construct one LogEvent from a StatsLogEventWrapper with the i-th work chain. -1 if no chain.
+     */
+    explicit LogEvent(const StatsLogEventWrapper& statsLogEventWrapper, int workChainIndex);
 
     /**
      * Constructs a LogEvent with synthetic data for testing. Must call init() before reading.
@@ -198,12 +207,15 @@ public:
         return &mValues;
     }
 
+    inline LogEvent makeCopy() {
+        return LogEvent(*this);
+    }
+
 private:
     /**
-     * Don't copy, it's slower. If we really need this we can add it but let's try to
-     * avoid it.
+     * Only use this if copy is absolutely needed.
      */
-    explicit LogEvent(const LogEvent&);
+    LogEvent(const LogEvent&);
 
     /**
      * Parses a log_msg into a LogEvent object.

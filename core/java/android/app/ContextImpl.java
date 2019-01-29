@@ -217,6 +217,8 @@ class ContextImpl extends Context {
     private AutofillClient mAutofillClient = null;
     private boolean mIsAutofillCompatEnabled;
 
+    private boolean mIsContentCaptureSupported = false;
+
     private final Object mSync = new Object();
 
     @GuardedBy("mSync")
@@ -1724,6 +1726,27 @@ class ContextImpl extends Context {
     }
 
     @Override
+    public void updateServiceGroup(@NonNull ServiceConnection conn, int group, int importance) {
+        if (conn == null) {
+            throw new IllegalArgumentException("connection is null");
+        }
+        if (mPackageInfo != null) {
+            IServiceConnection sd = mPackageInfo.lookupServiceDispatcher(conn, getOuterContext());
+            if (sd == null) {
+                throw new IllegalArgumentException("ServiceConnection not currently bound: "
+                        + conn);
+            }
+            try {
+                ActivityManager.getService().updateServiceGroup(sd, group, importance);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        } else {
+            throw new RuntimeException("Not supported in system context");
+        }
+    }
+
+    @Override
     public void unbindService(ServiceConnection conn) {
         if (conn == null) {
             throw new IllegalArgumentException("connection is null");
@@ -2358,6 +2381,18 @@ class ContextImpl extends Context {
         mIsAutofillCompatEnabled = autofillCompatEnabled;
     }
 
+    /** @hide */
+    @Override
+    public boolean isContentCaptureSupported() {
+        return mIsContentCaptureSupported;
+    }
+
+    /** @hide */
+    @Override
+    public void setContentCaptureSupported(boolean supported) {
+        mIsContentCaptureSupported = supported;
+    }
+
     @UnsupportedAppUsage
     static ContextImpl createSystemContext(ActivityThread mainThread) {
         LoadedApk packageInfo = new LoadedApk(mainThread);
@@ -2372,14 +2407,26 @@ class ContextImpl extends Context {
     /**
      * System Context to be used for UI. This Context has resources that can be themed.
      * Make sure that the created system UI context shares the same LoadedApk as the system context.
+     * @param systemContext The system context which created by
+     *                      {@link #createSystemContext(ActivityThread)}.
+     * @param displayId The ID of the display where the UI is shown.
      */
-    static ContextImpl createSystemUiContext(ContextImpl systemContext) {
+    static ContextImpl createSystemUiContext(ContextImpl systemContext, int displayId) {
         final LoadedApk packageInfo = systemContext.mPackageInfo;
         ContextImpl context = new ContextImpl(null, systemContext.mMainThread, packageInfo, null,
                 null, null, 0, null);
-        context.setResources(createResources(null, packageInfo, null, Display.DEFAULT_DISPLAY, null,
+        context.setResources(createResources(null, packageInfo, null, displayId, null,
                 packageInfo.getCompatibilityInfo()));
+        context.updateDisplay(displayId);
         return context;
+    }
+
+    /**
+     * The overloaded method of {@link #createSystemUiContext(ContextImpl, int)}.
+     * Uses {@Code Display.DEFAULT_DISPLAY} as the target display.
+     */
+    static ContextImpl createSystemUiContext(ContextImpl systemContext) {
+        return createSystemUiContext(systemContext, Display.DEFAULT_DISPLAY);
     }
 
     @UnsupportedAppUsage

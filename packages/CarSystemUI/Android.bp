@@ -26,6 +26,7 @@ android_app {
     ],
 
     static_libs: [
+        "CarNotificationLib",
         "SystemUI-core",
         "SystemUIPluginLib",
         "SystemUISharedLib",
@@ -45,6 +46,7 @@ android_app {
         "androidx.slice_slice-builders",
         "androidx.arch.core_core-runtime",
         "androidx.lifecycle_lifecycle-extensions",
+        "car-theme-lib-bp",
         "SystemUI-tags",
         "SystemUI-proto",
     ],
@@ -67,6 +69,7 @@ android_app {
         ],
     },
     resource_dirs: [
+        "res-keyguard",
         "res",
     ],
 
@@ -78,4 +81,5 @@ android_app {
         "com.android.keyguard",
     ],
 
+    annotation_processors: ["dagger2-compiler-2.19"],
 }

@@ -32,7 +32,6 @@
 
 #include <SkCanvas.h>
 #include <SkImagePriv.h>
-#include <SkToSRGBColorFilter.h>
 
 #include <SkHighContrastFilter.h>
 #include <limits>
@@ -76,31 +75,6 @@ sk_sp<Bitmap> Bitmap::allocateAshmemBitmap(SkBitmap* bitmap) {
     return allocateBitmap(bitmap, &Bitmap::allocateAshmemBitmap);
 }
 
-static sk_sp<Bitmap> allocateHeapBitmap(size_t size, const SkImageInfo& info, size_t rowBytes) {
-    void* addr = calloc(size, 1);
-    if (!addr) {
-        return nullptr;
-    }
-    return sk_sp<Bitmap>(new Bitmap(addr, size, info, rowBytes));
-}
-
-sk_sp<Bitmap> Bitmap::allocateHardwareBitmap(SkBitmap& bitmap) {
-    return uirenderer::HardwareBitmapUploader::allocateHardwareBitmap(bitmap);
-}
-
-sk_sp<Bitmap> Bitmap::allocateHeapBitmap(SkBitmap* bitmap) {
-    return allocateBitmap(bitmap, &android::allocateHeapBitmap);
-}
-
-sk_sp<Bitmap> Bitmap::allocateHeapBitmap(const SkImageInfo& info) {
-    size_t size;
-    if (!computeAllocationSize(info.minRowBytes(), info.height(), &size)) {
-        LOG_ALWAYS_FATAL("trying to allocate too large bitmap");
-        return nullptr;
-    }
-    return android::allocateHeapBitmap(size, info, info.minRowBytes());
-}
-
 sk_sp<Bitmap> Bitmap::allocateAshmemBitmap(size_t size, const SkImageInfo& info, size_t rowBytes) {
     // Create new ashmem region with read/write priv
     int fd = ashmem_create_region("bitmap", size);
@@ -122,6 +96,31 @@ sk_sp<Bitmap> Bitmap::allocateAshmemBitmap(size_t size, const SkImageInfo& info,
     return sk_sp<Bitmap>(new Bitmap(addr, fd, size, info, rowBytes));
 }
 
+sk_sp<Bitmap> Bitmap::allocateHardwareBitmap(const SkBitmap& bitmap) {
+    return uirenderer::HardwareBitmapUploader::allocateHardwareBitmap(bitmap);
+}
+
+sk_sp<Bitmap> Bitmap::allocateHeapBitmap(SkBitmap* bitmap) {
+    return allocateBitmap(bitmap, &Bitmap::allocateHeapBitmap);
+}
+
+sk_sp<Bitmap> Bitmap::allocateHeapBitmap(const SkImageInfo& info) {
+    size_t size;
+    if (!computeAllocationSize(info.minRowBytes(), info.height(), &size)) {
+        LOG_ALWAYS_FATAL("trying to allocate too large bitmap");
+        return nullptr;
+    }
+    return allocateHeapBitmap(size, info, info.minRowBytes());
+}
+
+sk_sp<Bitmap> Bitmap::allocateHeapBitmap(size_t size, const SkImageInfo& info, size_t rowBytes) {
+    void* addr = calloc(size, 1);
+    if (!addr) {
+        return nullptr;
+    }
+    return sk_sp<Bitmap>(new Bitmap(addr, size, info, rowBytes));
+}
+
 void FreePixelRef(void* addr, void* context) {
     auto pixelRef = (SkPixelRef*)context;
     pixelRef->unref();
@@ -133,17 +132,38 @@ sk_sp<Bitmap> Bitmap::createFrom(const SkImageInfo& info, SkPixelRef& pixelRef) 
                                     pixelRef.rowBytes()));
 }
 
-sk_sp<Bitmap> Bitmap::createFrom(sp<GraphicBuffer> graphicBuffer) {
-    return createFrom(graphicBuffer, SkColorSpace::MakeSRGB());
+
+sk_sp<Bitmap> Bitmap::createFrom(sp<GraphicBuffer> graphicBuffer, sk_sp<SkColorSpace> colorSpace,
+                                 SkAlphaType alphaType, BitmapPalette palette) {
+    // As we will be effectively texture-sampling the buffer (using either EGL or Vulkan), we can
+    // view the format as RGBA8888.
+    SkImageInfo info = SkImageInfo::Make(graphicBuffer->getWidth(), graphicBuffer->getHeight(),
+                                         kRGBA_8888_SkColorType, alphaType, colorSpace);
+    return sk_sp<Bitmap>(new Bitmap(graphicBuffer.get(), info, palette));
 }
 
-sk_sp<Bitmap> Bitmap::createFrom(sp<GraphicBuffer> graphicBuffer, sk_sp<SkColorSpace> colorSpace) {
-    // As we will be effectively texture-sampling the buffer (using either EGL or Vulkan), we can
-    // view the colorspace as RGBA8888.
-    SkImageInfo info = SkImageInfo::Make(graphicBuffer->getWidth(), graphicBuffer->getHeight(),
-                                         kRGBA_8888_SkColorType, kPremul_SkAlphaType,
-                                         colorSpace);
-    return sk_sp<Bitmap>(new Bitmap(graphicBuffer.get(), info));
+sk_sp<Bitmap> Bitmap::createFrom(const SkImageInfo& info, size_t rowBytes, int fd, void* addr,
+                                 size_t size, bool readOnly) {
+    if (info.colorType() == kUnknown_SkColorType) {
+        LOG_ALWAYS_FATAL("unknown bitmap configuration");
+        return nullptr;
+    }
+
+    if (!addr) {
+        // Map existing ashmem region if not already mapped.
+        int flags = readOnly ? (PROT_READ) : (PROT_READ | PROT_WRITE);
+        size = ashmem_get_size_region(fd);
+        addr = mmap(NULL, size, flags, MAP_SHARED, fd, 0);
+        if (addr == MAP_FAILED) {
+            return nullptr;
+        }
+    }
+
+    sk_sp<Bitmap> bitmap(new Bitmap(addr, fd, size, info, rowBytes));
+    if (readOnly) {
+        bitmap->setImmutable();
+    }
+    return bitmap;
 }
 
 void Bitmap::setColorSpace(sk_sp<SkColorSpace> colorSpace) {
@@ -287,14 +307,8 @@ void Bitmap::setAlphaType(SkAlphaType alphaType) {
 
 void Bitmap::getSkBitmap(SkBitmap* outBitmap) {
     if (isHardware()) {
-        outBitmap->allocPixels(SkImageInfo::Make(info().width(), info().height(),
-                                                 info().colorType(), info().alphaType(), nullptr));
+        outBitmap->allocPixels(mInfo);
         uirenderer::renderthread::RenderProxy::copyHWBitmapInto(this, outBitmap);
-        if (mInfo.colorSpace()) {
-            sk_sp<SkPixelRef> pixelRef = sk_ref_sp(outBitmap->pixelRef());
-            outBitmap->setInfo(mInfo);
-            outBitmap->setPixelRef(std::move(pixelRef), 0, 0);
-        }
         return;
     }
     outBitmap->setInfo(mInfo, rowBytes());
@@ -313,7 +327,7 @@ GraphicBuffer* Bitmap::graphicBuffer() {
     return nullptr;
 }
 
-sk_sp<SkImage> Bitmap::makeImage(sk_sp<SkColorFilter>* outputColorFilter) {
+sk_sp<SkImage> Bitmap::makeImage() {
     sk_sp<SkImage> image = mImage;
     if (!image) {
         SkASSERT(!isHardware());
@@ -324,9 +338,6 @@ sk_sp<SkImage> Bitmap::makeImage(sk_sp<SkColorFilter>* outputColorFilter) {
         // internally and ~Bitmap won't be invoked.
         // TODO: refactor Bitmap to not derive from SkPixelRef, which would allow caching here.
         image = SkMakeImageFromRasterBitmap(skiaBitmap, kNever_SkCopyPixelsMode);
-    }
-    if (image->colorSpace() != nullptr && !image->colorSpace()->isSRGB()) {
-        *outputColorFilter = SkToSRGBColorFilter::Make(image->refColorSpace());
     }
     return image;
 }

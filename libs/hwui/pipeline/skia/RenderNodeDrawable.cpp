@@ -115,18 +115,33 @@ void RenderNodeDrawable::onDraw(SkCanvas* canvas) {
     }
 }
 
+class MarkDraw {
+public:
+    explicit MarkDraw(SkCanvas& canvas, RenderNode& node) : mCanvas(canvas), mNode(node) {
+        if (CC_UNLIKELY(Properties::skpCaptureEnabled)) {
+            mNode.markDrawStart(mCanvas);
+        }
+    }
+    ~MarkDraw() {
+        if (CC_UNLIKELY(Properties::skpCaptureEnabled)) {
+            mNode.markDrawEnd(mCanvas);
+        }
+    }
+
+private:
+    SkCanvas& mCanvas;
+    RenderNode& mNode;
+};
+
 void RenderNodeDrawable::forceDraw(SkCanvas* canvas) {
     RenderNode* renderNode = mRenderNode.get();
-    if (CC_UNLIKELY(Properties::skpCaptureEnabled)) {
-        SkRect dimensions = SkRect::MakeWH(renderNode->getWidth(), renderNode->getHeight());
-        canvas->drawAnnotation(dimensions, renderNode->getName(), nullptr);
-    }
+    MarkDraw _marker{*canvas, *renderNode};
 
     // We only respect the nothingToDraw check when we are composing a layer. This
     // ensures that we paint the layer even if it is not currently visible in the
     // event that the properties change and it becomes visible.
     if ((mProjectedDisplayList == nullptr && !renderNode->isRenderable()) ||
-            (renderNode->nothingToDraw() && mComposeLayer)) {
+        (renderNode->nothingToDraw() && mComposeLayer)) {
         return;
     }
 
@@ -220,8 +235,8 @@ void RenderNodeDrawable::drawContent(SkCanvas* canvas) const {
             // we need to restrict the portion of the surface drawn to the size of the renderNode.
             SkASSERT(renderNode->getLayerSurface()->width() >= bounds.width());
             SkASSERT(renderNode->getLayerSurface()->height() >= bounds.height());
-            canvas->drawImageRect(renderNode->getLayerSurface()->makeImageSnapshot().get(),
-                    bounds, bounds, &paint);
+            canvas->drawImageRect(renderNode->getLayerSurface()->makeImageSnapshot().get(), bounds,
+                                  bounds, &paint);
 
             if (!renderNode->getSkiaLayer()->hasRenderedSinceRepaint) {
                 renderNode->getSkiaLayer()->hasRenderedSinceRepaint = true;
@@ -318,6 +333,6 @@ void RenderNodeDrawable::setViewProperties(const RenderProperties& properties, S
     }
 }
 
-};  // namespace skiapipeline
-};  // namespace uirenderer
-};  // namespace android
+}  // namespace skiapipeline
+}  // namespace uirenderer
+}  // namespace android

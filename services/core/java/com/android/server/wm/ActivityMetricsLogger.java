@@ -3,6 +3,9 @@ package com.android.server.wm;
 import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
 import static android.app.ActivityManager.processStateAmToProto;
+import static android.app.WaitResult.LAUNCH_STATE_COLD;
+import static android.app.WaitResult.LAUNCH_STATE_HOT;
+import static android.app.WaitResult.LAUNCH_STATE_WARM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
@@ -80,6 +83,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_TIMEOUT;
 
+import android.app.WaitResult;
 import android.app.WindowConfiguration.WindowingMode;
 import android.content.Context;
 import android.content.Intent;
@@ -92,7 +96,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
 import android.os.Trace;
-import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
@@ -100,7 +103,9 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.StatsLog;
 import android.util.TimeUtils;
+import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.SomeArgs;
@@ -165,14 +170,12 @@ class ActivityMetricsLogger {
     private ArtManagerInternal mArtManagerInternal;
     private final StringBuilder mStringBuilder = new StringBuilder();
 
-    public static BoostFramework mPerfFirstDraw = null;
-    private static ActivityRecord mLaunchedActivity;
-
     /**
      * Due to the global single concurrent launch sequence, all calls to this observer must be made
      * in-order on the same thread to fulfill the "happens-before" guarantee in LaunchObserver.
      */
-    private final ActivityMetricsLaunchObserver mLaunchObserver = null;
+    private final LaunchObserverRegistryImpl mLaunchObserver;
+    @VisibleForTesting static final int LAUNCH_OBSERVER_ACTIVITY_RECORD_PROTO_CHUNK_SIZE = 512;
 
     private final class H extends Handler {
 
@@ -255,10 +258,23 @@ class ActivityMetricsLogger {
             type = getTransitionType(info);
             processRecord = findProcessForActivity(launchedActivity);
             processName = launchedActivity.processName;
-            userId = launchedActivity.userId;
+            userId = launchedActivity.mUserId;
             launchedActivityShortComponentName = launchedActivity.shortComponentName;
             activityRecordIdHashCode = System.identityHashCode(launchedActivity);
             this.windowsFullyDrawnDelayMs = windowsFullyDrawnDelayMs;
+        }
+
+        @WaitResult.LaunchState int getLaunchState() {
+            switch (type) {
+                case TYPE_TRANSITION_WARM_LAUNCH:
+                    return LAUNCH_STATE_WARM;
+                case TYPE_TRANSITION_HOT_LAUNCH:
+                    return LAUNCH_STATE_HOT;
+                case TYPE_TRANSITION_COLD_LAUNCH:
+                    return LAUNCH_STATE_COLD;
+                default:
+                    return -1;
+            }
         }
     }
 
@@ -267,6 +283,7 @@ class ActivityMetricsLogger {
         mSupervisor = supervisor;
         mContext = context;
         mHandler = new H(looper);
+        mLaunchObserver = new LaunchObserverRegistryImpl(looper);
     }
 
     void logWindowState() {
@@ -281,7 +298,8 @@ class ActivityMetricsLogger {
         mLastLogTimeSecs = now;
 
         mWindowState = WINDOW_STATE_INVALID;
-        ActivityStack stack = mSupervisor.getTopDisplayFocusedStack();
+        ActivityStack stack =
+                mSupervisor.mRootActivityContainer.getTopDisplayFocusedStack();
         if (stack == null) {
             return;
         }
@@ -293,7 +311,7 @@ class ActivityMetricsLogger {
 
         @WindowingMode int windowingMode = stack.getWindowingMode();
         if (windowingMode == WINDOWING_MODE_PINNED) {
-            stack = mSupervisor.findStackBehind(stack);
+            stack = mSupervisor.mRootActivityContainer.findStackBehind(stack);
             windowingMode = stack.getWindowingMode();
         }
         switch (windowingMode) {
@@ -519,7 +537,7 @@ class ActivityMetricsLogger {
         if (info.launchedActivity != activityRecord) {
             return;
         }
-        final TaskRecord t = activityRecord.getTask();
+        final TaskRecord t = activityRecord.getTaskRecord();
         final SomeArgs args = SomeArgs.obtain();
         args.arg1 = t;
         args.arg2 = activityRecord;
@@ -645,8 +663,6 @@ class ActivityMetricsLogger {
                 return;
             }
 
-            mLaunchedActivity = info.launchedActivity;
-
             // Take a snapshot of the transition info before sending it to the handler for logging.
             // This will avoid any races with other operations that modify the ActivityRecord.
             final WindowingModeTransitionInfoSnapshot infoSnapshot =
@@ -749,30 +765,7 @@ class ActivityMetricsLogger {
         sb.append(info.launchedActivityShortComponentName);
         sb.append(": ");
         TimeUtils.formatDuration(info.windowsDrawnDelayMs, sb);
-
-        if (mLaunchedActivity.mUxPerf != null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
-        }
-
         Log.i(TAG, sb.toString());
-
-        int isGame = mLaunchedActivity.isAppInfoGame();
-        if (mLaunchedActivity.mUxPerf !=  null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
-        }
-
-        if (mPerfFirstDraw == null) {
-            mPerfFirstDraw = new BoostFramework();
-        }
-
-        if (mPerfFirstDraw != null) {
-            mPerfFirstDraw.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName, info.windowsDrawnDelayMs, BoostFramework.Draw.EVENT_TYPE_V1);
-        }
-
-        if (mLaunchedActivity.mPerf != null && mLaunchedActivity.perfActivityBoostHandler > 0) {
-            mLaunchedActivity.mPerf.perfLockReleaseHandler(mLaunchedActivity.perfActivityBoostHandler);
-            mLaunchedActivity.perfActivityBoostHandler = -1;
-        }
     }
 
     private int convertAppStartTransitionType(int tronType) {
@@ -879,9 +872,10 @@ class ActivityMetricsLogger {
         builder.addTaggedData(FIELD_TARGET_UID_HAS_ANY_VISIBLE_WINDOW,
                 targetUidHasAnyVisibleWindow ? 1 : 0);
         builder.addTaggedData(FIELD_TARGET_WHITELIST_TAG, targetWhitelistTag);
-        builder.addTaggedData(FIELD_TARGET_SHORT_COMPONENT_NAME, r.shortComponentName);
         builder.addTaggedData(FIELD_COMING_FROM_PENDING_INTENT, comingFromPendingIntent ? 1 : 0);
-        builder.addTaggedData(FIELD_INTENT_ACTION, intent.getAction());
+        if (intent != null) {
+            builder.addTaggedData(FIELD_INTENT_ACTION, intent.getAction());
+        }
         if (callerApp != null) {
             builder.addTaggedData(FIELD_PROCESS_RECORD_PROCESS_NAME, callerApp.mName);
             builder.addTaggedData(FIELD_PROCESS_RECORD_CUR_PROC_STATE,
@@ -910,29 +904,34 @@ class ActivityMetricsLogger {
                         (nowUptime - callerApp.getWhenUnimportant()));
             }
         }
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_LAUNCH_MODE, r.info.launchMode);
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_TARGET_ACTIVITY, r.info.targetActivity);
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_FLAGS, r.info.flags);
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_REAL_ACTIVITY, r.realActivity.toShortString());
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_SHORT_COMPONENT_NAME, r.shortComponentName);
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_PROCESS_NAME, r.processName);
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_FULLSCREEN, r.fullscreen ? 1 : 0);
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_NO_DISPLAY, r.noDisplay ? 1 : 0);
-        if (r.lastVisibleTime != 0) {
-            builder.addTaggedData(FIELD_ACTIVITY_RECORD_MILLIS_SINCE_LAST_VISIBLE,
-                    (nowUptime - r.lastVisibleTime));
-        }
-        if (r.resultTo != null) {
-            builder.addTaggedData(FIELD_ACTIVITY_RECORD_RESULT_TO_PKG_NAME, r.resultTo.packageName);
-            builder.addTaggedData(FIELD_ACTIVITY_RECORD_RESULT_TO_SHORT_COMPONENT_NAME,
-                    r.resultTo.shortComponentName);
-        }
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_VISIBLE, r.visible ? 1 : 0);
-        builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_VISIBLE_IGNORING_KEYGUARD,
-                r.visibleIgnoringKeyguard ? 1 : 0);
-        if (r.lastLaunchTime != 0) {
-            builder.addTaggedData(FIELD_ACTIVITY_RECORD_MILLIS_SINCE_LAST_LAUNCH,
-                    (nowUptime - r.lastLaunchTime));
+        if (r != null) {
+            builder.addTaggedData(FIELD_TARGET_SHORT_COMPONENT_NAME, r.shortComponentName);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_LAUNCH_MODE, r.info.launchMode);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_TARGET_ACTIVITY, r.info.targetActivity);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_FLAGS, r.info.flags);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_REAL_ACTIVITY,
+                    r.mActivityComponent.toShortString());
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_SHORT_COMPONENT_NAME, r.shortComponentName);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_PROCESS_NAME, r.processName);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_FULLSCREEN, r.fullscreen ? 1 : 0);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_NO_DISPLAY, r.noDisplay ? 1 : 0);
+            if (r.lastVisibleTime != 0) {
+                builder.addTaggedData(FIELD_ACTIVITY_RECORD_MILLIS_SINCE_LAST_VISIBLE,
+                        (nowUptime - r.lastVisibleTime));
+            }
+            if (r.resultTo != null) {
+                builder.addTaggedData(FIELD_ACTIVITY_RECORD_RESULT_TO_PKG_NAME,
+                        r.resultTo.packageName);
+                builder.addTaggedData(FIELD_ACTIVITY_RECORD_RESULT_TO_SHORT_COMPONENT_NAME,
+                        r.resultTo.shortComponentName);
+            }
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_VISIBLE, r.visible ? 1 : 0);
+            builder.addTaggedData(FIELD_ACTIVITY_RECORD_IS_VISIBLE_IGNORING_KEYGUARD,
+                    r.visibleIgnoringKeyguard ? 1 : 0);
+            if (r.lastLaunchTime != 0) {
+                builder.addTaggedData(FIELD_ACTIVITY_RECORD_MILLIS_SINCE_LAST_LAUNCH,
+                        (nowUptime - r.lastLaunchTime));
+            }
         }
         mMetricsLogger.write(builder);
     }
@@ -1022,12 +1021,19 @@ class ActivityMetricsLogger {
         }
     }
 
+    public ActivityMetricsLaunchObserverRegistry getLaunchObserverRegistry() {
+        return mLaunchObserver;
+    }
+
     /** Notify the {@link ActivityMetricsLaunchObserver} that a new launch sequence has begun. */
     private void launchObserverNotifyIntentStarted(Intent intent) {
-        if (mLaunchObserver != null) {
-            // Beginning a launch is timing sensitive and so should be observed as soon as possible.
-            mLaunchObserver.onIntentStarted(intent);
-        }
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                "MetricsLogger:launchObserverNotifyIntentStarted");
+
+        // Beginning a launch is timing sensitive and so should be observed as soon as possible.
+        mLaunchObserver.onIntentStarted(intent);
+
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     /**
@@ -1036,9 +1042,12 @@ class ActivityMetricsLogger {
      * intent being delivered to the top running activity.
      */
     private void launchObserverNotifyIntentFailed() {
-        if (mLaunchObserver != null) {
-            mLaunchObserver.onIntentFailed();
-        }
+       Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                "MetricsLogger:launchObserverNotifyIntentFailed");
+
+        mLaunchObserver.onIntentFailed();
+
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     /**
@@ -1046,14 +1055,17 @@ class ActivityMetricsLogger {
      * has started.
      */
     private void launchObserverNotifyActivityLaunched(WindowingModeTransitionInfo info) {
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                "MetricsLogger:launchObserverNotifyActivityLaunched");
+
         @ActivityMetricsLaunchObserver.Temperature int temperature =
                 convertTransitionTypeToLaunchObserverTemperature(getTransitionType(info));
 
-        if (mLaunchObserver != null) {
-            // Beginning a launch is timing sensitive and so should be observed as soon as possible.
-            mLaunchObserver.onActivityLaunched(info.launchedActivity,
-                                               temperature);
-        }
+        // Beginning a launch is timing sensitive and so should be observed as soon as possible.
+        mLaunchObserver.onActivityLaunched(convertActivityRecordToProto(info.launchedActivity),
+                                           temperature);
+
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     /**
@@ -1061,11 +1073,15 @@ class ActivityMetricsLogger {
      * cancelled.
      */
     private void launchObserverNotifyActivityLaunchCancelled(WindowingModeTransitionInfo info) {
-        final ActivityRecord launchedActivity = info != null ? info.launchedActivity : null;
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                "MetricsLogger:launchObserverNotifyActivityLaunchCancelled");
 
-        if (mLaunchObserver != null) {
-            mLaunchObserver.onActivityLaunchCancelled(launchedActivity);
-        }
+        final @ActivityMetricsLaunchObserver.ActivityRecordProto byte[] activityRecordProto =
+                info != null ? convertActivityRecordToProto(info.launchedActivity) : null;
+
+        mLaunchObserver.onActivityLaunchCancelled(activityRecordProto);
+
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     /**
@@ -1073,11 +1089,34 @@ class ActivityMetricsLogger {
      * has fully finished (successfully).
      */
     private void launchObserverNotifyActivityLaunchFinished(WindowingModeTransitionInfo info) {
-        final ActivityRecord launchedActivity = info.launchedActivity;
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                "MetricsLogger:launchObserverNotifyActivityLaunchFinished");
 
-        if (mLaunchObserver != null) {
-            mLaunchObserver.onActivityLaunchFinished(launchedActivity);
-        }
+        mLaunchObserver.onActivityLaunchFinished(
+                convertActivityRecordToProto(info.launchedActivity));
+
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+    }
+
+    @VisibleForTesting
+    static @ActivityMetricsLaunchObserver.ActivityRecordProto byte[]
+            convertActivityRecordToProto(ActivityRecord record) {
+        // May take non-negligible amount of time to convert ActivityRecord into a proto,
+        // so track the time.
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                "MetricsLogger:convertActivityRecordToProto");
+
+        // There does not appear to be a way to 'reset' a ProtoOutputBuffer stream,
+        // so create a new one every time.
+        final ProtoOutputStream protoOutputStream =
+                new ProtoOutputStream(LAUNCH_OBSERVER_ACTIVITY_RECORD_PROTO_CHUNK_SIZE);
+        // Write this data out as the top-most ActivityRecordProto (i.e. it is not a sub-object).
+        record.writeToProto(protoOutputStream);
+        final byte[] bytes = protoOutputStream.getBytes();
+
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+
+        return bytes;
     }
 
     private static @ActivityMetricsLaunchObserver.Temperature int

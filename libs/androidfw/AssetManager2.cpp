@@ -217,10 +217,19 @@ std::set<ResTable_config> AssetManager2::GetResourceConfigurations(bool exclude_
   ATRACE_NAME("AssetManager::GetResourceConfigurations");
   std::set<ResTable_config> configurations;
   for (const PackageGroup& package_group : package_groups_) {
+    bool found_system_package = false;
     for (const ConfiguredPackage& package : package_group.packages_) {
       if (exclude_system && package.loaded_package_->IsSystem()) {
+        found_system_package = true;
         continue;
       }
+
+      if (exclude_system && package.loaded_package_->IsOverlay() && found_system_package) {
+        // Overlays must appear after the target package to take effect. Any overlay found in the
+        // same package as a system package is able to overlay system resources.
+        continue;
+      }
+
       package.loaded_package_->CollectConfigurations(exclude_mipmap, &configurations);
     }
   }
@@ -232,10 +241,19 @@ std::set<std::string> AssetManager2::GetResourceLocales(bool exclude_system,
   ATRACE_NAME("AssetManager::GetResourceLocales");
   std::set<std::string> locales;
   for (const PackageGroup& package_group : package_groups_) {
+    bool found_system_package = false;
     for (const ConfiguredPackage& package : package_group.packages_) {
       if (exclude_system && package.loaded_package_->IsSystem()) {
+        found_system_package = true;
         continue;
       }
+
+      if (exclude_system && package.loaded_package_->IsOverlay() && found_system_package) {
+        // Overlays must appear after the target package to take effect. Any overlay found in the
+        // same package as a system package is able to overlay system resources.
+        continue;
+      }
+
       package.loaded_package_->CollectLocales(merge_equivalent_languages, &locales);
     }
   }
@@ -637,6 +655,7 @@ const ResolvedBag* AssetManager2::GetBag(uint32_t resid, std::vector<uint32_t>& 
       new_entry->key = new_key;
       new_entry->key_pool = nullptr;
       new_entry->type_pool = nullptr;
+      new_entry->style = resid;
       new_entry->value.copyFrom_dtoh(map_entry->value);
       status_t err = entry.dynamic_ref_table->lookupResourceValue(&new_entry->value);
       if (err != NO_ERROR) {
@@ -695,6 +714,7 @@ const ResolvedBag* AssetManager2::GetBag(uint32_t resid, std::vector<uint32_t>& 
       new_entry->key_pool = nullptr;
       new_entry->type_pool = nullptr;
       new_entry->value.copyFrom_dtoh(map_entry->value);
+      new_entry->style = resid;
       status_t err = entry.dynamic_ref_table->lookupResourceValue(&new_entry->value);
       if (err != NO_ERROR) {
         LOG(ERROR) << base::StringPrintf(
@@ -731,6 +751,7 @@ const ResolvedBag* AssetManager2::GetBag(uint32_t resid, std::vector<uint32_t>& 
     new_entry->key_pool = nullptr;
     new_entry->type_pool = nullptr;
     new_entry->value.copyFrom_dtoh(map_entry->value);
+    new_entry->style = resid;
     status_t err = entry.dynamic_ref_table->lookupResourceValue(&new_entry->value);
     if (err != NO_ERROR) {
       LOG(ERROR) << base::StringPrintf("Failed to resolve value t=0x%02x d=0x%08x for key 0x%08x.",
@@ -1183,8 +1204,32 @@ void Theme::SetTo(const Theme& o) {
             continue;
           }
 
-          // The package id of the attribute needs to be rewritten to the package id of the value in
-          // the destination
+          // If the attribute value represents an attribute or reference, the package id of the
+          // value needs to be rewritten to the package id of the value in the destination
+          uint32_t attribue_data = entry.value.data;
+          if ((entry.value.dataType == Res_value::TYPE_ATTRIBUTE
+              || entry.value.dataType == Res_value::TYPE_REFERENCE
+              || entry.value.dataType == Res_value::TYPE_DYNAMIC_ATTRIBUTE
+              || entry.value.dataType == Res_value::TYPE_DYNAMIC_REFERENCE)
+              && attribue_data != 0x0) {
+
+            // Determine the package id of the reference in the destination AssetManager
+            auto value_package_map = src_asset_cookie_id_map.find(entry.cookie);
+            if (value_package_map == src_asset_cookie_id_map.end()) {
+              continue;
+            }
+
+            auto value_dest_package = value_package_map->second.find(
+                get_package_id(entry.value.data));
+            if (value_dest_package == value_package_map->second.end()) {
+              continue;
+            }
+
+            attribue_data = fix_package_id(entry.value.data, value_dest_package->second);
+          }
+
+          // The package id of the attribute needs to be rewritten to the package id of the
+          // attribute in the destination
           int attribute_dest_package_id = p;
           if (attribute_dest_package_id != 0x01) {
             // Find the cookie of the attribute resource id
@@ -1204,29 +1249,6 @@ void Theme::SetTo(const Theme& o) {
               continue;
             }
             attribute_dest_package_id = attribute_dest_package->second;
-          }
-
-          // If the attribute value represents an attribute or reference, the package id of the
-          // value needs to be rewritten to the package id of the value in the destination
-          uint32_t attribue_data = entry.value.data;
-          if (entry.value.dataType == Res_value::TYPE_DYNAMIC_ATTRIBUTE
-              || entry.value.dataType == Res_value::TYPE_DYNAMIC_REFERENCE
-              || entry.value.dataType == Res_value::TYPE_ATTRIBUTE
-              || entry.value.dataType == Res_value::TYPE_REFERENCE) {
-
-            // Determine the package id of the reference in the destination AssetManager
-            auto value_package_map = src_asset_cookie_id_map.find(entry.cookie);
-            if (value_package_map == src_asset_cookie_id_map.end()) {
-              continue;
-            }
-
-            auto value_dest_package = value_package_map->second.find(
-                get_package_id(entry.value.data));
-            if (value_dest_package == value_package_map->second.end()) {
-              continue;
-            }
-
-            attribue_data = fix_package_id(entry.value.data, value_dest_package->second);
           }
 
           // Lazily instantiate the destination package

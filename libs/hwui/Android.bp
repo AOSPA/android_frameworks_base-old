@@ -9,7 +9,7 @@ cc_defaults {
         "hwui_lto",
     ],
 
-    cpp_std: "c++17",
+    cpp_std: "experimental",
 
     cflags: [
         "-DEGL_EGLEXT_PROTOTYPES",
@@ -45,9 +45,6 @@ cc_defaults {
     ],
 
     product_variables: {
-        device_uses_hwc2: {
-            cflags: ["-DUSE_HWC2"],
-        },
         eng: {
             lto: {
                 never: true,
@@ -64,7 +61,9 @@ cc_defaults {
         "libstatslog",
         "libutils",
         "libEGL",
+        "libGLESv1_CM",
         "libGLESv2",
+        "libGLESv3",
         "libvulkan",
         "libui",
         "libgui",
@@ -176,12 +175,14 @@ cc_defaults {
         "pipeline/skia/SkiaRecordingCanvas.cpp",
         "pipeline/skia/SkiaVulkanPipeline.cpp",
         "pipeline/skia/VectorDrawableAtlas.cpp",
+        "pipeline/skia/VkFunctorDrawable.cpp",
         "pipeline/skia/VkInteropFunctorDrawable.cpp",
         "renderstate/RenderState.cpp",
         "renderthread/CacheManager.cpp",
         "renderthread/CanvasContext.cpp",
         "renderthread/DrawFrameTask.cpp",
         "renderthread/EglManager.cpp",
+        "renderthread/ReliableSurface.cpp",
         "renderthread/VulkanManager.cpp",
         "renderthread/RenderProxy.cpp",
         "renderthread/RenderTask.cpp",
@@ -210,6 +211,7 @@ cc_defaults {
         "FrameInfoVisualizer.cpp",
         "GpuMemoryTracker.cpp",
         "HardwareBitmapUploader.cpp",
+        "HWUIProperties.sysprop",
         "Interpolator.cpp",
         "JankTracker.cpp",
         "Layer.cpp",
@@ -227,6 +229,7 @@ cc_defaults {
         "RenderProperties.cpp",
         "SkiaCanvas.cpp",
         "TreeInfo.cpp",
+        "WebViewFunctorManager.cpp",
         "VectorDrawable.cpp",
         "protos/graphicsstats.proto",
     ],
@@ -331,6 +334,7 @@ cc_test {
         "tests/unit/TypefaceTests.cpp",
         "tests/unit/VectorDrawableTests.cpp",
         "tests/unit/VectorDrawableAtlasTests.cpp",
+        "tests/unit/WebViewFunctorManagerTests.cpp",
     ],
 }
 

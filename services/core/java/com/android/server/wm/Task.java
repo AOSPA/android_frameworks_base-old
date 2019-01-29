@@ -24,24 +24,27 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.res.Configuration.EMPTY;
 
 import static com.android.server.EventLogTags.WM_TASK_REMOVED;
+import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
 import static com.android.server.wm.TaskProto.APP_WINDOW_TOKENS;
 import static com.android.server.wm.TaskProto.BOUNDS;
 import static com.android.server.wm.TaskProto.DEFER_REMOVAL;
+import static com.android.server.wm.TaskProto.DISPLAYED_BOUNDS;
 import static com.android.server.wm.TaskProto.FILLS_PARENT;
 import static com.android.server.wm.TaskProto.ID;
 import static com.android.server.wm.TaskProto.SURFACE_HEIGHT;
 import static com.android.server.wm.TaskProto.SURFACE_WIDTH;
-import static com.android.server.wm.TaskProto.TEMP_INSET_BOUNDS;
 import static com.android.server.wm.TaskProto.WINDOW_CONTAINER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.annotation.CallSuper;
+import android.app.ActivityManager;
 import android.app.ActivityManager.TaskDescription;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.os.IBinder;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -54,7 +57,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.PrintWriter;
 import java.util.function.Consumer;
 
-class Task extends WindowContainer<AppWindowToken> {
+class Task extends WindowContainer<AppWindowToken> implements ConfigurationContainerListener{
     static final String TAG = TAG_WITH_CLASS_NAME ? "Task" : TAG_WM;
 
     // TODO: Track parent marks like this in WindowContainer.
@@ -66,8 +69,8 @@ class Task extends WindowContainer<AppWindowToken> {
     final Rect mPreparedFrozenBounds = new Rect();
     final Configuration mPreparedFrozenMergedConfig = new Configuration();
 
-    // Bounds used to calculate the insets.
-    private final Rect mTempInsetBounds = new Rect();
+    // If non-empty, bounds used to display the task during animations/interactions.
+    private final Rect mOverrideDisplayedBounds = new Rect();
 
     /** ID of the display which rotation {@link #mRotation} has. */
     private int mLastRotationDisplayId = Display.INVALID_DISPLAY;
@@ -109,17 +112,25 @@ class Task extends WindowContainer<AppWindowToken> {
     /** @see #setCanAffectSystemUiFlags */
     private boolean mCanAffectSystemUiFlags = true;
 
+    // TODO: remove after unification
+    TaskRecord mTaskRecord;
+
     Task(int taskId, TaskStack stack, int userId, WindowManagerService service, int resizeMode,
             boolean supportsPictureInPicture, TaskDescription taskDescription,
-            TaskWindowContainerController controller) {
+            TaskRecord taskRecord) {
         super(service);
         mTaskId = taskId;
         mStack = stack;
         mUserId = userId;
         mResizeMode = resizeMode;
         mSupportsPictureInPicture = supportsPictureInPicture;
-        setController(controller);
-        setBounds(getOverrideBounds());
+        mTaskRecord = taskRecord;
+        if (mTaskRecord != null) {
+            // This can be null when we call createTaskInStack in WindowTestUtils. Remove this after
+            // unification.
+            mTaskRecord.registerConfigurationChangeListener(this);
+        }
+        setBounds(getRequestedOverrideBounds());
         mTaskDescription = taskDescription;
 
         // Tasks have no set orientation value (including SCREEN_ORIENTATION_UNSPECIFIED).
@@ -191,9 +202,27 @@ class Task extends WindowContainer<AppWindowToken> {
         if (DEBUG_STACK) Slog.i(TAG, "removeTask: removing taskId=" + mTaskId);
         EventLog.writeEvent(WM_TASK_REMOVED, mTaskId, "removeTask");
         mDeferRemoval = false;
+        if (mTaskRecord != null) {
+            mTaskRecord.unregisterConfigurationChangeListener(this);
+        }
 
         super.removeImmediately();
     }
+
+    void reparent(StackWindowController stackController, int position, boolean moveParents) {
+        if (DEBUG_STACK) {
+            Slog.i(TAG_WM, "reparent: moving taskId=" + mTaskId
+                    + " to stack=" + stackController + " at " + position);
+        }
+        final TaskStack stack = stackController.mContainer;
+        if (stack == null) {
+            throw new IllegalArgumentException("reparent: could not find stack="
+                    + stackController);
+        }
+        reparent(stack, position, moveParents);
+        getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
+    }
+
 
     void reparent(TaskStack stack, int position, boolean moveParents) {
         if (stack == mStack) {
@@ -301,30 +330,52 @@ class Task extends WindowContainer<AppWindowToken> {
     }
 
     @Override
+    public boolean onDescendantOrientationChanged(IBinder freezeDisplayToken,
+            ConfigurationContainer requestingContainer) {
+        if (super.onDescendantOrientationChanged(freezeDisplayToken, requestingContainer)) {
+            return true;
+        }
+
+        // No one in higher hierarchy handles this request, let's adjust our bounds to fulfill
+        // it if possible.
+        // TODO: Move to TaskRecord after unification is done.
+        if (mTaskRecord != null) {
+            mTaskRecord.onConfigurationChanged(mTaskRecord.getParent().getConfiguration());
+            return true;
+        }
+        return false;
+    }
+
+    void resize(boolean relayout, boolean forced) {
+        if (setBounds(getRequestedOverrideBounds(), forced) != BOUNDS_CHANGE_NONE && relayout) {
+            getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
+        }
+    }
+
+    @Override
     void onDisplayChanged(DisplayContent dc) {
-        updateSurfaceSize(dc);
         adjustBoundsForDisplayChangeIfNeeded(dc);
         super.onDisplayChanged(dc);
     }
 
     /**
-     * Sets the bounds used to calculate the insets. See
-     * {@link android.app.IActivityTaskManager#resizeDockedStack} why this is needed.
+     * Sets bounds that override where the task is displayed. Used during transient operations
+     * like animation / interaction.
      */
-    void setTempInsetBounds(Rect tempInsetBounds) {
-        if (tempInsetBounds != null) {
-            mTempInsetBounds.set(tempInsetBounds);
+    void setOverrideDisplayedBounds(Rect overrideDisplayedBounds) {
+        if (overrideDisplayedBounds != null) {
+            mOverrideDisplayedBounds.set(overrideDisplayedBounds);
         } else {
-            mTempInsetBounds.setEmpty();
+            mOverrideDisplayedBounds.setEmpty();
         }
     }
 
     /**
-     * Gets the bounds used to calculate the insets. See
+     * Gets the bounds that override where the task is displayed. See
      * {@link android.app.IActivityTaskManager#resizeDockedStack} why this is needed.
      */
-    void getTempInsetBounds(Rect out) {
-        out.set(mTempInsetBounds);
+    Rect getOverrideDisplayedBounds() {
+        return mOverrideDisplayedBounds;
     }
 
     void setResizeable(int resizeMode) {
@@ -333,7 +384,7 @@ class Task extends WindowContainer<AppWindowToken> {
 
     boolean isResizeable() {
         return ActivityInfo.isResizeableMode(mResizeMode) || mSupportsPictureInPicture
-                || mService.mForceResizableTasks;
+                || mWmService.mForceResizableTasks;
     }
 
     /**
@@ -370,7 +421,7 @@ class Task extends WindowContainer<AppWindowToken> {
      *                    the adjusted bounds's top.
      */
     void alignToAdjustedBounds(Rect adjustedBounds, Rect tempInsetBounds, boolean alignBottom) {
-        if (!isResizeable() || EMPTY.equals(getOverrideConfiguration())) {
+        if (!isResizeable() || EMPTY.equals(getRequestedOverrideConfiguration())) {
             return;
         }
 
@@ -381,8 +432,13 @@ class Task extends WindowContainer<AppWindowToken> {
         } else {
             mTmpRect2.offsetTo(adjustedBounds.left, adjustedBounds.top);
         }
-        setTempInsetBounds(tempInsetBounds);
-        setBounds(mTmpRect2, false /* forced */);
+        if (tempInsetBounds == null || tempInsetBounds.isEmpty()) {
+            setOverrideDisplayedBounds(null);
+            setBounds(mTmpRect2);
+        } else {
+            setOverrideDisplayedBounds(mTmpRect2);
+            setBounds(tempInsetBounds);
+        }
     }
 
     /** Return true if the current bound can get outputted to the rest of the system as-is. */
@@ -406,6 +462,15 @@ class Task extends WindowContainer<AppWindowToken> {
         // The bounds has been adjusted to accommodate for a docked stack, but the docked stack is
         // not currently visible. Go ahead a represent it as fullscreen to the rest of the system.
         mStack.getDisplayContent().getBounds(out);
+    }
+
+    @Override
+    public Rect getDisplayedBounds() {
+        if (mOverrideDisplayedBounds.isEmpty()) {
+            return super.getDisplayedBounds();
+        } else {
+            return mOverrideDisplayedBounds;
+        }
     }
 
     /**
@@ -502,6 +567,15 @@ class Task extends WindowContainer<AppWindowToken> {
         return mDragResizeMode;
     }
 
+    /**
+     * Puts this task into docked drag resizing mode. See {@link DragResizeMode}.
+     *
+     * @param resizing Whether to put the task into drag resize mode.
+     */
+    public void setTaskDockedResizing(boolean resizing) {
+        setDragResizing(resizing, DRAG_RESIZE_MODE_DOCKED_DIVIDER);
+    }
+
     private void adjustBoundsForDisplayChangeIfNeeded(final DisplayContent displayContent) {
         if (displayContent == null) {
             return;
@@ -543,9 +617,8 @@ class Task extends WindowContainer<AppWindowToken> {
 
         displayContent.rotateBounds(mRotation, newRotation, mTmpRect2);
         if (setBounds(mTmpRect2) != BOUNDS_CHANGE_NONE) {
-            final TaskWindowContainerController controller = getController();
-            if (controller != null) {
-                controller.requestResize(getBounds(), RESIZE_MODE_SYSTEM_SCREEN_ROTATION);
+            if (mTaskRecord != null) {
+                mTaskRecord.requestResize(getBounds(), RESIZE_MODE_SYSTEM_SCREEN_ROTATION);
             }
         }
     }
@@ -582,7 +655,7 @@ class Task extends WindowContainer<AppWindowToken> {
     }
 
     boolean isTaskAnimating() {
-        final RecentsAnimationController recentsAnim = mService.getRecentsAnimationController();
+        final RecentsAnimationController recentsAnim = mWmService.getRecentsAnimationController();
         if (recentsAnim != null) {
             if (recentsAnim.isAnimatingTask(this)) {
                 return true;
@@ -618,6 +691,20 @@ class Task extends WindowContainer<AppWindowToken> {
         return null;
     }
 
+    void positionChildAtTop(AppWindowToken aToken) {
+        positionChildAt(aToken, POSITION_TOP);
+    }
+
+    void positionChildAt(AppWindowToken aToken, int position) {
+        if (aToken == null) {
+            Slog.w(TAG_WM,
+                    "Attempted to position of non-existing app");
+            return;
+        }
+
+        positionChildAt(position, aToken, false /* includeParents */);
+    }
+
     boolean isFullscreen() {
         if (useCurrentBounds()) {
             return matchParentBounds();
@@ -629,18 +716,22 @@ class Task extends WindowContainer<AppWindowToken> {
     }
 
     void forceWindowsScaleable(boolean force) {
-        mService.openSurfaceTransaction();
+        mWmService.openSurfaceTransaction();
         try {
             for (int i = mChildren.size() - 1; i >= 0; i--) {
                 mChildren.get(i).forceWindowsScaleableInTransaction(force);
             }
         } finally {
-            mService.closeSurfaceTransaction("forceWindowsScaleable");
+            mWmService.closeSurfaceTransaction("forceWindowsScaleable");
         }
     }
 
     void setTaskDescription(TaskDescription taskDescription) {
         mTaskDescription = taskDescription;
+    }
+
+    void onSnapshotChanged(ActivityManager.TaskSnapshot snapshot) {
+        mTaskRecord.onSnapshotChanged(snapshot);
     }
 
     TaskDescription getTaskDescription() {
@@ -650,11 +741,6 @@ class Task extends WindowContainer<AppWindowToken> {
     @Override
     boolean fillsParent() {
         return matchParentBounds() || !getWindowConfiguration().canResizeTask();
-    }
-
-    @Override
-    TaskWindowContainerController getController() {
-        return (TaskWindowContainerController) super.getController();
     }
 
     @Override
@@ -724,7 +810,7 @@ class Task extends WindowContainer<AppWindowToken> {
         }
         proto.write(FILLS_PARENT, matchParentBounds());
         getBounds().writeToProto(proto, BOUNDS);
-        mTempInsetBounds.writeToProto(proto, TEMP_INSET_BOUNDS);
+        mOverrideDisplayedBounds.writeToProto(proto, DISPLAYED_BOUNDS);
         proto.write(DEFER_REMOVAL, mDeferRemoval);
         proto.write(SURFACE_WIDTH, mSurfaceControl.getWidth());
         proto.write(SURFACE_HEIGHT, mSurfaceControl.getHeight());
@@ -740,7 +826,7 @@ class Task extends WindowContainer<AppWindowToken> {
         pw.println(doublePrefix + "mBounds=" + getBounds().toShortString());
         pw.println(doublePrefix + "mdr=" + mDeferRemoval);
         pw.println(doublePrefix + "appTokens=" + mChildren);
-        pw.println(doublePrefix + "mTempInsetBounds=" + mTempInsetBounds.toShortString());
+        pw.println(doublePrefix + "mDisplayedBounds=" + mOverrideDisplayedBounds.toShortString());
 
         final String triplePrefix = doublePrefix + "  ";
         final String quadruplePrefix = triplePrefix + "  ";

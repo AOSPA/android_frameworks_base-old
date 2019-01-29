@@ -36,6 +36,8 @@ import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.hardware.display.DisplayedContentSample;
+import android.hardware.display.DisplayedContentSamplingAttributes;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -104,6 +106,8 @@ public class SurfaceControl implements Parcelable {
             int flags, int mask);
     private static native void nativeSetWindowCrop(long transactionObj, long nativeObject,
             int l, int t, int r, int b);
+    private static native void nativeSetCornerRadius(long transactionObj, long nativeObject,
+            float cornerRadius);
     private static native void nativeSetLayerStack(long transactionObj, long nativeObject,
             int layerStack);
 
@@ -127,6 +131,12 @@ public class SurfaceControl implements Parcelable {
             int width, int height);
     private static native SurfaceControl.PhysicalDisplayInfo[] nativeGetDisplayConfigs(
             IBinder displayToken);
+    private static native DisplayedContentSamplingAttributes
+            nativeGetDisplayedContentSamplingAttributes(IBinder displayToken);
+    private static native boolean nativeSetDisplayedContentSamplingEnabled(IBinder displayToken,
+            boolean enable, int componentMask, int maxFrames);
+    private static native DisplayedContentSample nativeGetDisplayedContentSample(
+            IBinder displayToken, long numFrames, long timestamp);
     private static native int nativeGetActiveConfig(IBinder displayToken);
     private static native boolean nativeSetActiveConfig(IBinder displayToken, int id);
     private static native int[] nativeGetDisplayColorModes(IBinder displayToken);
@@ -155,7 +165,8 @@ public class SurfaceControl implements Parcelable {
 
     private static native void nativeSetInputWindowInfo(long transactionObj, long nativeObject,
             InputWindowHandle handle);
-
+    private static native void nativeTransferTouchFocus(long transactionObj, IBinder fromToken,
+            IBinder toToken);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private final String mName;
@@ -384,9 +395,13 @@ public class SurfaceControl implements Parcelable {
          * Construct a new {@link SurfaceControl} with the set parameters.
          */
         public SurfaceControl build() {
-            if (mWidth <= 0 || mHeight <= 0) {
+            if (mWidth < 0 || mHeight < 0) {
                 throw new IllegalArgumentException(
-                        "width and height must be set");
+                        "width and height must be positive or unset");
+            }
+            if ((mWidth > 0 || mHeight > 0) && (isColorLayerSet() || isContainerLayerSet())) {
+                throw new IllegalArgumentException(
+                        "Only buffer layers can set a valid buffer size.");
             }
             return new SurfaceControl(mSession, mName, mWidth, mHeight, mFormat,
                     mFlags, mParent, mWindowType, mOwnerUid);
@@ -408,8 +423,8 @@ public class SurfaceControl implements Parcelable {
          * @param width The buffer width in pixels.
          * @param height The buffer height in pixels.
          */
-        public Builder setSize(int width, int height) {
-            if (width <= 0 || height <= 0) {
+        public Builder setBufferSize(int width, int height) {
+            if (width < 0 || height < 0) {
                 throw new IllegalArgumentException(
                         "width and height must be positive");
             }
@@ -542,6 +557,10 @@ public class SurfaceControl implements Parcelable {
             return this;
         }
 
+        private boolean isColorLayerSet() {
+            return  (mFlags & FX_SURFACE_DIM) == FX_SURFACE_DIM;
+        }
+
         /**
          * Indicates whether a 'ContainerLayer' is to be constructed.
          *
@@ -557,6 +576,10 @@ public class SurfaceControl implements Parcelable {
                 mFlags &= ~FX_SURFACE_CONTAINER;
             }
             return this;
+        }
+
+        private boolean isContainerLayerSet() {
+            return  (mFlags & FX_SURFACE_CONTAINER) == FX_SURFACE_CONTAINER;
         }
 
         /**
@@ -878,10 +901,10 @@ public class SurfaceControl implements Parcelable {
         }
     }
 
-    public void setSize(int w, int h) {
+    public void setBufferSize(int w, int h) {
         checkNotReleased();
         synchronized(SurfaceControl.class) {
-            sGlobalTransaction.setSize(this, w, h);
+            sGlobalTransaction.setBufferSize(this, w, h);
         }
     }
 
@@ -1000,6 +1023,18 @@ public class SurfaceControl implements Parcelable {
         checkNotReleased();
         synchronized (SurfaceControl.class) {
             sGlobalTransaction.setWindowCrop(this, width, height);
+        }
+    }
+
+    /**
+     * Sets the corner radius of a {@link SurfaceControl}.
+     *
+     * @param cornerRadius Corner radius in pixels.
+     */
+    public void setCornerRadius(float cornerRadius) {
+        checkNotReleased();
+        synchronized (SurfaceControl.class) {
+            sGlobalTransaction.setCornerRadius(this, cornerRadius);
         }
     }
 
@@ -1146,6 +1181,45 @@ public class SurfaceControl implements Parcelable {
         }
         return nativeGetActiveConfig(displayToken);
     }
+
+    /**
+     * @hide
+     */
+    public static DisplayedContentSamplingAttributes getDisplayedContentSamplingAttributes(
+            IBinder displayToken) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        return nativeGetDisplayedContentSamplingAttributes(displayToken);
+    }
+
+    /**
+     * @hide
+     */
+    public static boolean setDisplayedContentSamplingEnabled(
+            IBinder displayToken, boolean enable, int componentMask, int maxFrames) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        final int maxColorComponents = 4;
+        if ((componentMask >> maxColorComponents) != 0) {
+            throw new IllegalArgumentException("invalid componentMask when enabling sampling");
+        }
+        return nativeSetDisplayedContentSamplingEnabled(
+                displayToken, enable, componentMask, maxFrames);
+    }
+
+    /**
+     * @hide
+     */
+    public static DisplayedContentSample getDisplayedContentSample(
+            IBinder displayToken, long maxFrames, long timestamp) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        return nativeGetDisplayedContentSample(displayToken, maxFrames, timestamp);
+    }
+
 
     public static boolean setActiveConfig(IBinder displayToken, int id) {
         if (displayToken == null) {
@@ -1436,7 +1510,7 @@ public class SurfaceControl implements Parcelable {
         }
 
         @UnsupportedAppUsage
-        public Transaction setSize(SurfaceControl sc, int w, int h) {
+        public Transaction setBufferSize(SurfaceControl sc, int w, int h) {
             sc.checkNotReleased();
             mResizedSurfaces.put(sc, new Point(w, h));
             nativeSetSize(mNativeObject, sc.mNativeObject, w, h);
@@ -1474,6 +1548,21 @@ public class SurfaceControl implements Parcelable {
         public Transaction setInputWindowInfo(SurfaceControl sc, InputWindowHandle handle) {
             sc.checkNotReleased();
             nativeSetInputWindowInfo(mNativeObject, sc.mNativeObject, handle);
+            return this;
+        }
+
+        /**
+         * Transfers touch focus from one window to another. It is possible for multiple windows to
+         * have touch focus if they support split touch dispatch
+         * {@link android.view.WindowManager.LayoutParams#FLAG_SPLIT_TOUCH} but this
+         * method only transfers touch focus of the specified window without affecting
+         * other windows that may also have touch focus at the same time.
+         * @param fromToken The token of a window that currently has touch focus.
+         * @param toToken The token of the window that should receive touch focus in
+         * place of the first.
+         */
+        public Transaction transferTouchFocus(IBinder fromToken, IBinder toToken) {
+            nativeTransferTouchFocus(mNativeObject, fromToken, toToken);
             return this;
         }
 
@@ -1523,6 +1612,20 @@ public class SurfaceControl implements Parcelable {
         public Transaction setWindowCrop(SurfaceControl sc, int width, int height) {
             sc.checkNotReleased();
             nativeSetWindowCrop(mNativeObject, sc.mNativeObject, 0, 0, width, height);
+            return this;
+        }
+
+        /**
+         * Sets the corner radius of a {@link SurfaceControl}.
+         * @param sc SurfaceControl
+         * @param cornerRadius Corner radius in pixels.
+         * @return Itself.
+         */
+        @UnsupportedAppUsage
+        public Transaction setCornerRadius(SurfaceControl sc, float cornerRadius) {
+            sc.checkNotReleased();
+            nativeSetCornerRadius(mNativeObject, sc.mNativeObject, cornerRadius);
+
             return this;
         }
 

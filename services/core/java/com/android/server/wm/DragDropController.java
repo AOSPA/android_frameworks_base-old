@@ -31,13 +31,12 @@ import android.util.Slog;
 import android.view.Display;
 import android.view.IWindow;
 import android.view.SurfaceControl;
-import android.view.SurfaceControl.Transaction;
 import android.view.SurfaceSession;
 import android.view.View;
 
 import com.android.internal.util.Preconditions;
-import android.view.InputWindowHandle;
 import com.android.server.wm.WindowManagerInternal.IDragDropCallback;
+
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -71,11 +70,18 @@ class DragDropController {
             new IDragDropCallback() {});
 
     boolean dragDropActiveLocked() {
-        return mDragState != null;
+        return mDragState != null && !mDragState.isClosing();
     }
 
-    InputWindowHandle getInputWindowHandleLocked() {
-        return mDragState.getInputWindowHandle();
+    void showInputSurface(SurfaceControl.Transaction t, int displayId) {
+        mDragState.showInputSurface(t, displayId);
+    }
+
+    void hideInputSurface(SurfaceControl.Transaction t, int displayId) {
+        if (mDragState != null) {
+            // TODO: Are we guaranteed to get here?
+            mDragState.hideInputSurface(t, displayId);
+        }
     }
 
     void registerCallback(IDragDropCallback callback) {

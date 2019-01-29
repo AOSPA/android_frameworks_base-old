@@ -21,14 +21,15 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.view.Display.INVALID_DISPLAY;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import android.content.ComponentName;
 import android.content.pm.PackageList;
@@ -39,7 +40,6 @@ import android.platform.test.annotations.Presubmit;
 import android.view.DisplayInfo;
 
 import androidx.test.InstrumentationRegistry;
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.MediumTest;
 
 import com.android.server.LocalServices;
@@ -64,7 +64,6 @@ import java.util.function.Predicate;
  */
 @MediumTest
 @Presubmit
-@FlakyTest(detail = "Confirm stable in post-submit before removing")
 public class LaunchParamsPersisterTests extends ActivityTestsBase {
     private static final int TEST_USER_ID = 3;
     private static final int ALTERNATIVE_USER_ID = 0;
@@ -109,8 +108,9 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
         final DisplayInfo info = new DisplayInfo();
         info.uniqueId = mDisplayUniqueId;
         mTestDisplay = createNewActivityDisplay(info);
-        mSupervisor.addChild(mTestDisplay, ActivityDisplay.POSITION_TOP);
-        when(mSupervisor.getActivityDisplay(eq(mDisplayUniqueId))).thenReturn(mTestDisplay);
+        mRootActivityContainer.addChild(mTestDisplay, ActivityDisplay.POSITION_TOP);
+        when(mRootActivityContainer.getActivityDisplay(eq(mDisplayUniqueId)))
+                .thenReturn(mTestDisplay);
 
         ActivityStack stack = mTestDisplay.createStack(TEST_WINDOWING_MODE,
                 ACTIVITY_TYPE_STANDARD, /* onTop */ true);
@@ -183,7 +183,7 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
     public void testReturnsEmptyDisplayIfDisplayIsNotFound() {
         mTarget.saveTask(mTestTask);
 
-        when(mSupervisor.getActivityDisplay(eq(mDisplayUniqueId))).thenReturn(null);
+        when(mRootActivityContainer.getActivityDisplay(eq(mDisplayUniqueId))).thenReturn(null);
 
         mTarget.getLaunchParams(mTestTask, null, mResult);
 
@@ -268,6 +268,51 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
         mTarget.getLaunchParams(anotherTaskOfTheSameUser, null, mResult);
         assertTrue("Should have cleaned record for " + ALTERNATIVE_COMPONENT, mResult.isEmpty());
     }
+
+    @Test
+    public void testClearsRecordInMemory() {
+        mTarget.saveTask(mTestTask);
+
+        mTarget.removeRecordForPackage(TEST_COMPONENT.getPackageName());
+
+        mTarget.getLaunchParams(mTestTask, null, mResult);
+
+        assertTrue("Result should be empty.", mResult.isEmpty());
+    }
+
+    @Test
+    public void testClearsWriteQueueItem() {
+        mTarget.saveTask(mTestTask);
+
+        mTarget.removeRecordForPackage(TEST_COMPONENT.getPackageName());
+
+        final LaunchParamsPersister target = new LaunchParamsPersister(mPersisterQueue, mSupervisor,
+                mUserFolderGetter);
+        target.onSystemReady();
+        target.onUnlockUser(TEST_USER_ID);
+
+        target.getLaunchParams(mTestTask, null, mResult);
+
+        assertTrue("Result should be empty.", mResult.isEmpty());
+    }
+
+    @Test
+    public void testClearsFile() {
+        mTarget.saveTask(mTestTask);
+        mPersisterQueue.flush();
+
+        mTarget.removeRecordForPackage(TEST_COMPONENT.getPackageName());
+
+        final LaunchParamsPersister target = new LaunchParamsPersister(mPersisterQueue, mSupervisor,
+                mUserFolderGetter);
+        target.onSystemReady();
+        target.onUnlockUser(TEST_USER_ID);
+
+        target.getLaunchParams(mTestTask, null, mResult);
+
+        assertTrue("Result should be empty.", mResult.isEmpty());
+    }
+
 
     @Test
     public void testClearsRecordInMemoryOnPackageUninstalled() {

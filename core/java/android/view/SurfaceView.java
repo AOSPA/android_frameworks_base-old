@@ -110,7 +110,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
     final ReentrantLock mSurfaceLock = new ReentrantLock();
     @UnsupportedAppUsage
     final Surface mSurface = new Surface();       // Current surface in use
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     boolean mDrawingStopped = true;
     // We use this to track if the application has produced a frame
     // in to the Surface. Up until that point, we should be careful not to punch
@@ -129,7 +129,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
 
     int mSubLayer = APPLICATION_MEDIA_SUBLAYER;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     boolean mIsCreating = false;
     private volatile boolean mRtHandlingPositionUpdates = false;
 
@@ -159,9 +159,9 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
     boolean mViewVisibility = false;
     boolean mWindowStopped = false;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     int mRequestedWidth = -1;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     int mRequestedHeight = -1;
     /* Set SurfaceView's format to 565 by default to maintain backward
      * compatibility with applications assuming this format.
@@ -172,7 +172,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
     @UnsupportedAppUsage
     boolean mHaveFrame = false;
     boolean mSurfaceCreated = false;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     long mLastLockTime = 0;
 
     boolean mVisible = false;
@@ -182,7 +182,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
     int mSurfaceHeight = -1;
     @UnsupportedAppUsage
     int mFormat = -1;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     final Rect mSurfaceFrame = new Rect();
     int mLastSurfaceWidth = -1, mLastSurfaceHeight = -1;
     private Translator mTranslator;
@@ -557,7 +557,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                             name,
                             (mSurfaceFlags & SurfaceControl.OPAQUE) != 0,
                             new SurfaceControl.Builder(mSurfaceSession)
-                                    .setSize(mSurfaceWidth, mSurfaceHeight)
+                                    .setBufferSize(mSurfaceWidth, mSurfaceHeight)
                                     .setFormat(mFormat)
                                     .setFlags(mSurfaceFlags));
                 } else if (mSurfaceControl == null) {
@@ -595,10 +595,14 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                             mSurfaceControl.setMatrix(mScreenRect.width() / (float) mSurfaceWidth,
                                     0.0f, 0.0f,
                                     mScreenRect.height() / (float) mSurfaceHeight);
+                            // Set a window crop when creating the surface or changing its size to
+                            // crop the buffer to the surface size since the buffer producer may
+                            // use SCALING_MODE_SCALE and submit a larger size than the surface
+                            // size.
+                            mSurfaceControl.setWindowCrop(mSurfaceWidth, mSurfaceHeight);
                         }
                         if (sizeChanged && !creating) {
-                            mSurfaceControl.setSize(mSurfaceWidth, mSurfaceHeight);
-                            mSurfaceControl.setWindowCrop(mSurfaceWidth, mSurfaceHeight);
+                            mSurfaceControl.setBufferSize(mSurfaceWidth, mSurfaceHeight);
                         }
                     } finally {
                         SurfaceControl.closeTransaction();
@@ -1122,6 +1126,13 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
         }
     };
 
+    /**
+     * @hide
+     */
+    public SurfaceControl getSurfaceControl() {
+        return mSurfaceControl;
+    }
+
     class SurfaceControlWithBackground extends SurfaceControl {
         SurfaceControl mBackgroundControl;
         private boolean mOpaque = true;
@@ -1133,6 +1144,8 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
 
             mBackgroundControl = b.setName("Background for -" + name)
                     .setFormat(OPAQUE)
+                    // Unset the buffer size of the background color layer.
+                    .setBufferSize(0, 0)
                     .setColorLayer(true)
                     .build();
             mOpaque = opaque;
@@ -1158,9 +1171,9 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
         }
 
         @Override
-        public void setSize(int w, int h) {
-            super.setSize(w, h);
-            mBackgroundControl.setSize(w, h);
+        public void setBufferSize(int w, int h) {
+            super.setBufferSize(w, h);
+            // The background surface is a color layer so we do not set a size.
         }
 
         @Override

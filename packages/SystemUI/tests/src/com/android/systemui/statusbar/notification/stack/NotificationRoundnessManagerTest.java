@@ -25,12 +25,13 @@ import static org.mockito.Mockito.when;
 
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
-import android.view.View;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.NotificationTestHelper;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.ExpandableView;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -41,17 +42,18 @@ import java.util.HashSet;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@RunWithLooper(setAsMainLooper = true)
+@RunWithLooper
 public class NotificationRoundnessManagerTest extends SysuiTestCase {
 
     private NotificationRoundnessManager mRoundnessManager = new NotificationRoundnessManager();
-    private HashSet<View> mAnimatedChildren = new HashSet<>();
+    private HashSet<ExpandableView> mAnimatedChildren = new HashSet<>();
     private Runnable mRoundnessCallback = mock(Runnable.class);
     private ExpandableNotificationRow mFirst;
     private ExpandableNotificationRow mSecond;
 
     @Before
     public void setUp() throws Exception {
+        com.android.systemui.util.Assert.sMainLooper = TestableLooper.get(this).getLooper();
         NotificationTestHelper testHelper = new NotificationTestHelper(getContext());
         mFirst = testHelper.createRow();
         mFirst.setHeadsUpAnimatingAwayListener(animatingAway

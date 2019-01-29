@@ -31,21 +31,21 @@ import android.os.LocaleList;
 import android.os.RemoteException;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.Pair;
 import android.util.Printer;
 import android.util.Slog;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodSubtype;
 import android.view.textservice.SpellCheckerInfo;
-import android.view.textservice.TextServicesManager;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.inputmethod.StartInputFlags;
+import com.android.server.textservices.TextServicesManagerInternal;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -63,7 +63,6 @@ final class InputMethodUtils {
     public static final int NOT_A_SUBTYPE_ID = -1;
     public static final String SUBTYPE_MODE_ANY = null;
     public static final String SUBTYPE_MODE_KEYBOARD = "keyboard";
-    public static final String SUBTYPE_MODE_VOICE = "voice";
     private static final String TAG = "InputMethodUtils";
     private static final Locale ENGLISH_LOCALE = new Locale("en");
     private static final String NOT_A_SUBTYPE_ID_STR = String.valueOf(NOT_A_SUBTYPE_ID);
@@ -375,19 +374,6 @@ final class InputMethodUtils {
         return subtypes;
     }
 
-    public static ArrayList<InputMethodSubtype> getOverridingImplicitlyEnabledSubtypes(
-            InputMethodInfo imi, String mode) {
-        ArrayList<InputMethodSubtype> subtypes = new ArrayList<>();
-        final int subtypeCount = imi.getSubtypeCount();
-        for (int i = 0; i < subtypeCount; ++i) {
-            final InputMethodSubtype subtype = imi.getSubtypeAt(i);
-            if (subtype.overridesImplicitlyEnabledSubtype() && subtype.getMode().equals(mode)) {
-                subtypes.add(subtype);
-            }
-        }
-        return subtypes;
-    }
-
     public static InputMethodInfo getMostApplicableDefaultIME(List<InputMethodInfo> enabledImes) {
         if (enabledImes == null || enabledImes.isEmpty()) {
             return null;
@@ -473,7 +459,7 @@ final class InputMethodUtils {
         final int numSubtypes = subtypes.size();
 
         // Handle overridesImplicitlyEnabledSubtype mechanism.
-        final HashMap<String, InputMethodSubtype> applicableModeAndSubtypesMap = new HashMap<>();
+        final ArrayMap<String, InputMethodSubtype> applicableModeAndSubtypesMap = new ArrayMap<>();
         for (int i = 0; i < numSubtypes; ++i) {
             // scan overriding implicitly enabled subtypes.
             final InputMethodSubtype subtype = subtypes.get(i);
@@ -488,8 +474,8 @@ final class InputMethodUtils {
             return new ArrayList<>(applicableModeAndSubtypesMap.values());
         }
 
-        final HashMap<String, ArrayList<InputMethodSubtype>> nonKeyboardSubtypesMap =
-                new HashMap<>();
+        final ArrayMap<String, ArrayList<InputMethodSubtype>> nonKeyboardSubtypesMap =
+                new ArrayMap<>();
         final ArrayList<InputMethodSubtype> keyboardSubtypes = new ArrayList<>();
 
         for (int i = 0; i < numSubtypes; ++i) {
@@ -641,7 +627,7 @@ final class InputMethodUtils {
         }
         // Only the current spell checker should be treated as an enabled one.
         final SpellCheckerInfo currentSpellChecker =
-                TextServicesManager.getInstance().getCurrentSpellChecker();
+                TextServicesManagerInternal.get().getCurrentSpellCheckerForUser(userId);
         for (final String packageName : systemImesDisabledUntilUsed) {
             if (DEBUG) {
                 Slog.d(TAG, "check " + packageName);
@@ -761,12 +747,12 @@ final class InputMethodUtils {
 
         private final Resources mRes;
         private final ContentResolver mResolver;
-        private final HashMap<String, InputMethodInfo> mMethodMap;
+        private final ArrayMap<String, InputMethodInfo> mMethodMap;
 
         /**
          * On-memory data store to emulate when {@link #mCopyOnWrite} is {@code true}.
          */
-        private final HashMap<String, String> mCopyOnWriteDataStore = new HashMap<>();
+        private final ArrayMap<String, String> mCopyOnWriteDataStore = new ArrayMap<>();
 
         private boolean mCopyOnWrite = false;
         @NonNull
@@ -812,7 +798,7 @@ final class InputMethodUtils {
 
         public InputMethodSettings(
                 Resources res, ContentResolver resolver,
-                HashMap<String, InputMethodInfo> methodMap, ArrayList<InputMethodInfo> methodList,
+                ArrayMap<String, InputMethodInfo> methodMap, ArrayList<InputMethodInfo> methodList,
                 @UserIdInt int userId, boolean copyOnWrite) {
             mRes = res;
             mResolver = resolver;
@@ -1275,17 +1261,6 @@ final class InputMethodUtils {
             if (canAddToLastInputMethod(currentSubtype)) {
                 addSubtypeToHistory(curMethodId, subtypeId);
             }
-        }
-
-        public HashMap<InputMethodInfo, List<InputMethodSubtype>>
-                getExplicitlyOrImplicitlyEnabledInputMethodsAndSubtypeListLocked(Context context) {
-            HashMap<InputMethodInfo, List<InputMethodSubtype>> enabledInputMethodAndSubtypes =
-                    new HashMap<>();
-            for (InputMethodInfo imi: getEnabledInputMethodListLocked()) {
-                enabledInputMethodAndSubtypes.put(
-                        imi, getEnabledInputMethodSubtypeListLocked(context, imi, true));
-            }
-            return enabledInputMethodAndSubtypes;
         }
 
         public void dumpLocked(final Printer pw, final String prefix) {

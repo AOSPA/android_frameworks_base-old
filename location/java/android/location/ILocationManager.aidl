@@ -21,6 +21,7 @@ import android.location.Address;
 import android.location.Criteria;
 import android.location.GeocoderParams;
 import android.location.Geofence;
+import android.location.GnssMeasurementCorrections;
 import android.location.IBatchedLocationCallback;
 import android.location.IGnssMeasurementsListener;
 import android.location.IGnssStatusListener;
@@ -63,6 +64,9 @@ interface ILocationManager
     boolean sendNiResponse(int notifId, int userResponse);
 
     boolean addGnssMeasurementsListener(in IGnssMeasurementsListener listener, in String packageName);
+    void injectGnssMeasurementCorrections(in GnssMeasurementCorrections corrections,
+            in String packageName);
+    int getGnssCapabilities(in String packageName);
     void removeGnssMeasurementsListener(in IGnssMeasurementsListener listener);
 
     boolean addGnssNavigationMessageListener(
@@ -88,6 +92,10 @@ interface ILocationManager
     boolean providerMeetsCriteria(String provider, in Criteria criteria);
     ProviderProperties getProviderProperties(String provider);
     String getNetworkProviderPackage();
+    void setLocationControllerExtraPackage(String packageName);
+    String getLocationControllerExtraPackage();
+    void setLocationControllerExtraPackageEnabled(boolean enabled);
+    boolean isLocationControllerExtraPackageEnabled();
 
     boolean isProviderEnabledForUser(String provider, int userId);
     boolean setProviderEnabledForUser(String provider, boolean enabled, int userId);
@@ -96,23 +104,18 @@ interface ILocationManager
     void addTestProvider(String name, in ProviderProperties properties, String opPackageName);
     void removeTestProvider(String provider, String opPackageName);
     void setTestProviderLocation(String provider, in Location loc, String opPackageName);
-    void clearTestProviderLocation(String provider, String opPackageName);
     void setTestProviderEnabled(String provider, boolean enabled, String opPackageName);
-    void clearTestProviderEnabled(String provider, String opPackageName);
+
+    // --- deprecated ---
     void setTestProviderStatus(String provider, int status, in Bundle extras, long updateTime,
             String opPackageName);
-    void clearTestProviderStatus(String provider, String opPackageName);
 
     boolean sendExtraCommand(String provider, String command, inout Bundle extras);
 
     // --- internal ---
 
-    // Used by location providers to tell the location manager when it has a new location.
-    // Passive is true if the location is coming from the passive provider, in which case
-    // it need not be shared with other providers.
+    // --- deprecated ---
     void reportLocation(in Location location, boolean passive);
-
-    // Used when a (initially Gnss) Location batch arrives
     void reportLocationBatch(in List<Location> locations);
 
     // for reporting callback completion
@@ -120,18 +123,4 @@ interface ILocationManager
 
     // used by gts tests to verify throttling whitelist
     String[] getBackgroundThrottlingWhitelist();
-
-    /**
-     * Allow the {@link android.location.LocationManager#getNetworkProviderPackage location
-     * provider} to start the UI to modify the location permission for a package.
-     *
-     * <p>Can only be called by the location provider.
-     *
-     * @param packageName The package the permission belongs to
-     * @param permission The (individual) permission to switch
-     *
-     * @return A pending intent that starts the permission management UI or {@code null} if the
-     *         intent cannot be created
-     */
-    PendingIntent createManageLocationPermissionIntent(in String packageName, in String permission);
 }

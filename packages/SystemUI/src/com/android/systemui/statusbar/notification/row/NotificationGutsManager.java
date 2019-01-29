@@ -18,17 +18,13 @@ package com.android.systemui.statusbar.notification.row;
 import static android.app.AppOpsManager.OP_CAMERA;
 import static android.app.AppOpsManager.OP_RECORD_AUDIO;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
-import static android.service.notification.NotificationListenerService.Ranking
-        .USER_SENTIMENT_NEGATIVE;
-
-import static com.android.systemui.statusbar.notification.row.NotificationInfo.ACTION_NONE;
+import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEGATIVE;
 
 import android.app.INotificationManager;
 import android.app.NotificationChannel;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.Resources;
 import android.net.Uri;
 import android.os.ServiceManager;
 import android.os.UserHandle;
@@ -43,16 +39,15 @@ import android.view.accessibility.AccessibilityManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
-import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
-import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.row.NotificationInfo.CheckSaveListener;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
@@ -62,10 +57,14 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Handles various NotificationGuts related tasks, such as binding guts to a row, opening and
  * closing guts, and keeping track of the currently exposed notification guts.
  */
+@Singleton
 public class NotificationGutsManager implements Dumpable, NotificationLifetimeExtender {
     private static final String TAG = "NotificationGutsManager";
 
@@ -83,28 +82,24 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
             Dependency.get(StatusBarStateController.class);
     private final DeviceProvisionedController mDeviceProvisionedController =
             Dependency.get(DeviceProvisionedController.class);
-    private final ActivityStarter mActivityStarter = Dependency.get(ActivityStarter.class);
 
     // which notification is currently being longpress-examined by the user
-    private final IStatusBarService mBarService;
     private NotificationGuts mNotificationGutsExposed;
     private NotificationMenuRowPlugin.MenuItem mGutsMenuItem;
     private NotificationSafeToRemoveCallback mNotificationLifetimeFinishedCallback;
     private NotificationPresenter mPresenter;
+    private NotificationActivityStarter mNotificationActivityStarter;
     private NotificationListContainer mListContainer;
     private CheckSaveListener mCheckSaveListener;
     private OnSettingsClickListener mOnSettingsClickListener;
     @VisibleForTesting
     protected String mKeyToRemoveOnGutsClosed;
 
+    @Inject
     public NotificationGutsManager(Context context) {
         mContext = context;
-        Resources res = context.getResources();
-
         mAccessibilityManager = (AccessibilityManager)
                 mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
-        mBarService = IStatusBarService.Stub.asInterface(
-                ServiceManager.getService(Context.STATUS_BAR_SERVICE));
     }
 
     public void setUpWithPresenter(NotificationPresenter presenter,
@@ -116,9 +111,14 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         mOnSettingsClickListener = onSettingsClick;
     }
 
-    public void onDensityOrFontScaleChanged(ExpandableNotificationRow row) {
-        setExposedGuts(row.getGuts());
-        bindGuts(row);
+    public void setNotificationActivityStarter(
+            NotificationActivityStarter notificationActivityStarter) {
+        mNotificationActivityStarter = notificationActivityStarter;
+    }
+
+    public void onDensityOrFontScaleChanged(NotificationData.Entry entry) {
+        setExposedGuts(entry.getGuts());
+        bindGuts(entry.getRow());
     }
 
     /**
@@ -134,7 +134,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         if (channel != null) {
             intent.putExtra(EXTRA_FRAGMENT_ARG_KEY, channel.getId());
         }
-        mPresenter.startNotificationGutsIntent(intent, appUid, row);
+        mNotificationActivityStarter.startNotificationGutsIntent(intent, appUid, row);
     }
 
     protected void startAppOpsSettingsActivity(String pkg, int uid, ArraySet<Integer> ops,
@@ -145,12 +145,12 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
             } else {
                 Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
                 intent.setData(Uri.fromParts("package", pkg, null));
-                mPresenter.startNotificationGutsIntent(intent, uid, row);
+                mNotificationActivityStarter.startNotificationGutsIntent(intent, uid, row);
             }
         } else if (ops.contains(OP_CAMERA) || ops.contains(OP_RECORD_AUDIO)) {
             Intent intent = new Intent(Intent.ACTION_MANAGE_APP_PERMISSIONS);
             intent.putExtra(Intent.EXTRA_PACKAGE_NAME, pkg);
-            mPresenter.startNotificationGutsIntent(intent, uid, row);
+            mNotificationActivityStarter.startNotificationGutsIntent(intent, uid, row);
         }
     }
 
@@ -191,13 +191,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
             } else if (gutsView instanceof AppOpsInfo) {
                 initializeAppOpsInfo(row, (AppOpsInfo) gutsView);
             } else if (gutsView instanceof NotificationInfo) {
-                int action;
-                if (item instanceof NotificationMenuRow.NotificationInfoMenuItem) {
-                    action = ((NotificationMenuRow.NotificationInfoMenuItem) item).mAction;
-                } else {
-                    action = ACTION_NONE;
-                }
-                initializeNotificationInfo(row, (NotificationInfo) gutsView, action);
+                initializeNotificationInfo(row, (NotificationInfo) gutsView);
             }
             return true;
         } catch (Exception e) {
@@ -256,13 +250,11 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
      * Sets up the {@link NotificationInfo} inside the notification row's guts.
      * @param row view to set up the guts for
      * @param notificationInfoView view to set up/bind within {@code row}
-     * @param action The action to take immediately upon binding, if any.
      */
     @VisibleForTesting
     void initializeNotificationInfo(
             final ExpandableNotificationRow row,
-            NotificationInfo notificationInfoView,
-            @NotificationInfo.NotificationInfoAction int action) throws Exception {
+            NotificationInfo notificationInfoView) throws Exception {
         NotificationGuts guts = row.getGuts();
         StatusBarNotification sbn = row.getStatusBarNotification();
         String packageName = sbn.getPackageName();
@@ -277,7 +269,8 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 (View v, Intent intent) -> {
                     mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_APP_NOTE_SETTINGS);
                     guts.resetFalsingCheck();
-                    mPresenter.startNotificationGutsIntent(intent, sbn.getUid(), row);
+                    mNotificationActivityStarter.startNotificationGutsIntent(intent, sbn.getUid(),
+                            row);
                 };
         boolean isForBlockingHelper = row.isBlockingHelperShowing();
 
@@ -305,9 +298,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 row.getIsNonblockable(),
                 isForBlockingHelper,
                 row.getEntry().userSentiment == USER_SENTIMENT_NEGATIVE,
-                row.getEntry().noisy,
-                row.getEntry().importance,
-                action);
+                row.getEntry().importance);
 
     }
 
@@ -441,8 +432,8 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
     public boolean shouldExtendLifetime(NotificationData.Entry entry) {
         return entry != null
                 &&(mNotificationGutsExposed != null
-                    && entry.row.getGuts() != null
-                    && mNotificationGutsExposed == entry.row.getGuts()
+                    && entry.getGuts() != null
+                    && mNotificationGutsExposed == entry.getGuts()
                     && !mNotificationGutsExposed.isLeavebehind());
     }
 

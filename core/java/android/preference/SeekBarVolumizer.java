@@ -45,7 +45,14 @@ import com.android.internal.annotations.GuardedBy;
 /**
  * Turns a {@link SeekBar} into a volume control.
  * @hide
+ *
+ * @deprecated Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+ *      <a href="{@docRoot}reference/androidx/preference/package-summary.html">
+ *      Preference Library</a> for consistent behavior across all devices. For more information on
+ *      using the AndroidX Preference Library see
+ *      <a href="{@docRoot}guide/topics/ui/settings.html">Settings</a>.
  */
+@Deprecated
 public class SeekBarVolumizer implements OnSeekBarChangeListener, Handler.Callback {
     private static final String TAG = "SeekBarVolumizer";
 
@@ -116,7 +123,7 @@ public class SeekBarVolumizer implements OnSeekBarChangeListener, Handler.Callba
         mContext = context;
         mAudioManager = context.getSystemService(AudioManager.class);
         mNotificationManager = context.getSystemService(NotificationManager.class);
-        mNotificationPolicy = mNotificationManager.getNotificationPolicy();
+        mNotificationPolicy = mNotificationManager.getConsolidatedNotificationPolicy();
         mAllowAlarms = (mNotificationPolicy.priorityCategories & NotificationManager.Policy
                 .PRIORITY_CATEGORY_ALARMS) != 0;
         mAllowMedia = (mNotificationPolicy.priorityCategories & NotificationManager.Policy
@@ -478,7 +485,7 @@ public class SeekBarVolumizer implements OnSeekBarChangeListener, Handler.Callba
                 mZenMode = mNotificationManager.getZenMode();
                 updateSlider();
             } else if (NotificationManager.ACTION_NOTIFICATION_POLICY_CHANGED.equals(action)) {
-                mNotificationPolicy = mNotificationManager.getNotificationPolicy();
+                mNotificationPolicy = mNotificationManager.getConsolidatedNotificationPolicy();
                 mAllowAlarms = (mNotificationPolicy.priorityCategories & NotificationManager.Policy
                         .PRIORITY_CATEGORY_ALARMS) != 0;
                 mAllowMedia = (mNotificationPolicy.priorityCategories

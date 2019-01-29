@@ -18,11 +18,13 @@ package com.android.server.autofill;
 
 import static android.Manifest.permission.MANAGE_AUTO_FILL;
 import static android.content.Context.AUTOFILL_MANAGER_SERVICE;
+import static android.util.DebugUtils.flagsToString;
 
 import static com.android.server.autofill.Helper.sDebug;
 import static com.android.server.autofill.Helper.sFullScreenMode;
 import static com.android.server.autofill.Helper.sVerbose;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -68,13 +70,16 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
-import com.android.server.AbstractMasterSystemService;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.autofill.ui.AutoFillUI;
+import com.android.server.infra.AbstractMasterSystemService;
+import com.android.server.infra.SecureSettingsServiceNameResolver;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -89,11 +94,33 @@ import java.util.Objects;
  * {@link AutofillManagerServiceImpl} itself.
  */
 public final class AutofillManagerService
-        extends AbstractMasterSystemService<AutofillManagerServiceImpl> {
+        extends AbstractMasterSystemService<AutofillManagerService, AutofillManagerServiceImpl> {
 
     private static final String TAG = "AutofillManagerService";
 
     private static final Object sLock = AutofillManagerService.class;
+
+    private static final int MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS = 1_000 * 60 * 2; // 2 minutes
+
+    /**
+     * IME supports Smart Suggestions.
+     */
+    // NOTE: must be public because of flagsToString()
+    public static final int FLAG_SMART_SUGGESTION_IME = 0x1;
+
+    /**
+     * System supports Smarts Suggestions (as a popup-window similar to standard Autofill).
+     */
+    // NOTE: must be public because of flagsToString()
+    public static final int FLAG_SMART_SUGGESTION_SYSTEM = 0x2;
+
+    /** @hide */
+    @IntDef(flag = true, prefix = { "FLAG_SMART_SUGGESTION_" }, value = {
+            FLAG_SMART_SUGGESTION_IME,
+            FLAG_SMART_SUGGESTION_SYSTEM
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface SmartSuggestionMode {}
 
     static final String RECEIVER_BUNDLE_EXTRA_SESSIONS = "sessions";
 
@@ -101,7 +128,6 @@ public final class AutofillManagerService
     private static final char COMPAT_PACKAGE_URL_IDS_DELIMITER = ',';
     private static final char COMPAT_PACKAGE_URL_IDS_BLOCK_BEGIN = '[';
     private static final char COMPAT_PACKAGE_URL_IDS_BLOCK_END = ']';
-
 
     /**
      * Maximum number of partitions that can be allowed in a session.
@@ -130,6 +156,7 @@ public final class AutofillManagerService
 
     private final AutofillCompatState mAutofillCompatState = new AutofillCompatState();
     private final LocalService mLocalService = new LocalService();
+    private final ActivityManagerInternal mAm;
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
@@ -149,17 +176,23 @@ public final class AutofillManagerService
         }
     };
 
-    // TODO(b/117779333): move to superclass / create super-class for ShellCommand
+    /**
+     * Supported modes for Augmented Autofill Smart Suggestions.
+     */
     @GuardedBy("mLock")
-    private boolean mAllowInstantService;
+    private int mSupportedSmartSuggestionModes;
 
     public AutofillManagerService(Context context) {
-        super(context, UserManager.DISALLOW_AUTOFILL);
+        super(context,
+                new SecureSettingsServiceNameResolver(context, Settings.Secure.AUTOFILL_SERVICE),
+                UserManager.DISALLOW_AUTOFILL);
         mUi = new AutoFillUI(ActivityThread.currentActivityThread().getSystemUiContext());
+        mAm = LocalServices.getService(ActivityManagerInternal.class);
 
         setLogLevelFromSettings();
         setMaxPartitionsFromSettings();
         setMaxVisibleDatasetsFromSettings();
+        setSmartSuggestionEmulationFromSettings();
 
         final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
@@ -186,6 +219,9 @@ public final class AutofillManagerService
         resolver.registerContentObserver(Settings.Global.getUriFor(
                 Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS), false, observer,
                 UserHandle.USER_ALL);
+        resolver.registerContentObserver(Settings.Global.getUriFor(
+                Settings.Global.AUTOFILL_SMART_SUGGESTION_EMULATION_FLAGS), false, observer,
+                UserHandle.USER_ALL);
     }
 
     @Override // from AbstractMasterSystemService
@@ -199,6 +235,9 @@ public final class AutofillManagerService
                 break;
             case Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS:
                 setMaxVisibleDatasetsFromSettings();
+                break;
+            case Settings.Global.AUTOFILL_SMART_SUGGESTION_EMULATION_FLAGS:
+                setSmartSuggestionEmulationFromSettings();
                 break;
             default:
                 Slog.w(TAG, "Unexpected property (" + property + "); updating cache instead");
@@ -231,6 +270,11 @@ public final class AutofillManagerService
         addCompatibilityModeRequestsLocked(service, userId);
     }
 
+    @Override // from AbstractMasterSystemService
+    protected void enforceCallingPermissionForManagement() {
+        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+    }
+
     @Override // from SystemService
     public void onStart() {
         publishBinderService(AUTOFILL_MANAGER_SERVICE, new AutoFillManagerServiceStub());
@@ -243,10 +287,19 @@ public final class AutofillManagerService
         mUi.hideAll(null);
     }
 
+    @SmartSuggestionMode int getSupportedSmartSuggestionModesLocked() {
+        return mSupportedSmartSuggestionModes;
+    }
+
+    // Called by AutofillManagerServiceImpl, doesn't need to check permission
+    boolean isInstantServiceAllowed() {
+        return mAllowInstantService;
+    }
+
     // Called by Shell command.
     void destroySessions(@UserIdInt int userId, IResultReceiver receiver) {
         Slog.i(TAG, "destroySessions() for userId " + userId);
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         synchronized (mLock) {
             if (userId != UserHandle.USER_ALL) {
@@ -269,7 +322,7 @@ public final class AutofillManagerService
     // Called by Shell command.
     void listSessions(int userId, IResultReceiver receiver) {
         Slog.i(TAG, "listSessions() for userId " + userId);
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         final Bundle resultData = new Bundle();
         final ArrayList<String> sessions = new ArrayList<>();
@@ -296,7 +349,7 @@ public final class AutofillManagerService
     // Called by Shell command.
     void reset() {
         Slog.i(TAG, "reset()");
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         synchronized (mLock) {
             visitServicesLocked((s) -> s.destroyLocked());
@@ -307,7 +360,7 @@ public final class AutofillManagerService
     // Called by Shell command.
     void setLogLevel(int level) {
         Slog.i(TAG, "setLogLevel(): " + level);
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         final long token = Binder.clearCallingIdentity();
         try {
@@ -344,7 +397,7 @@ public final class AutofillManagerService
 
     // Called by Shell command.
     int getLogLevel() {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         synchronized (mLock) {
             if (sVerbose) return AutofillManager.FLAG_ADD_CLIENT_VERBOSE;
@@ -355,7 +408,7 @@ public final class AutofillManagerService
 
     // Called by Shell command.
     int getMaxPartitions() {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         synchronized (mLock) {
             return sPartitionMaxCount;
@@ -364,8 +417,8 @@ public final class AutofillManagerService
 
     // Called by Shell command.
     void setMaxPartitions(int max) {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
         Slog.i(TAG, "setMaxPartitions(): " + max);
+        enforceCallingPermissionForManagement();
 
         final long token = Binder.clearCallingIdentity();
         try {
@@ -389,7 +442,7 @@ public final class AutofillManagerService
 
     // Called by Shell command.
     int getMaxVisibleDatasets() {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         synchronized (sLock) {
             return sVisibleDatasetsMaxCount;
@@ -398,8 +451,8 @@ public final class AutofillManagerService
 
     // Called by Shell command.
     void setMaxVisibleDatasets(int max) {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
         Slog.i(TAG, "setMaxVisibleDatasets(): " + max);
+        enforceCallingPermissionForManagement();
 
         final long token = Binder.clearCallingIdentity();
         try {
@@ -420,44 +473,73 @@ public final class AutofillManagerService
         }
     }
 
+    private void setSmartSuggestionEmulationFromSettings() {
+        final int flags = Settings.Global.getInt(getContext().getContentResolver(),
+                Settings.Global.AUTOFILL_SMART_SUGGESTION_EMULATION_FLAGS, 0);
+        if (sDebug) {
+            Slog.d(TAG, "setSmartSuggestionEmulationFromSettings(): "
+                    + smartSuggestionFlagsToString(flags));
+        }
+
+        synchronized (mLock) {
+            mSupportedSmartSuggestionModes = flags;
+        }
+    }
+
     // Called by Shell command.
-    void getScore(@Nullable String algorithmName, @NonNull String value1,
+    void calculateScore(@Nullable String algorithmName, @NonNull String value1,
             @NonNull String value2, @NonNull RemoteCallback callback) {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
 
         final FieldClassificationStrategy strategy =
                 new FieldClassificationStrategy(getContext(), UserHandle.USER_CURRENT);
 
-        strategy.getScores(callback, algorithmName, null,
-                Arrays.asList(AutofillValue.forText(value1)), new String[] { value2 });
+        strategy.calculateScores(callback, Arrays.asList(AutofillValue.forText(value1)),
+                new String[] { value2 }, null, algorithmName, null, null, null);
     }
 
     // Called by Shell command.
     Boolean getFullScreenMode() {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
         return sFullScreenMode;
     }
 
     // Called by Shell command.
     void setFullScreenMode(@Nullable Boolean mode) {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        enforceCallingPermissionForManagement();
         sFullScreenMode = mode;
     }
 
     // Called by Shell command.
-    boolean getAllowInstantService() {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+    void setTemporaryAugmentedAutofillService(@UserIdInt int userId, @NonNull String serviceName,
+            int durationMs) {
+        Slog.i(mTag, "setTemporaryAugmentedAutofillService(" + userId + ") to " + serviceName
+                + " for " + durationMs + "ms");
+        enforceCallingPermissionForManagement();
+
+        Preconditions.checkNotNull(serviceName);
+        if (durationMs > MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS) {
+            throw new IllegalArgumentException("Max duration is "
+                    + MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS + " (called with " + durationMs + ")");
+        }
+
         synchronized (mLock) {
-            return mAllowInstantService;
+            final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
+            if (service != null) {
+                service.mAugmentedAutofillResolver.setTemporaryService(userId, serviceName,
+                        durationMs);
+            }
         }
     }
 
-    // Called by Shell command.
-    void setAllowInstantService(boolean mode) {
-        getContext().enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
-        Slog.i(TAG, "setAllowInstantService(): " + mode);
+    // Called by Shell command
+    void resetTemporaryAugmentedAutofillService(@UserIdInt int userId) {
+        enforceCallingPermissionForManagement();
         synchronized (mLock) {
-            mAllowInstantService = mode;
+            final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
+            if (service != null) {
+                service.mAugmentedAutofillResolver.resetTemporaryService(userId);
+            }
         }
     }
 
@@ -608,6 +690,10 @@ public final class AutofillManagerService
         synchronized (sLock) {
             return sVisibleDatasetsMaxCount;
         }
+    }
+
+    static String smartSuggestionFlagsToString(int flags) {
+        return flagsToString(AutofillManagerService.class, "FLAG_SMART_SUGGESTION_", flags);
     }
 
     private final class LocalService extends AutofillManagerInternal {
@@ -832,14 +918,9 @@ public final class AutofillManagerService
                 throw new IllegalArgumentException(packageName + " is not a valid package", e);
             }
 
-            // TODO(b/113281366): rather than always call AM here, call it on demand on
-            // getPreviousSessionsLocked()? That way we save space / time here, and don't set
-            // a callback on AM unnecessarily (see TODO below :-)
-            final ActivityManagerInternal am = LocalServices
-                    .getService(ActivityManagerInternal.class);
             // TODO(b/113281366): add a callback method on AM to be notified when a task is finished
             // so we can clean up sessions kept alive
-            final int taskId = am.getTaskIdForActivity(activityToken, false);
+            final int taskId = mAm.getTaskIdForActivity(activityToken, false);
             final int sessionId;
             synchronized (mLock) {
                 final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
@@ -1157,7 +1238,10 @@ public final class AutofillManagerService
                     mAutofillCompatState.dump(prefix, pw);
                     pw.print("from settings: ");
                     pw.println(getWhitelistedCompatModePackagesFromSettings());
-                    pw.print("Allow instant service: "); pw.println(mAllowInstantService);
+                    if (mSupportedSmartSuggestionModes != 0) {
+                        pw.print("Smart Suggestion modes: ");
+                        pw.println(smartSuggestionFlagsToString(mSupportedSmartSuggestionModes));
+                    }
                     if (showHistory) {
                         pw.println(); pw.println("Requests history:"); pw.println();
                         mRequestsHistory.reverseDump(fd, pw, args);

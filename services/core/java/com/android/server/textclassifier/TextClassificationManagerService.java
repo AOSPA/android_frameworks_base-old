@@ -23,23 +23,27 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.service.textclassifier.IConversationActionsCallback;
 import android.service.textclassifier.ITextClassificationCallback;
 import android.service.textclassifier.ITextClassifierService;
+import android.service.textclassifier.ITextLanguageCallback;
 import android.service.textclassifier.ITextLinksCallback;
 import android.service.textclassifier.ITextSelectionCallback;
 import android.service.textclassifier.TextClassifierService;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.view.textclassifier.ConversationActions;
 import android.view.textclassifier.SelectionEvent;
 import android.view.textclassifier.TextClassification;
 import android.view.textclassifier.TextClassificationContext;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textclassifier.TextClassificationSessionId;
+import android.view.textclassifier.TextClassifierEvent;
+import android.view.textclassifier.TextLanguage;
 import android.view.textclassifier.TextLinks;
 import android.view.textclassifier.TextSelection;
 
@@ -132,6 +136,7 @@ public final class TextClassificationManagerService extends ITextClassifierServi
             throws RemoteException {
         Preconditions.checkNotNull(request);
         Preconditions.checkNotNull(callback);
+        validateInput(mContext, request.getCallingPackageName());
 
         synchronized (mLock) {
             UserState userState = getCallingUserStateLocked();
@@ -154,6 +159,7 @@ public final class TextClassificationManagerService extends ITextClassifierServi
             throws RemoteException {
         Preconditions.checkNotNull(request);
         Preconditions.checkNotNull(callback);
+        validateInput(mContext, request.getCallingPackageName());
 
         synchronized (mLock) {
             UserState userState = getCallingUserStateLocked();
@@ -176,6 +182,7 @@ public final class TextClassificationManagerService extends ITextClassifierServi
             throws RemoteException {
         Preconditions.checkNotNull(request);
         Preconditions.checkNotNull(callback);
+        validateInput(mContext, request.getCallingPackageName());
 
         synchronized (mLock) {
             UserState userState = getCallingUserStateLocked();
@@ -195,7 +202,7 @@ public final class TextClassificationManagerService extends ITextClassifierServi
     public void onSelectionEvent(
             TextClassificationSessionId sessionId, SelectionEvent event) throws RemoteException {
         Preconditions.checkNotNull(event);
-        validateInput(event.getPackageName(), mContext);
+        validateInput(mContext, event.getPackageName());
 
         synchronized (mLock) {
             UserState userState = getCallingUserStateLocked();
@@ -208,6 +215,73 @@ public final class TextClassificationManagerService extends ITextClassifierServi
             }
         }
     }
+    @Override
+    public void onTextClassifierEvent(
+            TextClassificationSessionId sessionId,
+            TextClassifierEvent event) throws RemoteException {
+        Preconditions.checkNotNull(event);
+        final String packageName = event.getEventContext() == null
+                ? null
+                : event.getEventContext().getPackageName();
+        validateInput(mContext, packageName);
+
+        synchronized (mLock) {
+            UserState userState = getCallingUserStateLocked();
+            if (userState.isBoundLocked()) {
+                userState.mService.onTextClassifierEvent(sessionId, event);
+            } else {
+                userState.mPendingRequests.add(new PendingRequest(
+                        () -> onTextClassifierEvent(sessionId, event),
+                        null /* onServiceFailure */, null /* binder */, this, userState));
+            }
+        }
+    }
+
+    @Override
+    public void onDetectLanguage(
+            TextClassificationSessionId sessionId,
+            TextLanguage.Request request,
+            ITextLanguageCallback callback) throws RemoteException {
+        Preconditions.checkNotNull(request);
+        Preconditions.checkNotNull(callback);
+        validateInput(mContext, request.getCallingPackageName());
+
+        synchronized (mLock) {
+            UserState userState = getCallingUserStateLocked();
+            if (!userState.bindLocked()) {
+                callback.onFailure();
+            } else if (userState.isBoundLocked()) {
+                userState.mService.onDetectLanguage(sessionId, request, callback);
+            } else {
+                userState.mPendingRequests.add(new PendingRequest(
+                        () -> onDetectLanguage(sessionId, request, callback),
+                        callback::onFailure, callback.asBinder(), this, userState));
+            }
+        }
+    }
+
+    @Override
+    public void onSuggestConversationActions(
+            TextClassificationSessionId sessionId,
+            ConversationActions.Request request,
+            IConversationActionsCallback callback) throws RemoteException {
+        Preconditions.checkNotNull(request);
+        Preconditions.checkNotNull(callback);
+        validateInput(mContext, request.getCallingPackageName());
+
+        synchronized (mLock) {
+            UserState userState = getCallingUserStateLocked();
+            if (!userState.bindLocked()) {
+                callback.onFailure();
+            } else if (userState.isBoundLocked()) {
+                userState.mService.onSuggestConversationActions(sessionId, request, callback);
+            } else {
+                userState.mPendingRequests.add(new PendingRequest(
+                        () -> onSuggestConversationActions(sessionId, request, callback),
+                        callback::onFailure, callback.asBinder(), this, userState));
+            }
+        }
+    }
 
     @Override
     public void onCreateTextClassificationSession(
@@ -215,7 +289,7 @@ public final class TextClassificationManagerService extends ITextClassifierServi
             throws RemoteException {
         Preconditions.checkNotNull(sessionId);
         Preconditions.checkNotNull(classificationContext);
-        validateInput(classificationContext.getPackageName(), mContext);
+        validateInput(mContext, classificationContext.getPackageName());
 
         synchronized (mLock) {
             UserState userState = getCallingUserStateLocked();
@@ -350,15 +424,17 @@ public final class TextClassificationManagerService extends ITextClassifierServi
                 e -> Slog.d(LOG_TAG, "Error " + opDesc + ": " + e.getMessage()));
     }
 
-    private static void validateInput(String packageName, Context context)
+    private static void validateInput(Context context, @Nullable String packageName)
             throws RemoteException {
+        if (packageName == null) return;
+
         try {
             final int uid = context.getPackageManager()
-                    .getPackageUid(packageName, 0);
+                    .getPackageUidAsUser(packageName, UserHandle.getCallingUserId());
             Preconditions.checkArgument(Binder.getCallingUid() == uid);
-        } catch (IllegalArgumentException | NullPointerException |
-                PackageManager.NameNotFoundException e) {
-            throw new RemoteException(e.getMessage());
+        } catch (Exception e) {
+            throw new RemoteException(
+                    String.format("Invalid package: name=%s, error=%s", packageName, e));
         }
     }
 

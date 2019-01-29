@@ -201,21 +201,42 @@
         <new-permission name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     </split-permission>
 
+    <!-- Apps holding either the legacy READ or WRITE permissions will inherit
+         the ability to <em>read</em> new typed permissions in the Q release; they
+         won't gain the ability to <em>write</em> that content. -->
+    <!-- STOPSHIP(b/112545973): change targetSdk to Q when SDK version finalised -->
+    <split-permission name="android.permission.READ_EXTERNAL_STORAGE"
+                      targetSdk="10000">
+        <new-permission name="android.permission.READ_MEDIA_AUDIO" />
+        <new-permission name="android.permission.READ_MEDIA_VIDEO" />
+        <new-permission name="android.permission.READ_MEDIA_IMAGES" />
+    </split-permission>
+    <!-- STOPSHIP(b/112545973): change targetSdk to Q when SDK version finalised -->
+    <split-permission name="android.permission.WRITE_EXTERNAL_STORAGE"
+                      targetSdk="10000">
+        <new-permission name="android.permission.READ_MEDIA_AUDIO" />
+        <new-permission name="android.permission.READ_MEDIA_VIDEO" />
+        <new-permission name="android.permission.READ_MEDIA_IMAGES" />
+    </split-permission>
+
     <!-- This is a list of all the libraries available for application
          code to link against. -->
 
     <library name="android.test.base"
             file="/system/framework/android.test.base.impl.jar" />
     <library name="android.test.mock"
-            file="/system/framework/android.test.mock.impl.jar" />
+            file="/system/framework/android.test.mock.impl.jar"
+            dependency="android.test.base" />
     <library name="android.test.runner"
-            file="/system/framework/android.test.runner.impl.jar" />
+            file="/system/framework/android.test.runner.impl.jar"
+            dependency="android.test.base:android.test.mock" />
 
     <!-- In BOOT_JARS historically, and now added to legacy applications. -->
     <library name="android.hidl.base-V1.0-java"
             file="/system/framework/android.hidl.base-V1.0-java.jar" />
     <library name="android.hidl.manager-V1.0-java"
-            file="/system/framework/android.hidl.manager-V1.0-java.jar" />
+            file="/system/framework/android.hidl.manager-V1.0-java.jar"
+            dependency="android.hidl.base-V1.0-java" />
 
     <!-- These are the standard packages that are white-listed to always have internet
          access while in power save mode, even if they aren't in the foreground. -->

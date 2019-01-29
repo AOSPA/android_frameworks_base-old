@@ -41,13 +41,36 @@ LogEvent::LogEvent(log_msg& msg) {
     }
 }
 
-LogEvent::LogEvent(const StatsLogEventWrapper& statsLogEventWrapper) {
+LogEvent::LogEvent(const LogEvent& event) {
+    mTagId = event.mTagId;
+    mLogUid = event.mLogUid;
+    mElapsedTimestampNs = event.mElapsedTimestampNs;
+    mLogdTimestampNs = event.mLogdTimestampNs;
+    mValues = event.mValues;
+}
+
+LogEvent::LogEvent(const StatsLogEventWrapper& statsLogEventWrapper, int workChainIndex) {
     mTagId = statsLogEventWrapper.getTagId();
     mLogdTimestampNs = statsLogEventWrapper.getWallClockTimeNs();
     mElapsedTimestampNs = statsLogEventWrapper.getElapsedRealTimeNs();
     mLogUid = 0;
+    int workChainPosOffset = 0;
+    if (workChainIndex != -1) {
+        const WorkChain& wc = statsLogEventWrapper.getWorkChains()[workChainIndex];
+        // chains are at field 1, level 2
+        int depth = 2;
+        for (int i = 0; i < (int)wc.uids.size(); i++) {
+            int pos[] = {1, i + 1, 1};
+            mValues.push_back(FieldValue(Field(mTagId, pos, depth), Value(wc.uids[i])));
+            pos[2]++;
+            mValues.push_back(FieldValue(Field(mTagId, pos, depth), Value(wc.tags[i])));
+            mValues.back().mField.decorateLastPos(2);
+        }
+        mValues.back().mField.decorateLastPos(1);
+        workChainPosOffset = 1;
+    }
     for (int i = 0; i < (int)statsLogEventWrapper.getElements().size(); i++) {
-        Field field(statsLogEventWrapper.getTagId(), getSimpleField(i + 1));
+        Field field(statsLogEventWrapper.getTagId(), getSimpleField(i + 1 + workChainPosOffset));
         switch (statsLogEventWrapper.getElements()[i].type) {
             case android::os::StatsLogValue::STATS_LOG_VALUE_TYPE::INT:
                 mValues.push_back(
@@ -75,6 +98,17 @@ LogEvent::LogEvent(const StatsLogEventWrapper& statsLogEventWrapper) {
                 break;
             default:
                 break;
+        }
+    }
+}
+
+void LogEvent::createLogEvents(const StatsLogEventWrapper& statsLogEventWrapper,
+                               std::vector<std::shared_ptr<LogEvent>>& logEvents) {
+    if (statsLogEventWrapper.getWorkChains().size() == 0) {
+        logEvents.push_back(std::make_shared<LogEvent>(statsLogEventWrapper, -1));
+    } else {
+        for (size_t i = 0; i < statsLogEventWrapper.getWorkChains().size(); i++) {
+            logEvents.push_back(std::make_shared<LogEvent>(statsLogEventWrapper, i));
         }
     }
 }
@@ -653,7 +687,7 @@ float LogEvent::GetFloat(size_t key, status_t* err) const {
 
 string LogEvent::ToString() const {
     string result;
-    result += StringPrintf("{ %lld %lld (%d)", (long long)mLogdTimestampNs,
+    result += StringPrintf("{ uid(%d) %lld %lld (%d)", mLogUid, (long long)mLogdTimestampNs,
                            (long long)mElapsedTimestampNs, mTagId);
     for (const auto& value : mValues) {
         result +=

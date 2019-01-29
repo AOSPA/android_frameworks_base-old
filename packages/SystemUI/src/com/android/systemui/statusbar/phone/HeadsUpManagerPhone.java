@@ -37,6 +37,7 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.ScreenDecorations;
+import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarStateController.StateListener;
@@ -56,8 +57,8 @@ import java.util.Stack;
  * A implementation of HeadsUpManager for phone and car.
  */
 public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
-       ViewTreeObserver.OnComputeInternalInsetsListener, VisualStabilityManager.Callback,
-       OnHeadsUpChangedListener, ConfigurationController.ConfigurationListener {
+        ViewTreeObserver.OnComputeInternalInsetsListener, VisualStabilityManager.Callback,
+        OnHeadsUpChangedListener, ConfigurationController.ConfigurationListener {
     private static final String TAG = "HeadsUpManagerPhone";
 
     private final View mStatusBarWindowView;
@@ -78,11 +79,13 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     private int[] mTmpTwoArray = new int[2];
     private boolean mHeadsUpGoingAway;
     private boolean mWaitingOnCollapseWhenGoingAway;
+    private boolean mBubbleGoingAway;
     private boolean mIsObserving;
     private int mStatusBarState;
 
     private final StateListener mStateListener = this::setStatusBarState;
     private AnimationStateHandler mAnimationStateHandler;
+    private BubbleController mBubbleController = Dependency.get(BubbleController.class);
 
     private final Pools.Pool<HeadsUpEntryPhone> mEntryPool = new Pools.Pool<HeadsUpEntryPhone>() {
         private Stack<HeadsUpEntryPhone> mPoolObjects = new Stack<>();
@@ -126,7 +129,13 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
                 updateTouchableRegionListener();
             }
         });
-        Dependency.get(StatusBarStateController.class).addListener(mStateListener);
+        Dependency.get(StatusBarStateController.class).addCallback(mStateListener);
+        mBubbleController.setBubbleStateChangeListener((hasBubbles) -> {
+            if (!hasBubbles) {
+                mBubbleGoingAway = true;
+            }
+            updateTouchableRegionListener();
+        });
     }
 
     public void setAnimationStateHandler(AnimationStateHandler handler) {
@@ -134,7 +143,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     }
 
     public void destroy() {
-        Dependency.get(StatusBarStateController.class).removeListener(mStateListener);
+        Dependency.get(StatusBarStateController.class).removeCallback(mStateListener);
     }
 
     private void initResources() {
@@ -210,6 +219,9 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
                 mHeadsUpGoingAway = false;
                 updateTouchableRegionListener();
             }
+            if (mBubbleController.hasBubbles() || !mIsExpanded) {
+                updateTouchableRegionListener();
+            }
         }
     }
 
@@ -249,6 +261,17 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
             } else {
                 headsUpEntry.updateEntry(false /* updatePostTime */);
             }
+        }
+    }
+
+    /**
+     * Sets whether an entry's menu row is exposed and therefore it should stick in the heads up
+     * area if it's pinned until it's hidden again.
+     */
+    public void setMenuShown(@NonNull NotificationData.Entry entry, boolean menuShown) {
+        HeadsUpEntry headsUpEntry = getHeadsUpEntry(entry.key);
+        if (headsUpEntry instanceof HeadsUpEntryPhone && entry.isRowPinned()) {
+            ((HeadsUpEntryPhone) headsUpEntry).setMenuShownPinned(menuShown);
         }
     }
 
@@ -292,24 +315,30 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
             return;
         }
         if (hasPinnedHeadsUp()) {
-            ExpandableNotificationRow topEntry = getTopEntry().row;
+            NotificationData.Entry topEntry = getTopEntry();
             if (topEntry.isChildInGroup()) {
-                final ExpandableNotificationRow groupSummary
-                        = mGroupManager.getGroupSummary(topEntry.getStatusBarNotification());
+                final NotificationData.Entry groupSummary
+                        = mGroupManager.getGroupSummary(topEntry.notification);
                 if (groupSummary != null) {
                     topEntry = groupSummary;
                 }
             }
-            topEntry.getLocationOnScreen(mTmpTwoArray);
+            ExpandableNotificationRow topRow = topEntry.getRow();
+            topRow.getLocationOnScreen(mTmpTwoArray);
             int minX = mTmpTwoArray[0];
-            int maxX = mTmpTwoArray[0] + topEntry.getWidth();
-            int height = topEntry.getIntrinsicHeight();
+            int maxX = mTmpTwoArray[0] + topRow.getWidth();
+            int height = topRow.getIntrinsicHeight();
 
             info.setTouchableInsets(ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
             info.touchableRegion.set(minX, 0, maxX, mHeadsUpInset + height);
         } else {
             setCollapsedTouchableInsets(info);
         }
+        Rect r = mBubbleController.getTouchableRegion();
+        if (r != null) {
+            info.touchableRegion.union(r);
+        }
+        mBubbleGoingAway = false;
     }
 
     private void setCollapsedTouchableInsets(ViewTreeObserver.InternalInsetsInfo info) {
@@ -428,8 +457,11 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
         });
     }
 
+    // TODO: some kind of TouchableRegionManager to deal with this, HeadsUpManager is not really
+    // the right place
     private void updateTouchableRegionListener() {
         boolean shouldObserve = hasPinnedHeadsUp() || mHeadsUpGoingAway
+                || mBubbleController.hasBubbles() || mBubbleGoingAway
                 || mWaitingOnCollapseWhenGoingAway
                 || mStatusBarWindowView.getRootWindowInsets().getDisplayCutout() != null;
         if (shouldObserve == mIsObserving) {
@@ -448,6 +480,14 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     //  HeadsUpEntryPhone:
 
     protected class HeadsUpEntryPhone extends HeadsUpManager.HeadsUpEntry {
+
+        private boolean mMenuShownPinned;
+
+        @Override
+        protected boolean isSticky() {
+            return super.isSticky() || mMenuShownPinned;
+        }
+
         public void setEntry(@NonNull final NotificationData.Entry entry) {
            Runnable removeHeadsUpRunnable = () -> {
                 if (!mVisualStabilityManager.isReorderingAllowed()) {
@@ -488,6 +528,25 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
             } else {
                 updateEntry(false /* updatePostTime */);
             }
+        }
+
+        public void setMenuShownPinned(boolean menuShownPinned) {
+            if (mMenuShownPinned == menuShownPinned) {
+                return;
+            }
+
+            mMenuShownPinned = menuShownPinned;
+            if (menuShownPinned) {
+                removeAutoRemovalCallbacks();
+            } else {
+                updateEntry(false /* updatePostTime */);
+            }
+        }
+
+        @Override
+        public void reset() {
+            super.reset();
+            mMenuShownPinned = false;
         }
     }
 

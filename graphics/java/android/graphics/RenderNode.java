@@ -446,7 +446,21 @@ public final class RenderNode {
     }
 
     /**
-     * Sets the clip bounds of the RenderNode.
+     * Gets whether or not a compositing layer is forced to be used. The default & recommended
+     * is false, as it is typically faster to avoid using compositing layers.
+     * See {@link #setUseCompositingLayer(boolean, Paint)}.
+     *
+     * @return true if a compositing layer is forced, false otherwise
+     */
+    public boolean getUseCompositingLayer() {
+        return nGetLayerType(mNativeRenderNode) != 0;
+    }
+
+    /**
+     * Sets the clip bounds of the RenderNode. If null, the clip bounds is removed from the
+     * RenderNode. If non-null, the RenderNode will be clipped to this rect. If
+     * {@link #setClipToBounds(boolean)} is true, then the RenderNode will be clipped to the
+     * intersection of this rectangle and the bounds of the render node.
      *
      * @param rect the bounds to clip to. If null, the clip bounds are reset
      * @return True if the clip bounds changed, false otherwise
@@ -460,13 +474,27 @@ public final class RenderNode {
     }
 
     /**
-     * Set whether the Render node should clip itself to its bounds. This property is controlled by
-     * the view's parent.
+     * Set whether the Render node should clip itself to its bounds. This defaults to true,
+     * and is useful to the renderer in enable quick-rejection of chunks of the tree as well as
+     * better partial invalidation support. Clipping can be further restricted or controlled
+     * through the combination of this property as well as {@link #setClipBounds(Rect)}, which
+     * allows for a different clipping rectangle to be used in addition to or instead of the
+     * {@link #setLeftTopRightBottom(int, int, int, int)} or the RenderNode.
      *
-     * @param clipToBounds true if the display list should clip to its bounds
+     * @param clipToBounds true if the display list should clip to its bounds, false otherwise.
      */
     public boolean setClipToBounds(boolean clipToBounds) {
         return nSetClipToBounds(mNativeRenderNode, clipToBounds);
+    }
+
+    /**
+     * Returns whether or not the RenderNode is clipping to its bounds. See
+     * {@link #setClipToBounds(boolean)} and {@link #setLeftTopRightBottom(int, int, int, int)}
+     *
+     * @return true if the render node clips to its bounds, false otherwise.
+     */
+    public boolean getClipToBounds() {
+        return nGetClipToBounds(mNativeRenderNode);
     }
 
     /**
@@ -1173,6 +1201,22 @@ public final class RenderNode {
         return nGetAllowForceDark(mNativeRenderNode);
     }
 
+    /**
+     * Returns the unique ID that identifies this RenderNode. This ID is unique for the
+     * lifetime of the process. IDs are reset on process death, and are unique only within
+     * the process.
+     *
+     * This ID is intended to be used with debugging tools to associate a particular
+     * RenderNode across different debug dumping & inspection tools. For example
+     * a View layout inspector should include the unique ID for any RenderNodes that it owns
+     * to associate the drawing content with the layout content.
+     *
+     * @return the unique ID for this RenderNode
+     */
+    public long getUniqueId() {
+        return nGetUniqueId(mNativeRenderNode);
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Animations
     ///////////////////////////////////////////////////////////////////////////
@@ -1323,10 +1367,16 @@ public final class RenderNode {
     private static native boolean nSetLayerType(long renderNode, int layerType);
 
     @CriticalNative
+    private static native int nGetLayerType(long renderNode);
+
+    @CriticalNative
     private static native boolean nSetLayerPaint(long renderNode, long paint);
 
     @CriticalNative
     private static native boolean nSetClipToBounds(long renderNode, boolean clipToBounds);
+
+    @CriticalNative
+    private static native boolean nGetClipToBounds(long renderNode);
 
     @CriticalNative
     private static native boolean nSetClipBounds(long renderNode, int left, int top,
@@ -1479,4 +1529,7 @@ public final class RenderNode {
 
     @CriticalNative
     private static native boolean nGetAllowForceDark(long renderNode);
+
+    @CriticalNative
+    private static native long nGetUniqueId(long renderNode);
 }

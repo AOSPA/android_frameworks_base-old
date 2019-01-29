@@ -16,9 +16,14 @@
 
 package android.service.notification;
 
+import static java.lang.annotation.RetentionPolicy.SOURCE;
+
+import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
@@ -33,6 +38,7 @@ import android.util.Log;
 
 import com.android.internal.os.SomeArgs;
 
+import java.lang.annotation.Retention;
 import java.util.List;
 
 /**
@@ -62,6 +68,13 @@ import java.util.List;
 @TestApi
 public abstract class NotificationAssistantService extends NotificationListenerService {
     private static final String TAG = "NotificationAssistants";
+
+    /** @hide */
+    @Retention(SOURCE)
+    @IntDef({SOURCE_FROM_APP, SOURCE_FROM_ASSISTANT})
+    public @interface Source {}
+    public static final int SOURCE_FROM_APP = 0;
+    public static final int SOURCE_FROM_ASSISTANT = 1;
 
     /**
      * The {@link Intent} that must be declared as handled by the service.
@@ -160,6 +173,41 @@ public abstract class NotificationAssistantService extends NotificationListenerS
     }
 
     /**
+     * Implement this to know when a notification is expanded / collapsed.
+     * @param key the notification key
+     * @param isUserAction whether the expanded change is caused by user action.
+     * @param isExpanded whether the notification is expanded.
+     */
+    public void onNotificationExpansionChanged(
+            @NonNull String key, boolean isUserAction, boolean isExpanded) {}
+
+    /**
+     * Implement this to know when a direct reply is sent from a notification.
+     * @param key the notification key
+     */
+    public void onNotificationDirectReply(@NonNull String key) {}
+
+    /**
+     * Implement this to know when a suggested reply is sent.
+     * @param key the notification key
+     * @param reply the reply that is just sent
+     * @param source the source that provided the reply, e.g. SOURCE_FROM_APP
+     */
+    public void onSuggestedReplySent(@NonNull String key, @NonNull CharSequence reply,
+            @Source int source) {
+    }
+
+    /**
+     * Implement this to know when an action is clicked.
+     * @param key the notification key
+     * @param action the action that is just clicked
+     * @param source the source that provided the action, e.g. SOURCE_FROM_APP
+     */
+    public void onActionClicked(@NonNull String key, @NonNull Notification.Action action,
+            @Source int source) {
+    }
+
+    /**
      * Updates a notification.  N.B. this won’t cause
      * an existing notification to alert, but might allow a future update to
      * this notification to alert.
@@ -255,12 +303,53 @@ public abstract class NotificationAssistantService extends NotificationListenerS
             mHandler.obtainMessage(MyHandler.MSG_ON_NOTIFICATIONS_SEEN,
                     args).sendToTarget();
         }
+
+        @Override
+        public void onNotificationExpansionChanged(String key, boolean isUserAction,
+                boolean isExpanded) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = key;
+            args.argi1 = isUserAction ? 1 : 0;
+            args.argi2 = isExpanded ? 1 : 0;
+            mHandler.obtainMessage(MyHandler.MSG_ON_NOTIFICATION_EXPANSION_CHANGED, args)
+                    .sendToTarget();
+        }
+
+        @Override
+        public void onNotificationDirectReply(String key) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = key;
+            mHandler.obtainMessage(MyHandler.MSG_ON_NOTIFICATION_DIRECT_REPLY_SENT, args)
+                    .sendToTarget();
+        }
+
+        @Override
+        public void onSuggestedReplySent(String key, CharSequence reply, int source) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = key;
+            args.arg2 = reply;
+            args.argi2 = source;
+            mHandler.obtainMessage(MyHandler.MSG_ON_SUGGESTED_REPLY_SENT, args).sendToTarget();
+        }
+
+        @Override
+        public void onActionClicked(String key, Notification.Action action, int source) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = key;
+            args.arg2 = action;
+            args.argi2 = source;
+            mHandler.obtainMessage(MyHandler.MSG_ON_ACTION_CLICKED, args).sendToTarget();
+        }
     }
 
     private final class MyHandler extends Handler {
         public static final int MSG_ON_NOTIFICATION_ENQUEUED = 1;
         public static final int MSG_ON_NOTIFICATION_SNOOZED = 2;
         public static final int MSG_ON_NOTIFICATIONS_SEEN = 3;
+        public static final int MSG_ON_NOTIFICATION_EXPANSION_CHANGED = 4;
+        public static final int MSG_ON_NOTIFICATION_DIRECT_REPLY_SENT = 5;
+        public static final int MSG_ON_SUGGESTED_REPLY_SENT = 6;
+        public static final int MSG_ON_ACTION_CLICKED = 7;
 
         public MyHandler(Looper looper) {
             super(looper, null, false);
@@ -303,6 +392,40 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                     List<String> keys = (List<String>) args.arg1;
                     args.recycle();
                     onNotificationsSeen(keys);
+                    break;
+                }
+                case MSG_ON_NOTIFICATION_EXPANSION_CHANGED: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    String key = (String) args.arg1;
+                    boolean isUserAction = args.argi1 == 1;
+                    boolean isExpanded = args.argi2 == 1;
+                    args.recycle();
+                    onNotificationExpansionChanged(key, isUserAction, isExpanded);
+                    break;
+                }
+                case MSG_ON_NOTIFICATION_DIRECT_REPLY_SENT: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    String key = (String) args.arg1;
+                    args.recycle();
+                    onNotificationDirectReply(key);
+                    break;
+                }
+                case MSG_ON_SUGGESTED_REPLY_SENT: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    String key = (String) args.arg1;
+                    CharSequence reply = (CharSequence) args.arg2;
+                    int source = args.argi2;
+                    args.recycle();
+                    onSuggestedReplySent(key, reply, source);
+                    break;
+                }
+                case MSG_ON_ACTION_CLICKED: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    String key = (String) args.arg1;
+                    Notification.Action action = (Notification.Action) args.arg2;
+                    int source = args.argi2;
+                    args.recycle();
+                    onActionClicked(key, action, source);
                     break;
                 }
             }

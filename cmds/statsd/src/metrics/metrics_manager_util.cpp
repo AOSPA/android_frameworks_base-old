@@ -454,6 +454,16 @@ bool initMetrics(const ConfigKey& key, const StatsdConfig& config, const int64_t
             ALOGW("cannot find \"what\" in ValueMetric \"%lld\"", (long long)metric.id());
             return false;
         }
+        if (!metric.has_value_field()) {
+            ALOGW("cannot find \"value_field\" in ValueMetric \"%lld\"", (long long)metric.id());
+            return false;
+        }
+        std::vector<Matcher> fieldMatchers;
+        translateFieldMatcher(metric.value_field(), &fieldMatchers);
+        if (fieldMatchers.size() < 1) {
+            ALOGW("incorrect \"value_field\" in ValueMetric \"%lld\"", (long long)metric.id());
+            return false;
+        }
 
         int metricIndex = allMetricProducers.size();
         metricMap.insert({metric.id(), metricIndex});
@@ -535,9 +545,13 @@ bool initMetrics(const ConfigKey& key, const StatsdConfig& config, const int64_t
 
         int triggerTrackerIndex;
         int triggerAtomId = -1;
-        if (pullTagId != -1 && metric.has_trigger_event()) {
-            // event_trigger should be used with ALL_CONDITION_CHANGES
-            if (metric.sampling_type() != GaugeMetric::ALL_CONDITION_CHANGES) {
+        if (metric.has_trigger_event()) {
+            if (pullTagId == -1) {
+                ALOGW("Pull atom not specified for trigger");
+                return false;
+            }
+            // event_trigger should be used with FIRST_N_SAMPLES
+            if (metric.sampling_type() != GaugeMetric::FIRST_N_SAMPLES) {
                 return false;
             }
             if (!handlePullMetricTriggerWithLogTrackers(metric.trigger_event(), metricIndex,
@@ -547,6 +561,12 @@ bool initMetrics(const ConfigKey& key, const StatsdConfig& config, const int64_t
             }
             sp<LogMatchingTracker> triggerAtomMatcher = allAtomMatchers.at(triggerTrackerIndex);
             triggerAtomId = *(triggerAtomMatcher->getAtomIds().begin());
+        }
+
+        if (!metric.has_trigger_event() && pullTagId != -1 &&
+            metric.sampling_type() == GaugeMetric::FIRST_N_SAMPLES) {
+            ALOGW("FIRST_N_SAMPLES is only for pushed event or pull_on_trigger");
+            return false;
         }
 
         int conditionIndex = -1;
@@ -578,7 +598,7 @@ bool initMetrics(const ConfigKey& key, const StatsdConfig& config, const int64_t
         }
         noReportMetricIds.insert(no_report_metric);
     }
-    for (auto it : allMetricProducers) {
+    for (const auto& it : allMetricProducers) {
         uidMap.addListener(it);
     }
     return true;

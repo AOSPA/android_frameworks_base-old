@@ -726,6 +726,11 @@ public class ContextWrapper extends Context {
     }
 
     @Override
+    public void updateServiceGroup(ServiceConnection conn, int group, int importance) {
+        mBase.updateServiceGroup(conn, group, importance);
+    }
+
+    @Override
     public void unbindService(ServiceConnection conn) {
         mBase.unbindService(conn);
     }
@@ -1043,5 +1048,21 @@ public class ContextWrapper extends Context {
         if (mBase != null) {
             mBase.setAutofillCompatibilityEnabled(autofillCompatEnabled);
         }
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public boolean isContentCaptureSupported() {
+        return mBase.isContentCaptureSupported();
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public void setContentCaptureSupported(boolean supported) {
+        mBase.setContentCaptureSupported(supported);
     }
 }

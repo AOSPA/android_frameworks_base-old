@@ -29,6 +29,7 @@
 
 #include <SkPathOps.h>
 #include <algorithm>
+#include <atomic>
 #include <sstream>
 #include <string>
 
@@ -47,8 +48,14 @@ private:
     TreeInfo* mTreeInfo;
 };
 
+static int64_t generateId() {
+    static std::atomic<int64_t> sNextId{1};
+    return sNextId++;
+}
+
 RenderNode::RenderNode()
-        : mDirtyPropertyFields(0)
+        : mUniqueId(generateId())
+        , mDirtyPropertyFields(0)
         , mNeedsDisplayListSync(false)
         , mDisplayList(nullptr)
         , mStagingDisplayList(nullptr)
@@ -281,7 +288,10 @@ void RenderNode::syncDisplayList(TreeObserver& observer, TreeInfo* info) {
     mDisplayList = mStagingDisplayList;
     mStagingDisplayList = nullptr;
     if (mDisplayList) {
-        mDisplayList->syncContents();
+        WebViewSyncData syncData {
+            .applyForceDark = info && !info->disableForceDark
+        };
+        mDisplayList->syncContents(syncData);
         handleForceDark(info);
     }
 }
@@ -442,6 +452,43 @@ const SkPath* RenderNode::getClippedOutline(const SkRect& clipRect) const {
         Op(*outlinePath, clipPath, kIntersect_SkPathOp, &mClippedOutlineCache.clippedOutline);
     }
     return &mClippedOutlineCache.clippedOutline;
+}
+
+using StringBuffer = FatVector<char, 128>;
+
+template <typename... T>
+// TODO:__printflike(2, 3)
+// Doesn't work because the warning doesn't understand string_view and doesn't like that
+// it's not a C-style variadic function.
+static void format(StringBuffer& buffer, const std::string_view& format, T... args) {
+    buffer.resize(buffer.capacity());
+    while (1) {
+        int needed = snprintf(buffer.data(), buffer.size(),
+                format.data(), std::forward<T>(args)...);
+        if (needed < 0) {
+            buffer[0] = '\0';
+            buffer.resize(1);
+            return;
+        }
+        if (needed < buffer.size()) {
+            buffer.resize(needed + 1);
+            return;
+        }
+        // If we're doing a heap alloc anyway might as well give it some slop
+        buffer.resize(needed + 100);
+    }
+}
+
+void RenderNode::markDrawStart(SkCanvas& canvas) {
+    StringBuffer buffer;
+    format(buffer, "RenderNode(id=%" PRId64 ", name='%s')", uniqueId(), getName());
+    canvas.drawAnnotation(SkRect::MakeWH(getWidth(), getHeight()), buffer.data(), nullptr);
+}
+
+void RenderNode::markDrawEnd(SkCanvas& canvas) {
+    StringBuffer buffer;
+    format(buffer, "/RenderNode(id=%" PRId64 ", name='%s')", uniqueId(), getName());
+    canvas.drawAnnotation(SkRect::MakeWH(getWidth(), getHeight()), buffer.data(), nullptr);
 }
 
 } /* namespace uirenderer */

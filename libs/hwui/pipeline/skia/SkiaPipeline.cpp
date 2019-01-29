@@ -17,6 +17,7 @@
 #include "SkiaPipeline.h"
 
 #include <SkImageEncoder.h>
+#include <SkImageInfo.h>
 #include <SkImagePriv.h>
 #include <SkOverdrawCanvas.h>
 #include <SkOverdrawColorFilter.h>
@@ -169,7 +170,7 @@ bool SkiaPipeline::createOrUpdateLayer(RenderNode* node, const DamageAccumulator
     if (!layer || layer->width() != surfaceWidth || layer->height() != surfaceHeight) {
         SkImageInfo info;
         info = SkImageInfo::Make(surfaceWidth, surfaceHeight, getSurfaceColorType(),
-                                 kPremul_SkAlphaType);
+                                 kPremul_SkAlphaType, getSurfaceColorSpace());
         SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
         SkASSERT(mRenderThread.getGrContext() != nullptr);
         node->setLayerSurface(SkSurface::MakeRenderTarget(mRenderThread.getGrContext(),
@@ -183,15 +184,15 @@ bool SkiaPipeline::createOrUpdateLayer(RenderNode* node, const DamageAccumulator
         } else {
             String8 cachesOutput;
             mRenderThread.cacheManager().dumpMemoryUsage(cachesOutput,
-                    &mRenderThread.renderState());
+                                                         &mRenderThread.renderState());
             ALOGE("%s", cachesOutput.string());
             if (errorHandler) {
                 std::ostringstream err;
                 err << "Unable to create layer for " << node->getName();
                 const int maxTextureSize = DeviceInfo::get()->maxTextureSize();
                 err << ", size " << info.width() << "x" << info.height() << " max size "
-                    << maxTextureSize << " color type " << (int)info.colorType()
-                    << " has context " << (int)(mRenderThread.getGrContext() != nullptr);
+                    << maxTextureSize << " color type " << (int)info.colorType() << " has context "
+                    << (int)(mRenderThread.getGrContext() != nullptr);
                 errorHandler->onError(err.str());
             }
         }
@@ -204,8 +205,7 @@ void SkiaPipeline::prepareToDraw(const RenderThread& thread, Bitmap* bitmap) {
     GrContext* context = thread.getGrContext();
     if (context) {
         ATRACE_FORMAT("Bitmap#prepareToDraw %dx%d", bitmap->width(), bitmap->height());
-        sk_sp<SkColorFilter> colorFilter;
-        auto image = bitmap->makeImage(&colorFilter);
+        auto image = bitmap->makeImage();
         if (image.get() && !bitmap->isHardware()) {
             SkImage_pinAsTexture(image.get(), context);
             SkImage_unpinAsTexture(image.get(), context);
@@ -301,8 +301,7 @@ void SkiaPipeline::endCapture(SkSurface* surface) {
                 mSavePictureProcessor->savePicture(data, mCapturedFile);
             } else {
                 mSavePictureProcessor->savePicture(
-                        data,
-                        mCapturedFile + "_" + std::to_string(mCaptureSequence));
+                        data, mCapturedFile + "_" + std::to_string(mCaptureSequence));
             }
             mCaptureSequence--;
         }
@@ -452,6 +451,20 @@ void SkiaPipeline::dumpResourceCacheUsage() const {
                 bytes * (1.0f / (1024.0f * 1024.0f)), maxBytes * (1.0f / (1024.0f * 1024.0f)));
 
     ALOGD("%s", log.c_str());
+}
+
+void SkiaPipeline::setSurfaceColorProperties(ColorMode colorMode) {
+    if (colorMode == ColorMode::SRGB) {
+        mSurfaceColorType = SkColorType::kN32_SkColorType;
+        mSurfaceColorGamut = SkColorSpace::Gamut::kSRGB_Gamut;
+        mSurfaceColorSpace = SkColorSpace::MakeSRGB();
+    } else if (colorMode == ColorMode::WideColorGamut) {
+        mSurfaceColorType = DeviceInfo::get()->getWideColorType();
+        mSurfaceColorGamut = DeviceInfo::get()->getWideColorGamut();
+        mSurfaceColorSpace = DeviceInfo::get()->getWideColorSpace();
+    } else {
+        LOG_ALWAYS_FATAL("Unreachable: unsupported color mode.");
+    }
 }
 
 // Overdraw debugging

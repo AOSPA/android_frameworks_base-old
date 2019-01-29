@@ -14,7 +14,8 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static com.android.systemui.statusbar.policy.DarkIconDispatcher.getTint;
+import static com.android.systemui.plugins.DarkIconDispatcher.DEFAULT_ICON_TINT;
+import static com.android.systemui.plugins.DarkIconDispatcher.getTint;
 
 import android.animation.ArgbEvaluator;
 import android.content.Context;
@@ -24,9 +25,18 @@ import android.util.ArrayMap;
 import android.widget.ImageView;
 
 import com.android.systemui.R;
-import com.android.systemui.statusbar.policy.DarkIconDispatcher;
+import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 
-public class DarkIconDispatcherImpl implements DarkIconDispatcher {
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
+/**
+ */
+@Singleton
+public class DarkIconDispatcherImpl implements SysuiDarkIconDispatcher {
 
     private final LightBarTransitionsController mTransitionsController;
     private final Rect mTintArea = new Rect();
@@ -37,6 +47,9 @@ public class DarkIconDispatcherImpl implements DarkIconDispatcher {
     private int mDarkModeIconColorSingleTone;
     private int mLightModeIconColorSingleTone;
 
+    /**
+     */
+    @Inject
     public DarkIconDispatcherImpl(Context context) {
         mDarkModeIconColorSingleTone = context.getColor(R.color.dark_mode_icon_color_single_tone);
         mLightModeIconColorSingleTone = context.getColor(R.color.light_mode_icon_color_single_tone);
@@ -74,7 +87,7 @@ public class DarkIconDispatcherImpl implements DarkIconDispatcher {
     }
 
     /**
-     * Sets the dark area so {@link #setIconsDark} only affects the icons in the specified area.
+     * Sets the dark area so {@link #applyDark} only affects the icons in the specified area.
      *
      * @param darkArea the area in which icons should change it's tint, in logical screen
      *                 coordinates
@@ -102,5 +115,13 @@ public class DarkIconDispatcherImpl implements DarkIconDispatcher {
         for (int i = 0; i < mReceivers.size(); i++) {
             mReceivers.valueAt(i).onDarkChanged(mTintArea, mDarkIntensity, mIconTint);
         }
+    }
+
+    @Override
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("DarkIconDispatcher: ");
+        pw.println("  mIconTint: 0x" + Integer.toHexString(mIconTint));
+        pw.println("  mDarkIntensity: " + mDarkIntensity + "f");
+        pw.println("  mTintArea: " + mTintArea);
     }
 }

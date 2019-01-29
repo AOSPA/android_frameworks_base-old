@@ -30,10 +30,13 @@ import "frameworks/base/core/proto/android/server/enums.proto";
 import "frameworks/base/core/proto/android/server/location/enums.proto";
 import "frameworks/base/core/proto/android/service/procstats_enum.proto";
 import "frameworks/base/core/proto/android/stats/enums.proto";
+import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
+import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enums.proto";
+import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy.proto";
 
 /**
  * The master atom class. This message defines all of the available
@@ -156,10 +159,24 @@ message Atom {
         ServiceLaunchReported service_launch_reported = 100;
         PhenotypeFlagStateChanged phenotype_flag_state_changed = 101;
         BinaryPushStateChanged binary_push_state_changed = 102;
+        DevicePolicyEvent device_policy_event = 103;
+        DocsUIFileOperationCanceledReported docs_ui_file_op_canceled = 104;
+        DocsUIFileOperationCopyMoveModeReported docs_ui_file_op_copy_move_mode_reported = 105;
+        DocsUIFileOperationFailureReported docs_ui_file_op_failure = 106;
+        DocsUIFileOperationReported docs_ui_provider_file_op = 107;
+        DocsUIInvalidScopedAccessRequestReported docs_ui_invalid_scoped_access_request = 108;
+        DocsUILaunchReported docs_ui_launch_reported = 109;
+        DocsUIRootVisitedReported docs_ui_root_visited = 110;
+        DocsUIStartupMsReported docs_ui_startup_ms = 111;
+        DocsUIUserActionReported docs_ui_user_action_reported = 112;
+        WifiEnabledStateChanged wifi_enabled_state_changed = 113;
+        WifiRunningStateChanged wifi_running_state_changed = 114;
+        AppCompacted app_compacted = 115;
+        NetworkDnsEventReported network_dns_event_Reported = 116;
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10038
+    // Next: 10043
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -203,6 +220,9 @@ message Atom {
         DeviceCalculatedPowerUse device_calculated_power_use = 10039;
         DeviceCalculatedPowerBlameUid device_calculated_power_blame_uid = 10040;
         DeviceCalculatedPowerBlameOther device_calculated_power_blame_other = 10041;
+        ProcessMemoryHighWaterMark process_memory_high_water_mark = 10042;
+        BatteryLevel battery_level = 10043;
+        BuildInformation build_information = 10044;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -855,6 +875,39 @@ message KernelWakeupReported {
 }
 
 /**
+ * Logs when Wifi is toggled on/off.
+ * Note that Wifi may still perform certain functions (e.g. location scanning) even when disabled.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/am/BatteryStatsService.java
+ */
+message WifiEnabledStateChanged {
+    enum State {
+        OFF = 0;
+        ON = 1;
+    }
+    optional State state = 1;
+}
+
+/**
+ * Logs when an app causes Wifi to run. In this context, 'to run' means to use Wifi Client Mode.
+ * TODO: Include support for Hotspot, perhaps by using an extra field to denote 'mode'.
+ * Note that Wifi Scanning is monitored separately in WifiScanStateChanged.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/am/BatteryStatsService.java
+ */
+message WifiRunningStateChanged {
+    repeated AttributionNode attribution_node = 1;
+
+    enum State {
+        OFF = 0;
+        ON = 1;
+    }
+    optional State state = 2;
+}
+
+/**
  * Logs wifi locks held by an app.
  *
  * Logged from:
@@ -874,7 +927,7 @@ message WifiLockStateChanged {
  * Logs wifi signal strength changes.
  *
  * Logged from:
- *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
+ *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/ClientModeImpl.java
  */
 message WifiSignalStrengthChanged {
     // Signal strength, from frameworks/base/core/proto/android/telephony/enums.proto.
@@ -885,7 +938,7 @@ message WifiSignalStrengthChanged {
  * Logs wifi scans performed by an app.
  *
  * Logged from:
- *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
+ *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/scanner/WifiScanningServiceImpl.java
  */
 message WifiScanStateChanged {
     repeated AttributionNode attribution_node = 1;
@@ -901,7 +954,7 @@ message WifiScanStateChanged {
  * Logs wifi multicast locks held by an app
  *
  * Logged from:
- *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
+ *   frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiMulticastLockManager.java
  */
 message WifiMulticastLockStateChanged {
     repeated AttributionNode attribution_node = 1;
@@ -911,6 +964,8 @@ message WifiMulticastLockStateChanged {
         ON = 1;
     }
     optional State state = 2;
+
+    optional string tag = 3;
 }
 
 /**
@@ -1201,6 +1256,12 @@ message UsbDeviceAttached {
     optional bool has_audio = 3;
     optional bool has_hid = 4;
     optional bool has_storage = 5;
+    enum State {
+        STATE_DISCONNECTED = 0;
+        STATE_CONNECTED = 1;
+    }
+    optional State state = 6;
+    optional int64 last_connect_duration_millis = 7;
 }
 
 
@@ -1249,14 +1310,18 @@ message BluetoothConnectionStateChanged {
  * Logs when something is plugged into or removed from the USB-C connector.
  *
  * Logged from:
- *  Vendor USB HAL.
+ *  UsbService
  */
 message UsbConnectorStateChanged {
     enum State {
-      DISCONNECTED = 0;
-      CONNECTED = 1;
+        STATE_DISCONNECTED = 0;
+        STATE_CONNECTED = 1;
     }
     optional State state = 1;
+    optional string id = 2;
+    // Last active session in ms.
+    // 0 when the port is in connected state.
+    optional int64 last_connect_duration_millis = 3;
 }
 
 /**
@@ -1332,8 +1397,9 @@ message PhysicalDropDetected {
  * Log bucketed battery charge cycles.
  *
  * Each bucket represents cycles of the battery past
- * a given charge point.  For example, bucket 1 is the
- * lowest 1/8th of the battery, and bucket 8 is 100%.
+ * a given charge point.  For example, if 10 cycle buckets are
+ * initialized, bucket 1 is the lowest 1/10th of the battery,
+ * and bucket 10 is 100%.
  *
  * Logged from:
  * /sys/class/power_supply/bms/cycle_count, via Vendor.
@@ -1347,6 +1413,8 @@ message ChargeCyclesReported {
     optional int32 cycle_bucket_6 = 6;
     optional int32 cycle_bucket_7 = 7;
     optional int32 cycle_bucket_8 = 8;
+    optional int32 cycle_bucket_9 = 9;
+    optional int32 cycle_bucket_10 = 10;
 }
 
 /**
@@ -1492,17 +1560,17 @@ message SettingsUIChanged {
     /**
      * Where the action is happening
      */
-    optional android.app.settings.PageId pageId = 3;
+    optional android.app.settings.PageId page_id = 3;
 
     /**
      * What preference changed in this event.
      */
-    optional string changedPreferenceKey = 4;
+    optional string changed_preference_key = 4;
 
     /**
      * The new value of the changed preference.
      */
-    optional int64 changedPreferenceIntValue = 5;
+    optional int64 changed_preference_int_value = 5;
 }
 
 /**
@@ -1594,6 +1662,8 @@ message AppCrashOccurred {
         FOREGROUND = 2;
     }
     optional ForegroundState foreground_state = 7;
+
+    optional android.server.ErrorSource error_source = 8;
 }
 
 /**
@@ -1612,6 +1682,8 @@ message WTFOccurred {
 
     // The pid if available. -1 means not available.
     optional sint32 pid = 4;
+
+    optional android.server.ErrorSource error_source = 5;
 }
 
 /**
@@ -1649,6 +1721,10 @@ message ANROccurred {
         FOREGROUND = 2;
     }
     optional ForegroundState foreground_state = 6;
+
+    optional android.server.ErrorSource error_source = 7;
+
+    optional string package_name = 8;
 }
 
 /**
@@ -2001,6 +2077,9 @@ message LmkKillOccurred {
 
     // SWAP
     optional int64 swap_in_bytes = 8;
+
+    // The elapsed real time of start of the process.
+    optional int64 process_start_time_nanos = 9;
 }
 
 /*
@@ -2354,16 +2433,23 @@ message KernelWakelock {
 }
 
 /**
- * Pulls low power state information. This includes platform and subsystem sleep state information,
- * PowerStatePlatformSleepState, PowerStateVoter or PowerStateSubsystemSleepState as defined in
+ * Pulls low power state information. If power.stats HAL is not available, this
+ * includes platform and subsystem sleep state information,
+ * PowerStatePlatformSleepState, PowerStateVoter or PowerStateSubsystemSleepState
+ * as defined in:
  *   hardware/interfaces/power/1.0/types.hal
  *   hardware/interfaces/power/1.1/types.hal
+ * If power.stats HAL is available, this includes PowerEntityStateResidencyResult
+ * as defined in:
+ *   hardware/interfaces/power/stats/1.0/types.hal
  */
 message SubsystemSleepState {
     // Subsystem name
     optional string subsystem_name = 1;
     // For PlatformLowPowerStats (hal 1.0), this is the voter name, which could be empty.
     // For SubsystemLowPowerStats (hal 1.1), this is the sleep state name.
+    // For PowerEntityStateResidencyResult (hal power/stats/1.0) this is the
+    //    powerEntityStateName from the corresponding PowerEntityStateInfo.
     optional string subname = 2;
     // The number of times it entered, or voted for entering the sleep state
     optional uint64 count = 3;
@@ -2411,8 +2497,8 @@ message CpuTimePerFreq {
  */
 message CpuTimePerUid {
     optional int32 uid = 1 [(is_uid) = true];
-    optional uint64 user_time_millis = 2;
-    optional uint64 sys_time_millis = 3;
+    optional uint64 user_time_micros = 2;
+    optional uint64 sys_time_micros = 3;
 }
 
 /**
@@ -2500,15 +2586,19 @@ message BluetoothActivityInfo {
 
 /*
  * Logs the memory stats for a process.
+ *
+ * Pulled from StatsCompanionService for all managed processes (from ActivityManagerService).
  */
 message ProcessMemoryState {
     // The uid if available. -1 means not available.
     optional int32 uid = 1 [(is_uid) = true];
 
     // The process name.
+    // Usually package name, "system" for system server.
+    // Provided by ActivityManagerService.
     optional string process_name = 2;
 
-    // oom adj score.
+    // Current OOM score adjustment. Value read from ProcessRecord.
     optional int32 oom_adj_score = 3;
 
     // # of page-faults
@@ -2518,18 +2608,22 @@ message ProcessMemoryState {
     optional int64 page_major_fault = 5;
 
     // RSS
+    // Value is read from /proc/PID/stat, field 24. Or from memory.stat, field
+    // total_rss if per-app memory cgroups are enabled.
     optional int64 rss_in_bytes = 6;
 
     // CACHE
+    // Value is read from memory.stat, field total_cache if per-app memory
+    // cgroups are enabled. Otherwise, 0.
     optional int64 cache_in_bytes = 7;
 
     // SWAP
+    // Value is read from memory.stat, field total_swap if per-app memory
+    // cgroups are enabled. Otherwise, 0.
     optional int64 swap_in_bytes = 8;
 
-    // RSS high watermark.
-    // Peak RSS usage of the process. Value is read from the VmHWM field in /proc/PID/status or
-    // from memory.max_usage_in_bytes under /dev/memcg if the device uses per-app memory cgroups.
-    optional int64 rss_high_watermark_in_bytes = 9;
+    // Deprecated: use ProcessMemoryHighWaterMark atom instead. Always 0.
+    optional int64 rss_high_watermark_in_bytes = 9 [deprecated = true];
 
     // Elapsed real time when the process started.
     // Value is read from /proc/PID/stat, field 22. 0 if read from per-app memory cgroups.
@@ -2538,12 +2632,15 @@ message ProcessMemoryState {
 
 /*
  * Logs the memory stats for a native process (from procfs).
+ *
+ * Pulled from StatsCompanionService for selected native processes.
  */
 message NativeProcessMemoryState {
     // The uid if available. -1 means not available.
     optional int32 uid = 1 [(is_uid) = true];
 
     // The process name.
+    // Value read from /proc/PID/cmdline.
     optional string process_name = 2;
 
     // # of page-faults
@@ -2553,15 +2650,37 @@ message NativeProcessMemoryState {
     optional int64 page_major_fault = 4;
 
     // RSS
+    // Value read from /proc/PID/stat, field 24.
     optional int64 rss_in_bytes = 5;
 
-    // RSS high watermark.
-    // Peak RSS usage of the process. Value is read from the VmHWM field in /proc/PID/status.
-    optional int64 rss_high_watermark_in_bytes = 6;
+    // Deprecated: use ProcessMemoryHighWaterMark atom instead. Always 0.
+    optional int64 rss_high_watermark_in_bytes = 6 [deprecated = true];
 
     // Elapsed real time when the process started.
     // Value is read from /proc/PID/stat, field 22.
     optional int64 start_time_nanos = 7;
+}
+
+/*
+ * Logs the memory high-water mark for a process.
+ *
+ * Pulled from StatsCompanionService for all managed processes (from ActivityManagerServie)
+ * and for selected native processes.
+ *
+ * Pulling this atom resets high-water mark counters for all processes.
+ */
+message ProcessMemoryHighWaterMark {
+    // The uid if available. -1 means not available.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // The process name.
+    // Usually package name or process cmdline.
+    // Provided by ActivityManagerService or read from /proc/PID/cmdline.
+    optional string process_name = 2;
+
+    // RSS high-water mark. Peak RSS usage of the process. Read from the VmHWM field in
+    // /proc/PID/status.
+    optional int64 rss_high_water_mark_in_bytes = 3;
 }
 
 /*
@@ -2652,6 +2771,17 @@ message BatteryVoltage {
 }
 
 /**
+ * Pulls battery level (percent full, from 0 to 100).
+ *
+ * Pulled from:
+ *   frameworks/base/cmds/statsd/src/external/ResourceHealthManagerPuller.cpp
+ */
+message BatteryLevel {
+    // Battery level. Should be in [0, 100].
+    optional int32 battery_level = 1;
+}
+
+/**
  * Pulls the temperature of various parts of the device.
  * The units are tenths of a degree Celsius. Eg: 30.3C is reported as 303.
  *
@@ -2659,13 +2789,14 @@ message BatteryVoltage {
  *   frameworks/base/cmds/statsd/src/external/ResourceThermalManagerPuller.cpp
  */
 message Temperature {
-    // The type of temperature being reported. Eg. CPU, GPU, SKIN, BATTERY.
+    // The type of temperature being reported. Eg. CPU, GPU, SKIN, BATTERY, BCL_.
     optional android.os.TemperatureTypeEnum sensor_location = 1;
 
     // The name of the temperature source. Eg. CPU0
     optional string sensor_name = 2;
 
     // Temperature in tenths of a degree C.
+    // For BCL, it is decimillivolt, decimilliamps, and percentage * 10.
     optional int32 temperature_deci_celsius = 3;
 }
 
@@ -3278,27 +3409,78 @@ message CpuTimePerThreadFreq {
     // UID that owns the process.
     optional int32 uid = 1 [(is_uid) = true];
     // ID of the process.
-    optional uint32 process_id = 2;
+    optional int32 process_id = 2;
     // ID of the thread.
-    optional uint32 thread_id = 3;
+    optional int32 thread_id = 3;
     // Name of the process taken from `/proc/$PID/cmdline`.
     optional string process_name = 4;
     // Name of the thread taken from `/proc/$PID/task/$TID/comm`
     optional string thread_name = 5;
-    // What frequency the CPU was running at, in KHz
-    optional uint32 frequency_khz = 6;
-    // Time spent in frequency in milliseconds, since thread start.
-    optional uint32 time_millis = 7;
+
+    // Report eight different frequencies, and how much time is spent in each frequency. Frequencies
+    // are given in KHz, and time is given in milliseconds since the thread started. All eight
+    // frequencies are given here as the alternative is sending eight separate atoms. This method
+    // significantly reduces the amount of data created
+    optional int32 frequency1_khz = 6;
+    optional int32 time1_millis = 7;
+    optional int32 frequency2_khz = 8;
+    optional int32 time2_millis = 9;
+    optional int32 frequency3_khz = 10;
+    optional int32 time3_millis = 11;
+    optional int32 frequency4_khz = 12;
+    optional int32 time4_millis = 13;
+    optional int32 frequency5_khz = 14;
+    optional int32 time5_millis = 15;
+    optional int32 frequency6_khz = 16;
+    optional int32 time6_millis = 17;
+    optional int32 frequency7_khz = 18;
+    optional int32 time7_millis = 19;
+    optional int32 frequency8_khz = 20;
+    optional int32 time8_millis = 21;
+}
+
+/**
+ * Pulls information about the device's build.
+ */
+message BuildInformation {
+    // Build.FINGERPRINT. A string that uniquely identifies this build. Do not parse.
+    // E.g. may be composed of the brand, product, device, release, id, incremental, type, and tags.
+    optional string fingerprint = 1;
+
+    // Build.BRAND. The consumer-visible brand with which the product/hardware will be associated.
+    optional string brand = 2;
+
+    // Build.PRODUCT. The name of the overall product.
+    optional string product = 3;
+
+    // Build.DEVICE. The name of the industrial design.
+    optional string device = 4;
+
+    // Build.VERSION.RELEASE. The user-visible version string.  E.g., "1.0" or "3.4b5" or "bananas".
+    optional string version_release = 5;
+
+    // Build.ID. E.g. a label like "M4-rc20".
+    optional string id = 6;
+
+    // Build.VERSION.INCREMENTAL. The internal value used by the underlying source control to
+    // represent this build.
+    optional string version_incremental = 7;
+
+    // Build.TYPE. The type of build, like "user" or "eng".
+    optional string type = 8;
+
+    // Build.TAGS. Comma-separated tags describing the build, like "unsigned,debug".
+    optional string tags = 9;
 }
 
 /**
  * Pulls on-device BatteryStats power use calculations for the overall device.
  */
 message DeviceCalculatedPowerUse {
-    // Power used by the device in mAh, as computed by BatteryStats, since BatteryStats last reset
-    // (i.e. roughly since device was last significantly charged).
-    // Currently, this is BatteryStatsHelper.getComputedPower() (not getTotalPower()).
-    optional float computed_power_milli_amp_hours = 1;
+    // Power used by the device in nAs (i.e. nanocoulombs (nC)), as computed by BatteryStats, since
+    // BatteryStats last reset (i.e. roughly since device was last significantly charged).
+    // Currently, this is from BatteryStatsHelper.getComputedPower() (not getTotalPower()).
+    optional int64 computed_power_nano_amp_secs = 1;
 }
 
 /**
@@ -3310,9 +3492,9 @@ message DeviceCalculatedPowerBlameUid {
     // Uid being blamed. Note: isolated uids have already been mapped to host uid.
     optional int32 uid = 1 [(is_uid) = true];
 
-    // Power used by this uid in mAh, as computed by BatteryStats, since BatteryStats last reset
-    // (i.e. roughly since device was last significantly charged).
-    optional float power_milli_amp_hours = 2;
+    // Power used by this uid in nAs (i.e. nanocoulombs (nC)), as computed by BatteryStats, since
+    // BatteryStats last reset (i.e. roughly since device was last significantly charged).
+    optional int64 power_nano_amp_secs = 2;
 }
 
 /**
@@ -3346,7 +3528,239 @@ message DeviceCalculatedPowerBlameOther {
     }
     optional DrainType drain_type = 1;
 
-    // Power used by this item in mAh, as computed by BatteryStats, since BatteryStats last reset
-    // (i.e. roughly since device was last significantly charged).
-    optional float power_milli_amp_hours = 2;
+    // Power used by this item in nAs (i.e. nanocoulombs (nC)), as computed by BatteryStats, since
+    // BatteryStats last reset (i.e. roughly since device was last significantly charged).
+    optional int64 power_nano_amp_secs = 2;
+}
+
+/**
+ * Logs device policy features.
+ *
+ * Logged from:
+ *   frameworks/base/services/devicepolicy/java/com/android/server/devicepolicy/DevicePolicyManagerService.java
+ *   packages/apps/ManagedProvisioning/src/com/android/managedprovisioning/
+ */
+message DevicePolicyEvent {
+    // The event id - unique for each event.
+    optional android.stats.devicepolicy.EventId event_id = 1;
+    // The admin package name.
+    optional string admin_package_name = 2;
+    // A generic integer parameter.
+    optional int32 integer_value = 3;
+    // A generic boolean parameter.
+    optional bool boolean_value = 4;
+    // A parameter specifying a time period in milliseconds.
+    optional uint64 time_period_millis = 5;
+    // A parameter specifying a list of package names, bundle extras or string parameters.
+    optional android.stats.devicepolicy.StringList string_list_value = 6 [(log_mode) = MODE_BYTES];
+}
+
+/**
+ * Logs when DocumentsUI is started, and how. Call this when DocumentsUI first starts up.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUILaunchReported {
+    optional android.stats.docsui.LaunchAction launch_action = 1;
+    optional bool has_initial_uri = 2;
+    optional android.stats.docsui.MimeType mime_type = 3;
+    optional android.stats.docsui.Root initial_root = 4;
+}
+
+/**
+ * Logs root/app visited event in file managers/picker. Call this when the user
+ * taps on root/app in hamburger menu.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUIRootVisitedReported {
+    optional android.stats.docsui.ContextScope scope = 1;
+    optional android.stats.docsui.Root root = 2;
+}
+
+/**
+ * Logs file operation stats. Call this when a file operation has completed.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUIFileOperationReported {
+    optional android.stats.docsui.Provider provider = 1;
+    optional android.stats.docsui.FileOperation file_op = 2;
+}
+
+/**
+ * Logs file operation stats. Call this when a copy/move operation has completed with a specific
+ * mode.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUIFileOperationCopyMoveModeReported {
+    optional android.stats.docsui.FileOperation file_op = 1;
+    optional android.stats.docsui.CopyMoveOpMode mode = 2;
+}
+
+
+/**
+ * Logs file sub operation stats. Call this when a file operation has failed.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUIFileOperationFailureReported {
+    optional android.stats.docsui.Authority authority = 1;
+    optional android.stats.docsui.SubFileOperation sub_op = 2;
+}
+
+/**
+* Logs the cancellation of a file operation. Call this when a job is canceled
+*
+* Logged from:
+*     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+*/
+message DocsUIFileOperationCanceledReported {
+    optional android.stats.docsui.FileOperation file_op = 1;
+}
+
+/**
+ * Logs startup time in milliseconds.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUIStartupMsReported {
+    optional int32 startup_millis = 1;
+}
+
+/**
+ * Logs the action that was started by user.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/Metrics.java
+ */
+message DocsUIUserActionReported {
+    optional android.stats.docsui.UserAction action = 1;
+}
+
+/**
+ * Logs the invalid type when invalid scoped access is requested.
+ *
+ * Logged from:
+ *     package/app/DocumentsUI/src/com/android/documentsui/ScopedAccessMetrics.java
+ */
+message DocsUIInvalidScopedAccessRequestReported {
+    optional android.stats.docsui.InvalidScopedAccess type = 1;
+}
+
+/**
+ * Logs when an app's memory is compacted.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+ */
+message AppCompacted {
+  // The pid of the process being compacted.
+  optional int32 pid = 1;
+
+  // The name of the process being compacted.
+  optional string process_name = 2;
+
+  // The type of compaction.
+  enum Action {
+    UNKNOWN = 0;
+    SOME = 1;
+    FULL = 2;
+  }
+  optional Action action = 3;
+
+  // Total RSS in kilobytes consumed by the process prior to compaction.
+  optional int64 before_rss_total_kilobytes = 4;
+
+  // File RSS in kilobytes consumed by the process prior to compaction.
+  optional int64 before_rss_file_kilobytes = 5;
+
+  // Anonymous RSS in kilobytes consumed by the process prior to compaction.
+  optional int64 before_rss_anon_kilobytes = 6;
+
+  // Swap in kilobytes consumed by the process prior to compaction.
+  optional int64 before_swap_kilobytes = 7;
+
+  // Total RSS in kilobytes consumed by the process after compaction.
+  optional int64 after_rss_total_kilobytes = 8;
+
+  // File RSS in kilobytes consumed by the process after compaction.
+  optional int64 after_rss_file_kilobytes = 9;
+
+  // Anonymous RSS in kilobytes consumed by the process after compaction.
+  optional int64 after_rss_anon_kilobytes = 10;
+
+  // Swap in kilobytes consumed by the process after compaction.
+  optional int64 after_swap_kilobytes = 11;
+
+  // The time taken to perform compaction in milliseconds.
+  optional int64 time_to_compact_millis = 12;
+
+  // The last compaction action performed for this app.
+  optional Action last_action = 13;
+
+  // The last time that compaction was attempted on this process in milliseconds
+  // since boot, not including sleep (see SystemClock.uptimeMillis()).
+  optional int64 last_compact_timestamp_ms_since_boot = 14;
+
+  // The oom_score_adj at the time of compaction.
+  optional int32 oom_score_adj = 15;
+
+  // The process state at the time of compaction.
+  optional android.app.ProcessStateEnum process_state = 16 [default = PROCESS_STATE_UNKNOWN];
+}
+
+/**
+ * Logs the latency period(in microseconds) and the return code of
+ * the DNS(Domain Name System) lookups.
+ * These 4 methods(GETADDRINFO,GETHOSTBYNAME,GETHOSTBYADDR,RES_NSEND)
+ * to get info(address or hostname) from DNS server(or DNS cache).
+ * Logged from:
+ *   /system/netd/server/DnsProxyListener.cpp
+ */
+message NetworkDnsEventReported {
+    // The types of the DNS lookups, as defined in
+    //system/netd/server/binder/android/net/metrics/INetdEventListener.aidl
+    enum EventType {
+        EVENT_UNKNOWN = 0;
+        EVENT_GETADDRINFO = 1;
+        EVENT_GETHOSTBYNAME = 2;
+        EVENT_GETHOSTBYADDR = 3;
+        EVENT_RES_NSEND = 4;
+    }
+    optional EventType event_type = 1;
+
+    // The return value of the DNS resolver for each DNS lookups.
+    //bionic/libc/include/netdb.h
+    //system/netd/resolv/include/netd_resolv/resolv.h
+    enum ReturnCode {
+        EAI_NOERR = 0;
+        EAI_ADDRFAMILY = 1;
+        EAI_AGAIN = 2;
+        EAI_BADFLAGS = 3;
+        EAI_FAIL = 4;
+        EAI_FAMILY = 5;
+        EAI_MEMORY = 6;
+        EAI_NODATA = 7;
+        EAI_NONAME = 8;
+        EAI_SERVICE = 9;
+        EAI_SOCKTYPE = 10;
+        EAI_SYSTEM = 11;
+        EAI_BADHINTS = 12;
+        EAI_PROTOCOL = 13;
+        EAI_OVERFLOW = 14;
+        RESOLV_TIMEOUT = 255;
+        EAI_MAX = 256;
+    }
+    optional ReturnCode return_code = 2;
+
+    // The latency period(in microseconds) it took for this DNS lookup to complete.
+    optional int32 latency_micros = 3;
 }

@@ -16,11 +16,15 @@
 
 package android.provider;
 
+import android.annotation.BytesLong;
+import android.annotation.DurationMillisLong;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
 import android.app.AppGlobals;
@@ -37,6 +41,7 @@ import android.database.DatabaseUtils;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Point;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
@@ -45,11 +50,13 @@ import android.os.OperationCanceledException;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
 import android.os.storage.VolumeInfo;
 import android.service.media.CameraPrewarmService;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
@@ -65,6 +72,7 @@ import java.io.OutputStream;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * The Media provider contains meta data for all available media on both internal
@@ -101,6 +109,11 @@ public final class MediaStore {
     /** {@hide} */
     public static final String GET_MEDIA_URI_CALL = "get_media_uri";
 
+    /** {@hide} */
+    public static final String GET_CONTRIBUTED_MEDIA_CALL = "get_contributed_media";
+    /** {@hide} */
+    public static final String DELETE_CONTRIBUTED_MEDIA_CALL = "delete_contributed_media";
+
     /**
      * This is for internal use by the media scanner only.
      * Name of the (optional) Uri parameter that determines whether to skip deleting
@@ -120,7 +133,11 @@ public final class MediaStore {
     /** {@hide} */
     public static final String PARAM_INCLUDE_PENDING = "includePending";
     /** {@hide} */
+    public static final String PARAM_INCLUDE_TRASHED = "includeTrashed";
+    /** {@hide} */
     public static final String PARAM_PROGRESS = "progress";
+    /** {@hide} */
+    public static final String PARAM_REQUIRE_ORIGINAL = "requireOriginal";
 
     /**
      * Activity Action: Launch a music player.
@@ -472,9 +489,44 @@ public final class MediaStore {
      * By default no pending items are returned.
      *
      * @see MediaColumns#IS_PENDING
+     * @see MediaStore#setIncludePending(Uri)
+     * @see MediaStore#createPending(Context, PendingParams)
      */
     public static @NonNull Uri setIncludePending(@NonNull Uri uri) {
         return uri.buildUpon().appendQueryParameter(PARAM_INCLUDE_PENDING, "1").build();
+    }
+
+    /**
+     * Update the given {@link Uri} to also include any trashed media items from
+     * calls such as
+     * {@link ContentResolver#query(Uri, String[], Bundle, CancellationSignal)}.
+     * By default no trashed items are returned.
+     *
+     * @see MediaColumns#IS_TRASHED
+     * @see MediaStore#setIncludeTrashed(Uri)
+     * @see MediaStore#trash(Context, Uri)
+     * @see MediaStore#untrash(Context, Uri)
+     */
+    public static @NonNull Uri setIncludeTrashed(@NonNull Uri uri) {
+        return uri.buildUpon().appendQueryParameter(PARAM_INCLUDE_TRASHED, "1").build();
+    }
+
+    /**
+     * Update the given {@link Uri} to indicate that the caller requires the
+     * original file contents when calling
+     * {@link ContentResolver#openFileDescriptor(Uri, String)}.
+     * <p>
+     * This can be useful when the caller wants to ensure they're backing up the
+     * exact bytes of the underlying media, without any Exif redaction being
+     * performed.
+     * <p>
+     * If the original file contents cannot be provided, a
+     * {@link UnsupportedOperationException} will be thrown when the returned
+     * {@link Uri} is used, such as when the caller doesn't hold
+     * {@link android.Manifest.permission#ACCESS_MEDIA_LOCATION}.
+     */
+    public static @NonNull Uri setRequireOriginal(@NonNull Uri uri) {
+        return uri.buildUpon().appendQueryParameter(PARAM_REQUIRE_ORIGINAL, "1").build();
     }
 
     /**
@@ -485,6 +537,9 @@ public final class MediaStore {
      *
      * @return token which can be passed to {@link #openPending(Context, Uri)}
      *         to work with this pending item.
+     * @see MediaColumns#IS_PENDING
+     * @see MediaStore#setIncludePending(Uri)
+     * @see MediaStore#createPending(Context, PendingParams)
      */
     public static @NonNull Uri createPending(@NonNull Context context,
             @NonNull PendingParams params) {
@@ -541,6 +596,8 @@ public final class MediaStore {
             this.insertValues.put(MediaColumns.DATE_ADDED, now);
             this.insertValues.put(MediaColumns.DATE_MODIFIED, now);
             this.insertValues.put(MediaColumns.IS_PENDING, 1);
+            this.insertValues.put(MediaColumns.DATE_EXPIRES,
+                    (System.currentTimeMillis() + DateUtils.DAY_IN_MILLIS) / 1000);
         }
 
         /**
@@ -571,6 +628,34 @@ public final class MediaStore {
          */
         public void setSecondaryDirectory(@Nullable String secondaryDirectory) {
             this.secondaryDirectory = secondaryDirectory;
+        }
+
+        /**
+         * Optionally set the Uri from where the file has been downloaded. This is used
+         * for files being added to {@link Downloads} table.
+         *
+         * @see DownloadColumns#DOWNLOAD_URI
+         */
+        public void setDownloadUri(@Nullable Uri downloadUri) {
+            if (downloadUri == null) {
+                this.insertValues.remove(DownloadColumns.DOWNLOAD_URI);
+            } else {
+                this.insertValues.put(DownloadColumns.DOWNLOAD_URI, downloadUri.toString());
+            }
+        }
+
+        /**
+         * Optionally set the Uri indicating HTTP referer of the file. This is used for
+         * files being added to {@link Downloads} table.
+         *
+         * @see DownloadColumns#REFERER_URI
+         */
+        public void setRefererUri(@Nullable Uri refererUri) {
+            if (refererUri == null) {
+                this.insertValues.remove(DownloadColumns.REFERER_URI);
+            } else {
+                this.insertValues.put(DownloadColumns.REFERER_URI, refererUri.toString());
+            }
         }
     }
 
@@ -637,6 +722,7 @@ public final class MediaStore {
         public @NonNull Uri publish() {
             final ContentValues values = new ContentValues();
             values.put(MediaColumns.IS_PENDING, 0);
+            values.putNull(MediaColumns.DATE_EXPIRES);
             mContext.getContentResolver().update(mUri, values, null, null);
             return mUri;
         }
@@ -655,6 +741,67 @@ public final class MediaStore {
             // progress is being actively made.
             notifyProgress(-1);
         }
+    }
+
+    /**
+     * Mark the given item as being "trashed", meaning it should be deleted at
+     * some point in the future. This is a more gentle operation than simply
+     * calling {@link ContentResolver#delete(Uri, String, String[])}, which
+     * would take effect immediately.
+     * <p>
+     * This method preserves trashed items for at least 48 hours before erasing
+     * them, giving the user a chance to untrash the item.
+     *
+     * @see MediaColumns#IS_TRASHED
+     * @see MediaStore#setIncludeTrashed(Uri)
+     * @see MediaStore#trash(Context, Uri)
+     * @see MediaStore#untrash(Context, Uri)
+     */
+    public static void trash(@NonNull Context context, @NonNull Uri uri) {
+        trash(context, uri, 48 * DateUtils.HOUR_IN_MILLIS);
+    }
+
+    /**
+     * Mark the given item as being "trashed", meaning it should be deleted at
+     * some point in the future. This is a more gentle operation than simply
+     * calling {@link ContentResolver#delete(Uri, String, String[])}, which
+     * would take effect immediately.
+     * <p>
+     * This method preserves trashed items for at least the given timeout before
+     * erasing them, giving the user a chance to untrash the item.
+     *
+     * @see MediaColumns#IS_TRASHED
+     * @see MediaStore#setIncludeTrashed(Uri)
+     * @see MediaStore#trash(Context, Uri)
+     * @see MediaStore#untrash(Context, Uri)
+     */
+    public static void trash(@NonNull Context context, @NonNull Uri uri,
+            @DurationMillisLong long timeoutMillis) {
+        if (timeoutMillis < 0) {
+            throw new IllegalArgumentException();
+        }
+
+        final ContentValues values = new ContentValues();
+        values.put(MediaColumns.IS_TRASHED, 1);
+        values.put(MediaColumns.DATE_EXPIRES,
+                (System.currentTimeMillis() + timeoutMillis) / 1000);
+        context.getContentResolver().update(uri, values, null, null);
+    }
+
+    /**
+     * Mark the given item as being "untrashed", meaning it should no longer be
+     * deleted as previously requested through {@link #trash(Context, Uri)}.
+     *
+     * @see MediaColumns#IS_TRASHED
+     * @see MediaStore#setIncludeTrashed(Uri)
+     * @see MediaStore#trash(Context, Uri)
+     * @see MediaStore#untrash(Context, Uri)
+     */
+    public static void untrash(@NonNull Context context, @NonNull Uri uri) {
+        final ContentValues values = new ContentValues();
+        values.put(MediaColumns.IS_TRASHED, 0);
+        values.putNull(MediaColumns.DATE_EXPIRES);
+        context.getContentResolver().update(uri, values, null, null);
     }
 
     /**
@@ -762,10 +909,32 @@ public final class MediaStore {
          * <p>
          * Type: BOOLEAN
          *
+         * @see MediaColumns#IS_PENDING
+         * @see MediaStore#setIncludePending(Uri)
          * @see MediaStore#createPending(Context, PendingParams)
-         * @see MediaStore#QUERY_ARG_INCLUDE_PENDING
          */
         public static final String IS_PENDING = "is_pending";
+
+        /**
+         * Flag indicating if a media item is trashed.
+         * <p>
+         * Type: BOOLEAN
+         *
+         * @see MediaColumns#IS_TRASHED
+         * @see MediaStore#setIncludeTrashed(Uri)
+         * @see MediaStore#trash(Context, Uri)
+         * @see MediaStore#untrash(Context, Uri)
+         */
+        public static final String IS_TRASHED = "is_trashed";
+
+        /**
+         * The time the file should be considered expired. Units are seconds
+         * since 1970. Typically only meaningful in the context of
+         * {@link #IS_PENDING} or {@link #IS_TRASHED}.
+         * <p>
+         * Type: INTEGER
+         */
+        public static final String DATE_EXPIRES = "date_expires";
 
         /**
          * The width of the image/video in pixels.
@@ -856,6 +1025,11 @@ public final class MediaStore {
             return AUTHORITY_URI.buildUpon().appendPath(volumeName).appendPath("dir").build();
         }
 
+        /** @hide */
+        public static final Uri getContentUriForPath(String path) {
+            return getContentUri(getVolumeNameForPath(path));
+        }
+
         /**
          * Fields for master table for all media files.
          * Table also contains MediaColumns._ID, DATA, SIZE and DATE_MODIFIED.
@@ -927,6 +1101,12 @@ public final class MediaStore {
              * Constant for the {@link #MEDIA_TYPE} column indicating that file is a playlist file.
              */
             public static final int MEDIA_TYPE_PLAYLIST = 4;
+
+            /**
+             * Column indicating if the file is part of Downloads collection.
+             * @hide
+             */
+            public static final String IS_DOWNLOAD = "is_download";
         }
     }
 
@@ -937,7 +1117,113 @@ public final class MediaStore {
         public static final int MICRO_KIND = 3;
 
         public static final Point MINI_SIZE = new Point(512, 384);
+        public static final Point FULL_SCREEN_SIZE = new Point(1024, 786);
         public static final Point MICRO_SIZE = new Point(96, 96);
+    }
+
+    /** Column fields for downloaded files used in {@link Downloads} table */
+    public interface DownloadColumns extends MediaColumns {
+        /**
+         * Uri indicating where the file has been downloaded from.
+         * <p>
+         * Type: TEXT
+         */
+        String DOWNLOAD_URI = "download_uri";
+
+        /**
+         * Uri indicating HTTP referer of {@link #DOWNLOAD_URI}.
+         * <p>
+         * Type: TEXT
+         */
+        String REFERER_URI = "referer_uri";
+
+        /**
+         * The description of the download.
+         * <p>
+         * Type: Text
+         */
+        String DESCRIPTION = "description";
+    }
+
+    /**
+     * Container for downloaded files.
+     *
+     * <p>
+     * Querying for downloads from this table will return files contributed via
+     * {@link PendingSession} and also ones which were downloaded using
+     * {@link android.app.DownloadManager} APIs.
+     */
+    public static final class Downloads implements DownloadColumns {
+        private Downloads() {}
+
+        /**
+         * The content:// style URI for the internal storage.
+         */
+        public static final Uri INTERNAL_CONTENT_URI =
+                getContentUri("internal");
+
+        /**
+         * The content:// style URI for the "primary" external storage
+         * volume.
+         */
+        public static final Uri EXTERNAL_CONTENT_URI =
+                getContentUri("external");
+
+        /**
+         * The MIME type for this table.
+         */
+        public static final String CONTENT_TYPE = "vnd.android.cursor.dir/download";
+
+        /**
+         * Regex that matches paths that needs to be considered part of downloads collection.
+         * @hide
+         */
+        public static final Pattern PATTERN_DOWNLOADS_FILE = Pattern.compile(
+                "(?i)^/storage/[^/]+/(?:[0-9]+/)?(?:Android/sandbox/[^/]+/)?Download/.+");
+        private static final Pattern PATTERN_DOWNLOADS_DIRECTORY = Pattern.compile(
+                "(?i)^/storage/[^/]+/(?:[0-9]+/)?(?:Android/sandbox/[^/]+/)?Download/?");
+
+        /**
+         * Get the content:// style URI for the downloads table on the
+         * given volume.
+         *
+         * @param volumeName the name of the volume to get the URI for
+         * @return the URI to the image media table on the given volume
+         */
+        public static Uri getContentUri(String volumeName) {
+            return AUTHORITY_URI.buildUpon().appendPath(volumeName)
+                    .appendPath("downloads").build();
+        }
+
+        /** @hide */
+        public static Uri getContentUriForPath(@NonNull String path) {
+            return getContentUri(getVolumeNameForPath(path));
+        }
+
+        /** @hide */
+        public static boolean isDownload(@NonNull String path) {
+            return PATTERN_DOWNLOADS_FILE.matcher(path).matches();
+        }
+
+        /** @hide */
+        public static boolean isDownloadDir(@NonNull String path) {
+            return PATTERN_DOWNLOADS_DIRECTORY.matcher(path).matches();
+        }
+    }
+
+    private static String getVolumeNameForPath(@NonNull String path) {
+        final StorageManager sm = AppGlobals.getInitialApplication()
+                .getSystemService(StorageManager.class);
+        final StorageVolume sv = sm.getStorageVolume(new File(path));
+        if (sv != null) {
+            if (sv.isPrimary()) {
+                return VOLUME_EXTERNAL;
+            } else {
+                return sv.getUuid();
+            }
+        } else {
+            return VOLUME_INTERNAL;
+        }
     }
 
     /**
@@ -964,6 +1250,8 @@ public final class MediaStore {
             final Point size;
             if (kind == ThumbnailConstants.MICRO_KIND) {
                 size = ThumbnailConstants.MICRO_SIZE;
+            } else if (kind == ThumbnailConstants.FULL_SCREEN_KIND) {
+                size = ThumbnailConstants.FULL_SCREEN_SIZE;
             } else if (kind == ThumbnailConstants.MINI_KIND) {
                 size = ThumbnailConstants.MINI_SIZE;
             } else {
@@ -1038,13 +1326,25 @@ public final class MediaStore {
             /**
              * The latitude where the image was captured.
              * <P>Type: DOUBLE</P>
+             *
+             * @deprecated location details are no longer indexed for privacy
+             *             reasons, and this value is now always {@code null}.
+             *             You can still manually obtain location metadata using
+             *             {@link ExifInterface#getLatLong(float[])}.
              */
+            @Deprecated
             public static final String LATITUDE = "latitude";
 
             /**
              * The longitude where the image was captured.
              * <P>Type: DOUBLE</P>
+             *
+             * @deprecated location details are no longer indexed for privacy
+             *             reasons, and this value is now always {@code null}.
+             *             You can still manually obtain location metadata using
+             *             {@link ExifInterface#getLatLong(float[])}.
              */
+            @Deprecated
             public static final String LONGITUDE = "longitude";
 
             /**
@@ -1073,18 +1373,32 @@ public final class MediaStore {
             public static final String MINI_THUMB_MAGIC = "mini_thumb_magic";
 
             /**
-             * The bucket id of the image. This is a read-only property that
-             * is automatically computed from the DATA column.
-             * <P>Type: TEXT</P>
+             * The primary bucket ID of this media item. This can be useful to
+             * present the user a first-level clustering of related media items.
+             * This is a read-only column that is automatically computed.
+             * <p>
+             * Type: INTEGER
              */
             public static final String BUCKET_ID = "bucket_id";
 
             /**
-             * The bucket display name of the image. This is a read-only property that
-             * is automatically computed from the DATA column.
-             * <P>Type: TEXT</P>
+             * The primary bucket display name of this media item. This can be
+             * useful to present the user a first-level clustering of related
+             * media items. This is a read-only column that is automatically
+             * computed.
+             * <p>
+             * Type: TEXT
              */
             public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
+
+            /**
+             * The secondary bucket ID of this media item. This can be useful to
+             * present the user a second-level clustering of related media
+             * items. This is a read-only column that is automatically computed.
+             * <p>
+             * Type: INTEGER
+             */
+            public static final String SECONDARY_BUCKET_ID = "secondary_bucket_id";
         }
 
         public static final class Media implements ImageColumns {
@@ -1160,7 +1474,7 @@ public final class MediaStore {
             public static final String insertImage(ContentResolver cr, Bitmap source,
                                                    String title, String description) {
                 ContentValues values = new ContentValues();
-                values.put(Images.Media.TITLE, title);
+                values.put(Images.Media.DISPLAY_NAME, title);
                 values.put(Images.Media.DESCRIPTION, description);
                 values.put(Images.Media.MIME_TYPE, "image/jpeg");
 
@@ -1565,6 +1879,12 @@ public final class MediaStore {
             public static final String IS_NOTIFICATION = "is_notification";
 
             /**
+             * Non-zero if the audio file is an audiobook
+             * <P>Type: INTEGER (boolean)</P>
+             */
+            public static final String IS_AUDIOBOOK = "is_audiobook";
+
+            /**
              * The genre of the audio file, if any
              * <P>Type: TEXT</P>
              * Does not exist in the database - only used by the media scanner for inserts.
@@ -1671,18 +1991,7 @@ public final class MediaStore {
              *             access this path.
              */
             public static @Nullable Uri getContentUriForPath(@NonNull String path) {
-                final StorageManager sm = AppGlobals.getInitialApplication()
-                        .getSystemService(StorageManager.class);
-                final StorageVolume sv = sm.getStorageVolume(new File(path));
-                if (sv != null) {
-                    if (sv.isPrimary()) {
-                        return EXTERNAL_CONTENT_URI;
-                    } else {
-                        return getContentUri(sv.getUuid());
-                    }
-                } else {
-                    return INTERNAL_CONTENT_URI;
-                }
+                return getContentUri(getVolumeNameForPath(path));
             }
 
             /**
@@ -2287,13 +2596,25 @@ public final class MediaStore {
             /**
              * The latitude where the video was captured.
              * <P>Type: DOUBLE</P>
+             *
+             * @deprecated location details are no longer indexed for privacy
+             *             reasons, and this value is now always {@code null}.
+             *             You can still manually obtain location metadata using
+             *             {@link ExifInterface#getLatLong(float[])}.
              */
+            @Deprecated
             public static final String LATITUDE = "latitude";
 
             /**
              * The longitude where the video was captured.
              * <P>Type: DOUBLE</P>
+             *
+             * @deprecated location details are no longer indexed for privacy
+             *             reasons, and this value is now always {@code null}.
+             *             You can still manually obtain location metadata using
+             *             {@link ExifInterface#getLatLong(float[])}.
              */
+            @Deprecated
             public static final String LONGITUDE = "longitude";
 
             /**
@@ -2315,18 +2636,32 @@ public final class MediaStore {
             public static final String MINI_THUMB_MAGIC = "mini_thumb_magic";
 
             /**
-             * The bucket id of the video. This is a read-only property that
-             * is automatically computed from the DATA column.
-             * <P>Type: TEXT</P>
+             * The primary bucket ID of this media item. This can be useful to
+             * present the user a first-level clustering of related media items.
+             * This is a read-only column that is automatically computed.
+             * <p>
+             * Type: INTEGER
              */
             public static final String BUCKET_ID = "bucket_id";
 
             /**
-             * The bucket display name of the video. This is a read-only property that
-             * is automatically computed from the DATA column.
-             * <P>Type: TEXT</P>
+             * The primary bucket display name of this media item. This can be
+             * useful to present the user a first-level clustering of related
+             * media items. This is a read-only column that is automatically
+             * computed.
+             * <p>
+             * Type: TEXT
              */
             public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
+
+            /**
+             * The secondary bucket ID of this media item. This can be useful to
+             * present the user a second-level clustering of related media
+             * items. This is a read-only column that is automatically computed.
+             * <p>
+             * Type: INTEGER
+             */
+            public static final String SECONDARY_BUCKET_ID = "secondary_bucket_id";
 
             /**
              * The bookmark for the video. Time in ms. Represents the location in the video that the
@@ -2715,6 +3050,61 @@ public final class MediaStore {
             return out.getParcelable(DocumentsContract.EXTRA_URI);
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
+     * Calculate size of media contributed by given package under the calling
+     * user. The meaning of "contributed" means it won't automatically be
+     * deleted when the app is uninstalled.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.CLEAR_APP_USER_DATA)
+    public static @BytesLong long getContributedMediaSize(Context context, String packageName,
+            UserHandle user) throws IOException {
+        final UserManager um = context.getSystemService(UserManager.class);
+        if (um.isUserUnlocked(user) && um.isUserRunning(user)) {
+            try {
+                final ContentResolver resolver = context
+                        .createPackageContextAsUser(packageName, 0, user).getContentResolver();
+                final Bundle in = new Bundle();
+                in.putString(Intent.EXTRA_PACKAGE_NAME, packageName);
+                final Bundle out = resolver.call(AUTHORITY, GET_CONTRIBUTED_MEDIA_CALL, null, in);
+                return out.getLong(Intent.EXTRA_INDEX);
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+        } else {
+            throw new IOException("User " + user + " must be unlocked and running");
+        }
+    }
+
+    /**
+     * Delete all media contributed by given package under the calling user. The
+     * meaning of "contributed" means it won't automatically be deleted when the
+     * app is uninstalled.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.CLEAR_APP_USER_DATA)
+    public static void deleteContributedMedia(Context context, String packageName,
+            UserHandle user) throws IOException {
+        final UserManager um = context.getSystemService(UserManager.class);
+        if (um.isUserUnlocked(user) && um.isUserRunning(user)) {
+            try {
+                final ContentResolver resolver = context
+                        .createPackageContextAsUser(packageName, 0, user).getContentResolver();
+                final Bundle in = new Bundle();
+                in.putString(Intent.EXTRA_PACKAGE_NAME, packageName);
+                resolver.call(AUTHORITY, DELETE_CONTRIBUTED_MEDIA_CALL, null, in);
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+        } else {
+            throw new IOException("User " + user + " must be unlocked and running");
         }
     }
 }

@@ -52,7 +52,6 @@ import android.util.ArraySet;
 import android.widget.FrameLayout;
 
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.Dependency;
 import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.InitController;
@@ -61,7 +60,6 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
-import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.RemoteInputController;
@@ -103,11 +101,13 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Mock private KeyguardEnvironment mEnvironment;
     @Mock private ExpandableNotificationRow mRow;
     @Mock private NotificationListContainer mListContainer;
-    @Mock private NotificationEntryManager.Callback mCallback;
+    @Mock
+    private NotificationEntryListener mEntryListener;
+    @Mock
+    private NotificationRowBinder.BindRowCallback mBindCallback;
     @Mock private HeadsUpManager mHeadsUpManager;
     @Mock private NotificationListenerService.RankingMap mRankingMap;
     @Mock private RemoteInputController mRemoteInputController;
-    @Mock private IStatusBarService mBarService;
 
     // Dependency mocks:
     @Mock private ForegroundServiceController mForegroundServiceController;
@@ -115,7 +115,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Mock private NotificationGroupManager mGroupManager;
     @Mock private NotificationGutsManager mGutsManager;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
-    @Mock private NotificationMediaManager mMediaManager;
     @Mock private NotificationListener mNotificationListener;
     @Mock private DeviceProvisionedController mDeviceProvisionedController;
     @Mock private VisualStabilityManager mVisualStabilityManager;
@@ -131,11 +130,9 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     private class TestableNotificationEntryManager extends NotificationEntryManager {
         private final CountDownLatch mCountDownLatch;
 
-        public TestableNotificationEntryManager(Context context, IStatusBarService barService) {
+        TestableNotificationEntryManager(Context context) {
             super(context);
-            mBarService = barService;
             mCountDownLatch = new CountDownLatch(1);
-            mUseHeadsUp = true;
         }
 
         @Override
@@ -167,7 +164,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                     0,
                     NotificationManager.IMPORTANCE_DEFAULT,
                     null, null,
-                    null, null, null, true, sentiment, false, false, false, null, null);
+                    null, null, null, true, sentiment, false, -1, false, null, null);
             return true;
         }).when(mRankingMap).getRanking(eq(key), any(NotificationListenerService.Ranking.class));
     }
@@ -185,7 +182,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                     NotificationManager.IMPORTANCE_DEFAULT,
                     null, null,
                     null, null, null, true,
-                    NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL, false, false,
+                    NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL, false, -1,
                     false, smartActions, null);
             return true;
         }).when(mRankingMap).getRanking(eq(key), any(NotificationListenerService.Ranking.class));
@@ -202,7 +199,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         mDependency.injectTestDependency(NotificationGroupManager.class, mGroupManager);
         mDependency.injectTestDependency(NotificationGutsManager.class, mGutsManager);
         mDependency.injectTestDependency(NotificationRemoteInputManager.class, mRemoteInputManager);
-        mDependency.injectTestDependency(NotificationMediaManager.class, mMediaManager);
         mDependency.injectTestDependency(NotificationListener.class, mNotificationListener);
         mDependency.injectTestDependency(DeviceProvisionedController.class,
                 mDeviceProvisionedController);
@@ -228,9 +224,15 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         mEntry = new NotificationData.Entry(mSbn);
         mEntry.expandedIcon = mock(StatusBarIconView.class);
 
-        mEntryManager = new TestableNotificationEntryManager(mContext, mBarService);
+        mEntryManager = new TestableNotificationEntryManager(mContext);
         Dependency.get(InitController.class).executePostInitTasks();
-        mEntryManager.setUpWithPresenter(mPresenter, mListContainer, mCallback, mHeadsUpManager);
+        mEntryManager.setUpWithPresenter(mPresenter, mListContainer, mHeadsUpManager);
+        mEntryManager.addNotificationEntryListener(mEntryListener);
+
+        NotificationRowBinder notificationRowBinder = Dependency.get(NotificationRowBinder.class);
+        notificationRowBinder.setUpWithPresenter(
+                mPresenter, mListContainer, mHeadsUpManager, mEntryManager, mBindCallback);
+        notificationRowBinder.setNotificationClicker(mock(NotificationClicker.class));
 
         setUserSentiment(mEntry.key, NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL);
     }
@@ -243,7 +245,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         doAnswer(invocation -> {
             mCountDownLatch.countDown();
             return null;
-        }).when(mCallback).onBindRow(any(), any(), any(), any());
+        }).when(mBindCallback).onBindRow(any(), any(), any(), any());
 
         // Post on main thread, otherwise we will be stuck waiting here for the inflation finished
         // callback forever, since it won't execute until the tests ends.
@@ -253,23 +255,21 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         assertTrue(mEntryManager.getCountDownLatch().await(10, TimeUnit.SECONDS));
 
         // Check that no inflation error occurred.
-        verify(mBarService, never()).onNotificationError(any(), any(), anyInt(), anyInt(), anyInt(),
-                any(), anyInt());
-        verify(mForegroundServiceController).addNotification(eq(mSbn), anyInt());
+        verify(mEntryListener, never()).onInflationError(any(), any());
 
         // Row inflation:
         ArgumentCaptor<NotificationData.Entry> entryCaptor = ArgumentCaptor.forClass(
                 NotificationData.Entry.class);
-        verify(mCallback).onBindRow(entryCaptor.capture(), any(), eq(mSbn), any());
+        verify(mBindCallback).onBindRow(entryCaptor.capture(), any(), eq(mSbn), any());
         NotificationData.Entry entry = entryCaptor.getValue();
-        verify(mRemoteInputManager).bindRow(entry.row);
+        verify(mRemoteInputManager).bindRow(entry.getRow());
 
         // Row content inflation:
-        verify(mCallback).onNotificationAdded(entry);
+        verify(mEntryListener).onNotificationAdded(entry);
         verify(mPresenter).updateNotificationViews();
 
         assertEquals(mEntryManager.getNotificationData().get(mSbn.getKey()), entry);
-        assertNotNull(entry.row);
+        assertNotNull(entry.getRow());
         assertEquals(mEntry.userSentiment,
                 NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL);
     }
@@ -288,13 +288,11 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         // Wait for content update.
         assertTrue(mEntryManager.getCountDownLatch().await(10, TimeUnit.SECONDS));
 
-        verify(mBarService, never()).onNotificationError(any(), any(), anyInt(), anyInt(), anyInt(),
-                any(), anyInt());
+        verify(mEntryListener, never()).onInflationError(any(), any());
 
         verify(mPresenter).updateNotificationViews();
-        verify(mForegroundServiceController).updateNotification(eq(mSbn), anyInt());
-        verify(mCallback).onNotificationUpdated(mSbn);
-        assertNotNull(mEntry.row);
+        verify(mEntryListener).onEntryUpdated(mEntry);
+        assertNotNull(mEntry.getRow());
         assertEquals(mEntry.userSentiment,
                 NotificationListenerService.Ranking.USER_SENTIMENT_NEGATIVE);
     }
@@ -303,19 +301,17 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     public void testRemoveNotification() throws Exception {
         com.android.systemui.util.Assert.isNotMainThread();
 
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntryManager.getNotificationData().add(mEntry);
 
         mEntryManager.removeNotification(mSbn.getKey(), mRankingMap);
 
-        verify(mBarService, never()).onNotificationError(any(), any(), anyInt(), anyInt(), anyInt(),
-                any(), anyInt());
+        verify(mEntryListener, never()).onInflationError(any(), any());
 
-        verify(mMediaManager).onNotificationRemoved(mSbn.getKey());
-        verify(mForegroundServiceController).removeNotification(mSbn);
-        verify(mListContainer).cleanUpViewState(mRow);
+        verify(mListContainer).cleanUpViewStateForEntry(mEntry);
         verify(mPresenter).updateNotificationViews();
-        verify(mCallback).onNotificationRemoved(mSbn.getKey(), mSbn);
+        verify(mEntryListener).onEntryRemoved(mEntry, mSbn.getKey(), mSbn,
+                null, false /* lifetimeExtended */, false /* removedByUser */);
         verify(mRow).setRemoved();
 
         assertNull(mEntryManager.getNotificationData().get(mSbn.getKey()));
@@ -332,13 +328,15 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         extenders.clear();
         extenders.add(extender);
 
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntryManager.getNotificationData().add(mEntry);
 
         mEntryManager.removeNotification(mSbn.getKey(), mRankingMap);
 
         assertNotNull(mEntryManager.getNotificationData().get(mSbn.getKey()));
         verify(extender).setShouldManageLifetime(mEntry, true /* shouldManage */);
+        verify(mEntryListener).onEntryRemoved(mEntry, mSbn.getKey(), null,
+                null, true /* lifetimeExtended */, false /* removedByUser */);
     }
 
     @Test
@@ -347,7 +345,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         when(mForegroundServiceController.getStandardLayoutKey(anyInt(), anyString()))
                 .thenReturn(mEntry.key);
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntryManager.getNotificationData().add(mEntry);
 
         mEntryManager.updateNotificationsForAppOp(
@@ -372,7 +370,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testAddNotificationExistingAppOps() {
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntryManager.getNotificationData().add(mEntry);
         ArraySet<Integer> expected = new ArraySet<>();
         expected.add(3);
@@ -395,7 +393,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testAdd_noExistingAppOps() {
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntryManager.getNotificationData().add(mEntry);
         when(mForegroundServiceController.getStandardLayoutKey(
                 mEntry.notification.getUserId(),
@@ -409,7 +407,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testAdd_existingAppOpsNotForegroundNoti() {
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntryManager.getNotificationData().add(mEntry);
         ArraySet<Integer> ops = new ArraySet<>();
         ops.add(3);
@@ -431,7 +429,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         when(mEnvironment.isDeviceProvisioned()).thenReturn(true);
         when(mEnvironment.isNotificationForCurrentProfiles(any())).thenReturn(true);
 
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntry.setInflationTask(mAsyncInflationTask);
         mEntryManager.getNotificationData().add(mEntry);
         setSmartActions(mEntry.key, new ArrayList<>(Arrays.asList(createAction())));
@@ -447,7 +445,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         when(mDeviceProvisionedController.isDeviceProvisioned()).thenReturn(true);
         when(mEnvironment.isNotificationForCurrentProfiles(any())).thenReturn(true);
 
-        mEntry.row = mRow;
+        mEntry.setRow(mRow);
         mEntryManager.getNotificationData().add(mEntry);
         setSmartActions(mEntry.key, null);
 
@@ -461,7 +459,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         when(mDeviceProvisionedController.isDeviceProvisioned()).thenReturn(true);
         when(mEnvironment.isNotificationForCurrentProfiles(any())).thenReturn(true);
 
-        mEntry.row = null;
+        mEntry.setRow(null);
         mEntryManager.getNotificationData().add(mEntry);
         setSmartActions(mEntry.key, new ArrayList<>(Arrays.asList(createAction())));
 
@@ -476,7 +474,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         when(mDeviceProvisionedController.isDeviceProvisioned()).thenReturn(true);
         when(mEnvironment.isNotificationForCurrentProfiles(any())).thenReturn(true);
 
-        mEntry.row = null;
+        mEntry.setRow(null);
         mEntryManager.mPendingNotifications.put(mEntry.key, mEntry);
         setSmartActions(mEntry.key, new ArrayList<>(Arrays.asList(createAction())));
 

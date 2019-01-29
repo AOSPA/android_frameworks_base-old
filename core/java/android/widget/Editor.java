@@ -390,7 +390,8 @@ public class Editor {
                 com.android.internal.R.bool.config_enableHapticTextHandle);
 
         if (FLAG_USE_MAGNIFIER) {
-            final Magnifier magnifier = new Magnifier.Builder(mTextView).build();
+            final Magnifier magnifier =
+                    Magnifier.createBuilderWithOldMagnifierDefaults(mTextView).build();
             mMagnifierAnimator = new MagnifierMotionAnimator(magnifier);
         }
     }
@@ -2050,8 +2051,8 @@ public class Editor {
     }
 
     void updateCursorPosition() {
-        if (mTextView.mCursorDrawableRes == 0) {
-            mDrawableForCursor = null;
+        loadCursorDrawable();
+        if (mDrawableForCursor == null) {
             return;
         }
 
@@ -2461,10 +2462,7 @@ public class Editor {
     }
 
     private void updateCursorPosition(int top, int bottom, float horizontal) {
-        if (mDrawableForCursor == null) {
-            mDrawableForCursor = mTextView.getContext().getDrawable(
-                    mTextView.mCursorDrawableRes);
-        }
+        loadCursorDrawable();
         final int left = clampHorizontalPosition(mDrawableForCursor, horizontal);
         final int width = mDrawableForCursor.getIntrinsicWidth();
         mDrawableForCursor.setBounds(left, top - mTempRect.top, left + width,
@@ -5695,6 +5693,12 @@ public class Editor {
         public boolean isCursorBeingModified();
 
         public boolean isActive();
+    }
+
+    void loadCursorDrawable() {
+        if (mDrawableForCursor == null) {
+            mDrawableForCursor = mTextView.getTextCursorDrawable();
+        }
     }
 
     private class InsertionPointCursorController implements CursorController {

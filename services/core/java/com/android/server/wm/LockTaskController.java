@@ -54,6 +54,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
 import android.util.Pair;
@@ -126,7 +127,7 @@ public class LockTaskController {
     /** Tag used for disabling of keyguard */
     private static final String LOCK_TASK_TAG = "Lock-to-App";
 
-    private final IBinder mToken = new Binder();
+    private final IBinder mToken = new LockTaskToken();
     private final ActivityStackSupervisor mSupervisor;
     private final Context mContext;
 
@@ -180,6 +181,17 @@ public class LockTaskController {
      */
     private final Handler mHandler;
 
+    /**
+     * Stores the user for which we're trying to dismiss the keyguard and then subsequently
+     * disable it.
+     *
+     * Tracking this ensures we don't mistakenly disable the keyguard if we've stopped trying to
+     * between the dismiss request and when it succeeds.
+     *
+     * Must only be accessed from the Handler thread.
+     */
+    private int mPendingDisableFromDismiss = UserHandle.USER_NULL;
+
     LockTaskController(Context context, ActivityStackSupervisor supervisor,
             Handler handler) {
         mContext = context;
@@ -225,7 +237,7 @@ public class LockTaskController {
      * of the last locked task and finishing it would mean that lock task mode is ended illegally.
      */
     boolean activityBlockedFromFinish(ActivityRecord activity) {
-        final TaskRecord task = activity.getTask();
+        final TaskRecord task = activity.getTaskRecord();
         if (activity == task.getRootActivity()
                 && activity == task.getTopActivity()
                 && task.mLockTaskAuth != LOCK_TASK_AUTH_LAUNCHABLE_PRIV
@@ -447,7 +459,7 @@ public class LockTaskController {
             return;
         }
         task.performClearTaskLocked();
-        mSupervisor.resumeFocusedStacksTopActivitiesLocked();
+        mSupervisor.mRootActivityContainer.resumeFocusedStacksTopActivities();
     }
 
     /**
@@ -579,10 +591,10 @@ public class LockTaskController {
         if (andResume) {
             mSupervisor.findTaskToMoveToFront(task, 0, null, reason,
                     lockTaskModeState != LOCK_TASK_MODE_NONE);
-            mSupervisor.resumeFocusedStacksTopActivitiesLocked();
+            mSupervisor.mRootActivityContainer.resumeFocusedStacksTopActivities();
             final ActivityStack stack = task.getStack();
             if (stack != null) {
-                stack.getDisplay().getWindowContainerController().executeAppTransition();
+                stack.getDisplay().mDisplayContent.executeAppTransition();
             }
         } else if (lockTaskModeState != LOCK_TASK_MODE_NONE) {
             mSupervisor.handleNonResizableTaskIfNeeded(task, WINDOWING_MODE_UNDEFINED,
@@ -641,12 +653,13 @@ public class LockTaskController {
             taskChanged = true;
         }
 
-        for (int displayNdx = mSupervisor.getChildCount() - 1; displayNdx >= 0; --displayNdx) {
-            mSupervisor.getChildAt(displayNdx).onLockTaskPackagesUpdated();
+        for (int displayNdx = mSupervisor.mRootActivityContainer.getChildCount() - 1;
+             displayNdx >= 0; --displayNdx) {
+            mSupervisor.mRootActivityContainer.getChildAt(displayNdx).onLockTaskPackagesUpdated();
         }
 
-        final ActivityRecord r = mSupervisor.topRunningActivityLocked();
-        final TaskRecord task = (r != null) ? r.getTask() : null;
+        final ActivityRecord r = mSupervisor.mRootActivityContainer.topRunningActivity();
+        final TaskRecord task = (r != null) ? r.getTaskRecord() : null;
         if (mLockTaskModeTasks.isEmpty() && task!= null
                 && task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE) {
             // This task must have just been authorized.
@@ -657,7 +670,7 @@ public class LockTaskController {
         }
 
         if (taskChanged) {
-            mSupervisor.resumeFocusedStacksTopActivitiesLocked();
+            mSupervisor.mRootActivityContainer.resumeFocusedStacksTopActivities();
         }
     }
 
@@ -739,16 +752,18 @@ public class LockTaskController {
      * Should only be called on the handler thread to avoid race.
      */
     private void setKeyguardState(int lockTaskModeState, int userId) {
+        mPendingDisableFromDismiss = UserHandle.USER_NULL;
         if (lockTaskModeState == LOCK_TASK_MODE_NONE) {
-            mWindowManager.reenableKeyguard(mToken);
+            mWindowManager.reenableKeyguard(mToken, userId);
 
         } else if (lockTaskModeState == LOCK_TASK_MODE_LOCKED) {
             if (isKeyguardAllowed(userId)) {
-                mWindowManager.reenableKeyguard(mToken);
+                mWindowManager.reenableKeyguard(mToken, userId);
             } else {
                 // If keyguard is not secure and it is locked, dismiss the keyguard before
                 // disabling it, which avoids the platform to think the keyguard is still on.
                 if (mWindowManager.isKeyguardLocked() && !mWindowManager.isKeyguardSecure()) {
+                    mPendingDisableFromDismiss = userId;
                     mWindowManager.dismissKeyguard(new IKeyguardDismissCallback.Stub() {
                         @Override
                         public void onDismissError() throws RemoteException {
@@ -758,7 +773,13 @@ public class LockTaskController {
                         @Override
                         public void onDismissSucceeded() throws RemoteException {
                             mHandler.post(
-                                    () -> mWindowManager.disableKeyguard(mToken, LOCK_TASK_TAG));
+                                    () -> {
+                                        if (mPendingDisableFromDismiss == userId) {
+                                            mWindowManager.disableKeyguard(mToken, LOCK_TASK_TAG,
+                                                    userId);
+                                            mPendingDisableFromDismiss = UserHandle.USER_NULL;
+                                        }
+                                    });
                         }
 
                         @Override
@@ -767,12 +788,12 @@ public class LockTaskController {
                         }
                     }, null);
                 } else {
-                    mWindowManager.disableKeyguard(mToken, LOCK_TASK_TAG);
+                    mWindowManager.disableKeyguard(mToken, LOCK_TASK_TAG, userId);
                 }
             }
 
         } else { // lockTaskModeState == LOCK_TASK_MODE_PINNED
-            mWindowManager.disableKeyguard(mToken, LOCK_TASK_TAG);
+            mWindowManager.disableKeyguard(mToken, LOCK_TASK_TAG, userId);
         }
     }
 
@@ -895,6 +916,12 @@ public class LockTaskController {
             case LOCK_TASK_MODE_NONE:
                 return "NONE";
             default: return "unknown=" + mLockTaskModeState;
+        }
+    }
+
+    /** Marker class for the token used to disable keyguard. */
+    static class LockTaskToken extends Binder {
+        private LockTaskToken() {
         }
     }
 }

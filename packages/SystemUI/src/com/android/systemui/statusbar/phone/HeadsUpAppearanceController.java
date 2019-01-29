@@ -25,12 +25,12 @@ import android.view.WindowInsets;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.HeadsUpStatusBarView;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
-import com.android.systemui.statusbar.policy.DarkIconDispatcher;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 
 import java.util.function.BiConsumer;
@@ -143,9 +143,9 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
     }
 
     @Override
-    public void onHeadsUpPinned(ExpandableNotificationRow headsUp) {
+    public void onHeadsUpPinned(NotificationData.Entry entry) {
         updateTopEntry();
-        updateHeader(headsUp.getEntry());
+        updateHeader(entry);
     }
 
     /** To count the distance from the window right boundary to scroller right boundary. The
@@ -298,9 +298,9 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
     }
 
     @Override
-    public void onHeadsUpUnPinned(ExpandableNotificationRow headsUp) {
+    public void onHeadsUpUnPinned(NotificationData.Entry entry) {
         updateTopEntry();
-        updateHeader(headsUp.getEntry());
+        updateHeader(entry);
     }
 
     public void setExpandedHeight(float expandedHeight, float appearFraction) {
@@ -339,7 +339,7 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
     }
 
     public void updateHeader(NotificationData.Entry entry) {
-        ExpandableNotificationRow row = entry.row;
+        ExpandableNotificationRow row = entry.getRow();
         float headerVisibleAmount = 1.0f;
         if (row.isPinned() || row.isHeadsUpAnimatingAway() || row == mTrackedChild) {
             headerVisibleAmount = mExpandFraction;

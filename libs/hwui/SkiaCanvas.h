@@ -74,6 +74,7 @@ public:
                           SaveFlags::Flags flags) override;
     virtual int saveLayerAlpha(float left, float top, float right, float bottom, int alpha,
                                SaveFlags::Flags flags) override;
+    virtual int saveUnclippedLayer(int left, int top, int right, int bottom) override;
 
     virtual void getMatrix(SkMatrix* outMatrix) const override;
     virtual void setMatrix(const SkMatrix& matrix) override;
@@ -232,7 +233,6 @@ private:
 
     class Clip;
 
-    std::unique_ptr<SkCanvas> mCanvasWrapper;  // might own a wrapper on the canvas
     std::unique_ptr<SkCanvas> mCanvasOwned;    // might own a canvas we allocated
     SkCanvas* mCanvas;                         // we do NOT own this canvas, it must survive us
                                                // unless it is the same as mCanvasOwned.get()

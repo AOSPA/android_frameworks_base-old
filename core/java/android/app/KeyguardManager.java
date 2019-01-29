@@ -62,6 +62,7 @@ public class KeyguardManager {
     private final IWindowManager mWM;
     private final IActivityManager mAm;
     private final ITrustManager mTrustManager;
+    private final INotificationManager mNotificationManager;
 
     /**
      * Intent used to prompt user for device credentials.
@@ -219,6 +220,45 @@ public class KeyguardManager {
         return intent;
     }
 
+    /**
+     * Controls whether notifications can be shown atop a securely locked screen in their full
+     * private form (same as when the device is unlocked).
+     *
+     * <p>Other sources like the DevicePolicyManger and Settings app can modify this configuration.
+     * The result is that private notifications are only shown if all sources allow it.
+     *
+     * @param allow secure notifications can be shown if {@code true},
+     * secure notifications cannot be shown if {@code false}
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS)
+    @SystemApi
+    public void setPrivateNotificationsAllowed(boolean allow) {
+        try {
+            mNotificationManager.setPrivateNotificationsAllowed(allow);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether notifications can be shown atop a securely locked screen in their full
+     * private form (same as when the device is unlocked).
+     *
+     * @return {@code true} if secure notifications can be shown, {@code false} otherwise.
+     * By default, private notifications are allowed.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS)
+    @SystemApi
+    public boolean getPrivateNotificationsAllowed() {
+        try {
+            return mNotificationManager.getPrivateNotificationsAllowed();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     private String getSettingsPackageForIntent(Intent intent) {
         List<ResolveInfo> resolveInfos = mContext.getPackageManager()
                 .queryIntentActivities(intent, PackageManager.MATCH_SYSTEM_ONLY);
@@ -230,14 +270,14 @@ public class KeyguardManager {
     }
 
     /**
+     * Handle returned by {@link KeyguardManager#newKeyguardLock} that allows
+     * you to disable / reenable the keyguard.
+     *
      * @deprecated Use {@link LayoutParams#FLAG_DISMISS_KEYGUARD}
      * and/or {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED}
      * instead; this allows you to seamlessly hide the keyguard as your application
      * moves in and out of the foreground and does not require that any special
      * permissions be requested.
-     *
-     * Handle returned by {@link KeyguardManager#newKeyguardLock} that allows
-     * you to disable / reenable the keyguard.
      */
     @Deprecated
     public class KeyguardLock {
@@ -263,7 +303,7 @@ public class KeyguardManager {
         @RequiresPermission(Manifest.permission.DISABLE_KEYGUARD)
         public void disableKeyguard() {
             try {
-                mWM.disableKeyguard(mToken, mTag);
+                mWM.disableKeyguard(mToken, mTag, mContext.getUserId());
             } catch (RemoteException ex) {
             }
         }
@@ -282,16 +322,17 @@ public class KeyguardManager {
         @RequiresPermission(Manifest.permission.DISABLE_KEYGUARD)
         public void reenableKeyguard() {
             try {
-                mWM.reenableKeyguard(mToken);
+                mWM.reenableKeyguard(mToken, mContext.getUserId());
             } catch (RemoteException ex) {
             }
         }
     }
 
     /**
-     * @deprecated Use {@link KeyguardDismissCallback}
      * Callback passed to {@link KeyguardManager#exitKeyguardSecurely} to notify
      * caller of result.
+     *
+     * @deprecated Use {@link KeyguardDismissCallback}
      */
     @Deprecated
     public interface OnKeyguardExitResult {
@@ -335,15 +376,11 @@ public class KeyguardManager {
         mAm = ActivityManager.getService();
         mTrustManager = ITrustManager.Stub.asInterface(
                 ServiceManager.getServiceOrThrow(Context.TRUST_SERVICE));
+        mNotificationManager = INotificationManager.Stub.asInterface(
+                ServiceManager.getServiceOrThrow(Context.NOTIFICATION_SERVICE));
     }
 
     /**
-     * @deprecated Use {@link LayoutParams#FLAG_DISMISS_KEYGUARD}
-     * and/or {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED}
-     * instead; this allows you to seamlessly hide the keyguard as your application
-     * moves in and out of the foreground and does not require that any special
-     * permissions be requested.
-     *
      * Enables you to lock or unlock the keyguard. Get an instance of this class by
      * calling {@link android.content.Context#getSystemService(java.lang.String) Context.getSystemService()}.
      * This class is wrapped by {@link android.app.KeyguardManager KeyguardManager}.
@@ -352,6 +389,12 @@ public class KeyguardManager {
      *
      * @return A {@link KeyguardLock} handle to use to disable and reenable the
      *   keyguard.
+     *
+     * @deprecated Use {@link LayoutParams#FLAG_DISMISS_KEYGUARD}
+     *   and/or {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED}
+     *   instead; this allows you to seamlessly hide the keyguard as your application
+     *   moves in and out of the foreground and does not require that any special
+     *   permissions be requested.
      */
     @Deprecated
     public KeyguardLock newKeyguardLock(String tag) {
@@ -388,13 +431,12 @@ public class KeyguardManager {
     }
 
     /**
-     * @deprecated Use {@link #isKeyguardLocked()} instead.
-     *
      * If keyguard screen is showing or in restricted key input mode (i.e. in
      * keyguard password emergency screen). When in such mode, certain keys,
      * such as the Home key and the right soft keys, don't work.
      *
      * @return true if in keyguard restricted input mode.
+     * @deprecated Use {@link #isKeyguardLocked()} instead.
      */
     public boolean inKeyguardRestrictedInputMode() {
         return isKeyguardLocked();
@@ -546,12 +588,6 @@ public class KeyguardManager {
     }
 
     /**
-     * @deprecated Use {@link LayoutParams#FLAG_DISMISS_KEYGUARD}
-     * and/or {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED}
-     * instead; this allows you to seamlessly hide the keyguard as your application
-     * moves in and out of the foreground and does not require that any special
-     * permissions be requested.
-     *
      * Exit the keyguard securely.  The use case for this api is that, after
      * disabling the keyguard, your app, which was granted permission to
      * disable the keyguard and show a limited amount of information deemed
@@ -564,6 +600,12 @@ public class KeyguardManager {
      * @param callback Lets you know whether the operation was successful and
      *   it is safe to launch anything that would normally be considered safe
      *   once the user has gotten past the keyguard.
+
+     * @deprecated Use {@link LayoutParams#FLAG_DISMISS_KEYGUARD}
+     *   and/or {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED}
+     *   instead; this allows you to seamlessly hide the keyguard as your application
+     *   moves in and out of the foreground and does not require that any special
+     *   permissions be requested.
      */
     @Deprecated
     @RequiresPermission(Manifest.permission.DISABLE_KEYGUARD)

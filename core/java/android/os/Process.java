@@ -111,6 +111,12 @@ public class Process {
     public static final int NFC_UID = 1027;
 
     /**
+     * Defines the UID/GID for the clatd process.
+     * @hide
+     * */
+    public static final int CLAT_UID = 1029;
+
+    /**
      * Defines the UID/GID for the Bluetooth service process.
      * @hide
      */
@@ -175,6 +181,12 @@ public class Process {
      * @hide
      */
     public static final int SE_UID = 1068;
+
+    /**
+     * Defines the UID/GID for the NetworkStack app.
+     * @hide
+     */
+    public static final int NETWORK_STACK_UID = 1073;
 
     /** {@hide} */
     public static final int NOBODY_UID = 9999;
@@ -1078,6 +1090,9 @@ public class Process {
      * @hide
      */
     public static final native long getPss(int pid);
+
+    /** @hide */
+    public static final native long[] getRss(int pid);
 
     /**
      * Specifies the outcome of having started a process.

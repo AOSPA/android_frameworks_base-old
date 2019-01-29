@@ -35,12 +35,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.os.Handler;
-import android.os.IPowerManager;
-import android.os.Looper;
-import android.os.PowerManager;
 import android.provider.Settings;
-import android.service.dreams.IDreamManager;
 import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -104,8 +99,6 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private NotificationData mNotificationData;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
     @Mock private RemoteInputController mRemoteInputController;
-    @Mock private IDreamManager mDreamManager;
-    private PowerManager mPowerManager;
     private TestableNotificationEntryManager mEntryManager;
     private int mOriginalInterruptionModelSetting;
 
@@ -122,20 +115,16 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mDependency.injectMockDependency(ShadeController.class);
         when(mRemoteInputManager.getController()).thenReturn(mRemoteInputController);
 
-        IPowerManager powerManagerService = mock(IPowerManager.class);
-        mPowerManager = new PowerManager(mContext, powerManagerService,
-                Handler.createAsync(Looper.myLooper()));
-
-        mEntryManager = new TestableNotificationEntryManager(mDreamManager, mPowerManager,
-                mContext);
+        mEntryManager = new TestableNotificationEntryManager(mContext);
         mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
         Dependency.get(InitController.class).executePostInitTasks();
-        mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, null, mHeadsUpManager,
+        mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, mHeadsUpManager,
                 mNotificationData);
 
 
         NotificationShelf notificationShelf = mock(NotificationShelf.class);
-        mStackScroller = spy(new NotificationStackScrollLayout(getContext()));
+        mStackScroller = spy(new NotificationStackScrollLayout(getContext(), null,
+                true /* allowLongPress */));
         mStackScroller.setShelf(notificationShelf);
         mStackScroller.setStatusBar(mBar);
         mStackScroller.setScrimController(mock(ScrimController.class));
@@ -325,7 +314,9 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
 
         // add notification
         ExpandableNotificationRow row = mock(ExpandableNotificationRow.class);
-        when(row.isClearable()).thenReturn(true);
+        NotificationData.Entry entry = mock(NotificationData.Entry.class);
+        when(row.getEntry()).thenReturn(entry);
+        when(entry.isClearable()).thenReturn(true);
         mStackScroller.addContainerView(row);
 
         mStackScroller.onUpdateRowStates();

@@ -58,8 +58,9 @@ import java.util.Set;
 /**
  * BROADCASTS
  *
- * We keep two broadcast queues and associated bookkeeping, one for those at
- * foreground priority, and one for normal (background-priority) broadcasts.
+ * We keep three broadcast queues and associated bookkeeping, one for those at
+ * foreground priority, and one for normal (background-priority) broadcasts, and one to
+ * offload special broadcasts that we know take a long time, such as BOOT_COMPLETED.
  */
 public final class BroadcastQueue {
     private static final String TAG = "BroadcastQueue";
@@ -286,6 +287,9 @@ public final class BroadcastQueue {
         r.curApp = app;
         app.curReceivers.add(r);
         app.forceProcessStateUpTo(ActivityManager.PROCESS_STATE_RECEIVER);
+        if (r.allowBackgroundActivityStarts) {
+            app.addAllowBackgroundActivityStartsToken(r);
+        }
         mService.mProcessList.updateLruProcessLocked(app, false, null);
         if (!skipOomAdj) {
             mService.updateOomAdjLocked();
@@ -414,6 +418,9 @@ public final class BroadcastQueue {
         if (state == BroadcastRecord.IDLE) {
             Slog.w(TAG, "finishReceiver [" + mQueueName + "] called but state is IDLE");
         }
+        if (r.allowBackgroundActivityStarts) {
+            r.curApp.removeAllowBackgroundActivityStartsToken(r);
+         }
         // If we're abandoning this broadcast before any receivers were actually spun up,
         // nextReceiver is zero; in which case time-to-process bookkeeping doesn't apply.
         if (r.nextReceiver > 0) {
@@ -526,6 +533,24 @@ public final class BroadcastQueue {
     private void deliverToRegisteredReceiverLocked(BroadcastRecord r,
             BroadcastFilter filter, boolean ordered, int index) {
         boolean skip = false;
+        if (!mService.validateAssociationAllowedLocked(r.callerPackage, r.callingUid,
+                filter.packageName, filter.owningUid)) {
+            Slog.w(TAG, "Association not allowed: broadcasting "
+                    + r.intent.toString()
+                    + " from " + r.callerPackage + " (pid=" + r.callingPid
+                    + ", uid=" + r.callingUid + ") to " + filter.packageName + " through "
+                    + filter);
+            skip = true;
+        }
+        if (!skip && !mService.mIntentFirewall.checkBroadcast(r.intent, r.callingUid,
+                r.callingPid, r.resolvedType, filter.receiverList.uid)) {
+            Slog.w(TAG, "Firewall blocked: broadcasting "
+                    + r.intent.toString()
+                    + " from " + r.callerPackage + " (pid=" + r.callingPid
+                    + ", uid=" + r.callingUid + ") to " + filter.packageName + " through "
+                    + filter);
+            skip = true;
+        }
         if (filter.requiredPermission != null) {
             int perm = mService.checkComponentPermission(filter.requiredPermission,
                     r.callingPid, r.callingUid, -1, true);
@@ -615,11 +640,6 @@ public final class BroadcastQueue {
                     + " requires appop " + AppOpsManager.opToName(r.appOp)
                     + " due to sender " + r.callerPackage
                     + " (uid " + r.callingUid + ")");
-            skip = true;
-        }
-
-        if (!mService.mIntentFirewall.checkBroadcast(r.intent, r.callingUid,
-                r.callingPid, r.resolvedType, filter.receiverList.uid)) {
             skip = true;
         }
 
@@ -1081,6 +1101,24 @@ public final class BroadcastQueue {
                         > brOptions.getMaxManifestReceiverApiLevel())) {
             skip = true;
         }
+        if (!skip && !mService.validateAssociationAllowedLocked(r.callerPackage, r.callingUid,
+                component.getPackageName(), info.activityInfo.applicationInfo.uid)) {
+            Slog.w(TAG, "Association not allowed: broadcasting "
+                    + r.intent.toString()
+                    + " from " + r.callerPackage + " (pid=" + r.callingPid
+                    + ", uid=" + r.callingUid + ") to " + component.flattenToShortString());
+            skip = true;
+        }
+        if (!skip) {
+            skip = !mService.mIntentFirewall.checkBroadcast(r.intent, r.callingUid,
+                    r.callingPid, r.resolvedType, info.activityInfo.applicationInfo.uid);
+            if (skip) {
+                Slog.w(TAG, "Firewall blocked: broadcasting "
+                        + r.intent.toString()
+                        + " from " + r.callerPackage + " (pid=" + r.callingPid
+                        + ", uid=" + r.callingUid + ") to " + component.flattenToShortString());
+            }
+        }
         int perm = mService.checkComponentPermission(info.activityInfo.permission,
                 r.callingPid, r.callingUid, info.activityInfo.applicationInfo.uid,
                 info.activityInfo.exported);
@@ -1168,10 +1206,6 @@ public final class BroadcastQueue {
                     + " due to sender " + r.callerPackage
                     + " (uid " + r.callingUid + ")");
             skip = true;
-        }
-        if (!skip) {
-            skip = !mService.mIntentFirewall.checkBroadcast(r.intent, r.callingUid,
-                    r.callingPid, r.resolvedType, info.activityInfo.applicationInfo.uid);
         }
         boolean isSingleton = false;
         try {
@@ -1336,7 +1370,7 @@ public final class BroadcastQueue {
         // Broadcast is being executed, its package can't be stopped.
         try {
             AppGlobals.getPackageManager().setPackageStoppedState(
-                    r.curComponent.getPackageName(), false, UserHandle.getUserId(r.callingUid));
+                    r.curComponent.getPackageName(), false, r.userId);
         } catch (RemoteException e) {
         } catch (IllegalArgumentException e) {
             Slog.w(TAG, "Failed trying to unstop package "

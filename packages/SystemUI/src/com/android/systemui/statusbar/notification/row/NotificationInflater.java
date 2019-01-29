@@ -33,6 +33,7 @@ import android.view.View;
 import android.widget.RemoteViews;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.widget.ImageMessageConsumer;
 import com.android.systemui.statusbar.InflationTask;
 import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.MediaNotificationProcessor;
@@ -100,17 +101,13 @@ public class NotificationInflater {
 
     public static final int FLAG_CONTENT_VIEW_ALL = ~0;
 
-    // TODO: Heads up and ambient are always inflated as a temporary workaround.
-    // See http://b/117933032 and http://b/117894786
     /**
      * Content views that must be inflated at all times.
      */
     @InflationFlag
     private static final int REQUIRED_INFLATION_FLAGS =
             FLAG_CONTENT_VIEW_CONTRACTED
-            | FLAG_CONTENT_VIEW_EXPANDED
-            | FLAG_CONTENT_VIEW_HEADS_UP
-            | FLAG_CONTENT_VIEW_AMBIENT;
+            | FLAG_CONTENT_VIEW_EXPANDED;
 
     /**
      * The set of content views to inflate.
@@ -118,7 +115,7 @@ public class NotificationInflater {
     @InflationFlag
     private int mInflationFlags = REQUIRED_INFLATION_FLAGS;
 
-    private static final InflationExecutor EXECUTOR = new InflationExecutor();
+    static final InflationExecutor EXECUTOR = new InflationExecutor();
 
     private final ExpandableNotificationRow mRow;
     private boolean mIsLowPriority;
@@ -201,11 +198,12 @@ public class NotificationInflater {
     }
 
     /**
-     * Add flags for which content views should be inflated in addition to those already set.
+     * Convenience method for setting multiple flags at once.
      *
      * @param flags a set of {@link InflationFlag} corresponding to content views that should be
      *              inflated
      */
+    @VisibleForTesting
     public void addInflationFlags(@InflationFlag int flags) {
         mInflationFlags |= flags;
     }
@@ -216,13 +214,12 @@ public class NotificationInflater {
      * @param flag the {@link InflationFlag} corresponding to the view
      * @return true if the flag is set and view will be inflated, false o/w
      */
-    @VisibleForTesting
     public boolean isInflationFlagSet(@InflationFlag int flag) {
         return ((mInflationFlags & flag) != 0);
     }
 
     /**
-     * Inflate all views of this notification on a background thread. This is asynchronous and will
+     * Inflate views for set flags on a background thread. This is asynchronous and will
      * notify the callback once it's finished.
      */
     public void inflateNotificationViews() {
@@ -234,7 +231,7 @@ public class NotificationInflater {
      * will notify the callback once it's finished.  If the content view is already inflated, this
      * will reinflate it.
      *
-     * @param reInflateFlags flags which views should be inflated.  Should be a subset of
+     * @param reInflateFlags flags which views should be inflated. Should be a subset of
      *                       {@link NotificationInflater#mInflationFlags} as only those will be
      *                       inflated/reinflated.
      */
@@ -248,6 +245,10 @@ public class NotificationInflater {
         // Only inflate the ones that are set.
         reInflateFlags &= mInflationFlags;
         StatusBarNotification sbn = mRow.getEntry().notification;
+
+        // To check if the notification has inline image and preload inline image if necessary.
+        mRow.getImageResolver().preloadImages(sbn.getNotification());
+
         AsyncInflationTask task = new AsyncInflationTask(sbn, reInflateFlags, mCachedContentViews,
                 mRow, mIsLowPriority, mIsChildInGroup, mUsesIncreasedHeight,
                 mUsesIncreasedHeadsUpHeight, mRedactAmbient, mCallback, mRemoteViewClickHandler);
@@ -524,8 +525,14 @@ public class NotificationInflater {
             }
             return;
         }
-        RemoteViews.OnViewAppliedListener listener
-                = new RemoteViews.OnViewAppliedListener() {
+        RemoteViews.OnViewAppliedListener listener = new RemoteViews.OnViewAppliedListener() {
+
+            @Override
+            public void onViewInflated(View v) {
+                if (v instanceof ImageMessageConsumer) {
+                    ((ImageMessageConsumer) v).setImageResolver(row.getImageResolver());
+                }
+            }
 
             @Override
             public void onViewApplied(View v) {
@@ -701,7 +708,7 @@ public class NotificationInflater {
                         && newView.getPackage() != null
                         && newView.getPackage().equals(oldView.getPackage())
                         && newView.getLayoutId() == oldView.getLayoutId()
-                        && !oldView.isReapplyDisallowed());
+                        && !oldView.hasFlags(RemoteViews.FLAG_REAPPLY_DISALLOWED));
     }
 
     public void setInflationCallback(InflationCallback callback) {
@@ -855,6 +862,10 @@ public class NotificationInflater {
             mRow.getEntry().onInflationTaskFinished();
             mRow.onNotificationUpdated();
             mCallback.onAsyncInflationFinished(mRow.getEntry(), inflatedFlags);
+
+            // Notify the resolver that the inflation task has finished,
+            // try to purge unnecessary cached entries.
+            mRow.getImageResolver().purgeCache();
         }
 
         @Override

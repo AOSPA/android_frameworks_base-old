@@ -25,6 +25,7 @@ import android.net.wifi.hotspot2.IProvisioningCallback;
 
 import android.net.DhcpInfo;
 import android.net.Network;
+import android.net.wifi.IDppCallback;
 import android.net.wifi.INetworkRequestMatchCallback;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ITrafficStateCallback;
@@ -59,13 +60,15 @@ interface IWifiManager
      */
     oneway void requestActivityInfo(in ResultReceiver result);
 
-    ParceledListSlice getConfiguredNetworks();
+    ParceledListSlice getConfiguredNetworks(String packageName);
 
     ParceledListSlice getPrivilegedConfiguredNetworks();
 
     List<WifiConfiguration> getAllMatchingWifiConfigs(in List<ScanResult> scanResult);
 
     List<OsuProvider> getMatchingOsuProviders(in List<ScanResult> scanResult);
+
+    Map getMatchingPasspointConfigsForOsuProviders(in List<OsuProvider> osuProviders);
 
     int addOrUpdateNetwork(in WifiConfiguration config, String packageName);
 
@@ -91,11 +94,11 @@ interface IWifiManager
 
     List<ScanResult> getScanResults(String callingPackage);
 
-    void disconnect(String packageName);
+    boolean disconnect(String packageName);
 
-    void reconnect(String packageName);
+    boolean reconnect(String packageName);
 
-    void reassociate(String packageName);
+    boolean reassociate(String packageName);
 
     WifiInfo getConnectionInfo(String callingPackage);
 
@@ -219,8 +222,20 @@ interface IWifiManager
 
     void unregisterNetworkRequestMatchCallback(int callbackIdentifier);
 
-    boolean addNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
+    int addNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
 
-    boolean removeNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
+    int removeNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
+
+    String[] getFactoryMacAddresses();
+
+    void setDeviceMobilityState(int state);
+
+    void startDppAsConfiguratorInitiator(in IBinder binder, in String enrolleeUri,
+        int selectedNetworkId, int netRole, in IDppCallback callback);
+
+    void startDppAsEnrolleeInitiator(in IBinder binder, in String configuratorUri,
+        in IDppCallback callback);
+
+    void stopDppSession();
 }
 

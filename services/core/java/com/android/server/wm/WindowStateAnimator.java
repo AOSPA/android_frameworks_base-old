@@ -234,7 +234,7 @@ class WindowStateAnimator {
     private final Point mTmpPos = new Point();
 
     WindowStateAnimator(final WindowState win) {
-        final WindowManagerService service = win.mService;
+        final WindowManagerService service = win.mWmService;
 
         mService = service;
         mAnimator = service.mAnimator;
@@ -245,7 +245,7 @@ class WindowStateAnimator {
         mSession = win.mSession;
         mAttrType = win.mAttrs.type;
         mIsWallpaper = win.mIsWallpaper;
-        mWallpaperControllerLocked = mService.mRoot.mWallpaperController;
+        mWallpaperControllerLocked = win.getDisplayContent().mWallpaperController;
     }
 
     void cancelExitAnimationForNextAnimationLocked() {
@@ -861,7 +861,7 @@ class WindowStateAnimator {
         // to find the surface size changed underneath it.
         final boolean relayout = !w.mRelayoutCalled || w.mInRelayout;
         if (relayout) {
-            mSurfaceResized = mSurfaceController.setSizeInTransaction(
+            mSurfaceResized = mSurfaceController.setBufferSizeInTransaction(
                     mTmpSize.width(), mTmpSize.height(), recoveringMemory);
         } else {
             mSurfaceResized = false;
@@ -1020,7 +1020,7 @@ class WindowStateAnimator {
                         mTmpPos.x = 0;
                         mTmpPos.y = 0;
                         if (stack != null) {
-                            stack.getRelativePosition(mTmpPos);
+                            stack.getRelativeDisplayedPosition(mTmpPos);
                         }
 
                         xOffset = -mTmpPos.x;
@@ -1343,7 +1343,7 @@ class WindowStateAnimator {
         // is running.
         Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "WSA#applyAnimationLocked");
         if (mWin.mToken.okToAnimate()) {
-            int anim = mPolicy.selectAnimationLw(mWin, transit);
+            int anim = mWin.getDisplayContent().getDisplayPolicy().selectAnimationLw(mWin, transit);
             int attr = -1;
             Animation a = null;
             if (anim != 0) {

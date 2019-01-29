@@ -18,6 +18,8 @@ package android.widget;
 
 import android.annotation.ColorInt;
 import android.annotation.DimenRes;
+import android.annotation.IntDef;
+import android.annotation.LayoutRes;
 import android.annotation.NonNull;
 import android.annotation.StyleRes;
 import android.annotation.UnsupportedAppUsage;
@@ -131,6 +133,12 @@ public class RemoteViews implements Parcelable, Filter {
     static final String EXTRA_REMOTEADAPTER_APPWIDGET_ID = "remoteAdapterAppWidgetId";
 
     /**
+     * The intent extra that contains {@code true} if inflating as dak text theme.
+     * @hide
+     */
+    static final String EXTRA_REMOTEADAPTER_ON_LIGHT_BACKGROUND = "remoteAdapterOnLightBackground";
+
+    /**
      * The intent extra that contains the bounds for all shared elements.
      */
     public static final String EXTRA_SHARED_ELEMENT_BOUNDS =
@@ -161,6 +169,37 @@ public class RemoteViews implements Parcelable, Filter {
     private static final int LAYOUT_PARAM_ACTION_TAG = 19;
     private static final int OVERRIDE_TEXT_COLORS_TAG = 20;
     private static final int SET_RIPPLE_DRAWABLE_COLOR_TAG = 21;
+    private static final int SET_INT_TAG_TAG = 22;
+
+    /** @hide **/
+    @IntDef(flag = true, value = {
+            FLAG_REAPPLY_DISALLOWED,
+            FLAG_WIDGET_IS_COLLECTION_CHILD,
+            FLAG_USE_LIGHT_BACKGROUND_LAYOUT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ApplyFlags {}
+    /**
+     * Whether reapply is disallowed on this remoteview. This maybe be true if some actions modify
+     * the layout in a way that isn't recoverable, since views are being removed.
+     * @hide
+     */
+    public static final int FLAG_REAPPLY_DISALLOWED = 1;
+    /**
+     * This flag indicates whether this RemoteViews object is being created from a
+     * RemoteViewsService for use as a child of a widget collection. This flag is used
+     * to determine whether or not certain features are available, in particular,
+     * setting on click extras and setting on click pending intents. The former is enabled,
+     * and the latter disabled when this flag is true.
+     * @hide
+     */
+    public static final int FLAG_WIDGET_IS_COLLECTION_CHILD = 2;
+    /**
+     * When this flag is set, the views is inflated with {@link #mLightBackgroundLayoutId} instead
+     * of {link #mLayoutId}
+     * @hide
+     */
+    public static final int FLAG_USE_LIGHT_BACKGROUND_LAYOUT = 4;
 
     /**
      * Application that hosts the remote views.
@@ -175,6 +214,11 @@ public class RemoteViews implements Parcelable, Filter {
      */
     @UnsupportedAppUsage
     private final int mLayoutId;
+
+    /**
+     * The resource ID of the layout file in dark text mode. (Added to the parcel)
+     */
+    private int mLightBackgroundLayoutId = 0;
 
     /**
      * An array of actions to perform on the view tree once it has been
@@ -196,12 +240,6 @@ public class RemoteViews implements Parcelable, Filter {
     private boolean mIsRoot = true;
 
     /**
-     * Whether reapply is disallowed on this remoteview. This maybe be true if some actions modify
-     * the layout in a way that isn't recoverable, since views are being removed.
-     */
-    private boolean mReapplyDisallowed;
-
-    /**
      * Constants to whether or not this RemoteViews is composed of a landscape and portrait
      * RemoteViews.
      */
@@ -217,14 +255,8 @@ public class RemoteViews implements Parcelable, Filter {
     @UnsupportedAppUsage
     private RemoteViews mPortrait = null;
 
-    /**
-     * This flag indicates whether this RemoteViews object is being created from a
-     * RemoteViewsService for use as a child of a widget collection. This flag is used
-     * to determine whether or not certain features are available, in particular,
-     * setting on click extras and setting on click pending intents. The former is enabled,
-     * and the latter disabled when this flag is true.
-     */
-    private boolean mIsWidgetCollectionChild = false;
+    @ApplyFlags
+    private int mApplyFlags = 0;
 
     /** Class cookies of the Parcel this instance was read from. */
     private final Map<Class, Object> mClassCookies;
@@ -274,23 +306,29 @@ public class RemoteViews implements Parcelable, Filter {
     }
 
     /**
+     * Sets an integer tag to the view.
+     *
+     * @hide
+     */
+    public void setIntTag(int viewId, int key, int tag) {
+        addAction(new SetIntTagAction(viewId, key, tag));
+    }
+
+    /**
      * Set that it is disallowed to reapply another remoteview with the same layout as this view.
      * This should be done if an action is destroying the view tree of the base layout.
      *
      * @hide
      */
-    public void setReapplyDisallowed() {
-        mReapplyDisallowed = true;
+    public void addFlags(@ApplyFlags int flags) {
+        mApplyFlags = mApplyFlags | flags;
     }
 
     /**
-     * @return Whether it is disallowed to reapply another remoteview with the same layout as this
-     * view. True if this remoteview has actions that destroyed view tree of the base layout.
-     *
      * @hide
      */
-    public boolean isReapplyDisallowed() {
-        return mReapplyDisallowed;
+    public boolean hasFlags(@ApplyFlags int flag) {
+        return (mApplyFlags & flag) == flag;
     }
 
     /**
@@ -758,7 +796,10 @@ public class RemoteViews implements Parcelable, Filter {
             // Embed the AppWidget Id for use in RemoteViewsAdapter when connecting to the intent
             // RemoteViewsService
             AppWidgetHostView host = (AppWidgetHostView) rootParent;
-            intent.putExtra(EXTRA_REMOTEADAPTER_APPWIDGET_ID, host.getAppWidgetId());
+            intent.putExtra(EXTRA_REMOTEADAPTER_APPWIDGET_ID, host.getAppWidgetId())
+                    .putExtra(EXTRA_REMOTEADAPTER_ON_LIGHT_BACKGROUND,
+                            hasFlags(FLAG_USE_LIGHT_BACKGROUND_LAYOUT));
+
             if (target instanceof AbsListView) {
                 AbsListView v = (AbsListView) target;
                 v.setRemoteViewsAdapter(intent, isAsync);
@@ -819,7 +860,7 @@ public class RemoteViews implements Parcelable, Filter {
                 // If the view is an AdapterView, setting a PendingIntent on click doesn't make
                 // much sense, do they mean to set a PendingIntent template for the
                 // AdapterView's children?
-                if (mIsWidgetCollectionChild) {
+                if (hasFlags(FLAG_WIDGET_IS_COLLECTION_CHILD)) {
                     Log.w(LOG_TAG, "Cannot SetOnClickResponse for collection item "
                             + "(id: " + viewId + ")");
                     ApplicationInfo appInfo = root.getContext().getApplicationInfo();
@@ -833,7 +874,7 @@ public class RemoteViews implements Parcelable, Filter {
                 }
                 target.setTagInternal(R.id.pending_intent_tag, mResponse.mPendingIntent);
             } else if (mResponse.mFillIntent != null) {
-                if (!mIsWidgetCollectionChild) {
+                if (!hasFlags(FLAG_WIDGET_IS_COLLECTION_CHILD)) {
                     Log.e(LOG_TAG, "The method setOnClickFillInIntent is available "
                             + "only from RemoteViewsFactory (ie. on collection items).");
                     return;
@@ -1535,6 +1576,7 @@ public class RemoteViews implements Parcelable, Filter {
             viewId = parcel.readInt();
             mIndex = parcel.readInt();
             mNestedViews = new RemoteViews(parcel, bitmapCache, info, depth, classCookies);
+            mNestedViews.addFlags(mApplyFlags);
         }
 
         public void writeToParcel(Parcel dest, int flags) {
@@ -2122,6 +2164,43 @@ public class RemoteViews implements Parcelable, Filter {
         }
     }
 
+    private class SetIntTagAction extends Action {
+        private final int mViewId;
+        private final int mKey;
+        private final int mTag;
+
+        SetIntTagAction(int viewId, int key, int tag) {
+            mViewId = viewId;
+            mKey = key;
+            mTag = tag;
+        }
+
+        SetIntTagAction(Parcel parcel) {
+            mViewId = parcel.readInt();
+            mKey = parcel.readInt();
+            mTag = parcel.readInt();
+        }
+
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeInt(mViewId);
+            dest.writeInt(mKey);
+            dest.writeInt(mTag);
+        }
+
+        @Override
+        public void apply(View root, ViewGroup rootParent, OnClickHandler handler) {
+            final View target = root.findViewById(mViewId);
+            if (target == null) return;
+
+            target.setTagInternal(mKey, mTag);
+        }
+
+        @Override
+        public int getActionTag() {
+            return SET_INT_TAG_TAG;
+        }
+    }
+
     /**
      * Create a new RemoteViews object that will display the views contained
      * in the specified layout file.
@@ -2143,7 +2222,7 @@ public class RemoteViews implements Parcelable, Filter {
      *
      * @hide
      */
-    public RemoteViews(String packageName, int userId, int layoutId) {
+    public RemoteViews(String packageName, int userId, @LayoutRes int layoutId) {
         this(getApplicationInfo(packageName, userId), layoutId);
     }
 
@@ -2156,7 +2235,7 @@ public class RemoteViews implements Parcelable, Filter {
      *
      * @hide
      */
-    protected RemoteViews(ApplicationInfo application, int layoutId) {
+    protected RemoteViews(ApplicationInfo application, @LayoutRes int layoutId) {
         mApplication = application;
         mLayoutId = layoutId;
         mBitmapCache = new BitmapCache();
@@ -2182,7 +2261,8 @@ public class RemoteViews implements Parcelable, Filter {
             throw new RuntimeException("Both RemoteViews must share the same package and user");
         }
         mApplication = portrait.mApplication;
-        mLayoutId = portrait.getLayoutId();
+        mLayoutId = portrait.mLayoutId;
+        mLightBackgroundLayoutId = portrait.mLightBackgroundLayoutId;
 
         mLandscape = landscape;
         mPortrait = portrait;
@@ -2203,8 +2283,8 @@ public class RemoteViews implements Parcelable, Filter {
         mApplication = src.mApplication;
         mIsRoot = src.mIsRoot;
         mLayoutId = src.mLayoutId;
-        mIsWidgetCollectionChild = src.mIsWidgetCollectionChild;
-        mReapplyDisallowed = src.mReapplyDisallowed;
+        mLightBackgroundLayoutId = src.mLightBackgroundLayoutId;
+        mApplyFlags = src.mApplyFlags;
         mClassCookies = src.mClassCookies;
 
         if (src.hasLandscapeAndPortraitLayouts()) {
@@ -2262,7 +2342,7 @@ public class RemoteViews implements Parcelable, Filter {
             mApplication = parcel.readInt() == 0 ? info :
                     ApplicationInfo.CREATOR.createFromParcel(parcel);
             mLayoutId = parcel.readInt();
-            mIsWidgetCollectionChild = parcel.readInt() == 1;
+            mLightBackgroundLayoutId = parcel.readInt();
 
             readActionsFromParcel(parcel, depth);
         } else {
@@ -2271,9 +2351,10 @@ public class RemoteViews implements Parcelable, Filter {
             mPortrait = new RemoteViews(parcel, mBitmapCache, mLandscape.mApplication, depth,
                     mClassCookies);
             mApplication = mPortrait.mApplication;
-            mLayoutId = mPortrait.getLayoutId();
+            mLayoutId = mPortrait.mLayoutId;
+            mLightBackgroundLayoutId = mPortrait.mLightBackgroundLayoutId;
         }
-        mReapplyDisallowed = parcel.readInt() == 0;
+        mApplyFlags = parcel.readInt();
     }
 
     private void readActionsFromParcel(Parcel parcel, int depth) {
@@ -2326,6 +2407,8 @@ public class RemoteViews implements Parcelable, Filter {
                 return new OverrideTextColorsAction(parcel);
             case SET_RIPPLE_DRAWABLE_COLOR_TAG:
                 return new SetRippleDrawableColor(parcel);
+            case SET_INT_TAG_TAG:
+                return new SetIntTagAction(parcel);
             default:
                 throw new ActionException("Tag " + tag + " not found");
         }
@@ -2360,19 +2443,8 @@ public class RemoteViews implements Parcelable, Filter {
      * @return the layout id.
      */
     public int getLayoutId() {
-        return mLayoutId;
-    }
-
-    /*
-     * This flag indicates whether this RemoteViews object is being created from a
-     * RemoteViewsService for use as a child of a widget collection. This flag is used
-     * to determine whether or not certain features are available, in particular,
-     * setting on click extras and setting on click pending intents. The former is enabled,
-     * and the latter disabled when this flag is true.
-     */
-    @UnsupportedAppUsage
-    void setIsWidgetCollectionChild(boolean isWidgetCollectionChild) {
-        mIsWidgetCollectionChild = isWidgetCollectionChild;
+        return hasFlags(FLAG_USE_LIGHT_BACKGROUND_LAYOUT) && (mLightBackgroundLayoutId != 0)
+                ? mLightBackgroundLayoutId : mLayoutId;
     }
 
     /**
@@ -3243,6 +3315,33 @@ public class RemoteViews implements Parcelable, Filter {
         setInt(viewId, "setLabelFor", labeledId);
     }
 
+    /**
+     * Provides an alternate layout ID, which can be used to inflate this view. This layout will be
+     * used by the host when the widgets displayed on a light-background where foreground elements
+     * and text can safely draw using a dark color without any additional background protection.
+     */
+    public void setLightBackgroundLayoutId(@LayoutRes int layoutId) {
+        mLightBackgroundLayoutId = layoutId;
+    }
+
+    /**
+     * If this view supports dark text versions, creates a copy representing that version,
+     * otherwise returns itself.
+     * @hide
+     */
+    public RemoteViews getDarkTextViews() {
+        if (hasFlags(FLAG_USE_LIGHT_BACKGROUND_LAYOUT)) {
+            return this;
+        }
+
+        try {
+            addFlags(FLAG_USE_LIGHT_BACKGROUND_LAYOUT);
+            return new RemoteViews(this);
+        } finally {
+            mApplyFlags &= ~FLAG_USE_LIGHT_BACKGROUND_LAYOUT;
+        }
+    }
+
     private RemoteViews getRemoteViewsToApply(Context context) {
         if (hasLandscapeAndPortraitLayouts()) {
             int orientation = context.getResources().getConfiguration().orientation;
@@ -3324,6 +3423,12 @@ public class RemoteViews implements Parcelable, Filter {
      * @hide
      */
     public interface OnViewAppliedListener {
+        /**
+         * Callback when the RemoteView has finished inflating,
+         * but no actions have been applied yet.
+         */
+        default void onViewInflated(View v) {};
+
         void onViewApplied(View v);
 
         void onError(Exception e);
@@ -3420,6 +3525,10 @@ public class RemoteViews implements Parcelable, Filter {
         @Override
         protected void onPostExecute(ViewTree viewTree) {
             if (mError == null) {
+                if (mListener != null) {
+                    mListener.onViewInflated(viewTree.mRoot);
+                }
+
                 try {
                     if (mActions != null) {
                         OnClickHandler handler = mHandler == null
@@ -3603,7 +3712,7 @@ public class RemoteViews implements Parcelable, Filter {
                 mApplication.writeToParcel(dest, flags);
             }
             dest.writeInt(mLayoutId);
-            dest.writeInt(mIsWidgetCollectionChild ? 1 : 0);
+            dest.writeInt(mLightBackgroundLayoutId);
             writeActionsToParcel(dest);
         } else {
             dest.writeInt(MODE_HAS_LANDSCAPE_AND_PORTRAIT);
@@ -3616,7 +3725,7 @@ public class RemoteViews implements Parcelable, Filter {
             // Both RemoteViews already share the same package and user
             mPortrait.writeToParcel(dest, flags | PARCELABLE_ELIDE_DUPLICATES);
         }
-        dest.writeInt(mReapplyDisallowed ? 1 : 0);
+        dest.writeInt(mApplyFlags);
     }
 
     private void writeActionsToParcel(Parcel parcel) {

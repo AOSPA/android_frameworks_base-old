@@ -18,6 +18,7 @@ package android.os;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.util.ExceptionUtils;
 import android.util.Log;
 import android.util.Slog;
@@ -83,6 +84,15 @@ public class Binder implements IBinder {
 
     /** @hide */
     public static boolean LOG_RUNTIME_EXCEPTION = false; // DO NOT SUBMIT WITH TRUE
+
+    /**
+     * Value to represents that a calling work source is not set.
+     *
+     * This constatnt needs to be kept in sync with IPCThreadState::kUnsetWorkSource.
+     *
+     * @hide
+     */
+    public static final int UNSET_WORKSOURCE = -1;
 
     /**
      * Control whether dump() calls are allowed.
@@ -382,28 +392,37 @@ public class Binder implements IBinder {
     /**
      * Sets the work source for this thread.
      *
-     * <p>All the following binder calls on this thread will use the provided work source.
+     * <p>All the following binder calls on this thread will use the provided work source. If this
+     * is called during an on-going binder transaction, all the following binder calls will use the
+     * work source until the end of the transaction.
      *
      * <p>The concept of worksource is similar to {@link WorkSource}. However, for performance
      * reasons, we only support one UID. This UID represents the original user responsible for the
      * binder calls.
      *
+     * <p>{@link Binder#restoreCallingWorkSource(long)} must always be called after setting the
+     * worksource.
+     *
      * <p>A typical use case would be
      * <pre>
-     * Binder.setThreadWorkSource(uid);
+     * long token = Binder.setCallingWorkSourceUid(uid);
      * try {
      *   // Call an API.
      * } finally {
-     *   Binder.clearThreadWorkSource();
+     *   Binder.restoreCallingWorkSource(token);
      * }
      * </pre>
      *
+     * <p>The work source will be propagated for future outgoing binder transactions
+     * executed on this thread.
+     *
      * @param workSource The original UID responsible for the binder call.
-     * @return The previously set work source.
+     * @return token to restore original work source.
      * @hide
      **/
     @CriticalNative
-    public static final native int setThreadWorkSource(int workSource);
+    @SystemApi
+    public static final native long setCallingWorkSourceUid(int workSource);
 
     /**
      * Returns the work source set by the caller.
@@ -416,16 +435,54 @@ public class Binder implements IBinder {
      * @hide
      */
     @CriticalNative
-    public static final native int getThreadWorkSource();
+    @SystemApi
+    public static final native int getCallingWorkSourceUid();
 
     /**
      * Clears the work source on this thread.
      *
-     * @return The previously set work source.
+     * <p>The work source will be propagated for future outgoing binder transactions
+     * executed on this thread.
+     *
+     * <p>{@link Binder#restoreCallingWorkSource(long)} must always be called after clearing the
+     * worksource.
+     *
+     * <p>A typical use case would be
+     * <pre>
+     * long token = Binder.clearCallingWorkSource();
+     * try {
+     *   // Call an API.
+     * } finally {
+     *   Binder.restoreCallingWorkSource(token);
+     * }
+     * </pre>
+     *
+     * @return token to restore original work source.
      * @hide
      **/
     @CriticalNative
-    public static final native int clearThreadWorkSource();
+    @SystemApi
+    public static final native long clearCallingWorkSource();
+
+    /**
+     * Restores the work source on this thread using a token returned by
+     * {@link #setCallingWorkSourceUid(int) or {@link clearCallingWorkSource()}.
+     *
+     * <p>A typical use case would be
+     * <pre>
+     * long token = Binder.setCallingWorkSourceUid(uid);
+     * try {
+     *   // Call an API.
+     * } finally {
+     *   Binder.restoreCallingWorkSource(token);
+     * }
+     * </pre>
+     *
+     * @hide
+     **/
+    @CriticalNative
+    @SystemApi
+    public static final native void restoreCallingWorkSource(long token);
 
     /**
      * Flush any Binder commands pending in the current thread to the kernel
@@ -565,6 +622,7 @@ public class Binder implements IBinder {
      * See {@link setProxyTransactListener}.
      * @hide
      */
+    @SystemApi
     public interface ProxyTransactListener {
         /**
          * Called before onTransact.
@@ -586,7 +644,7 @@ public class Binder implements IBinder {
      *
      * <li>By default, this listener will propagate the worksource if the outgoing call happens on
      * the same thread as the incoming binder call.
-     * <li>Custom attribution can be done by calling {@link ThreadLocalWorkSourceUid#set(int)}.
+     * <li>Custom attribution can be done by calling {@link ThreadLocalWorkSource#setUid(int)}.
      * @hide
      */
     public static class PropagateWorkSourceTransactListener implements ProxyTransactListener {
@@ -595,12 +653,11 @@ public class Binder implements IBinder {
            // Note that {@link Binder#getCallingUid()} is already set to the UID of the current
            // process when this method is called.
            //
-           // We use ThreadLocalWorkSourceUid instead. It also allows feature owners to set
-           // {@link ThreadLocalWorkSourceUid#set(int) manually to attribute resources to a UID.
-            int uid = ThreadLocalWorkSourceUid.get();
-            if (uid >= 0) {
-                int originalUid = Binder.setThreadWorkSource(uid);
-                return Integer.valueOf(originalUid);
+           // We use ThreadLocalWorkSource instead. It also allows feature owners to set
+           // {@link ThreadLocalWorkSource#set(int) manually to attribute resources to a UID.
+            int uid = ThreadLocalWorkSource.getUid();
+            if (uid != ThreadLocalWorkSource.UID_NONE) {
+                return Binder.setCallingWorkSourceUid(uid);
             }
             return null;
         }
@@ -608,8 +665,8 @@ public class Binder implements IBinder {
         @Override
         public void onTransactEnded(Object session) {
             if (session != null) {
-                int uid = (int) session;
-                Binder.setThreadWorkSource(uid);
+                long token = (long) session;
+                Binder.restoreCallingWorkSource(token);
             }
         }
     }
@@ -628,6 +685,7 @@ public class Binder implements IBinder {
      * <li>Never execute another binder transaction inside the listener.
      * @hide
      */
+    @SystemApi
     public static void setProxyTransactListener(@Nullable ProxyTransactListener listener) {
         BinderProxy.setTransactListener(listener);
     }
@@ -881,13 +939,49 @@ public class Binder implements IBinder {
     private static native long getNativeBBinderHolder();
     private static native long getFinalizer();
 
+    /**
+     * By default, we use the calling uid since we can always trust it.
+     */
+    private static volatile BinderInternal.WorkSourceProvider sWorkSourceProvider =
+            Binder::getCallingUid;
+
+    /**
+     * Sets the work source provider.
+     *
+     * <li>The callback is global. Only fast operations should be done to avoid thread
+     * contentions.
+     * <li>The callback implementation needs to handle synchronization if needed. The methods on the
+     * callback can be called concurrently.
+     * <li>The callback is called on the critical path of the binder transaction so be careful about
+     * performance.
+     * <li>Never execute another binder transaction inside the callback.
+     * @hide
+     */
+    public static void setWorkSourceProvider(BinderInternal.WorkSourceProvider workSourceProvider) {
+        if (workSourceProvider == null) {
+            throw new IllegalArgumentException("workSourceProvider cannot be null");
+        }
+        sWorkSourceProvider = workSourceProvider;
+    }
+
     // Entry point from android_util_Binder.cpp's onTransact
     private boolean execTransact(int code, long dataObj, long replyObj,
             int flags) {
+        final int workSourceUid = sWorkSourceProvider.resolveWorkSourceUid();
+        final long origWorkSource = ThreadLocalWorkSource.setUid(workSourceUid);
+        try {
+            return execTransactInternal(code, dataObj, replyObj, flags, workSourceUid);
+        } finally {
+            ThreadLocalWorkSource.restore(origWorkSource);
+        }
+    }
+
+    private boolean execTransactInternal(int code, long dataObj, long replyObj,
+            int flags, int workSourceUid) {
         // Make sure the observer won't change while processing a transaction.
         final BinderInternal.Observer observer = sObserver;
         final CallSession callSession =
-                observer != null ? observer.callStarted(this, code) : null;
+                observer != null ? observer.callStarted(this, code, workSourceUid) : null;
         Parcel data = Parcel.obtain(dataObj);
         Parcel reply = Parcel.obtain(replyObj);
         // theoretically, we should call transact, which will call onTransact,
@@ -899,9 +993,10 @@ public class Binder implements IBinder {
         final boolean tracingEnabled = Binder.isTracingEnabled();
         try {
             if (tracingEnabled) {
-                Trace.traceBegin(Trace.TRACE_TAG_ALWAYS, getClass().getName() + ":" + code);
+                final String transactionName = getTransactionName(code);
+                Trace.traceBegin(Trace.TRACE_TAG_ALWAYS, getClass().getName() + ":"
+                        + (transactionName != null ? transactionName : code));
             }
-            ThreadLocalWorkSourceUid.set(Binder.getCallingUid());
             res = onTransact(code, data, reply, flags);
         } catch (RemoteException|RuntimeException e) {
             if (observer != null) {
@@ -922,14 +1017,14 @@ public class Binder implements IBinder {
             }
             res = true;
         } finally {
-            ThreadLocalWorkSourceUid.clear();
             if (tracingEnabled) {
                 Trace.traceEnd(Trace.TRACE_TAG_ALWAYS);
             }
+            if (observer != null) {
+                observer.callEnded(callSession, data.dataSize(), reply.dataSize(), workSourceUid);
+            }
         }
         checkParcel(this, code, reply, "Unreasonably large binder reply buffer");
-        int replySizeBytes = reply.dataSize();
-        int requestSizeBytes = data.dataSize();
         reply.recycle();
         data.recycle();
 
@@ -939,10 +1034,6 @@ public class Binder implements IBinder {
         // to the main transaction loop to wait for another incoming transaction.  Either
         // way, strict mode begone!
         StrictMode.clearGatheredViolations();
-        if (observer != null) {
-            observer.callEnded(callSession, requestSizeBytes, replySizeBytes);
-        }
-
         return res;
     }
 }

@@ -40,6 +40,7 @@ import android.app.AppOpsManager;
 import android.app.NotificationChannel;
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.util.ArraySet;
 import android.view.NotificationHeaderView;
@@ -53,7 +54,6 @@ import com.android.systemui.statusbar.notification.stack.NotificationChildrenCon
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -65,7 +65,7 @@ import java.util.List;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@RunWithLooper(setAsMainLooper = true)
+@RunWithLooper
 public class ExpandableNotificationRowTest extends SysuiTestCase {
 
     private ExpandableNotificationRow mGroupRow;
@@ -78,6 +78,7 @@ public class ExpandableNotificationRowTest extends SysuiTestCase {
 
     @Before
     public void setUp() throws Exception {
+        com.android.systemui.util.Assert.sMainLooper = TestableLooper.get(this).getLooper();
         mNotificationTestHelper = new NotificationTestHelper(mContext);
         mGroupRow = mNotificationTestHelper.createGroup();
         mGroupRow.setHeadsUpAnimatingAwayListener(
@@ -140,10 +141,7 @@ public class ExpandableNotificationRowTest extends SysuiTestCase {
         verify(row).updateShelfIconColor();
     }
 
-    // TODO: Ignoring as a temporary workaround until heads up views can be safely freed.
-    // See http://b/117933032
     @Test
-    @Ignore
     public void testFreeContentViewWhenSafe() throws Exception {
         ExpandableNotificationRow row = mNotificationTestHelper.createRow(FLAG_CONTENT_VIEW_ALL);
 

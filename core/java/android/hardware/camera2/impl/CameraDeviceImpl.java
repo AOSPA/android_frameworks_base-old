@@ -715,6 +715,17 @@ public class CameraDeviceImpl extends CameraDevice
         }
     }
 
+    @Override
+    public boolean isSessionConfigurationSupported(
+            @NonNull SessionConfiguration sessionConfig) throws CameraAccessException,
+            UnsupportedOperationException, IllegalArgumentException {
+        synchronized(mInterfaceLock) {
+            checkIfCameraClosedOrInError();
+
+            return mRemoteDevice.isSessionConfigurationSupported(sessionConfig);
+        }
+    }
+
     /**
      * For use by backwards-compatibility code only.
      */

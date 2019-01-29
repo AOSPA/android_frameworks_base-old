@@ -20,9 +20,9 @@
 #include "Readback.h"
 #include "SkiaPipeline.h"
 #include "SkiaProfileRenderer.h"
+#include "VkInteropFunctorDrawable.h"
 #include "renderstate/RenderState.h"
 #include "renderthread/Frame.h"
-#include "VkInteropFunctorDrawable.h"
 
 #include <SkSurface.h>
 #include <SkTypes.h>
@@ -115,21 +115,17 @@ DeferredLayerUpdater* SkiaVulkanPipeline::createTextureLayer() {
 
 void SkiaVulkanPipeline::onStop() {}
 
-bool SkiaVulkanPipeline::setSurface(Surface* surface, SwapBehavior swapBehavior,
+bool SkiaVulkanPipeline::setSurface(ANativeWindow* surface, SwapBehavior swapBehavior,
                                     ColorMode colorMode) {
     if (mVkSurface) {
         mVkManager.destroySurface(mVkSurface);
         mVkSurface = nullptr;
     }
 
+    setSurfaceColorProperties(colorMode);
     if (surface) {
-        mVkSurface = mVkManager.createSurface(surface, colorMode);
-    }
-
-    if (colorMode == ColorMode::SRGB) {
-        mSurfaceColorType = SkColorType::kN32_SkColorType;
-    } else if (colorMode == ColorMode::WideColorGamut) {
-        mSurfaceColorType = SkColorType::kRGBA_F16_SkColorType;
+        mVkSurface = mVkManager.createSurface(surface, colorMode, mSurfaceColorSpace,
+                                              mSurfaceColorGamut, mSurfaceColorType);
     }
 
     return mVkSurface != nullptr;
@@ -162,7 +158,7 @@ sk_sp<Bitmap> SkiaVulkanPipeline::allocateHardwareBitmap(renderthread::RenderThr
         ALOGW("SkiaVulkanPipeline::allocateHardwareBitmap() failed in GraphicBuffer.create()");
         return nullptr;
     }
-    return sk_sp<Bitmap>(new Bitmap(buffer.get(), skBitmap.info()));
+    return Bitmap::createFrom(buffer, skBitmap.refColorSpace());
 }
 
 } /* namespace skiapipeline */

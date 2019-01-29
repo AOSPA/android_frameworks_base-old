@@ -16,6 +16,12 @@
 
 package com.android.server.wm;
 
+import static android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW;
+import static android.view.PointerIcon.TYPE_NOT_SPECIFIED;
+import static android.view.PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW;
+import static android.view.PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW;
+import static android.view.PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW;
+
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.input.InputManager;
@@ -24,26 +30,19 @@ import android.view.MotionEvent;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.server.wm.WindowManagerService.H;
-import com.android.server.am.ActivityManagerService;
-import com.android.server.wm.ActivityStackSupervisor;
-import android.util.BoostFramework;
-
-import static android.view.PointerIcon.TYPE_NOT_SPECIFIED;
-import static android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW;
-import static android.view.PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW;
-import static android.view.PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW;
-import static android.view.PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW;
 
 public class TaskTapPointerEventListener implements PointerEventListener {
 
-    final private Region mTouchExcludeRegion = new Region();
+    private final Region mTouchExcludeRegion = new Region();
+    private final Region mTmpRegion = new Region();
     private final WindowManagerService mService;
     private final DisplayContent mDisplayContent;
     private final Handler mHandler;
     private final Runnable mMoveDisplayToTop;
     private final Rect mTmpRect = new Rect();
     private int mPointerIconType = TYPE_NOT_SPECIFIED;
-    public BoostFramework mPerfObj = null;
+    private int mLastDownX;
+    private int mLastDownY;
 
     public TaskTapPointerEventListener(WindowManagerService service,
             DisplayContent displayContent) {
@@ -51,14 +50,29 @@ public class TaskTapPointerEventListener implements PointerEventListener {
         mDisplayContent = displayContent;
         mHandler = new Handler(mService.mH.getLooper());
         mMoveDisplayToTop = () -> {
+            int x;
+            int y;
+            synchronized (this) {
+                x = mLastDownX;
+                y = mLastDownY;
+            }
             synchronized (mService.mGlobalLock) {
-                mDisplayContent.getParent().positionChildAt(WindowContainer.POSITION_TOP,
-                        mDisplayContent, true /* includingParents */);
+                if (!mService.mPerDisplayFocusEnabled
+                        && mService.mRoot.getTopFocusedDisplayContent() != mDisplayContent
+                        && inputMethodWindowContains(x, y)) {
+                    // In a single focus system, if the input method window and the input method
+                    // target window are on the different displays, when the user is tapping on the
+                    // input method window, we don't move its display to top. Otherwise, the input
+                    // method target window will lose the focus.
+                    return;
+                }
+                WindowContainer parent = mDisplayContent.getParent();
+                if (parent != null) {
+                    parent.positionChildAt(WindowContainer.POSITION_TOP, mDisplayContent,
+                            true /* includingParents */);
+                }
             }
         };
-        if (mPerfObj == null) {
-            mPerfObj = new BoostFramework();
-        }
     }
 
     @Override
@@ -77,6 +91,8 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                         mService.mTaskPositioningController.handleTapOutsideTask(
                                 mDisplayContent, x, y);
                     }
+                    mLastDownX = x;
+                    mLastDownY = y;
                     mHandler.post(mMoveDisplayToTop);
                 }
             }
@@ -118,17 +134,6 @@ public class TaskTapPointerEventListener implements PointerEventListener {
             }
             break;
         }
-        if (ActivityStackSupervisor.mIsPerfBoostAcquired && (mPerfObj != null)) {
-            if (ActivityStackSupervisor.mPerfHandle > 0) {
-                mPerfObj.perfLockReleaseHandler(ActivityStackSupervisor.mPerfHandle);
-                ActivityStackSupervisor.mPerfHandle = -1;
-            }
-            ActivityStackSupervisor.mIsPerfBoostAcquired = false;
-        }
-        if (ActivityStackSupervisor.mPerfSendTapHint && (mPerfObj != null)) {
-            mPerfObj.perfHint(BoostFramework.VENDOR_HINT_TAP_EVENT, null);
-            ActivityStackSupervisor.mPerfSendTapHint = false;
-        }
     }
 
     void setTouchExcludeRegion(Region newRegion) {
@@ -139,5 +144,14 @@ public class TaskTapPointerEventListener implements PointerEventListener {
 
     private int getDisplayId() {
         return mDisplayContent.getDisplayId();
+    }
+
+    private boolean inputMethodWindowContains(int x, int y) {
+        final WindowState inputMethodWindow = mDisplayContent.mInputMethodWindow;
+        if (inputMethodWindow == null || !inputMethodWindow.isVisibleLw()) {
+            return false;
+        }
+        inputMethodWindow.getTouchableRegion(mTmpRegion);
+        return mTmpRegion.contains(x, y);
     }
 }

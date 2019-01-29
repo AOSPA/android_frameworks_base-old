@@ -24,11 +24,12 @@
 #include "incidentd_util.h"
 #include "section_list.h"
 
+#include <android/os/IncidentReportArgs.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IResultReceiver.h>
 #include <binder/IServiceManager.h>
 #include <binder/IShellCallback.h>
-#include <cutils/log.h>
+#include <log/log.h>
 #include <private/android_filesystem_config.h>
 #include <utils/Looper.h>
 
@@ -40,6 +41,13 @@ enum { WHAT_RUN_REPORT = 1, WHAT_SEND_BACKLOG_TO_DROPBOX = 2 };
 
 #define DEFAULT_BYTES_SIZE_LIMIT (20 * 1024 * 1024)        // 20MB
 #define DEFAULT_REFACTORY_PERIOD_MS (24 * 60 * 60 * 1000)  // 1 Day
+
+// Skip these sections for dumpstate only. Dumpstate allows 10s max for each service to dump.
+// Skip logs (1100 - 1108) and traces (1200 - 1202) because they are already in the bug report.
+// Skip 3018 because it takes too long.
+#define SKIPPED_SECTIONS { 1100, 1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, /* Logs */ \
+                           1200, 1201, 1202, /* Native, hal, java traces */ \
+                           3018  /* "meminfo -a --proto" */ }
 
 namespace android {
 namespace os {
@@ -82,15 +90,17 @@ static Status checkIncidentPermissions(const IncidentReportArgs& args) {
                         Status::EX_SECURITY,
                         "Calling process does not have permission to get local data.");
             }
+            break;
         case DEST_EXPLICIT:
             if (callingUid != AID_SHELL && callingUid != AID_ROOT && callingUid != AID_STATSD &&
-                callingUid != AID_SYSTEM) {
+                    callingUid != AID_SYSTEM) {
                 ALOGW("Calling pid %d and uid %d does not have permission to get explicit data.",
                       callingPid, callingUid);
                 return Status::fromExceptionCode(
                         Status::EX_SECURITY,
                         "Calling process does not have permission to get explicit data.");
             }
+            break;
     }
     return Status::ok();
 }
@@ -298,7 +308,7 @@ status_t IncidentService::onTransact(uint32_t code, const Parcel& data, Parcel* 
             }
 
             return NO_ERROR;
-        }
+        } break;
         default: { return BnIncidentManager::onTransact(code, data, reply, flags); }
     }
 }
@@ -386,6 +396,38 @@ status_t IncidentService::cmd_privacy(FILE* in, FILE* out, FILE* err, Vector<Str
     } else {
         return cmd_help(out);
     }
+    return NO_ERROR;
+}
+
+status_t IncidentService::dump(int fd, const Vector<String16>& args) {
+    if (std::find(args.begin(), args.end(), String16("--proto")) == args.end()) {
+        ALOGD("Skip dumping incident. Only proto format is supported.");
+        dprintf(fd, "Incident dump only supports proto version.\n");
+        return NO_ERROR;
+    }
+
+    ALOGD("Dump incident proto");
+    IncidentReportArgs incidentArgs;
+    incidentArgs.setDest(DEST_EXPLICIT);
+    int skipped[] = SKIPPED_SECTIONS;
+    for (const Section** section = SECTION_LIST; *section; section++) {
+        const int id = (*section)->id;
+        if (std::find(std::begin(skipped), std::end(skipped), id) == std::end(skipped)) {
+            incidentArgs.addSection(id);
+        }
+    }
+
+    if (!checkIncidentPermissions(incidentArgs).isOk()) {
+        return PERMISSION_DENIED;
+    }
+
+    int fd1 = dup(fd);
+    if (fd1 < 0) {
+        return -errno;
+    }
+
+    mHandler->scheduleRunReport(new ReportRequest(incidentArgs, NULL, fd1));
+
     return NO_ERROR;
 }
 

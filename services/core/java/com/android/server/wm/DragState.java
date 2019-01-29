@@ -31,23 +31,24 @@ import android.animation.ValueAnimator;
 import android.annotation.Nullable;
 import android.content.ClipData;
 import android.content.ClipDescription;
-import android.content.Context;
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.hardware.input.InputManager;
+import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.os.IUserManager;
 import android.os.UserManagerInternal;
 import android.util.Slog;
 import android.view.Display;
 import android.view.DragEvent;
+import android.view.InputApplicationHandle;
 import android.view.InputChannel;
 import android.view.InputDevice;
+import android.view.InputWindowHandle;
 import android.view.PointerIcon;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -57,8 +58,6 @@ import android.view.animation.Interpolator;
 
 import com.android.internal.view.IDragAndDropPermissions;
 import com.android.server.LocalServices;
-import android.view.InputApplicationHandle;
-import android.view.InputWindowHandle;
 
 import java.util.ArrayList;
 
@@ -118,6 +117,17 @@ class DragState {
     private final Interpolator mCubicEaseOutInterpolator = new DecelerateInterpolator(1.5f);
     private Point mDisplaySize = new Point();
 
+    // A surface used to catch input events for the drag-and-drop operation.
+    SurfaceControl mInputSurface;
+
+    private final Rect mTmpClipRect = new Rect();
+
+    /**
+     * Whether we are finishing this drag and drop. This starts with {@code false}, and is set to
+     * {@code true} when {@link #closeLocked()} is called.
+     */
+    private boolean mIsClosing;
+
     DragState(WindowManagerService service, DragDropController controller, IBinder token,
             SurfaceControl surface, int flags, IBinder localWin) {
         mService = service;
@@ -127,6 +137,46 @@ class DragState {
         mFlags = flags;
         mLocalWin = localWin;
         mNotifiedWindows = new ArrayList<WindowState>();
+
+    }
+
+    boolean isClosing() {
+        return mIsClosing;
+    }
+
+    void hideInputSurface(SurfaceControl.Transaction t, int displayId) {
+        if (displayId != mDisplayContent.getDisplayId()) {
+            return;
+        }
+
+        if (mInputSurface != null) {
+            t.hide(mInputSurface);
+        }
+    }
+
+    void showInputSurface(SurfaceControl.Transaction t, int displayId) {
+        if (displayId != mDisplayContent.getDisplayId()) {
+            return;
+        }
+
+        if (mInputSurface == null) {
+            mInputSurface = mService.makeSurfaceBuilder(mService.mRoot.getDisplayContent(displayId)
+                    .getSession()).setContainerLayer(true)
+                    .setName("Drag and Drop Input Consumer").build();
+        }
+        final InputWindowHandle h = getInputWindowHandle();
+        if (h == null) {
+            Slog.w(TAG_WM, "Drag is in progress but there is no "
+                    + "drag window handle.");
+            return;
+        }
+
+        t.show(mInputSurface);
+        t.setInputWindowInfo(mInputSurface, h);
+        t.setLayer(mInputSurface, Integer.MAX_VALUE);
+
+        mTmpClipRect.set(0, 0, mDisplaySize.x, mDisplaySize.y);
+        t.setWindowCrop(mInputSurface, mTmpClipRect);
     }
 
     /**
@@ -134,6 +184,7 @@ class DragState {
      * DragDropController#mDragState becomes null.
      */
     void closeLocked() {
+        mIsClosing = true;
         // Unregister the input interceptor.
         if (mInputInterceptor != null) {
             if (DEBUG_DRAG)
@@ -218,7 +269,7 @@ class DragState {
             mInputEventReceiver = new DragInputEventReceiver(mClientChannel,
                     mService.mH.getLooper(), mDragDropController);
 
-            mDragApplicationHandle = new InputApplicationHandle(null);
+            mDragApplicationHandle = new InputApplicationHandle(new Binder());
             mDragApplicationHandle.name = "drag";
             mDragApplicationHandle.dispatchingTimeoutNanos =
                     WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
@@ -226,7 +277,7 @@ class DragState {
             mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle, null,
                     display.getDisplayId());
             mDragWindowHandle.name = "drag";
-            mDragWindowHandle.inputChannel = mServerChannel;
+            mDragWindowHandle.token = mServerChannel.getToken();
             mDragWindowHandle.layer = getDragLayerLocked();
             mDragWindowHandle.layoutParamsFlags = 0;
             mDragWindowHandle.layoutParamsType = WindowManager.LayoutParams.TYPE_DRAG;

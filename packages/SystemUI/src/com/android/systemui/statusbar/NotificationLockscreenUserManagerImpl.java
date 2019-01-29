@@ -165,7 +165,7 @@ public class NotificationLockscreenUserManagerImpl implements
         mCurrentUserId = ActivityManager.getCurrentUser();
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
-        Dependency.get(StatusBarStateController.class).addListener(this);
+        Dependency.get(StatusBarStateController.class).addCallback(this);
         mLockPatternUtils = new LockPatternUtils(context);
         mKeyguardManager = context.getSystemService(KeyguardManager.class);
     }
@@ -397,7 +397,8 @@ public class NotificationLockscreenUserManagerImpl implements
                     Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS, 0, userHandle);
             final boolean allowedByDpm = adminAllowsKeyguardFeature(userHandle,
                     DevicePolicyManager.KEYGUARD_DISABLE_SECURE_NOTIFICATIONS);
-            final boolean allowed = allowedByUser && allowedByDpm;
+            final boolean allowedBySystem = mKeyguardManager.getPrivateNotificationsAllowed();
+            final boolean allowed = allowedByUser && allowedByDpm && allowedBySystem;
             mUsersAllowingNotifications.append(userHandle, allowed);
             return allowed;
         }

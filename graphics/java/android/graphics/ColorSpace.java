@@ -1779,6 +1779,70 @@ public abstract class ColorSpace {
     }
 
     /**
+     * <p>Computes the chromaticity coordinates of a CIE series D illuminant
+     * from the specified correlated color temperature (CCT). The specified CCT
+     * must be greater than 0. A meaningful CCT range is [4000, 25000].</p>
+     *
+     * <p>The transform is computed using the methods referred to in Kang et
+     * al., <i>Design of Advanced Color - Temperature Control System for HDTV
+     * Applications</i>, Journal of Korean Physical Society 41, 865-871
+     * (2002).</p>
+     *
+     * @param cct The correlated color temperature, in Kelvin
+     * @return Corresponding XYZ values
+     * @throws IllegalArgumentException If cct is invalid
+     */
+    @NonNull
+    @Size(3)
+    public static float[] cctToIlluminantdXyz(@IntRange(from = 1) int cct) {
+        if (cct < 1) {
+            throw new IllegalArgumentException("Temperature must be greater than 0");
+        }
+
+        final float icct = 1.0f / cct;
+        final float icct2 = icct * icct;
+        final float x = cct <= 7000.0f ?
+            0.244063f + 0.09911e3f * icct + 2.9678e6f * icct2 - 4.6070e9f * icct2 * icct :
+            0.237040f + 0.24748e3f * icct + 1.9018e6f * icct2 - 2.0064e9f * icct2 * icct;
+        final float y = -3.0f * x * x + 2.87f * x - 0.275f;
+        return xyYToXyz(new float[] {x, y});
+    }
+
+    /**
+     * <p>Computes the chromatic adaptation transform from the specified
+     * source white point to the specified destination white point.</p>
+     *
+     * <p>The transform is computed using the von Kries method, described
+     * in more details in the documentation of {@link Adaptation}. The
+     * {@link Adaptation} enum provides different matrices that can be
+     * used to perform the adaptation.</p>
+     *
+     * @param adaptation The adaptation method
+     * @param srcWhitePoint The white point to adapt from
+     * @param dstWhitePoint The white point to adapt to
+     * @return A 3x3 matrix as a non-null array of 9 floats
+     */
+    @NonNull
+    @Size(9)
+    public static float[] chromaticAdaptation(@NonNull Adaptation adaptation,
+            @NonNull @Size(min = 2, max = 3) float[] srcWhitePoint,
+            @NonNull @Size(min = 2, max = 3) float[] dstWhitePoint) {
+        float[] srcXyz = srcWhitePoint.length == 3 ?
+            Arrays.copyOf(srcWhitePoint, 3) : xyYToXyz(srcWhitePoint);
+        float[] dstXyz = dstWhitePoint.length == 3 ?
+            Arrays.copyOf(dstWhitePoint, 3) : xyYToXyz(dstWhitePoint);
+
+        if (compare(srcXyz, dstXyz)) {
+            return new float[] {
+                1.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 1.0f
+            };
+        }
+        return chromaticAdaptation(adaptation.mTransform, srcXyz, dstXyz);
+    }
+
+    /**
      * Implementation of the CIE XYZ color space. Assumes the white point is D50.
      */
     @AnyThread

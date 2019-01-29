@@ -1832,8 +1832,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         updateMagnificationLocked(userState);
         scheduleUpdateFingerprintGestureHandling(userState);
         scheduleUpdateInputFilter(userState);
-        scheduleUpdateClientsIfNeededLocked(userState);
         updateRelevantEventsLocked(userState);
+        scheduleUpdateClientsIfNeededLocked(userState);
         updateAccessibilityButtonTargetsLocked(userState);
     }
 
@@ -2463,6 +2463,25 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             return false;
         }
         return mFingerprintGestureDispatcher.onFingerprintGesture(gestureKeyCode);
+    }
+
+    /**
+     * AIDL-exposed method. System only.
+     * Gets accessibility window id from window token.
+     *
+     * @param windowToken Window token to get accessibility window id.
+     * @return Accessibility window id for the window token. Returns -1 if no such token is
+     *   registered.
+     */
+    @Override
+    public int getAccessibilityWindowId(IBinder windowToken) {
+        synchronized (mLock) {
+            if (UserHandle.getAppId(Binder.getCallingUid()) != Process.SYSTEM_UID) {
+                throw new SecurityException("Only SYSTEM can call getAccessibilityWindowId");
+            }
+
+            return findWindowIdLocked(windowToken);
+        }
     }
 
     /**

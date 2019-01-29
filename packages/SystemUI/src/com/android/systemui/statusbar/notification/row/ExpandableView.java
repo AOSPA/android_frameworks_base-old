@@ -25,25 +25,30 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import androidx.annotation.Nullable;
+
 import com.android.systemui.Dumpable;
 import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
-import com.android.systemui.statusbar.notification.stack.StackScrollState;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * An abstract view for expandable views.
  */
 public abstract class ExpandableView extends FrameLayout implements Dumpable {
+    private static final String TAG = "ExpandableView";
 
     public static final float NO_ROUNDNESS = -1;
     protected OnHeightChangedListener mOnHeightChangedListener;
     private int mActualHeight;
     protected int mClipTopAmount;
     protected int mClipBottomAmount;
+    protected int mMinimumHeightForClipping = 0;
+    protected float mExtraWidthForClipping = 0;
     private boolean mDark;
     private ArrayList<View> mMatchParentViews = new ArrayList<View>();
     private static Rect mClipRect = new Rect();
@@ -54,9 +59,11 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     private ViewGroup mTransientContainer;
     private boolean mInShelf;
     private boolean mTransformingInShelf;
+    private final ExpandableViewState mViewState;
 
     public ExpandableView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mViewState = createExpandableViewState();
     }
 
     @Override
@@ -305,16 +312,19 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
      * @param duration The duration of the remove animation.
      * @param delay The delay of the animation
      * @param translationDirection The direction value from [-1 ... 1] indicating in which the
- *                             animation should be performed. A value of -1 means that The
- *                             remove animation should be performed upwards,
- *                             such that the  child appears to be going away to the top. 1
- *                             Should mean the opposite.
+     *                             animation should be performed. A value of -1 means that The
+     *                             remove animation should be performed upwards,
+     *                             such that the  child appears to be going away to the top. 1
+     *                             Should mean the opposite.
      * @param isHeadsUpAnimation Is this a headsUp animation.
      * @param endLocation The location where the horizonal heads up disappear animation should end.
      * @param onFinishedRunnable A runnable which should be run when the animation is finished.
      * @param animationListener An animation listener to add to the animation.
+     *
+     * @return The additional delay, in milliseconds, that this view needs to add before the
+     * animation starts.
      */
-    public abstract void performRemoveAnimation(long duration,
+    public abstract long performRemoveAnimation(long duration,
             long delay, float translationDirection, boolean isHeadsUpAnimation, float endLocation,
             Runnable onFinishedRunnable,
             AnimatorListenerAdapter animationListener);
@@ -393,12 +403,24 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     protected void updateClipping() {
         if (mClipToActualHeight && shouldClipToActualHeight()) {
             int top = getClipTopAmount();
-            mClipRect.set(0, top, getWidth(), Math.max(getActualHeight() + getExtraBottomPadding()
-                    - mClipBottomAmount, top));
+            int bottom = Math.max(Math.max(getActualHeight() + getExtraBottomPadding()
+                    - mClipBottomAmount, top), mMinimumHeightForClipping);
+            int halfExtraWidth = (int) (mExtraWidthForClipping / 2.0f);
+            mClipRect.set(-halfExtraWidth, top, getWidth() + halfExtraWidth, bottom);
             setClipBounds(mClipRect);
         } else {
             setClipBounds(null);
         }
+    }
+
+    public void setMinimumHeightForClipping(int minimumHeightForClipping) {
+        mMinimumHeightForClipping = minimumHeightForClipping;
+        updateClipping();
+    }
+
+    public void setExtraWidthForClipping(float extraWidthForClipping) {
+        mExtraWidthForClipping = extraWidthForClipping;
+        updateClipping();
     }
 
     public float getHeaderVisibleAmount() {
@@ -441,13 +463,6 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     public boolean hasOverlappingRendering() {
         // Otherwise it will be clipped
         return super.hasOverlappingRendering() && getActualHeight() <= getHeight();
-    }
-
-    public float getShadowAlpha() {
-        return 0.0f;
-    }
-
-    public void setShadowAlpha(float shadowAlpha) {
     }
 
     /**
@@ -518,8 +533,47 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
 
     public void setActualHeightAnimating(boolean animating) {}
 
-    public ExpandableViewState createNewViewState(StackScrollState stackScrollState) {
+    protected ExpandableViewState createExpandableViewState() {
         return new ExpandableViewState();
+    }
+
+    /** Sets {@link ExpandableViewState} to default state. */
+    public ExpandableViewState resetViewState() {
+        // initialize with the default values of the view
+        mViewState.height = getIntrinsicHeight();
+        mViewState.gone = getVisibility() == View.GONE;
+        mViewState.alpha = 1f;
+        mViewState.notGoneIndex = -1;
+        mViewState.xTranslation = getTranslationX();
+        mViewState.hidden = false;
+        mViewState.scaleX = getScaleX();
+        mViewState.scaleY = getScaleY();
+        mViewState.inShelf = false;
+        mViewState.headsUpIsVisible = false;
+
+        // handling reset for child notifications
+        if (this instanceof ExpandableNotificationRow) {
+            ExpandableNotificationRow row = (ExpandableNotificationRow) this;
+            List<ExpandableNotificationRow> children = row.getNotificationChildren();
+            if (row.isSummaryWithChildren() && children != null) {
+                for (ExpandableNotificationRow childRow : children) {
+                    childRow.resetViewState();
+                }
+            }
+        }
+
+        return mViewState;
+    }
+
+    @Nullable public ExpandableViewState getViewState() {
+        return mViewState;
+    }
+
+    /** Applies internal {@link ExpandableViewState} to this view. */
+    public void applyViewState() {
+        if (!mViewState.gone) {
+            mViewState.applyToView(this);
+        }
     }
 
     /**

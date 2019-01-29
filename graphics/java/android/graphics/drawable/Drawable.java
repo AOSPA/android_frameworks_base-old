@@ -595,7 +595,12 @@ public abstract class Drawable {
      * <p class="note"><strong>Note:</strong> Setting a color filter disables
      * {@link #setTintList(ColorStateList) tint}.
      * </p>
+     *
+     * @see {@link #setColorFilter(ColorFilter)} }
+     * @deprecated use {@link #setColorFilter(ColorFilter)} with an instance
+     * of {@link android.graphics.BlendModeColorFilter}
      */
+    @Deprecated
     public void setColorFilter(@ColorInt int color, @NonNull PorterDuff.Mode mode) {
         if (getColorFilter() instanceof PorterDuffColorFilter) {
             PorterDuffColorFilter existing = (PorterDuffColorFilter) getColorFilter();
@@ -713,11 +718,12 @@ public abstract class Drawable {
     }
 
     /**
-     * Whether this drawable requests projection.
+     * Whether this drawable requests projection. Indicates that the
+     * {@link android.graphics.RenderNode} this Drawable will draw into should be drawn immediately
+     * after the closest ancestor RenderNode containing a projection receiver.
      *
-     * @hide magic!
+     * @see android.graphics.RenderNode#setProjectBackwards(boolean)
      */
-    @UnsupportedAppUsage
     public boolean isProjected() {
         return false;
     }

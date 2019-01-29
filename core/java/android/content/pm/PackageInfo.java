@@ -18,8 +18,13 @@ package android.content.pm;
 
 import android.annotation.Nullable;
 import android.annotation.UnsupportedAppUsage;
+import android.apex.ApexInfo;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Overall information about the contents of a package.  This corresponds
@@ -203,7 +208,10 @@ public class PackageInfo implements Parcelable {
      * {@link PackageManager#GET_PERMISSIONS} was set.  This list includes
      * all permissions requested, even those that were not granted or known
      * by the system at install time.
+     *
+     * @deprecated Use {@link #usesPermissions}
      */
+    @Deprecated
     public String[] requestedPermissions;
 
     /**
@@ -213,8 +221,21 @@ public class PackageInfo implements Parcelable {
      * {@link PackageManager#GET_PERMISSIONS} was set.  Each value matches
      * the corresponding entry in {@link #requestedPermissions}, and will have
      * the flag {@link #REQUESTED_PERMISSION_GRANTED} set as appropriate.
+     *
+     * @deprecated Use {@link #usesPermissions}
      */
+    @Deprecated
     public int[] requestedPermissionsFlags;
+
+    /**
+     * Array of all {@link android.R.styleable#AndroidManifestUsesPermission
+     * &lt;uses-permission&gt;} tags included under &lt;manifest&gt;,
+     * or null if there were none.  This is only filled in if the flag
+     * {@link PackageManager#GET_PERMISSIONS} was set.  This list includes
+     * all permissions requested, even those that were not granted or known
+     * by the system at install time.
+     */
+    public UsesPermissionInfo[] usesPermissions;
 
     /**
      * Flag for {@link #requestedPermissionsFlags}: the requested permission
@@ -390,6 +411,11 @@ public class PackageInfo implements Parcelable {
     @Nullable
     public String compileSdkVersionCodename;
 
+    /**
+     * Whether the package is an APEX package.
+     */
+    public boolean isApex;
+
     public PackageInfo() {
     }
 
@@ -450,6 +476,7 @@ public class PackageInfo implements Parcelable {
         dest.writeTypedArray(permissions, parcelableFlags);
         dest.writeStringArray(requestedPermissions);
         dest.writeIntArray(requestedPermissionsFlags);
+        dest.writeTypedArray(usesPermissions, parcelableFlags);
         dest.writeTypedArray(signatures, parcelableFlags);
         dest.writeTypedArray(configPreferences, parcelableFlags);
         dest.writeTypedArray(reqFeatures, parcelableFlags);
@@ -472,6 +499,7 @@ public class PackageInfo implements Parcelable {
         } else {
             dest.writeInt(0);
         }
+        dest.writeBoolean(isApex);
     }
 
     public static final Parcelable.Creator<PackageInfo> CREATOR
@@ -487,7 +515,7 @@ public class PackageInfo implements Parcelable {
         }
     };
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private PackageInfo(Parcel source) {
         packageName = source.readString();
         splitNames = source.createStringArray();
@@ -513,6 +541,7 @@ public class PackageInfo implements Parcelable {
         permissions = source.createTypedArray(PermissionInfo.CREATOR);
         requestedPermissions = source.createStringArray();
         requestedPermissionsFlags = source.createIntArray();
+        usesPermissions = source.createTypedArray(UsesPermissionInfo.CREATOR);
         signatures = source.createTypedArray(Signature.CREATOR);
         configPreferences = source.createTypedArray(ConfigurationInfo.CREATOR);
         reqFeatures = source.createTypedArray(FeatureInfo.CREATOR);
@@ -533,7 +562,7 @@ public class PackageInfo implements Parcelable {
         if (hasSigningInfo != 0) {
             signingInfo = SigningInfo.CREATOR.createFromParcel(source);
         }
-
+        isApex = source.readBoolean();
         // The component lists were flattened with the redundant ApplicationInfo
         // instances omitted.  Distribute the canonical one here as appropriate.
         if (applicationInfo != null) {
@@ -542,6 +571,15 @@ public class PackageInfo implements Parcelable {
             propagateApplicationInfo(applicationInfo, services);
             propagateApplicationInfo(applicationInfo, providers);
         }
+    }
+
+    /**
+     * @hide
+     */
+    public PackageInfo(ApexInfo apexInfo) {
+        packageName = apexInfo.packageName;
+        setLongVersionCode(apexInfo.versionCode);
+        isApex = true;
     }
 
     private void propagateApplicationInfo(ApplicationInfo appInfo, ComponentInfo[] components) {

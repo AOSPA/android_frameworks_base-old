@@ -46,7 +46,6 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
 import android.permission.PermissionManager;
@@ -144,6 +143,18 @@ public final class DefaultPermissionGrantPolicy {
         LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
     }
 
+    private static final Set<String> ALWAYS_LOCATION_PERMISSIONS = new ArraySet<>();
+    static {
+        ALWAYS_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        ALWAYS_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        ALWAYS_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION);
+    }
+
+    private static final Set<String> ACTIVITY_RECOGNITION_PERMISSIONS = new ArraySet<>();
+    static {
+        ACTIVITY_RECOGNITION_PERMISSIONS.add(Manifest.permission.ACTIVITY_RECOGNITION);
+    }
+
     private static final Set<String> COARSE_LOCATION_PERMISSIONS = new ArraySet<>();
     static {
         COARSE_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
@@ -184,7 +195,7 @@ public final class DefaultPermissionGrantPolicy {
     private static final Set<String> STORAGE_PERMISSIONS = new ArraySet<>();
     static {
         // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (!SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
+        if (!StorageManager.hasIsolatedStorage()) {
             STORAGE_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
             STORAGE_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
@@ -193,20 +204,17 @@ public final class DefaultPermissionGrantPolicy {
     private static final Set<String> MEDIA_AURAL_PERMISSIONS = new ArraySet<>();
     static {
         // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
+        if (StorageManager.hasIsolatedStorage()) {
             MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_AUDIO);
-            MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.WRITE_MEDIA_AUDIO);
         }
     }
 
     private static final Set<String> MEDIA_VISUAL_PERMISSIONS = new ArraySet<>();
     static {
         // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
-            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_IMAGES);
-            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.WRITE_MEDIA_IMAGES);
+        if (StorageManager.hasIsolatedStorage()) {
             MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_VIDEO);
-            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.WRITE_MEDIA_VIDEO);
+            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_IMAGES);
         }
     }
 
@@ -627,7 +635,7 @@ public final class DefaultPermissionGrantPolicy {
                         PHONE_PERMISSIONS, SMS_PERMISSIONS, CAMERA_PERMISSIONS,
                         SENSORS_PERMISSIONS, STORAGE_PERMISSIONS);
                 grantSystemFixedPermissionsToSystemPackage(packageName, userId,
-                        LOCATION_PERMISSIONS);
+                        LOCATION_PERMISSIONS, ACTIVITY_RECOGNITION_PERMISSIONS);
             }
         }
 
@@ -689,7 +697,7 @@ public final class DefaultPermissionGrantPolicy {
         // Companion devices
         grantSystemFixedPermissionsToSystemPackage(
                 CompanionDeviceManager.COMPANION_DEVICE_DISCOVERY_PACKAGE_NAME, userId,
-                LOCATION_PERMISSIONS);
+                ALWAYS_LOCATION_PERMISSIONS);
 
         // Ringtone Picker
         grantSystemFixedPermissionsToSystemPackage(
@@ -1057,6 +1065,17 @@ public final class DefaultPermissionGrantPolicy {
             return;
         }
 
+        // Intersect the requestedPermissions for a factory image with that of its current update
+        // in case the latter one removed a <uses-permission>
+        String[] requestedByNonSystemPackage = getPackageInfo(pkg.packageName).requestedPermissions;
+        int size = requestedPermissions.length;
+        for (int i = 0; i < size; i++) {
+            if (!ArrayUtils.contains(requestedByNonSystemPackage, requestedPermissions[i])) {
+                requestedPermissions[i] = null;
+            }
+        }
+        requestedPermissions = ArrayUtils.filterNotNull(requestedPermissions, String[]::new);
+
         PackageManager pm = mContext.getPackageManager();
         final ArraySet<String> permissions = new ArraySet<>(permissionsWithoutSplits);
         ApplicationInfo applicationInfo = pkg.applicationInfo;
@@ -1174,9 +1193,9 @@ public final class DefaultPermissionGrantPolicy {
                             if (pm.checkPermission(fgPerm, pkg.packageName)
                                     == PackageManager.PERMISSION_GRANTED) {
                                 // Upgrade the app-op state of the fg permission to allow bg access
-                                mContext.getSystemService(AppOpsManager.class).setMode(
+                                mContext.getSystemService(AppOpsManager.class).setUidMode(
                                         AppOpsManager.permissionToOp(fgPerm), uid,
-                                        pkg.packageName, AppOpsManager.MODE_ALLOWED);
+                                        AppOpsManager.MODE_ALLOWED);
 
                                 break;
                             }
@@ -1186,8 +1205,8 @@ public final class DefaultPermissionGrantPolicy {
                     String bgPerm = getBackgroundPermission(permission);
                     if (bgPerm == null) {
                         if (op != null) {
-                            mContext.getSystemService(AppOpsManager.class).setMode(op, uid,
-                                    pkg.packageName, AppOpsManager.MODE_ALLOWED);
+                            mContext.getSystemService(AppOpsManager.class).setUidMode(op, uid,
+                                    AppOpsManager.MODE_ALLOWED);
                         }
                     } else {
                         int mode;
@@ -1198,13 +1217,27 @@ public final class DefaultPermissionGrantPolicy {
                             mode = AppOpsManager.MODE_FOREGROUND;
                         }
 
-                        mContext.getSystemService(AppOpsManager.class).setMode(op, uid,
-                                pkg.packageName, mode);
+                        mContext.getSystemService(AppOpsManager.class).setUidMode(op, uid, mode);
                     }
 
                     if (DEBUG) {
                         Log.i(TAG, "Granted " + (systemFixed ? "fixed " : "not fixed ")
                                 + permission + " to default handler " + pkg);
+
+                        int appOp = AppOpsManager.permissionToOpCode(permission);
+                        if (appOp != AppOpsManager.OP_NONE
+                                && AppOpsManager.opToDefaultMode(appOp)
+                                        != AppOpsManager.MODE_ALLOWED) {
+                            // Permission has a corresponding appop which is not allowed by default
+                            // We must allow it as well, as it's usually checked alongside the
+                            // permission
+                            if (DEBUG) {
+                                Log.i(TAG, "Granting OP_" + AppOpsManager.opToName(appOp)
+                                        + " to " + pkg.packageName);
+                            }
+                            mContext.getSystemService(AppOpsManager.class).setUidMode(
+                                    appOp, pkg.applicationInfo.uid, AppOpsManager.MODE_ALLOWED);
+                        }
                     }
                 }
 

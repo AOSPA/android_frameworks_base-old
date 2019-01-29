@@ -223,7 +223,8 @@ class LaunchParamsPersister {
     private boolean saveTaskToLaunchParam(TaskRecord task, PersistableLaunchParams params) {
         final ActivityStack<?> stack = task.getStack();
         final int displayId = stack.mDisplayId;
-        final ActivityDisplay display = mSupervisor.getActivityDisplay(displayId);
+        final ActivityDisplay display =
+                mSupervisor.mRootActivityContainer.getActivityDisplay(displayId);
         final DisplayInfo info = new DisplayInfo();
         display.mDisplay.getDisplayInfo(info);
 
@@ -245,8 +246,8 @@ class LaunchParamsPersister {
     }
 
     void getLaunchParams(TaskRecord task, ActivityRecord activity, LaunchParams outParams) {
-        final ComponentName name = task != null ? task.realActivity : activity.realActivity;
-        final int userId = task != null ? task.userId : activity.userId;
+        final ComponentName name = task != null ? task.realActivity : activity.mActivityComponent;
+        final int userId = task != null ? task.userId : activity.mUserId;
 
         outParams.reset();
         Map<ComponentName, PersistableLaunchParams> map = mMap.get(userId);
@@ -259,7 +260,7 @@ class LaunchParamsPersister {
             return;
         }
 
-        final ActivityDisplay display = mSupervisor.getActivityDisplay(
+        final ActivityDisplay display = mSupervisor.mRootActivityContainer.getActivityDisplay(
                 persistableParams.mDisplayUniqueId);
         if (display != null) {
             outParams.mPreferredDisplayId =  display.mDisplayId;
@@ -268,7 +269,7 @@ class LaunchParamsPersister {
         outParams.mBounds.set(persistableParams.mBounds);
     }
 
-    private void onPackageRemoved(String packageName) {
+    void removeRecordForPackage(String packageName) {
         final List<File> fileToDelete = new ArrayList<>();
         for (int i = 0; i < mMap.size(); ++i) {
             int userId = mMap.keyAt(i);
@@ -309,7 +310,7 @@ class LaunchParamsPersister {
 
         @Override
         public void onPackageRemoved(String packageName) {
-            LaunchParamsPersister.this.onPackageRemoved(packageName);
+            removeRecordForPackage(packageName);
         }
     }
 

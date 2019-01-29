@@ -37,7 +37,7 @@ import android.util.Slog;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.GridLayout;
-import android.widget.RelativeLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.core.graphics.ColorUtils;
@@ -51,6 +51,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.google.android.collect.Sets;
 
 import java.util.Locale;
+import java.util.TimeZone;
 
 public class KeyguardStatusView extends GridLayout implements
         ConfigurationController.ConfigurationListener, View.OnLayoutChangeListener {
@@ -82,6 +83,11 @@ public class KeyguardStatusView extends GridLayout implements
         @Override
         public void onTimeChanged() {
             refreshTime();
+        }
+
+        @Override
+        public void onTimeZoneChanged(TimeZone timeZone) {
+            updateTimeZone(timeZone);
         }
 
         @Override
@@ -167,7 +173,7 @@ public class KeyguardStatusView extends GridLayout implements
             mLogoutView.setOnClickListener(this::onLogoutClicked);
         }
 
-        mClockView = findViewById(R.id.clock_view);
+        mClockView = findViewById(R.id.keyguard_clock_container);
         mClockView.setShowCurrentUserTime(true);
         if (KeyguardClockAccessibilityDelegate.isNeeded(mContext)) {
             mClockView.setAccessibilityDelegate(new KeyguardClockAccessibilityDelegate(mContext));
@@ -199,8 +205,8 @@ public class KeyguardStatusView extends GridLayout implements
      * Moves clock, adjusting margins when slice content changes.
      */
     private void onSliceContentChanged() {
-        RelativeLayout.LayoutParams layoutParams =
-                (RelativeLayout.LayoutParams) mClockView.getLayoutParams();
+        LinearLayout.LayoutParams layoutParams =
+                (LinearLayout.LayoutParams) mClockView.getLayoutParams();
         layoutParams.bottomMargin = mPulsing ? mSmallClockPadding : 0;
         mClockView.setLayoutParams(layoutParams);
     }
@@ -280,6 +286,10 @@ public class KeyguardStatusView extends GridLayout implements
 
     private void refreshTime() {
         mClockView.refresh();
+    }
+
+    private void updateTimeZone(TimeZone timeZone) {
+        mClockView.onTimeZoneChanged(timeZone);
     }
 
     private void refreshFormat() {

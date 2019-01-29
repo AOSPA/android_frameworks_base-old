@@ -156,7 +156,8 @@ public class MediaScanner implements AutoCloseable {
     private static final String NOTIFICATIONS_DIR = "/notifications/";
     private static final String ALARMS_DIR = "/alarms/";
     private static final String MUSIC_DIR = "/music/";
-    private static final String PODCAST_DIR = "/podcasts/";
+    private static final String PODCASTS_DIR = "/podcasts/";
+    private static final String AUDIOBOOKS_DIR = "/audiobooks/";
 
     public static final String SCANNED_BUILD_PREFS_NAME = "MediaScanBuild";
     public static final String LAST_INTERNAL_SCAN_FINGERPRINT = "lastScanFingerprint";
@@ -654,7 +655,7 @@ public class MediaScanner implements AutoCloseable {
                 // rescan for metadata if file was modified since last scan
                 if (entry != null && (entry.mLastModifiedChanged || scanAlways)) {
                     if (noMedia) {
-                        result = endFile(entry, false, false, false, false, false);
+                        result = endFile(entry, false, false, false, false, false, false);
                     } else {
                         boolean isaudio = MediaFile.isAudioMimeType(mMimeType);
                         boolean isvideo = MediaFile.isVideoMimeType(mMimeType);
@@ -679,11 +680,13 @@ public class MediaScanner implements AutoCloseable {
                         boolean notifications = mScanSuccess &&
                                 (lowpath.indexOf(NOTIFICATIONS_DIR) > 0);
                         boolean alarms = mScanSuccess && (lowpath.indexOf(ALARMS_DIR) > 0);
-                        boolean podcasts = mScanSuccess && (lowpath.indexOf(PODCAST_DIR) > 0);
+                        boolean podcasts = mScanSuccess && (lowpath.indexOf(PODCASTS_DIR) > 0);
+                        boolean audiobooks = mScanSuccess && (lowpath.indexOf(AUDIOBOOKS_DIR) > 0);
                         boolean music = mScanSuccess && ((lowpath.indexOf(MUSIC_DIR) > 0) ||
-                            (!ringtones && !notifications && !alarms && !podcasts));
+                            (!ringtones && !notifications && !alarms && !podcasts && !audiobooks));
 
-                        result = endFile(entry, ringtones, notifications, alarms, music, podcasts);
+                        result = endFile(entry, ringtones, notifications, alarms, podcasts,
+                                audiobooks, music);
                     }
                 }
             } catch (RemoteException e) {
@@ -899,6 +902,7 @@ public class MediaScanner implements AutoCloseable {
             map.put(MediaStore.MediaColumns.SIZE, mFileSize);
             map.put(MediaStore.MediaColumns.MIME_TYPE, mMimeType);
             map.put(MediaStore.MediaColumns.IS_DRM, mIsDrm);
+            map.putNull(MediaStore.MediaColumns.HASH);
 
             String resolution = null;
             if (mWidth > 0 && mHeight > 0) {
@@ -931,7 +935,7 @@ public class MediaScanner implements AutoCloseable {
                     }
                 } else if (MediaFile.isImageMimeType(mMimeType)) {
                     // FIXME - add DESCRIPTION
-                } else if (mScanSuccess && MediaFile.isAudioMimeType(mMimeType)) {
+                } else if (MediaFile.isAudioMimeType(mMimeType)) {
                     map.put(Audio.Media.ARTIST, (mArtist != null && mArtist.length() > 0) ?
                             mArtist : MediaStore.UNKNOWN_STRING);
                     map.put(Audio.Media.ALBUM_ARTIST, (mAlbumArtist != null &&
@@ -947,17 +951,13 @@ public class MediaScanner implements AutoCloseable {
                     map.put(Audio.Media.DURATION, mDuration);
                     map.put(Audio.Media.COMPILATION, mCompilation);
                 }
-                if (!mScanSuccess) {
-                    // force mediaprovider to not determine the media type from the mime type
-                    map.put(Files.FileColumns.MEDIA_TYPE, 0);
-                }
             }
             return map;
         }
 
         @UnsupportedAppUsage
         private Uri endFile(FileEntry entry, boolean ringtones, boolean notifications,
-                boolean alarms, boolean music, boolean podcasts)
+                boolean alarms, boolean podcasts, boolean audiobooks, boolean music)
                 throws RemoteException {
             // update database
 
@@ -1003,6 +1003,7 @@ public class MediaScanner implements AutoCloseable {
                 values.put(Audio.Media.IS_ALARM, alarms);
                 values.put(Audio.Media.IS_MUSIC, music);
                 values.put(Audio.Media.IS_PODCAST, podcasts);
+                values.put(Audio.Media.IS_AUDIOBOOK, audiobooks);
             } else if (MediaFile.isExifMimeType(mMimeType) && !mNoMedia) {
                 ExifInterface exif = null;
                 try {
@@ -1011,12 +1012,6 @@ public class MediaScanner implements AutoCloseable {
                     // exif is null
                 }
                 if (exif != null) {
-                    float[] latlng = new float[2];
-                    if (exif.getLatLong(latlng)) {
-                        values.put(Images.Media.LATITUDE, latlng[0]);
-                        values.put(Images.Media.LONGITUDE, latlng[1]);
-                    }
-
                     long time = exif.getGpsDateTime();
                     if (time != -1) {
                         values.put(Images.Media.DATE_TAKEN, time);
@@ -1058,7 +1053,7 @@ public class MediaScanner implements AutoCloseable {
             Uri tableUri = mFilesUri;
             int mediaType = FileColumns.MEDIA_TYPE_NONE;
             MediaInserter inserter = mMediaInserter;
-            if (mScanSuccess && !mNoMedia) {
+            if (!mNoMedia) {
                 if (MediaFile.isVideoMimeType(mMimeType)) {
                     tableUri = mVideoUri;
                     mediaType = FileColumns.MEDIA_TYPE_VIDEO;
@@ -1133,7 +1128,7 @@ public class MediaScanner implements AutoCloseable {
                 // with squashed lower case paths
                 values.remove(MediaStore.MediaColumns.DATA);
 
-                if (mScanSuccess && !mNoMedia) {
+                if (!mNoMedia) {
                     // Changing media type must be done as separate update
                     if (mediaType != entry.mMediaType) {
                         final ContentValues mediaTypeValues = new ContentValues();

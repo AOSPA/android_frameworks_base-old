@@ -268,6 +268,12 @@
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the system default text classifier -->
         <flag name="textClassifier" value="0x10000" />
+        <!-- Additional flag from base permission type: this permission will be granted to the
+             wellbeing app, as defined by the OEM. -->
+        <flag name="wellbeing" value="0x20000" />
+        <!-- Additional flag from base permission type: this permission can be automatically
+            granted to the document manager -->
+        <flag name="documenter" value="0x40000" />
     </attr>
 
     <!-- Flags indicating more context for a permission group. -->
@@ -1106,6 +1112,11 @@
          resource] to be present in order to function. Default value is false. -->
     <attr name="isSplitRequired" format="boolean" />
 
+    <!-- Flag to specify if this app prioritizes code integrity. The system may choose
+         to run with better integrity guarantee in various components if possible based on the app's
+         <code>targetSdkVersion</code>. -->
+    <attr name="preferCodeIntegrity" format="boolean" />
+
     <!-- Extra options for an activity's UI. Applies to either the {@code <activity>} or
          {@code <application>} tag. If specified on the {@code <application>}
          tag these will be considered defaults for all activities in the
@@ -1288,6 +1299,20 @@
          supports any size. -->
     <attr name="maxAspectRatio" format="float" />
 
+    <!-- This value indicates the minimum aspect ratio the activity supports. If the app runs on a
+         device with a narrower aspect ratio, the system automatically letterboxes the app, leaving
+         portions of the screen unused so the app can run at its specified minimum aspect ratio.
+         <p>
+         Minimum aspect ratio, expressed as (longer dimension / shorter dimension) in decimal
+         form. For example, if the minimum aspect ratio is 4:3, set value to 1.33.
+         <p>
+         Value needs to be greater or equal to 1.0, otherwise it is ignored.
+         <p>
+         NOTE: This attribute is ignored if the activity has
+         {@link android.R.attr#resizeableActivity} set to true, since that means your activity
+         supports any size. -->
+    <attr name="minAspectRatio" format="float" />
+
     <!-- This value indicates how tasks rooted at this activity will behave in lockTask mode.
          While in lockTask mode the system will not launch non-permitted tasks until
          lockTask mode is disabled.
@@ -1393,6 +1418,29 @@
     <attr name="appComponentFactory" format="string" />
 
     <attr name="usesNonSdkApi" format="boolean" />
+
+    <!-- Specify the type of foreground service. Apps targeting API
+     {@link android.os.Build.VERSION_CODES#Q} or later must specify foreground service type,
+     otherwise a SecurityException is thrown when
+     {@link android.app.Service#startForeground(int, Notification)} on this service is called.
+    -->
+    <attr name="foregroundServiceType">
+        <!-- Data (photo, file, account) upload/download, backup/restore, import/export, fetch,
+        transfer over network between device and cloud.  -->
+        <enum name="sync" value="1" />
+        <!-- Music, video, news or other media play. -->
+        <enum name="mediaPlay" value="2" />
+        <!-- Ongoing phone call or video conference. -->
+        <enum name="phoneCall" value="3" />
+        <!-- GPS, map, navigation location update. -->
+        <enum name="location" value="4" />
+        <!-- Auto, bluetooth, TV or other devices connection, monitoring and interaction. -->
+        <enum name="deviceCompanion" value="5" />
+        <!-- Process that should not be interrupted, including installation, setup, photo
+        compression etc. -->
+        <enum name="ongoingProcess" value="6" />
+    </attr>
+
 
     <!-- The <code>manifest</code> tag is the root of an
          <code>AndroidManifest.xml</code> file,
@@ -1537,11 +1585,13 @@
              to honor this flag as well. -->
         <attr name="usesCleartextTraffic" />
         <attr name="multiArch" />
+        <attr name="preferCodeIntegrity" />
         <attr name="extractNativeLibs" />
         <attr name="defaultToDeviceProtectedStorage" format="boolean" />
         <attr name="directBootAware" />
         <attr name="resizeableActivity" />
         <attr name="maxAspectRatio" />
+        <attr name="minAspectRatio" />
         <attr name="networkSecurityConfig" />
         <!-- Declare the category of this app. Categories are used to cluster multiple apps
              together into meaningful groups, such as when summarizing battery, network, or
@@ -1574,6 +1624,9 @@
         <!-- Declares that this application should be invoked without non-SDK API enforcement -->
         <attr name="usesNonSdkApi" />
 
+        <!-- If {@code true} the user is prompted to keep the app's data on uninstall -->
+        <attr name="hasFragileUserData" />
+
     </declare-styleable>
     <!-- The <code>permission</code> tag declares a security permission that can be
          used to control access from other packages to specific components or
@@ -1601,6 +1654,10 @@
         <attr name="request" />
         <attr name="protectionLevel" />
         <attr name="permissionFlags" />
+        <!-- If {@code true} applications that target Q <em>must</em> specify the permission usage
+             attributes in their {@code uses-permission} elements or the permission will not be
+             granted. -->
+        <attr name="usageInfoRequired" format="boolean" />
     </declare-styleable>
 
     <!-- The <code>permission-group</code> tag declares a logical grouping of
@@ -1700,6 +1757,81 @@
         requested.  If it does support the feature, it will be as if the manifest didn't
         request it at all. -->
         <attr name="requiredNotFeature" format="string" />
+
+        <!-- Specify if the app uploads data, or derived data, guarded by this permission.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+        -->
+        <attr name="dataSentOffDevice">
+          <!-- The application may send data, or derived data, guarded by this permission off of the
+               device. -->
+          <enum name="yes" value="1" />
+          <!-- The application may send data, or derived data, guarded by this permission off of the
+               device, however it will only do so when explicitly triggered by a user action. -->
+          <enum name="userTriggered" value="2" />
+          <!-- The application does not send data, or derived data, guarded by this permission off
+               of the device. -->
+          <enum name="no" value="3" />
+        </attr>
+
+        <!-- Specify if the application or its related off-device services provide data,
+             or derived data, guarded by this permission to third parties outside of the developer's
+             organization that do not qualify as data processors.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+             -->
+        <attr name="dataSharedWithThirdParty">
+          <!-- The application or its services may provide data, or derived data, guarded by this
+               permission to third party organizations. -->
+          <enum name="yes" value="1" />
+          <!-- The application or its services may provide data, or derived data, guarded by this
+               permission to third party organizations, however it will only do so when explicitly
+               triggered by a user action. -->
+          <enum name="userTriggered" value="2" />
+          <!-- The application or its services does not provide data, or derived data, guarded by
+               this permission to third party organizations. -->
+          <enum name="no" value="3" />
+        </attr>
+
+        <!-- Specify if the application or its related off-device services use data,
+             or derived data, guarded by this permission for monetization purposes.
+
+             For example, if the data is sold to another party or used for targeting advertisements
+             this must be set to {@code yes}.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+             -->
+        <attr name="dataUsedForMonetization">
+          <!-- The application or its services may use data, or derived data, guarded by this
+               permission for monetization purposes. -->
+          <enum name="yes" value="1" />
+          <!-- The application or its services may use data, or derived data, guarded by this
+               permission for monetization purposes, however it will only do so when explicity
+               triggered by a user action. -->
+          <enum name="userTriggered" value="2" />
+          <!--  The application or its services does not use data, or derived data, guarded by
+                this permission for monetization purposes. -->
+          <enum name="no" value="3" />
+        </attr>
+
+        <!-- Specify how long the application or its related off-device services store
+             data, or derived data, guarded by this permission.
+
+             This can be one of "notRetained", "userSelected", "unlimited", or a number
+             representing the number of weeks the data is retained.
+
+             If the permission is defined with {@link android.R.attr#usageInfoRequired}
+             {@code true} this <em>must</em> be specified by apps that target Android Q or the
+             permission will not be granted, it will be as if the manifest didn't request it at all.
+             -->
+        <attr name="dataRetentionTime" format="string" />
+
     </declare-styleable>
 
     <!-- The <code>uses-configuration</code> tag specifies
@@ -2148,6 +2280,23 @@
         <attr name="visibleToInstantApps" />
         <!-- The code for this component is located in the given split. -->
         <attr name="splitName" />
+        <!-- If true, and this is an {@link android.R.attr#isolatedProcess} service, the service
+             will be spawned from an Application Zygote, instead of the regular Zygote.
+             <p>
+             The Application Zygote will pre-initialize the application's class loader,
+             and call a static callback into the application to allow it to perform
+             application-specific preloads (such as loading a shared library). Therefore,
+             spawning from the Application Zygote will typically reduce the service
+             launch time and reduce its memory usage. The downside of using this flag
+             is that you will have an additional process (the app zygote itself) that
+             is taking up memory. Whether actual memory usage is improved therefore strongly
+             depends on the number of isolated services that an application starts,
+             and how much memory those services save by preloading. Therefore, it is
+             recommended to measure memory usage under typical workloads to determine
+             whether it makes sense to use this flag. -->
+        <attr name="useAppZygote" format="boolean" />
+        <!-- If this is a foreground service, specify its category. -->
+        <attr name="foregroundServiceType" />
     </declare-styleable>
 
     <!-- The <code>receiver</code> tag declares an
@@ -2258,6 +2407,7 @@
         <attr name="resizeableActivity" />
         <attr name="supportsPictureInPicture" />
         <attr name="maxAspectRatio" />
+        <attr name="minAspectRatio" />
         <attr name="lockTaskMode" />
         <attr name="showForAllUsers" />
 

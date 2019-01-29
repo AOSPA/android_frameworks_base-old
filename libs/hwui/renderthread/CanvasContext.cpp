@@ -142,7 +142,12 @@ void CanvasContext::destroy() {
 void CanvasContext::setSurface(sp<Surface>&& surface) {
     ATRACE_CALL();
 
-    mNativeSurface = std::move(surface);
+    if (surface) {
+        mNativeSurface = new ReliableSurface{std::move(surface)};
+        mNativeSurface->setDequeueTimeout(500_ms);
+    } else {
+        mNativeSurface = nullptr;
+    }
 
     ColorMode colorMode = mWideColorGamut ? ColorMode::WideColorGamut : ColorMode::SRGB;
     bool hasSurface = mRenderPipeline->setSurface(mNativeSurface.get(), mSwapBehavior, colorMode);
@@ -285,10 +290,11 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     info.damageAccumulator = &mDamageAccumulator;
     info.layerUpdateQueue = &mLayerUpdateQueue;
+    info.out.canDrawThisFrame = true;
 
     mAnimationContext->startFrame(info.mode);
     mRenderPipeline->onPrepareTree();
-    for (const sp<RenderNode>& node : mRenderNodes) {
+    for (const sp<RenderNode> &node : mRenderNodes) {
         // Only the primary target node will be drawn full - all other nodes would get drawn in
         // real time mode. In case of a window, the primary node is the window content and the other
         // node(s) are non client / filler nodes.
@@ -304,7 +310,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     mIsDirty = true;
 
-    if (CC_UNLIKELY(!mNativeSurface.get())) {
+    if (CC_UNLIKELY(!hasSurface())) {
         mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
         info.out.canDrawThisFrame = false;
         return;
@@ -312,7 +318,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     if (CC_LIKELY(mSwapHistory.size() && !Properties::forceDrawFrame)) {
         nsecs_t latestVsync = mRenderThread.timeLord().latestVsync();
-        SwapHistory& lastSwap = mSwapHistory.back();
+        SwapHistory &lastSwap = mSwapHistory.back();
         nsecs_t vsyncDelta = std::abs(lastSwap.vsyncTime - latestVsync);
         // The slight fudge-factor is to deal with cases where
         // the vsync was estimated due to being slow handling the signal.
@@ -323,25 +329,6 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
             // the deadline for RT animations
             info.out.canDrawThisFrame = false;
         }
-        /* This logic exists to try and recover from a display latch miss, which essentially
-         * results in the bufferqueue being double-buffered instead of triple-buffered.
-         * SurfaceFlinger itself now tries to handle & recover from this situation, so this
-         * logic should no longer be necessary. As it's occasionally triggering when
-         * undesired disable it.
-         * TODO: Remove this entirely if the results are solid.
-        else if (vsyncDelta >= mRenderThread.timeLord().frameIntervalNanos() * 3 ||
-                   (latestVsync - mLastDropVsync) < 500_ms) {
-            // It's been several frame intervals, assume the buffer queue is fine
-            // or the last drop was too recent
-            info.out.canDrawThisFrame = true;
-        } else {
-            info.out.canDrawThisFrame = !isSwapChainStuffed();
-            if (!info.out.canDrawThisFrame) {
-                // dropping frame
-                mLastDropVsync = mRenderThread.timeLord().latestVsync();
-            }
-        }
-        */
     } else {
         info.out.canDrawThisFrame = true;
     }
@@ -352,7 +339,19 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
         info.out.canDrawThisFrame = false;
     }
 
-    if (!info.out.canDrawThisFrame) {
+    if (info.out.canDrawThisFrame) {
+        int err = mNativeSurface->reserveNext();
+        if (err != OK) {
+            mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
+            info.out.canDrawThisFrame = false;
+            ALOGW("reserveNext failed, error = %d (%s)", err, strerror(-err));
+            if (err != TIMED_OUT) {
+                // A timed out surface can still recover, but assume others are permanently dead.
+                setSurface(nullptr);
+                return;
+            }
+        }
+    } else {
         mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
     }
 
@@ -577,8 +576,7 @@ void CanvasContext::trimMemory(RenderThread& thread, int level) {
     ATRACE_CALL();
     if (level >= TRIM_MEMORY_COMPLETE) {
         thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::Complete);
-        thread.destroyGlContext();
-        thread.vulkanManager().destroy();
+        thread.destroyRenderingContext();
     } else if (level >= TRIM_MEMORY_UI_HIDDEN) {
         thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::UiHidden);
     }

@@ -24,12 +24,13 @@
 #include "hwui/PaintFilter.h"
 #include "pipeline/skia/AnimatedDrawables.h"
 
+#include <SkAndroidFrameworkUtils.h>
 #include <SkAnimatedImage.h>
 #include <SkCanvasStateUtils.h>
 #include <SkColorFilter.h>
-#include <SkColorSpaceXformCanvas.h>
 #include <SkDeque.h>
 #include <SkDrawable.h>
+#include <SkFont.h>
 #include <SkGraphics.h>
 #include <SkImage.h>
 #include <SkImagePriv.h>
@@ -60,19 +61,8 @@ SkiaCanvas::SkiaCanvas() {}
 SkiaCanvas::SkiaCanvas(SkCanvas* canvas) : mCanvas(canvas) {}
 
 SkiaCanvas::SkiaCanvas(const SkBitmap& bitmap) {
-    sk_sp<SkColorSpace> cs = bitmap.refColorSpace();
-    mCanvasOwned =
-            std::unique_ptr<SkCanvas>(new SkCanvas(bitmap, SkCanvas::ColorBehavior::kLegacy));
-    if (cs.get() == nullptr || cs->isSRGB()) {
-        mCanvas = mCanvasOwned.get();
-    } else {
-        /** The wrapper is needed if we are drawing into a non-sRGB destination, since
-         *  we need to transform all colors (not just bitmaps via filters) into the
-         *  destination's colorspace.
-         */
-        mCanvasWrapper = SkCreateColorSpaceXformCanvas(mCanvasOwned.get(), std::move(cs));
-        mCanvas = mCanvasWrapper.get();
-    }
+    mCanvasOwned = std::unique_ptr<SkCanvas>(new SkCanvas(bitmap));
+    mCanvas = mCanvasOwned.get();
 }
 
 SkiaCanvas::~SkiaCanvas() {}
@@ -81,7 +71,6 @@ void SkiaCanvas::reset(SkCanvas* skiaCanvas) {
     if (mCanvas != skiaCanvas) {
         mCanvas = skiaCanvas;
         mCanvasOwned.reset();
-        mCanvasWrapper.reset();
     }
     mSaveStack.reset(nullptr);
 }
@@ -91,18 +80,9 @@ void SkiaCanvas::reset(SkCanvas* skiaCanvas) {
 // ----------------------------------------------------------------------------
 
 void SkiaCanvas::setBitmap(const SkBitmap& bitmap) {
-    sk_sp<SkColorSpace> cs = bitmap.refColorSpace();
-    std::unique_ptr<SkCanvas> newCanvas =
-            std::unique_ptr<SkCanvas>(new SkCanvas(bitmap, SkCanvas::ColorBehavior::kLegacy));
-    std::unique_ptr<SkCanvas> newCanvasWrapper;
-    if (cs.get() != nullptr && !cs->isSRGB()) {
-        newCanvasWrapper = SkCreateColorSpaceXformCanvas(newCanvas.get(), std::move(cs));
-    }
-
     // deletes the previously owned canvas (if any)
-    mCanvasOwned = std::move(newCanvas);
-    mCanvasWrapper = std::move(newCanvasWrapper);
-    mCanvas = mCanvasWrapper ? mCanvasWrapper.get() : mCanvasOwned.get();
+    mCanvasOwned.reset(new SkCanvas(bitmap));
+    mCanvas = mCanvasOwned.get();
 
     // clean up the old save stack
     mSaveStack.reset(nullptr);
@@ -204,6 +184,11 @@ int SkiaCanvas::saveLayerAlpha(float left, float top, float right, float bottom,
         return this->saveLayer(left, top, right, bottom, &alphaPaint, flags);
     }
     return this->saveLayer(left, top, right, bottom, nullptr, flags);
+}
+
+int SkiaCanvas::saveUnclippedLayer(int left, int top, int right, int bottom) {
+    SkRect bounds = SkRect::MakeLTRB(left, top, right, bottom);
+    return SkAndroidFrameworkUtils::SaveBehind(mCanvas, &bounds);
 }
 
 class SkiaCanvas::Clip {
@@ -547,40 +532,14 @@ void SkiaCanvas::drawVertices(const SkVertices* vertices, SkBlendMode mode, cons
 // Canvas draw operations: Bitmaps
 // ----------------------------------------------------------------------------
 
-SkiaCanvas::PaintCoW&& SkiaCanvas::filterBitmap(PaintCoW&& paint,
-                                                sk_sp<SkColorFilter> colorSpaceFilter) const {
-    /* We don't apply the colorSpace filter if this canvas is already wrapped with
-     * a SkColorSpaceXformCanvas since it already takes care of converting the
-     * contents of the bitmap into the appropriate colorspace.  The mCanvasWrapper
-     * should only be used if this canvas is backed by a surface/bitmap that is known
-     * to have a non-sRGB colorspace.
-     */
-    if (!mCanvasWrapper && colorSpaceFilter) {
-        SkPaint& tmpPaint = paint.writeable();
-        if (tmpPaint.getColorFilter()) {
-            tmpPaint.setColorFilter(SkColorFilter::MakeComposeFilter(tmpPaint.refColorFilter(),
-                                                                     std::move(colorSpaceFilter)));
-            LOG_ALWAYS_FATAL_IF(!tmpPaint.getColorFilter());
-        } else {
-            tmpPaint.setColorFilter(std::move(colorSpaceFilter));
-        }
-    }
-    return filterPaint(std::move(paint));
-}
-
 void SkiaCanvas::drawBitmap(Bitmap& bitmap, float left, float top, const SkPaint* paint) {
-    sk_sp<SkColorFilter> colorFilter;
-    sk_sp<SkImage> image = bitmap.makeImage(&colorFilter);
-    mCanvas->drawImage(image, left, top, filterBitmap(paint, std::move(colorFilter)));
+    mCanvas->drawImage(bitmap.makeImage(), left, top, filterPaint(paint));
 }
 
 void SkiaCanvas::drawBitmap(Bitmap& bitmap, const SkMatrix& matrix, const SkPaint* paint) {
     SkAutoCanvasRestore acr(mCanvas, true);
     mCanvas->concat(matrix);
-
-    sk_sp<SkColorFilter> colorFilter;
-    sk_sp<SkImage> image = bitmap.makeImage(&colorFilter);
-    mCanvas->drawImage(image, 0, 0, filterBitmap(paint, std::move(colorFilter)));
+    mCanvas->drawImage(bitmap.makeImage(), 0, 0, filterPaint(paint));
 }
 
 void SkiaCanvas::drawBitmap(Bitmap& bitmap, float srcLeft, float srcTop, float srcRight,
@@ -589,9 +548,7 @@ void SkiaCanvas::drawBitmap(Bitmap& bitmap, float srcLeft, float srcTop, float s
     SkRect srcRect = SkRect::MakeLTRB(srcLeft, srcTop, srcRight, srcBottom);
     SkRect dstRect = SkRect::MakeLTRB(dstLeft, dstTop, dstRight, dstBottom);
 
-    sk_sp<SkColorFilter> colorFilter;
-    sk_sp<SkImage> image = bitmap.makeImage(&colorFilter);
-    mCanvas->drawImageRect(image, srcRect, dstRect, filterBitmap(paint, std::move(colorFilter)),
+    mCanvas->drawImageRect(bitmap.makeImage(), srcRect, dstRect, filterPaint(paint),
                            SkCanvas::kFast_SrcRectConstraint);
 }
 
@@ -673,13 +630,9 @@ void SkiaCanvas::drawBitmapMesh(Bitmap& bitmap, int meshWidth, int meshHeight,
     PaintCoW paintCoW(paint);
     SkPaint& tmpPaint = paintCoW.writeable();
 
-    sk_sp<SkColorFilter> colorFilter;
-    sk_sp<SkImage> image = bitmap.makeImage(&colorFilter);
+    sk_sp<SkImage> image = bitmap.makeImage();
     sk_sp<SkShader> shader =
             image->makeShader(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
-    if (colorFilter) {
-        shader = shader->makeWithColorFilter(std::move(colorFilter));
-    }
     tmpPaint.setShader(std::move(shader));
 
     mCanvas->drawVertices(builder.detach(), SkBlendMode::kModulate,
@@ -710,10 +663,7 @@ void SkiaCanvas::drawNinePatch(Bitmap& bitmap, const Res_png_9patch& chunk, floa
     lattice.fBounds = nullptr;
     SkRect dst = SkRect::MakeLTRB(dstLeft, dstTop, dstRight, dstBottom);
 
-    sk_sp<SkColorFilter> colorFilter;
-    sk_sp<SkImage> image = bitmap.makeImage(&colorFilter);
-    mCanvas->drawImageLattice(image.get(), lattice, dst,
-                              filterBitmap(paint, std::move(colorFilter)));
+    mCanvas->drawImageLattice(bitmap.makeImage().get(), lattice, dst, filterPaint(paint));
 }
 
 double SkiaCanvas::drawAnimatedImage(AnimatedImageDrawable* imgDrawable) {
@@ -732,11 +682,12 @@ void SkiaCanvas::drawGlyphs(ReadGlyphFunc glyphFunc, int count, const SkPaint& p
                             float y, float boundsLeft, float boundsTop, float boundsRight,
                             float boundsBottom, float totalAdvance) {
     if (count <= 0 || paint.nothingToDraw()) return;
+    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
     SkPaint paintCopy(paint);
     if (mPaintFilter) {
         mPaintFilter->filter(&paintCopy);
     }
-    SkASSERT(paintCopy.getTextEncoding() == SkPaint::kGlyphID_TextEncoding);
+    SkASSERT(paintCopy.getTextEncoding() == kGlyphID_SkTextEncoding);
     // Stroke with a hairline is drawn on HW with a fill style for compatibility with Android O and
     // older.
     if (!mCanvasOwned && sApiLevel <= 27 && paintCopy.getStrokeWidth() <= 0 &&
@@ -748,7 +699,7 @@ void SkiaCanvas::drawGlyphs(ReadGlyphFunc glyphFunc, int count, const SkPaint& p
             SkRect::MakeLTRB(boundsLeft + x, boundsTop + y, boundsRight + x, boundsBottom + y);
 
     SkTextBlobBuilder builder;
-    const SkTextBlobBuilder::RunBuffer& buffer = builder.allocRunPos(paintCopy, count, &bounds);
+    const SkTextBlobBuilder::RunBuffer& buffer = builder.allocRunPos(font, count, &bounds);
     glyphFunc(buffer.glyphs, buffer.pos);
 
     sk_sp<SkTextBlob> textBlob(builder.make());
@@ -759,16 +710,18 @@ void SkiaCanvas::drawGlyphs(ReadGlyphFunc glyphFunc, int count, const SkPaint& p
 void SkiaCanvas::drawLayoutOnPath(const minikin::Layout& layout, float hOffset, float vOffset,
                                   const SkPaint& paint, const SkPath& path, size_t start,
                                   size_t end) {
+    SkFont font = SkFont::LEGACY_ExtractFromPaint(paint);
     SkPaint paintCopy(paint);
     if (mPaintFilter) {
         mPaintFilter->filter(&paintCopy);
     }
-    SkASSERT(paintCopy.getTextEncoding() == SkPaint::kGlyphID_TextEncoding);
+    SkASSERT(paintCopy.getTextEncoding() == kGlyphID_SkTextEncoding);
 
     const int N = end - start;
-    SkAutoSTMalloc<1024, uint8_t> storage(N * (sizeof(uint16_t) + sizeof(SkRSXform)));
-    SkRSXform* xform = (SkRSXform*)storage.get();
-    uint16_t* glyphs = (uint16_t*)(xform + N);
+    SkTextBlobBuilder builder;
+    auto rec = builder.allocRunRSXform(font, N);
+    SkRSXform* xform = (SkRSXform*)rec.pos;
+    uint16_t* glyphs = rec.glyphs;
     SkPathMeasure meas(path, false);
 
     for (size_t i = start; i < end; i++) {
@@ -789,7 +742,7 @@ void SkiaCanvas::drawLayoutOnPath(const minikin::Layout& layout, float hOffset, 
         xform[i - start].fTy = pos.y() + tan.x() * y - halfWidth * tan.y();
     }
 
-    this->asSkCanvas()->drawTextRSXform(glyphs, sizeof(uint16_t) * N, xform, nullptr, paintCopy);
+    this->asSkCanvas()->drawTextBlob(builder.make(), 0, 0, paintCopy);
 }
 
 // ----------------------------------------------------------------------------

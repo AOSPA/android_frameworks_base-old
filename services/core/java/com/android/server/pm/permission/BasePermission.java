@@ -105,6 +105,8 @@ public final class BasePermission {
      */
     private boolean perUser;
 
+    boolean usageInfoRequired;
+
     public BasePermission(String _name, String _sourcePackageName, @PermissionType int _type) {
         name = _name;
         sourcePackageName = _sourcePackageName;
@@ -187,6 +189,12 @@ public final class BasePermission {
         return (protectionLevel & PermissionInfo.PROTECTION_MASK_BASE)
                 == PermissionInfo.PROTECTION_DANGEROUS;
     }
+
+    public boolean isRemoved() {
+        return perm != null && perm.info != null
+                && (perm.info.flags & PermissionInfo.FLAG_REMOVED) != 0;
+    }
+
     public boolean isSignature() {
         return (protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) ==
                 PermissionInfo.PROTECTION_SIGNATURE;
@@ -232,6 +240,12 @@ public final class BasePermission {
     public boolean isSystemTextClassifier() {
         return (protectionLevel & PermissionInfo.PROTECTION_FLAG_SYSTEM_TEXT_CLASSIFIER)
                 != 0;
+    }
+    public boolean isWellbeing() {
+        return (protectionLevel & PermissionInfo.PROTECTION_FLAG_WELLBEING) != 0;
+    }
+    public boolean isDocumenter() {
+        return (protectionLevel & PermissionInfo.PROTECTION_FLAG_DOCUMENTER) != 0;
     }
 
     public void transfer(@NonNull String origPackageName, @NonNull String newPackageName) {
@@ -351,6 +365,7 @@ public final class BasePermission {
         }
         if (bp.perm == p) {
             bp.protectionLevel = p.info.protectionLevel;
+            bp.usageInfoRequired = p.info.usageInfoRequired;
         }
         if (PackageManagerService.DEBUG_PACKAGE_SCANNING && r != null) {
             Log.d(TAG, "  Permissions: " + r);
@@ -430,6 +445,7 @@ public final class BasePermission {
         permissionInfo.packageName = sourcePackageName;
         permissionInfo.nonLocalizedLabel = name;
         permissionInfo.protectionLevel = protectionLevel;
+        permissionInfo.usageInfoRequired = usageInfoRequired;
         return permissionInfo;
     }
 
@@ -458,6 +474,7 @@ public final class BasePermission {
         bp.protectionLevel = readInt(parser, null, "protection",
                 PermissionInfo.PROTECTION_NORMAL);
         bp.protectionLevel = PermissionInfo.fixProtectionLevel(bp.protectionLevel);
+        bp.usageInfoRequired = readInt(parser, null, "usageInfoRequired", 0) != 0;
         if (dynamic) {
             final PermissionInfo pi = new PermissionInfo();
             pi.packageName = sourcePackage.intern();
@@ -465,6 +482,7 @@ public final class BasePermission {
             pi.icon = readInt(parser, null, "icon", 0);
             pi.nonLocalizedLabel = parser.getAttributeValue(null, "label");
             pi.protectionLevel = bp.protectionLevel;
+            pi.usageInfoRequired = bp.usageInfoRequired;
             bp.pendingPermissionInfo = pi;
         }
         out.put(bp.name, bp);
@@ -497,6 +515,7 @@ public final class BasePermission {
         if (protectionLevel != PermissionInfo.PROTECTION_NORMAL) {
             serializer.attribute(null, "protection", Integer.toString(protectionLevel));
         }
+        serializer.attribute(null, "usageInfoRequired", usageInfoRequired ? "1" : "0");
         if (type == BasePermission.TYPE_DYNAMIC) {
             final PermissionInfo pi = perm != null ? perm.info : pendingPermissionInfo;
             if (pi != null) {
@@ -533,6 +552,7 @@ public final class BasePermission {
         if (!compareStrings(pi1.nonLocalizedLabel, pi2.nonLocalizedLabel)) return false;
         // We'll take care of setting this one.
         if (!compareStrings(pi1.packageName, pi2.packageName)) return false;
+        if (pi1.usageInfoRequired != pi2.usageInfoRequired) return false;
         // These are not currently stored in settings.
         //if (!compareStrings(pi1.group, pi2.group)) return false;
         //if (!compareStrings(pi1.nonLocalizedDescription, pi2.nonLocalizedDescription)) return false;
@@ -580,6 +600,8 @@ public final class BasePermission {
             pw.print("    enforced=");
             pw.println(readEnforced);
         }
+        pw.print("    usageInfoRequired=");
+        pw.println(usageInfoRequired);
         return true;
     }
 }

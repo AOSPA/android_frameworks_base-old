@@ -111,7 +111,7 @@ public class BatterySaverPolicy extends ContentObserver {
             false, /* enableAdjustBrightness */
             false, /* enableDataSaver */
             true,  /* enableFirewall */
-            false, /* enableQuickDoze */
+            true, /* enableQuickDoze */
             new ArrayMap<>(), /* filesForInteractive */
             new ArrayMap<>(), /* filesForNoninteractive */
             true, /* forceAllAppsStandby */
@@ -492,7 +492,7 @@ public class BatterySaverPolicy extends ContentObserver {
         public final boolean forceAllAppsStandby;
 
         /**
-         * Whether to put all apps in the stand-by mode.
+         * Whether to force background check.
          */
         public final boolean forceBackgroundCheck;
 

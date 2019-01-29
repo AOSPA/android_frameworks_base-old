@@ -29,6 +29,9 @@ import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
+
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
@@ -38,8 +41,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.spy;
 
 import static java.lang.Integer.MAX_VALUE;
 
@@ -109,14 +110,13 @@ public class RecentTasksTest extends ActivityTestsBase {
     @Before
     public void setUp() throws Exception {
         mTaskPersister = new TestTaskPersister(mContext.getFilesDir());
-        mTestService = spy(new MyTestActivityTaskManagerService(mContext));
-        final TestActivityManagerService am = spy(new MyTestActivityManagerService());
-        setupActivityManagerService(am, mTestService);
+        mTestService = new MyTestActivityTaskManagerService(mContext);
         mRecentTasks = (TestRecentTasks) mTestService.getRecentTasks();
         mRecentTasks.loadParametersFromResources(mContext.getResources());
-        mHomeStack = mTestService.mStackSupervisor.getDefaultDisplay().getOrCreateStack(
+        mRunningTasks = (TestRunningTasks) mTestService.mStackSupervisor.mRunningTasks;
+        mHomeStack = mTestService.mRootActivityContainer.getDefaultDisplay().getOrCreateStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
-        mStack = mTestService.mStackSupervisor.getDefaultDisplay().createStack(
+        mStack = mTestService.mRootActivityContainer.getDefaultDisplay().createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         mCallbacksRecorder = new CallbacksRecorder();
         mRecentTasks.registerCallback(mCallbacksRecorder);
@@ -867,35 +867,26 @@ public class RecentTasksTest extends ActivityTestsBase {
         }
 
         @Override
-        protected ActivityStackSupervisor createTestSupervisor() {
-            return new MyTestActivityStackSupervisor(this, mH.getLooper());
-        }
-
-    }
-
-    private class MyTestActivityManagerService extends TestActivityManagerService {
-        MyTestActivityManagerService() {
-            super(mTestInjector);
+        protected ActivityStackSupervisor createStackSupervisor() {
+            if (mTestStackSupervisor == null) {
+                mTestStackSupervisor = new MyTestActivityStackSupervisor(this, mH.getLooper());
+            }
+            return mTestStackSupervisor;
         }
 
         @Override
-        public boolean isUserRunning(int userId, int flags) {
-            return true;
+        void createDefaultDisplay() {
+            super.createDefaultDisplay();
+            mDisplay = mRootActivityContainer.getActivityDisplay(DEFAULT_DISPLAY);
+            mOtherDisplay = TestActivityDisplay.create(mTestStackSupervisor, DEFAULT_DISPLAY + 1);
+            mRootActivityContainer.addChild(mOtherDisplay, ActivityDisplay.POSITION_TOP);
+            mRootActivityContainer.addChild(mDisplay, ActivityDisplay.POSITION_TOP);
         }
     }
 
     private class MyTestActivityStackSupervisor extends TestActivityStackSupervisor {
         MyTestActivityStackSupervisor(ActivityTaskManagerService service, Looper looper) {
             super(service, looper);
-        }
-
-        @Override
-        public void initialize() {
-            super.initialize();
-            mDisplay = getActivityDisplay(DEFAULT_DISPLAY);
-            mOtherDisplay = TestActivityDisplay.create(this, DEFAULT_DISPLAY + 1);
-            addChild(mOtherDisplay, ActivityDisplay.POSITION_TOP);
-            addChild(mDisplay, ActivityDisplay.POSITION_TOP);
         }
 
         @Override

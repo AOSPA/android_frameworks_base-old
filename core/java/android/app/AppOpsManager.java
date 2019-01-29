@@ -41,8 +41,10 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.util.ArrayMap;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IAppOpsActiveCallback;
 import com.android.internal.app.IAppOpsCallback;
+import com.android.internal.app.IAppOpsNotedCallback;
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.util.Preconditions;
 
@@ -86,10 +88,20 @@ public class AppOpsManager {
      */
 
     final Context mContext;
+
     @UnsupportedAppUsage
     final IAppOpsService mService;
-    final ArrayMap<OnOpChangedListener, IAppOpsCallback> mModeWatchers = new ArrayMap<>();
-    final ArrayMap<OnOpActiveChangedListener, IAppOpsActiveCallback> mActiveWatchers =
+
+    @GuardedBy("mModeWatchers")
+    private final ArrayMap<OnOpChangedListener, IAppOpsCallback> mModeWatchers =
+            new ArrayMap<>();
+
+    @GuardedBy("mActiveWatchers")
+    private final ArrayMap<OnOpActiveChangedListener, IAppOpsActiveCallback> mActiveWatchers =
+            new ArrayMap<>();
+
+    @GuardedBy("mNotedWatchers")
+    private final ArrayMap<OnOpNotedListener, IAppOpsNotedCallback> mNotedWatchers =
             new ArrayMap<>();
 
     static IBinder sToken;
@@ -462,9 +474,25 @@ public class AppOpsManager {
     public static final int OP_USE_BIOMETRIC = 78;
     /** @hide Physical activity recognition. */
     public static final int OP_ACTIVITY_RECOGNITION = 79;
+    /** @hide Financial app sms read. */
+    public static final int OP_SMS_FINANCIAL_TRANSACTIONS = 80;
+    /** @hide Read media of audio type. */
+    public static final int OP_READ_MEDIA_AUDIO = 81;
+    /** @hide Write media of audio type. */
+    public static final int OP_WRITE_MEDIA_AUDIO = 82;
+    /** @hide Read media of video type. */
+    public static final int OP_READ_MEDIA_VIDEO = 83;
+    /** @hide Write media of video type. */
+    public static final int OP_WRITE_MEDIA_VIDEO = 84;
+    /** @hide Read media of image type. */
+    public static final int OP_READ_MEDIA_IMAGES = 85;
+    /** @hide Write media of image type. */
+    public static final int OP_WRITE_MEDIA_IMAGES = 86;
+    /** @hide Has a legacy (non-isolated) view of storage. */
+    public static final int OP_LEGACY_STORAGE = 87;
     /** @hide */
     @UnsupportedAppUsage
-    public static final int _NUM_OP = 80;
+    public static final int _NUM_OP = 88;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -715,6 +743,25 @@ public class AppOpsManager {
     /** @hide Recognize physical activity. */
     public static final String OPSTR_ACTIVITY_RECOGNITION = "android:activity_recognition";
 
+    /** @hide Financial app read sms. */
+    public static final String OPSTR_SMS_FINANCIAL_TRANSACTIONS =
+            "android:sms_financial_transactions";
+
+    /** @hide Read media of audio type. */
+    public static final String OPSTR_READ_MEDIA_AUDIO = "android:read_media_audio";
+    /** @hide Write media of audio type. */
+    public static final String OPSTR_WRITE_MEDIA_AUDIO = "android:write_media_audio";
+    /** @hide Read media of video type. */
+    public static final String OPSTR_READ_MEDIA_VIDEO = "android:read_media_video";
+    /** @hide Write media of video type. */
+    public static final String OPSTR_WRITE_MEDIA_VIDEO = "android:write_media_video";
+    /** @hide Read media of image type. */
+    public static final String OPSTR_READ_MEDIA_IMAGES = "android:read_media_images";
+    /** @hide Write media of image type. */
+    public static final String OPSTR_WRITE_MEDIA_IMAGES = "android:write_media_images";
+    /** @hide Has a legacy (non-isolated) view of storage. */
+    public static final String OPSTR_LEGACY_STORAGE = "android:legacy_storage";
+
     // Warning: If an permission is added here it also has to be added to
     // com.android.packageinstaller.permission.utils.EventLogger
     private static final int[] RUNTIME_AND_APPOP_PERMISSIONS_OPS = {
@@ -758,6 +805,14 @@ public class AppOpsManager {
             OP_BODY_SENSORS,
             // Activity recognition
             OP_ACTIVITY_RECOGNITION,
+            // Aural
+            OP_READ_MEDIA_AUDIO,
+            OP_WRITE_MEDIA_AUDIO,
+            // Visual
+            OP_READ_MEDIA_VIDEO,
+            OP_WRITE_MEDIA_VIDEO,
+            OP_READ_MEDIA_IMAGES,
+            OP_WRITE_MEDIA_IMAGES,
 
             // APPOP PERMISSIONS
             OP_ACCESS_NOTIFICATIONS,
@@ -765,6 +820,7 @@ public class AppOpsManager {
             OP_WRITE_SETTINGS,
             OP_REQUEST_INSTALL_PACKAGES,
             OP_START_FOREGROUND,
+            OP_SMS_FINANCIAL_TRANSACTIONS,
     };
 
     /**
@@ -856,6 +912,14 @@ public class AppOpsManager {
             OP_COARSE_LOCATION,                 // BLUETOOTH_SCAN
             OP_USE_BIOMETRIC,                   // BIOMETRIC
             OP_ACTIVITY_RECOGNITION,            // ACTIVITY_RECOGNITION
+            OP_SMS_FINANCIAL_TRANSACTIONS,      // SMS_FINANCIAL_TRANSACTIONS
+            OP_READ_MEDIA_AUDIO,                // READ_MEDIA_AUDIO
+            OP_WRITE_MEDIA_AUDIO,               // WRITE_MEDIA_AUDIO
+            OP_READ_MEDIA_VIDEO,                // READ_MEDIA_VIDEO
+            OP_WRITE_MEDIA_VIDEO,               // WRITE_MEDIA_VIDEO
+            OP_READ_MEDIA_IMAGES,               // READ_MEDIA_IMAGES
+            OP_WRITE_MEDIA_IMAGES,              // WRITE_MEDIA_IMAGES
+            OP_LEGACY_STORAGE,                  // LEGACY_STORAGE
     };
 
     /**
@@ -942,6 +1006,14 @@ public class AppOpsManager {
             OPSTR_BLUETOOTH_SCAN,
             OPSTR_USE_BIOMETRIC,
             OPSTR_ACTIVITY_RECOGNITION,
+            OPSTR_SMS_FINANCIAL_TRANSACTIONS,
+            OPSTR_READ_MEDIA_AUDIO,
+            OPSTR_WRITE_MEDIA_AUDIO,
+            OPSTR_READ_MEDIA_VIDEO,
+            OPSTR_WRITE_MEDIA_VIDEO,
+            OPSTR_READ_MEDIA_IMAGES,
+            OPSTR_WRITE_MEDIA_IMAGES,
+            OPSTR_LEGACY_STORAGE,
     };
 
     /**
@@ -1000,7 +1072,7 @@ public class AppOpsManager {
             "WRITE_WALLPAPER",
             "ASSIST_STRUCTURE",
             "ASSIST_SCREENSHOT",
-            "OP_READ_PHONE_STATE",
+            "READ_PHONE_STATE",
             "ADD_VOICEMAIL",
             "USE_SIP",
             "PROCESS_OUTGOING_CALLS",
@@ -1029,6 +1101,14 @@ public class AppOpsManager {
             "BLUETOOTH_SCAN",
             "USE_BIOMETRIC",
             "ACTIVITY_RECOGNITION",
+            "SMS_FINANCIAL_TRANSACTIONS",
+            "READ_MEDIA_AUDIO",
+            "WRITE_MEDIA_AUDIO",
+            "READ_MEDIA_VIDEO",
+            "WRITE_MEDIA_VIDEO",
+            "READ_MEDIA_IMAGES",
+            "WRITE_MEDIA_IMAGES",
+            "LEGACY_STORAGE",
     };
 
     /**
@@ -1117,6 +1197,14 @@ public class AppOpsManager {
             null, // no permission for OP_BLUETOOTH_SCAN
             Manifest.permission.USE_BIOMETRIC,
             Manifest.permission.ACTIVITY_RECOGNITION,
+            Manifest.permission.SMS_FINANCIAL_TRANSACTIONS,
+            Manifest.permission.READ_MEDIA_AUDIO,
+            null, // no permission for OP_WRITE_MEDIA_AUDIO
+            Manifest.permission.READ_MEDIA_VIDEO,
+            null, // no permission for OP_WRITE_MEDIA_VIDEO
+            Manifest.permission.READ_MEDIA_IMAGES,
+            null, // no permission for OP_WRITE_MEDIA_IMAGES
+            null, // no permission for OP_LEGACY_STORAGE
     };
 
     /**
@@ -1205,6 +1293,14 @@ public class AppOpsManager {
             null, // maybe should be UserManager.DISALLOW_SHARE_LOCATION, //BLUETOOTH_SCAN
             null, // USE_BIOMETRIC
             null, // ACTIVITY_RECOGNITION
+            UserManager.DISALLOW_SMS, // SMS_FINANCIAL_TRANSACTIONS
+            null, // READ_MEDIA_AUDIO
+            null, // WRITE_MEDIA_AUDIO
+            null, // READ_MEDIA_VIDEO
+            null, // WRITE_MEDIA_VIDEO
+            null, // READ_MEDIA_IMAGES
+            null, // WRITE_MEDIA_IMAGES
+            null, // LEGACY_STORAGE
     };
 
     /**
@@ -1292,6 +1388,14 @@ public class AppOpsManager {
             true, // BLUETOOTH_SCAN
             false, // USE_BIOMETRIC
             false, // ACTIVITY_RECOGNITION
+            false, // SMS_FINANCIAL_TRANSACTIONS
+            false, // READ_MEDIA_AUDIO
+            false, // WRITE_MEDIA_AUDIO
+            false, // READ_MEDIA_VIDEO
+            false, // WRITE_MEDIA_VIDEO
+            false, // READ_MEDIA_IMAGES
+            false, // WRITE_MEDIA_IMAGES
+            false, // LEGACY_STORAGE
     };
 
     /**
@@ -1378,6 +1482,14 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // BLUETOOTH_SCAN
             AppOpsManager.MODE_ALLOWED, // USE_BIOMETRIC
             AppOpsManager.MODE_ALLOWED, // ACTIVITY_RECOGNITION
+            AppOpsManager.MODE_DEFAULT, // SMS_FINANCIAL_TRANSACTIONS
+            AppOpsManager.MODE_ALLOWED, // READ_MEDIA_AUDIO
+            AppOpsManager.MODE_ERRORED, // WRITE_MEDIA_AUDIO
+            AppOpsManager.MODE_ALLOWED, // READ_MEDIA_VIDEO
+            AppOpsManager.MODE_ERRORED, // WRITE_MEDIA_VIDEO
+            AppOpsManager.MODE_ALLOWED, // READ_MEDIA_IMAGES
+            AppOpsManager.MODE_ERRORED, // WRITE_MEDIA_IMAGES
+            AppOpsManager.MODE_DEFAULT, // LEGACY_STORAGE
     };
 
     /**
@@ -1468,6 +1580,14 @@ public class AppOpsManager {
             false, // BLUETOOTH_SCAN
             false, // USE_BIOMETRIC
             false, // ACTIVITY_RECOGNITION
+            false, // SMS_FINANCIAL_TRANSACTIONS
+            false, // READ_MEDIA_AUDIO
+            false, // WRITE_MEDIA_AUDIO
+            false, // READ_MEDIA_VIDEO
+            false, // WRITE_MEDIA_VIDEO
+            false, // READ_MEDIA_IMAGES
+            false, // WRITE_MEDIA_IMAGES
+            false, // LEGACY_STORAGE
     };
 
     /**
@@ -2363,6 +2483,23 @@ public class AppOpsManager {
     }
 
     /**
+     * Callback for notification of an op being noted.
+     *
+     * @hide
+     */
+    public interface OnOpNotedListener {
+        /**
+         * Called when an op was noted.
+         *
+         * @param code The op code.
+         * @param uid The UID performing the operation.
+         * @param packageName The package performing the operation.
+         * @param result The result of the note.
+         */
+        void onOpNoted(int code, int uid, String packageName, int result);
+    }
+
+    /**
      * Callback for notification of changes to operation state.
      * This allows you to see the raw op codes instead of strings.
      * @hide
@@ -2391,30 +2528,6 @@ public class AppOpsManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-    }
-
-    /**
-     * Retrieve current operation state for all applications.
-     *
-     * @param ops The set of operations you are interested in, or null if you want all of them.
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
-    @SystemApi
-    public List<AppOpsManager.PackageOps> getPackagesForOpStrs(String[] ops) {
-        if (ops == null) {
-            return getPackagesForOps(null);
-        }
-        final int[] opCodes = new int[ops.length];
-        for (int i = 0; i < ops.length; ++i) {
-            final Integer opCode = sOpStrToOp.get(ops[i]);
-            if (opCode == null) {
-                opCodes[i] = OP_NONE;
-            } else {
-                opCodes[i] = opCode;
-            }
-        }
-        return getPackagesForOps(opCodes);
     }
 
     /**
@@ -2735,7 +2848,7 @@ public class AppOpsManager {
      */
     public void stopWatchingMode(OnOpChangedListener callback) {
         synchronized (mModeWatchers) {
-            IAppOpsCallback cb = mModeWatchers.get(callback);
+            IAppOpsCallback cb = mModeWatchers.remove(callback);
             if (cb != null) {
                 try {
                     mService.stopWatchingMode(cb);
@@ -2809,10 +2922,74 @@ public class AppOpsManager {
     @TestApi
     public void stopWatchingActive(@NonNull OnOpActiveChangedListener callback) {
         synchronized (mActiveWatchers) {
-            final IAppOpsActiveCallback cb = mActiveWatchers.get(callback);
+            final IAppOpsActiveCallback cb = mActiveWatchers.remove(callback);
             if (cb != null) {
                 try {
                     mService.stopWatchingActive(cb);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+            }
+        }
+    }
+
+    /**
+     * Start watching for noted app ops. An app op may be immediate or long running.
+     * Immediate ops are noted while long running ones are started and stopped. This
+     * method allows registering a listener to be notified when an app op is noted. If
+     * an op is being noted by any package you will get a callback. To change the
+     * watched ops for a registered callback you need to unregister and register it again.
+     *
+     * <p> If you don't hold the {@link android.Manifest.permission#WATCH_APPOPS} permission
+     * you can watch changes only for your UID.
+     *
+     * @param ops The ops to watch.
+     * @param callback Where to report changes.
+     *
+     * @see #startWatchingActive(int[], OnOpActiveChangedListener)
+     * @see #stopWatchingNoted(OnOpNotedListener)
+     * @see #noteOp(String, int, String)
+     *
+     * @hide
+     */
+    @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
+    public void startWatchingNoted(@NonNull int[] ops, @NonNull OnOpNotedListener callback) {
+        IAppOpsNotedCallback cb;
+        synchronized (mNotedWatchers) {
+            cb = mNotedWatchers.get(callback);
+            if (cb != null) {
+                return;
+            }
+            cb = new IAppOpsNotedCallback.Stub() {
+                @Override
+                public void opNoted(int op, int uid, String packageName, int mode) {
+                    callback.onOpNoted(op, uid, packageName, mode);
+                }
+            };
+            mNotedWatchers.put(callback, cb);
+        }
+        try {
+            mService.startWatchingNoted(ops, cb);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Stop watching for noted app ops. An app op may be immediate or long running.
+     * Unregistering a non-registered callback has no effect.
+     *
+     * @see #startWatchingNoted(int[], OnOpNotedListener)
+     * @see #noteOp(String, int, String)
+     *
+     * @hide
+     */
+    public void stopWatchingNoted(@NonNull OnOpNotedListener callback) {
+        synchronized (mNotedWatchers) {
+            final IAppOpsNotedCallback cb = mNotedWatchers.get(callback);
+            if (cb != null) {
+                try {
+                    mService.stopWatchingNoted(cb);
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
                 }
@@ -2897,7 +3074,7 @@ public class AppOpsManager {
      */
     public int unsafeCheckOpRaw(String op, int uid, String packageName) {
         try {
-            return mService.checkOperation(strOpToOp(op), uid, packageName);
+            return mService.checkOperationRaw(strOpToOp(op), uid, packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

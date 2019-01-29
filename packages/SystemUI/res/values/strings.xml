@@ -272,6 +272,8 @@
     <string name="accessibility_biometric_dialog_help_area">Help message area</string>
     <!-- Message shown when a biometric is authenticated, asking the user to confirm authentication [CHAR LIMIT=30] -->
     <string name="biometric_dialog_confirm">Confirm</string>
+    <!-- Button name on BiometricPrompt shown when a biometric is detected but not authenticated. Tapping the button resumes authentication [CHAR_LIMIT=30] -->
+    <string name="biometric_dialog_try_again">Try again</string>
 
     <!-- Message shown when the system-provided fingerprint dialog is shown, asking for authentication -->
     <string name="fingerprint_dialog_touch_sensor">Touch the fingerprint sensor</string>
@@ -406,11 +408,14 @@
     <!-- Content description of the data connection type LTE+. [CHAR LIMIT=NONE] -->
     <string name="data_connection_lte_plus">LTE+</string>
 
+    <!-- Content description of the data connection type 5G. [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5g" translate="false">5G</string>
+
+    <!-- Content description of the data connection type 5G+. [CHAR LIMIT=NONE] -->
+    <string name="data_connection_5g_plus" translate="false">5G+</string>
+
     <!-- Content description of the data connection type CDMA. [CHAR LIMIT=NONE] -->
     <string name="data_connection_cdma">1X</string>
-
-    <!-- Content description of the data connection type 5G. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g">5G</string>
 
     <!-- Content description of the data connection type 5G Basic. [CHAR LIMIT=NONE] -->
     <string name="data_connection_5g_basic">5GBasic</string>
@@ -610,6 +615,10 @@
     <string name="accessibility_quick_settings_data_saver_changed_off">Data Saver turned off.</string>
     <!-- Announcement made when the Data Saver changes to on (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_data_saver_changed_on">Data Saver turned on.</string>
+    <!-- Announcement made when the Sensor Privacy changes to off (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_sensor_privacy_changed_off">Sensor Privacy turned off.</string>
+    <!-- Announcement made when the Sensor Privacy changes to on (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_sensor_privacy_changed_on">Sensor Privacy turned on.</string>
 
     <!-- Content description of the display brightness slider (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_brightness">Display brightness</string>
@@ -714,6 +723,8 @@
     <string name="quick_settings_bluetooth_secondary_label_headset">Headset</string>
     <!-- QuickSettings: Bluetooth secondary label for an input/IO device being connected [CHAR LIMIT=20]-->
     <string name="quick_settings_bluetooth_secondary_label_input">Input</string>
+    <!-- QuickSettings: Bluetooth secondary label for a Hearing Aids device being connected [CHAR LIMIT=20]-->
+    <string name="quick_settings_bluetooth_secondary_label_hearing_aids">Hearing Aids</string>
     <!-- QuickSettings: Bluetooth secondary label shown when bluetooth is being enabled [CHAR LIMIT=NONE] -->
     <string name="quick_settings_bluetooth_secondary_label_transient">Turning on&#8230;</string>
     <!-- QuickSettings: Brightness [CHAR LIMIT=NONE] -->
@@ -1570,23 +1581,35 @@
     <!-- Notification inline controls: block notifications button -->
     <string name="inline_stop_button">Stop notifications</string>
 
+    <!-- Notification inline controls: button to block notifications from this channel [CHAR_LIMIT=35] -->
+    <string name="inline_block_button">Block</string>
+
     <!-- Notification inline controls: keep getting notifications button -->
     <string name="inline_keep_button">Keep showing</string>
 
     <!-- Notification inline controls: minimize notifications button -->
     <string name="inline_minimize_button">Minimize</string>
 
-    <!-- Notification inline controls: show notifications silently button [CHAR_LIMIT=25] -->
+    <!-- Notification inline controls: button to show notifications silently, without alerting the user [CHAR_LIMIT=35] -->
     <string name="inline_silent_button_silent">Show silently</string>
 
-    <!-- Notification inline controls: show and alert button [CHAR_LIMIT=25] -->
-    <string name="inline_silent_button_alert">Show and alert</string>
+    <!-- Notification inline controls: button to continue showing notifications silently [CHAR_LIMIT=35] -->
+    <string name="inline_silent_button_stay_silent">Stay silent</string>
+
+    <!-- Notification inline controls: button to make notifications alert the user [CHAR_LIMIT=35] -->
+    <string name="inline_silent_button_alert">Alert me</string>
+
+    <!-- Notification inline controls: button to continue alerting the user when notifications arrive [CHAR_LIMIT=35] -->
+    <string name="inline_silent_button_keep_alerting">Keep alerting</string>
 
     <!-- Notification Inline controls: continue receiving notifications prompt, app level -->
     <string name="inline_keep_showing_app">Keep showing notifications from this app?</string>
 
     <!-- Notification: Control panel: Label that displays when the app's notifications cannot be blocked. -->
     <string name="notification_unblockable_desc">These notifications can\'t be turned off</string>
+
+    <!-- Notification: Control panel: Label for the app that posted this notification, if it's not the package that the notification was posted for -->
+    <string name="notification_delegate_header">via <xliff:g id="app_name" example="YouTube">%1$s</xliff:g></string>
 
     <!-- Notification Inline controls: describes what the app is doing in the background [CHAR_LIMIT=NONE] -->
     <string name="appops_camera">This app is using the camera.</string>
@@ -2272,7 +2295,11 @@
     <string name="heap_dump_tile_name">Dump SysUI Heap</string>
 
     <!-- Text on chip for multiple apps using a single app op [CHAR LIMIT=10] -->
-    <string name="ongoing_privacy_chip_multiple_apps"><xliff:g id="num_apps" example="3">%d</xliff:g> apps</string>
+    <plurals name="ongoing_privacy_chip_multiple_apps">
+        <item quantity="one"><xliff:g id="num_apps" example="1">%d</xliff:g> app</item>
+        <item quantity="few"><xliff:g id="num_apps" example="3">%d</xliff:g> apps</item>
+        <item quantity="other"><xliff:g id="num_apps" example="3">%d</xliff:g> apps</item>
+    </plurals>
 
     <!-- Content description for ongoing privacy chip. Use with a single app [CHAR LIMIT=NONE]-->
     <string name="ongoing_privacy_chip_content_single_app"><xliff:g id="app" example="Example App">%1$s</xliff:g> is using your <xliff:g id="types_list" example="camera, location">%2$s</xliff:g>.</string>
@@ -2281,12 +2308,16 @@
     <string name="ongoing_privacy_chip_content_multiple_apps">Applications are using your <xliff:g id="types_list" example="camera, location">%s</xliff:g>.</string>
 
     <!-- Content description for ongoing privacy chip. Use with multiple apps using same app op[CHAR LIMIT=NONE]-->
-    <string name="ongoing_privacy_chip_content_multiple_apps_single_op"><xliff:g id="num_apps" example="3">%1$d</xliff:g> applications are using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</string>
+    <plurals name="ongoing_privacy_chip_content_multiple_apps_single_op">
+        <item quantity="one"><xliff:g id="num_apps" example="1">%1$d</xliff:g> application is using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</item>
+        <item quantity="few"><xliff:g id="num_apps" example="3">%1$d</xliff:g> applications are using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</item>
+        <item quantity="other"><xliff:g id="num_apps" example="3">%1$d</xliff:g> applications are using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</item>
+    </plurals>
 
     <!-- Action on Ongoing Privacy Dialog to dismiss [CHAR LIMIT=10]-->
     <string name="ongoing_privacy_dialog_cancel">Cancel</string>
 
-    <!-- Action on Ongoing Privacy Dialog to open privacy hub [CHAR LIMIT=15]-->
+    <!-- Action on Ongoing Privacy Dialog to open privacy hub [CHAR LIMIT=20]-->
     <string name="ongoing_privacy_dialog_open_settings">View details</string>
 
     <!-- Text for item in Ongoing Privacy Dialog title when only one app is using app ops [CHAR LIMIT=NONE] -->
@@ -2313,6 +2344,14 @@
     <!-- Text for indicating extra apps using app ops [CHAR LIMIT=NONE] -->
     <plurals name="ongoing_privacy_dialog_overflow_text">
         <item quantity="one"><xliff:g id="num_apps" example="1">%d</xliff:g> other app</item>
-        <item quantity="other"><xliff:g id="num_apps" example="3">%d</xliff:g> other app</item>
+        <item quantity="other"><xliff:g id="num_apps" example="3">%d</xliff:g> other apps</item>
     </plurals>
+    <!-- Text for the quick setting tile for sensor privacy [CHAR LIMIT=30] -->
+    <string name="sensor_privacy_mode">Sensors off</string>
+
+    <!-- Name for device services grouping system uid apps in Ongoing Privacy Dialog [CHAR_LIMIT=NONE] -->
+    <string name="device_services">Device Services</string>
+
+    <!-- What to show on the ambient display player when song doesn't have a title. [CHAR LIMIT=20] -->
+    <string name="music_controls_no_title">No title</string>
 </resources>

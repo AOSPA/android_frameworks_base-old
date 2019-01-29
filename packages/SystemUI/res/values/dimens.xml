@@ -23,6 +23,8 @@
     <dimen name="navigation_bar_size">@*android:dimen/navigation_bar_height</dimen>
     <!-- Minimum swipe distance to catch the swipe gestures to invoke assist or switch tasks. -->
     <dimen name="navigation_bar_min_swipe_distance">48dp</dimen>
+    <!-- The distance from a side of device of the navigation bar to start an edge swipe -->
+    <dimen name="navigation_bar_edge_swipe_threshold">48dp</dimen>
 
     <!-- thickness (height) of the dead zone at the top of the navigation bar,
          reducing false presses on navbar buttons; approx 2mm -->
@@ -359,6 +361,7 @@
     <!-- The height of the qs customize header. Should be (28dp - qs_tile_margin_top_bottom). -->
     <dimen name="qs_customize_header_min_height">40dp</dimen>
     <dimen name="qs_tile_margin_top">18dp</dimen>
+    <dimen name="qs_tile_background_size">40dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
     <!-- Maximum width of quick quick settings panel. Defaults to MATCH_PARENT-->
     <dimen name="qs_quick_layout_width">-1px</dimen>
@@ -858,9 +861,6 @@
     <dimen name="bottom_padding">48dp</dimen>
     <dimen name="edge_margin">8dp</dimen>
 
-    <dimen name="rounded_corner_radius">@*android:dimen/rounded_corner_radius</dimen>
-    <dimen name="rounded_corner_radius_top">@*android:dimen/rounded_corner_radius_top</dimen>
-    <dimen name="rounded_corner_radius_bottom">@*android:dimen/rounded_corner_radius_bottom</dimen>
     <dimen name="rounded_corner_content_padding">0dp</dimen>
     <dimen name="nav_content_padding">0dp</dimen>
     <dimen name="nav_quick_scrub_track_edge_padding">24dp</dimen>
@@ -881,6 +881,8 @@
     <dimen name="smart_reply_button_stroke_width">1dp</dimen>
     <dimen name="smart_reply_button_font_size">14sp</dimen>
     <dimen name="smart_reply_button_line_spacing_extra">6sp</dimen> <!-- Total line height 20sp. -->
+    <dimen name="smart_action_button_icon_size">24dp</dimen>
+    <dimen name="smart_action_button_icon_padding">10dp</dimen>
 
     <!-- A reasonable upper bound for the height of the smart reply button. The measuring code
             needs to start with a guess for the maximum size. Currently two-line smart reply buttons
@@ -944,14 +946,20 @@
     <dimen name="ongoing_appops_dialog_sep">16dp</dimen>
     <!--Padding around text items in Ongoing App Ops dialog -->
     <dimen name="ongoing_appops_dialog_text_padding">16dp</dimen>
-    <!-- Height of icons in Ongoing App Ops dialog. Both App Op icon and application icon -->
-    <dimen name="ongoing_appops_dialog_icon_height">28dp</dimen>
-    <!-- Margin between text lines in Ongoing App Ops dialog -->
-    <dimen name="ongoing_appops_dialog_text_margin">15dp</dimen>
-    <!-- Side padding of title in Ongoing App Ops dialog -->
-    <dimen name="ongoing_appops_dialog_title_padding">10dp</dimen>
-    <!-- Padding around Ongoing App Ops dialog content -->
-    <dimen name="ongoing_appops_dialog_content_padding">24dp</dimen>
+    <!-- Height and width of App Opp icons in Ongoing App Ops dialog -->
+    <dimen name="ongoing_appops_dialog_icon_size">24dp</dimen>
+    <!-- Left margin of App Opp icons in Ongoing App Ops dialog -->
+    <dimen name="ongoing_appops_dialog_icon_margin">8dp</dimen>
+    <!-- Height and width of Application icons in Ongoing App Ops dialog -->
+    <dimen name="ongoing_appops_dialog_app_icon_size">32dp</dimen>
+    <!-- Height of line in Ongoing App Ops dialog-->
+    <dimen name="ongoing_appops_dialog_line_height">48dp</dimen>
+    <!-- Side margin of title in Ongoing App Ops dialog -->
+    <dimen name="ongoing_appops_dialog_title_margin_sides">24dp</dimen>
+    <!-- Bottom margin of items in Ongoing App Ops dialog -->
+    <dimen name="ongoing_appops_dialog_items_bottom_margin">24dp</dimen>
+    <!-- Top and bottom margin of title in Ongoing App Ops dialog -->
+    <dimen name="ongoing_appops_dialog_title_margin_top_bottom">18dp</dimen>
     <!-- Side margins around the Ongoing App Ops chip-->
     <dimen name="ongoing_appops_chip_margin">12dp</dimen>
     <!-- Top and bottom margins around the Ongoing App Ops chip -->
@@ -967,7 +975,26 @@
     <!-- Radius of Ongoing App Ops chip corners -->
     <dimen name="ongoing_appops_chip_bg_corner_radius">12dp</dimen>
     <!-- Text size for Ongoing App Ops dialog title -->
-    <dimen name="ongoing_appops_dialog_title_size">24sp</dimen>
+    <dimen name="ongoing_appops_dialog_title_size">20sp</dimen>
     <!-- Text size for Ongoing App Ops dialog items -->
-    <dimen name="ongoing_appops_dialog_item_size">20sp</dimen>
+    <dimen name="ongoing_appops_dialog_item_size">16sp</dimen>
+
+    <!-- How much a bubble is elevated -->
+    <dimen name="bubble_elevation">8dp</dimen>
+    <!-- Padding between bubbles when displayed in expanded state -->
+    <dimen name="bubble_padding">8dp</dimen>
+    <!-- Padding around the view displayed when the bubble is expanded -->
+    <dimen name="bubble_expanded_view_padding">8dp</dimen>
+    <!-- Size of the collapsed bubble -->
+    <dimen name="bubble_size">56dp</dimen>
+    <!-- Size of an icon displayed within the bubble -->
+    <dimen name="bubble_icon_size">24dp</dimen>
+    <!-- Default height of the expanded view shown when the bubble is expanded -->
+    <dimen name="bubble_expanded_default_height">400dp</dimen>
+    <!-- Height of the triangle that points to the expanded bubble -->
+    <dimen name="bubble_pointer_height">4dp</dimen>
+    <!-- Width of the triangle that points to the expanded bubble -->
+    <dimen name="bubble_pointer_width">6dp</dimen>
+    <!-- Extra padding around the dismiss target for bubbles -->
+    <dimen name="bubble_dismiss_slop">16dp</dimen>
 </resources>

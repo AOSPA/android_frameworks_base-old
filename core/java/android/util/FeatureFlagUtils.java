@@ -35,7 +35,6 @@ public class FeatureFlagUtils {
     public static final String FFLAG_OVERRIDE_PREFIX = FFLAG_PREFIX + "override.";
     public static final String PERSIST_PREFIX = "persist." + FFLAG_OVERRIDE_PREFIX;
     public static final String HEARING_AID_SETTINGS = "settings_bluetooth_hearing_aid";
-    public static final String EMERGENCY_DIAL_SHORTCUTS = "settings_emergency_dial_shortcuts";
     public static final String SAFETY_HUB = "settings_safety_hub";
     public static final String SCREENRECORD_LONG_PRESS = "settings_screenrecord_long_press";
 
@@ -43,14 +42,16 @@ public class FeatureFlagUtils {
     static {
         DEFAULT_FLAGS = new HashMap<>();
         DEFAULT_FLAGS.put("settings_audio_switcher", "true");
-        DEFAULT_FLAGS.put("settings_systemui_theme", "true");
         DEFAULT_FLAGS.put("settings_dynamic_homepage", "true");
         DEFAULT_FLAGS.put("settings_mobile_network_v2", "true");
-        DEFAULT_FLAGS.put("settings_data_usage_v2", "false");
-        DEFAULT_FLAGS.put("settings_seamless_transfer", "false");
-        DEFAULT_FLAGS.put(HEARING_AID_SETTINGS, "false");
-        DEFAULT_FLAGS.put(EMERGENCY_DIAL_SHORTCUTS, "true");
         DEFAULT_FLAGS.put("settings_network_and_internet_v2", "false");
+        DEFAULT_FLAGS.put("settings_seamless_transfer", "false");
+        DEFAULT_FLAGS.put("settings_slice_injection", "false");
+        DEFAULT_FLAGS.put("settings_systemui_theme", "true");
+        DEFAULT_FLAGS.put("settings_wifi_dpp", "false");
+        DEFAULT_FLAGS.put("settings_wifi_mac_randomization", "false");
+        DEFAULT_FLAGS.put("settings_wifi_sharing", "false");
+        DEFAULT_FLAGS.put(HEARING_AID_SETTINGS, "false");
         DEFAULT_FLAGS.put(SAFETY_HUB, "false");
         DEFAULT_FLAGS.put(SCREENRECORD_LONG_PRESS, "false");
     }

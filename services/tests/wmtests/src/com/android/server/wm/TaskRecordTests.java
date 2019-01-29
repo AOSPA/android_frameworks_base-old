@@ -16,6 +16,9 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_TASK_ON_HOME;
 
@@ -31,10 +34,13 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.Xml;
+import android.view.DisplayInfo;
 
 import androidx.test.filters.MediumTest;
 
@@ -47,12 +53,10 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.InputStreamReader;
 import java.io.Reader;
 import java.util.ArrayList;
 
@@ -68,10 +72,13 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     private static final String TASK_TAG = "task";
 
+    private Rect mParentBounds;
+
     @Before
     public void setUp() throws Exception {
         TaskRecord.setTaskRecordFactory(null);
         setupActivityTaskManagerService();
+        mParentBounds = new Rect(10 /*left*/, 30 /*top*/, 80 /*right*/, 60 /*bottom*/);
     }
 
     @Test
@@ -79,15 +86,10 @@ public class TaskRecordTests extends ActivityTestsBase {
         final TaskRecord expected = createTaskRecord(64);
         expected.mLastNonFullscreenBounds = new Rect(50, 50, 100, 100);
 
-        final File serializedFile = serializeToFile(expected);
-
-        try {
-            final TaskRecord actual = restoreFromFile(serializedFile);
-            assertEquals(expected.taskId, actual.taskId);
-            assertEquals(expected.mLastNonFullscreenBounds, actual.mLastNonFullscreenBounds);
-        } finally {
-            serializedFile.delete();
-        }
+        final byte[] serializedBytes = serializeToBytes(expected);
+        final TaskRecord actual = restoreFromBytes(serializedBytes);
+        assertEquals(expected.taskId, actual.taskId);
+        assertEquals(expected.mLastNonFullscreenBounds, actual.mLastNonFullscreenBounds);
     }
 
     @Test
@@ -131,10 +133,92 @@ public class TaskRecordTests extends ActivityTestsBase {
         assertTrue(task.returnsToHomeStack());
     }
 
-    private File serializeToFile(TaskRecord r) throws IOException, XmlPullParserException {
-        final File tmpFile = File.createTempFile(r.taskId + "_task_", "xml");
+    /** Ensures that bounds are clipped to their parent. */
+    @Test
+    public void testAppBounds_BoundsClipping() {
+        final Rect shiftedBounds = new Rect(mParentBounds);
+        shiftedBounds.offset(10, 10);
+        final Rect expectedBounds = new Rect(mParentBounds);
+        expectedBounds.intersect(shiftedBounds);
+        testStackBoundsConfiguration(WINDOWING_MODE_FULLSCREEN, mParentBounds, shiftedBounds,
+                expectedBounds);
+    }
 
-        try (OutputStream os = new FileOutputStream(tmpFile)) {
+    /** Ensures that empty bounds are not propagated to the configuration. */
+    @Test
+    public void testAppBounds_EmptyBounds() {
+        final Rect emptyBounds = new Rect();
+        testStackBoundsConfiguration(WINDOWING_MODE_FULLSCREEN, mParentBounds, emptyBounds,
+                null /*ExpectedBounds*/);
+    }
+
+    /** Ensures that bounds on freeform stacks are not clipped. */
+    @Test
+    public void testAppBounds_FreeFormBounds() {
+        final Rect freeFormBounds = new Rect(mParentBounds);
+        freeFormBounds.offset(10, 10);
+        testStackBoundsConfiguration(WINDOWING_MODE_FREEFORM, mParentBounds, freeFormBounds,
+                freeFormBounds);
+    }
+
+    /** Ensures that fully contained bounds are not clipped. */
+    @Test
+    public void testAppBounds_ContainedBounds() {
+        final Rect insetBounds = new Rect(mParentBounds);
+        insetBounds.inset(5, 5, 5, 5);
+        testStackBoundsConfiguration(
+                WINDOWING_MODE_FULLSCREEN, mParentBounds, insetBounds, insetBounds);
+    }
+
+    /** Ensures that full screen free form bounds are clipped */
+    @Test
+    public void testAppBounds_FullScreenFreeFormBounds() {
+        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        DisplayInfo info = new DisplayInfo();
+        display.mDisplay.getDisplayInfo(info);
+        final Rect fullScreenBounds = new Rect(0, 0, info.logicalWidth, info.logicalHeight);
+        testStackBoundsConfiguration(WINDOWING_MODE_FULLSCREEN, mParentBounds, fullScreenBounds,
+                mParentBounds);
+    }
+
+    /** Ensures that the alias intent won't have target component resolved. */
+    @Test
+    public void testTaskIntentActivityAlias() {
+        final String aliasActivity = DEFAULT_COMPONENT_PACKAGE_NAME + ".aliasActivity";
+        final String targetActivity = DEFAULT_COMPONENT_PACKAGE_NAME + ".targetActivity";
+        final Intent intent = new Intent();
+        intent.setComponent(new ComponentName(DEFAULT_COMPONENT_PACKAGE_NAME, aliasActivity));
+        final ActivityInfo info = new ActivityInfo();
+        info.applicationInfo = new ApplicationInfo();
+        info.packageName = DEFAULT_COMPONENT_PACKAGE_NAME;
+        info.targetActivity = targetActivity;
+
+        final TaskRecord task = TaskRecord.create(mService, 1 /* taskId */, info, intent,
+                null /* taskDescription */);
+        assertEquals("The alias activity component should be saved in task intent.", aliasActivity,
+                task.intent.getComponent().getClassName());
+    }
+
+    private void testStackBoundsConfiguration(int windowingMode, Rect parentBounds, Rect bounds,
+            Rect expectedConfigBounds) {
+
+        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        ActivityStack stack = display.createStack(windowingMode, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        TaskRecord task = new TaskBuilder(mSupervisor).setStack(stack).build();
+
+        final Configuration parentConfig = stack.getConfiguration();
+        parentConfig.windowConfiguration.setAppBounds(parentBounds);
+        task.setBounds(bounds);
+
+        task.resolveOverrideConfiguration(parentConfig);
+        // Assert that both expected and actual are null or are equal to each other
+        assertEquals(expectedConfigBounds,
+                task.getResolvedOverrideConfiguration().windowConfiguration.getAppBounds());
+    }
+
+    private byte[] serializeToBytes(TaskRecord r) throws IOException, XmlPullParserException {
+        try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
             final XmlSerializer serializer = Xml.newSerializer();
             serializer.setOutput(os, "UTF-8");
             serializer.startDocument(null, true);
@@ -142,13 +226,14 @@ public class TaskRecordTests extends ActivityTestsBase {
             r.saveToXml(serializer);
             serializer.endTag(null, TASK_TAG);
             serializer.endDocument();
-        }
 
-        return tmpFile;
+            os.flush();
+            return os.toByteArray();
+        }
     }
 
-    private TaskRecord restoreFromFile(File file) throws IOException, XmlPullParserException {
-        try (Reader reader = new BufferedReader(new FileReader(file))) {
+    private TaskRecord restoreFromBytes(byte[] in) throws IOException, XmlPullParserException {
+        try (Reader reader = new InputStreamReader(new ByteArrayInputStream(in))) {
             final XmlPullParser parser = Xml.newPullParser();
             parser.setInput(reader);
             assertEquals(XmlPullParser.START_TAG, parser.next());

@@ -32,9 +32,8 @@
 #include <atomic>
 #include <iomanip>
 #include <string>
+#include <vector>
 
-#include <android-base/stringprintf.h>
-#include <android-base/unique_fd.h>
 #include <debuggerd/client.h>
 #include <log/log.h>
 #include <utils/misc.h>
@@ -43,16 +42,13 @@
 #include <nativehelper/JNIHelp.h>
 #include <nativehelper/ScopedUtfChars.h>
 #include "jni.h"
+#include <meminfo/sysmeminfo.h>
 #include <memtrack/memtrack.h>
 #include <memunreachable/memunreachable.h>
 #include "android_os_Debug.h"
 
 namespace android
 {
-
-static inline UniqueFile MakeUniqueFile(const char* path, const char* mode) {
-    return UniqueFile(fopen(path, mode), safeFclose);
-}
 
 enum {
     HEAP_UNKNOWN,
@@ -692,14 +688,8 @@ static jlong android_os_Debug_getPss(JNIEnv *env, jobject clazz)
 
 static long get_allocated_vmalloc_memory() {
     char line[1024];
-    // Ignored tags that don't actually consume memory (ie remappings)
-    static const char* const ignored_tags[] = {
-            "ioremap",
-            "map_lowmem",
-            "vm_map_ram",
-            NULL
-    };
-    long size, vmalloc_allocated_size = 0;
+
+    long vmalloc_allocated_size = 0;
 
     UniqueFile fp = MakeUniqueFile("/proc/vmallocinfo", "re");
     if (fp == nullptr) {
@@ -710,22 +700,22 @@ static long get_allocated_vmalloc_memory() {
         if (fgets(line, 1024, fp.get()) == NULL) {
             break;
         }
-        bool valid_line = true;
-        int i = 0;
-        while (ignored_tags[i]) {
-            if (strstr(line, ignored_tags[i]) != NULL) {
-                valid_line = false;
-                break;
-            }
-            i++;
+
+        // check to see if there are pages mapped in vmalloc area
+        if (!strstr(line, "pages=")) {
+            continue;
         }
-        if (valid_line && (sscanf(line, "%*x-%*x %ld", &size) == 1)) {
-            vmalloc_allocated_size += size;
+
+        long nr_pages;
+        if (sscanf(line, "%*x-%*x %*ld %*s pages=%ld", &nr_pages) == 1) {
+            vmalloc_allocated_size += (nr_pages * getpagesize());
         }
     }
     return vmalloc_allocated_size;
 }
 
+// The 1:1 mapping of MEMINFO_* enums here must match with the constants from
+// Debug.java.
 enum {
     MEMINFO_TOTAL,
     MEMINFO_FREE,
@@ -745,138 +735,43 @@ enum {
     MEMINFO_COUNT
 };
 
-static long long get_zram_mem_used()
-{
-#define ZRAM_SYSFS "/sys/block/zram0/"
-    UniqueFile mm_stat_file = MakeUniqueFile(ZRAM_SYSFS "mm_stat", "re");
-    if (mm_stat_file) {
-        long long mem_used_total = 0;
-
-        int matched = fscanf(mm_stat_file.get(), "%*d %*d %lld %*d %*d %*d %*d", &mem_used_total);
-        if (matched != 1)
-            ALOGW("failed to parse " ZRAM_SYSFS "mm_stat");
-
-        return mem_used_total;
-    }
-
-    UniqueFile mem_used_total_file = MakeUniqueFile(ZRAM_SYSFS "mem_used_total", "re");
-    if (mem_used_total_file) {
-        long long mem_used_total = 0;
-
-        int matched = fscanf(mem_used_total_file.get(), "%lld", &mem_used_total);
-        if (matched != 1)
-            ALOGW("failed to parse " ZRAM_SYSFS "mem_used_total");
-
-        return mem_used_total;
-    }
-
-    return 0;
-}
-
 static void android_os_Debug_getMemInfo(JNIEnv *env, jobject clazz, jlongArray out)
 {
-    char buffer[4096];
-    size_t numFound = 0;
-
     if (out == NULL) {
         jniThrowNullPointerException(env, "out == null");
         return;
     }
 
-    int fd = open("/proc/meminfo", O_RDONLY | O_CLOEXEC);
-
-    if (fd < 0) {
-        ALOGW("Unable to open /proc/meminfo: %s\n", strerror(errno));
+    int outLen = env->GetArrayLength(out);
+    if (outLen < MEMINFO_COUNT) {
+        jniThrowRuntimeException(env, "outLen < MEMINFO_COUNT");
         return;
     }
 
-    int len = read(fd, buffer, sizeof(buffer)-1);
-    close(fd);
-
-    if (len < 0) {
-        ALOGW("Empty /proc/meminfo");
+    // Read system memory info including ZRAM. The values are stored in the vector
+    // in the same order as MEMINFO_* enum
+    std::vector<uint64_t> mem(MEMINFO_COUNT);
+    std::vector<std::string> tags(::android::meminfo::SysMemInfo::kDefaultSysMemInfoTags);
+    tags.insert(tags.begin() + MEMINFO_ZRAM_TOTAL, "Zram:");
+    ::android::meminfo::SysMemInfo smi;
+    if (!smi.ReadMemInfo(tags, &mem)) {
+        jniThrowRuntimeException(env, "SysMemInfo read failed");
         return;
     }
-    buffer[len] = 0;
 
-    static const char* const tags[] = {
-            "MemTotal:",
-            "MemFree:",
-            "Buffers:",
-            "Cached:",
-            "Shmem:",
-            "Slab:",
-            "SReclaimable:",
-            "SUnreclaim:",
-            "SwapTotal:",
-            "SwapFree:",
-            "ZRam:",
-            "Mapped:",
-            "VmallocUsed:",
-            "PageTables:",
-            "KernelStack:",
-            NULL
-    };
-    static const int tagsLen[] = {
-            9,
-            8,
-            8,
-            7,
-            6,
-            5,
-            13,
-            11,
-            10,
-            9,
-            5,
-            7,
-            12,
-            11,
-            12,
-            0
-    };
-    long mem[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-
-    char* p = buffer;
-    while (*p && numFound < (sizeof(tagsLen) / sizeof(tagsLen[0]))) {
-        int i = 0;
-        while (tags[i]) {
-            if (strncmp(p, tags[i], tagsLen[i]) == 0) {
-                p += tagsLen[i];
-                while (*p == ' ') p++;
-                char* num = p;
-                while (*p >= '0' && *p <= '9') p++;
-                if (*p != 0) {
-                    *p = 0;
-                    p++;
-                }
-                mem[i] = atoll(num);
-                numFound++;
-                break;
-            }
-            i++;
-        }
-        while (*p && *p != '\n') {
-            p++;
-        }
-        if (*p) p++;
-    }
-
-    mem[MEMINFO_ZRAM_TOTAL] = get_zram_mem_used() / 1024;
-    // Recompute Vmalloc Used since the value in meminfo
-    // doesn't account for I/O remapping which doesn't use RAM.
-    mem[MEMINFO_VMALLOC_USED] = get_allocated_vmalloc_memory() / 1024;
-
-    int maxNum = env->GetArrayLength(out);
-    if (maxNum > MEMINFO_COUNT) {
-        maxNum = MEMINFO_COUNT;
-    }
     jlong* outArray = env->GetLongArrayElements(out, 0);
     if (outArray != NULL) {
-        for (int i=0; i<maxNum; i++) {
+        outLen = MEMINFO_COUNT;
+        for (int i = 0; i < outLen; i++) {
+            // TODO: move get_allocated_vmalloc_memory() to libmeminfo
+            if (i == MEMINFO_VMALLOC_USED) {
+                outArray[i] = get_allocated_vmalloc_memory() / 1024;
+                continue;
+            }
             outArray[i] = mem[i];
         }
     }
+
     env->ReleaseLongArrayElements(out, outArray, 0);
 }
 

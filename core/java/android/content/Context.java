@@ -49,6 +49,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDatabase.CursorFactory;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
+import android.net.NetworkStack;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -425,6 +426,15 @@ public abstract class Context {
      */
     public static final int BIND_EXTERNAL_SERVICE = 0x80000000;
 
+    /**
+     * These bind flags reduce the strength of the binding such that we shouldn't
+     * consider it as pulling the process up to the level of the one that is bound to it.
+     * @hide
+     */
+    public static final int BIND_REDUCTION_FLAGS =
+            Context.BIND_ALLOW_OOM_MANAGEMENT | Context.BIND_WAIVE_PRIORITY
+                    | Context.BIND_ADJUST_BELOW_PERCEPTIBLE | Context.BIND_NOT_VISIBLE;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "RECEIVER_VISIBLE_" }, value = {
             RECEIVER_VISIBLE_TO_INSTANT_APPS
@@ -682,7 +692,8 @@ public abstract class Context {
      *
      * @see android.content.res.Resources.Theme#obtainStyledAttributes(int[])
      */
-    public final TypedArray obtainStyledAttributes(@StyleableRes int[] attrs) {
+    @NonNull
+    public final TypedArray obtainStyledAttributes(@NonNull @StyleableRes int[] attrs) {
         return getTheme().obtainStyledAttributes(attrs);
     }
 
@@ -693,8 +704,9 @@ public abstract class Context {
      *
      * @see android.content.res.Resources.Theme#obtainStyledAttributes(int, int[])
      */
-    public final TypedArray obtainStyledAttributes(
-            @StyleRes int resid, @StyleableRes int[] attrs) throws Resources.NotFoundException {
+    @NonNull
+    public final TypedArray obtainStyledAttributes(@StyleRes int resid,
+            @NonNull @StyleableRes int[] attrs) throws Resources.NotFoundException {
         return getTheme().obtainStyledAttributes(resid, attrs);
     }
 
@@ -705,8 +717,9 @@ public abstract class Context {
      *
      * @see android.content.res.Resources.Theme#obtainStyledAttributes(AttributeSet, int[], int, int)
      */
+    @NonNull
     public final TypedArray obtainStyledAttributes(
-            AttributeSet set, @StyleableRes int[] attrs) {
+            @Nullable AttributeSet set, @NonNull @StyleableRes int[] attrs) {
         return getTheme().obtainStyledAttributes(set, attrs, 0, 0);
     }
 
@@ -717,8 +730,9 @@ public abstract class Context {
      *
      * @see android.content.res.Resources.Theme#obtainStyledAttributes(AttributeSet, int[], int, int)
      */
-    public final TypedArray obtainStyledAttributes(
-            AttributeSet set, @StyleableRes int[] attrs, @AttrRes int defStyleAttr,
+    @NonNull
+    public final TypedArray obtainStyledAttributes(@Nullable AttributeSet set,
+            @NonNull @StyleableRes int[] attrs, @AttrRes int defStyleAttr,
             @StyleRes int defStyleRes) {
         return getTheme().obtainStyledAttributes(
             set, attrs, defStyleAttr, defStyleRes);
@@ -732,16 +746,22 @@ public abstract class Context {
     /** Return the name of this application's package. */
     public abstract String getPackageName();
 
-    /** @hide Return the name of the base context this context is derived from. */
+    /**
+     * @hide Return the name of the base context this context is derived from.
+     * This is the same as {@link #getOpPackageName()} except in
+     * cases where system components are loaded into other app processes, in which
+     * case {@link #getOpPackageName()} will be the name of the primary package in
+     * that process (so that app ops uid verification will work with the name).
+     */
     @UnsupportedAppUsage
     public abstract String getBasePackageName();
 
-    /** @hide Return the package name that should be used for app ops calls from
-     * this context.  This is the same as {@link #getBasePackageName()} except in
-     * cases where system components are loaded into other app processes, in which
-     * case this will be the name of the primary package in that process (so that app
-     * ops uid verification will work with the name). */
-    @TestApi
+    /**
+     * Return the package name that should be used for {@link android.app.AppOpsManager} calls from
+     * this context, so that app ops manager's uid verification will work with the name.
+     * <p>
+     * This is not generally intended for third party application developers.
+     */
     public abstract String getOpPackageName();
 
     /** Return the full application info for this context's package. */
@@ -2982,6 +3002,36 @@ public abstract class Context {
     }
 
     /**
+     * For a service previously bound with {@link #bindService} or a related method, change
+     * how the system manages that service's process in relation to other processes.  This
+     * doesn't modify the original bind flags that were passed in when binding, but adjusts
+     * how the process will be managed in some cases based on those flags.  Currently only
+     * works on isolated processes (will be ignored for non-isolated processes).
+     *
+     * <p>Note that this call does not take immediate effect, but will be applied the next
+     * time the impacted process is adjusted for some other reason.  Typically you would
+     * call this before then calling a new {@link #bindIsolatedService} on the service
+     * of interest, with that binding causing the process to be shuffled accordingly.</p>
+     *
+     * @param conn The connection interface previously supplied to bindService().  This
+     *             parameter must not be null.
+     * @param group A group to put this connection's process in.  Upon calling here, this
+     *              will override any previous group that was set for that process.  The group
+     *              tells the system about processes that are logically grouped together, so
+     *              should be managed as one unit of importance (such as when being considered
+     *              a recently used app).  All processes in the same app with the same group
+     *              are considered to be related.  Supplying 0 reverts to the default behavior
+     *              of not grouping.
+     * @param importance Additional importance of the processes within a group.  Upon calling
+     *                   here, this will override any previous group that was set for that
+     *                   process.  This fine-tunes process killing of all processes within
+     *                   a related groups -- higher importance values will be killed before
+     *                   lower ones.
+     */
+    public abstract void updateServiceGroup(@NonNull ServiceConnection conn, int group,
+            int importance);
+
+    /**
      * Disconnect from an application service.  You will no longer receive
      * calls as the service is restarted, and the service is now allowed to
      * stop at any time.
@@ -3035,6 +3085,7 @@ public abstract class Context {
             //@hide: COUNTRY_DETECTOR,
             SEARCH_SERVICE,
             SENSOR_SERVICE,
+            SENSOR_PRIVACY_SERVICE,
             STORAGE_SERVICE,
             STORAGE_STATS_SERVICE,
             WALLPAPER_SERVICE,
@@ -3072,6 +3123,7 @@ public abstract class Context {
             APPWIDGET_SERVICE,
             //@hide: VOICE_INTERACTION_MANAGER_SERVICE,
             //@hide: BACKUP_SERVICE,
+            ROLLBACK_SERVICE,
             DROPBOX_SERVICE,
             //@hide: DEVICE_IDLE_CONTROLLER,
             DEVICE_POLICY_SERVICE,
@@ -3086,6 +3138,7 @@ public abstract class Context {
             //@hide: HDMI_CONTROL_SERVICE,
             INPUT_SERVICE,
             DISPLAY_SERVICE,
+            //@hide COLOR_DISPLAY_SERVICE,
             USER_SERVICE,
             RESTRICTIONS_SERVICE,
             APP_OPS_SERVICE,
@@ -3498,6 +3551,18 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
+     * android.hardware.SensorPrivacyManager} for accessing sensor privacy
+     * functions.
+     *
+     * @see #getSystemService(String)
+     * @see android.hardware.SensorPrivacyManager
+     *
+     * @hide
+     */
+    public static final String SENSOR_PRIVACY_SERVICE = "sensor_privacy";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link
      * android.os.storage.StorageManager} for accessing system storage
      * functions.
      *
@@ -3553,6 +3618,15 @@ public abstract class Context {
      * @see android.net.ConnectivityManager
      */
     public static final String CONNECTIVITY_SERVICE = "connectivity";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link NetworkStack} for communicating with the network stack
+     * @hide
+     * @see #getSystemService(String)
+     * @see NetworkStack
+     */
+    public static final String NETWORK_STACK_SERVICE = "network_stack";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -3893,12 +3967,12 @@ public abstract class Context {
     public static final String AUTOFILL_MANAGER_SERVICE = "autofill";
 
     /**
-     * Official published name of the intelligence service.
+     * Official published name of the content capture service.
      *
      * @hide
      * @see #getSystemService(String)
      */
-    public static final String INTELLIGENCE_MANAGER_SERVICE = "intelligence";
+    public static final String CONTENT_CAPTURE_MANAGER_SERVICE = "content_capture";
 
     /**
      * Use with {@link #getSystemService(String)} to access the
@@ -3919,6 +3993,14 @@ public abstract class Context {
     public static final String PERMISSION_SERVICE = "permission";
 
     /**
+     * Official published name of the (internal) permission controller service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String PERMISSION_CONTROLLER_SERVICE = "permission_controller";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve an
      * {@link android.app.backup.IBackupManager IBackupManager} for communicating
      * with the backup mechanism.
@@ -3928,6 +4010,17 @@ public abstract class Context {
      */
     @SystemApi
     public static final String BACKUP_SERVICE = "backup";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.content.rollback.RollbackManager} for communicating
+     * with the rollback manager
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @SystemApi
+    public static final String ROLLBACK_SERVICE = "rollback";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4064,6 +4157,16 @@ public abstract class Context {
      * @see android.hardware.display.DisplayManager
      */
     public static final String DISPLAY_SERVICE = "display";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.hardware.display.ColorDisplayManager} for controlling color transforms.
+     *
+     * @see #getSystemService(String)
+     * @see android.hardware.display.ColorDisplayManager
+     * @hide
+     */
+    public static final String COLOR_DISPLAY_SERVICE = "color_display";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4406,7 +4509,7 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
-     * {@link android.telephony.rcs.RcsManager}.
+     * {@link android.telephony.ims.RcsManager}.
      * @hide
      */
     public static final String TELEPHONY_RCS_SERVICE = "ircs";
@@ -5180,6 +5283,25 @@ public abstract class Context {
     @TestApi
     public void setAutofillCompatibilityEnabled(
             @SuppressWarnings("unused") boolean autofillCompatEnabled) {
+    }
+
+    /**
+     * Checks whether this context supports content capture.
+     *
+     * @hide
+     */
+    // NOTE: for now we just need to check if it's supported so we can optimize calls that can be
+    // skipped when it isn't. Eventually, we might need a full
+    // ContentCaptureManager.ContentCaptureClient interface (as it's done with AutofillClient).
+    //
+    public boolean isContentCaptureSupported() {
+        return false;
+    }
+
+    /**
+     * @hide
+     */
+    public void setContentCaptureSupported(@SuppressWarnings("unused") boolean supported) {
     }
 
     /**

@@ -16,35 +16,58 @@
 
 package com.android.server.wm;
 
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyBoolean;
-import static org.mockito.Mockito.anyFloat;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
+import static android.app.AppOpsManager.OP_NONE;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import android.app.ActivityManager;
+import android.content.ComponentName;
 import android.content.Context;
-import android.content.res.Configuration;
-import android.graphics.Rect;
+import android.os.Binder;
+import android.os.Build;
+import android.os.IBinder;
 import android.view.Display;
+import android.view.IApplicationToken;
+import android.view.IWindow;
 import android.view.Surface;
-
-import org.mockito.invocation.InvocationOnMock;
+import android.view.SurfaceControl.Transaction;
+import android.view.WindowManager;
 
 /**
  * A collection of static functions that can be referenced by other test packages to provide access
  * to WindowManager related test functionality.
  */
 public class WindowTestUtils {
+    private static int sNextTaskId = 0;
 
     /** An extension of {@link DisplayContent} to gain package scoped access. */
     public static class TestDisplayContent extends DisplayContent {
 
         private TestDisplayContent(Display display, WindowManagerService service,
-                WallpaperController wallpaperController, DisplayWindowController controller) {
-            super(display, service, wallpaperController, controller);
+                ActivityDisplay activityDisplay) {
+            super(display, service, activityDisplay);
+        }
+
+        /**
+         * Stubbing method of non-public parent class isn't supported, so here explicitly overrides.
+         */
+        @Override
+        public DisplayRotation getDisplayRotation() {
+            return null;
+        }
+
+        /**
+         * Stubbing method of non-public parent class isn't supported, so here explicitly overrides.
+         */
+        @Override
+        DockedStackDividerController getDockedDividerController() {
+            return null;
         }
 
         /** Create a mocked default {@link DisplayContent}. */
@@ -58,7 +81,7 @@ public class WindowTestUtils {
 
             final DisplayRotation displayRotation = new DisplayRotation(
                     mock(WindowManagerService.class), displayContent, displayPolicy,
-                    context, new Object());
+                    mock(DisplayWindowSettings.class), context, new Object());
             displayRotation.mPortraitRotation = Surface.ROTATION_0;
             displayRotation.mLandscapeRotation = Surface.ROTATION_90;
             displayRotation.mUpsideDownRotation = Surface.ROTATION_180;
@@ -70,24 +93,40 @@ public class WindowTestUtils {
         }
     }
 
+    /** Create a mocked default {@link DisplayContent}. */
+    public static TestDisplayContent createTestDisplayContent() {
+        final TestDisplayContent displayContent = mock(TestDisplayContent.class);
+        DockedStackDividerController divider = mock(DockedStackDividerController.class);
+        when(displayContent.getDockedDividerController()).thenReturn(divider);
+
+        return displayContent;
+    }
+
     /**
      * Creates a mock instance of {@link StackWindowController}.
      */
     public static StackWindowController createMockStackWindowContainerController() {
         StackWindowController controller = mock(StackWindowController.class);
         controller.mContainer = mock(TestTaskStack.class);
-
-        // many components rely on the {@link StackWindowController#adjustConfigurationForBounds}
-        // to properly set bounds values in the configuration. We must mimick those actions here.
-        doAnswer((InvocationOnMock invocationOnMock) -> {
-            final Configuration config = invocationOnMock.<Configuration>getArgument(7);
-            final Rect bounds = invocationOnMock.<Rect>getArgument(0);
-            config.windowConfiguration.setBounds(bounds);
-            return null;
-        }).when(controller).adjustConfigurationForBounds(any(), any(), any(), any(),
-                anyBoolean(), anyBoolean(), anyFloat(), any(), any(), anyInt());
-
         return controller;
+    }
+
+    /** Creates a {@link Task} and adds it to the specified {@link TaskStack}. */
+    public static Task createTaskInStack(WindowManagerService service, TaskStack stack,
+            int userId) {
+        synchronized (service.mGlobalLock) {
+            final Task newTask = new Task(sNextTaskId++, stack, userId, service, 0, false,
+                    new ActivityManager.TaskDescription(), null);
+            stack.addTask(newTask, POSITION_TOP);
+            return newTask;
+        }
+    }
+
+    /** Creates an {@link AppWindowToken} and adds it to the specified {@link Task}. */
+    public static TestAppWindowToken createAppWindowTokenInTask(DisplayContent dc, Task task) {
+        final TestAppWindowToken newToken = createTestAppWindowToken(dc);
+        task.addChild(newToken, POSITION_TOP);
+        return newToken;
     }
 
     /**
@@ -102,6 +141,198 @@ public class WindowTestUtils {
         @Override
         void addTask(Task task, int position, boolean showForAllUsers, boolean moveParents) {
             // Do nothing.
+        }
+    }
+
+    static TestAppWindowToken createTestAppWindowToken(DisplayContent dc) {
+        synchronized (dc.mWmService.mGlobalLock) {
+            return new TestAppWindowToken(dc);
+        }
+    }
+
+    /** Used so we can gain access to some protected members of the {@link AppWindowToken} class. */
+    public static class TestAppWindowToken extends AppWindowToken {
+        boolean mOnTop = false;
+        private Transaction mPendingTransactionOverride;
+
+        private TestAppWindowToken(DisplayContent dc) {
+            super(dc.mWmService, new IApplicationToken.Stub() {
+                @Override
+                public String getName() {
+                    return null;
+                }
+            }, new ComponentName("", ""), false, dc, true /* fillsParent */);
+            mTargetSdk = Build.VERSION_CODES.CUR_DEVELOPMENT;
+        }
+
+        TestAppWindowToken(WindowManagerService service, IApplicationToken token,
+                ComponentName activityComponent, boolean voiceInteraction, DisplayContent dc,
+                long inputDispatchingTimeoutNanos, boolean fullscreen, boolean showForAllUsers,
+                int targetSdk, int orientation, int rotationAnimationHint, int configChanges,
+                boolean launchTaskBehind, boolean alwaysFocusable, ActivityRecord activityRecord) {
+            super(service, token, activityComponent, voiceInteraction, dc,
+                    inputDispatchingTimeoutNanos, fullscreen, showForAllUsers, targetSdk,
+                    orientation, rotationAnimationHint, configChanges, launchTaskBehind,
+                    alwaysFocusable, activityRecord);
+        }
+
+        int getWindowsCount() {
+            return mChildren.size();
+        }
+
+        boolean hasWindow(WindowState w) {
+            return mChildren.contains(w);
+        }
+
+        WindowState getFirstChild() {
+            return mChildren.peekFirst();
+        }
+
+        WindowState getLastChild() {
+            return mChildren.peekLast();
+        }
+
+        int positionInParent() {
+            return getParent().mChildren.indexOf(this);
+        }
+
+        void setIsOnTop(boolean onTop) {
+            mOnTop = onTop;
+        }
+
+        @Override
+        boolean isOnTop() {
+            return mOnTop;
+        }
+
+        void setPendingTransaction(Transaction transaction) {
+            mPendingTransactionOverride = transaction;
+        }
+
+        @Override
+        public Transaction getPendingTransaction() {
+            return mPendingTransactionOverride == null
+                    ? super.getPendingTransaction()
+                    : mPendingTransactionOverride;
+        }
+    }
+
+    static TestWindowToken createTestWindowToken(int type, DisplayContent dc) {
+        return createTestWindowToken(type, dc, false /* persistOnEmpty */);
+    }
+
+    static TestWindowToken createTestWindowToken(int type, DisplayContent dc,
+            boolean persistOnEmpty) {
+        synchronized (dc.mWmService.mGlobalLock) {
+            return new TestWindowToken(type, dc, persistOnEmpty);
+        }
+    }
+
+    /* Used so we can gain access to some protected members of the {@link WindowToken} class */
+    public static class TestWindowToken extends WindowToken {
+
+        private TestWindowToken(int type, DisplayContent dc, boolean persistOnEmpty) {
+            super(dc.mWmService, mock(IBinder.class), type, persistOnEmpty, dc,
+                    false /* ownerCanManageAppTokens */);
+        }
+
+        int getWindowsCount() {
+            return mChildren.size();
+        }
+
+        boolean hasWindow(WindowState w) {
+            return mChildren.contains(w);
+        }
+    }
+
+    /* Used so we can gain access to some protected members of the {@link Task} class */
+    public static class TestTask extends Task {
+        boolean mShouldDeferRemoval = false;
+        boolean mOnDisplayChangedCalled = false;
+        private boolean mIsAnimating = false;
+
+        TestTask(int taskId, TaskStack stack, int userId, WindowManagerService service,
+                int resizeMode, boolean supportsPictureInPicture,
+                TaskRecord taskRecord) {
+            super(taskId, stack, userId, service, resizeMode, supportsPictureInPicture,
+                    new ActivityManager.TaskDescription(), taskRecord);
+            stack.addTask(this, POSITION_TOP);
+        }
+
+        boolean shouldDeferRemoval() {
+            return mShouldDeferRemoval;
+        }
+
+        int positionInParent() {
+            return getParent().mChildren.indexOf(this);
+        }
+
+        @Override
+        void onDisplayChanged(DisplayContent dc) {
+            super.onDisplayChanged(dc);
+            mOnDisplayChangedCalled = true;
+        }
+
+        @Override
+        boolean isSelfAnimating() {
+            return mIsAnimating;
+        }
+
+        void setLocalIsAnimating(boolean isAnimating) {
+            mIsAnimating = isAnimating;
+        }
+    }
+
+    public static TestTask createTestTask(StackWindowController stackWindowController) {
+        return new TestTask(sNextTaskId++, stackWindowController.mContainer, 0,
+                stackWindowController.mService, RESIZE_MODE_UNRESIZEABLE, false,
+                mock(TaskRecord.class));
+    }
+
+    public static class TestIApplicationToken implements IApplicationToken {
+
+        private final Binder mBinder = new Binder();
+        @Override
+        public IBinder asBinder() {
+            return mBinder;
+        }
+        @Override
+        public String getName() {
+            return null;
+        }
+    }
+
+    /** Used to track resize reports. */
+    public static class TestWindowState extends WindowState {
+        boolean mResizeReported;
+
+        TestWindowState(WindowManagerService service, Session session, IWindow window,
+                WindowManager.LayoutParams attrs, WindowToken token) {
+            super(service, session, window, token, null, OP_NONE, 0, attrs, 0, 0,
+                    false /* ownerCanAddInternalSystemWindow */);
+        }
+
+        @Override
+        void reportResized() {
+            super.reportResized();
+            mResizeReported = true;
+        }
+
+        @Override
+        public boolean isGoneForLayoutLw() {
+            return false;
+        }
+
+        @Override
+        void updateResizingWindowIfNeeded() {
+            // Used in AppWindowTokenTests#testLandscapeSeascapeRotationRelayout to deceive
+            // the system that it can actually update the window.
+            boolean hadSurface = mHasSurface;
+            mHasSurface = true;
+
+            super.updateResizingWindowIfNeeded();
+
+            mHasSurface = hadSurface;
         }
     }
 }

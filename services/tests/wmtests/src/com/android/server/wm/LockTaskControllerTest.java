@@ -34,6 +34,13 @@ import static android.telecom.TelecomManager.EMERGENCY_DIALER_COMPONENT;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
 import static com.android.server.wm.LockTaskController.STATUS_BAR_MASK_LOCKED;
 import static com.android.server.wm.LockTaskController.STATUS_BAR_MASK_PINNED;
 
@@ -44,13 +51,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import android.app.StatusBarManager;
 import android.app.admin.DevicePolicyManager;
@@ -75,7 +75,6 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.server.LocalServices;
 import com.android.server.statusbar.StatusBarManagerInternal;
-import com.android.server.wm.WindowManagerService;
 
 import org.junit.After;
 import org.junit.Before;
@@ -105,6 +104,7 @@ public class LockTaskControllerTest {
             new DexmakerShareClassLoaderRule();
 
     @Mock private ActivityStackSupervisor mSupervisor;
+    @Mock private RootActivityContainer mRootActivityContainer;
     @Mock private IDevicePolicyManager mDevicePolicyManager;
     @Mock private IStatusBarService mStatusBarService;
     @Mock private WindowManagerService mWindowManager;
@@ -130,6 +130,7 @@ public class LockTaskControllerTest {
         }
 
         mSupervisor.mRecentTasks = mRecentTasks;
+        mSupervisor.mRootActivityContainer = mRootActivityContainer;
 
         mLockTaskController = new LockTaskController(mContext, mSupervisor,
                 new ImmediatelyExecuteHandler());
@@ -559,19 +560,20 @@ public class LockTaskControllerTest {
         mLockTaskController.startLockTaskMode(tr, false, TEST_UID);
 
         // THEN keyguard should be disabled
-        verify(mWindowManager).disableKeyguard(any(IBinder.class), anyString());
+        verify(mWindowManager).disableKeyguard(any(IBinder.class), anyString(), eq(TEST_USER_ID));
 
         // WHEN keyguard is enabled for lock task mode
         mLockTaskController.updateLockTaskFeatures(TEST_USER_ID, LOCK_TASK_FEATURE_KEYGUARD);
 
         // THEN keyguard should be enabled
-        verify(mWindowManager).reenableKeyguard(any(IBinder.class));
+        verify(mWindowManager).reenableKeyguard(any(IBinder.class), eq(TEST_USER_ID));
 
         // WHEN keyguard is disabled again for lock task mode
         mLockTaskController.updateLockTaskFeatures(TEST_USER_ID, LOCK_TASK_FEATURE_NONE);
 
         // THEN keyguard should be disabled
-        verify(mWindowManager, times(2)).disableKeyguard(any(IBinder.class), anyString());
+        verify(mWindowManager, times(2)).disableKeyguard(any(IBinder.class), anyString(),
+                eq(TEST_USER_ID));
     }
 
     @Test
@@ -652,7 +654,7 @@ public class LockTaskControllerTest {
 
     private void verifyLockTaskStarted(int statusBarMask, int statusBarMask2) throws Exception {
         // THEN the keyguard should have been disabled
-        verify(mWindowManager).disableKeyguard(any(IBinder.class), anyString());
+        verify(mWindowManager).disableKeyguard(any(IBinder.class), anyString(), eq(TEST_USER_ID));
         // THEN the status bar should have been disabled
         verify(mStatusBarService).disable(eq(statusBarMask), any(IBinder.class),
                 eq(mContext.getPackageName()));
@@ -667,7 +669,7 @@ public class LockTaskControllerTest {
 
     private void verifyLockTaskStopped(VerificationMode mode) throws Exception {
         // THEN the keyguard should have been disabled
-        verify(mWindowManager, mode).reenableKeyguard(any(IBinder.class));
+        verify(mWindowManager, mode).reenableKeyguard(any(IBinder.class), eq(TEST_USER_ID));
         // THEN the status bar should have been disabled
         verify(mStatusBarService, mode).disable(eq(StatusBarManager.DISABLE_NONE),
                 any(IBinder.class), eq(mContext.getPackageName()));

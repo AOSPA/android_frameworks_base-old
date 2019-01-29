@@ -2,8 +2,6 @@ cc_library_static {
     name: "libservices.core",
     defaults: ["libservices.core-libs"],
 
-    cpp_std: "c++17",
-
     cflags: [
         "-Wall",
         "-Werror",
@@ -83,6 +81,7 @@ cc_defaults {
         "libui",
         "libinput",
         "libinputflinger",
+        "libinputflinger_base",
         "libinputservice",
         "libschedulerservicehidl",
         "libsensorservice",
@@ -107,10 +106,12 @@ cc_defaults {
         "android.hardware.contexthub@1.0",
         "android.hardware.gnss@1.0",
         "android.hardware.gnss@1.1",
+        "android.hardware.gnss@2.0",
         "android.hardware.ir@1.0",
         "android.hardware.light@2.0",
         "android.hardware.power@1.0",
         "android.hardware.power@1.1",
+        "android.hardware.power.stats@1.0",
         "android.hardware.tetheroffload.config@1.0",
         "android.hardware.thermal@1.0",
         "android.hardware.tv.cec@1.0",
@@ -126,7 +127,6 @@ cc_defaults {
 
     static_libs: [
         "android.hardware.broadcastradio@common-utils-1x-lib",
-        "libscrypt_static",
     ],
 
     product_variables: {

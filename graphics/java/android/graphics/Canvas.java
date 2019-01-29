@@ -64,7 +64,7 @@ public class Canvas extends BaseCanvas {
     public boolean isRecordingFor(Object o) { return false; }
 
     // may be null
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 117521088)
     private Bitmap mBitmap;
 
     // optional field set by the caller
@@ -556,7 +556,7 @@ public class Canvas extends BaseCanvas {
      * @hide
      */
     public int saveUnclippedLayer(int left, int top, int right, int bottom) {
-        return nSaveLayer(mNativeCanvasWrapper, left, top, right, bottom, 0, 0);
+        return nSaveUnclippedLayer(mNativeCanvasWrapper, left, top, right, bottom);
     }
 
     /**
@@ -1395,6 +1395,8 @@ public class Canvas extends BaseCanvas {
     private static native int nSaveLayerAlpha(long nativeCanvas, float l, float t, float r, float b,
             int alpha, int layerFlags);
     @CriticalNative
+    private static native int nSaveUnclippedLayer(long nativeCanvas, int l, int t, int r, int b);
+    @CriticalNative
     private static native boolean nRestore(long canvasHandle);
     @CriticalNative
     private static native void nRestoreToCount(long canvasHandle, int saveCount);
@@ -1684,8 +1686,22 @@ public class Canvas extends BaseCanvas {
      *
      * @param color the color to draw with
      * @param mode the porter-duff mode to apply to the color
+     *
+     * @deprecated use {@link #drawColor(int, BlendMode)} instead
      */
+    @Deprecated
     public void drawColor(@ColorInt int color, @NonNull PorterDuff.Mode mode) {
+        super.drawColor(color, mode);
+    }
+
+    /**
+     * Fill the entire canvas' bitmap (restricted to the current clip) with the specified color and
+     * blendmode.
+     *
+     * @param color the color to draw with
+     * @param mode the blendmode to apply to the color
+     */
+    public void drawColor(@ColorInt int color, @NonNull BlendMode mode) {
         super.drawColor(color, mode);
     }
 

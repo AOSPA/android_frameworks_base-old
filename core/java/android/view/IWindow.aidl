@@ -24,6 +24,8 @@ import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.DisplayCutout;
+import android.view.InsetsState;
+import android.view.InsetsSourceControl;
 
 import com.android.internal.os.IResultReceiver;
 import android.util.MergedConfiguration;
@@ -53,46 +55,34 @@ oneway interface IWindow {
             in MergedConfiguration newMergedConfiguration, in Rect backDropFrame,
             boolean forceLayout, boolean alwaysConsumeNavBar, int displayId,
             in DisplayCutout.ParcelableWrapper displayCutout);
+
+    /**
+     * Called when the window insets configuration has changed.
+     */
+    void insetsChanged(in InsetsState insetsState);
+
+    /**
+     * Called when this window retrieved control over a specified set of inset sources.
+     */
+    void insetsControlChanged(in InsetsState insetsState, in InsetsSourceControl[] activeControls);
+
     void moved(int newX, int newY);
     void dispatchAppVisibility(boolean visible);
     void dispatchGetNewSurface();
 
     /**
-     * Tell the window that it is either gaining or losing focus.
-     *
-     * @param hasFocus       {@code true} if window has focus, {@code false} otherwise.
-     * @param inTouchMode    {@code true} if screen is in touch mode, {@code false} otherwise.
-     * @param reportToClient {@code true} when need to report to child view with
-     *                       {@link View#onWindowFocusChanged(boolean)}, {@code false} otherwise.
-     * <p>
-     * Note: In the previous design, there is only one window focus state tracked by
-     * WindowManagerService.
-     * For multi-display, the window focus state is tracked by each display independently.
-     * <p>
-     * It will introduce a problem if the window was already focused on one display and then
-     * switched to another display, since the window focus state on each display is independent,
-     * there is no global window focus state in WindowManagerService, so the window focus state of
-     * the former display remains unchanged.
-     * <p>
-     * When switched back to former display, some flows that rely on the global window focus state
-     * in view root will be missed due to the window focus state remaining unchanged.
-     * (i.e: Showing single IME window when switching between displays.)
-     * <p>
-     * To solve the problem, WindowManagerService tracks the top focused display change and then
-     * callbacks to the client via this method to make sure that the client side will request the
-     * IME on the top focused display, and then set {@param reportToClient} as {@code false} to
-     * ignore reporting to the application, since its focus remains unchanged on its display.
-     *
+     * Tell the window that it is either gaining or losing focus.  Keep it up
+     * to date on the current state showing navigational focus (touch mode) too.
      */
-    void windowFocusChanged(boolean hasFocus, boolean inTouchMode, boolean reportToClient);
-    
+    void windowFocusChanged(boolean hasFocus, boolean inTouchMode);
+
     void closeSystemDialogs(String reason);
-    
+
     /**
      * Called for wallpaper windows when their offsets change.
      */
     void dispatchWallpaperOffsets(float x, float y, float xStep, float yStep, boolean sync);
-    
+
     void dispatchWallpaperCommand(String action, int x, int y,
             int z, in Bundle extras, boolean sync);
 

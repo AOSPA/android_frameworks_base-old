@@ -145,6 +145,7 @@ public abstract class PackageManager {
             MATCH_FACTORY_ONLY,
             MATCH_DEBUG_TRIAGED_MISSING,
             MATCH_INSTANT,
+            MATCH_APEX,
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
@@ -216,6 +217,12 @@ public abstract class PackageManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ResolveInfoFlags {}
+
+    /** @hide */
+    @IntDef(flag = true, prefix = { "GET_", "MATCH_" }, value = {
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ModuleInfoFlags {}
 
     /** @hide */
     @IntDef(flag = true, prefix = { "GET_", "MATCH_" }, value = {
@@ -540,6 +547,17 @@ public abstract class PackageManager {
     public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
+     * {@link PackageInfo} flag: include APEX packages that are currently
+     * installed. In APEX terminology, this corresponds to packages that are
+     * currently active, i.e. mounted and available to other processes of the OS.
+     * In particular, this flag alone will not match APEX files that are staged
+     * for activation at next reboot.
+     * TODO(b/119767311): include uninstalled/inactive APEX if
+     *                    MATCH_UNINSTALLED_PACKAGES is set.
+     */
+    public static final int MATCH_APEX = 0x40000000;
+
+    /**
      * Flag for {@link #addCrossProfileIntentFilter}: if this flag is set: when
      * resolving an intent that matches the {@code CrossProfileIntentFilter},
      * the current profile will be skipped. Only activities in the target user
@@ -688,10 +706,8 @@ public abstract class PackageManager {
 
     /** @hide */
     @IntDef(flag = true, prefix = { "INSTALL_" }, value = {
-            INSTALL_FORWARD_LOCK,
             INSTALL_REPLACE_EXISTING,
             INSTALL_ALLOW_TEST,
-            INSTALL_EXTERNAL,
             INSTALL_INTERNAL,
             INSTALL_FROM_ADB,
             INSTALL_ALL_USERS,
@@ -704,20 +720,12 @@ public abstract class PackageManager {
             INSTALL_FORCE_SDK,
             INSTALL_FULL_APP,
             INSTALL_ALLOCATE_AGGRESSIVE,
+            INSTALL_VIRTUAL_PRELOAD,
+            INSTALL_APEX,
+            INSTALL_ENABLE_ROLLBACK,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallFlags {}
-
-    /**
-     * Flag parameter for {@link #installPackage} to indicate that this package
-     * should be installed as forward locked, i.e. only the app itself should
-     * have access to its code and non-resource assets.
-     *
-     * @deprecated new installs into ASEC containers are no longer supported.
-     * @hide
-     */
-    @Deprecated
-    public static final int INSTALL_FORWARD_LOCK = 0x00000001;
 
     /**
      * Flag parameter for {@link #installPackage} to indicate that you want to
@@ -735,17 +743,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_ALLOW_TEST = 0x00000004;
-
-    /**
-     * Flag parameter for {@link #installPackage} to indicate that this package
-     * must be installed to an ASEC on a {@link VolumeInfo#TYPE_PUBLIC}.
-     *
-     * @deprecated new installs into ASEC containers are no longer supported;
-     *             use adoptable storage instead.
-     * @hide
-     */
-    @Deprecated
-    public static final int INSTALL_EXTERNAL = 0x00000008;
 
     /**
      * Flag parameter for {@link #installPackage} to indicate that this package
@@ -862,6 +859,14 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_APEX = 0x00020000;
+
+    /**
+     * Flag parameter for {@link #installPackage} to indicate that rollback
+     * should be enabled for this install.
+     *
+     * @hide
+     */
+    public static final int INSTALL_ENABLE_ROLLBACK = 0x00040000;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "DONT_KILL_APP" }, value = {
@@ -1363,6 +1368,14 @@ public abstract class PackageManager {
      */
     public static final int INSTALL_FAILED_BAD_DEX_METADATA = -117;
 
+    /**
+     * Installation parse return code: this is passed in the
+     * {@link PackageInstaller#EXTRA_LEGACY_STATUS} if there is any signature problem.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_BAD_SIGNATURE = -118;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
             DELETE_KEEP_DATA,
@@ -1409,6 +1422,16 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int DELETE_DONT_KILL_APP = 0x00000008;
+
+    /**
+     * Flag parameter for {@link #deletePackage} to indicate that any
+     * contributed media should also be deleted during this uninstall. The
+     * meaning of "contributed" means it won't automatically be deleted when the
+     * app is uninstalled.
+     *
+     * @hide
+     */
+    public static final int DELETE_CONTRIBUTED_MEDIA = 0x00000010;
 
     /**
      * Flag parameter for {@link #deletePackage} to indicate that package deletion
@@ -1506,14 +1529,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int MOVE_FAILED_SYSTEM_PACKAGE = -3;
-
-    /**
-     * Error code that is passed to the {@link IPackageMoveObserver} if the
-     * specified package cannot be moved since its forward locked.
-     *
-     * @hide
-     */
-    public static final int MOVE_FAILED_FORWARD_LOCKED = -4;
 
     /**
      * Error code that is passed to the {@link IPackageMoveObserver} if the
@@ -1924,6 +1939,30 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device supports uicc-
+     * based NFC card emulation.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_NFC_OFF_HOST_CARD_EMULATION_UICC =
+                                                                       "android.hardware.nfc.uicc";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device supports eSE-
+     * based NFC card emulation.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_NFC_OFF_HOST_CARD_EMULATION_ESE = "android.hardware.nfc.ese";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The Beam API is enabled on the device.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_NFC_BEAM = "android.sofware.nfc.beam";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports any
      * one of the {@link #FEATURE_NFC}, {@link #FEATURE_NFC_HOST_CARD_EMULATION},
      * or {@link #FEATURE_NFC_HOST_CARD_EMULATION_NFCF} features.
@@ -2292,21 +2331,28 @@ public abstract class PackageManager {
      * {@link #hasSystemFeature}: The device has biometric hardware to detect a fingerprint.
      */
     @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_FINGERPRINT = "android.hardware.fingerprint";
+    public static final String FEATURE_FINGERPRINT_PRE_29 = "android.hardware.fingerprint";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device has biometric hardware to detect a fingerprint.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_FINGERPRINT = "android.hardware.biometrics.fingerprint";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device has biometric hardware to perform face authentication.
      */
     @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_FACE = "android.hardware.face";
+    public static final String FEATURE_FACE = "android.hardware.biometrics.face";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device has biometric hardware to perform iris authentication.
      */
     @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_IRIS = "android.hardware.iris";
+    public static final String FEATURE_IRIS = "android.hardware.biometrics.iris";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
@@ -2705,6 +2751,16 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_DEVICE_ID_ATTESTATION =
             "android.software.device_id_attestation";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
+     * the requisite kernel support for multinetworking-capable IPsec tunnels.
+     *
+     * <p>This feature implies that the device supports XFRM Interfaces (CONFIG_XFRM_INTERFACE), or
+     * VTIs with kernel patches allowing updates of output/set mark via UPDSA.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_IPSEC_TUNNELS = "android.software.ipsec_tunnels";
 
     /**
      * Extra field name for the URI to a verification file. Passed to a package
@@ -3377,6 +3433,33 @@ public abstract class PackageManager {
             @ApplicationInfoFlags int flags, @UserIdInt int userId) throws NameNotFoundException;
 
     /**
+     * Retrieve all of the information we know about a particular
+     * package/application, for a specific user.
+     *
+     * @param packageName The full name (i.e. com.google.apps.contacts) of an
+     *            application.
+     * @param flags Additional option flags to modify the data returned.
+     * @return An {@link ApplicationInfo} containing information about the
+     *         package. If flag {@code MATCH_UNINSTALLED_PACKAGES} is set and if
+     *         the package is not found in the list of installed applications,
+     *         the application information is retrieved from the list of
+     *         uninstalled applications (which includes installed applications
+     *         as well as applications with data directory i.e. applications
+     *         which had been deleted with {@code DONT_DELETE_DATA} flag set).
+     * @throws NameNotFoundException if a package with the given name cannot be
+     *             found on the system.
+     * @hide
+     */
+    @NonNull
+    @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
+    @SystemApi
+    public ApplicationInfo getApplicationInfoAsUser(@NonNull String packageName,
+            @ApplicationInfoFlags int flags, @NonNull UserHandle user)
+            throws NameNotFoundException {
+        return getApplicationInfoAsUser(packageName, flags, user.getIdentifier());
+    }
+
+    /**
      * Retrieve all of the information we know about a particular activity
      * class.
      *
@@ -3438,6 +3521,35 @@ public abstract class PackageManager {
      */
     public abstract ProviderInfo getProviderInfo(ComponentName component,
             @ComponentInfoFlags int flags) throws NameNotFoundException;
+
+    /**
+     * Retrieve information for a particular module.
+     *
+     * @param packageName The name of the module.
+     * @param flags Additional option flags to modify the data returned.
+     * @return A {@link ModuleInfo} object containing information about the
+     *         module.
+     * @throws NameNotFoundException if a module with the given name cannot be
+     *             found on the system.
+     */
+    public ModuleInfo getModuleInfo(String packageName, @ModuleInfoFlags int flags)
+            throws NameNotFoundException {
+        throw new UnsupportedOperationException(
+                "getModuleInfo not implemented in subclass");
+    }
+
+    /**
+     * Return a List of all modules that are installed.
+     *
+     * @param flags Additional option flags to modify the data returned.
+     * @return A {@link List} of {@link ModuleInfo} objects, one for each installed
+     *         module, containing information about the module. In the unlikely case
+     *         there are no installed modules, an empty list is returned.
+     */
+    public @NonNull List<ModuleInfo> getInstalledModules(@ModuleInfoFlags int flags) {
+        throw new UnsupportedOperationException(
+                "getInstalledModules not implemented in subclass");
+    }
 
     /**
      * Return a List of all packages that are installed for the current user.
@@ -4203,6 +4315,32 @@ public abstract class PackageManager {
             @ResolveInfoFlags int flags, @UserIdInt int userId);
 
     /**
+     * Retrieve all activities that can be performed for the given intent, for a
+     * specific user.
+     *
+     * @param intent The desired intent as per resolveActivity().
+     * @param flags Additional option flags to modify the data returned. The
+     *            most important is {@link #MATCH_DEFAULT_ONLY}, to limit the
+     *            resolution to only those activities that support the
+     *            {@link android.content.Intent#CATEGORY_DEFAULT}. Or, set
+     *            {@link #MATCH_ALL} to prevent any filtering of the results.
+     * @param user The user being queried.
+     * @return Returns a List of ResolveInfo objects containing one entry for
+     *         each matching activity, ordered from best to worst. In other
+     *         words, the first item is what would be returned by
+     *         {@link #resolveActivity}. If there are no matching activities, an
+     *         empty list is returned.
+     * @hide
+     */
+    @NonNull
+    @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
+    @SystemApi
+    public List<ResolveInfo> queryIntentActivitiesAsUser(@NonNull Intent intent,
+            @ResolveInfoFlags int flags, @NonNull UserHandle user) {
+        return queryIntentActivitiesAsUser(intent, flags, user.getIdentifier());
+    }
+
+    /**
      * Retrieve a set of activities that should be presented to the user as
      * similar options. This is like {@link #queryIntentActivities}, except it
      * also allows you to supply a list of more explicit Intents that you would
@@ -4334,6 +4472,27 @@ public abstract class PackageManager {
             @ResolveInfoFlags int flags, @UserIdInt int userId);
 
     /**
+     * Retrieve all services that can match the given intent for a given user.
+     *
+     * @param intent The desired intent as per resolveService().
+     * @param flags Additional option flags to modify the data returned.
+     * @param user The user being queried.
+     * @return Returns a List of ResolveInfo objects containing one entry for
+     *         each matching service, ordered from best to worst. In other
+     *         words, the first item is what would be returned by
+     *         {@link #resolveService}. If there are no matching services, an
+     *         empty list or null is returned.
+     * @hide
+     */
+    @NonNull
+    @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
+    @SystemApi
+    public List<ResolveInfo> queryIntentServicesAsUser(@NonNull Intent intent,
+            @ResolveInfoFlags int flags, @NonNull UserHandle user) {
+        return queryIntentServicesAsUser(intent, flags, user.getIdentifier());
+    }
+
+    /**
      * Retrieve all providers that can match the given intent.
      *
      * @param intent An intent containing all of the desired specification
@@ -4348,6 +4507,26 @@ public abstract class PackageManager {
     @UnsupportedAppUsage
     public abstract List<ResolveInfo> queryIntentContentProvidersAsUser(
             Intent intent, @ResolveInfoFlags int flags, @UserIdInt int userId);
+
+    /**
+     * Retrieve all providers that can match the given intent.
+     *
+     * @param intent An intent containing all of the desired specification
+     *            (action, data, type, category, and/or component).
+     * @param flags Additional option flags to modify the data returned.
+     * @param user The user being queried.
+     * @return Returns a List of ResolveInfo objects containing one entry for
+     *         each matching provider, ordered from best to worst. If there are
+     *         no matching services, an empty list or null is returned.
+     * @hide
+     */
+    @NonNull
+    @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
+    @SystemApi
+    public List<ResolveInfo> queryIntentContentProvidersAsUser(@NonNull Intent intent,
+            @ResolveInfoFlags int flags, @NonNull UserHandle user) {
+        return queryIntentContentProvidersAsUser(intent, flags, user.getIdentifier());
+    }
 
     /**
      * Retrieve all providers that can match the given intent.
@@ -5392,6 +5571,10 @@ public abstract class PackageManager {
     public abstract void removePackageFromPreferred(String packageName);
 
     /**
+     * @deprecated This function no longer does anything; it was an old
+     * approach to managing preferred activities, which has been superseded
+     * by (and conflicts with) the modern activity-based preferences.
+     *
      * Retrieve the list of all currently configured preferred packages. The
      * first package on the list is the most preferred, the last is the least
      * preferred.
@@ -5400,6 +5583,7 @@ public abstract class PackageManager {
      * @return A List of PackageInfo objects, one for each preferred
      *         application, in order of preference.
      */
+    @Deprecated
     public abstract List<PackageInfo> getPreferredPackages(@PackageInfoFlags int flags);
 
     /**
@@ -5426,11 +5610,16 @@ public abstract class PackageManager {
             ComponentName[] set, ComponentName activity);
 
     /**
+     * @deprecated This is a protected API that should not have been available
+     * to third party applications.  It is the platform's responsibility for
+     * assigning preferred activities and this cannot be directly modified.
+     *
      * Same as {@link #addPreferredActivity(IntentFilter, int,
             ComponentName[], ComponentName)}, but with a specific userId to apply the preference
             to.
      * @hide
      */
+    @Deprecated
     @UnsupportedAppUsage
     public void addPreferredActivityAsUser(IntentFilter filter, int match,
             ComponentName[] set, ComponentName activity, @UserIdInt int userId) {
@@ -5464,6 +5653,10 @@ public abstract class PackageManager {
             ComponentName[] set, ComponentName activity);
 
     /**
+     * @deprecated This is a protected API that should not have been available
+     * to third party applications.  It is the platform's responsibility for
+     * assigning preferred activities and this cannot be directly modified.
+     *
      * Replaces an existing preferred activity mapping to the system, and if that were not present
      * adds a new preferred activity.  This will be used to automatically select the given activity
      * component when {@link Context#startActivity(Intent) Context.startActivity()} finds multiple
@@ -5479,6 +5672,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @Deprecated
     @SystemApi
     public void replacePreferredActivity(@NonNull IntentFilter filter, int match,
             @NonNull List<ComponentName> set, @NonNull ComponentName activity) {
@@ -5496,6 +5690,10 @@ public abstract class PackageManager {
     }
 
     /**
+     * @deprecated This function no longer does anything; it was an old
+     * approach to managing preferred activities, which has been superseded
+     * by (and conflicts with) the modern activity-based preferences.
+     *
      * Remove all preferred activity mappings, previously added with
      * {@link #addPreferredActivity}, from the
      * system whose activities are implemented in the given package name.
@@ -5504,9 +5702,14 @@ public abstract class PackageManager {
      * @param packageName The name of the package whose preferred activity
      * mappings are to be removed.
      */
+    @Deprecated
     public abstract void clearPackagePreferredActivities(String packageName);
 
     /**
+     * @deprecated This function no longer does anything; it was an old
+     * approach to managing preferred activities, which has been superseded
+     * by (and conflicts with) the modern activity-based preferences.
+     *
      * Retrieve all preferred activities, previously added with
      * {@link #addPreferredActivity}, that are
      * currently registered with the system.
@@ -5523,6 +5726,7 @@ public abstract class PackageManager {
      * (the number of distinct IntentFilter records, not the number of unique
      * activity components) that were found.
      */
+    @Deprecated
     public abstract int getPreferredActivities(@NonNull List<IntentFilter> outFilters,
             @NonNull List<ComponentName> outActivities, String packageName);
 
@@ -5797,27 +6001,28 @@ public abstract class PackageManager {
     }
 
     /**
-     * Returns whether or not a given package can be suspended via a call to {@link
+     * Returns any packages in a given set of packages that cannot be suspended via a call to {@link
      * #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle,
      * SuspendDialogInfo) setPackagesSuspended}. The platform prevents suspending certain critical
      * packages to keep the device in a functioning state, e.g. the default dialer.
      * Apps need to hold {@link Manifest.permission#SUSPEND_APPS SUSPEND_APPS} to call this api.
      *
      * <p>
-     * Note that this set of critical packages can change with time, so <em>a value of {@code true}
-     * returned by this api does not guarantee that a following call to {@link
-     * #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle,
-     * SuspendDialogInfo) setPackagesSuspended} for the same package will succeed</em>, especially
-     * if considerable time elapsed between the two calls.
+     * Note that this set of critical packages can change with time, so even though a package name
+     * was not returned by this call, it does not guarantee that a subsequent call to
+     * {@link #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle,
+     * SuspendDialogInfo) setPackagesSuspended} for that package will succeed, especially if
+     * significant time elapsed between the two calls.
      *
-     * @param packageName The package to check.
-     * @return {@code true} if the given package can be suspended, {@code false} otherwise.
+     * @param packageNames The packages to check.
+     * @return A list of packages that can not be currently suspended by the system.
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.SUSPEND_APPS)
-    public boolean canSuspendPackage(@NonNull String packageName) {
-        throw new UnsupportedOperationException("canSuspendPackage not implemented");
+    @NonNull
+    public String[] getUnsuspendablePackages(@NonNull String[] packageNames) {
+        throw new UnsupportedOperationException("canSuspendPackages not implemented");
     }
 
     /**
@@ -6070,6 +6275,7 @@ public abstract class PackageManager {
             case INSTALL_FAILED_ABORTED: return "INSTALL_FAILED_ABORTED";
             case INSTALL_FAILED_BAD_DEX_METADATA: return "INSTALL_FAILED_BAD_DEX_METADATA";
             case INSTALL_FAILED_MISSING_SPLIT: return "INSTALL_FAILED_MISSING_SPLIT";
+            case INSTALL_FAILED_BAD_SIGNATURE: return "INSTALL_FAILED_BAD_SIGNATURE";
             default: return Integer.toString(status);
         }
     }
@@ -6115,6 +6321,7 @@ public abstract class PackageManager {
             case INSTALL_PARSE_FAILED_MANIFEST_MALFORMED: return PackageInstaller.STATUS_FAILURE_INVALID;
             case INSTALL_PARSE_FAILED_MANIFEST_EMPTY: return PackageInstaller.STATUS_FAILURE_INVALID;
             case INSTALL_FAILED_BAD_DEX_METADATA: return PackageInstaller.STATUS_FAILURE_INVALID;
+            case INSTALL_FAILED_BAD_SIGNATURE: return PackageInstaller.STATUS_FAILURE_INVALID;
             case INSTALL_FAILED_INTERNAL_ERROR: return PackageInstaller.STATUS_FAILURE;
             case INSTALL_FAILED_USER_RESTRICTED: return PackageInstaller.STATUS_FAILURE_INCOMPATIBLE;
             case INSTALL_FAILED_DUPLICATE_PERMISSION: return PackageInstaller.STATUS_FAILURE_CONFLICT;
@@ -6419,6 +6626,17 @@ public abstract class PackageManager {
     }
 
     /**
+     * @return the wellbeing app package name, or null if it's not defined by the OEM.
+     *
+     * @hide
+     */
+    @TestApi
+    public String getWellbeingPackageName() {
+        throw new UnsupportedOperationException(
+                "getWellbeingPackageName not implemented in subclass");
+    }
+
+    /**
      * @return whether a given package's state is protected, e.g. package cannot be disabled,
      *         suspended, hidden or force stopped.
      *
@@ -6427,6 +6645,20 @@ public abstract class PackageManager {
     public boolean isPackageStateProtected(String packageName, int userId) {
         throw new UnsupportedOperationException(
             "isPackageStateProtected not implemented in subclass");
+    }
+
+    /**
+     * Notify to the rest of the system that a new device configuration has
+     * been prepared and that it is time to refresh caches.
+     *
+     * @see android.content.Intent#ACTION_DEVICE_CUSTOMIZATION_READY
+     *
+     * @hide
+     */
+    @SystemApi
+    public void sendDeviceCustomizationReadyBroadcast() {
+        throw new UnsupportedOperationException(
+            "sendDeviceCustomizationReadyBroadcast not implemented in subclass");
     }
 
 }

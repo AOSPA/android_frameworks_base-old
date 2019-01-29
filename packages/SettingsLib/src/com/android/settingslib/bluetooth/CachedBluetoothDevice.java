@@ -55,32 +55,24 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private final Context mContext;
     private final BluetoothAdapter mLocalAdapter;
     private final LocalBluetoothProfileManager mProfileManager;
+    private final Object mProfileLock = new Object();
     BluetoothDevice mDevice;
     private long mHiSyncId;
     // Need this since there is no method for getting RSSI
     short mRssi;
     // mProfiles and mRemovedProfiles does not do swap() between main and sub device. It is
     // because current sub device is only for HearingAid and its profile is the same.
-    private final List<LocalBluetoothProfile> mProfiles =
-            Collections.synchronizedList(new ArrayList<>());
+    private final List<LocalBluetoothProfile> mProfiles = new ArrayList<>();
 
     // List of profiles that were previously in mProfiles, but have been removed
-    private final List<LocalBluetoothProfile> mRemovedProfiles =
-            Collections.synchronizedList(new ArrayList<>());
+    private final List<LocalBluetoothProfile> mRemovedProfiles = new ArrayList<>();
 
     // Device supports PANU but not NAP: remove PanProfile after device disconnects from NAP
     private boolean mLocalNapRoleConnected;
 
     boolean mJustDiscovered;
 
-    private int mMessageRejectionCount;
-
-    private final Collection<Callback> mCallbacks = new ArrayList<Callback>();
-
-    // How many times user should reject the connection to make the choice persist.
-    private final static int MESSAGE_REJECTION_COUNT_LIMIT_TO_PERSIST = 2;
-
-    private final static String MESSAGE_REJECTION_COUNT_PREFS_NAME = "bluetooth_message_reject";
+    private final Collection<Callback> mCallbacks = new ArrayList<>();
 
     /**
      * Last time a bt profile auto-connect was attempted.
@@ -141,8 +133,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     void onProfileStateChanged(LocalBluetoothProfile profile, int newProfileState) {
         if (BluetoothUtils.D) {
-            Log.d(TAG, "onProfileStateChanged: profile " + profile +
-                    " newProfileState " + newProfileState);
+            Log.d(TAG, "onProfileStateChanged: profile " + profile + ", device=" + mDevice
+                    + ", newProfileState " + newProfileState);
         }
         if (mLocalAdapter.getState() == BluetoothAdapter.STATE_TURNING_OFF)
         {
@@ -151,36 +143,42 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             }
             return;
         }
-        if (newProfileState == BluetoothProfile.STATE_CONNECTED) {
-            if (profile instanceof MapProfile) {
-                profile.setPreferred(mDevice, true);
-            }
-            if (!mProfiles.contains(profile)) {
-                mRemovedProfiles.remove(profile);
-                mProfiles.add(profile);
-                if (profile instanceof PanProfile &&
-                        ((PanProfile) profile).isLocalRoleNap(mDevice)) {
-                    // Device doesn't support NAP, so remove PanProfile on disconnect
-                    mLocalNapRoleConnected = true;
+
+        synchronized (mProfileLock) {
+            if (newProfileState == BluetoothProfile.STATE_CONNECTED) {
+                if (profile instanceof MapProfile) {
+                    profile.setPreferred(mDevice, true);
                 }
+                if (!mProfiles.contains(profile)) {
+                    mRemovedProfiles.remove(profile);
+                    mProfiles.add(profile);
+                    if (profile instanceof PanProfile
+                            && ((PanProfile) profile).isLocalRoleNap(mDevice)) {
+                        // Device doesn't support NAP, so remove PanProfile on disconnect
+                        mLocalNapRoleConnected = true;
+                    }
+                }
+            } else if (profile instanceof MapProfile
+                    && newProfileState == BluetoothProfile.STATE_DISCONNECTED) {
+                profile.setPreferred(mDevice, false);
+            } else if (mLocalNapRoleConnected && profile instanceof PanProfile
+                    && ((PanProfile) profile).isLocalRoleNap(mDevice)
+                    && newProfileState == BluetoothProfile.STATE_DISCONNECTED) {
+                Log.d(TAG, "Removing PanProfile from device after NAP disconnect");
+                mProfiles.remove(profile);
+                mRemovedProfiles.add(profile);
+                mLocalNapRoleConnected = false;
             }
-        } else if (profile instanceof MapProfile &&
-                newProfileState == BluetoothProfile.STATE_DISCONNECTED) {
-            profile.setPreferred(mDevice, false);
-        } else if (mLocalNapRoleConnected && profile instanceof PanProfile &&
-                ((PanProfile) profile).isLocalRoleNap(mDevice) &&
-                newProfileState == BluetoothProfile.STATE_DISCONNECTED) {
-            Log.d(TAG, "Removing PanProfile from device after NAP disconnect");
-            mProfiles.remove(profile);
-            mRemovedProfiles.add(profile);
-            mLocalNapRoleConnected = false;
         }
+
         fetchActiveDevices();
     }
 
     public void disconnect() {
-        for (LocalBluetoothProfile profile : mProfiles) {
-            disconnect(profile);
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : mProfiles) {
+                disconnect(profile);
+            }
         }
         // Disconnect  PBAP server in case its connected
         // This is to ensure all the profiles are disconnected as some CK/Hs do not
@@ -220,6 +218,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mHiSyncId = id;
     }
 
+    public boolean isHearingAidDevice() {
+        return mHiSyncId != BluetoothHearingAid.HI_SYNC_ID_INVALID;
+    }
+
     void onBondingDockConnect() {
         // Attempt to connect if UUIDs are available. Otherwise,
         // we will connect when the ACTION_UUID intent arrives.
@@ -227,32 +229,35 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     private void connectWithoutResettingTimer(boolean connectAllProfiles) {
-        // Try to initialize the profiles if they were not.
-        if (mProfiles.isEmpty()) {
-            // if mProfiles is empty, then do not invoke updateProfiles. This causes a race
-            // condition with carkits during pairing, wherein RemoteDevice.UUIDs have been updated
-            // from bluetooth stack but ACTION.uuid is not sent yet.
-            // Eventually ACTION.uuid will be received which shall trigger the connection of the
-            // various profiles
-            // If UUIDs are not available yet, connect will be happen
-            // upon arrival of the ACTION_UUID intent.
-            Log.d(TAG, "No profiles. Maybe we will connect later");
-            return;
-        }
+        synchronized (mProfileLock) {
+            // Try to initialize the profiles if they were not.
+            if (mProfiles.isEmpty()) {
+                // if mProfiles is empty, then do not invoke updateProfiles. This causes a race
+                // condition with carkits during pairing, wherein RemoteDevice.UUIDs have been
+                // updated from bluetooth stack but ACTION.uuid is not sent yet.
+                // Eventually ACTION.uuid will be received which shall trigger the connection of the
+                // various profiles
+                // If UUIDs are not available yet, connect will be happen
+                // upon arrival of the ACTION_UUID intent.
+                Log.d(TAG, "No profiles. Maybe we will connect later");
+                return;
+            }
 
-        int preferredProfiles = 0;
-        for (LocalBluetoothProfile profile : mProfiles) {
-            if (connectAllProfiles ? profile.accessProfileEnabled() : profile.isAutoConnectable()) {
-                if (profile.isPreferred(mDevice)) {
-                    ++preferredProfiles;
-                    connectInt(profile);
+            int preferredProfiles = 0;
+            for (LocalBluetoothProfile profile : mProfiles) {
+                if (connectAllProfiles ? profile.accessProfileEnabled()
+                        : profile.isAutoConnectable()) {
+                    if (profile.isPreferred(mDevice)) {
+                        ++preferredProfiles;
+                        connectInt(profile);
+                    }
                 }
             }
-        }
-        if (BluetoothUtils.D) Log.d(TAG, "Preferred profiles = " + preferredProfiles);
+            if (BluetoothUtils.D) Log.d(TAG, "Preferred profiles = " + preferredProfiles);
 
-        if (preferredProfiles == 0) {
-            connectAutoConnectableProfiles();
+            if (preferredProfiles == 0) {
+                connectAutoConnectableProfiles();
+            }
         }
     }
 
@@ -261,10 +266,12 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             return;
         }
 
-        for (LocalBluetoothProfile profile : mProfiles) {
-            if (profile.isAutoConnectable()) {
-                profile.setPreferred(mDevice, true);
-                connectInt(profile);
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : mProfiles) {
+                if (profile.isAutoConnectable()) {
+                    profile.setPreferred(mDevice, true);
+                    connectInt(profile);
+                }
             }
         }
     }
@@ -362,7 +369,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         fetchActiveDevices();
         migratePhonebookPermissionChoice();
         migrateMessagePermissionChoice();
-        fetchMessageRejectionCount();
 
         dispatchAttributesChanged();
     }
@@ -543,14 +549,16 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
      * @return Whether it is connected.
      */
     public boolean isConnected() {
-        for (LocalBluetoothProfile profile : mProfiles) {
-            int status = getProfileConnectionState(profile);
-            if (status == BluetoothProfile.STATE_CONNECTED) {
-                return true;
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : mProfiles) {
+                int status = getProfileConnectionState(profile);
+                if (status == BluetoothProfile.STATE_CONNECTED) {
+                    return true;
+                }
             }
-        }
 
-        return false;
+            return false;
+        }
     }
 
     public boolean isConnectedProfile(LocalBluetoothProfile profile) {
@@ -560,14 +568,16 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     public boolean isBusy() {
-        for (LocalBluetoothProfile profile : mProfiles) {
-            int status = getProfileConnectionState(profile);
-            if (status == BluetoothProfile.STATE_CONNECTING
-                    || status == BluetoothProfile.STATE_DISCONNECTING) {
-                return true;
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : mProfiles) {
+                int status = getProfileConnectionState(profile);
+                if (status == BluetoothProfile.STATE_CONNECTING
+                        || status == BluetoothProfile.STATE_DISCONNECTING) {
+                    return true;
+                }
             }
+            return getBondState() == BluetoothDevice.BOND_BONDING;
         }
-        return getBondState() == BluetoothDevice.BOND_BONDING;
     }
 
     private boolean updateProfiles() {
@@ -582,11 +592,13 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
          */
         processPhonebookAccess();
 
-        mProfileManager.updateProfiles(uuids, localUuids, mProfiles, mRemovedProfiles,
-                                       mLocalNapRoleConnected, mDevice);
+        synchronized (mProfileLock) {
+            mProfileManager.updateProfiles(uuids, localUuids, mProfiles, mRemovedProfiles,
+                    mLocalNapRoleConnected, mDevice);
+        }
 
         if (BluetoothUtils.D) {
-            Log.e(TAG, "updating profiles for " + mDevice.getAliasName());
+            Log.e(TAG, "updating profiles for " + mDevice.getAliasName() + ", " + mDevice);
             BluetoothClass bluetoothClass = mDevice.getBluetoothClass();
 
             if (bluetoothClass != null) Log.v(TAG, "Class: " + bluetoothClass.toString());
@@ -644,12 +656,12 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     void onBondingStateChanged(int bondState) {
         if (bondState == BluetoothDevice.BOND_NONE) {
-            mProfiles.clear();
+            synchronized (mProfileLock) {
+                mProfiles.clear();
+            }
             mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
             mDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
             mDevice.setSimAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
-            mMessageRejectionCount = 0;
-            saveMessageRejectionCount();
         }
 
         refresh();
@@ -679,9 +691,11 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     public List<LocalBluetoothProfile> getConnectableProfiles() {
         List<LocalBluetoothProfile> connectableProfiles =
                 new ArrayList<LocalBluetoothProfile>();
-        for (LocalBluetoothProfile profile : mProfiles) {
-            if (profile.accessProfileEnabled()) {
-                connectableProfiles.add(profile);
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : mProfiles) {
+                if (profile.accessProfileEnabled()) {
+                    connectableProfiles.add(profile);
+                }
             }
         }
         return connectableProfiles;
@@ -806,34 +820,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         editor.commit();
     }
 
-    /**
-     * @return Whether this rejection should persist.
-     */
-    public boolean checkAndIncreaseMessageRejectionCount() {
-        if (mMessageRejectionCount < MESSAGE_REJECTION_COUNT_LIMIT_TO_PERSIST) {
-            mMessageRejectionCount++;
-            saveMessageRejectionCount();
-        }
-        return mMessageRejectionCount >= MESSAGE_REJECTION_COUNT_LIMIT_TO_PERSIST;
-    }
-
-    private void fetchMessageRejectionCount() {
-        SharedPreferences preference = mContext.getSharedPreferences(
-                MESSAGE_REJECTION_COUNT_PREFS_NAME, Context.MODE_PRIVATE);
-        mMessageRejectionCount = preference.getInt(mDevice.getAddress(), 0);
-    }
-
-    private void saveMessageRejectionCount() {
-        SharedPreferences.Editor editor = mContext.getSharedPreferences(
-                MESSAGE_REJECTION_COUNT_PREFS_NAME, Context.MODE_PRIVATE).edit();
-        if (mMessageRejectionCount == 0) {
-            editor.remove(mDevice.getAddress());
-        } else {
-            editor.putInt(mDevice.getAddress(), mMessageRejectionCount);
-        }
-        editor.commit();
-    }
-
     private void processPhonebookAccess() {
         if (mDevice.getBondState() != BluetoothDevice.BOND_BONDED) return;
 
@@ -857,10 +843,12 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     public int getMaxConnectionState() {
         int maxState = BluetoothProfile.STATE_DISCONNECTED;
-        for (LocalBluetoothProfile profile : getProfiles()) {
-            int connectionStatus = getProfileConnectionState(profile);
-            if (connectionStatus > maxState) {
-                maxState = connectionStatus;
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : getProfiles()) {
+                int connectionStatus = getProfileConnectionState(profile);
+                if (connectionStatus > maxState) {
+                    maxState = connectionStatus;
+                }
             }
         }
         return maxState;
@@ -877,32 +865,34 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         boolean hfpConnected = true;         // HFP is connected
         boolean hearingAidConnected = true;  // Hearing Aid is connected
 
-        for (LocalBluetoothProfile profile : getProfiles()) {
-            int connectionStatus = getProfileConnectionState(profile);
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : getProfiles()) {
+                int connectionStatus = getProfileConnectionState(profile);
 
-            switch (connectionStatus) {
-                case BluetoothProfile.STATE_CONNECTING:
-                case BluetoothProfile.STATE_DISCONNECTING:
-                    return mContext.getString(
-                            BluetoothUtils.getConnectionStateSummary(connectionStatus));
+                switch (connectionStatus) {
+                    case BluetoothProfile.STATE_CONNECTING:
+                    case BluetoothProfile.STATE_DISCONNECTING:
+                        return mContext.getString(
+                                BluetoothUtils.getConnectionStateSummary(connectionStatus));
 
-                case BluetoothProfile.STATE_CONNECTED:
-                    profileConnected = true;
-                    break;
+                    case BluetoothProfile.STATE_CONNECTED:
+                        profileConnected = true;
+                        break;
 
-                case BluetoothProfile.STATE_DISCONNECTED:
-                    if (profile.isProfileReady()) {
-                        if ((profile instanceof A2dpProfile) ||
-                                (profile instanceof A2dpSinkProfile)) {
-                            a2dpConnected = false;
-                        } else if ((profile instanceof HeadsetProfile) ||
-                                (profile instanceof HfpClientProfile)) {
-                            hfpConnected = false;
-                        } else if (profile instanceof HearingAidProfile) {
-                            hearingAidConnected = false;
+                    case BluetoothProfile.STATE_DISCONNECTED:
+                        if (profile.isProfileReady()) {
+                            if (profile instanceof A2dpProfile
+                                    || profile instanceof A2dpSinkProfile) {
+                                a2dpConnected = false;
+                            } else if (profile instanceof HeadsetProfile
+                                    || profile instanceof HfpClientProfile) {
+                                hfpConnected = false;
+                            } else if (profile instanceof HearingAidProfile) {
+                                hearingAidConnected = false;
+                            }
                         }
-                    }
-                    break;
+                        break;
+                }
             }
         }
 
@@ -921,39 +911,24 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         int stringRes = R.string.bluetooth_pairing;
         //when profile is connected, information would be available
         if (profileConnected) {
+            // Set default string with battery level in device connected situation.
+            if (batteryLevelPercentageString != null) {
+                stringRes = R.string.bluetooth_battery_level;
+            }
+
+            // Set active string in following device connected situation.
+            //    1. Hearing Aid device active.
+            //    2. Headset device active with in-calling state.
+            //    3. A2DP device active without in-calling state.
             if (a2dpConnected || hfpConnected || hearingAidConnected) {
-                //contain battery information
-                if (batteryLevelPercentageString != null) {
-                    //device is in phone call
-                    if (com.android.settingslib.Utils.isAudioModeOngoingCall(mContext)) {
-                        if (mIsActiveDeviceHearingAid || mIsActiveDeviceHeadset) {
-                            stringRes = R.string.bluetooth_active_battery_level;
-                        } else {
-                            stringRes = R.string.bluetooth_battery_level;
-                        }
-                    } else {//device is not in phone call(ex. idle or playing media)
-                        //need to check if A2DP and HearingAid are exclusive
-                        if (mIsActiveDeviceHearingAid || mIsActiveDeviceA2dp) {
-                            stringRes = R.string.bluetooth_active_battery_level;
-                        } else {
-                            stringRes = R.string.bluetooth_battery_level;
-                        }
-                    }
-                } else {
-                    //no battery information
-                    if (com.android.settingslib.Utils.isAudioModeOngoingCall(mContext)) {
-                        if (mIsActiveDeviceHearingAid || mIsActiveDeviceHeadset) {
-                            stringRes = R.string.bluetooth_active_no_battery_level;
-                        }
-                    } else {
-                        if (mIsActiveDeviceHearingAid || mIsActiveDeviceA2dp) {
-                            stringRes = R.string.bluetooth_active_no_battery_level;
-                        }
-                    }
-                }
-            } else {//unknown profile with battery information
-                if (batteryLevelPercentageString != null) {
-                    stringRes = R.string.bluetooth_battery_level;
+                final boolean isOnCall =
+                        com.android.settingslib.Utils.isAudioModeOngoingCall(mContext);
+                if ((mIsActiveDeviceHearingAid)
+                        || (mIsActiveDeviceHeadset && isOnCall)
+                        || (mIsActiveDeviceA2dp && !isOnCall)) {
+                    stringRes = (batteryLevelPercentageString != null)
+                            ? R.string.bluetooth_active_battery_level
+                            : R.string.bluetooth_active_no_battery_level;
                 }
             }
         }
@@ -973,32 +948,34 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         boolean hfpNotConnected = false;        // HFP is preferred but not connected
         boolean hearingAidNotConnected = false; // Hearing Aid is preferred but not connected
 
-        for (LocalBluetoothProfile profile : getProfiles()) {
-            int connectionStatus = getProfileConnectionState(profile);
+        synchronized (mProfileLock) {
+            for (LocalBluetoothProfile profile : getProfiles()) {
+                int connectionStatus = getProfileConnectionState(profile);
 
-            switch (connectionStatus) {
-                case BluetoothProfile.STATE_CONNECTING:
-                case BluetoothProfile.STATE_DISCONNECTING:
-                    return mContext.getString(
-                            BluetoothUtils.getConnectionStateSummary(connectionStatus));
+                switch (connectionStatus) {
+                    case BluetoothProfile.STATE_CONNECTING:
+                    case BluetoothProfile.STATE_DISCONNECTING:
+                        return mContext.getString(
+                                BluetoothUtils.getConnectionStateSummary(connectionStatus));
 
-                case BluetoothProfile.STATE_CONNECTED:
-                    profileConnected = true;
-                    break;
+                    case BluetoothProfile.STATE_CONNECTED:
+                        profileConnected = true;
+                        break;
 
-                case BluetoothProfile.STATE_DISCONNECTED:
-                    if (profile.isProfileReady()) {
-                        if ((profile instanceof A2dpProfile) ||
-                                (profile instanceof A2dpSinkProfile)){
-                            a2dpNotConnected = true;
-                        } else if ((profile instanceof HeadsetProfile) ||
-                                (profile instanceof HfpClientProfile)) {
-                            hfpNotConnected = true;
-                        } else if (profile instanceof  HearingAidProfile) {
-                            hearingAidNotConnected = true;
+                    case BluetoothProfile.STATE_DISCONNECTED:
+                        if (profile.isProfileReady()) {
+                            if (profile instanceof A2dpProfile
+                                    || profile instanceof A2dpSinkProfile) {
+                                a2dpNotConnected = true;
+                            } else if (profile instanceof HeadsetProfile
+                                    || profile instanceof HfpClientProfile) {
+                                hfpNotConnected = true;
+                            } else if (profile instanceof HearingAidProfile) {
+                                hearingAidNotConnected = true;
+                            }
                         }
-                    }
-                    break;
+                        break;
+                }
             }
         }
 

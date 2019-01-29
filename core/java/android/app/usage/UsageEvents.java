@@ -19,6 +19,7 @@ import android.annotation.IntDef;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -50,13 +51,27 @@ public final class UsageEvents implements Parcelable {
         public static final int NONE = 0;
 
         /**
+         * @deprecated by {@link #ACTIVITY_RESUMED}
+         */
+        @Deprecated
+        public static final int MOVE_TO_FOREGROUND = 1;
+
+        /**
          * An event type denoting that an {@link android.app.Activity} moved to the foreground.
          * This event has a package name and class name associated with it and can be retrieved
          * using {@link #getPackageName()} and {@link #getClassName()}.
          * If a package has multiple activities, this event is reported for each activity that moves
          * to foreground.
+         * This event is corresponding to {@link android.app.Activity#onResume()} of the
+         * activity's lifecycle.
          */
-        public static final int MOVE_TO_FOREGROUND = 1;
+        public static final int ACTIVITY_RESUMED = MOVE_TO_FOREGROUND;
+
+        /**
+         * @deprecated by {@link #ACTIVITY_PAUSED}
+         */
+        @Deprecated
+        public static final int MOVE_TO_BACKGROUND = 2;
 
         /**
          * An event type denoting that an {@link android.app.Activity} moved to the background.
@@ -64,19 +79,21 @@ public final class UsageEvents implements Parcelable {
          * using {@link #getPackageName()} and {@link #getClassName()}.
          * If a package has multiple activities, this event is reported for each activity that moves
          * to background.
+         * This event is corresponding to {@link android.app.Activity#onPause()} of the activity's
+         * lifecycle.
          */
-        public static final int MOVE_TO_BACKGROUND = 2;
+        public static final int ACTIVITY_PAUSED = MOVE_TO_BACKGROUND;
 
         /**
          * An event type denoting that a component was in the foreground when the stats
-         * rolled-over. This is effectively treated as a {@link #MOVE_TO_BACKGROUND}.
+         * rolled-over. This is effectively treated as a {@link #ACTIVITY_PAUSED}.
          * {@hide}
          */
         public static final int END_OF_DAY = 3;
 
         /**
          * An event type denoting that a component was in the foreground the previous day.
-         * This is effectively treated as a {@link #MOVE_TO_FOREGROUND}.
+         * This is effectively treated as a {@link #ACTIVITY_RESUMED}.
          * {@hide}
          */
         public static final int CONTINUE_PREVIOUS_DAY = 4;
@@ -207,10 +224,31 @@ public final class UsageEvents implements Parcelable {
         public static final int ROLLOVER_FOREGROUND_SERVICE = 22;
 
         /**
+         * An activity becomes invisible on the UI, corresponding to
+         * {@link android.app.Activity#onStop()} of the activity's lifecycle.
+         */
+        public static final int ACTIVITY_STOPPED = 23;
+
+        /**
+         * An activity object is destroyed, corresponding to
+         * {@link android.app.Activity#onDestroy()} of the activity's lifecycle.
+         * {@hide}
+         */
+        public static final int ACTIVITY_DESTROYED = 24;
+
+        /**
+         * The event type demoting that a flush of UsageStatsDatabase to file system. Before the
+         * flush all usage stats need to be updated to latest timestamp to make sure the most
+         * up to date stats are persisted.
+         * @hide
+         */
+        public static final int FLUSH_TO_DISK = 25;
+
+        /**
          * Keep in sync with the greatest event type value.
          * @hide
          */
-        public static final int MAX_EVENT_TYPE = 22;
+        public static final int MAX_EVENT_TYPE = 25;
 
         /** @hide */
         public static final int FLAG_IS_PACKAGE_INSTANT_APP = 1 << 0;
@@ -231,32 +269,38 @@ public final class UsageEvents implements Parcelable {
         /**
          * {@hide}
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public String mPackage;
 
         /**
          * {@hide}
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public String mClass;
+
 
         /**
          * {@hide}
          */
-        @UnsupportedAppUsage
+        public int mInstanceId;
+
+        /**
+         * {@hide}
+         */
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public long mTimeStamp;
 
         /**
          * {@hide}
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public int mEventType;
 
         /**
          * Only present for {@link #CONFIGURATION_CHANGE} event types.
          * {@hide}
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public Configuration mConfiguration;
 
         /**
@@ -311,9 +355,16 @@ public final class UsageEvents implements Parcelable {
         }
 
         /** @hide */
+        public Event(int type,  long timeStamp) {
+            mEventType = type;
+            mTimeStamp = timeStamp;
+        }
+
+        /** @hide */
         public Event(Event orig) {
             mPackage = orig.mPackage;
             mClass = orig.mClass;
+            mInstanceId = orig.mInstanceId;
             mTimeStamp = orig.mTimeStamp;
             mEventType = orig.mEventType;
             mConfiguration = orig.mConfiguration;
@@ -342,6 +393,16 @@ public final class UsageEvents implements Parcelable {
         }
 
         /**
+         *  An activity can be instantiated multiple times, this is the unique activity instance ID.
+         *  For non-activity class, instance ID is always zero.
+         *  @hide
+         */
+        @SystemApi
+        public int getInstanceId() {
+            return mInstanceId;
+        }
+
+        /**
          * The time at which this event occurred, measured in milliseconds since the epoch.
          * <p/>
          * See {@link System#currentTimeMillis()}.
@@ -352,12 +413,14 @@ public final class UsageEvents implements Parcelable {
 
         /**
          * The event type.
-         *
-         * @see #MOVE_TO_BACKGROUND
-         * @see #MOVE_TO_FOREGROUND
+         * @see #ACTIVITY_PAUSED
+         * @see #ACTIVITY_RESUMED
          * @see #CONFIGURATION_CHANGE
          * @see #USER_INTERACTION
          * @see #STANDBY_BUCKET_CHANGED
+         * @see #FOREGROUND_SERVICE_START
+         * @see #FOREGROUND_SERVICE_STOP
+         * @see #ACTIVITY_STOPPED
          */
         public int getEventType() {
             return mEventType;
@@ -439,30 +502,30 @@ public final class UsageEvents implements Parcelable {
     }
 
     // Only used when creating the resulting events. Not used for reading/unparceling.
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private List<Event> mEventsToWrite = null;
 
     // Only used for reading/unparceling events.
     @UnsupportedAppUsage
     private Parcel mParcel = null;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private final int mEventCount;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private int mIndex = 0;
 
     /*
      * In order to save space, since ComponentNames will be duplicated everywhere,
      * we use a map and index into it.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private String[] mStringPool;
 
     /**
      * Construct the iterator from a parcel.
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public UsageEvents(Parcel in) {
         byte[] bytes = in.readBlob();
         Parcel data = Parcel.obtain();
@@ -547,7 +610,7 @@ public final class UsageEvents implements Parcelable {
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private int findStringIndex(String str) {
         final int index = Arrays.binarySearch(mStringPool, str);
         if (index < 0) {
@@ -559,7 +622,7 @@ public final class UsageEvents implements Parcelable {
     /**
      * Writes a single event to the parcel. Modify this when updating {@link Event}.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private void writeEventToParcel(Event event, Parcel p, int flags) {
         final int packageIndex;
         if (event.mPackage != null) {
@@ -576,6 +639,7 @@ public final class UsageEvents implements Parcelable {
         }
         p.writeInt(packageIndex);
         p.writeInt(classIndex);
+        p.writeInt(event.mInstanceId);
         p.writeInt(event.mEventType);
         p.writeLong(event.mTimeStamp);
 
@@ -603,7 +667,7 @@ public final class UsageEvents implements Parcelable {
     /**
      * Reads a single event from the parcel. Modify this when updating {@link Event}.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private void readEventFromParcel(Parcel p, Event eventOut) {
         final int packageIndex = p.readInt();
         if (packageIndex >= 0) {
@@ -618,6 +682,7 @@ public final class UsageEvents implements Parcelable {
         } else {
             eventOut.mClass = null;
         }
+        eventOut.mInstanceId = p.readInt();
         eventOut.mEventType = p.readInt();
         eventOut.mTimeStamp = p.readLong();
 

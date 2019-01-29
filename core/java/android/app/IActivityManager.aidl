@@ -96,6 +96,7 @@ interface IActivityManager {
             String callingPackage);
     void unregisterUidObserver(in IUidObserver observer);
     boolean isUidActive(int uid, String callingPackage);
+    int getUidProcessState(int uid, in String callingPackage);
     // =============== End of transactions used on native side as well ============================
 
     // Special low-level communication with activity manager.
@@ -123,7 +124,7 @@ interface IActivityManager {
             int ignoreWindowingMode);
     void moveTaskToFront(int task, int flags, in Bundle options);
     int getTaskForActivity(in IBinder token, in boolean onlyRoot);
-    ContentProviderHolder getContentProvider(in IApplicationThread caller,
+    ContentProviderHolder getContentProvider(in IApplicationThread caller, in String callingPackage,
             in String name, int userId, boolean stable);
     void publishContentProviders(in IApplicationThread caller,
             in List<ContentProviderHolder> providers);
@@ -140,6 +141,7 @@ interface IActivityManager {
     int bindIsolatedService(in IApplicationThread caller, in IBinder token, in Intent service,
             in String resolvedType, in IServiceConnection connection, int flags,
             in String instanceName, in String callingPackage, int userId);
+    void updateServiceGroup(in IServiceConnection connection, int group, int importance);
     boolean unbindService(in IServiceConnection connection);
     void publishService(in IBinder token, in Intent intent, in IBinder service);
     void setDebugApp(in String packageName, boolean waitForDebugger, boolean persistent);
@@ -378,8 +380,6 @@ interface IActivityManager {
     void noteAlarmFinish(in IIntentSender sender, in WorkSource workSource, int sourceUid, in String tag);
     int getPackageProcessState(in String packageName, in String callingPackage);
     void updateDeviceOwner(in String packageName);
-    int getUidProcessState(int uid, in String callingPackage);
-
 
     // Start of N transactions
     // Start Binder transaction tracking for all applications.

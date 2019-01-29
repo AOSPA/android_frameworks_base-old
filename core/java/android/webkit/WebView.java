@@ -410,6 +410,9 @@ public class WebView extends AbsoluteLayout
         if (getImportantForAutofill() == IMPORTANT_FOR_AUTOFILL_AUTO) {
             setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
         }
+        if (getImportantForContentCapture() == IMPORTANT_FOR_CONTENT_CAPTURE_AUTO) {
+            setImportantForContentCapture(IMPORTANT_FOR_CONTENT_CAPTURE_YES);
+        }
 
         if (context == null) {
             throw new IllegalArgumentException("Invalid context argument");
@@ -847,7 +850,7 @@ public class WebView extends AbsoluteLayout
 
     /**
      * Asynchronously evaluates JavaScript in the context of the currently displayed page.
-     * If non-null, |resultCallback| will be invoked with any result returned from that
+     * If non-null, {@code resultCallback} will be invoked with any result returned from that
      * execution. This method must be called on the UI thread and the callback will
      * be made on the UI thread.
      * <p>
@@ -2695,8 +2698,8 @@ public class WebView extends AbsoluteLayout
     }
 
     @Override
-    public boolean onProvideContentCaptureStructure(ViewStructure structure, int flags) {
-        return mProvider.getViewDelegate().onProvideContentCaptureStructure(structure, flags);
+    public void onProvideContentCaptureStructure(ViewStructure structure, int flags) {
+        mProvider.getViewDelegate().onProvideContentCaptureStructure(structure, flags);
     }
 
     @Override

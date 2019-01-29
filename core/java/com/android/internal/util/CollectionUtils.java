@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -190,6 +191,13 @@ public class CollectionUtils {
     }
 
     /**
+     * Returns the size of the given map, or 0 if null
+     */
+    public static int size(@Nullable Map<?, ?> cur) {
+        return cur != null ? cur.size() : 0;
+    }
+
+    /**
      * Returns whether the given collection {@link Collection#isEmpty is empty} or {@code null}
      */
     public static boolean isEmpty(@Nullable Collection<?> cur) {
@@ -317,5 +325,9 @@ public class CollectionUtils {
         } catch (Exception e) {
             throw ExceptionUtils.propagate(e);
         }
+    }
+
+    public static @NonNull <T> List<T> defeatNullable(@Nullable List<T> val) {
+        return (val != null) ? val : Collections.emptyList();
     }
 }

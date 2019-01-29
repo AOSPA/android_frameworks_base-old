@@ -36,6 +36,7 @@
 
 #include "idmap2/CommandLineOptions.h"
 #include "idmap2/Idmap.h"
+#include "idmap2/Result.h"
 #include "idmap2/Xml.h"
 #include "idmap2/ZipFile.h"
 
@@ -48,46 +49,47 @@ using android::kInvalidCookie;
 using android::Res_value;
 using android::ResStringPool;
 using android::ResTable_config;
-using android::String16;
-using android::String8;
 using android::StringPiece16;
 using android::base::StringPrintf;
 using android::idmap2::CommandLineOptions;
 using android::idmap2::IdmapHeader;
 using android::idmap2::ResourceId;
+using android::idmap2::Result;
 using android::idmap2::Xml;
 using android::idmap2::ZipFile;
 using android::util::Utf16ToUtf8;
 
 namespace {
-std::pair<bool, ResourceId> WARN_UNUSED ParseResReference(const AssetManager2& am,
-                                                          const std::string& res,
-                                                          const std::string& fallback_package) {
+
+Result<ResourceId> WARN_UNUSED ParseResReference(const AssetManager2& am, const std::string& res,
+                                                 const std::string& fallback_package) {
+  static constexpr const int kBaseHex = 16;
+
   // first, try to parse as a hex number
   char* endptr = nullptr;
   ResourceId resid;
-  resid = strtol(res.c_str(), &endptr, 16);
+  resid = strtol(res.c_str(), &endptr, kBaseHex);
   if (*endptr == '\0') {
-    return std::make_pair(true, resid);
+    return {resid};
   }
 
   // next, try to parse as a package:type/name string
   resid = am.GetResourceId(res, "", fallback_package);
   if (is_valid_resid(resid)) {
-    return std::make_pair(true, resid);
+    return {resid};
   }
 
   // end of the road: res could not be parsed
-  return std::make_pair(false, 0);
+  return {};
 }
 
-std::pair<bool, std::string> WARN_UNUSED GetValue(const AssetManager2& am, ResourceId resid) {
+Result<std::string> WARN_UNUSED GetValue(const AssetManager2& am, ResourceId resid) {
   Res_value value;
   ResTable_config config;
   uint32_t flags;
   ApkAssetsCookie cookie = am.GetResource(resid, false, 0, &value, &config, &flags);
   if (cookie == kInvalidCookie) {
-    return std::make_pair(false, "");
+    return {};
   }
 
   std::string out;
@@ -125,37 +127,39 @@ std::pair<bool, std::string> WARN_UNUSED GetValue(const AssetManager2& am, Resou
       out.append(StringPrintf("dataType=0x%02x data=0x%08x", value.dataType, value.data));
       break;
   }
-  return std::make_pair(true, out);
+  return {out};
 }
 
-std::pair<bool, std::string> GetTargetPackageNameFromManifest(const std::string& apk_path) {
+Result<std::string> GetTargetPackageNameFromManifest(const std::string& apk_path) {
   const auto zip = ZipFile::Open(apk_path);
   if (!zip) {
-    return std::make_pair(false, "");
+    return {};
   }
   const auto entry = zip->Uncompress("AndroidManifest.xml");
   if (!entry) {
-    return std::make_pair(false, "");
+    return {};
   }
   const auto xml = Xml::Create(entry->buf, entry->size);
   if (!xml) {
-    return std::make_pair(false, "");
+    return {};
   }
   const auto tag = xml->FindTag("overlay");
   if (!tag) {
-    return std::make_pair(false, "");
+    return {};
   }
   const auto iter = tag->find("targetPackage");
   if (iter == tag->end()) {
-    return std::make_pair(false, "");
+    return {};
   }
-  return std::make_pair(true, iter->second);
+  return {iter->second};
 }
 }  // namespace
 
 bool Lookup(const std::vector<std::string>& args, std::ostream& out_error) {
   std::vector<std::string> idmap_paths;
-  std::string config_str, resid_str;
+  std::string config_str;
+  std::string resid_str;
+
   const CommandLineOptions opts =
       CommandLineOptions("idmap2 lookup")
           .MandatoryOption("--idmap-path", "input: path to idmap file to load", &idmap_paths)
@@ -197,14 +201,14 @@ bool Lookup(const std::vector<std::string>& args, std::ostream& out_error) {
       }
       apk_assets.push_back(std::move(target_apk));
 
-      bool lookup_ok;
-      std::tie(lookup_ok, target_package_name) =
+      const Result<std::string> package_name =
           GetTargetPackageNameFromManifest(idmap_header->GetOverlayPath().to_string());
-      if (!lookup_ok) {
+      if (!package_name) {
         out_error << "error: failed to parse android:targetPackage from overlay manifest"
                   << std::endl;
         return false;
       }
+      target_package_name = *package_name;
     } else if (target_path != idmap_header->GetTargetPath()) {
       out_error << "error: different target APKs (expected target APK " << target_path << " but "
                 << idmap_path << " has target APK " << idmap_header->GetTargetPath() << ")"
@@ -229,21 +233,18 @@ bool Lookup(const std::vector<std::string>& args, std::ostream& out_error) {
   am.SetApkAssets(raw_pointer_apk_assets);
   am.SetConfiguration(config);
 
-  ResourceId resid;
-  bool lookup_ok;
-  std::tie(lookup_ok, resid) = ParseResReference(am, resid_str, target_package_name);
-  if (!lookup_ok) {
+  const Result<ResourceId> resid = ParseResReference(am, resid_str, target_package_name);
+  if (!resid) {
     out_error << "error: failed to parse resource ID" << std::endl;
     return false;
   }
 
-  std::string value;
-  std::tie(lookup_ok, value) = GetValue(am, resid);
-  if (!lookup_ok) {
-    out_error << StringPrintf("error: resource 0x%08x not found", resid) << std::endl;
+  const Result<std::string> value = GetValue(am, *resid);
+  if (!value) {
+    out_error << StringPrintf("error: resource 0x%08x not found", *resid) << std::endl;
     return false;
   }
-  std::cout << value << std::endl;
+  std::cout << *value << std::endl;
 
   return true;
 }

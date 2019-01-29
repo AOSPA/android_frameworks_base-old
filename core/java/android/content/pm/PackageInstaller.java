@@ -17,6 +17,7 @@
 package android.content.pm;
 
 import android.Manifest;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -54,6 +55,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -68,7 +71,14 @@ import java.util.List;
  * {@link PackageInstaller.Session}, which any app can create. Once the session
  * is created, the installer can stream one or more APKs into place until it
  * decides to either commit or destroy the session. Committing may require user
- * intervention to complete the installation.
+ * intervention to complete the installation, unless the caller falls into one of the
+ * following categories, in which case the installation will complete automatically.
+ * <ul>
+ * <li>the device owner
+ * <li>the affiliated profile owner
+ * <li>the device owner delegated app with
+ *     {@link android.app.admin.DevicePolicyManager#DELEGATION_PACKAGE_INSTALLATION}
+ * </ul>
  * <p>
  * Sessions can install brand new apps, upgrade existing apps, or add new splits
  * into an existing app.
@@ -134,6 +144,15 @@ public class PackageInstaller {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_SESSION_COMMITTED =
             "android.content.pm.action.SESSION_COMMITTED";
+
+    /**
+     * Broadcast Action: Send information about a staged install session when its state is updated.
+     * <p>
+     * The associated session information is defined in {@link #EXTRA_SESSION}.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SESSION_UPDATED =
+            "android.content.pm.action.SESSION_UPDATED";
 
     /** {@hide} */
     public static final String ACTION_CONFIRM_INSTALL = "android.content.pm.action.CONFIRM_INSTALL";
@@ -463,12 +482,26 @@ public class PackageInstaller {
     }
 
     /**
+     * Return list of all staged install sessions.
+     */
+    public @NonNull List<SessionInfo> getStagedSessions() {
+        try {
+            // TODO: limit this to the mUserId?
+            return mInstaller.getStagedSessions().getList();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Uninstall the given package, removing it completely from the device. This
      * method is available to:
      * <ul>
      * <li>the current "installer of record" for the package
      * <li>the device owner
      * <li>the affiliated profile owner
+     * <li>the device owner delegated app with
+     *     {@link android.app.admin.DevicePolicyManager#DELEGATION_PACKAGE_INSTALLATION}
      * </ul>
      *
      * @param packageName The package to uninstall.
@@ -779,6 +812,11 @@ public class PackageInstaller {
      * individual session IDs can be added with {@link #addChildSessionId(int)}
      * and commit of the multi-package session will result in all child sessions
      * being committed atomically.
+     * <p>
+     * If a package requires to be installed only at reboot, the session should
+     * be marked as a staged session by calling {@link SessionParams#setStaged()}
+     * with {@code true}. This can also apply to a multi-package session, in
+     * which case all the packages in the session will be applied at reboot.
      */
     public static class Session implements Closeable {
         /** {@hide} */
@@ -1105,6 +1143,17 @@ public class PackageInstaller {
         }
 
         /**
+         * @return {@code true} if this session will be staged and applied at next reboot.
+         */
+        public boolean isStaged() {
+            try {
+                return mSession.isStaged();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
          * @return the session ID of the multi-package session that this belongs to or
          * {@link SessionInfo#INVALID_ID} if it does not belong to a multi-package session.
          */
@@ -1227,6 +1276,8 @@ public class PackageInstaller {
         public String installerPackageName;
         /** {@hide} */
         public boolean isMultiPackage;
+        /** {@hide} */
+        public boolean isStaged;
 
         /**
          * Construct parameters for a new package install session.
@@ -1257,6 +1308,7 @@ public class PackageInstaller {
             grantedRuntimePermissions = source.readStringArray();
             installerPackageName = source.readString();
             isMultiPackage = source.readBoolean();
+            isStaged = source.readBoolean();
         }
 
         /**
@@ -1373,10 +1425,13 @@ public class PackageInstaller {
             this.grantedRuntimePermissions = permissions;
         }
 
-        /** {@hide} */
-        public void setInstallFlagsInternal() {
-            installFlags |= PackageManager.INSTALL_INTERNAL;
-            installFlags &= ~PackageManager.INSTALL_EXTERNAL;
+        /**
+         * Request that rollbacks be enabled for the given upgrade.
+         * @hide
+         */
+        @SystemApi
+        public void setEnableRollback() {
+            installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
         }
 
         /** {@hide} */
@@ -1387,12 +1442,6 @@ public class PackageInstaller {
             } else {
                 installFlags &= ~PackageManager.INSTALL_ALLOW_DOWNGRADE;
             }
-        }
-
-        /** {@hide} */
-        public void setInstallFlagsExternal() {
-            installFlags |= PackageManager.INSTALL_EXTERNAL;
-            installFlags &= ~PackageManager.INSTALL_INTERNAL;
         }
 
         /** {@hide} */
@@ -1483,6 +1532,17 @@ public class PackageInstaller {
             this.isMultiPackage = true;
         }
 
+        /**
+         * Set this session to be staged to be installed at reboot.
+         *
+         * Staged sessions are scheduled to be installed at next reboot. Staged sessions can also be
+         * multi-package. In that case, if any of the children sessions fail to install at reboot,
+         * all the other children sessions are aborted as well.
+         */
+        public void setStaged() {
+            this.isStaged = true;
+        }
+
         /** {@hide} */
         public void dump(IndentingPrintWriter pw) {
             pw.printPair("mode", mode);
@@ -1500,6 +1560,7 @@ public class PackageInstaller {
             pw.printPair("grantedRuntimePermissions", grantedRuntimePermissions);
             pw.printPair("installerPackageName", installerPackageName);
             pw.printPair("isMultiPackage", isMultiPackage);
+            pw.printPair("isStaged", isStaged);
             pw.println();
         }
 
@@ -1526,6 +1587,7 @@ public class PackageInstaller {
             dest.writeStringArray(grantedRuntimePermissions);
             dest.writeString(installerPackageName);
             dest.writeBoolean(isMultiPackage);
+            dest.writeBoolean(isStaged);
         }
 
         public static final Parcelable.Creator<SessionParams>
@@ -1553,6 +1615,29 @@ public class PackageInstaller {
         public static final int INVALID_ID = -1;
         /** {@hide} */
         private static final int[] NO_SESSIONS = {};
+
+        /** @hide */
+        @IntDef(value = {NO_ERROR, VERIFICATION_FAILED, ACTIVATION_FAILED})
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface StagedSessionErrorCode{}
+        /**
+         * Constant indicating that no error occurred during the preparation or the activation of
+         * this staged session.
+         */
+        public static final int NO_ERROR = 0;
+
+        /**
+         * Constant indicating that an error occurred during the verification phase (pre-reboot) of
+         * this staged session.
+         */
+        public static final int VERIFICATION_FAILED = 1;
+
+        /**
+         * Constant indicating that an error occurred during the activation phase (post-reboot) of
+         * this staged session.
+         */
+        public static final int ACTIVATION_FAILED = 2;
+
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public int sessionId;
@@ -1605,9 +1690,19 @@ public class PackageInstaller {
         /** {@hide} */
         public boolean isMultiPackage;
         /** {@hide} */
+        public boolean isStaged;
+        /** {@hide} */
         public int parentSessionId = INVALID_ID;
         /** {@hide} */
         public int[] childSessionIds = NO_SESSIONS;
+
+        /** {@hide} */
+        public boolean isSessionApplied;
+        /** {@hide} */
+        public boolean isSessionReady;
+        /** {@hide} */
+        public boolean isSessionFailed;
+        private int mStagedSessionErrorCode;
 
         /** {@hide} */
         @UnsupportedAppUsage
@@ -1637,11 +1732,16 @@ public class PackageInstaller {
             grantedRuntimePermissions = source.readStringArray();
             installFlags = source.readInt();
             isMultiPackage = source.readBoolean();
+            isStaged = source.readBoolean();
             parentSessionId = source.readInt();
             childSessionIds = source.createIntArray();
             if (childSessionIds == null) {
                 childSessionIds = NO_SESSIONS;
             }
+            isSessionApplied = source.readBoolean();
+            isSessionReady = source.readBoolean();
+            isSessionFailed = source.readBoolean();
+            mStagedSessionErrorCode = source.readInt();
         }
 
         /**
@@ -1904,6 +2004,13 @@ public class PackageInstaller {
         }
 
         /**
+         * Returns true if this session is a staged session which will be applied at next reboot.
+         */
+        public boolean isStaged() {
+            return isStaged;
+        }
+
+        /**
          * Returns the parent multi-package session ID if this session belongs to one,
          * {@link #INVALID_ID} otherwise.
          */
@@ -1917,6 +2024,44 @@ public class PackageInstaller {
          */
         public int[] getChildSessionIds() {
             return childSessionIds;
+        }
+
+        /**
+         * Whether the staged session has been applied successfully, meaning that all of its
+         * packages have been activated and no further action is required.
+         * Only meaningful if {@code isStaged} is true.
+         */
+        public boolean isSessionApplied() {
+            return isSessionApplied;
+        }
+
+        /**
+         * Whether the staged session is ready to be applied at next reboot. Only meaningful if
+         * {@code isStaged} is true.
+         */
+        public boolean isSessionReady() {
+            return isSessionReady;
+        }
+
+        /**
+         * Whether something went wrong and the staged session is declared as failed, meaning that
+         * it will be ignored at next reboot. Only meaningful if {@code isStaged} is true.
+         */
+        public boolean isSessionFailed() {
+            return isSessionFailed;
+        }
+
+        /**
+         * If something went wrong with a staged session, clients can check this error code to
+         * understand which kind of failure happened. Only meaningful if {@code isStaged} is true.
+         */
+        public int getStagedSessionErrorCode() {
+            return mStagedSessionErrorCode;
+        }
+
+        /** {@hide} */
+        public void setStagedSessionErrorCode(@StagedSessionErrorCode int errorCode) {
+            mStagedSessionErrorCode = errorCode;
         }
 
         @Override
@@ -1947,8 +2092,13 @@ public class PackageInstaller {
             dest.writeStringArray(grantedRuntimePermissions);
             dest.writeInt(installFlags);
             dest.writeBoolean(isMultiPackage);
+            dest.writeBoolean(isStaged);
             dest.writeInt(parentSessionId);
             dest.writeIntArray(childSessionIds);
+            dest.writeBoolean(isSessionApplied);
+            dest.writeBoolean(isSessionReady);
+            dest.writeBoolean(isSessionFailed);
+            dest.writeInt(mStagedSessionErrorCode);
         }
 
         public static final Parcelable.Creator<SessionInfo>

@@ -16,18 +16,18 @@ package com.android.systemui.statusbar;
 
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
+
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
 import android.app.Notification;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
@@ -38,7 +38,7 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.phone.ShadeController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -55,6 +55,7 @@ public class SmartReplyControllerTest extends SysuiTestCase {
     private static final String TEST_CHOICE_TEXT = "A Reply";
     private static final int TEST_CHOICE_INDEX = 2;
     private static final int TEST_CHOICE_COUNT = 4;
+    private static final int TEST_ACTION_COUNT = 3;
 
     private Notification mNotification;
     private NotificationData.Entry mEntry;
@@ -73,14 +74,17 @@ public class SmartReplyControllerTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
         mDependency.injectTestDependency(NotificationEntryManager.class,
                 mNotificationEntryManager);
-        mDependency.injectTestDependency(IStatusBarService.class, mIStatusBarService);
 
-        mSmartReplyController = new SmartReplyController();
+        mSmartReplyController = new SmartReplyController(mNotificationEntryManager,
+                mIStatusBarService);
         mDependency.injectTestDependency(SmartReplyController.class,
                 mSmartReplyController);
 
-        mRemoteInputManager = new NotificationRemoteInputManager(mContext);
-        mRemoteInputManager.setUpWithPresenter(mPresenter, mCallback, mDelegate);
+        mRemoteInputManager = new NotificationRemoteInputManager(mContext,
+                mock(NotificationLockscreenUserManager.class), mSmartReplyController,
+                mNotificationEntryManager, () -> mock(ShadeController.class),
+                Handler.createAsync(Looper.myLooper()));
+        mRemoteInputManager.setUpWithCallback(mCallback, mDelegate);
         mNotification = new Notification.Builder(mContext, "")
                 .setSmallIcon(R.drawable.ic_person)
                 .setContentTitle("Title")
@@ -93,7 +97,7 @@ public class SmartReplyControllerTest extends SysuiTestCase {
 
     @Test
     public void testSendSmartReply_updatesRemoteInput() {
-        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT);
+        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT, false);
 
         // Sending smart reply should make calls to NotificationEntryManager
         // to update the notification with reply and spinner.
@@ -103,32 +107,44 @@ public class SmartReplyControllerTest extends SysuiTestCase {
 
     @Test
     public void testSendSmartReply_logsToStatusBar() throws RemoteException {
-        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT);
+        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT, false);
 
         // Check we log the result to the status bar service.
         verify(mIStatusBarService).onNotificationSmartReplySent(mSbn.getKey(),
-                TEST_CHOICE_INDEX);
+                TEST_CHOICE_INDEX, TEST_CHOICE_TEXT, false);
+    }
+
+
+    @Test
+    public void testSendSmartReply_logsToStatusBar_generatedByAssistant() throws RemoteException {
+        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT, true);
+
+        // Check we log the result to the status bar service.
+        verify(mIStatusBarService).onNotificationSmartReplySent(mSbn.getKey(),
+                TEST_CHOICE_INDEX, TEST_CHOICE_TEXT, true);
     }
 
     @Test
-    public void testShowSmartReply_logsToStatusBar() throws RemoteException {
-        mSmartReplyController.smartRepliesAdded(mEntry, TEST_CHOICE_COUNT);
+    public void testShowSmartSuggestions_logsToStatusBar() throws RemoteException {
+        final boolean generatedByAsssistant = true;
+        mSmartReplyController.smartSuggestionsAdded(mEntry, TEST_CHOICE_COUNT, TEST_ACTION_COUNT,
+                generatedByAsssistant);
 
         // Check we log the result to the status bar service.
-        verify(mIStatusBarService).onNotificationSmartRepliesAdded(mSbn.getKey(),
-                TEST_CHOICE_COUNT);
+        verify(mIStatusBarService).onNotificationSmartSuggestionsAdded(mSbn.getKey(),
+                TEST_CHOICE_COUNT, TEST_ACTION_COUNT, generatedByAsssistant);
     }
 
     @Test
     public void testSendSmartReply_reportsSending() {
-        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT);
+        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT, false);
 
         assertTrue(mSmartReplyController.isSendingSmartReply(mSbn.getKey()));
     }
 
     @Test
     public void testSendingSmartReply_afterRemove_shouldReturnFalse() {
-        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT);
+        mSmartReplyController.smartReplySent(mEntry, TEST_CHOICE_INDEX, TEST_CHOICE_TEXT, false);
         mSmartReplyController.stopSending(mEntry);
 
         assertFalse(mSmartReplyController.isSendingSmartReply(mSbn.getKey()));

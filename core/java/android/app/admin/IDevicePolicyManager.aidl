@@ -20,6 +20,7 @@ package android.app.admin;
 import android.app.admin.NetworkEvent;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
+import android.app.admin.StartInstallingUpdateCallback;
 import android.app.admin.SystemUpdateInfo;
 import android.app.admin.SystemUpdatePolicy;
 import android.app.admin.PasswordMetrics;
@@ -81,6 +82,7 @@ interface IDevicePolicyManager {
 
     boolean isActivePasswordSufficient(int userHandle, boolean parent);
     boolean isProfileActivePasswordSufficientForParent(int userHandle);
+    int getPasswordComplexity();
     boolean isUsingUnifiedPassword(in ComponentName admin);
     int getCurrentFailedPasswordAttempts(int userHandle, boolean parent);
     int getProfileWithMinimumFailedPasswordsForWipe(int userHandle, boolean parent);
@@ -365,9 +367,9 @@ interface IDevicePolicyManager {
     void setBackupServiceEnabled(in ComponentName admin, boolean enabled);
     boolean isBackupServiceEnabled(in ComponentName admin);
 
-    void setNetworkLoggingEnabled(in ComponentName admin, boolean enabled);
-    boolean isNetworkLoggingEnabled(in ComponentName admin);
-    List<NetworkEvent> retrieveNetworkLogs(in ComponentName admin, long batchToken);
+    void setNetworkLoggingEnabled(in ComponentName admin, in String packageName, boolean enabled);
+    boolean isNetworkLoggingEnabled(in ComponentName admin, in String packageName);
+    List<NetworkEvent> retrieveNetworkLogs(in ComponentName admin, in String packageName, long batchToken);
 
     boolean bindDeviceAdminServiceAsUser(in ComponentName admin,
         IApplicationThread caller, IBinder token, in Intent service,
@@ -414,7 +416,22 @@ interface IDevicePolicyManager {
 
     boolean isMeteredDataDisabledPackageForUser(in ComponentName admin, String packageName, int userId);
 
-    void setGlobalPrivateDns(in ComponentName admin, int mode, in String privateDnsHost);
+    int setGlobalPrivateDns(in ComponentName admin, int mode, in String privateDnsHost);
     int getGlobalPrivateDnsMode(in ComponentName admin);
     String getGlobalPrivateDnsHost(in ComponentName admin);
+
+    void grantDeviceIdsAccessToProfileOwner(in ComponentName who, int userId);
+
+    void installUpdateFromFile(in ComponentName admin, in ParcelFileDescriptor updateFileDescriptor, in StartInstallingUpdateCallback listener);
+
+    void addCrossProfileCalendarPackage(in ComponentName admin, String packageName);
+    boolean removeCrossProfileCalendarPackage(in ComponentName admin, String packageName);
+    List<String> getCrossProfileCalendarPackages(in ComponentName admin);
+    boolean isPackageAllowedToAccessCalendarForUser(String packageName, int userHandle);
+    List<String> getCrossProfileCalendarPackagesForUser(int userHandle);
+
+    boolean isManagedKiosk();
+    boolean isUnattendedManagedKiosk();
+
+    boolean startViewCalendarEventInManagedProfile(String packageName, long eventId, long start, long end, boolean allDay, int flags);
 }

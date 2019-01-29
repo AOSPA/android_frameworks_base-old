@@ -33,9 +33,27 @@ import java.util.List;
  * This class provides information for a shared library. There are
  * three types of shared libraries: builtin - non-updatable part of
  * the OS; dynamic - updatable backwards-compatible dynamically linked;
- * static - updatable non backwards-compatible emulating static linking.
+ * static - non backwards-compatible emulating static linking.
  */
 public final class SharedLibraryInfo implements Parcelable {
+
+    /** @hide */
+    public static SharedLibraryInfo createForStatic(PackageParser.Package pkg) {
+        return new SharedLibraryInfo(null, pkg.packageName, pkg.getAllCodePaths(),
+                pkg.staticSharedLibName,
+                pkg.staticSharedLibVersion,
+                TYPE_STATIC,
+                new VersionedPackage(pkg.manifestPackageName, pkg.getLongVersionCode()),
+                null, null);
+    }
+
+    /** @hide */
+    public static SharedLibraryInfo createForDynamic(PackageParser.Package pkg, String name) {
+        return new SharedLibraryInfo(null, pkg.packageName, pkg.getAllCodePaths(), name,
+                (long) VERSION_UNDEFINED,
+                TYPE_DYNAMIC, new VersionedPackage(pkg.packageName, pkg.getLongVersionCode()),
+                null, null);
+    }
 
     /** @hide */
     @IntDef(flag = true, prefix = { "TYPE_" }, value = {
@@ -74,6 +92,7 @@ public final class SharedLibraryInfo implements Parcelable {
     private final String mPath;
     private final String mPackageName;
     private final String mName;
+    private final List<String> mCodePaths;
 
     private final long mVersion;
     private final @Type int mType;
@@ -84,6 +103,8 @@ public final class SharedLibraryInfo implements Parcelable {
     /**
      * Creates a new instance.
      *
+     * @param codePaths For a non {@link #TYPE_BUILTIN builtin} library, the locations of jars of
+     *                  this shared library. Null for builtin library.
      * @param name The lib name.
      * @param version The lib version if not builtin.
      * @param type The lib type.
@@ -92,11 +113,13 @@ public final class SharedLibraryInfo implements Parcelable {
      *
      * @hide
      */
-    public SharedLibraryInfo(String path, String packageName, String name, long version, int type,
+    public SharedLibraryInfo(String path, String packageName, List<String> codePaths,
+            String name, long version, int type,
             VersionedPackage declaringPackage, List<VersionedPackage> dependentPackages,
             List<SharedLibraryInfo> dependencies) {
         mPath = path;
         mPackageName = packageName;
+        mCodePaths = codePaths;
         mName = name;
         mVersion = version;
         mType = type;
@@ -106,7 +129,8 @@ public final class SharedLibraryInfo implements Parcelable {
     }
 
     private SharedLibraryInfo(Parcel parcel) {
-        this(parcel.readString(), parcel.readString(), parcel.readString(), parcel.readLong(),
+        this(parcel.readString(), parcel.readString(), parcel.readArrayList(null),
+                parcel.readString(), parcel.readLong(),
                 parcel.readInt(), parcel.readParcelable(null), parcel.readArrayList(null),
                 parcel.createTypedArrayList(SharedLibraryInfo.CREATOR));
     }
@@ -152,6 +176,25 @@ public final class SharedLibraryInfo implements Parcelable {
      */
     public @Nullable String getPackageName() {
         return mPackageName;
+    }
+
+    /**
+     * Get all code paths for that library.
+     *
+     * @return All code paths.
+     *
+     * @hide
+     */
+    public List<String> getAllCodePaths() {
+        if (getPath() != null) {
+            // Builtin library.
+            ArrayList<String> list = new ArrayList<>();
+            list.add(getPath());
+            return list;
+        } else {
+            // Static or dynamic library.
+            return mCodePaths;
+        }
     }
 
     /**
@@ -273,6 +316,7 @@ public final class SharedLibraryInfo implements Parcelable {
     public void writeToParcel(Parcel parcel, int flags) {
         parcel.writeString(mPath);
         parcel.writeString(mPackageName);
+        parcel.writeList(mCodePaths);
         parcel.writeString(mName);
         parcel.writeLong(mVersion);
         parcel.writeInt(mType);

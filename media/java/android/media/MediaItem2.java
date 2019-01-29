@@ -16,196 +16,282 @@
 
 package android.media;
 
-import android.annotation.IntDef;
+import static android.media.MediaMetadata.METADATA_KEY_MEDIA_ID;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.media.update.ApiLoader;
-import android.media.update.MediaItem2Provider;
-import android.os.Bundle;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.text.TextUtils;
+import android.util.Log;
+import android.util.Pair;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
+import com.android.internal.annotations.GuardedBy;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
- * @hide
  * A class with information on a single media item with the metadata information.
- * Media item are application dependent so we cannot guarantee that they contain the right values.
  * <p>
- * When it's sent to a controller or browser, it's anonymized and data descriptor wouldn't be sent.
+ * This API is not generally intended for third party application developers.
+ * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+ * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
+ * for consistent behavior across all devices.
  * <p>
- * This object isn't a thread safe.
  */
-public class MediaItem2 {
-    /** @hide */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef(flag=true, value = { FLAG_BROWSABLE, FLAG_PLAYABLE })
-    public @interface Flags { }
+public final class MediaItem2 implements Parcelable {
+    private static final String TAG = "MediaItem2";
+
+    // intentionally less than long.MAX_VALUE.
+    // Declare this first to avoid 'illegal forward reference'.
+    static final long LONG_MAX = 0x7ffffffffffffffL;
 
     /**
-     * Flag: Indicates that the item has children of its own.
-     */
-    public static final int FLAG_BROWSABLE = 1 << 0;
-
-    /**
-     * Flag: Indicates that the item is playable.
-     * <p>
-     * The id of this item may be passed to
-     * {@link MediaController2#playFromMediaId(String, Bundle)}
-     */
-    public static final int FLAG_PLAYABLE = 1 << 1;
-
-    private final MediaItem2Provider mProvider;
-
-    /**
-     * Create a new media item
-     * @hide
-     */
-    public MediaItem2(MediaItem2Provider provider) {
-        mProvider = provider;
-    }
-
-    /**
-     * @hide
-     */
-    public MediaItem2Provider getProvider() {
-        return mProvider;
-    }
-
-    /**
-     * Return this object as a bundle to share between processes.
+     * Used when a position is unknown.
      *
-     * @return a new bundle instance
+     * @see #getEndPosition()
      */
-    public Bundle toBundle() {
-        return mProvider.toBundle_impl();
-    }
+    public static final long POSITION_UNKNOWN = LONG_MAX;
 
-    public static MediaItem2 fromBundle(Bundle bundle) {
-        return ApiLoader.getProvider().fromBundle_MediaItem2(bundle);
-    }
+    public static final Parcelable.Creator<MediaItem2> CREATOR =
+            new Parcelable.Creator<MediaItem2>() {
+                @Override
+                public MediaItem2 createFromParcel(Parcel in) {
+                    return new MediaItem2(in);
+                }
 
-    public String toString() {
-        return mProvider.toString_impl();
+                @Override
+                public MediaItem2[] newArray(int size) {
+                    return new MediaItem2[size];
+                }
+            };
+
+    private static final long UNKNOWN_TIME = -1;
+
+    private final long mStartPositionMs;
+    private final long mEndPositionMs;
+
+    private final Object mLock = new Object();
+
+    @GuardedBy("mLock")
+    private MediaMetadata mMetadata;
+    @GuardedBy("mLock")
+    private final List<Pair<OnMetadataChangedListener, Executor>> mListeners = new ArrayList<>();
+
+    /**
+     * Used by {@link MediaItem2.Builder}.
+     */
+    // Note: Needs to be protected when we want to allow 3rd party player to define customized
+    //       MediaItem2.
+    @SuppressWarnings("WeakerAccess") /* synthetic access */
+    MediaItem2(Builder builder) {
+        this(builder.mMetadata, builder.mStartPositionMs, builder.mEndPositionMs);
     }
 
     /**
-     * Gets the flags of the item.
+     * Used by Parcelable.Creator.
      */
-    public @Flags int getFlags() {
-        return mProvider.getFlags_impl();
+    // Note: Needs to be protected when we want to allow 3rd party player to define customized
+    //       MediaItem2.
+    @SuppressWarnings("WeakerAccess") /* synthetic access */
+    MediaItem2(Parcel in) {
+        this(in.readParcelable(MediaItem2.class.getClassLoader()), in.readLong(), in.readLong());
     }
 
-    /**
-     * Returns whether this item is browsable.
-     * @see #FLAG_BROWSABLE
-     */
-    public boolean isBrowsable() {
-        return mProvider.isBrowsable_impl();
+    @SuppressWarnings("WeakerAccess") /* synthetic access */
+    MediaItem2(MediaItem2 item) {
+        this(item.mMetadata, item.mStartPositionMs, item.mEndPositionMs);
     }
 
-    /**
-     * Returns whether this item is playable.
-     * @see #FLAG_PLAYABLE
-     */
-    public boolean isPlayable() {
-        return mProvider.isPlayable_impl();
-    }
-
-    /**
-     * Set a metadata. If the metadata is not null, its id should be matched with this instance's
-     * media id.
-     *
-     * @param metadata metadata to update
-     */
-    public void setMetadata(@Nullable MediaMetadata2 metadata) {
-        mProvider.setMetadata_impl(metadata);
-    }
-
-    /**
-     * Returns the metadata of the media.
-     */
-    public @Nullable MediaMetadata2 getMetadata() {
-        return mProvider.getMetadata_impl();
-    }
-
-    /**
-     * Returns the media id for this item.
-     */
-    public @NonNull String getMediaId() {
-        return mProvider.getMediaId_impl();
-    }
-
-    /**
-     * Return the {@link DataSourceDesc}
-     * <p>
-     * Can be {@code null} if the MediaItem2 came from another process and anonymized
-     *
-     * @return data source descriptor
-     */
-    public @Nullable DataSourceDesc getDataSourceDesc() {
-        return mProvider.getDataSourceDesc_impl();
+    @SuppressWarnings("WeakerAccess") /* synthetic access */
+    MediaItem2(@Nullable MediaMetadata metadata, long startPositionMs, long endPositionMs) {
+        if (startPositionMs > endPositionMs) {
+            throw new IllegalArgumentException("Illegal start/end position: "
+                    + startPositionMs + " : " + endPositionMs);
+        }
+        if (metadata != null && metadata.containsKey(MediaMetadata.METADATA_KEY_DURATION)) {
+            long durationMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION);
+            if (durationMs != UNKNOWN_TIME && endPositionMs != POSITION_UNKNOWN
+                    && endPositionMs > durationMs) {
+                throw new IllegalArgumentException("endPositionMs shouldn't be greater than"
+                        + " duration in the metdata, endPositionMs=" + endPositionMs
+                        + ", durationMs=" + durationMs);
+            }
+        }
+        mMetadata = metadata;
+        mStartPositionMs = startPositionMs;
+        mEndPositionMs = endPositionMs;
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return mProvider.equals_impl(obj);
+    public String toString() {
+        final StringBuilder sb = new StringBuilder(getClass().getSimpleName());
+        synchronized (mLock) {
+            sb.append("{mMetadata=").append(mMetadata);
+            sb.append(", mStartPositionMs=").append(mStartPositionMs);
+            sb.append(", mEndPositionMs=").append(mEndPositionMs);
+            sb.append('}');
+        }
+        return sb.toString();
     }
 
     /**
-     * Build {@link MediaItem2}
+     * Sets metadata. If the metadata is not {@code null}, its id should be matched with this
+     * instance's media id.
+     *
+     * @param metadata metadata to update
+     * @see MediaMetadata#METADATA_KEY_MEDIA_ID
      */
-    public static final class Builder {
-        private final MediaItem2Provider.BuilderProvider mProvider;
-
-        /**
-         * Constructor for {@link Builder}
-         *
-         * @param flags
-         */
-        public Builder(@Flags int flags) {
-            mProvider = ApiLoader.getProvider().createMediaItem2Builder(this, flags);
+    public void setMetadata(@Nullable MediaMetadata metadata) {
+        List<Pair<OnMetadataChangedListener, Executor>> listeners = new ArrayList<>();
+        synchronized (mLock) {
+            if (mMetadata != null && metadata != null
+                    && !TextUtils.equals(getMediaId(), metadata.getString(METADATA_KEY_MEDIA_ID))) {
+                Log.d(TAG, "MediaItem2's media ID shouldn't be changed");
+                return;
+            }
+            mMetadata = metadata;
+            listeners.addAll(mListeners);
         }
 
-        /**
-         * Set the media id of this instance. {@code null} for unset.
-         * <p>
-         * Media id is used to identify a media contents between session and controller.
-         * <p>
-         * If the metadata is set with the {@link #setMetadata(MediaMetadata2)} and it has
-         * media id, id from {@link #setMediaId(String)} will be ignored and metadata's id will be
-         * used instead. If the id isn't set neither by {@link #setMediaId(String)} nor
-         * {@link #setMetadata(MediaMetadata2)}, id will be automatically generated.
-         *
-         * @param mediaId media id
-         * @return this instance for chaining
-         */
-        public Builder setMediaId(@Nullable String mediaId) {
-            return mProvider.setMediaId_impl(mediaId);
+        for (Pair<OnMetadataChangedListener, Executor> pair : listeners) {
+            final OnMetadataChangedListener listener = pair.first;
+            pair.second.execute(new Runnable() {
+                @Override
+                public void run() {
+                    listener.onMetadataChanged(MediaItem2.this);
+                }
+            });
         }
+    }
+
+    /**
+     * Gets the metadata of the media.
+     *
+     * @return metadata from the session
+     */
+    public @Nullable MediaMetadata getMetadata() {
+        synchronized (mLock) {
+            return mMetadata;
+        }
+    }
+
+    /**
+     * Return the position in milliseconds at which the playback will start.
+     * @return the position in milliseconds at which the playback will start
+     */
+    public long getStartPosition() {
+        return mStartPositionMs;
+    }
+
+    /**
+     * Return the position in milliseconds at which the playback will end.
+     * {@link #POSITION_UNKNOWN} means ending at the end of source content.
+     * @return the position in milliseconds at which the playback will end
+     */
+    public long getEndPosition() {
+        return mEndPositionMs;
+    }
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeParcelable(mMetadata, 0);
+        dest.writeLong(mStartPositionMs);
+        dest.writeLong(mEndPositionMs);
+    }
+
+    /**
+     * Gets the media id for this item. If it's not {@code null}, it's a persistent unique key
+     * for the underlying media content.
+     *
+     * @return media Id from the session
+     */
+    @Nullable String getMediaId() {
+        synchronized (mLock) {
+            return mMetadata != null
+                    ? mMetadata.getString(METADATA_KEY_MEDIA_ID) : null;
+        }
+    }
+
+    void addOnMetadataChangedListener(Executor executor, OnMetadataChangedListener listener) {
+        synchronized (mLock) {
+            for (Pair<OnMetadataChangedListener, Executor> pair : mListeners) {
+                if (pair.first == listener) {
+                    return;
+                }
+            }
+            mListeners.add(new Pair<>(listener, executor));
+        }
+    }
+
+    void removeOnMetadataChangedListener(OnMetadataChangedListener listener) {
+        synchronized (mLock) {
+            for (int i = mListeners.size() - 1; i >= 0; i--) {
+                if (mListeners.get(i).first == listener) {
+                    mListeners.remove(i);
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Builder for {@link MediaItem2}.
+     */
+    public static class Builder {
+        @SuppressWarnings("WeakerAccess") /* synthetic access */
+        MediaMetadata mMetadata;
+        @SuppressWarnings("WeakerAccess") /* synthetic access */
+        long mStartPositionMs = 0;
+        @SuppressWarnings("WeakerAccess") /* synthetic access */
+        long mEndPositionMs = POSITION_UNKNOWN;
 
         /**
          * Set the metadata of this instance. {@code null} for unset.
-         * <p>
-         * If the metadata is set with the {@link #setMetadata(MediaMetadata2)} and it has
-         * media id, id from {@link #setMediaId(String)} will be ignored and metadata's id will be
-         * used instead. If the id isn't set neither by {@link #setMediaId(String)} nor
-         * {@link #setMetadata(MediaMetadata2)}, id will be automatically generated.
          *
          * @param metadata metadata
          * @return this instance for chaining
          */
-        public Builder setMetadata(@Nullable MediaMetadata2 metadata) {
-            return mProvider.setMetadata_impl(metadata);
+        public @NonNull Builder setMetadata(@Nullable MediaMetadata metadata) {
+            mMetadata = metadata;
+            return this;
         }
 
         /**
-         * Set the data source descriptor for this instance. {@code null} for unset.
+         * Sets the start position in milliseconds at which the playback will start.
+         * Any negative number is treated as 0.
          *
-         * @param dataSourceDesc data source descriptor
-         * @return this instance for chaining
+         * @param position the start position in milliseconds at which the playback will start
+         * @return the same Builder instance.
          */
-        public Builder setDataSourceDesc(@Nullable DataSourceDesc dataSourceDesc) {
-            return mProvider.setDataSourceDesc_impl(dataSourceDesc);
+        public @NonNull Builder setStartPosition(long position) {
+            if (position < 0) {
+                position = 0;
+            }
+            mStartPositionMs = position;
+            return this;
+        }
+
+        /**
+         * Sets the end position in milliseconds at which the playback will end.
+         * Any negative number is treated as maximum length of the media item.
+         *
+         * @param position the end position in milliseconds at which the playback will end
+         * @return the same Builder instance.
+         */
+        public @NonNull Builder setEndPosition(long position) {
+            if (position < 0) {
+                position = POSITION_UNKNOWN;
+            }
+            mEndPositionMs = position;
+            return this;
         }
 
         /**
@@ -213,8 +299,12 @@ public class MediaItem2 {
          *
          * @return a new {@link MediaItem2}.
          */
-        public MediaItem2 build() {
-            return mProvider.build_impl();
+        public @NonNull MediaItem2 build() {
+            return new MediaItem2(this);
         }
+    }
+
+    interface OnMetadataChangedListener {
+        void onMetadataChanged(MediaItem2 item);
     }
 }

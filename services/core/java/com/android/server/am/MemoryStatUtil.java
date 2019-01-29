@@ -39,38 +39,6 @@ import java.util.regex.Pattern;
  * Static utility methods related to {@link MemoryStat}.
  */
 public final class MemoryStatUtil {
-    /**
-     * Which native processes to create {@link MemoryStat} for.
-     *
-     * <p>Processes are matched by their cmdline in procfs. Example: cat /proc/pid/cmdline returns
-     * /system/bin/statsd for the stats daemon.
-     */
-    public static final String[] MEMORY_STAT_INTERESTING_NATIVE_PROCESSES = new String[]{
-            "/system/bin/statsd",  // Stats daemon.
-            "/system/bin/surfaceflinger",
-            "/system/bin/apexd",  // APEX daemon.
-            "/system/bin/audioserver",
-            "/system/bin/cameraserver",
-            "/system/bin/drmserver",
-            "/system/bin/healthd",
-            "/system/bin/incidentd",
-            "/system/bin/installd",
-            "/system/bin/lmkd",  // Low memory killer daemon.
-            "/system/bin/logd",
-            "media.codec",
-            "media.extractor",
-            "media.metrics",
-            "/system/bin/mediadrmserver",
-            "/system/bin/mediaserver",
-            "/system/bin/performanced",
-            "/system/bin/tombstoned",
-            "/system/bin/traced",  // Perfetto.
-            "/system/bin/traced_probes",  // Perfetto.
-            "webview_zygote",
-            "zygote",
-            "zygote64",
-    };
-
     static final int BYTES_IN_KILOBYTE = 1024;
     static final int PAGE_SIZE = 4096;
     static final long JIFFY_NANOS = 1_000_000_000 / Os.sysconf(OsConstants._SC_CLK_TCK);
@@ -81,13 +49,8 @@ public final class MemoryStatUtil {
     private static final boolean DEVICE_HAS_PER_APP_MEMCG =
             SystemProperties.getBoolean("ro.config.per_app_memcg", false);
 
-    /** Path to check if device has memcg */
-    private static final String MEMCG_TEST_PATH = "/dev/memcg/apps/memory.stat";
     /** Path to memory stat file for logging app start memory state */
     private static final String MEMORY_STAT_FILE_FMT = "/dev/memcg/apps/uid_%d/pid_%d/memory.stat";
-    /** Path to memory max usage file for logging app memory state */
-    private static final String MEMORY_MAX_USAGE_FILE_FMT =
-            "/dev/memcg/apps/uid_%d/pid_%d/memory.max_usage_in_bytes";
     /** Path to procfs stat file for logging app start memory state */
     private static final String PROC_STAT_FILE_FMT = "/proc/%d/stat";
     /** Path to procfs status file for logging app memory state */
@@ -130,14 +93,7 @@ public final class MemoryStatUtil {
     @Nullable
     static MemoryStat readMemoryStatFromMemcg(int uid, int pid) {
         final String statPath = String.format(Locale.US, MEMORY_STAT_FILE_FMT, uid, pid);
-        MemoryStat stat = parseMemoryStatFromMemcg(readFileContents(statPath));
-        if (stat == null) {
-            return null;
-        }
-        String maxUsagePath = String.format(Locale.US, MEMORY_MAX_USAGE_FILE_FMT, uid, pid);
-        stat.rssHighWatermarkInBytes = parseMemoryMaxUsageFromMemCg(
-                readFileContents(maxUsagePath));
-        return stat;
+        return parseMemoryStatFromMemcg(readFileContents(statPath));
     }
 
     /**
@@ -148,13 +104,16 @@ public final class MemoryStatUtil {
     @Nullable
     public static MemoryStat readMemoryStatFromProcfs(int pid) {
         final String statPath = String.format(Locale.US, PROC_STAT_FILE_FMT, pid);
-        MemoryStat stat = parseMemoryStatFromProcfs(readFileContents(statPath));
-        if (stat == null) {
-            return null;
-        }
+        return parseMemoryStatFromProcfs(readFileContents(statPath));
+    }
+
+    /**
+     * Reads RSS high-water mark of a process from procfs. Returns value of the VmHWM field in
+     * /proc/PID/status in bytes or 0 if not available.
+     */
+    public static long readRssHighWaterMarkFromProcfs(int pid) {
         final String statusPath = String.format(Locale.US, PROC_STATUS_FILE_FMT, pid);
-        stat.rssHighWatermarkInBytes = parseVmHWMFromProcfs(readFileContents(statusPath));
-        return stat;
+        return parseVmHWMFromProcfs(readFileContents(statusPath));
     }
 
     /**
@@ -164,9 +123,8 @@ public final class MemoryStatUtil {
      * if the file is not available.
      */
     public static String readCmdlineFromProcfs(int pid) {
-        String path = String.format(Locale.US, PROC_CMDLINE_FILE_FMT, pid);
-        String cmdline = readFileContents(path);
-        return cmdline != null ? cmdline : "";
+        final String path = String.format(Locale.US, PROC_CMDLINE_FILE_FMT, pid);
+        return parseCmdlineFromProcfs(readFileContents(path));
     }
 
     private static String readFileContents(String path) {
@@ -207,19 +165,6 @@ public final class MemoryStatUtil {
         m = SWAP_IN_BYTES.matcher(memoryStatContents);
         memoryStat.swapInBytes = m.find() ? Long.parseLong(m.group(1)) : 0;
         return memoryStat;
-    }
-
-    @VisibleForTesting
-    static long parseMemoryMaxUsageFromMemCg(String memoryMaxUsageContents) {
-        if (memoryMaxUsageContents == null || memoryMaxUsageContents.isEmpty()) {
-            return 0;
-        }
-        try {
-            return Long.parseLong(memoryMaxUsageContents);
-        } catch (NumberFormatException e) {
-            Slog.e(TAG, "Failed to parse value", e);
-            return 0;
-        }
     }
 
     /**
@@ -264,6 +209,24 @@ public final class MemoryStatUtil {
         return m.find() ? Long.parseLong(m.group(1)) * BYTES_IN_KILOBYTE : 0;
     }
 
+
+    /**
+     * Parses cmdline out of the contents of the /proc/pid/cmdline file in procfs.
+     *
+     * Parsing is required to strip anything after first null byte.
+     */
+    @VisibleForTesting
+    static String parseCmdlineFromProcfs(String cmdline) {
+        if (cmdline == null) {
+            return "";
+        }
+        int firstNullByte = cmdline.indexOf("\0");
+        if (firstNullByte == -1) {
+            return cmdline;
+        }
+        return cmdline.substring(0, firstNullByte);
+    }
+
     /**
      * Returns whether per-app memcg is available on device.
      */
@@ -282,8 +245,6 @@ public final class MemoryStatUtil {
         public long cacheInBytes;
         /** Number of bytes of swap usage */
         public long swapInBytes;
-        /** Number of bytes of peak anonymous and swap cache memory */
-        public long rssHighWatermarkInBytes;
         /** Device time when the processes started. */
         public long startTimeNanos;
     }

@@ -65,6 +65,10 @@ interface INotificationManager
     boolean areNotificationsEnabled(String pkg);
     int getPackageImportance(String pkg);
 
+    void setAppOverlaysAllowed(String pkg, int uid, boolean allowed);
+    boolean areAppOverlaysAllowed(String pkg);
+    boolean areAppOverlaysAllowedForPackage(String pkg, int uid);
+
     void createNotificationChannelGroups(String pkg, in ParceledListSlice channelGroupList);
     void createNotificationChannels(String pkg, in ParceledListSlice channelsList);
     void createNotificationChannelsForPackage(String pkg, int uid, in ParceledListSlice channelsList);
@@ -164,6 +168,7 @@ interface INotificationManager
     boolean removeAutomaticZenRule(String id);
     boolean removeAutomaticZenRules(String packageName);
     int getRuleInstanceCount(in ComponentName owner);
+    void setAutomaticZenRuleState(String id, in Condition condition);
 
     byte[] getBackupPayload(int user);
     void applyRestore(in byte[] payload, int user);
@@ -174,4 +179,7 @@ interface INotificationManager
     void revokeNotificationDelegate(String callingPkg);
     String getNotificationDelegate(String callingPkg);
     boolean canNotifyAsPackage(String callingPkg, String targetPkg);
+
+    void setPrivateNotificationsAllowed(boolean allow);
+    boolean getPrivateNotificationsAllowed();
 }

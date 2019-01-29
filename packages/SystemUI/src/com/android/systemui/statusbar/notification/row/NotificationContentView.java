@@ -55,6 +55,10 @@ import com.android.systemui.statusbar.policy.RemoteInputView;
 import com.android.systemui.statusbar.policy.SmartReplyConstants;
 import com.android.systemui.statusbar.policy.SmartReplyView;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.util.List;
+
 /**
  * A frame layout containing the actual payload of the notification, including the contracted,
  * expanded and heads up layout. This class is responsible for clipping the content and and
@@ -87,6 +91,7 @@ public class NotificationContentView extends FrameLayout {
 
     private SmartReplyConstants mSmartReplyConstants;
     private SmartReplyView mExpandedSmartReplyView;
+    private SmartReplyView mHeadsUpSmartReplyView;
     private SmartReplyController mSmartReplyController;
 
     private NotificationViewWrapper mContractedWrapper;
@@ -249,6 +254,9 @@ public class NotificationContentView extends FrameLayout {
         }
         if (mHeadsUpChild != null) {
             int maxHeight = mHeadsUpHeight;
+            if (mHeadsUpSmartReplyView != null) {
+                maxHeight += mHeadsUpSmartReplyView.getHeightUpperLimit();
+            }
             maxHeight += mHeadsUpWrapper.getExtraMeasureHeight();
             int size = maxHeight;
             ViewGroup.LayoutParams layoutParams = mHeadsUpChild.getLayoutParams();
@@ -488,11 +496,11 @@ public class NotificationContentView extends FrameLayout {
         if (child == null) {
             mExpandedChild = null;
             mExpandedWrapper = null;
-            if (mVisibleType == VISIBLE_TYPE_EXPANDED) {
-                mVisibleType = VISIBLE_TYPE_CONTRACTED;
-            }
             if (mTransformationStartVisibleType == VISIBLE_TYPE_EXPANDED) {
                 mTransformationStartVisibleType = UNDEFINED;
+            }
+            if (mVisibleType == VISIBLE_TYPE_EXPANDED) {
+                selectLayout(false /* animate */, true /* force */);
             }
             return;
         }
@@ -526,11 +534,11 @@ public class NotificationContentView extends FrameLayout {
         if (child == null) {
             mHeadsUpChild = null;
             mHeadsUpWrapper = null;
-            if (mVisibleType == VISIBLE_TYPE_HEADSUP) {
-                mVisibleType = VISIBLE_TYPE_CONTRACTED;
-            }
             if (mTransformationStartVisibleType == VISIBLE_TYPE_HEADSUP) {
                 mTransformationStartVisibleType = UNDEFINED;
+            }
+            if (mVisibleType == VISIBLE_TYPE_HEADSUP) {
+                selectLayout(false /* animate */, true /* force */);
             }
             return;
         }
@@ -553,11 +561,11 @@ public class NotificationContentView extends FrameLayout {
         if (child == null) {
             mAmbientChild = null;
             mAmbientWrapper = null;
-            if (mVisibleType == VISIBLE_TYPE_AMBIENT) {
-                mVisibleType = VISIBLE_TYPE_CONTRACTED;
-            }
             if (mTransformationStartVisibleType == VISIBLE_TYPE_AMBIENT) {
                 mTransformationStartVisibleType = UNDEFINED;
+            }
+            if (mVisibleType == VISIBLE_TYPE_AMBIENT) {
+                selectLayout(false /* animate */, true /* force */);
             }
             return;
         }
@@ -951,6 +959,9 @@ public class NotificationContentView extends FrameLayout {
         if (mExpandedSmartReplyView != null) {
             mExpandedSmartReplyView.setBackgroundTintColor(color);
         }
+        if (mHeadsUpSmartReplyView != null) {
+            mHeadsUpSmartReplyView.setBackgroundTintColor(color);
+        }
     }
 
     public int getVisibleType() {
@@ -1225,17 +1236,18 @@ public class NotificationContentView extends FrameLayout {
         mOnContentViewInactiveListeners.clear();
         mBeforeN = entry.targetSdk < Build.VERSION_CODES.N;
         updateAllSingleLineViews();
+        ExpandableNotificationRow row = entry.getRow();
         if (mContractedChild != null) {
-            mContractedWrapper.onContentUpdated(entry.row);
+            mContractedWrapper.onContentUpdated(row);
         }
         if (mExpandedChild != null) {
-            mExpandedWrapper.onContentUpdated(entry.row);
+            mExpandedWrapper.onContentUpdated(row);
         }
         if (mHeadsUpChild != null) {
-            mHeadsUpWrapper.onContentUpdated(entry.row);
+            mHeadsUpWrapper.onContentUpdated(row);
         }
         if (mAmbientChild != null) {
-            mAmbientWrapper.onContentUpdated(entry.row);
+            mAmbientWrapper.onContentUpdated(row);
         }
         applyRemoteInputAndSmartReply(entry);
         updateLegacy();
@@ -1285,38 +1297,77 @@ public class NotificationContentView extends FrameLayout {
             return;
         }
 
-        Notification notification = entry.notification.getNotification();
+        SmartRepliesAndActions smartRepliesAndActions =
+                chooseSmartRepliesAndActions(mSmartReplyConstants, entry);
 
-        Pair<RemoteInput, Notification.Action> remoteInputActionPair =
-                entry.notification.getNotification().findRemoteInputActionPair(false /*freeform */);
-        Pair<RemoteInput, Notification.Action> freeformRemoteInputActionPair =
-                notification.findRemoteInputActionPair(true /*freeform */);
+        applyRemoteInput(entry, smartRepliesAndActions.hasFreeformRemoteInput);
+        applySmartReplyView(smartRepliesAndActions, entry);
+    }
 
-        boolean enableAppGeneratedSmartReplies = (mSmartReplyConstants.isEnabled()
-                && (!mSmartReplyConstants.requiresTargetingP()
+    /**
+     * Chose what smart replies and smart actions to display. App generated suggestions take
+     * precedence. So if the app provides any smart replies, we don't show any
+     * replies or actions generated by the NotificationAssistantService (NAS), and if the app
+     * provides any smart actions we also don't show any NAS-generated replies or actions.
+     */
+    @VisibleForTesting
+    static SmartRepliesAndActions chooseSmartRepliesAndActions(
+            SmartReplyConstants smartReplyConstants,
+            final NotificationData.Entry entry) {
+        boolean enableAppGeneratedSmartReplies = (smartReplyConstants.isEnabled()
+                && (!smartReplyConstants.requiresTargetingP()
                 || entry.targetSdk >= Build.VERSION_CODES.P));
 
-        RemoteInput remoteInputWithChoices = null;
-        PendingIntent pendingIntentWithChoices= null;
-        CharSequence[] choices = null;
-        if (enableAppGeneratedSmartReplies
-                && remoteInputActionPair != null
-                && !ArrayUtils.isEmpty(remoteInputActionPair.first.getChoices())) {
-            // app generated smart replies
-            remoteInputWithChoices = remoteInputActionPair.first;
-            pendingIntentWithChoices = remoteInputActionPair.second.actionIntent;
-            choices = remoteInputActionPair.first.getChoices();
-        } else if (!ArrayUtils.isEmpty(entry.smartReplies)
-                && freeformRemoteInputActionPair != null
-                && freeformRemoteInputActionPair.second.getAllowGeneratedReplies()) {
-            // system generated smart replies
-            remoteInputWithChoices = freeformRemoteInputActionPair.first;
-            pendingIntentWithChoices = freeformRemoteInputActionPair.second.actionIntent;
-            choices = entry.smartReplies;
-        }
+        Notification notification = entry.notification.getNotification();
+        Pair<RemoteInput, Notification.Action> remoteInputActionPair =
+                notification.findRemoteInputActionPair(false /* freeform */);
+        Pair<RemoteInput, Notification.Action> freeformRemoteInputActionPair =
+                notification.findRemoteInputActionPair(true /* freeform */);
 
-        applyRemoteInput(entry, freeformRemoteInputActionPair != null);
-        applySmartReplyView(remoteInputWithChoices, pendingIntentWithChoices, entry, choices);
+        boolean appGeneratedSmartRepliesExist =
+                enableAppGeneratedSmartReplies
+                        && remoteInputActionPair != null
+                        && !ArrayUtils.isEmpty(remoteInputActionPair.first.getChoices())
+                        && remoteInputActionPair.second.actionIntent != null;
+
+        List<Notification.Action> appGeneratedSmartActions = notification.getContextualActions();
+        boolean appGeneratedSmartActionsExist = !appGeneratedSmartActions.isEmpty();
+
+        SmartReplyView.SmartReplies smartReplies = null;
+        SmartReplyView.SmartActions smartActions = null;
+        if (appGeneratedSmartRepliesExist) {
+            smartReplies = new SmartReplyView.SmartReplies(
+                    remoteInputActionPair.first.getChoices(),
+                    remoteInputActionPair.first,
+                    remoteInputActionPair.second.actionIntent,
+                    false /* fromAssistant */);
+        }
+        if (appGeneratedSmartActionsExist) {
+            smartActions = new SmartReplyView.SmartActions(appGeneratedSmartActions,
+                    false /* fromAssistant */);
+        }
+        // Apps didn't provide any smart replies / actions, use those from NAS (if any).
+        if (!appGeneratedSmartRepliesExist && !appGeneratedSmartActionsExist) {
+            boolean useGeneratedReplies = !ArrayUtils.isEmpty(entry.smartReplies)
+                    && freeformRemoteInputActionPair != null
+                    && freeformRemoteInputActionPair.second.getAllowGeneratedReplies()
+                    && freeformRemoteInputActionPair.second.actionIntent != null;
+            if (useGeneratedReplies) {
+                smartReplies = new SmartReplyView.SmartReplies(
+                        entry.smartReplies,
+                        freeformRemoteInputActionPair.first,
+                        freeformRemoteInputActionPair.second.actionIntent,
+                        true /* fromAssistant */);
+            }
+            boolean useSmartActions = !ArrayUtils.isEmpty(entry.systemGeneratedSmartActions)
+                    && notification.getAllowSystemGeneratedContextualActions();
+            if (useSmartActions) {
+                smartActions = new SmartReplyView.SmartActions(
+                        entry.systemGeneratedSmartActions, true /* fromAssistant */);
+            }
+        }
+        return new SmartRepliesAndActions(
+                smartReplies, smartActions, freeformRemoteInputActionPair != null);
     }
 
     private void applyRemoteInput(NotificationData.Entry entry, boolean hasFreeformRemoteInput) {
@@ -1418,28 +1469,43 @@ public class NotificationContentView extends FrameLayout {
         return null;
     }
 
-    private void applySmartReplyView(RemoteInput remoteInput, PendingIntent pendingIntent,
-            NotificationData.Entry entry, CharSequence[] choices) {
+    private void applySmartReplyView(SmartRepliesAndActions smartRepliesAndActions,
+            NotificationData.Entry entry) {
         if (mExpandedChild != null) {
             mExpandedSmartReplyView =
-                    applySmartReplyView(mExpandedChild, remoteInput, pendingIntent, entry, choices);
-            if (mExpandedSmartReplyView != null && remoteInput != null
-                    && choices != null && choices.length > 0) {
-                mSmartReplyController.smartRepliesAdded(entry, choices.length);
+                    applySmartReplyView(mExpandedChild, smartRepliesAndActions, entry);
+            if (mExpandedSmartReplyView != null) {
+                if (smartRepliesAndActions.smartReplies != null
+                        || smartRepliesAndActions.smartActions != null) {
+                    int numSmartReplies = smartRepliesAndActions.smartReplies == null
+                            ? 0 : smartRepliesAndActions.smartReplies.choices.length;
+                    int numSmartActions = smartRepliesAndActions.smartActions == null
+                            ? 0 : smartRepliesAndActions.smartActions.actions.size();
+                    boolean fromAssistant = smartRepliesAndActions.smartReplies == null
+                            ? smartRepliesAndActions.smartActions.fromAssistant
+                            : smartRepliesAndActions.smartReplies.fromAssistant;
+                    mSmartReplyController.smartSuggestionsAdded(entry, numSmartReplies,
+                            numSmartActions, fromAssistant);
+                }
             }
+        }
+        if (mHeadsUpChild != null) {
+            mHeadsUpSmartReplyView =
+                    applySmartReplyView(mHeadsUpChild, smartRepliesAndActions, entry);
         }
     }
 
-    private SmartReplyView applySmartReplyView(
-            View view, RemoteInput remoteInput, PendingIntent pendingIntent,
-            NotificationData.Entry entry, CharSequence[] choices) {
+    private SmartReplyView applySmartReplyView(View view,
+            SmartRepliesAndActions smartRepliesAndActions, NotificationData.Entry entry) {
         View smartReplyContainerCandidate = view.findViewById(
                 com.android.internal.R.id.smart_reply_container);
         if (!(smartReplyContainerCandidate instanceof LinearLayout)) {
             return null;
         }
         LinearLayout smartReplyContainer = (LinearLayout) smartReplyContainerCandidate;
-        if (remoteInput == null || pendingIntent == null) {
+        // If there are no smart replies and no smart actions - early out.
+        if (smartRepliesAndActions.smartReplies == null
+                && smartRepliesAndActions.smartActions == null) {
             smartReplyContainer.setVisibility(View.GONE);
             return null;
         }
@@ -1468,9 +1534,16 @@ public class NotificationContentView extends FrameLayout {
             }
         }
         if (smartReplyView != null) {
-            smartReplyView.setRepliesFromRemoteInput(remoteInput, pendingIntent,
-                    mSmartReplyController, entry, smartReplyContainer, choices
-            );
+            smartReplyView.resetSmartSuggestions(smartReplyContainer);
+            if (smartRepliesAndActions.smartReplies != null) {
+                smartReplyView.addRepliesFromRemoteInput(
+                        smartRepliesAndActions.smartReplies, mSmartReplyController, entry);
+            }
+            if (smartRepliesAndActions.smartActions != null) {
+                smartReplyView.addSmartActions(
+                        smartRepliesAndActions.smartActions, mSmartReplyController, entry,
+                        mContainingNotification.getHeadsUpManager());
+            }
             smartReplyContainer.setVisibility(View.VISIBLE);
         }
         return smartReplyView;
@@ -1552,15 +1625,15 @@ public class NotificationContentView extends FrameLayout {
     }
 
     /** Sets whether the notification being displayed audibly alerted the user. */
-    public void setAudiblyAlerted(boolean audiblyAlerted) {
+    public void setRecentlyAudiblyAlerted(boolean audiblyAlerted) {
         if (mContractedChild != null && mContractedWrapper.getNotificationHeader() != null) {
-            mContractedWrapper.getNotificationHeader().setAudiblyAlerted(audiblyAlerted);
+            mContractedWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
         }
         if (mExpandedChild != null && mExpandedWrapper.getNotificationHeader() != null) {
-            mExpandedWrapper.getNotificationHeader().setAudiblyAlerted(audiblyAlerted);
+            mExpandedWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
         }
         if (mHeadsUpChild != null && mHeadsUpWrapper.getNotificationHeader() != null) {
-            mHeadsUpWrapper.getNotificationHeader().setAudiblyAlerted(audiblyAlerted);
+            mHeadsUpWrapper.getNotificationHeader().setRecentlyAudiblyAlerted(audiblyAlerted);
         }
     }
 
@@ -1868,6 +1941,43 @@ public class NotificationContentView extends FrameLayout {
         }
         if (mExpandedWrapper != null) {
             mExpandedWrapper.setHeaderVisibleAmount(headerVisibleAmount);
+        }
+    }
+
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.print("    ");
+        pw.print("contentView visibility: " + getVisibility());
+        pw.print(", alpha: " + getAlpha());
+        pw.print(", clipBounds: " + getClipBounds());
+        pw.print(", contentHeight: " + mContentHeight);
+        pw.print(", visibleType: " + mVisibleType);
+        View view = getViewForVisibleType(mVisibleType);
+        pw.print(", visibleView ");
+        if (view != null) {
+            pw.print(" visibility: " + view.getVisibility());
+            pw.print(", alpha: " + view.getAlpha());
+            pw.print(", clipBounds: " + view.getClipBounds());
+        } else {
+            pw.print("null");
+        }
+        pw.println();
+    }
+
+    @VisibleForTesting
+    static class SmartRepliesAndActions {
+        @Nullable
+        public final SmartReplyView.SmartReplies smartReplies;
+        @Nullable
+        public final SmartReplyView.SmartActions smartActions;
+        public final boolean hasFreeformRemoteInput;
+
+        SmartRepliesAndActions(
+                @Nullable SmartReplyView.SmartReplies smartReplies,
+                @Nullable SmartReplyView.SmartActions smartActions,
+                boolean hasFreeformRemoteInput) {
+            this.smartReplies = smartReplies;
+            this.smartActions = smartActions;
+            this.hasFreeformRemoteInput = hasFreeformRemoteInput;
         }
     }
 }

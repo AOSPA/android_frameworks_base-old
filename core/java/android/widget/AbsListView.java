@@ -29,6 +29,7 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
@@ -116,11 +117,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     private static final double MOVE_TOUCH_SLOP = 0.6;
     private static final double TOUCH_SLOP_MIN = 0.6;
     private static final double TOUCH_SLOP_MAX = 1.0;
-
-    /**
-     * Property to enable/disable pre-obtain view
-     */
-    private final boolean PREOBTAIN_ENABLE = SystemProperties.getBoolean("ro.vendor.scroll.preobtain.enable", false);
 
     /**
      * Disables the transcript mode.
@@ -252,11 +248,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     private final Thread mOwnerThread;
 
     /**
-     * Absolute incremental delta Y value from the previous choreographer action
-     */
-    int mOldIncrementalDeltaY;
-
-    /**
      * Controls if/how the user may choose/check items in the list
      */
     int mChoiceMode = CHOICE_MODE_NONE;
@@ -331,7 +322,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The drawable used to draw the selector
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     Drawable mSelector;
 
     /**
@@ -692,7 +683,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * ID of the active pointer. This is used to retain consistency during
      * drags/flings if multiple pointers are used.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private int mActivePointerId = INVALID_POINTER;
 
     /**
@@ -5372,10 +5363,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             fillGap(down);
         }
 
-        if(PREOBTAIN_ENABLE) {
-            mOldIncrementalDeltaY = absIncrementalDeltaY;
-            findNextGap(down);
-        }
         mRecycler.fullyDetachScrapViews();
         boolean selectorOnScreen = false;
         if (!inTouchMode && mSelectedPosition != INVALID_POSITION) {
@@ -5431,15 +5418,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @param down true if the scroll is going down, false if it is going up
      */
     abstract void fillGap(boolean down);
-
-    /**
-     * Find if the next choreographer frame would have an obtain view call.
-     *
-     * @param down true if the scroll is going down, false if it is going up
-     */
-    void findNextGap(boolean down) {
-
-    }
 
     void hideSelector() {
         if (mSelectedPosition != INVALID_POSITION) {
@@ -6674,7 +6652,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             @ViewDebug.IntToString(from = ITEM_VIEW_TYPE_IGNORE, to = "ITEM_VIEW_TYPE_IGNORE"),
             @ViewDebug.IntToString(from = ITEM_VIEW_TYPE_HEADER_OR_FOOTER, to = "ITEM_VIEW_TYPE_HEADER_OR_FOOTER")
         })
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         int viewType;
 
         /**

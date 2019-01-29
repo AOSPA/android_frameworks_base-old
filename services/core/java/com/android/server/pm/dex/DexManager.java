@@ -16,6 +16,10 @@
 
 package com.android.server.pm.dex;
 
+import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
+import static com.android.server.pm.dex.PackageDexUsage.DexUseInfo;
+import static com.android.server.pm.dex.PackageDexUsage.PackageUseInfo;
+
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -26,9 +30,9 @@ import android.database.ContentObserver;
 import android.os.Build;
 import android.os.FileUtils;
 import android.os.RemoteException;
-import android.os.storage.StorageManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.storage.StorageManager;
 import android.provider.Settings.Global;
 import android.util.Log;
 import android.util.Slog;
@@ -42,24 +46,19 @@ import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.PackageDexOptimizer;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.PackageManagerServiceUtils;
-import com.android.server.pm.PackageManagerServiceCompilerMapping;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
-
-import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
-import static com.android.server.pm.dex.PackageDexUsage.PackageUseInfo;
-import static com.android.server.pm.dex.PackageDexUsage.DexUseInfo;
 
 /**
  * This class keeps track of how dex files are used.
@@ -90,12 +89,17 @@ public class DexManager {
     // encode and save the dex usage data.
     private final PackageDexUsage mPackageDexUsage;
 
+    // DexLogger handles recording of dynamic code loading - which is similar to PackageDexUsage
+    // but records a different aspect of the data.
+    // (It additionally includes DEX files loaded with unsupported class loaders, and doesn't
+    // record class loaders or ISAs.)
+    private final DexLogger mDexLogger;
+
     private final IPackageManager mPackageManager;
     private final PackageDexOptimizer mPackageDexOptimizer;
     private final Object mInstallLock;
     @GuardedBy("mInstallLock")
     private final Installer mInstaller;
-    private final Listener mListener;
 
     // Possible outcomes of a dex search.
     private static int DEX_SEARCH_NOT_FOUND = 0;  // dex file not found
@@ -116,25 +120,20 @@ public class DexManager {
      */
     private final static PackageUseInfo DEFAULT_USE_INFO = new PackageUseInfo();
 
-    public interface Listener {
-        /**
-         * Invoked just before the secondary dex file {@code dexPath} for the specified application
-         * is reconciled.
-         */
-        void onReconcileSecondaryDexFile(ApplicationInfo appInfo, DexUseInfo dexUseInfo,
-                String dexPath, int storageFlags);
+    public DexManager(Context context, IPackageManager pms, PackageDexOptimizer pdo,
+            Installer installer, Object installLock) {
+        mContext = context;
+        mPackageCodeLocationsCache = new HashMap<>();
+        mPackageDexUsage = new PackageDexUsage();
+        mPackageManager = pms;
+        mPackageDexOptimizer = pdo;
+        mInstaller = installer;
+        mInstallLock = installLock;
+        mDexLogger = new DexLogger(pms, installer, installLock);
     }
 
-    public DexManager(Context context, IPackageManager pms, PackageDexOptimizer pdo,
-            Installer installer, Object installLock, Listener listener) {
-      mContext = context;
-      mPackageCodeLocationsCache = new HashMap<>();
-      mPackageDexUsage = new PackageDexUsage();
-      mPackageManager = pms;
-      mPackageDexOptimizer = pdo;
-      mInstaller = installer;
-      mInstallLock = installLock;
-      mListener = listener;
+    public DexLogger getDexLogger() {
+        return mDexLogger;
     }
 
     public void systemReady() {
@@ -208,7 +207,6 @@ public class DexManager {
                 Slog.i(TAG, loadingAppInfo.packageName +
                         " uses unsupported class loader in " + classLoaderNames);
             }
-            return;
         }
 
         int dexPathIndex = 0;
@@ -237,15 +235,21 @@ public class DexManager {
                     continue;
                 }
 
-                // Record dex file usage. If the current usage is a new pattern (e.g. new secondary,
-                // or UsedByOtherApps), record will return true and we trigger an async write
-                // to disk to make sure we don't loose the data in case of a reboot.
+                mDexLogger.record(loaderUserId, dexPath, searchResult.mOwningPackageName,
+                        loadingAppInfo.packageName);
 
-                String classLoaderContext = classLoaderContexts[dexPathIndex];
-                if (mPackageDexUsage.record(searchResult.mOwningPackageName,
-                        dexPath, loaderUserId, loaderIsa, isUsedByOtherApps, primaryOrSplit,
-                        loadingAppInfo.packageName, classLoaderContext)) {
-                    mPackageDexUsage.maybeWriteAsync();
+                if (classLoaderContexts != null) {
+
+                    // Record dex file usage. If the current usage is a new pattern (e.g. new
+                    // secondary, or UsedByOtherApps), record will return true and we trigger an
+                    // async write to disk to make sure we don't loose the data in case of a reboot.
+
+                    String classLoaderContext = classLoaderContexts[dexPathIndex];
+                    if (mPackageDexUsage.record(searchResult.mOwningPackageName,
+                            dexPath, loaderUserId, loaderIsa, isUsedByOtherApps, primaryOrSplit,
+                            loadingAppInfo.packageName, classLoaderContext)) {
+                        mPackageDexUsage.maybeWriteAsync();
+                    }
                 }
             } else {
                 // If we can't find the owner of the dex we simply do not track it. The impact is
@@ -269,8 +273,8 @@ public class DexManager {
             loadInternal(existingPackages);
         } catch (Exception e) {
             mPackageDexUsage.clear();
-            Slog.w(TAG, "Exception while loading package dex usage. " +
-                    "Starting with a fresh state.", e);
+            mDexLogger.clear();
+            Slog.w(TAG, "Exception while loading. Starting with a fresh state.", e);
         }
     }
 
@@ -312,15 +316,20 @@ public class DexManager {
      * all usage information for the package will be removed.
      */
     public void notifyPackageDataDestroyed(String packageName, int userId) {
-        boolean updated = userId == UserHandle.USER_ALL
-            ? mPackageDexUsage.removePackage(packageName)
-            : mPackageDexUsage.removeUserPackage(packageName, userId);
         // In case there was an update, write the package use info to disk async.
-        // Note that we do the writing here and not in PackageDexUsage in order to be
+        // Note that we do the writing here and not in the lower level classes in order to be
         // consistent with other methods in DexManager (e.g. reconcileSecondaryDexFiles performs
         // multiple updates in PackageDexUsage before writing it).
-        if (updated) {
-            mPackageDexUsage.maybeWriteAsync();
+        if (userId == UserHandle.USER_ALL) {
+            if (mPackageDexUsage.removePackage(packageName)) {
+                mPackageDexUsage.maybeWriteAsync();
+            }
+            mDexLogger.removePackage(packageName);
+        } else {
+            if (mPackageDexUsage.removeUserPackage(packageName, userId)) {
+                mPackageDexUsage.maybeWriteAsync();
+            }
+            mDexLogger.removeUserPackage(packageName, userId);
         }
     }
 
@@ -389,8 +398,22 @@ public class DexManager {
             }
         }
 
-        mPackageDexUsage.read();
-        mPackageDexUsage.syncData(packageToUsersMap, packageToCodePaths);
+        try {
+            mPackageDexUsage.read();
+            mPackageDexUsage.syncData(packageToUsersMap, packageToCodePaths);
+        } catch (Exception e) {
+            mPackageDexUsage.clear();
+            Slog.w(TAG, "Exception while loading package dex usage. "
+                    + "Starting with a fresh state.", e);
+        }
+
+        try {
+            mDexLogger.readAndSync(packageToUsersMap);
+        } catch (Exception e) {
+            mDexLogger.clear();
+            Slog.w(TAG, "Exception while loading package dynamic code usage. "
+                    + "Starting with a fresh state.", e);
+        }
     }
 
     /**
@@ -416,6 +439,7 @@ public class DexManager {
      * TODO(calin): maybe we should not (prune) so we can have an accurate view when we try
      * to access the package use.
      */
+    @VisibleForTesting
     /*package*/ boolean hasInfoOnPackage(String packageName) {
         return mPackageDexUsage.getPackageUseInfo(packageName) != null;
     }
@@ -527,10 +551,6 @@ public class DexManager {
                 updated = mPackageDexUsage.removeDexFile(
                         packageName, dexPath, dexUseInfo.getOwnerUserId()) || updated;
                 continue;
-            }
-
-            if (mListener != null) {
-                mListener.onReconcileSecondaryDexFile(info, dexUseInfo, dexPath, flags);
             }
 
             boolean dexStillExists = true;
@@ -653,7 +673,7 @@ public class DexManager {
             // to load dex files through it.
             try {
                 String dexPathReal = PackageManagerServiceUtils.realpath(new File(dexPath));
-                if (dexPathReal != dexPath) {
+                if (!dexPath.equals(dexPathReal)) {
                     Slog.d(TAG, "Dex loaded with symlink. dexPath=" +
                             dexPath + " dexPathReal=" + dexPathReal);
                 }
@@ -676,6 +696,7 @@ public class DexManager {
      */
     public void writePackageDexUsageNow() {
         mPackageDexUsage.writeNow();
+        mDexLogger.writeNow();
     }
 
     private void registerSettingObserver() {
@@ -764,10 +785,10 @@ public class DexManager {
      * files that can be direclty mapped.
      */
     private static void logIfPackageHasUncompressedCode(PackageParser.Package pkg) {
-        logIfApkHasUncompressedCode(pkg.baseCodePath);
+        auditUncompressedCodeInApk(pkg.baseCodePath);
         if (!ArrayUtils.isEmpty(pkg.splitCodePaths)) {
             for (int i = 0; i < pkg.splitCodePaths.length; i++) {
-                logIfApkHasUncompressedCode(pkg.splitCodePaths[i]);
+                auditUncompressedCodeInApk(pkg.splitCodePaths[i]);
             }
         }
     }
@@ -776,34 +797,41 @@ public class DexManager {
      * Generates log if the archive located at {@code fileName} has uncompressed dex file and so
      * files that can be direclty mapped.
      */
-    private static void logIfApkHasUncompressedCode(String fileName) {
+    public static boolean auditUncompressedCodeInApk(String fileName) {
         StrictJarFile jarFile = null;
         try {
             jarFile = new StrictJarFile(fileName,
                     false /*verify*/, false /*signatureSchemeRollbackProtectionsEnforced*/);
             Iterator<ZipEntry> it = jarFile.iterator();
+            boolean allCorrect = true;
             while (it.hasNext()) {
                 ZipEntry entry = it.next();
                 if (entry.getName().endsWith(".dex")) {
                     if (entry.getMethod() != ZipEntry.STORED) {
+                        allCorrect = false;
                         Slog.w(TAG, "APK " + fileName + " has compressed dex code " +
                                 entry.getName());
                     } else if ((entry.getDataOffset() & 0x3) != 0) {
+                        allCorrect = false;
                         Slog.w(TAG, "APK " + fileName + " has unaligned dex code " +
                                 entry.getName());
                     }
                 } else if (entry.getName().endsWith(".so")) {
                     if (entry.getMethod() != ZipEntry.STORED) {
+                        allCorrect = false;
                         Slog.w(TAG, "APK " + fileName + " has compressed native code " +
                                 entry.getName());
                     } else if ((entry.getDataOffset() & (0x1000 - 1)) != 0) {
+                        allCorrect = false;
                         Slog.w(TAG, "APK " + fileName + " has unaligned native code " +
                                 entry.getName());
                     }
                 }
             }
+            return allCorrect;
         } catch (IOException ignore) {
             Slog.wtf(TAG, "Error when parsing APK " + fileName);
+            return false;
         } finally {
             try {
                 if (jarFile != null) {

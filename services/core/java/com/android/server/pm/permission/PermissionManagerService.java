@@ -27,7 +27,6 @@ import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.app.AppOpsManager.OP_NONE;
 import static android.app.AppOpsManager.permissionToOp;
 import static android.app.AppOpsManager.permissionToOpCode;
-import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_PRIVILEGED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
@@ -947,7 +946,8 @@ public class PermissionManagerService {
                                     // how to disable the API to simulate revocation as legacy
                                     // apps don't expect to run with revoked permissions.
                                     if (PLATFORM_PACKAGE_NAME.equals(bp.getSourcePackageName())) {
-                                        if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0) {
+                                        if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0
+                                                && !bp.isRemoved()) {
                                             flags |= FLAG_PERMISSION_REVIEW_REQUIRED;
                                             // We changed the flags, hence have to write.
                                             updatedUserIds = ArrayUtils.appendInt(
@@ -1072,9 +1072,8 @@ public class PermissionManagerService {
         AppOpsManagerInternal appOpsInternal = LocalServices.getService(
                 AppOpsManagerInternal.class);
 
-        appOpsInternal.setMode(permissionToOpCode(permission),
-                getUid(userId, getAppId(pkg.applicationInfo.uid)), pkg.packageName, mode,
-                (pkg.applicationInfo.privateFlags & PRIVATE_FLAG_PRIVILEGED) != 0);
+        appOpsInternal.setUidMode(permissionToOpCode(permission),
+                getUid(userId, getAppId(pkg.applicationInfo.uid)), mode);
     }
 
     /**
@@ -1242,6 +1241,9 @@ public class PermissionManagerService {
                         && ps.getRuntimePermissionState(sourcePerm, userId).isGranted()) {
                     isGranted = true;
                     break;
+                } else if (ps.hasInstallPermission(sourcePerm)) {
+                    isGranted = true;
+                    break;
                 }
             }
 
@@ -1341,15 +1343,29 @@ public class PermissionManagerService {
                                     sourcePermNum++) {
                                 String sourcePerm = sourcePerms.valueAt(sourcePermNum);
 
-                                if (appOpsManager.unsafeCheckOpNoThrow(permissionToOp(sourcePerm),
-                                        getUid(userId, getAppId(pkg.applicationInfo.uid)), pkgName)
+                                if (ps.hasRuntimePermission(sourcePerm, userId)
+                                        && ps.getRuntimePermissionState(sourcePerm, userId)
+                                        .isGranted()
+                                        && appOpsManager.unsafeCheckOpNoThrow(
+                                                permissionToOp(sourcePerm), getUid(userId,
+                                                getAppId(pkg.applicationInfo.uid)), pkgName)
                                         == MODE_ALLOWED) {
                                     setAppOpMode(sourcePerm, pkg, userId, MODE_FOREGROUND);
                                 }
                             }
                         } else {
-                            if (!origPs.hasRequestedPermission(sourcePerms)) {
-                                // Both permissions are new, do nothing
+                            boolean inheritsFromInstallPerm = false;
+                            for (int sourcePermNum = 0; sourcePermNum < sourcePerms.size();
+                                    sourcePermNum++) {
+                                if (ps.hasInstallPermission(sourcePerms.valueAt(sourcePermNum))) {
+                                    inheritsFromInstallPerm = true;
+                                    break;
+                                }
+                            }
+
+                            if (!origPs.hasRequestedPermission(sourcePerms)
+                                    && !inheritsFromInstallPerm) {
+                                // Both permissions are new so nothing to inherit.
                                 if (DEBUG_PERMISSIONS) {
                                     Slog.i(TAG, newPerm + " does not inherit from " + sourcePerms
                                             + " for " + pkgName
@@ -1358,6 +1374,7 @@ public class PermissionManagerService {
 
                                 break;
                             } else {
+                                // Inherit from new install or existing runtime permissions
                                 inheritPermissionStateToNewImplicitPermissionLocked(sourcePerms,
                                         newPerm, ps, pkg, userId);
                             }
@@ -1621,6 +1638,19 @@ public class PermissionManagerService {
                             PackageManagerInternal.PACKAGE_SYSTEM_TEXT_CLASSIFIER,
                             UserHandle.USER_SYSTEM))) {
                 // Special permissions for the system default text classifier.
+                allowed = true;
+            }
+            if (!allowed && bp.isWellbeing()
+                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                    PackageManagerInternal.PACKAGE_WELLBEING, UserHandle.USER_SYSTEM))) {
+                // Special permission granted only to the OEM specified wellbeing app
+                allowed = true;
+            }
+            if (!allowed && bp.isDocumenter()
+                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                            PackageManagerInternal.PACKAGE_DOCUMENTER, UserHandle.USER_SYSTEM))) {
+                // If this permission is to be granted to the documenter and
+                // this app is the documenter, then it gets the permission.
                 allowed = true;
             }
         }
@@ -2628,6 +2658,13 @@ public class PermissionManagerService {
         public BasePermission getPermissionTEMP(String permName) {
             synchronized (PermissionManagerService.this.mLock) {
                 return mSettings.getPermissionLocked(permName);
+            }
+        }
+        @Override
+        public boolean isPermissionUsageInfoRequired(String permName) {
+            synchronized (PermissionManagerService.this.mLock) {
+                BasePermission bp = mSettings.getPermissionLocked(permName);
+                return bp != null && bp.usageInfoRequired;
             }
         }
     }

@@ -208,9 +208,14 @@ class SettingsProtoDumpUtil {
                 GlobalSettingsProto.Autofill.MAX_VISIBLE_DATASETS);
         p.end(autofillToken);
 
+        final long backupToken = p.start(GlobalSettingsProto.BACKUP);
         dumpSetting(s, p,
                 Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS,
-                GlobalSettingsProto.BACKUP_AGENT_TIMEOUT_PARAMETERS);
+                GlobalSettingsProto.Backup.BACKUP_AGENT_TIMEOUT_PARAMETERS);
+        dumpSetting(s, p,
+                Settings.Global.BACKUP_MULTI_USER_ENABLED,
+                GlobalSettingsProto.Backup.BACKUP_MULTI_USER_ENABLED);
+        p.end(backupToken);
 
         final long batteryToken = p.start(GlobalSettingsProto.BATTERY);
         dumpSetting(s, p,
@@ -417,6 +422,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.CONTACTS_DATABASE_WAL_ENABLED,
                 GlobalSettingsProto.CONTACTS_DATABASE_WAL_ENABLED);
+
+        final long contentCaptureToken = p.start(GlobalSettingsProto.CONTENT_CAPTURE);
+        dumpSetting(s, p,
+                Settings.Global.CONTENT_CAPTURE_SERVICE_EXPLICITLY_ENABLED,
+                GlobalSettingsProto.ContentCapture.SERVICE_EXPLICITLY_ENABLED);
+        p.end(contentCaptureToken);
 
         final long dataToken = p.start(GlobalSettingsProto.DATA);
         // Settings.Global.DEFAULT_RESTRICT_BACKGROUND_DATA intentionally excluded.
@@ -679,8 +690,14 @@ class SettingsProtoDumpUtil {
                 Settings.Global.GPU_DEBUG_LAYERS,
                 GlobalSettingsProto.Gpu.DEBUG_LAYERS);
         dumpSetting(s, p,
-                Settings.Global.ANGLE_ENABLED_APP,
-                GlobalSettingsProto.Gpu.ANGLE_ENABLED_APP);
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE,
+                GlobalSettingsProto.Gpu.ANGLE_GL_DRIVER_ALL_ANGLE);
+        dumpSetting(s, p,
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS,
+                GlobalSettingsProto.Gpu.ANGLE_GL_DRIVER_SELECTION_PKGS);
+        dumpSetting(s, p,
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES,
+                GlobalSettingsProto.Gpu.ANGLE_GL_DRIVER_SELECTION_VALUES);
         dumpSetting(s, p,
                 Settings.Global.GPU_DEBUG_LAYER_APP,
                 GlobalSettingsProto.Gpu.DEBUG_LAYER_APP);
@@ -688,8 +705,11 @@ class SettingsProtoDumpUtil {
                 Settings.Global.GPU_DEBUG_LAYERS_GLES,
                 GlobalSettingsProto.Gpu.DEBUG_LAYERS_GLES);
         dumpSetting(s, p,
-                Settings.Global.UPDATED_GFX_DRIVER_DEV_OPT_IN_APP,
-                GlobalSettingsProto.Gpu.UPDATED_GFX_DRIVER_DEV_OPT_IN_APP);
+                Settings.Global.GUP_DEV_OPT_IN_APPS,
+                GlobalSettingsProto.Gpu.GUP_DEV_OPT_IN_APPS);
+        dumpSetting(s, p,
+                Settings.Global.GUP_BLACK_LIST,
+                GlobalSettingsProto.Gpu.GUP_BLACK_LIST);
         p.end(gpuToken);
 
         final long hdmiToken = p.start(GlobalSettingsProto.HDMI);
@@ -855,6 +875,10 @@ class SettingsProtoDumpUtil {
                 GlobalSettingsProto.MultiSim.SMS_PROMPT);
         p.end(multiSimToken);
 
+        dumpSetting(s, p,
+                Global.NATIVE_FLAGS_HEALTH_CHECK_ENABLED,
+                GlobalSettingsProto.NATIVE_FLAGS_HEALTH_CHECK_ENABLED);
+
         final long netstatsToken = p.start(GlobalSettingsProto.NETSTATS);
         dumpSetting(s, p,
                 Settings.Global.NETSTATS_ENABLED,
@@ -994,6 +1018,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS,
                 GlobalSettingsProto.Notification.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS);
+        dumpSetting(s, p,
+                Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS,
+                GlobalSettingsProto.Notification.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS);
         p.end(notificationToken);
 
         dumpSetting(s, p,
@@ -1305,6 +1332,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.WARNING_TEMPERATURE,
                 GlobalSettingsProto.TemperatureWarning.WARNING_TEMPERATURE_LEVEL);
+        dumpSetting(s, p,
+                Settings.Global.USB_ALARM_TEMPERATURE,
+                GlobalSettingsProto.TemperatureWarning.USB_ALARM_TEMPERATURE_LEVEL);
         p.end(tempWarningToken);
 
         final long tetherToken = p.start(GlobalSettingsProto.TETHER);
@@ -1912,6 +1942,15 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.LOCATION_CHANGER,
                 SecureSettingsProto.Location.CHANGER);
         p.end(locationToken);
+
+        final long locationAccessCheckToken = p.start(SecureSettingsProto.LOCATION_ACCESS_CHECK);
+        dumpSetting(s, p,
+                Settings.Secure.LOCATION_ACCESS_CHECK_INTERVAL_MILLIS,
+                SecureSettingsProto.LocationAccessCheck.INTERVAL_MILLIS);
+        dumpSetting(s, p,
+                Settings.Secure.LOCATION_ACCESS_CHECK_DELAY_MILLIS,
+                SecureSettingsProto.LocationAccessCheck.DELAY_MILLIS);
+        p.end(locationAccessCheckToken);
 
         final long lockScreenToken = p.start(SecureSettingsProto.LOCK_SCREEN);
         // Settings.Secure.LOCK_BIOMETRIC_WEAK_FLAGS intentionally excluded since it's deprecated.

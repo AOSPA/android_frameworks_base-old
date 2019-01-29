@@ -26,6 +26,10 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMAR
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.server.wm.ActivityStack.ActivityState.DESTROYING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
@@ -44,10 +48,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
 
 import android.content.pm.ActivityInfo;
 import android.os.UserHandle;
@@ -74,7 +74,7 @@ public class ActivityStackTests extends ActivityTestsBase {
     @Before
     public void setUp() throws Exception {
         setupActivityTaskManagerService();
-        mDefaultDisplay = mSupervisor.getDefaultDisplay();
+        mDefaultDisplay = mRootActivityContainer.getDefaultDisplay();
         mStack = spy(mDefaultDisplay.createStack(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD,
                 true /* onTop */));
         mTask = new TaskBuilder(mSupervisor).setStack(mStack).build();
@@ -82,17 +82,17 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testEmptyTaskCleanupOnRemove() {
-        assertNotNull(mTask.getWindowContainerController());
+        assertNotNull(mTask.getTask());
         mStack.removeTask(mTask, "testEmptyTaskCleanupOnRemove", REMOVE_TASK_MODE_DESTROYING);
-        assertNull(mTask.getWindowContainerController());
+        assertNull(mTask.getTask());
     }
 
     @Test
     public void testOccupiedTaskCleanupOnRemove() {
         final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
-        assertNotNull(mTask.getWindowContainerController());
+        assertNotNull(mTask.getTask());
         mStack.removeTask(mTask, "testOccupiedTaskCleanupOnRemove", REMOVE_TASK_MODE_DESTROYING);
-        assertNotNull(mTask.getWindowContainerController());
+        assertNotNull(mTask.getTask());
     }
 
     @Test
@@ -112,7 +112,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         r.setState(RESUMED, "testResumedActivityFromTaskReparenting");
         assertEquals(r, mStack.getResumedActivity());
 
-        final ActivityStack destStack = mService.mStackSupervisor.getDefaultDisplay().createStack(
+        final ActivityStack destStack = mRootActivityContainer.getDefaultDisplay().createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         mTask.reparent(destStack, true /* toTop */, TaskRecord.REPARENT_KEEP_STACK_AT_FRONT,
@@ -130,7 +130,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         r.setState(RESUMED, "testResumedActivityFromActivityReparenting");
         assertEquals(r, mStack.getResumedActivity());
 
-        final ActivityStack destStack = mService.mStackSupervisor.getDefaultDisplay().createStack(
+        final ActivityStack destStack = mRootActivityContainer.getDefaultDisplay().createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         final TaskRecord destTask = new TaskBuilder(mSupervisor).setStack(destStack).build();
 
@@ -162,7 +162,8 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
 
         // Ensure that the override mode is restored to undefined
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
     }
 
     @Test
@@ -184,7 +185,8 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertEquals(0, mDefaultDisplay.getIndexOf(primarySplitScreen));
 
         // Ensure that the override mode is restored to what it was (fullscreen)
-        assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_FULLSCREEN,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
     }
 
     @Test
@@ -193,11 +195,13 @@ public class ActivityStackTests extends ActivityTestsBase {
                 WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
 
         mDefaultDisplay.setWindowingMode(WINDOWING_MODE_FREEFORM);
         assertEquals(WINDOWING_MODE_FREEFORM, primarySplitScreen.getWindowingMode());
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
     }
 
     @Test
@@ -206,11 +210,13 @@ public class ActivityStackTests extends ActivityTestsBase {
                 WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
-        assertEquals(WINDOWING_MODE_UNDEFINED, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_UNDEFINED,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
 
         primarySplitScreen.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
         // setting windowing mode should still work even though resolved mode is already fullscreen
-        assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getOverrideWindowingMode());
+        assertEquals(WINDOWING_MODE_FULLSCREEN,
+                primarySplitScreen.getRequestedOverrideWindowingMode());
 
         mDefaultDisplay.setWindowingMode(WINDOWING_MODE_FREEFORM);
         assertEquals(WINDOWING_MODE_FULLSCREEN, primarySplitScreen.getWindowingMode());
@@ -233,14 +239,14 @@ public class ActivityStackTests extends ActivityTestsBase {
                 .setStack(mStack)
                 .setUid(0)
                 .build();
-        final TaskRecord task = r.getTask();
+        final TaskRecord task = r.getTaskRecord();
         // Overlay must be for a different user to prevent recognizing a matching top activity
         final ActivityRecord taskOverlay = new ActivityBuilder(mService).setTask(task)
                 .setUid(UserHandle.PER_USER_RANGE * 2).build();
         taskOverlay.mTaskOverlay = true;
 
-        final ActivityStackSupervisor.FindTaskResult result =
-                new ActivityStackSupervisor.FindTaskResult();
+        final RootActivityContainer.FindTaskResult result =
+                new RootActivityContainer.FindTaskResult();
         mStack.findTaskLocked(r, result);
 
         assertEquals(r, task.getTopActivity(false /* includeOverlays */));
@@ -700,7 +706,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         // should be destroyed immediately with updating configuration to restore original state.
         final ActivityRecord activity1 = finishCurrentActivity(stack1);
         assertEquals(DESTROYING, activity1.getState());
-        verify(mSupervisor).ensureVisibilityAndConfig(eq(null) /* starting */,
+        verify(mRootActivityContainer).ensureVisibilityAndConfig(eq(null) /* starting */,
                 eq(display.mDisplayId), anyBoolean(), anyBoolean());
     }
 
@@ -778,7 +784,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         final ActivityDisplay display = mock(ActivityDisplay.class);
         final KeyguardController keyguardController = mSupervisor.getKeyguardController();
 
-        doReturn(display).when(mSupervisor).getActivityDisplay(anyInt());
+        doReturn(display).when(mRootActivityContainer).getActivityDisplay(anyInt());
         doReturn(keyguardGoingAway).when(keyguardController).isKeyguardGoingAway();
         doReturn(displaySleeping).when(display).isSleeping();
         doReturn(focusedStack).when(mStack).isFocusedStackOnDisplay();
@@ -791,7 +797,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         public boolean mChanged = false;
 
         @Override
-        public void onStackOrderChanged() {
+        public void onStackOrderChanged(ActivityStack stack) {
             mChanged = true;
         }
     }

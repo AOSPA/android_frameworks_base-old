@@ -51,7 +51,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.NOTIFY_APP_TRANSITION_STARTING;
 
-import android.app.WindowConfiguration;
 import android.os.Trace;
 import android.util.ArraySet;
 import android.util.Slog;
@@ -83,7 +82,7 @@ public class AppTransitionController {
     AppTransitionController(WindowManagerService service, DisplayContent displayContent) {
         mService = service;
         mDisplayContent = displayContent;
-        mWallpaperControllerLocked = new WallpaperController(mService);
+        mWallpaperControllerLocked = mDisplayContent.mWallpaperController;
     }
 
     /**
@@ -97,16 +96,17 @@ public class AppTransitionController {
         Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "AppTransitionReady");
 
         if (DEBUG_APP_TRANSITIONS) Slog.v(TAG, "**** GOOD TO GO");
-        int transit = mDisplayContent.mAppTransition.getAppTransition();
+        final AppTransition appTransition = mDisplayContent.mAppTransition;
+        int transit = appTransition.getAppTransition();
         if (mDisplayContent.mSkipAppTransitionAnimation && !isKeyguardGoingAwayTransit(transit)) {
             transit = WindowManager.TRANSIT_UNSET;
         }
         mDisplayContent.mSkipAppTransitionAnimation = false;
         mDisplayContent.mNoAnimationNotifyOnTransitionFinished.clear();
 
-        mDisplayContent.mAppTransition.removeAppTransitionTimeoutCallbacks();
+        appTransition.removeAppTransitionTimeoutCallbacks();
 
-        mService.mRoot.mWallpaperMayChange = false;
+        mDisplayContent.mWallpaperMayChange = false;
 
         int i;
         for (i = 0; i < appsCount; i++) {
@@ -121,7 +121,7 @@ public class AppTransitionController {
         // Adjust wallpaper before we pull the lower/upper target, since pending changes
         // (like the clearAnimatingFlags() above) might affect wallpaper target result.
         // Or, the opening app window should be a wallpaper target.
-        mWallpaperControllerLocked.adjustWallpaperWindowsForAppTransitionIfNeeded(mDisplayContent,
+        mWallpaperControllerLocked.adjustWallpaperWindowsForAppTransitionIfNeeded(
                 mDisplayContent.mOpeningApps);
 
         // Determine if closing and opening app token sets are wallpaper targets, in which case
@@ -142,7 +142,7 @@ public class AppTransitionController {
         // done behind a dream window.
         final ArraySet<Integer> activityTypes = collectActivityTypes(mDisplayContent.mOpeningApps,
                 mDisplayContent.mClosingApps);
-        final boolean allowAnimations = mService.mPolicy.allowAppAnimationsLw();
+        final boolean allowAnimations = mDisplayContent.getDisplayPolicy().allowAppAnimationsLw();
         final AppWindowToken animLpToken = allowAnimations
                 ? findAnimLayoutParamsToken(transit, activityTypes)
                 : null;
@@ -166,15 +166,15 @@ public class AppTransitionController {
             handleClosingApps(transit, animLp, voiceInteraction);
             handleOpeningApps(transit, animLp, voiceInteraction);
 
-            mDisplayContent.mAppTransition.setLastAppTransition(transit, topOpeningApp,
+            appTransition.setLastAppTransition(transit, topOpeningApp,
                     topClosingApp);
 
-            final int flags = mDisplayContent.mAppTransition.getTransitFlags();
-            layoutRedo = mDisplayContent.mAppTransition.goodToGo(transit, topOpeningApp,
+            final int flags = appTransition.getTransitFlags();
+            layoutRedo = appTransition.goodToGo(transit, topOpeningApp,
                     topClosingApp, mDisplayContent.mOpeningApps, mDisplayContent.mClosingApps);
             handleNonAppWindowsInTransition(transit, flags);
-            mDisplayContent.mAppTransition.postAnimationCallback();
-            mDisplayContent.mAppTransition.clear();
+            appTransition.postAnimationCallback();
+            appTransition.clear();
         } finally {
             mService.mSurfaceAnimationRunner.continueStartingAnimations();
         }
@@ -255,8 +255,8 @@ public class AppTransitionController {
     }
 
     /**
-     * @return The set of {@link WindowConfiguration.ActivityType}s contained in the set of apps in
-     *         {@code array1} and {@code array2}.
+     * @return The set of {@link android.app.WindowConfiguration.ActivityType}s contained in the set
+     *         of apps in {@code array1} and {@code array2}.
      */
     private static ArraySet<Integer> collectActivityTypes(ArraySet<AppWindowToken> array1,
             ArraySet<AppWindowToken> array2) {
@@ -305,7 +305,7 @@ public class AppTransitionController {
             AppWindowToken wtoken = openingApps.valueAt(i);
             if (DEBUG_APP_TRANSITIONS) Slog.v(TAG, "Now opening app" + wtoken);
 
-            if (!wtoken.setVisibility(animLp, true, transit, false, voiceInteraction)) {
+            if (!wtoken.commitVisibility(animLp, true, transit, false, voiceInteraction)) {
                 // This token isn't going to be animating. Add it to the list of tokens to
                 // be notified of app transition complete since the notification will not be
                 // sent be the app window animator.
@@ -341,7 +341,7 @@ public class AppTransitionController {
             if (DEBUG_APP_TRANSITIONS) Slog.v(TAG, "Now closing app " + wtoken);
             // TODO: Do we need to add to mNoAnimationNotifyOnTransitionFinished like above if not
             //       animating?
-            wtoken.setVisibility(animLp, false, transit, false, voiceInteraction);
+            wtoken.commitVisibility(animLp, false, transit, false, voiceInteraction);
             wtoken.updateReportedVisibilityLocked();
             // Force the allDrawn flag, because we want to start
             // this guy's animations regardless of whether it's
@@ -350,9 +350,8 @@ public class AppTransitionController {
             wtoken.deferClearAllDrawn = false;
             // Ensure that apps that are mid-starting are also scheduled to have their
             // starting windows removed after the animation is complete
-            if (wtoken.startingWindow != null && !wtoken.startingWindow.mAnimatingExit
-                    && wtoken.getController() != null) {
-                wtoken.getController().removeStartingWindow();
+            if (wtoken.startingWindow != null && !wtoken.startingWindow.mAnimatingExit) {
+                wtoken.removeStartingWindow();
             }
 
             if (mDisplayContent.mAppTransition.isNextAppTransitionThumbnailDown()) {

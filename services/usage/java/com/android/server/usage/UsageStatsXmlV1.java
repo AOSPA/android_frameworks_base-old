@@ -20,6 +20,7 @@ import android.app.usage.UsageEvents;
 import android.app.usage.UsageStats;
 import android.content.res.Configuration;
 import android.util.ArrayMap;
+import android.util.Log;
 
 import com.android.internal.util.XmlUtils;
 
@@ -60,11 +61,13 @@ final class UsageStatsXmlV1 {
     private static final String FLAGS_ATTR = "flags";
     private static final String CLASS_ATTR = "class";
     private static final String TOTAL_TIME_ACTIVE_ATTR = "timeActive";
+    private static final String TOTAL_TIME_VISIBLE_ATTR = "timeVisible";
     private static final String TOTAL_TIME_SERVICE_USED_ATTR = "timeServiceUsed";
     private static final String COUNT_ATTR = "count";
     private static final String ACTIVE_ATTR = "active";
     private static final String LAST_EVENT_ATTR = "lastEvent";
     private static final String TYPE_ATTR = "type";
+    private static final String INSTANCE_ID_ATTR = "instanceId";
     private static final String SHORTCUT_ID_ATTR = "shortcutId";
     private static final String STANDBY_BUCKET_ATTR = "standbyBucket";
     private static final String APP_LAUNCH_COUNT_ATTR = "appLaunchCount";
@@ -74,6 +77,7 @@ final class UsageStatsXmlV1 {
 
     // Time attributes stored as an offset of the beginTime.
     private static final String LAST_TIME_ACTIVE_ATTR = "lastTimeActive";
+    private static final String LAST_TIME_VISIBLE_ATTR = "lastTimeVisible";
     private static final String LAST_TIME_SERVICE_USED_ATTR = "lastTimeServiceUsed";
     private static final String END_TIME_ATTR = "endTime";
     private static final String TIME_ATTR = "time";
@@ -89,11 +93,36 @@ final class UsageStatsXmlV1 {
         // Apply the offset to the beginTime to find the absolute time.
         stats.mLastTimeUsed = statsOut.beginTime + XmlUtils.readLongAttribute(
                 parser, LAST_TIME_ACTIVE_ATTR);
-        stats.mLastTimeForegroundServiceUsed = statsOut.beginTime + XmlUtils.readLongAttribute(
-                parser, LAST_TIME_SERVICE_USED_ATTR);
+
+        try {
+            stats.mLastTimeVisible = statsOut.beginTime + XmlUtils.readLongAttribute(
+                    parser, LAST_TIME_VISIBLE_ATTR);
+        } catch (IOException e) {
+            Log.i(TAG, "Failed to parse mLastTimeVisible");
+        }
+
+        try {
+            stats.mLastTimeForegroundServiceUsed = statsOut.beginTime + XmlUtils.readLongAttribute(
+                    parser, LAST_TIME_SERVICE_USED_ATTR);
+        } catch (IOException e) {
+            Log.i(TAG, "Failed to parse mLastTimeForegroundServiceUsed");
+        }
+
         stats.mTotalTimeInForeground = XmlUtils.readLongAttribute(parser, TOTAL_TIME_ACTIVE_ATTR);
-        stats.mTotalTimeForegroundServiceUsed = XmlUtils.readLongAttribute(parser,
-                TOTAL_TIME_SERVICE_USED_ATTR);
+
+        try {
+            stats.mTotalTimeVisible = XmlUtils.readLongAttribute(parser, TOTAL_TIME_VISIBLE_ATTR);
+        } catch (IOException e) {
+            Log.i(TAG, "Failed to parse mTotalTimeVisible");
+        }
+
+        try {
+            stats.mTotalTimeForegroundServiceUsed = XmlUtils.readLongAttribute(parser,
+                    TOTAL_TIME_SERVICE_USED_ATTR);
+        } catch (IOException e) {
+            Log.i(TAG, "Failed to parse mTotalTimeForegroundServiceUsed");
+        }
+
         stats.mLastEvent = XmlUtils.readIntAttribute(parser, LAST_EVENT_ATTR);
         stats.mAppLaunchCount = XmlUtils.readIntAttribute(parser, APP_LAUNCH_COUNT_ATTR,
                 0);
@@ -186,6 +215,13 @@ final class UsageStatsXmlV1 {
         event.mTimeStamp = statsOut.beginTime + XmlUtils.readLongAttribute(parser, TIME_ATTR);
 
         event.mEventType = XmlUtils.readIntAttribute(parser, TYPE_ATTR);
+
+        try {
+            event.mInstanceId = XmlUtils.readIntAttribute(parser, INSTANCE_ID_ATTR);
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to parse mInstanceId", e);
+        }
+
         switch (event.mEventType) {
             case UsageEvents.Event.CONFIGURATION_CHANGE:
                 event.mConfiguration = new Configuration();
@@ -214,10 +250,13 @@ final class UsageStatsXmlV1 {
         // Write the time offset.
         XmlUtils.writeLongAttribute(xml, LAST_TIME_ACTIVE_ATTR,
                 usageStats.mLastTimeUsed - stats.beginTime);
+        XmlUtils.writeLongAttribute(xml, LAST_TIME_VISIBLE_ATTR,
+                usageStats.mLastTimeVisible - stats.beginTime);
         XmlUtils.writeLongAttribute(xml, LAST_TIME_SERVICE_USED_ATTR,
                 usageStats.mLastTimeForegroundServiceUsed - stats.beginTime);
         XmlUtils.writeStringAttribute(xml, PACKAGE_ATTR, usageStats.mPackageName);
         XmlUtils.writeLongAttribute(xml, TOTAL_TIME_ACTIVE_ATTR, usageStats.mTotalTimeInForeground);
+        XmlUtils.writeLongAttribute(xml, TOTAL_TIME_VISIBLE_ATTR, usageStats.mTotalTimeVisible);
         XmlUtils.writeLongAttribute(xml, TOTAL_TIME_SERVICE_USED_ATTR,
                 usageStats.mTotalTimeForegroundServiceUsed);
         XmlUtils.writeIntAttribute(xml, LAST_EVENT_ATTR, usageStats.mLastEvent);
@@ -304,6 +343,7 @@ final class UsageStatsXmlV1 {
         }
         XmlUtils.writeIntAttribute(xml, FLAGS_ATTR, event.mFlags);
         XmlUtils.writeIntAttribute(xml, TYPE_ATTR, event.mEventType);
+        XmlUtils.writeIntAttribute(xml, INSTANCE_ID_ATTR, event.mInstanceId);
 
         switch (event.mEventType) {
             case UsageEvents.Event.CONFIGURATION_CHANGE:
@@ -350,8 +390,17 @@ final class UsageStatsXmlV1 {
         }
 
         statsOut.endTime = statsOut.beginTime + XmlUtils.readLongAttribute(parser, END_TIME_ATTR);
-        statsOut.majorVersion = XmlUtils.readIntAttribute(parser, MAJOR_VERSION_ATTR);
-        statsOut.minorVersion = XmlUtils.readIntAttribute(parser, MINOR_VERSION_ATTR);
+        try {
+            statsOut.majorVersion = XmlUtils.readIntAttribute(parser, MAJOR_VERSION_ATTR);
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to parse majorVersion", e);
+        }
+
+        try {
+            statsOut.minorVersion = XmlUtils.readIntAttribute(parser, MINOR_VERSION_ATTR);
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to parse minorVersion", e);
+        }
 
         int eventCode;
         int outerDepth = parser.getDepth();

@@ -35,6 +35,7 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 import android.text.TextPaint;
 import android.view.LayoutInflater;
+import android.widget.FrameLayout;
 import android.widget.TextClock;
 
 import com.android.systemui.SysuiTestCase;
@@ -51,10 +52,14 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 @SmallTest
-@RunWithLooper(setAsMainLooper = true)
 @RunWith(AndroidTestingRunner.class)
+// Need to run on the main thread because KeyguardSliceView$Row init checks for
+// the main thread before acquiring a wake lock. This class is constructed when
+// the keyguard_clcok_switch layout is inflated.
+@RunWithLooper(setAsMainLooper = true)
 public class KeyguardClockSwitchTest extends SysuiTestCase {
     private PluginManager mPluginManager;
+    private FrameLayout mClockContainer;
 
     @Mock
     TextClock mClockView;
@@ -67,6 +72,7 @@ public class KeyguardClockSwitchTest extends SysuiTestCase {
         LayoutInflater layoutInflater = LayoutInflater.from(getContext());
         mKeyguardClockSwitch =
                 (KeyguardClockSwitch) layoutInflater.inflate(R.layout.keyguard_clock_switch, null);
+        mClockContainer = mKeyguardClockSwitch.findViewById(R.id.clock_view);
         MockitoAnnotations.initMocks(this);
         when(mClockView.getPaint()).thenReturn(mock(TextPaint.class));
     }
@@ -97,7 +103,26 @@ public class KeyguardClockSwitchTest extends SysuiTestCase {
         listener.onPluginConnected(plugin, null);
 
         verify(mClockView).setVisibility(GONE);
-        assertThat(plugin.getView().getParent()).isEqualTo(mKeyguardClockSwitch);
+        assertThat(plugin.getView().getParent()).isEqualTo(mClockContainer);
+    }
+
+    @Test
+    public void onPluginConnected_showPluginBigClock() {
+        // GIVEN that the container for the big clock has visibility GONE
+        FrameLayout bigClockContainer = new FrameLayout(getContext());
+        bigClockContainer.setVisibility(GONE);
+        mKeyguardClockSwitch.setBigClockContainer(bigClockContainer);
+        // AND the plugin returns a view for the big clock
+        ClockPlugin plugin = mock(ClockPlugin.class);
+        TextClock pluginView = new TextClock(getContext());
+        when(plugin.getBigClockView()).thenReturn(pluginView);
+        PluginListener listener = mKeyguardClockSwitch.getClockPluginListener();
+        // WHEN the plugin is connected
+        listener.onPluginConnected(plugin, null);
+        // THEN the big clock container is visible and it is the parent of the
+        // big clock view.
+        assertThat(bigClockContainer.getVisibility()).isEqualTo(VISIBLE);
+        assertThat(pluginView.getParent()).isEqualTo(bigClockContainer);
     }
 
     @Test
@@ -120,7 +145,7 @@ public class KeyguardClockSwitchTest extends SysuiTestCase {
         when(plugin2.getView()).thenReturn(new TextClock(getContext()));
         listener.onPluginConnected(plugin2, null);
         // THEN only the view from the second plugin should be a child of KeyguardClockSwitch.
-        assertThat(plugin2.getView().getParent()).isEqualTo(mKeyguardClockSwitch);
+        assertThat(plugin2.getView().getParent()).isEqualTo(mClockContainer);
         assertThat(plugin1.getView().getParent()).isNull();
     }
 
@@ -137,6 +162,26 @@ public class KeyguardClockSwitchTest extends SysuiTestCase {
 
         verify(mClockView).setVisibility(VISIBLE);
         assertThat(plugin.getView().getParent()).isNull();
+    }
+
+    @Test
+    public void onPluginDisconnected_hidePluginBigClock() {
+        // GIVEN that the big clock container is visible
+        FrameLayout bigClockContainer = new FrameLayout(getContext());
+        bigClockContainer.setVisibility(VISIBLE);
+        mKeyguardClockSwitch.setBigClockContainer(bigClockContainer);
+        // AND the plugin returns a view for the big clock
+        ClockPlugin plugin = mock(ClockPlugin.class);
+        TextClock pluginView = new TextClock(getContext());
+        when(plugin.getBigClockView()).thenReturn(pluginView);
+        PluginListener listener = mKeyguardClockSwitch.getClockPluginListener();
+        listener.onPluginConnected(plugin, null);
+        // WHEN the plugin is disconnected
+        listener.onPluginDisconnected(plugin);
+        // THEN the big lock container is GONE and the big clock view doesn't have
+        // a parent.
+        assertThat(bigClockContainer.getVisibility()).isEqualTo(GONE);
+        assertThat(pluginView.getParent()).isNull();
     }
 
     @Test
@@ -161,7 +206,7 @@ public class KeyguardClockSwitchTest extends SysuiTestCase {
         // WHEN the first plugin is disconnected
         listener.onPluginDisconnected(plugin1);
         // THEN the view from the second plugin is still a child of KeyguardClockSwitch.
-        assertThat(plugin2.getView().getParent()).isEqualTo(mKeyguardClockSwitch);
+        assertThat(plugin2.getView().getParent()).isEqualTo(mClockContainer);
         assertThat(plugin1.getView().getParent()).isNull();
     }
 

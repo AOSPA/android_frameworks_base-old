@@ -41,6 +41,7 @@ import static org.mockito.Mockito.when;
 
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
+import android.app.AutomaticZenRule;
 import android.app.NotificationManager;
 import android.app.NotificationManager.Policy;
 import android.content.ComponentName;
@@ -60,6 +61,7 @@ import android.provider.Settings.Global;
 import android.service.notification.Condition;
 import android.service.notification.ZenModeConfig;
 import android.service.notification.ZenModeConfig.ScheduleInfo;
+import android.service.notification.ZenPolicy;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
@@ -632,8 +634,8 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         mZenModeHelperSpy.mConfig.manualRule.zenMode =
                 Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
         mZenModeHelperSpy.mConfig.manualRule.component = new ComponentName("a", "a");
+        mZenModeHelperSpy.mConfig.manualRule.pkg = "a";
         mZenModeHelperSpy.mConfig.manualRule.enabled = true;
-        mZenModeHelperSpy.mConfig.manualRule.snoozing = true;
 
         ZenModeConfig expected = mZenModeHelperSpy.mConfig.copy();
 
@@ -644,7 +646,8 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         parser.nextTag();
         mZenModeHelperSpy.readXml(parser, false);
 
-        assertEquals(expected, mZenModeHelperSpy.mConfig);
+        assertEquals("Config mismatch: current vs expected: "
+                + mZenModeHelperSpy.mConfig.diff(expected), expected, mZenModeHelperSpy.mConfig);
     }
 
     @Test
@@ -661,7 +664,9 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         customRule.name = "Custom Rule";
         customRule.zenMode = Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
         customRule.conditionId = ZenModeConfig.toScheduleConditionId(customRuleInfo);
-        customRule.component = new ComponentName("android", "ScheduleConditionProvider");
+        customRule.configurationActivity
+                = new ComponentName("android", "ScheduleConditionProvider");
+        customRule.pkg = customRule.configurationActivity.getPackageName();
         automaticRules.put("customRule", customRule);
         mZenModeHelperSpy.mConfig.automaticRules = automaticRules;
 
@@ -673,8 +678,95 @@ public class ZenModeHelperTest extends UiServiceTestCase {
                 new ByteArrayInputStream(baos.toByteArray())), null);
         parser.nextTag();
         mZenModeHelperSpy.readXml(parser, true);
-        assertEquals(original, mZenModeHelperSpy.mConfig);
+        assertEquals("Config mismatch: current vs original: "
+                + mZenModeHelperSpy.mConfig.diff(original), original, mZenModeHelperSpy.mConfig);
         assertEquals(original.hashCode(), mZenModeHelperSpy.mConfig.hashCode());
+    }
+
+    @Test
+    public void testWriteXmlWithZenPolicy() throws Exception {
+        final String ruleId = "customRule";
+        setupZenConfig();
+
+        // one enabled automatic rule with zen policy
+        ArrayMap<String, ZenModeConfig.ZenRule> automaticRules = new ArrayMap<>();
+        ZenModeConfig.ZenRule customRule = new ZenModeConfig.ZenRule();
+        final ScheduleInfo customRuleInfo = new ScheduleInfo();
+        customRule.enabled = true;
+        customRule.creationTime = 0;
+        customRule.id = "customRule";
+        customRule.name = "Custom Rule";
+        customRule.zenMode = Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
+        customRule.conditionId = ZenModeConfig.toScheduleConditionId(customRuleInfo);
+        customRule.configurationActivity =
+                new ComponentName("android", "ScheduleConditionProvider");
+        customRule.pkg = customRule.configurationActivity.getPackageName();
+        customRule.zenPolicy = new ZenPolicy.Builder()
+                .allowAlarms(false)
+                .allowMedia(false)
+                .allowRepeatCallers(false)
+                .allowCalls(ZenPolicy.PEOPLE_TYPE_NONE)
+                .allowMessages(ZenPolicy.PEOPLE_TYPE_CONTACTS)
+                .allowEvents(true)
+                .allowReminders(false)
+                .build();
+        automaticRules.put("customRule", customRule);
+        mZenModeHelperSpy.mConfig.automaticRules = automaticRules;
+
+        ZenModeConfig expected = mZenModeHelperSpy.mConfig.copy();
+
+        ByteArrayOutputStream baos = writeXmlAndPurge(false, null);
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setInput(new BufferedInputStream(
+                new ByteArrayInputStream(baos.toByteArray())), null);
+        parser.nextTag();
+        mZenModeHelperSpy.readXml(parser, false);
+
+        ZenModeConfig.ZenRule original = expected.automaticRules.get(ruleId);
+        ZenModeConfig.ZenRule current = mZenModeHelperSpy.mConfig.automaticRules.get(ruleId);
+
+        assertEquals("Automatic rules mismatch", original, current);
+    }
+
+    @Test
+    public void testReadXmlRestoreWithZenPolicy() throws Exception {
+        final String ruleId = "customRule";
+        setupZenConfig();
+
+        // one enabled automatic rule with zen policy
+        ArrayMap<String, ZenModeConfig.ZenRule> automaticRules = new ArrayMap<>();
+        ZenModeConfig.ZenRule customRule = new ZenModeConfig.ZenRule();
+        final ScheduleInfo customRuleInfo = new ScheduleInfo();
+        customRule.enabled = true;
+        customRule.creationTime = 0;
+        customRule.id = ruleId;
+        customRule.name = "Custom Rule";
+        customRule.zenMode = Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
+        customRule.conditionId = ZenModeConfig.toScheduleConditionId(customRuleInfo);
+        customRule.configurationActivity =
+                new ComponentName("android", "ScheduleConditionProvider");
+        customRule.pkg = customRule.configurationActivity.getPackageName();
+        customRule.zenPolicy = new ZenPolicy.Builder()
+                .allowSystem(true)
+                .allowCalls(ZenPolicy.PEOPLE_TYPE_ANYONE)
+                .allowReminders(true)
+                .build();
+        automaticRules.put(ruleId, customRule);
+        mZenModeHelperSpy.mConfig.automaticRules = automaticRules;
+
+        ZenModeConfig expected = mZenModeHelperSpy.mConfig.copy();
+
+        ByteArrayOutputStream baos = writeXmlAndPurge(false, null);
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setInput(new BufferedInputStream(
+                new ByteArrayInputStream(baos.toByteArray())), null);
+        parser.nextTag();
+        mZenModeHelperSpy.readXml(parser, true);
+
+        ZenModeConfig.ZenRule original = expected.automaticRules.get(ruleId);
+        ZenModeConfig.ZenRule current = mZenModeHelperSpy.mConfig.automaticRules.get(ruleId);
+
+        assertEquals("Automatic rules mismatch", original, current);
     }
 
     @Test
@@ -891,6 +983,10 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         customRule.zenMode = Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
         customRule.conditionId = ZenModeConfig.toScheduleConditionId(customRuleInfo);
         customRule.component = new ComponentName("android", "ScheduleConditionProvider");
+        customRule.zenPolicy = new ZenPolicy.Builder()
+                .allowReminders(true)
+                .allowMessages(ZenPolicy.PEOPLE_TYPE_ANYONE)
+                .build();
         automaticRules.put("customRule", customRule);
 
         ZenModeConfig.ZenRule defaultScheduleRule = new ZenModeConfig.ZenRule();
@@ -938,6 +1034,10 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         customRule.zenMode = Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
         customRule.conditionId = ZenModeConfig.toScheduleConditionId(customRuleInfo);
         customRule.component = new ComponentName("android", "ScheduleConditionProvider");
+        customRule.zenPolicy = new ZenPolicy.Builder()
+                .allowReminders(true)
+                .allowMessages(ZenPolicy.PEOPLE_TYPE_ANYONE)
+                .build();
         automaticRules.put("customRule", customRule);
 
         ZenModeConfig.ZenRule defaultScheduleRule = new ZenModeConfig.ZenRule();
@@ -948,6 +1048,10 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         defaultScheduleRule.conditionId = ZenModeConfig.toScheduleConditionId(
                 defaultScheduleRuleInfo);
         defaultScheduleRule.id = ZenModeConfig.EVERY_NIGHT_DEFAULT_RULE_ID;
+        defaultScheduleRule.zenPolicy = new ZenPolicy.Builder()
+                .allowEvents(true)
+                .allowMessages(ZenPolicy.PEOPLE_TYPE_ANYONE)
+                .build();
         automaticRules.put(ZenModeConfig.EVERY_NIGHT_DEFAULT_RULE_ID, defaultScheduleRule);
 
         ZenModeConfig.ZenRule defaultEventRule = new ZenModeConfig.ZenRule();
@@ -958,6 +1062,11 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         defaultEventRule.conditionId = ZenModeConfig.toScheduleConditionId(
                 defaultEventRuleInfo);
         defaultEventRule.id = ZenModeConfig.EVENTS_DEFAULT_RULE_ID;
+        defaultScheduleRule.zenPolicy = new ZenPolicy.Builder()
+                .allowAlarms(false)
+                .allowMedia(false)
+                .allowRepeatCallers(false)
+                .build();
         automaticRules.put(ZenModeConfig.EVENTS_DEFAULT_RULE_ID, defaultEventRule);
 
         mZenModeHelperSpy.mConfig.automaticRules = automaticRules;
@@ -1095,6 +1204,25 @@ public class ZenModeHelperTest extends UiServiceTestCase {
         assertEquals(customDefaultRule.id, ruleAfterUpdating.id);
         assertEquals(customDefaultRule.conditionId, ruleAfterUpdating.conditionId);
         assertFalse(Objects.equals(defaultRuleName, ruleAfterUpdating.name)); // update name
+    }
+
+    @Test
+    public void testAddAutomaticZenRule() {
+        AutomaticZenRule zenRule = new AutomaticZenRule("name",
+                new ComponentName("android", "ScheduleConditionProvider"),
+                ZenModeConfig.toScheduleConditionId(new ScheduleInfo()),
+                NotificationManager.INTERRUPTION_FILTER_PRIORITY, true);
+        String id = mZenModeHelperSpy.addAutomaticZenRule(zenRule, "test");
+
+        assertTrue(id != null);
+        ZenModeConfig.ZenRule ruleInConfig = mZenModeHelperSpy.mConfig.automaticRules.get(id);
+        assertTrue(ruleInConfig != null);
+        assertEquals(zenRule.isEnabled(), ruleInConfig.enabled);
+        assertEquals(zenRule.isModified(), ruleInConfig.modified);
+        assertEquals(zenRule.getConditionId(), ruleInConfig.conditionId);
+        assertEquals(NotificationManager.zenModeFromInterruptionFilter(
+                zenRule.getInterruptionFilter(), -1), ruleInConfig.zenMode);
+        assertEquals(zenRule.getName(), ruleInConfig.name);
     }
 
     private void setupZenConfig() {

@@ -55,15 +55,20 @@ final class CoreSettingsObserver extends ContentObserver {
         // add other system settings here...
 
         sGlobalSettingToTypeMap.put(Settings.Global.DEBUG_VIEW_ATTRIBUTES, int.class);
-        sGlobalSettingToTypeMap.put(Settings.Global.ANGLE_ENABLED_APP, String.class);
+        sGlobalSettingToTypeMap.put(
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE, String.class);
+        sGlobalSettingToTypeMap.put(
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS, String.class);
+        sGlobalSettingToTypeMap.put(
+                Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.ENABLE_GPU_DEBUG_LAYERS, int.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_APP, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_LAYERS, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_LAYERS_GLES, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_LAYER_APP, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED, int.class);
-        sGlobalSettingToTypeMap.put(Settings.Global.UPDATED_GFX_DRIVER_DEV_OPT_IN_APP,
-                                    String.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.GUP_DEV_OPT_IN_APPS, String.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.GUP_BLACK_LIST, String.class);
         // add other global settings here...
     }
 

@@ -103,6 +103,7 @@ extern int register_android_hardware_UsbDeviceConnection(JNIEnv *env);
 extern int register_android_hardware_UsbRequest(JNIEnv *env);
 extern int register_android_hardware_location_ActivityRecognitionHardware(JNIEnv* env);
 
+extern int register_android_media_AudioEffectDescriptor(JNIEnv *env);
 extern int register_android_media_AudioRecord(JNIEnv *env);
 extern int register_android_media_AudioSystem(JNIEnv *env);
 extern int register_android_media_AudioTrack(JNIEnv *env);
@@ -1058,10 +1059,16 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
     if (rootDir == NULL) {
         rootDir = "/system";
         if (!hasDir("/system")) {
-            LOG_FATAL("No root directory specified, and /android does not exist.");
+            LOG_FATAL("No root directory specified, and /system does not exist.");
             return;
         }
         setenv("ANDROID_ROOT", rootDir, 1);
+    }
+
+    const char* runtimeRootDir = getenv("ANDROID_RUNTIME_ROOT");
+    if (runtimeRootDir == NULL) {
+        LOG_FATAL("No runtime directory specified with ANDROID_RUNTIME_ROOT environment variable.");
+        return;
     }
 
     //const char* kernelHack = getenv("LD_ASSUME_KERNEL");
@@ -1453,8 +1460,9 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_hardware_UsbDeviceConnection),
     REG_JNI(register_android_hardware_UsbRequest),
     REG_JNI(register_android_hardware_location_ActivityRecognitionHardware),
-    REG_JNI(register_android_media_AudioRecord),
+    REG_JNI(register_android_media_AudioEffectDescriptor),
     REG_JNI(register_android_media_AudioSystem),
+    REG_JNI(register_android_media_AudioRecord),
     REG_JNI(register_android_media_AudioTrack),
     REG_JNI(register_android_media_JetPlayer),
     REG_JNI(register_android_media_MicrophoneInfo),

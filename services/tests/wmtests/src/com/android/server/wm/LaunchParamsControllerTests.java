@@ -22,21 +22,22 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyInt;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.eq;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_BOUNDS;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.RESULT_CONTINUE;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.RESULT_DONE;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.RESULT_SKIP;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 import android.app.ActivityOptions;
 import android.content.ComponentName;
@@ -89,10 +90,10 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         final WindowLayout layout = new WindowLayout(0, 0, 0, 0, 0, 0, 0);
         final ActivityOptions options = mock(ActivityOptions.class);
 
-        mController.calculate(record.getTask(), layout, record, source, options,
+        mController.calculate(record.getTaskRecord(), layout, record, source, options, PHASE_BOUNDS,
                 new LaunchParams());
-        verify(positioner, times(1)).onCalculate(eq(record.getTask()), eq(layout), eq(record),
-                eq(source), eq(options), any(), any());
+        verify(positioner, times(1)).onCalculate(eq(record.getTaskRecord()), eq(layout), eq(record),
+                eq(source), eq(options), anyInt(), any(), any());
     }
 
     /**
@@ -114,10 +115,10 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
 
         mPersister.putLaunchParams(userId, name, expected);
 
-        mController.calculate(activity.getTask(), null /*layout*/, activity, null /*source*/,
-                null /*options*/, new LaunchParams());
-        verify(positioner, times(1)).onCalculate(any(), any(), any(), any(), any(), eq(expected),
-                any());
+        mController.calculate(activity.getTaskRecord(), null /*layout*/, activity, null /*source*/,
+                null /*options*/, PHASE_BOUNDS, new LaunchParams());
+        verify(positioner, times(1)).onCalculate(any(), any(), any(), any(), any(), anyInt(),
+                eq(expected), any());
     }
 
     /**
@@ -128,14 +129,15 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         final LaunchParamsModifier
                 ignoredPositioner = mock(LaunchParamsModifier.class);
         final LaunchParamsModifier earlyExitPositioner =
-                (task, layout, activity, source, options, currentParams, outParams) -> RESULT_DONE;
+                (task, layout, activity, source, options, phase, currentParams, outParams)
+                        -> RESULT_DONE;
 
         mController.registerModifier(ignoredPositioner);
         mController.registerModifier(earlyExitPositioner);
 
         mController.calculate(null /*task*/, null /*layout*/, null /*activity*/,
-                null /*source*/, null /*options*/, new LaunchParams());
-        verify(ignoredPositioner, never()).onCalculate(any(), any(), any(), any(), any(),
+                null /*source*/, null /*options*/, PHASE_BOUNDS, new LaunchParams());
+        verify(ignoredPositioner, never()).onCalculate(any(), any(), any(), any(), any(), anyInt(),
                 any(), any());
     }
 
@@ -152,20 +154,20 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         mController.registerModifier(firstPositioner);
 
         mController.calculate(null /*task*/, null /*layout*/, null /*activity*/,
-                null /*source*/, null /*options*/, new LaunchParams());
-        verify(firstPositioner, times(1)).onCalculate(any(), any(), any(), any(), any(), any(),
-                any());
+                null /*source*/, null /*options*/, PHASE_BOUNDS, new LaunchParams());
+        verify(firstPositioner, times(1)).onCalculate(any(), any(), any(), any(), any(), anyInt(),
+                any(), any());
 
         final LaunchParamsModifier secondPositioner = spy(earlyExitPositioner);
 
         mController.registerModifier(secondPositioner);
 
         mController.calculate(null /*task*/, null /*layout*/, null /*activity*/,
-                null /*source*/, null /*options*/, new LaunchParams());
-        verify(firstPositioner, times(1)).onCalculate(any(), any(), any(), any(), any(), any(),
-                any());
-        verify(secondPositioner, times(1)).onCalculate(any(), any(), any(), any(), any(), any(),
-                any());
+                null /*source*/, null /*options*/, PHASE_BOUNDS, new LaunchParams());
+        verify(firstPositioner, times(1)).onCalculate(any(), any(), any(), any(), any(), anyInt(),
+                any(), any());
+        verify(secondPositioner, times(1)).onCalculate(any(), any(), any(), any(), any(), anyInt(),
+                any(), any());
     }
 
     /**
@@ -187,9 +189,9 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         mController.registerModifier(positioner2);
 
         mController.calculate(null /*task*/, null /*layout*/, null /*activity*/, null /*source*/,
-                null /*options*/, new LaunchParams());
+                null /*options*/, PHASE_BOUNDS, new LaunchParams());
 
-        verify(positioner1, times(1)).onCalculate(any(), any(), any(), any(), any(),
+        verify(positioner1, times(1)).onCalculate(any(), any(), any(), any(), any(), anyInt(),
                 eq(positioner2.getLaunchParams()), any());
     }
 
@@ -213,7 +215,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
         final LaunchParams result = new LaunchParams();
 
         mController.calculate(null /*task*/, null /*layout*/, null /*activity*/, null /*source*/,
-                null /*options*/, result);
+                null /*options*/, PHASE_BOUNDS, result);
 
         assertEquals(result, positioner2.getLaunchParams());
     }
@@ -228,23 +230,44 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
 
         final LaunchParams result = new LaunchParams();
         final ActivityRecord vrActivity = new ActivityBuilder(mService).build();
-        vrActivity.requestedVrComponent = vrActivity.realActivity;
+        vrActivity.requestedVrComponent = vrActivity.mActivityComponent;
 
         // VR activities should always land on default display.
         mController.calculate(null /*task*/, null /*layout*/, vrActivity /*activity*/,
-                null /*source*/, null /*options*/, result);
+                null /*source*/, null /*options*/, PHASE_BOUNDS, result);
         assertEquals(DEFAULT_DISPLAY, result.mPreferredDisplayId);
 
         // Otherwise, always lands on VR 2D display.
         final ActivityRecord vr2dActivity = new ActivityBuilder(mService).build();
         mController.calculate(null /*task*/, null /*layout*/, vr2dActivity /*activity*/,
-                null /*source*/, null /*options*/, result);
+                null /*source*/, null /*options*/, PHASE_BOUNDS, result);
         assertEquals(vr2dDisplayId, result.mPreferredDisplayId);
         mController.calculate(null /*task*/, null /*layout*/, null /*activity*/, null /*source*/,
-                null /*options*/, result);
+                null /*options*/, PHASE_BOUNDS, result);
         assertEquals(vr2dDisplayId, result.mPreferredDisplayId);
 
         mService.mVr2dDisplayId = INVALID_DISPLAY;
+    }
+
+
+    /**
+     * Ensures that {@link LaunchParamsController} calculates to {@link PHASE_BOUNDS} phase by
+     * default.
+     */
+    @Test
+    public void testCalculatePhase() {
+        final LaunchParamsModifier positioner = mock(LaunchParamsModifier.class);
+        mController.registerModifier(positioner);
+
+        final ActivityRecord record = new ActivityBuilder(mService).build();
+        final ActivityRecord source = new ActivityBuilder(mService).build();
+        final WindowLayout layout = new WindowLayout(0, 0, 0, 0, 0, 0, 0);
+        final ActivityOptions options = mock(ActivityOptions.class);
+
+        mController.calculate(record.getTaskRecord(), layout, record, source, options, PHASE_BOUNDS,
+                new LaunchParams());
+        verify(positioner, times(1)).onCalculate(eq(record.getTaskRecord()), eq(layout), eq(record),
+                eq(source), eq(options), eq(PHASE_BOUNDS), any(), any());
     }
 
     /**
@@ -348,7 +371,7 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
 
         @Override
         public int onCalculate(TaskRecord task, WindowLayout layout, ActivityRecord activity,
-                   ActivityRecord source, ActivityOptions options,
+                   ActivityRecord source, ActivityOptions options, int phase,
                    LaunchParams currentParams, LaunchParams outParams) {
             outParams.set(mParams);
             return mReturnVal;
@@ -412,8 +435,9 @@ public class LaunchParamsControllerTests extends ActivityTestsBase {
 
         @Override
         void getLaunchParams(TaskRecord task, ActivityRecord activity, LaunchParams params) {
-            final int userId = task != null ? task.userId : activity.userId;
-            final ComponentName name = task != null ? task.realActivity : activity.realActivity;
+            final int userId = task != null ? task.userId : activity.mUserId;
+            final ComponentName name = task != null
+                    ? task.realActivity : activity.mActivityComponent;
 
             params.reset();
             final Map<ComponentName, LaunchParams> map = mMap.get(userId);

@@ -73,6 +73,12 @@ public abstract class ActivityManagerInternal {
             IBinder whitelistToken, long duration);
 
     /**
+     * Allows for a {@link PendingIntent} to be whitelisted to start activities from background.
+     */
+    public abstract void setPendingIntentAllowBgActivityStarts(
+            IIntentSender target, IBinder whitelistToken, int flags);
+
+    /**
      * Allow DeviceIdleController to tell us about what apps are whitelisted.
      */
     public abstract void setDeviceIdleWhitelist(int[] allAppids, int[] exceptIdleAppids);
@@ -161,6 +167,13 @@ public abstract class ActivityManagerInternal {
     public abstract List<ProcessMemoryState> getMemoryStateForProcesses();
 
     /**
+     * Returns a list that contains the memory high-water mark for currently running processes.
+     *
+     * Only processes managed by ActivityManagerService are included.
+     */
+    public abstract List<ProcessMemoryHighWaterMark> getMemoryHighWaterMarkForProcesses();
+
+    /**
      * Checks to see if the calling pid is allowed to handle the user. Returns adjusted user id as
      * needed.
      */
@@ -189,8 +202,26 @@ public abstract class ActivityManagerInternal {
 
     public abstract void updateOomAdj();
     public abstract void updateCpuStats();
-    public abstract void updateUsageStats(
+
+    /**
+     * Update battery stats on activity usage.
+     * @param activity
+     * @param uid
+     * @param userId
+     * @param started
+     */
+    public abstract void updateBatteryStats(
             ComponentName activity, int uid, int userId, boolean resumed);
+
+    /**
+     * Update UsageStats of the activity.
+     * @param activity
+     * @param userId
+     * @param event
+     * @param appToken ActivityRecord's appToken.
+     */
+    public abstract void updateActivityUsageStats(
+            ComponentName activity, int userId, int event, IBinder appToken);
     public abstract void updateForegroundTimeIfOnBattery(
             String packageName, int uid, long cpuTimeDiff);
     public abstract void sendForegroundProfileChanged(int userId);
@@ -225,7 +256,7 @@ public abstract class ActivityManagerInternal {
     public abstract int broadcastIntentInPackage(String packageName, int uid, Intent intent,
             String resolvedType, IIntentReceiver resultTo, int resultCode, String resultData,
             Bundle resultExtras, String requiredPermission, Bundle bOptions, boolean serialized,
-            boolean sticky, int userId);
+            boolean sticky, int userId, boolean allowBackgroundActivityStarts);
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
             String resolvedType, boolean fgRequired, String callingPackage, int userId)
             throws TransactionTooLargeException;
@@ -236,6 +267,8 @@ public abstract class ActivityManagerInternal {
     public abstract void ensureBootCompleted();
     public abstract void updateOomLevelsForDisplay(int displayId);
     public abstract boolean isActivityStartsLoggingEnabled();
+    /** Returns true if the background activity starts is enabled. */
+    public abstract boolean isBackgroundActivityStartsEnabled();
     public abstract void reportCurKeyguardUsageEvent(boolean keyguardShowing);
 
     /** Input dispatch timeout to a window, start the ANR process. */
@@ -279,6 +312,6 @@ public abstract class ActivityManagerInternal {
     public abstract void setDebugFlagsForStartingActivity(ActivityInfo aInfo, int startFlags,
             ProfilerInfo profilerInfo, Object wmLock);
 
-    /** Checks if process running with given pid has access to full external storage or not */
-    public abstract boolean isAppStorageSandboxed(int pid, int uid);
+    /** Returns mount mode for process running with given pid */
+    public abstract int getStorageMountMode(int pid, int uid);
 }

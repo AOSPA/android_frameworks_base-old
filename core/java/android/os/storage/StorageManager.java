@@ -25,6 +25,7 @@ import android.annotation.SdkConstant;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.annotation.WorkerThread;
 import android.app.Activity;
@@ -55,6 +56,7 @@ import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.SystemProperties;
 import android.provider.Settings;
+import android.sysprop.VoldProperties;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -130,6 +132,8 @@ public class StorageManager {
     public static final String PROP_VIRTUAL_DISK = "persist.sys.virtual_disk";
     /** {@hide} */
     public static final String PROP_ISOLATED_STORAGE = "persist.sys.isolated_storage";
+    /** {@hide} */
+    public static final String PROP_ISOLATED_STORAGE_SNAPSHOT = "sys.isolated_storage_snapshot";
 
     /** {@hide} */
     public static final String PROP_FORCE_AUDIO = "persist.fw.force_audio";
@@ -137,8 +141,6 @@ public class StorageManager {
     public static final String PROP_FORCE_VIDEO = "persist.fw.force_video";
     /** {@hide} */
     public static final String PROP_FORCE_IMAGES = "persist.fw.force_images";
-    /** {@hide} */
-    public static final String PROP_FORCE_LEGACY = "persist.fw.force_legacy";
 
     /** {@hide} */
     public static final String UUID_PRIVATE_INTERNAL = null;
@@ -226,7 +228,9 @@ public class StorageManager {
     /** {@hide} */
     public static final int DEBUG_VIRTUAL_DISK = 1 << 5;
     /** {@hide} */
-    public static final int DEBUG_ISOLATED_STORAGE = 1 << 6;
+    public static final int DEBUG_ISOLATED_STORAGE_FORCE_ON = 1 << 6;
+    /** {@hide} */
+    public static final int DEBUG_ISOLATED_STORAGE_FORCE_OFF = 1 << 7;
 
     /** {@hide} */
     public static final int FLAG_STORAGE_DE = IInstalld.FLAG_STORAGE_DE;
@@ -1496,7 +1500,7 @@ public class StorageManager {
      * framework, so no service needs to check for changes during their lifespan
      */
     public static boolean isBlockEncrypting() {
-        final String state = SystemProperties.get("vold.encrypt_progress", "");
+        final String state = VoldProperties.encrypt_progress().orElse("");
         return !"".equalsIgnoreCase(state);
     }
 
@@ -1512,7 +1516,7 @@ public class StorageManager {
      * framework, so no service needs to check for changes during their lifespan
      */
     public static boolean inCryptKeeperBounce() {
-        final String status = SystemProperties.get("vold.decrypt");
+        final String status = VoldProperties.decrypt().orElse("");
         return "trigger_restart_min_framework".equals(status);
     }
 
@@ -1533,6 +1537,15 @@ public class StorageManager {
     /** {@hide} */
     public static boolean hasAdoptable() {
         return SystemProperties.getBoolean(PROP_HAS_ADOPTABLE, false);
+    }
+
+    /** {@hide} */
+    @SystemApi
+    @TestApi
+    public static boolean hasIsolatedStorage() {
+        // Prefer to use snapshot for current boot when available
+        return SystemProperties.getBoolean(PROP_ISOLATED_STORAGE_SNAPSHOT,
+                SystemProperties.getBoolean(PROP_ISOLATED_STORAGE, false));
     }
 
     /**

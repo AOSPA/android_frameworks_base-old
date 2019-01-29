@@ -1090,6 +1090,24 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testUpdateChannelsBypassingDnd_onUserSwitch_onUserUnlocked() throws Exception {
+        int user = USER.getIdentifier();
+        NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
+        NotificationChannel channel1 = new NotificationChannel("id1", "name1",
+                NotificationManager.IMPORTANCE_MAX);
+        channel1.setBypassDnd(true);
+        channel1.setGroup(ncg.getId());
+
+        // channel is associated with a group, then group is deleted
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, user, ncg,  /* fromTargetApp */ true);
+        mHelper.createNotificationChannel(PKG_N_MR1, user, channel1, true, /*has DND access*/ true);
+        mHelper.deleteNotificationChannelGroup(PKG_N_MR1, user, ncg.getId());
+
+        mHelper.onUserSwitched(user);
+        mHelper.onUserUnlocked(user);
+    }
+
+    @Test
     public void testGetChannelsBypassingDndCount_noChannelsBypassing() throws Exception {
         assertEquals(0, mHelper.getNotificationChannelsBypassingDnd(PKG_N_MR1,
                 USER.getIdentifier()).getList().size());
@@ -1563,39 +1581,6 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertEquals(ncg,
                 mHelper.getNotificationChannelGroups(PKG_N_MR1, UID_N_MR1).iterator().next());
         verify(mHandler, never()).requestSort();
-    }
-
-    @Test
-    public void testUpdateGroup_fromSystem_appOverlay() {
-        NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
-        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
-
-        // from system, allowed
-        NotificationChannelGroup update = ncg.clone();
-        update.setAllowAppOverlay(false);
-
-        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, update, false);
-        NotificationChannelGroup updated =
-                mHelper.getNotificationChannelGroup("group1", PKG_N_MR1, UID_N_MR1);
-        assertFalse(updated.canOverlayApps());
-        assertEquals(NotificationChannelGroup.USER_LOCKED_ALLOW_APP_OVERLAY,
-                updated.getUserLockedFields());
-    }
-
-    @Test
-    public void testUpdateGroup_fromApp_appOverlay() {
-        NotificationChannelGroup ncg = new NotificationChannelGroup("group1", "name1");
-        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
-
-        // from app, not allowed
-        NotificationChannelGroup update = new NotificationChannelGroup("group1", "name1");
-        update.setAllowAppOverlay(false);
-
-        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg, true);
-        NotificationChannelGroup updated =
-                mHelper.getNotificationChannelGroup("group1", PKG_N_MR1, UID_N_MR1);
-        assertTrue(updated.canOverlayApps());
-        assertEquals(0, updated.getUserLockedFields());
     }
 
     @Test
@@ -2173,5 +2158,33 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         mHelper.toggleNotificationDelegate(PKG_O, UID_O, true);
         assertEquals("other", mHelper.getNotificationDelegate(PKG_O, UID_O));
+    }
+
+    @Test
+    public void testAllowAppOverlay_defaults() throws Exception {
+        assertTrue(mHelper.areAppOverlaysAllowed(PKG_O, UID_O));
+
+        ByteArrayOutputStream baos = writeXmlAndPurge(PKG_O, UID_O, false);
+        mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper);
+        loadStreamXml(baos, false);
+
+        assertTrue(mHelper.areAppOverlaysAllowed(PKG_O, UID_O));
+        assertEquals(0, mHelper.getAppLockedFields(PKG_O, UID_O));
+    }
+
+    @Test
+    public void testAllowAppOverlay_xml() throws Exception {
+        mHelper.setAppOverlaysAllowed(PKG_O, UID_O, false);
+        assertFalse(mHelper.areAppOverlaysAllowed(PKG_O, UID_O));
+        assertEquals(PreferencesHelper.LockableAppFields.USER_LOCKED_APP_OVERLAY,
+                mHelper.getAppLockedFields(PKG_O, UID_O));
+
+        ByteArrayOutputStream baos = writeXmlAndPurge(PKG_O, UID_O, false);
+        mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper);
+        loadStreamXml(baos, false);
+
+        assertFalse(mHelper.areAppOverlaysAllowed(PKG_O, UID_O));
+        assertEquals(PreferencesHelper.LockableAppFields.USER_LOCKED_APP_OVERLAY,
+                mHelper.getAppLockedFields(PKG_O, UID_O));
     }
 }

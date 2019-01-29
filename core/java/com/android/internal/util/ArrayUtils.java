@@ -24,6 +24,7 @@ import dalvik.system.VMRuntime;
 
 import libcore.util.EmptyArray;
 
+import java.io.File;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,6 +33,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.IntFunction;
 
 /**
  * ArrayUtils contains some methods that you can call to find out
@@ -40,6 +42,8 @@ import java.util.Objects;
 public class ArrayUtils {
     private static final int CACHE_SIZE = 73;
     private static Object[] sCache = new Object[CACHE_SIZE];
+
+    public static final File[] EMPTY_FILE = new File[0];
 
     private ArrayUtils() { /* cannot be instantiated */ }
 
@@ -644,6 +648,10 @@ public class ArrayUtils {
         return (val != null) ? val : EmptyArray.STRING;
     }
 
+    public static @NonNull File[] defeatNullable(@Nullable File[] val) {
+        return (val != null) ? val : EMPTY_FILE;
+    }
+
     /**
      * Throws {@link ArrayIndexOutOfBoundsException} if the index is out of bounds.
      *
@@ -655,5 +663,31 @@ public class ArrayUtils {
         if (index < 0 || len <= index) {
             throw new ArrayIndexOutOfBoundsException("length=" + len + "; index=" + index);
         }
+    }
+
+    /**
+     * Returns an array with values from {@code val} minus {@code null} values
+     *
+     * @param arrayConstructor typically {@code T[]::new} e.g. {@code String[]::new}
+     */
+    public static <T> T[] filterNotNull(T[] val, IntFunction<T[]> arrayConstructor) {
+        int nullCount = 0;
+        int size = size(val);
+        for (int i = 0; i < size; i++) {
+            if (val[i] == null) {
+                nullCount++;
+            }
+        }
+        if (nullCount == 0) {
+            return val;
+        }
+        T[] result = arrayConstructor.apply(size - nullCount);
+        int outIdx = 0;
+        for (int i = 0; i < size; i++) {
+            if (val[i] != null) {
+                result[outIdx++] = val[i];
+            }
+        }
+        return result;
     }
 }

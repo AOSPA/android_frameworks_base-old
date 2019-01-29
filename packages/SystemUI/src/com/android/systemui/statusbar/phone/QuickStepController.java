@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.phone;
 
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_BOTTOM;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_RIGHT;
 
@@ -30,9 +31,9 @@ import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_
 
 import android.annotation.Nullable;
 import android.content.Context;
-import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.os.RemoteException;
 import android.provider.Settings;
 import android.util.Log;
@@ -75,7 +76,9 @@ public class QuickStepController implements GestureHelper {
     private static final int ACTION_SWIPE_DOWN_INDEX = 1;
     private static final int ACTION_SWIPE_LEFT_INDEX = 2;
     private static final int ACTION_SWIPE_RIGHT_INDEX = 3;
-    private static final int MAX_GESTURES = 4;
+    private static final int ACTION_SWIPE_LEFT_FROM_EDGE_INDEX = 4;
+    private static final int ACTION_SWIPE_RIGHT_FROM_EDGE_INDEX = 5;
+    private static final int MAX_GESTURES = 6;
 
     private NavigationBarView mNavigationBarView;
 
@@ -96,10 +99,12 @@ public class QuickStepController implements GestureHelper {
     private float mMaxDragLimit;
     private float mMinDragLimit;
     private float mDragDampeningFactor;
+    private float mEdgeSwipeThreshold;
 
     private NavigationGestureAction mCurrentAction;
     private NavigationGestureAction[] mGestureActions = new NavigationGestureAction[MAX_GESTURES];
 
+    private final Rect mLastLayoutRect = new Rect();
     private final OverviewProxyService mOverviewEventSender;
     private final Context mContext;
     private final StatusBar mStatusBar;
@@ -107,7 +112,6 @@ public class QuickStepController implements GestureHelper {
     private final Matrix mTransformLocalMatrix = new Matrix();
 
     public QuickStepController(Context context) {
-        final Resources res = context.getResources();
         mContext = context;
         mStatusBar = SysUiServiceProvider.getComponent(context, StatusBar.class);
         mOverviewEventSender = Dependency.get(OverviewProxyService.class);
@@ -127,21 +131,29 @@ public class QuickStepController implements GestureHelper {
      * @param swipeDownAction action after swiping down
      * @param swipeLeftAction action after swiping left
      * @param swipeRightAction action after swiping right
+     * @param swipeLeftFromEdgeAction action swiping left starting from the right side
+     * @param swipeRightFromEdgeAction action swiping right starting from the left side
      */
     public void setGestureActions(@Nullable NavigationGestureAction swipeUpAction,
             @Nullable NavigationGestureAction swipeDownAction,
             @Nullable NavigationGestureAction swipeLeftAction,
-            @Nullable NavigationGestureAction swipeRightAction) {
+            @Nullable NavigationGestureAction swipeRightAction,
+            @Nullable NavigationGestureAction swipeLeftFromEdgeAction,
+            @Nullable NavigationGestureAction swipeRightFromEdgeAction) {
         mGestureActions[ACTION_SWIPE_UP_INDEX] = swipeUpAction;
         mGestureActions[ACTION_SWIPE_DOWN_INDEX] = swipeDownAction;
         mGestureActions[ACTION_SWIPE_LEFT_INDEX] = swipeLeftAction;
         mGestureActions[ACTION_SWIPE_RIGHT_INDEX] = swipeRightAction;
+        mGestureActions[ACTION_SWIPE_LEFT_FROM_EDGE_INDEX] = swipeLeftFromEdgeAction;
+        mGestureActions[ACTION_SWIPE_RIGHT_FROM_EDGE_INDEX] = swipeRightFromEdgeAction;
 
         // Set the current state to all actions
         for (NavigationGestureAction action: mGestureActions) {
             if (action != null) {
                 action.setBarState(true, mNavBarPosition, mDragHPositive, mDragVPositive);
                 action.onDarkIntensityChange(mDarkIntensity);
+                action.onLayout(true /* changed */, mLastLayoutRect.left, mLastLayoutRect.top,
+                        mLastLayoutRect.right, mLastLayoutRect.bottom);
             }
         }
     }
@@ -182,6 +194,7 @@ public class QuickStepController implements GestureHelper {
 
         // Requires proxy and an active gesture or able to perform any gesture to continue
         if (mOverviewEventSender.getProxy() == null
+                || !mOverviewEventSender.shouldShowSwipeUpUI()
                 || (mCurrentAction == null && !canPerformAnyAction())) {
             return deadZoneConsumed;
         }
@@ -229,6 +242,8 @@ public class QuickStepController implements GestureHelper {
                 mNavigationBarView.transformMatrixToLocal(mTransformLocalMatrix);
                 mAllowGestureDetection = true;
                 mNotificationsVisibleOnDown = !mNavigationBarView.isNotificationsFullyCollapsed();
+                mEdgeSwipeThreshold = mContext.getResources()
+                        .getDimensionPixelSize(R.dimen.navigation_bar_edge_swipe_threshold);
                 break;
             }
             case MotionEvent.ACTION_MOVE: {
@@ -272,24 +287,26 @@ public class QuickStepController implements GestureHelper {
                         if (mDragVPositive ? (posV < touchDownV) : (posV > touchDownV)) {
                             // Swiping up gesture
                             tryToStartGesture(mGestureActions[ACTION_SWIPE_UP_INDEX],
-                                    false /* alignedWithNavBar */, false /* positiveDirection */,
-                                    event);
+                                    false /* alignedWithNavBar */, event);
                         } else {
                             // Swiping down gesture
                             tryToStartGesture(mGestureActions[ACTION_SWIPE_DOWN_INDEX],
-                                    false /* alignedWithNavBar */, true /* positiveDirection */,
-                                    event);
+                                    false /* alignedWithNavBar */, event);
                         }
                     } else if (exceededSwipeHorizontalTouchSlop) {
                         if (mDragHPositive ? (posH < touchDownH) : (posH > touchDownH)) {
-                            // Swiping left (ltr) gesture
-                            tryToStartGesture(mGestureActions[ACTION_SWIPE_LEFT_INDEX],
-                                    true /* alignedWithNavBar */, false /* positiveDirection */,
+                            // Swiping left (rtl) gesture
+                            int index = mGestureActions[ACTION_SWIPE_LEFT_FROM_EDGE_INDEX] != null
+                                        && isEdgeSwipeAlongNavBar(touchDownH, !mDragHPositive)
+                                    ? ACTION_SWIPE_LEFT_FROM_EDGE_INDEX : ACTION_SWIPE_LEFT_INDEX;
+                            tryToStartGesture(mGestureActions[index], true /* alignedWithNavBar */,
                                     event);
                         } else {
                             // Swiping right (ltr) gesture
-                            tryToStartGesture(mGestureActions[ACTION_SWIPE_RIGHT_INDEX],
-                                    true /* alignedWithNavBar */, true /* positiveDirection */,
+                            int index = mGestureActions[ACTION_SWIPE_RIGHT_FROM_EDGE_INDEX] != null
+                                        && isEdgeSwipeAlongNavBar(touchDownH, mDragHPositive)
+                                    ? ACTION_SWIPE_RIGHT_FROM_EDGE_INDEX : ACTION_SWIPE_RIGHT_INDEX;
+                            tryToStartGesture(mGestureActions[index], true /* alignedWithNavBar */,
                                     event);
                         }
                     }
@@ -303,7 +320,6 @@ public class QuickStepController implements GestureHelper {
             case MotionEvent.ACTION_UP:
                 if (mCurrentAction != null) {
                     mCurrentAction.endGesture();
-                    mCurrentAction = null;
                 }
 
                 // Return the hit target back to its original position
@@ -326,7 +342,23 @@ public class QuickStepController implements GestureHelper {
         if (shouldProxyEvents(action)) {
             proxyMotionEvents(event);
         }
+
+        // Clear action when gesture and event proxy finishes
+        if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
+            mCurrentAction = null;
+        }
         return mCurrentAction != null || deadZoneConsumed;
+    }
+
+    private boolean isEdgeSwipeAlongNavBar(int touchDown, boolean dragPositiveDirection) {
+        // Detect edge swipe from side of 0 -> threshold
+        if (dragPositiveDirection) {
+            return touchDown < mEdgeSwipeThreshold;
+        }
+        // Detect edge swipe from side of size -> (size - threshold)
+        final int largeSide = isNavBarVertical()
+                ? mNavigationBarView.getHeight() : mNavigationBarView.getWidth();
+        return touchDown > largeSide - mEdgeSwipeThreshold;
     }
 
     private void handleDragHitTarget(int position, int touchDown) {
@@ -351,8 +383,7 @@ public class QuickStepController implements GestureHelper {
 
     private boolean shouldProxyEvents(int action) {
         final boolean actionValid = (mCurrentAction == null
-                || (mGestureActions[ACTION_SWIPE_UP_INDEX] != null
-                        && mGestureActions[ACTION_SWIPE_UP_INDEX].isActive()));
+                || !mCurrentAction.disableProxyEvents());
         if (actionValid && !mIsInScreenPinning) {
             // Allow down, cancel and up events, move and other events are passed if notifications
             // are not showing and disabled gestures (such as long press) are not executed
@@ -382,6 +413,7 @@ public class QuickStepController implements GestureHelper {
                 action.onLayout(changed, left, top, right, bottom);
             }
         }
+        mLastLayoutRect.set(left, top, right, bottom);
     }
 
     @Override
@@ -418,6 +450,9 @@ public class QuickStepController implements GestureHelper {
                 mDragHPositive = !isRTL;
                 mDragVPositive = true;
                 break;
+            case NAV_BAR_INVALID:
+                Log.e(TAG, "Invalid nav bar position");
+                break;
         }
 
         for (NavigationGestureAction action: mGestureActions) {
@@ -448,7 +483,7 @@ public class QuickStepController implements GestureHelper {
     }
 
     private void tryToStartGesture(NavigationGestureAction action, boolean alignedWithNavBar,
-            boolean positiveDirection, MotionEvent event) {
+            MotionEvent event) {
         if (action == null) {
             return;
         }
@@ -473,7 +508,7 @@ public class QuickStepController implements GestureHelper {
                 event.transform(mTransformLocalMatrix);
 
                 // Calculate the bounding limits of drag to avoid dragging off nav bar's window
-                if (action.requiresDragWithHitTarget() && mHitTarget != null) {
+                if (action.allowHitTargetToMoveOverDrag() && mHitTarget != null) {
                     final int[] buttonCenter = new int[2];
                     View button = mHitTarget.getCurrentView();
                     button.getLocationInWindow(buttonCenter);
@@ -498,7 +533,7 @@ public class QuickStepController implements GestureHelper {
 
             // Handle direction of the hit target drag from the axis that started the gesture
             // Also calculate the dampening factor, weaker dampening if there is an active action
-            if (action.requiresDragWithHitTarget()) {
+            if (action.allowHitTargetToMoveOverDrag()) {
                 if (alignedWithNavBar) {
                     mGestureHorizontalDragsButton = true;
                     mGestureVerticalDragsButton = false;

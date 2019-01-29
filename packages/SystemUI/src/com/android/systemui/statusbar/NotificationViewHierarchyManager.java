@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar;
 
+import static com.android.systemui.statusbar.StatusBarState.SHADE;
+
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Trace;
@@ -23,8 +25,8 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
@@ -38,6 +40,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Stack;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
+import dagger.Lazy;
+
 /**
  * NotificationViewHierarchyManager manages updating the view hierarchy of notification views based
  * on their group structure. For example, if a notification becomes bundled with another,
@@ -45,26 +52,24 @@ import java.util.Stack;
  * tell NotificationListContainer which notifications to display, and inform it of changes to those
  * notifications that might affect their display.
  */
+@Singleton
 public class NotificationViewHierarchyManager {
     private static final String TAG = "NotificationViewHierarchyManager";
 
+    //TODO: change this top <Entry, List<Entry>>?
     private final HashMap<ExpandableNotificationRow, List<ExpandableNotificationRow>>
             mTmpChildOrderMap = new HashMap<>();
 
     // Dependencies:
-    protected final NotificationLockscreenUserManager mLockscreenUserManager =
-            Dependency.get(NotificationLockscreenUserManager.class);
-    protected final NotificationGroupManager mGroupManager =
-            Dependency.get(NotificationGroupManager.class);
-    protected final VisualStabilityManager mVisualStabilityManager =
-            Dependency.get(VisualStabilityManager.class);
-    private final StatusBarStateController mStatusBarStateController =
-            Dependency.get(StatusBarStateController.class);
-    private final NotificationEntryManager mEntryManager =
-            Dependency.get(NotificationEntryManager.class);
+    protected final NotificationLockscreenUserManager mLockscreenUserManager;
+    protected final NotificationGroupManager mGroupManager;
+    protected final VisualStabilityManager mVisualStabilityManager;
+    private final StatusBarStateController mStatusBarStateController;
+    private final NotificationEntryManager mEntryManager;
+    private final BubbleController mBubbleController;
 
     // Lazy
-    private ShadeController mShadeController;
+    private final Lazy<ShadeController> mShadeController;
 
     /**
      * {@code true} if notifications not part of a group should by default be rendered in their
@@ -75,18 +80,63 @@ public class NotificationViewHierarchyManager {
 
     private NotificationPresenter mPresenter;
     private NotificationListContainer mListContainer;
+    private StatusBarStateListener mStatusBarStateListener;
 
-    private ShadeController getShadeController() {
-        if (mShadeController == null) {
-            mShadeController = Dependency.get(ShadeController.class);
+    /**
+     * Listens for the current state of the status bar and updates the visibility state
+     * of bubbles as needed.
+     */
+    public class StatusBarStateListener implements StatusBarStateController.StateListener {
+        private int mState;
+        private BubbleController mController;
+
+        public StatusBarStateListener(BubbleController controller) {
+            mController = controller;
         }
-        return mShadeController;
+
+        /**
+         * Returns the current status bar state.
+         */
+        public int getCurrentState() {
+            return mState;
+        }
+
+        @Override
+        public void onStateChanged(int newState) {
+            mState = newState;
+            // Order here matters because we need to remove the expandable notification row
+            // from it's current parent (NSSL or bubble) before it can be added to the new parent
+            if (mState == SHADE) {
+                updateNotificationViews();
+                mController.updateVisibility(true);
+            } else {
+                mController.updateVisibility(false);
+                updateNotificationViews();
+            }
+        }
     }
 
-    public NotificationViewHierarchyManager(Context context) {
+    @Inject
+    public NotificationViewHierarchyManager(Context context,
+            NotificationLockscreenUserManager notificationLockscreenUserManager,
+            NotificationGroupManager groupManager,
+            VisualStabilityManager visualStabilityManager,
+            StatusBarStateController statusBarStateController,
+            NotificationEntryManager notificationEntryManager,
+            BubbleController bubbleController,
+            Lazy<ShadeController> shadeController) {
+        mLockscreenUserManager = notificationLockscreenUserManager;
+        mGroupManager = groupManager;
+        mVisualStabilityManager = visualStabilityManager;
+        mStatusBarStateController = statusBarStateController;
+        mEntryManager = notificationEntryManager;
+        mBubbleController = bubbleController;
+        mShadeController = shadeController;
         Resources res = context.getResources();
         mAlwaysExpandNonGroupedNotification =
                 res.getBoolean(R.bool.config_alwaysExpandNonGroupedNotifications);
+        mStatusBarStateListener = new StatusBarStateListener(mBubbleController);
+        mStatusBarStateController.addCallback(mStatusBarStateListener);
     }
 
     public void setUpWithPresenter(NotificationPresenter presenter,
@@ -98,18 +148,28 @@ public class NotificationViewHierarchyManager {
     /**
      * Updates the visual representation of the notifications.
      */
+    //TODO: Rewrite this to focus on Entries, or some other data object instead of views
     public void updateNotificationViews() {
         ArrayList<NotificationData.Entry> activeNotifications = mEntryManager.getNotificationData()
                 .getActiveNotifications();
         ArrayList<ExpandableNotificationRow> toShow = new ArrayList<>(activeNotifications.size());
+        ArrayList<NotificationData.Entry> toBubble = new ArrayList<>();
         final int N = activeNotifications.size();
         for (int i = 0; i < N; i++) {
             NotificationData.Entry ent = activeNotifications.get(i);
-            if (ent.row.isDismissed() || ent.row.isRemoved()) {
+            if (ent.isRowDismissed() || ent.isRowRemoved()) {
                 // we don't want to update removed notifications because they could
                 // temporarily become children if they were isolated before.
                 continue;
             }
+            ent.getRow().setStatusBarState(mStatusBarStateListener.getCurrentState());
+            boolean showAsBubble = ent.isBubble() && !ent.isBubbleDismissed()
+                    && mStatusBarStateListener.getCurrentState() == SHADE;
+            if (showAsBubble) {
+                toBubble.add(ent);
+                continue;
+            }
+
             int userId = ent.notification.getUserId();
 
             // Display public version of the notification if we need to redact.
@@ -124,20 +184,19 @@ public class NotificationViewHierarchyManager {
             boolean deviceSensitive = devicePublic
                     && !mLockscreenUserManager.userAllowsPrivateNotificationsInPublic(
                     mLockscreenUserManager.getCurrentUserId());
-            ent.row.setSensitive(sensitive, deviceSensitive);
-            ent.row.setNeedsRedaction(needsRedaction);
-            if (mGroupManager.isChildInGroupWithSummary(ent.row.getStatusBarNotification())) {
-                ExpandableNotificationRow summary = mGroupManager.getGroupSummary(
-                        ent.row.getStatusBarNotification());
+            ent.getRow().setSensitive(sensitive, deviceSensitive);
+            ent.getRow().setNeedsRedaction(needsRedaction);
+            if (mGroupManager.isChildInGroupWithSummary(ent.notification)) {
+                NotificationData.Entry summary = mGroupManager.getGroupSummary(ent.notification);
                 List<ExpandableNotificationRow> orderedChildren =
-                        mTmpChildOrderMap.get(summary);
+                        mTmpChildOrderMap.get(summary.getRow());
                 if (orderedChildren == null) {
                     orderedChildren = new ArrayList<>();
-                    mTmpChildOrderMap.put(summary, orderedChildren);
+                    mTmpChildOrderMap.put(summary.getRow(), orderedChildren);
                 }
-                orderedChildren.add(ent.row);
+                orderedChildren.add(ent.getRow());
             } else {
-                toShow.add(ent.row);
+                toShow.add(ent.getRow());
             }
 
         }
@@ -208,6 +267,12 @@ public class NotificationViewHierarchyManager {
             }
             j++;
 
+        }
+
+        for (int i = 0; i < toBubble.size(); i++) {
+            // TODO: might make sense to leave them in the shade and just reposition them
+            NotificationData.Entry ent = toBubble.get(i);
+            mBubbleController.addBubble(ent);
         }
 
         mVisualStabilityManager.onReorderingFinished();
@@ -334,19 +399,19 @@ public class NotificationViewHierarchyManager {
                         && !row.isLowPriority()));
             }
 
-            entry.row.setOnAmbient(getShadeController().isDozing());
+            entry.getRow().setOnAmbient(mShadeController.get().isDozing());
             int userId = entry.notification.getUserId();
             boolean suppressedSummary = mGroupManager.isSummaryOfSuppressedGroup(
-                    entry.notification) && !entry.row.isRemoved();
+                    entry.notification) && !entry.isRowRemoved();
             boolean showOnKeyguard = mLockscreenUserManager.shouldShowOnKeyguard(entry
                     .notification);
             if (!showOnKeyguard) {
                 // min priority notifications should show if their summary is showing
                 if (mGroupManager.isChildInGroupWithSummary(entry.notification)) {
-                    ExpandableNotificationRow summary = mGroupManager.getLogicalGroupSummary(
+                    NotificationData.Entry summary = mGroupManager.getLogicalGroupSummary(
                             entry.notification);
                     if (summary != null && mLockscreenUserManager.shouldShowOnKeyguard(
-                            summary.getStatusBarNotification()))         {
+                            summary.notification))         {
                         showOnKeyguard = true;
                     }
                 }
@@ -354,16 +419,16 @@ public class NotificationViewHierarchyManager {
             if (suppressedSummary
                     || mLockscreenUserManager.shouldHideNotifications(userId)
                     || (onKeyguard && !showOnKeyguard)) {
-                entry.row.setVisibility(View.GONE);
+                entry.getRow().setVisibility(View.GONE);
             } else {
-                boolean wasGone = entry.row.getVisibility() == View.GONE;
+                boolean wasGone = entry.getRow().getVisibility() == View.GONE;
                 if (wasGone) {
-                    entry.row.setVisibility(View.VISIBLE);
+                    entry.getRow().setVisibility(View.VISIBLE);
                 }
-                if (!isChildNotification && !entry.row.isRemoved()) {
+                if (!isChildNotification && !entry.getRow().isRemoved()) {
                     if (wasGone) {
                         // notify the scroller of a child addition
-                        mListContainer.generateAddAnimation(entry.row,
+                        mListContainer.generateAddAnimation(entry.getRow(),
                                 !showOnKeyguard /* fromMoreCard */);
                     }
                     visibleNotifications++;
@@ -379,7 +444,7 @@ public class NotificationViewHierarchyManager {
             }
 
             row.showAppOpsIcons(entry.mActiveAppOps);
-            row.setAudiblyAlerted(entry.audiblyAlerted);
+            row.setLastAudiblyAlertedMs(entry.lastAudiblyAlertedMs);
         }
 
         Trace.beginSection("NotificationPresenter#onUpdateRowStates");

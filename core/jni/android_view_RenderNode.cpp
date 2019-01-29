@@ -338,6 +338,11 @@ static jboolean android_view_RenderNode_hasOverlappingRendering(jlong renderNode
     return renderNode->stagingProperties().hasOverlappingRendering();
 }
 
+static jboolean android_view_RenderNode_getClipToBounds(jlong renderNodePtr) {
+    RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
+    return renderNode->stagingProperties().getClipToBounds();
+}
+
 static jboolean android_view_RenderNode_getClipToOutline(jlong renderNodePtr) {
     RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
     return renderNode->stagingProperties().getOutline().getShouldClip();
@@ -409,6 +414,11 @@ static jboolean android_view_RenderNode_hasIdentityMatrix(jlong renderNodePtr) {
     return !renderNode->stagingProperties().hasTransformMatrix();
 }
 
+static jint android_view_RenderNode_getLayerType(jlong renderNodePtr) {
+    RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
+    return static_cast<int>(renderNode->stagingProperties().layerProperties().type());
+}
+
 // ----------------------------------------------------------------------------
 // RenderProperties - computed getters
 // ----------------------------------------------------------------------------
@@ -466,6 +476,10 @@ static jboolean android_view_RenderNode_setAllowForceDark(jlong renderNodePtr, j
 
 static jboolean android_view_RenderNode_getAllowForceDark(jlong renderNodePtr) {
     return reinterpret_cast<RenderNode*>(renderNodePtr)->stagingProperties().getAllowForceDark();
+}
+
+static jlong android_view_RenderNode_getUniqueId(jlong renderNodePtr) {
+    return reinterpret_cast<RenderNode*>(renderNodePtr)->uniqueId();
 }
 
 // ----------------------------------------------------------------------------
@@ -619,10 +633,12 @@ static const JNINativeMethod gMethods[] = {
 // ----------------------------------------------------------------------------
     { "nIsValid",              "(J)Z",   (void*) android_view_RenderNode_isValid },
     { "nSetLayerType",         "(JI)Z",  (void*) android_view_RenderNode_setLayerType },
+    { "nGetLayerType",         "(J)I",   (void*) android_view_RenderNode_getLayerType },
     { "nSetLayerPaint",        "(JJ)Z",  (void*) android_view_RenderNode_setLayerPaint },
     { "nSetStaticMatrix",      "(JJ)Z",  (void*) android_view_RenderNode_setStaticMatrix },
     { "nSetAnimationMatrix",   "(JJ)Z",  (void*) android_view_RenderNode_setAnimationMatrix },
     { "nSetClipToBounds",      "(JZ)Z",  (void*) android_view_RenderNode_setClipToBounds },
+    { "nGetClipToBounds",      "(J)Z",   (void*) android_view_RenderNode_getClipToBounds },
     { "nSetClipBounds",        "(JIIII)Z", (void*) android_view_RenderNode_setClipBounds },
     { "nSetClipBoundsEmpty",   "(J)Z",   (void*) android_view_RenderNode_setClipBoundsEmpty },
     { "nSetProjectBackwards",  "(JZ)Z",  (void*) android_view_RenderNode_setProjectBackwards },
@@ -694,6 +710,7 @@ static const JNINativeMethod gMethods[] = {
     { "nGetHeight",                "(J)I",  (void*) android_view_RenderNode_getHeight },
     { "nSetAllowForceDark",        "(JZ)Z", (void*) android_view_RenderNode_setAllowForceDark },
     { "nGetAllowForceDark",        "(J)Z",  (void*) android_view_RenderNode_getAllowForceDark },
+    { "nGetUniqueId",              "(J)J",  (void*) android_view_RenderNode_getUniqueId },
 };
 
 int register_android_view_RenderNode(JNIEnv* env) {

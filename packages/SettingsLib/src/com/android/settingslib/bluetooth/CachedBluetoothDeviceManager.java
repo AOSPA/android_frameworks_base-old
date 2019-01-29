@@ -50,7 +50,7 @@ public class CachedBluetoothDeviceManager {
     }
 
     public synchronized Collection<CachedBluetoothDevice> getCachedDevicesCopy() {
-        return new ArrayList<CachedBluetoothDevice>(mCachedDevices);
+        return new ArrayList<>(mCachedDevices);
     }
 
     public static boolean onDeviceDisappeared(CachedBluetoothDevice cachedDevice) {
@@ -124,6 +124,25 @@ public class CachedBluetoothDeviceManager {
             return subDevice.getConnectionSummary();
         }
         return null;
+    }
+
+    /**
+     * Search for existing sub device {@link CachedBluetoothDevice}.
+     *
+     * @param device the address of the Bluetooth device
+     * @return true for found sub device or false.
+     */
+    public synchronized boolean isSubDevice(BluetoothDevice device) {
+        for (CachedBluetoothDevice cachedDevice : mCachedDevices) {
+            if (!cachedDevice.getDevice().equals(device)) {
+                // Check sub devices if it exists
+                CachedBluetoothDevice subDevice = cachedDevice.getSubDevice();
+                if (subDevice != null && subDevice.getDevice().equals(device)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

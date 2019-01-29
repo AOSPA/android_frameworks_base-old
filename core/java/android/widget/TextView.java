@@ -157,6 +157,8 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.AnimationUtils;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
+import android.view.contentcapture.ContentCaptureManager;
+import android.view.contentcapture.ContentCaptureSession;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
@@ -166,7 +168,6 @@ import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
-import android.view.intelligence.IntelligenceManager;
 import android.view.textclassifier.TextClassification;
 import android.view.textclassifier.TextClassificationContext;
 import android.view.textclassifier.TextClassificationManager;
@@ -428,7 +429,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     @ViewDebug.ExportedProperty(category = "text")
     @UnsupportedAppUsage
     private int mCurTextColor;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private int mCurHintTextColor;
     private boolean mFreezesText;
 
@@ -719,7 +720,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     @ViewDebug.ExportedProperty(category = "text")
     @UnsupportedAppUsage
     private int mGravity = Gravity.TOP | Gravity.START;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private boolean mHorizontallyScrolling;
 
     private int mAutoLinkMask;
@@ -799,8 +800,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     // Although these fields are specific to editable text, they are not added to Editor because
     // they are defined by the TextView's style and are theme-dependent.
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     int mCursorDrawableRes;
+    private Drawable mCursorDrawable;
     // Note: this might be stale if setTextSelectHandleLeft is used. We could simplify the code
     // by removing it, but we would break apps targeting <= P that use it by reflection.
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
@@ -3640,6 +3642,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     /**
      * Returns the Drawable corresponding to the right handle used
      * for selecting text.
+     * Note that any change applied to the handle Drawable will not be visible
+     * until the handle is hidden and then drawn again.
      *
      * @return the right text selection handle drawable
      *
@@ -3652,6 +3656,58 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             mTextSelectHandleRight = mContext.getDrawable(mTextSelectHandleRightRes);
         }
         return mTextSelectHandleRight;
+    }
+
+    /**
+     * Sets the Drawable corresponding to the text cursor. The Drawable defaults to the
+     * value of the textCursorDrawable attribute.
+     * Note that any change applied to the cursor Drawable will not be visible
+     * until the cursor is hidden and then drawn again.
+     *
+     * @see #setTextCursorDrawable(int)
+     * @attr ref android.R.styleable#TextView_textCursorDrawable
+     */
+    public void setTextCursorDrawable(@NonNull Drawable textCursorDrawable) {
+        Preconditions.checkNotNull(textCursorDrawable,
+                "The cursor drawable should not be null.");
+        mCursorDrawable = textCursorDrawable;
+        mCursorDrawableRes = 0;
+        if (mEditor != null) {
+            mEditor.loadCursorDrawable();
+        }
+    }
+
+    /**
+     * Sets the Drawable corresponding to the text cursor. The Drawable defaults to the
+     * value of the textCursorDrawable attribute.
+     * Note that any change applied to the cursor Drawable will not be visible
+     * until the cursor is hidden and then drawn again.
+     *
+     * @see #setTextCursorDrawable(Drawable)
+     * @attr ref android.R.styleable#TextView_textCursorDrawable
+     */
+    public void setTextCursorDrawable(@DrawableRes int textCursorDrawable) {
+        Preconditions.checkArgumentPositive(textCursorDrawable,
+                "The cursor drawable should be a valid drawable resource id.");
+        setTextCursorDrawable(mContext.getDrawable(textCursorDrawable));
+    }
+
+    /**
+     * Returns the Drawable corresponding to the text cursor.
+     * Note that any change applied to the cursor Drawable will not be visible
+     * until the cursor is hidden and then drawn again.
+     *
+     * @return the text cursor drawable
+     *
+     * @see #setTextCursorDrawable(Drawable)
+     * @see #setTextCursorDrawable(int)
+     * @attr ref android.R.styleable#TextView_textCursorDrawable
+     */
+    @Nullable public Drawable getTextCursorDrawable() {
+        if (mCursorDrawable == null && mCursorDrawableRes != 0) {
+            mCursorDrawable = mContext.getDrawable(mCursorDrawableRes);
+        }
+        return mCursorDrawable;
     }
 
     /**
@@ -5040,13 +5096,24 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Returns whether the text is allowed to be wider than the View is.
+     * Returns whether the text is allowed to be wider than the View.
+     * If false, the text will be wrapped to the width of the View.
+     *
+     * @attr ref android.R.styleable#TextView_scrollHorizontally
+     * @see #setHorizontallyScrolling(boolean)
+     */
+    public final boolean isHorizontallyScrolling() {
+        return mHorizontallyScrolling;
+    }
+
+    /**
+     * Returns whether the text is allowed to be wider than the View.
      * If false, the text will be wrapped to the width of the View.
      *
      * @attr ref android.R.styleable#TextView_scrollHorizontally
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public boolean getHorizontallyScrolling() {
         return mHorizontallyScrolling;
     }
@@ -5973,14 +6040,22 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (mTextDir == null) {
                 mTextDir = getTextDirectionHeuristic();
             }
-            if (!precomputed.getParams().isSameTextMetricsInternal(
-                    getPaint(), mTextDir, mBreakStrategy, mHyphenationFrequency)) {
-                throw new IllegalArgumentException(
+            final @PrecomputedText.Params.CheckResultUsableResult int checkResult =
+                    precomputed.getParams().checkResultUsable(getPaint(), mTextDir, mBreakStrategy,
+                            mHyphenationFrequency);
+            switch (checkResult) {
+                case PrecomputedText.Params.UNUSABLE:
+                    throw new IllegalArgumentException(
                         "PrecomputedText's Parameters don't match the parameters of this TextView."
                         + "Consider using setTextMetricsParams(precomputedText.getParams()) "
                         + "to override the settings of this TextView: "
                         + "PrecomputedText: " + precomputed.getParams()
                         + "TextView: " + getTextMetricsParams());
+                case PrecomputedText.Params.NEED_RECOMPUTE:
+                    precomputed = PrecomputedText.create(precomputed, getTextMetricsParams());
+                    break;
+                case PrecomputedText.Params.USABLE:
+                    // pass through
             }
         } else if (type == BufferType.SPANNABLE || mMovement != null) {
             text = mSpannableFactory.newSpannable(text);
@@ -6254,8 +6329,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return mHint;
     }
 
-    @UnsupportedAppUsage
-    boolean isSingleLine() {
+    /**
+     * Returns if the text is constrained to a single horizontally scrolling line ignoring new
+     * line characters instead of letting it wrap onto multiple lines.
+     *
+     * @attr ref android.R.styleable#TextView_singleLine
+     */
+    public boolean isSingleLine() {
         return mSingleLine;
     }
 
@@ -9933,7 +10013,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         && mSavedMarqueeModeLayout.getLineWidth(0) > width));
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private void startMarquee() {
         // Do not ellipsize EditText
         if (getKeyListener() != null) return;
@@ -9976,7 +10056,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private void startStopMarquee(boolean start) {
         if (mEllipsize == TextUtils.TruncateAt.MARQUEE) {
             if (start) {
@@ -10130,7 +10210,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Notify managers (such as {@link AutofillManager} and {@link IntelligenceManager}) that are
+     * Notify managers (such as {@link AutofillManager} and {@link ContentCaptureManager}) that are
      * interested on text changes.
      */
     private void notifyListeningManagersAfterTextChanged() {
@@ -10148,12 +10228,19 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         }
 
+        // TODO(b/121045053): should use a flag / boolean to keep status of SHOWN / HIDDEN instead
+        // of using isLaidout(), so it's not called in cases where it's laid out but a
+        // notifyAppeared was not sent.
+
         // ContentCapture
-        if (isImportantForContentCapture() && isTextEditable()) {
-            final IntelligenceManager im = mContext.getSystemService(IntelligenceManager.class);
-            if (im != null && im.isContentCaptureEnabled()) {
-                // TODO(b/111276913): pass flags when edited by user / add CTS test
-                im.notifyViewTextChanged(getAutofillId(), getText(), /* flags= */ 0);
+        if (isLaidOut() && isImportantForContentCapture() && isTextEditable()) {
+            final ContentCaptureManager cm = mContext.getSystemService(ContentCaptureManager.class);
+            if (cm != null && cm.isContentCaptureEnabled()) {
+                final ContentCaptureSession session = getContentCaptureSession();
+                if (session != null) {
+                    // TODO(b/111276913): pass flags when edited by user / add CTS test
+                    session.notifyViewTextChanged(getAutofillId(), getText(), /* flags= */ 0);
+                }
             }
         }
     }
@@ -10744,6 +10831,25 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         return onTextContextMenuItem(ID_PASTE);
                     }
                     break;
+                case KeyEvent.KEYCODE_INSERT:
+                    if (canCopy()) {
+                        return onTextContextMenuItem(ID_COPY);
+                    }
+                    break;
+            }
+        } else if (event.hasModifiers(KeyEvent.META_SHIFT_ON)) {
+            // Handle Shift-only shortcuts.
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_FORWARD_DEL:
+                    if (canCut()) {
+                        return onTextContextMenuItem(ID_CUT);
+                    }
+                    break;
+                case KeyEvent.KEYCODE_INSERT:
+                    if (canPaste()) {
+                        return onTextContextMenuItem(ID_PASTE);
+                    }
+                    break;
             }
         } else if (event.hasModifiers(KeyEvent.META_CTRL_ON | KeyEvent.META_SHIFT_ON)) {
             // Handle Ctrl-Shift shortcuts.
@@ -10942,6 +11048,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
                 || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
             if (mLayout == null) {
+                if (viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+                    Log.w(LOG_TAG, "onProvideContentCaptureStructure(): calling assumeLayout()");
+                }
                 assumeLayout();
             }
             Layout layout = mLayout;
@@ -12265,13 +12374,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Returns the current {@link TextDirectionHeuristic}.
-     *
-     * @return the current {@link TextDirectionHeuristic}.
-     * @hide
+     * Returns resolved {@link TextDirectionHeuristic} that will be used for text layout.
+     * The {@link TextDirectionHeuristic} that is used by TextView is only available after
+     * {@link #getTextDirection()} and {@link #getLayoutDirection()} is resolved. Therefore the
+     * return value may not be the same as the one TextView uses if the View's layout direction is
+     * not resolved or detached from parent root view.
      */
-    @UnsupportedAppUsage
-    protected TextDirectionHeuristic getTextDirectionHeuristic() {
+    public TextDirectionHeuristic getTextDirectionHeuristic() {
         if (hasPasswordTransformationMethod()) {
             // passwords fields should be LTR
             return TextDirectionHeuristics.LTR;

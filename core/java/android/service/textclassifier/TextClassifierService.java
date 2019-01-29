@@ -32,12 +32,15 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.text.TextUtils;
 import android.util.Slog;
+import android.view.textclassifier.ConversationActions;
 import android.view.textclassifier.SelectionEvent;
 import android.view.textclassifier.TextClassification;
 import android.view.textclassifier.TextClassificationContext;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textclassifier.TextClassificationSessionId;
 import android.view.textclassifier.TextClassifier;
+import android.view.textclassifier.TextClassifierEvent;
+import android.view.textclassifier.TextLanguage;
 import android.view.textclassifier.TextLinks;
 import android.view.textclassifier.TextSelection;
 
@@ -79,7 +82,6 @@ public abstract class TextClassifierService extends Service {
      * {@link android.Manifest.permission#BIND_TEXTCLASSIFIER_SERVICE} permission so
      * that other applications can not abuse it.
      */
-    @SystemApi
     public static final String SERVICE_INTERFACE =
             "android.service.textclassifier.TextClassifierService";
 
@@ -92,8 +94,7 @@ public abstract class TextClassifierService extends Service {
         @Override
         public void onSuggestSelection(
                 TextClassificationSessionId sessionId,
-                TextSelection.Request request, ITextSelectionCallback callback)
-                throws RemoteException {
+                TextSelection.Request request, ITextSelectionCallback callback) {
             Preconditions.checkNotNull(request);
             Preconditions.checkNotNull(callback);
             TextClassifierService.this.onSuggestSelection(
@@ -125,8 +126,7 @@ public abstract class TextClassifierService extends Service {
         @Override
         public void onClassifyText(
                 TextClassificationSessionId sessionId,
-                TextClassification.Request request, ITextClassificationCallback callback)
-                throws RemoteException {
+                TextClassification.Request request, ITextClassificationCallback callback) {
             Preconditions.checkNotNull(request);
             Preconditions.checkNotNull(callback);
             TextClassifierService.this.onClassifyText(
@@ -156,8 +156,7 @@ public abstract class TextClassifierService extends Service {
         @Override
         public void onGenerateLinks(
                 TextClassificationSessionId sessionId,
-                TextLinks.Request request, ITextLinksCallback callback)
-                throws RemoteException {
+                TextLinks.Request request, ITextLinksCallback callback) {
             Preconditions.checkNotNull(request);
             Preconditions.checkNotNull(callback);
             TextClassifierService.this.onGenerateLinks(
@@ -188,16 +187,90 @@ public abstract class TextClassifierService extends Service {
         @Override
         public void onSelectionEvent(
                 TextClassificationSessionId sessionId,
-                SelectionEvent event) throws RemoteException {
+                SelectionEvent event) {
             Preconditions.checkNotNull(event);
             TextClassifierService.this.onSelectionEvent(sessionId, event);
         }
 
         /** {@inheritDoc} */
         @Override
+        public void onTextClassifierEvent(
+                TextClassificationSessionId sessionId,
+                TextClassifierEvent event) {
+            Preconditions.checkNotNull(event);
+            TextClassifierService.this.onTextClassifierEvent(sessionId, event);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void onDetectLanguage(
+                TextClassificationSessionId sessionId,
+                TextLanguage.Request request,
+                ITextLanguageCallback callback) {
+            Preconditions.checkNotNull(request);
+            Preconditions.checkNotNull(callback);
+            TextClassifierService.this.onDetectLanguage(
+                    sessionId,
+                    request,
+                    mCancellationSignal,
+                    new Callback<TextLanguage>() {
+                        @Override
+                        public void onSuccess(TextLanguage result) {
+                            try {
+                                callback.onSuccess(result);
+                            } catch (RemoteException e) {
+                                Slog.d(LOG_TAG, "Error calling callback");
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(CharSequence error) {
+                            try {
+                                callback.onFailure();
+                            } catch (RemoteException e) {
+                                Slog.d(LOG_TAG, "Error calling callback");
+                            }
+                        };
+                    });
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void onSuggestConversationActions(
+                TextClassificationSessionId sessionId,
+                ConversationActions.Request request,
+                IConversationActionsCallback callback) {
+            Preconditions.checkNotNull(request);
+            Preconditions.checkNotNull(callback);
+            TextClassifierService.this.onSuggestConversationActions(
+                    sessionId,
+                    request,
+                    mCancellationSignal,
+                    new Callback<ConversationActions>() {
+                        @Override
+                        public void onSuccess(ConversationActions result) {
+                            try {
+                                callback.onSuccess(result);
+                            } catch (RemoteException e) {
+                                Slog.d(LOG_TAG, "Error calling callback");
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(CharSequence error) {
+                            try {
+                                callback.onFailure();
+                            } catch (RemoteException e) {
+                                Slog.d(LOG_TAG, "Error calling callback");
+                            }
+                        }
+                    });
+        }
+
+        /** {@inheritDoc} */
+        @Override
         public void onCreateTextClassificationSession(
-                TextClassificationContext context, TextClassificationSessionId sessionId)
-                throws RemoteException {
+                TextClassificationContext context, TextClassificationSessionId sessionId) {
             Preconditions.checkNotNull(context);
             Preconditions.checkNotNull(sessionId);
             TextClassifierService.this.onCreateTextClassificationSession(context, sessionId);
@@ -205,8 +278,7 @@ public abstract class TextClassifierService extends Service {
 
         /** {@inheritDoc} */
         @Override
-        public void onDestroyTextClassificationSession(TextClassificationSessionId sessionId)
-                throws RemoteException {
+        public void onDestroyTextClassificationSession(TextClassificationSessionId sessionId) {
             TextClassifierService.this.onDestroyTextClassificationSession(sessionId);
         }
     };
@@ -266,6 +338,38 @@ public abstract class TextClassifierService extends Service {
             @NonNull Callback<TextLinks> callback);
 
     /**
+     * Detects and returns the language of the give text.
+     *
+     * @param sessionId the session id
+     * @param request the language detection request
+     * @param cancellationSignal object to watch for canceling the current operation
+     * @param callback the callback to return the result to
+     */
+    public void onDetectLanguage(
+            @Nullable TextClassificationSessionId sessionId,
+            @NonNull TextLanguage.Request request,
+            @NonNull CancellationSignal cancellationSignal,
+            @NonNull Callback<TextLanguage> callback) {
+        callback.onSuccess(getLocalTextClassifier().detectLanguage(request));
+    }
+
+    /**
+     * Suggests and returns a list of actions according to the given conversation.
+     *
+     * @param sessionId the session id
+     * @param request the conversation actions request
+     * @param cancellationSignal object to watch for canceling the current operation
+     * @param callback the callback to return the result to
+     */
+    public void onSuggestConversationActions(
+            @Nullable TextClassificationSessionId sessionId,
+            @NonNull ConversationActions.Request request,
+            @NonNull CancellationSignal cancellationSignal,
+            @NonNull Callback<ConversationActions> callback) {
+        callback.onSuccess(getLocalTextClassifier().suggestConversationActions(request));
+    }
+
+    /**
      * Writes the selection event.
      * This is called when a selection event occurs. e.g. user changed selection; or smart selection
      * happened.
@@ -274,9 +378,26 @@ public abstract class TextClassifierService extends Service {
      *
      * @param sessionId the session id
      * @param event the selection event
+     * @deprecated
+     *      Use {@link #onTextClassifierEvent(TextClassificationSessionId, TextClassifierEvent)}
+     *      instead
      */
+    @Deprecated
     public void onSelectionEvent(
             @Nullable TextClassificationSessionId sessionId, @NonNull SelectionEvent event) {}
+
+    /**
+     * Writes the TextClassifier event.
+     * This is called when a TextClassifier event occurs. e.g. user changed selection,
+     * smart selection happened, or a link was clicked.
+     *
+     * <p>The default implementation ignores the event.
+     *
+     * @param sessionId the session id
+     * @param event the TextClassifier event
+     */
+    public void onTextClassifierEvent(
+            @Nullable TextClassificationSessionId sessionId, @NonNull TextClassifierEvent event) {}
 
     /**
      * Creates a new text classification session for the specified context.
@@ -312,9 +433,7 @@ public abstract class TextClassifierService extends Service {
      * Callbacks for TextClassifierService results.
      *
      * @param <T> the type of the result
-     * @hide
      */
-    @SystemApi
     public interface Callback<T> {
         /**
          * Returns the result.

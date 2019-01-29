@@ -17,6 +17,10 @@
 package com.android.systemui.shared.system;
 
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_BOTTOM;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_RIGHT;
 
 import android.app.WindowConfiguration;
 import android.graphics.Rect;
@@ -25,10 +29,6 @@ import android.os.RemoteException;
 import android.util.Log;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
-
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_RIGHT;
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_BOTTOM;
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
 
 import com.android.systemui.shared.recents.view.AppTransitionAnimationSpecsFuture;
 import com.android.systemui.shared.recents.view.RecentsTransition;
@@ -62,7 +62,7 @@ public class WindowManagerWrapper {
     public static final int TRANSIT_KEYGUARD_OCCLUDE = WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
     public static final int TRANSIT_KEYGUARD_UNOCCLUDE = WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 
-    public static final int NAV_BAR_POS_INVALID = -1;
+    public static final int NAV_BAR_POS_INVALID = NAV_BAR_INVALID;
     public static final int NAV_BAR_POS_LEFT = NAV_BAR_LEFT;
     public static final int NAV_BAR_POS_RIGHT = NAV_BAR_RIGHT;
     public static final int NAV_BAR_POS_BOTTOM = NAV_BAR_BOTTOM;
@@ -101,23 +101,23 @@ public class WindowManagerWrapper {
      * Overrides a pending app transition.
      */
     public void overridePendingAppTransitionMultiThumbFuture(
-            AppTransitionAnimationSpecsFuture animationSpecFuture,
-            Runnable animStartedCallback, Handler animStartedCallbackHandler, boolean scaleUp) {
+            AppTransitionAnimationSpecsFuture animationSpecFuture, Runnable animStartedCallback,
+            Handler animStartedCallbackHandler, boolean scaleUp, int displayId) {
         try {
             WindowManagerGlobal.getWindowManagerService()
                     .overridePendingAppTransitionMultiThumbFuture(animationSpecFuture.getFuture(),
                             RecentsTransition.wrapStartedListener(animStartedCallbackHandler,
-                                    animStartedCallback), scaleUp);
+                                    animStartedCallback), scaleUp, displayId);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to override pending app transition (multi-thumbnail future): ", e);
         }
     }
 
     public void overridePendingAppTransitionRemote(
-            RemoteAnimationAdapterCompat remoteAnimationAdapter) {
+            RemoteAnimationAdapterCompat remoteAnimationAdapter, int displayId) {
         try {
             WindowManagerGlobal.getWindowManagerService().overridePendingAppTransitionRemote(
-                    remoteAnimationAdapter.getWrapped());
+                    remoteAnimationAdapter.getWrapped(), displayId);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to override pending app transition (remote): ", e);
         }
@@ -160,11 +160,13 @@ public class WindowManagerWrapper {
     }
 
     /**
-     * @return whether there is a soft nav bar.
+     * @param displayId the id of display to check if there is a software navigation bar.
+     *
+     * @return whether there is a soft nav bar on specific display.
      */
-    public boolean hasSoftNavigationBar() {
+    public boolean hasSoftNavigationBar(int displayId) {
         try {
-            return WindowManagerGlobal.getWindowManagerService().hasNavigationBar();
+            return WindowManagerGlobal.getWindowManagerService().hasNavigationBar(displayId);
         } catch (RemoteException e) {
             return false;
         }
@@ -177,9 +179,9 @@ public class WindowManagerWrapper {
      * @see #NAV_BAR_POS_BOTTOM
      * @see #NAV_BAR_POS_INVALID
      */
-    public int getNavBarPosition() {
+    public int getNavBarPosition(int displayId) {
         try {
-            return WindowManagerGlobal.getWindowManagerService().getNavBarPosition();
+            return WindowManagerGlobal.getWindowManagerService().getNavBarPosition(displayId);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to get nav bar position");
         }

@@ -97,6 +97,7 @@ public class Watchdog extends Thread {
         "/system/bin/mediaserver",
         "/system/bin/sdcard",
         "/system/bin/surfaceflinger",
+        "/system/bin/vold",
         "media.extractor", // system/bin/mediaextractor
         "media.metrics", // system/bin/mediametrics
         "media.codec", // vendor/bin/hw/android.hardware.media.omx@1.0-service
@@ -111,6 +112,7 @@ public class Watchdog extends Thread {
         "android.hardware.camera.provider@2.4::ICameraProvider",
         "android.hardware.graphics.allocator@2.0::IAllocator",
         "android.hardware.graphics.composer@2.1::IComposer",
+        "android.hardware.health@2.0::IHealth",
         "android.hardware.media.omx@1.0::IOmx",
         "android.hardware.media.omx@1.0::IOmxStore",
         "android.hardware.sensors@1.0::ISensors",

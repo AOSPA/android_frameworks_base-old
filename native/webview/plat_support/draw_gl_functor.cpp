@@ -21,14 +21,12 @@
 
 #include "draw_gl.h"
 
-#include <errno.h>
 #include <jni.h>
 #include <private/hwui/DrawGlInfo.h>
-#include <string.h>
-#include <sys/resource.h>
-#include <sys/time.h>
 #include <utils/Functor.h>
 #include <utils/Log.h>
+
+#include "functor_utils.h"
 
 #define NELEM(x) ((int) (sizeof(x) / sizeof((x)[0])))
 #define COMPILE_ASSERT(expr, err) \
@@ -42,10 +40,10 @@ AwDrawGLFunction* g_aw_drawgl_function = NULL;
 class DrawGLFunctor : public Functor {
  public:
   explicit DrawGLFunctor(jlong view_context) : view_context_(view_context) {}
-  virtual ~DrawGLFunctor() {}
+  ~DrawGLFunctor() override {}
 
   // Functor
-  virtual status_t operator ()(int what, void* data) {
+  status_t operator ()(int what, void* data) override {
     using uirenderer::DrawGlInfo;
     if (!g_aw_drawgl_function) {
       ALOGE("Cannot draw: no DrawGL Function installed");
@@ -97,27 +95,6 @@ class DrawGLFunctor : public Functor {
  private:
   intptr_t view_context_;
 };
-
-// Raise the file handle soft limit to the hard limit since gralloc buffers
-// uses file handles.
-void RaiseFileNumberLimit() {
-  static bool have_raised_limit = false;
-  if (have_raised_limit)
-    return;
-
-  have_raised_limit = true;
-  struct rlimit limit_struct;
-  limit_struct.rlim_cur = 0;
-  limit_struct.rlim_max = 0;
-  if (getrlimit(RLIMIT_NOFILE, &limit_struct) == 0) {
-    limit_struct.rlim_cur = limit_struct.rlim_max;
-    if (setrlimit(RLIMIT_NOFILE, &limit_struct) != 0) {
-      ALOGE("setrlimit failed: %s", strerror(errno));
-    }
-  } else {
-    ALOGE("getrlimit failed: %s", strerror(errno));
-  }
-}
 
 jlong CreateGLFunctor(JNIEnv*, jclass, jlong view_context) {
   RaiseFileNumberLimit();

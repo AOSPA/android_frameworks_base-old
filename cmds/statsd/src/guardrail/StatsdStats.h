@@ -113,7 +113,7 @@ public:
 
     // Max memory allowed for storing metrics per configuration. If this limit is exceeded, statsd
     // drops the metrics data in memory.
-    static const size_t kMaxMetricsBytesPerConfig = 256 * 1024;
+    static const size_t kMaxMetricsBytesPerConfig = 2 * 1024 * 1024;
 
     // Soft memory limit per configuration. Once this limit is exceeded, we begin notifying the
     // data subscriber that it's time to call getData.
@@ -130,7 +130,7 @@ public:
     static const int64_t kMinBroadcastPeriodNs = 60 * NS_PER_SEC;
 
     /* Min period between two checks of byte size per config key in nanoseconds. */
-    static const int64_t kMinByteSizeCheckPeriodNs = 10 * NS_PER_SEC;
+    static const int64_t kMinByteSizeCheckPeriodNs = 60 * NS_PER_SEC;
 
     // Maximum age (30 days) that files on disk can exist in seconds.
     static const int kMaxAgeSecond = 60 * 60 * 24 * 30;
@@ -144,6 +144,8 @@ public:
     // How long to try to clear puller cache from last time
     static const long kPullerCacheClearIntervalSec = 1;
 
+    // Max time to do a pull.
+    static const int64_t kPullMaxDelayNs = 10 * NS_PER_SEC;
     /**
      * Report a new config has been received and report the static stats about the config.
      *
@@ -296,6 +298,16 @@ public:
     void notePullDelay(int pullAtomId, int64_t pullDelayNs);
 
     /*
+     * Records pull exceeds timeout for the puller.
+     */
+    void notePullTimeout(int pullAtomId);
+
+    /*
+     * Records pull exceeds max delay for a metric.
+     */
+    void notePullExceedMaxDelay(int pullAtomId);
+
+    /*
      * Records when system server restarts.
      */
     void noteSystemServerRestart(int32_t timeSec);
@@ -335,6 +347,8 @@ public:
         int64_t maxPullDelayNs = 0;
         long numPullDelay = 0;
         long dataError = 0;
+        long pullTimeout = 0;
+        long pullExceedMaxDelay = 0;
     } PulledAtomStats;
 
 private:

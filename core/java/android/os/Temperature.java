@@ -25,12 +25,10 @@ import java.lang.annotation.RetentionPolicy;
 
 /**
  * Temperature values used by IThermalService.
- */
-
-/**
+ *
  * @hide
  */
-public class Temperature implements Parcelable {
+public final class Temperature implements Parcelable {
     /** Temperature value */
     private float mValue;
     /** A temperature type from ThermalHAL */
@@ -40,14 +38,13 @@ public class Temperature implements Parcelable {
     /** The level of the sensor is currently in throttling */
     private int mStatus;
 
-    /** @hide */
     @IntDef(prefix = { "THROTTLING_" }, value = {
             THROTTLING_NONE,
             THROTTLING_LIGHT,
             THROTTLING_MODERATE,
             THROTTLING_SEVERE,
             THROTTLING_CRITICAL,
-            THROTTLING_WARNING,
+            THROTTLING_EMERGENCY,
             THROTTLING_SHUTDOWN,
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -59,10 +56,9 @@ public class Temperature implements Parcelable {
     public static final int THROTTLING_MODERATE = ThrottlingSeverity.MODERATE;
     public static final int THROTTLING_SEVERE = ThrottlingSeverity.SEVERE;
     public static final int THROTTLING_CRITICAL = ThrottlingSeverity.CRITICAL;
-    public static final int THROTTLING_WARNING = ThrottlingSeverity.WARNING;
+    public static final int THROTTLING_EMERGENCY = ThrottlingSeverity.EMERGENCY;
     public static final int THROTTLING_SHUTDOWN = ThrottlingSeverity.SHUTDOWN;
 
-    /** @hide */
     @IntDef(prefix = { "TYPE_" }, value = {
             TYPE_UNKNOWN,
             TYPE_CPU,
@@ -74,6 +70,7 @@ public class Temperature implements Parcelable {
             TYPE_BCL_VOLTAGE,
             TYPE_BCL_CURRENT,
             TYPE_BCL_PERCENTAGE,
+            TYPE_NPU,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Type {}
@@ -89,25 +86,35 @@ public class Temperature implements Parcelable {
     public static final int TYPE_BCL_VOLTAGE = TemperatureType.BCL_VOLTAGE;
     public static final int TYPE_BCL_CURRENT = TemperatureType.BCL_CURRENT;
     public static final int TYPE_BCL_PERCENTAGE = TemperatureType.BCL_PERCENTAGE;
+    public static final int TYPE_NPU = TemperatureType.NPU;
 
     /**
      * Verify a valid temperature type.
      *
      * @return true if a temperature type is valid otherwise false.
      */
-    public static boolean isValidType(int type) {
-        return type >= TYPE_UNKNOWN && type <= TYPE_BCL_PERCENTAGE;
+    public static boolean isValidType(@Type int type) {
+        return type >= TYPE_UNKNOWN && type <= TYPE_NPU;
+    }
+
+    /**
+     * Verify a valid throttling status.
+     *
+     * @return true if a status is valid otherwise false.
+     */
+    public static boolean isValidStatus(@ThrottlingStatus int status) {
+        return status >= THROTTLING_NONE && status <= THROTTLING_SHUTDOWN;
     }
 
     public Temperature() {
         this(Float.NaN, TYPE_UNKNOWN, "", THROTTLING_NONE);
     }
 
-    public Temperature(float value, @Type int type, String name, int status) {
+    public Temperature(float value, @Type int type, String name, @ThrottlingStatus int status) {
         mValue = value;
         mType = isValidType(type) ? type : TYPE_UNKNOWN;
         mName = name;
-        mStatus = status;
+        mStatus = isValidStatus(status) ? status : THROTTLING_NONE;
     }
 
     /**

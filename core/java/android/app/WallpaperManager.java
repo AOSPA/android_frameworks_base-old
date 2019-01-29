@@ -1485,7 +1485,7 @@ public class WallpaperManager {
             throw new RuntimeException(new DeadSystemException());
         }
         try {
-            return sGlobals.mService.getWidthHint();
+            return sGlobals.mService.getWidthHint(mContext.getDisplayId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1511,7 +1511,7 @@ public class WallpaperManager {
             throw new RuntimeException(new DeadSystemException());
         }
         try {
-            return sGlobals.mService.getHeightHint();
+            return sGlobals.mService.getHeightHint(mContext.getDisplayId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1572,7 +1572,7 @@ public class WallpaperManager {
                 throw new RuntimeException(new DeadSystemException());
             } else {
                 sGlobals.mService.setDimensionHints(minimumWidth, minimumHeight,
-                        mContext.getOpPackageName());
+                        mContext.getOpPackageName(), mContext.getDisplayId());
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -1597,7 +1597,8 @@ public class WallpaperManager {
                 Log.w(TAG, "WallpaperService not running");
                 throw new RuntimeException(new DeadSystemException());
             } else {
-                sGlobals.mService.setDisplayPadding(padding, mContext.getOpPackageName());
+                sGlobals.mService.setDisplayPadding(padding, mContext.getOpPackageName(),
+                        mContext.getDisplayId());
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -1897,23 +1898,33 @@ public class WallpaperManager {
      * @hide
      */
     public static ComponentName getDefaultWallpaperComponent(Context context) {
+        ComponentName cn = null;
+
         String flat = SystemProperties.get(PROP_WALLPAPER_COMPONENT);
         if (!TextUtils.isEmpty(flat)) {
-            final ComponentName cn = ComponentName.unflattenFromString(flat);
-            if (cn != null) {
-                return cn;
+            cn = ComponentName.unflattenFromString(flat);
+        }
+
+        if (cn == null) {
+            flat = context.getString(com.android.internal.R.string.default_wallpaper_component);
+            if (!TextUtils.isEmpty(flat)) {
+                cn = ComponentName.unflattenFromString(flat);
             }
         }
 
-        flat = context.getString(com.android.internal.R.string.default_wallpaper_component);
-        if (!TextUtils.isEmpty(flat)) {
-            final ComponentName cn = ComponentName.unflattenFromString(flat);
-            if (cn != null) {
-                return cn;
+        // Check if the package exists
+        if (cn != null) {
+            try {
+                final PackageManager packageManager = context.getPackageManager();
+                packageManager.getPackageInfo(cn.getPackageName(),
+                        PackageManager.MATCH_DIRECT_BOOT_AWARE
+                                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE);
+            } catch (PackageManager.NameNotFoundException e) {
+                cn = null;
             }
         }
 
-        return null;
+        return cn;
     }
 
     /**

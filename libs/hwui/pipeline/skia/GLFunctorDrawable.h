@@ -31,16 +31,14 @@ namespace skiapipeline {
  */
 class GLFunctorDrawable : public FunctorDrawable {
 public:
-    GLFunctorDrawable(Functor* functor, GlFunctorLifecycleListener* listener, SkCanvas* canvas)
-            : FunctorDrawable(functor, listener, canvas) {}
+    using FunctorDrawable::FunctorDrawable;
+
     virtual ~GLFunctorDrawable();
 
-    void syncFunctor() const override;
-
 protected:
-    virtual void onDraw(SkCanvas* canvas) override;
+    void onDraw(SkCanvas* canvas) override;
 };
 
-};  // namespace skiapipeline
-};  // namespace uirenderer
-};  // namespace android
+}  // namespace skiapipeline
+}  // namespace uirenderer
+}  // namespace android

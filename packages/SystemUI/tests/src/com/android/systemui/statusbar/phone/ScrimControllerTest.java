@@ -220,9 +220,9 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.transitionTo(ScrimState.PULSING);
         mScrimController.finishAnimationsImmediately();
         // Front scrim should be transparent
-        // Back scrim should be visible with tint
+        // Back scrim should be semi-transparent so the user can see the wallpaper
         // Pulse callback should have been invoked
-        assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_FULLY_OPAQUE);
+        assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_SEMI_TRANSPARENT);
         assertScrimTint(mScrimBehind, true /* tinted */);
     }
 
@@ -260,6 +260,19 @@ public class ScrimControllerTest extends SysuiTestCase {
         // Back scrim should be visible after start dragging
         mScrimController.setPanelExpansion(0.5f);
         assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_SEMI_TRANSPARENT);
+    }
+
+    @Test
+    public void transitionToBubbleExpanded() {
+        mScrimController.transitionTo(ScrimState.BUBBLE_EXPANDED);
+        mScrimController.finishAnimationsImmediately();
+
+        // Front scrim should be transparent
+        Assert.assertEquals(ScrimController.VISIBILITY_FULLY_TRANSPARENT,
+                mScrimInFront.getViewAlpha(), 0.0f);
+        // Back scrim should be visible
+        Assert.assertEquals(ScrimController.GRADIENT_SCRIM_ALPHA_BUSY,
+                mScrimBehind.getViewAlpha(), 0.0f);
     }
 
     @Test

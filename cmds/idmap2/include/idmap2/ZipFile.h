@@ -19,13 +19,12 @@
 
 #include <memory>
 #include <string>
-#include <utility>
 
 #include "android-base/macros.h"
+#include "idmap2/Result.h"
 #include "ziparchive/zip_archive.h"
 
-namespace android {
-namespace idmap2 {
+namespace android::idmap2 {
 
 struct MemoryChunk {
   size_t size;
@@ -43,7 +42,7 @@ class ZipFile {
   static std::unique_ptr<const ZipFile> Open(const std::string& path);
 
   std::unique_ptr<const MemoryChunk> Uncompress(const std::string& entryPath) const;
-  std::pair<bool, uint32_t> Crc(const std::string& entryPath) const;
+  Result<uint32_t> Crc(const std::string& entryPath) const;
 
   ~ZipFile();
 
@@ -56,7 +55,6 @@ class ZipFile {
   DISALLOW_COPY_AND_ASSIGN(ZipFile);
 };
 
-}  // namespace idmap2
-}  // namespace android
+}  // namespace android::idmap2
 
 #endif  // IDMAP2_INCLUDE_IDMAP2_ZIPFILE_H_

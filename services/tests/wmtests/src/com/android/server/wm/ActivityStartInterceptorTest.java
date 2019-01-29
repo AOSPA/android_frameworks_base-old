@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.content.pm.ApplicationInfo.FLAG_SUSPENDED;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 
 import static org.junit.Assert.assertEquals;
@@ -25,7 +26,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.when;
 
 import android.app.ActivityManagerInternal;
 import android.app.KeyguardManager;
@@ -90,6 +90,8 @@ public class ActivityStartInterceptorTest {
     @Mock
     private ActivityTaskManagerService mService;
     @Mock
+    private RootActivityContainer mRootActivityContainer;
+    @Mock
     private ActivityStackSupervisor mSupervisor;
     @Mock
     private DevicePolicyManagerInternal mDevicePolicyManager;
@@ -111,7 +113,8 @@ public class ActivityStartInterceptorTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mService.mAmInternal = mAmInternal;
-        mInterceptor = new ActivityStartInterceptor(mService, mSupervisor, mContext);
+        mInterceptor = new ActivityStartInterceptor(
+                mService, mSupervisor, mRootActivityContainer, mContext);
         mInterceptor.setStates(TEST_USER_ID, TEST_REAL_CALLING_PID, TEST_REAL_CALLING_UID,
                 TEST_START_FLAGS, TEST_CALLING_PACKAGE);
 

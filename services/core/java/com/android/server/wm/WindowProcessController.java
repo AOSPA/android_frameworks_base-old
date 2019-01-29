@@ -141,6 +141,9 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     private volatile boolean mPerceptible;
     // Set to true when process was launched with a wrapper attached
     private volatile boolean mUsingWrapper;
+    // Set to true if this process is currently temporarily whitelisted to start activities even if
+    // it's not in the foreground
+    private volatile boolean mAllowBackgroundActivityStarts;
 
     // Thread currently set for VR scheduling
     int mVrThreadTid;
@@ -343,6 +346,14 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return mUsingWrapper;
     }
 
+    public void setAllowBackgroundActivityStarts(boolean allowBackgroundActivityStarts) {
+        mAllowBackgroundActivityStarts = allowBackgroundActivityStarts;
+    }
+
+    public boolean areBackgroundActivityStartsAllowed() {
+        return mAllowBackgroundActivityStarts;
+    }
+
     public void setInstrumenting(boolean instrumenting) {
         mInstrumenting = instrumenting;
     }
@@ -443,7 +454,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             for (int i = 0; i < activities.size(); i++) {
                 final ActivityRecord r = activities.get(i);
                 if (!r.finishing && r.isInStackLocked()) {
-                    r.getStack().finishActivityLocked(r, Activity.RESULT_CANCELED,
+                    r.getActivityStack().finishActivityLocked(r, Activity.RESULT_CANCELED,
                             null, "finish-heavy", true);
                 }
             }
@@ -513,7 +524,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             }
             ActivityRecord hist = mActivities.get(0);
             intent.putExtra(HeavyWeightSwitcherActivity.KEY_CUR_APP, hist.packageName);
-            intent.putExtra(HeavyWeightSwitcherActivity.KEY_CUR_TASK, hist.getTask().taskId);
+            intent.putExtra(HeavyWeightSwitcherActivity.KEY_CUR_TASK, hist.getTaskRecord().taskId);
         }
     }
 
@@ -524,7 +535,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 // Don't kill process(es) that has an activity not stopped.
                 return false;
             }
-            final TaskRecord otherTask = activity.getTask();
+            final TaskRecord otherTask = activity.getTaskRecord();
             if (tr.taskId != otherTask.taskId && otherTask.inRecents) {
                 // Don't kill process(es) that has an activity in a different task that is
                 // also in recents.
@@ -557,7 +568,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 continue;
             }
 
-            final TaskRecord task = r.getTask();
+            final TaskRecord task = r.getTaskRecord();
             if (task != null) {
                 if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Collecting release task " + task
                         + " from " + r);
@@ -600,7 +611,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 }
                 if (r.visible) {
                     callback.onVisibleActivity();
-                    final TaskRecord task = r.getTask();
+                    final TaskRecord task = r.getTaskRecord();
                     if (task != null && minTaskLayer > 0) {
                         final int layer = task.mLayerRank;
                         if (layer >= 0 && minTaskLayer > layer) {
@@ -755,9 +766,9 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             return;
         }
         final ActivityDisplay activityDisplay =
-                mAtm.mStackSupervisor.getActivityDisplay(mDisplayId);
+                mAtm.mRootActivityContainer.getActivityDisplay(mDisplayId);
         if (activityDisplay != null) {
-            mAtm.mStackSupervisor.getActivityDisplay(
+            mAtm.mRootActivityContainer.getActivityDisplay(
                     mDisplayId).unregisterConfigurationChangeListener(this);
         }
         mDisplayId = INVALID_DISPLAY;
@@ -770,8 +781,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     }
 
     @Override
-    public void onOverrideConfigurationChanged(Configuration newOverrideConfig) {
-        super.onOverrideConfigurationChanged(newOverrideConfig);
+    public void onRequestedOverrideConfigurationChanged(Configuration newOverrideConfig) {
+        super.onRequestedOverrideConfigurationChanged(newOverrideConfig);
         updateConfiguration();
     }
 
@@ -898,6 +909,11 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         }
     }
 
+    @Override
+    public String toString() {
+        return mOwner.toString();
+    }
+
     public void dump(PrintWriter pw, String prefix) {
         synchronized (mAtm.mGlobalLock) {
             if (mActivities.size() > 0) {
@@ -919,7 +935,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             }
         }
         pw.println(prefix + " Configuration=" + getConfiguration());
-        pw.println(prefix + " OverrideConfiguration=" + getOverrideConfiguration());
+        pw.println(prefix + " OverrideConfiguration=" + getRequestedOverrideConfiguration());
         pw.println(prefix + " mLastReportedConfiguration=" + mLastReportedConfiguration);
     }
 

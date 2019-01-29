@@ -94,9 +94,7 @@ import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.am.ActivityManagerService.ItemMatcher;
 import com.android.server.uri.NeededUriGrants;
-import com.android.server.wm.ActivityRecord;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
-import com.android.server.wm.ActivityStack;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -137,10 +135,6 @@ public final class ActiveServices {
     // Maximum number of services that we allow to start in the background
     // at the same time.
     final int mMaxStartingBackground;
-
-    // Flag to reschedule the services during app launch. Disable by default.
-    private static final boolean SERVICE_RESCHEDULE
-            = SystemProperties.getBoolean("ro.vendor.qti.am.reschedule_service", false);
 
     final SparseArray<ServiceMap> mServiceMap = new SparseArray<>();
 
@@ -1211,10 +1205,20 @@ public final class ActiveServices {
                                 android.Manifest.permission.INSTANT_APP_FOREGROUND_SERVICE,
                                 r.app.pid, r.appInfo.uid, "startForeground");
                 }
-            } else if (r.appInfo.targetSdkVersion >= Build.VERSION_CODES.P) {
-                mAm.enforcePermission(
-                        android.Manifest.permission.FOREGROUND_SERVICE,
-                        r.app.pid, r.appInfo.uid, "startForeground");
+            } else {
+                if (r.appInfo.targetSdkVersion >= Build.VERSION_CODES.P) {
+                    mAm.enforcePermission(
+                            android.Manifest.permission.FOREGROUND_SERVICE,
+                            r.app.pid, r.appInfo.uid, "startForeground");
+                }
+                if (r.appInfo.targetSdkVersion >= Build.VERSION_CODES.Q) {
+                    if (r.serviceInfo.getForegroundServiceType()
+                            == ServiceInfo.FOREGROUND_SERVICE_TYPE_UNSPECIFIED) {
+                        // STOPSHIP(b/120611119): replace log message with SecurityException.
+                        Slog.w(TAG, "missing foregroundServiceType attribute in "
+                                + "service element of manifest file");
+                    }
+                }
             }
             boolean alreadyStartedOp = false;
             boolean stopProcStatsOp = false;
@@ -1661,7 +1665,7 @@ public final class ActiveServices {
             AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);
             ConnectionRecord c = new ConnectionRecord(b, activity,
                     connection, flags, clientLabel, clientIntent,
-                    callerApp.uid, callerApp.processName);
+                    callerApp.uid, callerApp.processName, callingPackage);
 
             IBinder binder = connection.asBinder();
             ArrayList<ConnectionRecord> clist = s.connections.get(binder);
@@ -1708,8 +1712,11 @@ public final class ActiveServices {
                     s.app.whitelistManager = true;
                 }
                 // This could have made the service more important.
-                mAm.updateLruProcessLocked(s.app, s.app.hasClientActivities()
-                        || s.app.treatLikeActivity, b.client);
+                mAm.updateLruProcessLocked(s.app,
+                        (callerApp.hasActivitiesOrRecentTasks() && s.app.hasClientActivities())
+                                || (callerApp.getCurProcState() <= ActivityManager.PROCESS_STATE_TOP
+                                        && (flags & Context.BIND_TREAT_LIKE_ACTIVITY) != 0),
+                        b.client);
                 mAm.updateOomAdjLocked(s.app, true);
             }
 
@@ -1790,6 +1797,41 @@ public final class ActiveServices {
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
+        }
+    }
+
+    void updateServiceGroupLocked(IServiceConnection connection, int group, int importance) {
+        final IBinder binder = connection.asBinder();
+        if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "updateServiceGroup: conn=" + binder);
+        final ArrayList<ConnectionRecord> clist = mServiceConnections.get(binder);
+        if (clist == null) {
+            throw new IllegalArgumentException("Could not find connection for "
+                    + connection.asBinder());
+        }
+        for (int i = clist.size() - 1; i >= 0; i--) {
+            final ConnectionRecord crec = clist.get(i);
+            final ServiceRecord srec = crec.binding.service;
+            if (srec != null && (srec.serviceInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0) {
+                if (srec.app != null) {
+                    if (group > 0) {
+                        srec.app.connectionService = srec;
+                        srec.app.connectionGroup = group;
+                        srec.app.connectionImportance = importance;
+                    } else {
+                        srec.app.connectionService = null;
+                        srec.app.connectionGroup = 0;
+                        srec.app.connectionImportance = 0;
+                    }
+                } else {
+                    if (group > 0) {
+                        srec.pendingConnectionGroup = group;
+                        srec.pendingConnectionImportance = importance;
+                    } else {
+                        srec.pendingConnectionGroup = 0;
+                        srec.pendingConnectionImportance = 0;
+                    }
+                }
+            }
         }
     }
 
@@ -1922,7 +1964,8 @@ public final class ActiveServices {
                 + " type=" + resolvedType + " callingUid=" + callingUid);
 
         userId = mAm.mUserController.handleIncomingUser(callingPid, callingUid, userId, false,
-                ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE, "service", null);
+                ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE, "service",
+                callingPackage);
 
         ServiceMap smap = getServiceMapLocked(userId);
         final ComponentName comp;
@@ -1977,6 +2020,13 @@ public final class ActiveServices {
                 ComponentName className = new ComponentName(
                         sInfo.applicationInfo.packageName, sInfo.name);
                 ComponentName name = comp != null ? comp : className;
+                if (!mAm.validateAssociationAllowedLocked(callingPackage, callingUid,
+                        name.getPackageName(), sInfo.applicationInfo.uid)) {
+                    String msg = "association not allowed between packages "
+                            + callingPackage + " and " + name.getPackageName();
+                    Slog.w(TAG, "Service lookup failed: " + msg);
+                    return new ServiceLookupResult(null, msg);
+                }
                 if ((sInfo.flags & ServiceInfo.FLAG_EXTERNAL_SERVICE) != 0) {
                     if (isBindExternal) {
                         if (!sInfo.exported) {
@@ -2035,8 +2085,8 @@ public final class ActiveServices {
                                 sInfo.applicationInfo.uid, name.getPackageName(),
                                 name.getClassName());
                     }
-                    r = new ServiceRecord(mAm, ss, className, name, filter, sInfo, callingFromFg,
-                            res);
+                    r = new ServiceRecord(mAm, ss, className, name, filter, sInfo,
+                            callingFromFg, res);
                     res.setService(r);
                     smap.mServicesByInstanceName.put(name, r);
                     smap.mServicesByIntent.put(filter, r);
@@ -2057,6 +2107,17 @@ public final class ActiveServices {
             }
         }
         if (r != null) {
+            if (!mAm.validateAssociationAllowedLocked(callingPackage, callingUid, r.packageName,
+                    r.appInfo.uid)) {
+                String msg = "association not allowed between packages "
+                        + callingPackage + " and " + r.packageName;
+                Slog.w(TAG, "Service lookup failed: " + msg);
+                return new ServiceLookupResult(null, msg);
+            }
+            if (!mAm.mIntentFirewall.checkService(r.name, service, callingUid, callingPid,
+                    resolvedType, r.appInfo)) {
+                return new ServiceLookupResult(null, "blocked by firewall");
+            }
             if (mAm.checkComponentPermission(r.permission,
                     callingPid, callingUid, r.appInfo.uid, r.exported) != PERMISSION_GRANTED) {
                 if (!r.exported) {
@@ -2082,11 +2143,6 @@ public final class ActiveServices {
                             + " requires appop " + AppOpsManager.opToName(opCode));
                     return null;
                 }
-            }
-
-            if (!mAm.mIntentFirewall.checkService(r.name, service, callingUid, callingPid,
-                    resolvedType, r.appInfo)) {
-                return null;
             }
             return new ServiceLookupResult(r, null);
         }
@@ -2216,14 +2272,6 @@ public final class ActiveServices {
                         r.pendingStarts.add(0, si);
                         long dur = SystemClock.uptimeMillis() - si.deliveredTime;
                         dur *= 2;
-                        if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
-                            Slog.w(TAG,"Can add more delay !!!"
-                               +" si.deliveredTime "+si.deliveredTime
-                               +" dur "+dur
-                               +" si.deliveryCount "+si.deliveryCount
-                               +" si.doneExecutingCount "+si.doneExecutingCount
-                               +" allowCancel "+allowCancel);
-                        }
                         if (minDuration < dur) minDuration = dur;
                         if (resetTime < dur) resetTime = dur;
                     } else {
@@ -2236,13 +2284,6 @@ public final class ActiveServices {
             }
 
             r.totalRestartCount++;
-            if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
-                Slog.w(TAG,"r.name "+r.name+" N "+N+" minDuration "+minDuration
-                       +" resetTime "+resetTime+" now "+now
-                       +" r.restartDelay "+r.restartDelay
-                       +" r.restartTime+resetTime "+(r.restartTime+resetTime)
-                       +" allowCancel "+allowCancel);
-            }
             if (r.restartDelay == 0) {
                 r.restartCount++;
                 r.restartDelay = minDuration;
@@ -2267,14 +2308,6 @@ public final class ActiveServices {
             }
 
             r.nextRestartTime = now + r.restartDelay;
-            if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
-                Slog.w(TAG,"r.name "+r.name+" N "+N+" minDuration "+minDuration
-                       +" resetTime "+resetTime+" now "+now
-                       +" r.restartDelay "+r.restartDelay
-                       +" r.restartTime+resetTime "+(r.restartTime+resetTime)
-                       +" r.nextRestartTime "+r.nextRestartTime
-                       +" allowCancel "+allowCancel);
-            }
 
             // Make sure that we don't end up restarting a bunch of services
             // all at the same time.
@@ -2316,15 +2349,6 @@ public final class ActiveServices {
         r.nextRestartTime = SystemClock.uptimeMillis() + r.restartDelay;
         Slog.w(TAG, "Scheduling restart of crashed service "
                 + r.shortInstanceName + " in " + r.restartDelay + "ms");
-
-        if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
-            for (int i=mRestartingServices.size()-1; i>=0; i--) {
-                ServiceRecord r2 = mRestartingServices.get(i);
-                Slog.w(TAG,"Restarting list - i "+i+" r2.nextRestartTime "
-                           +r2.nextRestartTime+" r2.name "+r2.name);
-            }
-        }
-
         EventLog.writeEvent(EventLogTags.AM_SCHEDULE_SERVICE_RESTART,
                 r.userId, r.shortInstanceName, r.restartDelay);
 
@@ -2345,35 +2369,7 @@ public final class ActiveServices {
             return;
         }
         try {
-            if(SERVICE_RESCHEDULE) {
-                boolean shouldDelay = false;
-                ActivityRecord top_rc = null;
-                ActivityStack stack = mAm.mStackSupervisor.getTopDisplayFocusedStack();
-                if(stack != null) {
-                    top_rc = stack.topRunningActivityLocked();
-                }
-
-                boolean isPersistent
-                        = !((r.serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0);
-                if(top_rc != null) {
-                    if(top_rc.launching && !r.shortInstanceName.contains(top_rc.packageName)
-                            && !isPersistent) {
-                        shouldDelay = true;
-                    }
-                }
-                if(!shouldDelay) {
-                    bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
-                } else {
-                    if (DEBUG_DELAYED_SERVICE) {
-                        Slog.v(TAG, "Reschedule service restart due to app launch"
-                              +" r.shortInstanceName "+r.shortInstanceName+" r.app = "+r.app);
-                    }
-                    r.resetRestartCounter();
-                    scheduleServiceRestartLocked(r, true);
-                }
-            } else {
-                bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
-            }
+            bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
         } catch (TransactionTooLargeException e) {
             // Ignore, it's been logged and nothing upstack cares.
         }
@@ -2616,12 +2612,7 @@ public final class ActiveServices {
                 // Cleanup.
                 if (newService) {
                     app.services.remove(r);
-                    r.app = null;
-                    if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
-                    Slog.w(TAG, " Failed to create Service !!!! ."
-                           +"This will introduce huge delay...  "
-                           +r.shortInstanceName + " in " + r.restartDelay + "ms");
-                    }
+                    r.setProcess(null);
                 }
 
                 // Retry.
