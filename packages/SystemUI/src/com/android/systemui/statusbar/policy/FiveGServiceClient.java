@@ -56,6 +56,7 @@ import org.codeaurora.internal.IExtTelephony;
 import org.codeaurora.internal.INetworkCallback;
 import org.codeaurora.internal.NetworkCallbackBase;
 import org.codeaurora.internal.NrConfigType;
+import org.codeaurora.internal.NrIconType;
 import org.codeaurora.internal.ServiceUtil;
 import org.codeaurora.internal.SignalStrength;
 import org.codeaurora.internal.Status;
@@ -122,6 +123,7 @@ public class FiveGServiceClient {
         private int mDcnr;
         private int mLevel;
         private int mNrConfigType;
+        private int mNrIconType;
         private MobileIconGroup mIconGroup;
 
         public FiveGServiceState(){
@@ -131,6 +133,7 @@ public class FiveGServiceClient {
             mDcnr = DcParam.DCNR_RESTRICTED;
             mLevel = 0;
             mNrConfigType = NrConfigType.NSA_CONFIGURATION;
+            mNrIconType = NrIconType.INVALID;
             mIconGroup = TelephonyIcons.UNKNOWN;
         }
 
@@ -204,7 +207,8 @@ public class FiveGServiceClient {
                     && this.mDcnr == state.mDcnr
                     && this.mLevel == state.mLevel
                     && this.mNrConfigType == state.mNrConfigType
-                    && this.mIconGroup == state.mIconGroup;
+                    && this.mIconGroup == state.mIconGroup
+                    && this.mNrIconType == state.mNrIconType;
         }
         @Override
         public String toString() {
@@ -216,7 +220,8 @@ public class FiveGServiceClient {
                     append("mDcnr=" + mDcnr).append(", ").
                     append("mLevel=").append(mLevel).append(", ").
                     append("mNrConfigType=").append(mNrConfigType).append(", ").
-                    append("mIconGroup=").append(mIconGroup);
+                    append("mIconGroup=").append(mIconGroup).
+                    append("mNrIconType=").append(mNrIconType);
 
             return builder.toString();
         }
@@ -365,6 +370,9 @@ public class FiveGServiceClient {
 
                 token = mNetworkService.query5gConfigInfo(phoneId, mClient);
                 Log.d(TAG, "query5gConfigInfo result:" + token);
+
+                token = mNetworkService.queryNrIconType(phoneId, mClient);
+                Log.d(TAG, "queryNrIconType result:" + token);
             }catch (Exception e) {
                 Log.d(TAG, "initFiveGServiceState: Exception = " + e);
                 if ( mInitRetryTimes < MAX_RETRY && !mHandler.hasMessages(MESSAGE_REINIT) ) {
@@ -439,7 +447,10 @@ public class FiveGServiceClient {
         if ( state.mNrConfigType == NrConfigType.SA_CONFIGURATION ) {
             state.mIconGroup = getSaIcon(state);
         }else if ( state.mNrConfigType == NrConfigType.NSA_CONFIGURATION){
-            state.mIconGroup = getNsaIcon(state, phoneId);
+            state.mIconGroup = getNrIconGroup(state.mNrIconType, phoneId);
+            if ( state.mIconGroup == TelephonyIcons.UNKNOWN ) {
+                state.mIconGroup = getNsaIcon(state, phoneId);
+            }
         }else {
             state.mIconGroup = TelephonyIcons.UNKNOWN;
         }
@@ -484,6 +495,19 @@ public class FiveGServiceClient {
             }
         }
 
+        return iconGroup;
+    }
+
+    private MobileIconGroup getNrIconGroup(int nrIconType , int phoneId) {
+        MobileIconGroup iconGroup = TelephonyIcons.UNKNOWN;
+        switch (nrIconType){
+            case NrIconType.TYPE_5G_BASIC:
+                iconGroup = TelephonyIcons.FIVE_G_BASIC;
+                break;
+            case NrIconType.TYPE_5G_UWB:
+                iconGroup = TelephonyIcons.FIVE_G_UWB;
+                break;
+        }
         return iconGroup;
     }
 
@@ -631,6 +655,20 @@ public class FiveGServiceClient {
             if (status.get() == Status.SUCCESS) {
                 FiveGServiceState state = getCurrentServiceState(slotId);
                 state.mNrConfigType = nrConfigType.get();
+                update5GIcon(state, slotId);
+                notifyListenersIfNecessary(slotId);
+            }
+        }
+
+        @Override
+        public void onNrIconType(int slotId, Token token, Status status, NrIconType
+                nrIconType) throws RemoteException {
+            Log.d(TAG,
+                    "onNrIconType: slotId = " + slotId + " token = " + token + " " + "status"
+                            + status + " NrIconType = " + nrIconType);
+            if (status.get() == Status.SUCCESS) {
+                FiveGServiceState state = getCurrentServiceState(slotId);
+                state.mNrIconType = nrIconType.get();
                 update5GIcon(state, slotId);
                 notifyListenersIfNecessary(slotId);
             }
