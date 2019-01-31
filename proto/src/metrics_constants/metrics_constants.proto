@@ -213,6 +213,25 @@ message MetricsEvent {
         IOOP_SYNC = 4;
     }
 
+  // Subtypes of notifications blocking helper view
+  // (NOTIFICATION_BLOCKING_HELPER).
+  enum NotificationBlockingHelper {
+    BLOCKING_HELPER_UNKNOWN = 0;
+    BLOCKING_HELPER_DISPLAY = 1;
+    BLOCKING_HELPER_DISMISS = 2;
+    // When the view of the notification blocking helper was triggered by
+    // system.
+    BLOCKING_HELPER_TRIGGERED_BY_SYSTEM = 3;
+    // "block" was clicked.
+    BLOCKING_HELPER_CLICK_BLOCKED = 4;
+    // "stay silent" was clicked.
+    BLOCKING_HELPER_CLICK_STAY_SILENT = 5;
+    // "alert me" was clicked.
+    BLOCKING_HELPER_CLICK_ALERT_ME = 6;
+    // "undo" was clicked (enables the user to undo "stop notification" action).
+    BLOCKING_HELPER_CLICK_UNDO = 7;
+  }
+
   // Known visual elements: views or controls.
   enum View {
     // Unknown view
@@ -3684,7 +3703,7 @@ message MetricsEvent {
     ACTION_SETTINGS_TILE_CLICK = 830;
 
     // OPEN: Notification unsnoozed. CLOSE: Notification snoozed. UPDATE: snoozed notification
-    // updated
+    // updated. TYPE_DISMISS: snoozing canceled due to data being cleared on package
     // CATEGORY: NOTIFICATION
     // OS: O
     NOTIFICATION_SNOOZED = 831;
@@ -5325,7 +5344,7 @@ message MetricsEvent {
     // OS: P
     ACCESSIBILITY_VIBRATION = 1292;
 
-    // OPEN: Settings > Accessibility > Vibration > Ring & notification vibration
+    // OPEN: Settings > Accessibility > Vibration > Notification vibration
     // CATEGORY: SETTINGS
     // OS: P
     ACCESSIBILITY_VIBRATION_NOTIFICATION = 1293;
@@ -6735,8 +6754,73 @@ message MetricsEvent {
     // OS: Q
     SETTINGS_GUP_DASHBOARD = 1613;
 
-    // ---- End Q Constants, all Q constants go above this line ----
+    // CATEGORY: The category for all actions relating to language detection logging.
+    // OS: Q
+    LANGUAGE_DETECTION = 1614;
 
+    // CATEGORY: The category for all actions relating to conversation actions logging.
+    // OS: Q
+    CONVERSATION_ACTIONS = 1615;
+
+    // ACTION: Actions from a text classifier are shown to user.
+    // CATEGORY: CONVERSATION_ACTIONS
+    // OS: Q
+    ACTION_TEXT_CLASSIFIER_ACTIONS_SHOWN = 1616;
+
+    // ACTION: Event time of a text classifier event in unix timestamp.
+    // CATEGORY: CONVERSATION_ACTIONS, LANGUAGE_DETECTION
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_EVENT_TIME = 1617;
+
+    // ACTION: Users compose their own replies instead of using suggested ones.
+    // CATEGORY: CONVERSATION_ACTIONS
+    // OS: Q
+    ACTION_TEXT_CLASSIFIER_MANUAL_REPLY = 1618;
+
+    // ACTION: Text classifier generates an action.
+    // CATEGORY: CONVERSATION_ACTIONS
+    // OS: Q
+    ACTION_TEXT_CLASSIFIER_ACTIONS_GENERATED = 1619;
+
+    // OPEN: Settings > Accessibility > Vibration > Ring vibration
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACCESSIBILITY_VIBRATION_RING = 1620;
+
+    // ACTION: Notification blocking helper view, which helps the user to block
+    // application or channel from showing notifications.
+    // SUBTYPE: NotificationBlockingHelper enum.
+    // CATEGORY: NOTIFICATION
+    // OS: Q
+    NOTIFICATION_BLOCKING_HELPER = 1621;
+
+    // ACTION: Tap & Pay -> Default Application Setting -> Use Forground
+    // OS: Q
+    ACTION_NFC_PAYMENT_FOREGROUND_SETTING = 1622;
+
+    // ACTION: Tap & Pay -> Default Application Setting -> Use Default
+    // OS: Q
+    ACTION_NFC_PAYMENT_ALWAYS_SETTING = 1623;
+
+    // OPEN: Settings > System > Input & Gesture > Skip song gesture
+    // OS: Q
+    SETTINGS_GESTURE_SKIP_SONG = 1624;
+
+    // OPEN: Settings > System > Input & Gesture > Silence gesture
+    // OS: Q
+    SETTINGS_GESTURE_SILENCE = 1625;
+
+    // OPEN: Settings > System > Input & Gesture > Tap screen gesture
+    // OS: Q
+    SETTINGS_GESTURE_TAP_SCREEN = 1626;
+
+    // OPEN: Settings > Network & internet > Click Mobile network to land on a page with a list of
+    // SIM/eSIM subscriptions.
+    // CATEGORY: SETTINGS
+    // OS: Q
+    MOBILE_NETWORK_LIST = 1627;
+
+    // ---- End Q Constants, all Q constants go above this line ----
     // Add new aosp constants above this line.
     // END OF AOSP CONSTANTS
   }

@@ -19,6 +19,7 @@ package com.android.server.autofill;
 import static android.Manifest.permission.MANAGE_AUTO_FILL;
 import static android.content.Context.AUTOFILL_MANAGER_SERVICE;
 import static android.util.DebugUtils.flagsToString;
+import static android.view.autofill.AutofillManager.MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS;
 
 import static com.android.server.autofill.Helper.sDebug;
 import static com.android.server.autofill.Helper.sFullScreenMode;
@@ -70,6 +71,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.SyncResultReceiver;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.autofill.ui.AutoFillUI;
@@ -99,8 +101,6 @@ public final class AutofillManagerService
     private static final String TAG = "AutofillManagerService";
 
     private static final Object sLock = AutofillManagerService.class;
-
-    private static final int MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS = 1_000 * 60 * 2; // 2 minutes
 
     /**
      * IME supports Smart Suggestions.
@@ -252,9 +252,8 @@ public final class AutofillManagerService
     @Override // from AbstractMasterSystemService
     protected AutofillManagerServiceImpl newServiceLocked(@UserIdInt int resolvedUserId,
             boolean disabled) {
-        return new AutofillManagerServiceImpl(this, mLock, mRequestsHistory,
-                mUiLatencyHistory, mWtfHistory, resolvedUserId, mUi, mAutofillCompatState,
-                disabled);
+        return new AutofillManagerServiceImpl(this, mLock, mUiLatencyHistory,
+                mWtfHistory, resolvedUserId, mUi, mAutofillCompatState, disabled);
     }
 
     @Override // AbstractMasterSystemService
@@ -289,6 +288,13 @@ public final class AutofillManagerService
 
     @SmartSuggestionMode int getSupportedSmartSuggestionModesLocked() {
         return mSupportedSmartSuggestionModes;
+    }
+
+    /**
+     * Logs a request so it's dumped later...
+     */
+    void logRequestLocked(@NonNull String historyItem) {
+        mRequestsHistory.log(historyItem);
     }
 
     // Called by AutofillManagerServiceImpl, doesn't need to check permission
@@ -606,15 +612,15 @@ public final class AutofillManagerService
     }
 
     private void send(@NonNull IResultReceiver receiver, @Nullable String value) {
-        send(receiver, AutofillManager.SyncResultReceiver.bundleFor(value));
+        send(receiver, SyncResultReceiver.bundleFor(value));
     }
 
     private void send(@NonNull IResultReceiver receiver, @Nullable String[] value) {
-        send(receiver, AutofillManager.SyncResultReceiver.bundleFor(value));
+        send(receiver, SyncResultReceiver.bundleFor(value));
     }
 
     private void send(@NonNull IResultReceiver receiver, @Nullable Parcelable value) {
-        send(receiver, AutofillManager.SyncResultReceiver.bundleFor(value));
+        send(receiver, SyncResultReceiver.bundleFor(value));
     }
 
     private void send(@NonNull IResultReceiver receiver, boolean value) {
@@ -701,6 +707,11 @@ public final class AutofillManagerService
         public void onBackKeyPressed() {
             if (sDebug) Slog.d(TAG, "onBackKeyPressed()");
             mUi.hideAll(null);
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service =
+                        getServiceForUserLocked(UserHandle.getCallingUserId());
+                service.onBackKeyPressed();
+            }
         }
 
         @Override

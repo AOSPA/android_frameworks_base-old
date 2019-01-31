@@ -45,6 +45,14 @@ public:
 
     sk_sp<SkSurface> getBackBufferSurface() { return mBackbuffer; }
 
+    // The width and height are are the logical width and height for when submitting draws to the
+    // surface. In reality if the window is rotated the underlying VkImage may have the width and
+    // height swapped.
+    int windowWidth() const { return mWindowWidth; }
+    int windowHeight() const { return mWindowHeight; }
+
+    SkMatrix& preTransform() { return mPreTransform; }
+
 private:
     friend class VulkanManager;
     struct BackbufferInfo {
@@ -84,6 +92,8 @@ private:
     sk_sp<SkColorSpace> mColorSpace;
     SkColorSpace::Gamut mColorGamut;
     SkColorType mColorType;
+    VkSurfaceTransformFlagBitsKHR mTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    SkMatrix mPreTransform;
 };
 
 // This class contains the shared global Vulkan objects, such as VkInstance, VkDevice and VkQueue,
@@ -131,6 +141,9 @@ public:
 
     // Creates a fence that is signaled, when all the pending Vulkan commands are flushed.
     status_t createReleaseFence(sp<Fence>& nativeFence);
+
+    // Returned pointers are owned by VulkanManager.
+    VkFunctorInitParams getVkFunctorInitParams() const;
 
 private:
     friend class RenderThread;
@@ -233,6 +246,12 @@ private:
     VkCommandPool mCommandPool = VK_NULL_HANDLE;
 
     VkCommandBuffer mDummyCB = VK_NULL_HANDLE;
+
+    // Variables saved to populate VkFunctorInitParams.
+    uint32_t mInstanceVersion = 0u;
+    std::vector<const char*> mInstanceExtensions;
+    std::vector<const char*> mDeviceExtensions;
+    VkPhysicalDeviceFeatures2 mPhysicalDeviceFeatures2{};
 
     enum class SwapBehavior {
         Discard,

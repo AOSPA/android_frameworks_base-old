@@ -29,9 +29,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.FileUtils;
 import android.os.SystemProperties;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.runner.AndroidJUnit4;
-import android.test.suitebuilder.annotation.SmallTest;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.frameworks.coretests.R;
 
@@ -51,6 +52,12 @@ public class PackageParserTest {
     private static final String PRE_RELEASE = "B";
     private static final String NEWER_PRE_RELEASE = "C";
 
+    // Codenames with a fingerprint attached to them. These may only be present in the apps
+    // declared min SDK and not as platform codenames.
+    private static final String OLDER_PRE_RELEASE_WITH_FINGERPRINT = "A.fingerprint";
+    private static final String PRE_RELEASE_WITH_FINGERPRINT = "B.fingerprint";
+    private static final String NEWER_PRE_RELEASE_WITH_FINGERPRINT = "C.fingerprint";
+
     private static final String[] CODENAMES_RELEASED = { /* empty */ };
     private static final String[] CODENAMES_PRE_RELEASE = { PRE_RELEASE };
 
@@ -68,7 +75,7 @@ public class PackageParserTest {
                 isPlatformReleased ? CODENAMES_RELEASED : CODENAMES_PRE_RELEASE,
                 outError);
 
-        assertEquals(result, expectedMinSdk);
+        assertEquals("Error msg: " + outError[0], expectedMinSdk, result);
 
         if (expectedMinSdk == -1) {
             assertNotNull(outError[0]);
@@ -98,6 +105,7 @@ public class PackageParserTest {
         // APP: Pre-release API 10
         // DEV: Pre-release API 20
         verifyComputeMinSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE, false, -1);
+        verifyComputeMinSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE_WITH_FINGERPRINT, false, -1);
 
         // Do allow same pre-release minSdkVersion on pre-release platform,
         // but overwrite the specified version with CUR_DEVELOPMENT.
@@ -105,11 +113,15 @@ public class PackageParserTest {
         // DEV: Pre-release API 20
         verifyComputeMinSdkVersion(PLATFORM_VERSION, PRE_RELEASE, false,
                 Build.VERSION_CODES.CUR_DEVELOPMENT);
+        verifyComputeMinSdkVersion(PLATFORM_VERSION, PRE_RELEASE_WITH_FINGERPRINT, false,
+                Build.VERSION_CODES.CUR_DEVELOPMENT);
+
 
         // Don't allow newer pre-release minSdkVersion on pre-release platform.
         // APP: Pre-release API 30
         // DEV: Pre-release API 20
         verifyComputeMinSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE, false, -1);
+        verifyComputeMinSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE_WITH_FINGERPRINT, false, -1);
     }
 
     @Test
@@ -133,16 +145,20 @@ public class PackageParserTest {
         // APP: Pre-release API 10
         // DEV: Released API 20
         verifyComputeMinSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE, true, -1);
+        verifyComputeMinSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE_WITH_FINGERPRINT, true, -1);
 
         // Don't allow same pre-release minSdkVersion on released platform.
         // APP: Pre-release API 20
         // DEV: Released API 20
         verifyComputeMinSdkVersion(PLATFORM_VERSION, PRE_RELEASE, true, -1);
+        verifyComputeMinSdkVersion(PLATFORM_VERSION, PRE_RELEASE_WITH_FINGERPRINT, true, -1);
+
 
         // Don't allow newer pre-release minSdkVersion on released platform.
         // APP: Pre-release API 30
         // DEV: Released API 20
         verifyComputeMinSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE, true, -1);
+        verifyComputeMinSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE_WITH_FINGERPRINT, true, -1);
     }
 
     private void verifyComputeTargetSdkVersion(int targetSdkVersion, String targetSdkCodename,
@@ -189,6 +205,9 @@ public class PackageParserTest {
         // DEV: Pre-release API 20
         verifyComputeTargetSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE, false, -1,
                 false /* forceCurrentDev */);
+        verifyComputeTargetSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE_WITH_FINGERPRINT, false, -1,
+                false /* forceCurrentDev */);
+
 
         // Do allow same pre-release targetSdkVersion on pre-release platform,
         // but overwrite the specified version with CUR_DEVELOPMENT.
@@ -196,17 +215,25 @@ public class PackageParserTest {
         // DEV: Pre-release API 20
         verifyComputeTargetSdkVersion(PLATFORM_VERSION, PRE_RELEASE, false,
                 Build.VERSION_CODES.CUR_DEVELOPMENT, false /* forceCurrentDev */);
+        verifyComputeTargetSdkVersion(PLATFORM_VERSION, PRE_RELEASE_WITH_FINGERPRINT, false,
+                Build.VERSION_CODES.CUR_DEVELOPMENT, false /* forceCurrentDev */);
+
 
         // Don't allow newer pre-release targetSdkVersion on pre-release platform.
         // APP: Pre-release API 30
         // DEV: Pre-release API 20
         verifyComputeTargetSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE, false, -1,
                 false /* forceCurrentDev */);
+        verifyComputeTargetSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE_WITH_FINGERPRINT, false, -1,
+                false /* forceCurrentDev */);
+
 
         // Force newer pre-release targetSdkVersion to current pre-release platform.
         // APP: Pre-release API 30
         // DEV: Pre-release API 20
         verifyComputeTargetSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE, false,
+                Build.VERSION_CODES.CUR_DEVELOPMENT, true /* forceCurrentDev */);
+        verifyComputeTargetSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE_WITH_FINGERPRINT, false,
                 Build.VERSION_CODES.CUR_DEVELOPMENT, true /* forceCurrentDev */);
     }
 
@@ -235,17 +262,24 @@ public class PackageParserTest {
         // DEV: Released API 20
         verifyComputeTargetSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE, true, -1,
                 false /* forceCurrentDev */);
+        verifyComputeTargetSdkVersion(OLDER_VERSION, OLDER_PRE_RELEASE_WITH_FINGERPRINT, true, -1,
+                false /* forceCurrentDev */);
 
         // Don't allow same pre-release targetSdkVersion on released platform.
         // APP: Pre-release API 20
         // DEV: Released API 20
         verifyComputeTargetSdkVersion(PLATFORM_VERSION, PRE_RELEASE, true, -1,
                 false /* forceCurrentDev */);
+        verifyComputeTargetSdkVersion(PLATFORM_VERSION, PRE_RELEASE_WITH_FINGERPRINT, true, -1,
+                false /* forceCurrentDev */);
+
 
         // Don't allow newer pre-release targetSdkVersion on released platform.
         // APP: Pre-release API 30
         // DEV: Released API 20
         verifyComputeTargetSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE, true, -1,
+                false /* forceCurrentDev */);
+        verifyComputeTargetSdkVersion(NEWER_VERSION, NEWER_PRE_RELEASE_WITH_FINGERPRINT, true, -1,
                 false /* forceCurrentDev */);
     }
 
@@ -296,6 +330,28 @@ public class PackageParserTest {
     }
 
     /**
+     * Copies a specified {@code resourceId} to a file. Returns a non-null file if the copy
+     * succeeded, or {@code null} otherwise.
+     */
+    File copyRawResourceToFile(String baseName, int resourceId) throws Exception {
+        // Copy the resource to a file.
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        InputStream is = context.getResources().openRawResource(resourceId);
+        File outFile = null;
+        try {
+            outFile = new File(context.getFilesDir(), baseName);
+            assertTrue(FileUtils.copyToFile(is, outFile));
+            return outFile;
+        } catch (Exception e) {
+            if (outFile != null) {
+                outFile.delete();
+            }
+
+            return null;
+        }
+    }
+
+    /**
      * Attempts to parse a package.
      *
      * APKs are put into coretests/apks/packageparser_*.
@@ -306,14 +362,14 @@ public class PackageParserTest {
     Package parsePackage(String apkFileName, int apkResourceId,
             Function<Package, Package> converter) throws Exception {
         // Copy the resource to a file.
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        File outFile = new File(context.getFilesDir(), apkFileName);
+        File outFile = null;
         try {
-            InputStream is = context.getResources().openRawResource(apkResourceId);
-            assertTrue(FileUtils.copyToFile(is, outFile));
+            outFile = copyRawResourceToFile(apkFileName, apkResourceId);
             return converter.apply(new PackageParser().parsePackage(outFile, 0 /* flags */));
         } finally {
-            outFile.delete();
+            if (outFile != null) {
+                outFile.delete();
+            }
         }
     }
 
@@ -463,5 +519,21 @@ public class PackageParserTest {
                         "android.permission.ACCESS_NETWORK_STATE",
                         "android.permission.READ_CONTACTS"),
                 secondChild.requestedPermissions);
+    }
+
+    @Test
+    public void testApexPackageInfoGeneration() throws Exception {
+        File apexFile = copyRawResourceToFile("com.android.tzdata.apex",
+                R.raw.com_android_tzdata);
+        PackageInfo pi = PackageParser.generatePackageInfoFromApex(apexFile, false);
+        assertEquals("com.google.android.tzdata", pi.packageName);
+        assertEquals(1, pi.getLongVersionCode());
+        assertNull(pi.signingInfo);
+
+        pi = PackageParser.generatePackageInfoFromApex(apexFile, true);
+        assertEquals("com.google.android.tzdata", pi.packageName);
+        assertEquals(1, pi.getLongVersionCode());
+        assertNotNull(pi.signingInfo);
+        assertTrue(pi.signingInfo.getApkContentsSigners().length > 0);
     }
 }

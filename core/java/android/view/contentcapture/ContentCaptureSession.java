@@ -19,22 +19,28 @@ import static android.view.contentcapture.ContentCaptureManager.DEBUG;
 import static android.view.contentcapture.ContentCaptureManager.VERBOSE;
 
 import android.annotation.CallSuper;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.util.DebugUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewStructure;
 import android.view.autofill.AutofillId;
 import android.view.contentcapture.ViewNode.ViewStructureImpl;
 
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
 
 import dalvik.system.CloseGuard;
 
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Session used to notify a system-provided Content Capture service about events associated with
@@ -45,62 +51,120 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     private static final String TAG = ContentCaptureSession.class.getSimpleName();
 
     /**
-     * Used on {@link #notifyViewTextChanged(AutofillId, CharSequence, int)} to indicate that the
-     *
-     * thext change was caused by user input (for example, through IME).
-     */
-    public static final int FLAG_USER_INPUT = 0x1;
-
-    /**
      * Initial state, when there is no session.
      *
      * @hide
      */
-    public static final int STATE_UNKNOWN = 0;
+    // NOTE: not prefixed by STATE_ so it's not printed on getStateAsString()
+    public static final int UNKNWON_STATE = 0x0;
 
     /**
      * Service's startSession() was called, but server didn't confirm it was created yet.
      *
      * @hide
      */
-    public static final int STATE_WAITING_FOR_SERVER = 1;
+    public static final int STATE_WAITING_FOR_SERVER = 0x1;
 
     /**
      * Session is active.
      *
      * @hide
      */
-    public static final int STATE_ACTIVE = 2;
+    public static final int STATE_ACTIVE = 0x2;
 
     /**
-     * Session is disabled.
+     * Session is disabled because there is no service for this user.
      *
      * @hide
      */
-    public static final int STATE_DISABLED = 3;
+    public static final int STATE_DISABLED = 0x4;
 
     /**
      * Session is disabled because its id already existed on server.
      *
      * @hide
      */
-    public static final int STATE_DISABLED_DUPLICATED_ID = 4;
+    public static final int STATE_DUPLICATED_ID = 0x8;
+
+    /**
+     * Session is disabled because service is not set for user.
+     *
+     * @hide
+     */
+    public static final int STATE_NO_SERVICE = 0x10;
+
+    /**
+     * Session is disabled by FLAG_SECURE
+     *
+     * @hide
+     */
+    public static final int STATE_FLAG_SECURE = 0x20;
+
+    /**
+     * Session is disabled manually by the specific app.
+     *
+     * @hide
+     */
+    public static final int STATE_BY_APP = 0x40;
+
+    /**
+     * Session is disabled because session start was never replied.
+     *
+     * @hide
+     */
+    public static final int STATE_NO_RESPONSE = 0x80;
+
+    /**
+     * Session is disabled because an internal error.
+     *
+     * @hide
+     */
+    public static final int STATE_INTERNAL_ERROR = 0x100;
 
     private static final int INITIAL_CHILDREN_CAPACITY = 5;
 
+    /** @hide */
+    public static final int FLUSH_REASON_FULL = 1;
+    /** @hide */
+    public static final int FLUSH_REASON_ACTIVITY_PAUSED = 2;
+    /** @hide */
+    public static final int FLUSH_REASON_ACTIVITY_RESUMED = 3;
+    /** @hide */
+    public static final int FLUSH_REASON_SESSION_STARTED = 4;
+    /** @hide */
+    public static final int FLUSH_REASON_SESSION_FINISHED = 5;
+    /** @hide */
+    public static final int FLUSH_REASON_IDLE_TIMEOUT = 6;
+
+    /** @hide */
+    @IntDef(prefix = { "FLUSH_REASON_" }, value = {
+            FLUSH_REASON_FULL,
+            FLUSH_REASON_ACTIVITY_PAUSED,
+            FLUSH_REASON_ACTIVITY_RESUMED,
+            FLUSH_REASON_SESSION_STARTED,
+            FLUSH_REASON_SESSION_FINISHED,
+            FLUSH_REASON_IDLE_TIMEOUT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface FlushReason{}
+
+
     private final CloseGuard mCloseGuard = CloseGuard.get();
+
+    private final Object mLock = new Object();
 
     /**
      * Guard use to ignore events after it's destroyed.
      */
     @NonNull
-    private final AtomicBoolean mDestroyed = new AtomicBoolean();
+    @GuardedBy("mLock")
+    private boolean mDestroyed;
 
     /** @hide */
     @Nullable
-    protected final String mId = UUID.randomUUID().toString();
+    protected final String mId;
 
-    private int mState = STATE_UNKNOWN;
+    private int mState = UNKNWON_STATE;
 
     // Lazily created on demand.
     private ContentCaptureSessionId mContentCaptureSessionId;
@@ -108,17 +172,25 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     /**
      * List of children session.
      */
-    // TODO(b/121033016): need to synchonize access, either by changing on handler or UI thread
-    // (for now there's no handler on this class, so we need to wait for the next refactoring),
-    // most likely the former (as we have no guarantee that createContentCaptureSession()
-    // it will be called in the UiThread; for example, WebView most likely won't call on it)
     @Nullable
+    @GuardedBy("mLock")
     private ArrayList<ContentCaptureSession> mChildren;
 
     /** @hide */
     protected ContentCaptureSession() {
+        this(UUID.randomUUID().toString());
+    }
+
+    /** @hide */
+    @VisibleForTesting
+    public ContentCaptureSession(@NonNull String id) {
+        mId = Preconditions.checkNotNull(id);
         mCloseGuard.open("destroy");
     }
+
+    /** @hide */
+    @NonNull
+    abstract MainContentCaptureSession getMainCaptureSession();
 
     /**
      * Gets the id used to identify this session.
@@ -128,6 +200,13 @@ public abstract class ContentCaptureSession implements AutoCloseable {
             mContentCaptureSessionId = new ContentCaptureSessionId(mId);
         }
         return mContentCaptureSessionId;
+    }
+
+    /** @hide */
+    @VisibleForTesting
+    public int getIdAsInt() {
+        // TODO(b/121197119): use sessionId instead of hashcode once it's changed to int
+        return mId.hashCode();
     }
 
     /**
@@ -143,10 +222,12 @@ public abstract class ContentCaptureSession implements AutoCloseable {
             Log.d(TAG, "createContentCaptureSession(" + context + ": parent=" + mId + ", child="
                     + child.mId);
         }
-        if (mChildren == null) {
-            mChildren = new ArrayList<>(INITIAL_CHILDREN_CAPACITY);
+        synchronized (mLock) {
+            if (mChildren == null) {
+                mChildren = new ArrayList<>(INITIAL_CHILDREN_CAPACITY);
+            }
+            mChildren.add(child);
         }
-        mChildren.add(child);
         return child;
     }
 
@@ -155,7 +236,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     /**
      * Flushes the buffered events to the service.
      */
-    abstract void flush();
+    abstract void flush(@FlushReason int reason);
 
     /**
      * Destroys this session, flushing out all pending notifications to the service.
@@ -163,35 +244,37 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      * <p>Once destroyed, any new notification will be dropped.
      */
     public final void destroy() {
-        if (!mDestroyed.compareAndSet(false, true)) {
-            Log.e(TAG, "destroy(): already destroyed");
-            return;
-        }
+        synchronized (mLock) {
+            if (mDestroyed) {
+                Log.e(TAG, "destroy(" + mId + "): already destroyed");
+                return;
+            }
+            mDestroyed = true;
 
-        mCloseGuard.close();
+            mCloseGuard.close();
 
-        //TODO(b/111276913): check state (for example, how to handle if it's waiting for remote
-        // id) and send it to the cache of batched commands
-        if (VERBOSE) {
-            Log.v(TAG, "destroy(): state=" + getStateAsString(mState) + ", mId=" + mId);
-        }
-
-        // Finish children first
-        if (mChildren != null) {
-            final int numberChildren = mChildren.size();
-            if (VERBOSE) Log.v(TAG, "Destroying " + numberChildren + " children first");
-            for (int i = 0; i < numberChildren; i++) {
-                final ContentCaptureSession child = mChildren.get(i);
-                try {
-                    child.destroy();
-                } catch (Exception e) {
-                    Log.w(TAG, "exception destroying child session #" + i + ": " + e);
+            // TODO(b/111276913): check state (for example, how to handle if it's waiting for remote
+            // id) and send it to the cache of batched commands
+            if (VERBOSE) {
+                Log.v(TAG, "destroy(): state=" + getStateAsString(mState) + ", mId=" + mId);
+            }
+            // Finish children first
+            if (mChildren != null) {
+                final int numberChildren = mChildren.size();
+                if (VERBOSE) Log.v(TAG, "Destroying " + numberChildren + " children first");
+                for (int i = 0; i < numberChildren; i++) {
+                    final ContentCaptureSession child = mChildren.get(i);
+                    try {
+                        child.destroy();
+                    } catch (Exception e) {
+                        Log.w(TAG, "exception destroying child session #" + i + ": " + e);
+                    }
                 }
             }
         }
 
         try {
-            flush();
+            flush(FLUSH_REASON_SESSION_FINISHED);
         } finally {
             onDestroy();
         }
@@ -257,12 +340,36 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     abstract void internalNotifyViewDisappeared(@NonNull AutofillId id);
 
     /**
+     * Notifies the Content Capture Service that many nodes has been removed from a virtual view
+     * structure.
+     *
+     * <p>Should only be called by views that handle their own virtual view hierarchy.
+     *
+     * @param hostId id of the view hosting the virtual hierarchy.
+     * @param virtualIds ids of the virtual children.
+     *
+     * @throws IllegalArgumentException if the {@code hostId} is an autofill id for a virtual view.
+     * @throws IllegalArgumentException if {@code virtualIds} is empty
+     */
+    public final void notifyViewsDisappeared(@NonNull AutofillId hostId,
+            @NonNull int[] virtualIds) {
+        Preconditions.checkArgument(!hostId.isVirtual(), "parent cannot be virtual");
+        Preconditions.checkArgument(!ArrayUtils.isEmpty(virtualIds), "virtual ids cannot be empty");
+        if (!isContentCaptureEnabled()) return;
+
+        // TODO(b/123036895): use a internalNotifyViewsDisappeared that optimizes how the event is
+        // parcelized
+        for (int id : virtualIds) {
+            internalNotifyViewDisappeared(new AutofillId(hostId, id, getIdAsInt()));
+        }
+    }
+
+    /**
      * Notifies the Intelligence Service that the value of a text node has been changed.
      *
      * @param id of the node.
      * @param text new text.
-     * @param flags either {@code 0} or {@link #FLAG_USER_INPUT} when the value was explicitly
-     * changed by the user (for example, through the keyboard).
+     * @param flags currently ignored.
      */
     public final void notifyViewTextChanged(@NonNull AutofillId id, @Nullable CharSequence text,
             int flags) {
@@ -270,11 +377,11 @@ public abstract class ContentCaptureSession implements AutoCloseable {
 
         if (!isContentCaptureEnabled()) return;
 
-        internalNotifyViewTextChanged(id, text, flags);
+        internalNotifyViewTextChanged(id, text);
     }
 
-    abstract void internalNotifyViewTextChanged(@NonNull AutofillId id, @Nullable CharSequence text,
-            int flags);
+    abstract void internalNotifyViewTextChanged(@NonNull AutofillId id,
+            @Nullable CharSequence text);
 
     /**
      * Creates a {@link ViewStructure} for a "standard" view.
@@ -287,6 +394,24 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /**
+     * Creates a new {@link AutofillId} for a virtual child, so it can be used to uniquely identify
+     * the children in the session.
+     *
+     * @param parentId id of the virtual view parent (it can be obtained by calling
+     * {@link ViewStructure#getAutofillId()} on the parent).
+     * @param virtualChildId id of the virtual child, relative to the parent.
+     *
+     * @return if for the virtual child
+     *
+     * @throws IllegalArgumentException if the {@code parentId} is a virtual child id.
+     */
+    public @NonNull AutofillId newAutofillId(@NonNull AutofillId parentId, int virtualChildId) {
+        Preconditions.checkNotNull(parentId);
+        Preconditions.checkArgument(!parentId.isVirtual(), "virtual ids cannot have children");
+        return new AutofillId(parentId, virtualChildId, getIdAsInt());
+    }
+
+    /**
      * Creates a {@link ViewStructure} for a "virtual" view, so it can be passed to
      * {@link #notifyViewAppeared(ViewStructure)} by the view managing the virtual view hierarchy.
      *
@@ -295,33 +420,34 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      * @param virtualId id of the virtual child, relative to the parent.
      *
      * @return a new {@link ViewStructure} that can be used for Content Capture purposes.
-     *
-     * @hide
      */
     @NonNull
     public final ViewStructure newVirtualViewStructure(@NonNull AutofillId parentId,
             int virtualId) {
-        return new ViewNode.ViewStructureImpl(parentId, virtualId);
+        return new ViewNode.ViewStructureImpl(parentId, virtualId, getIdAsInt());
     }
 
     boolean isContentCaptureEnabled() {
-        return !mDestroyed.get();
+        synchronized (mLock) {
+            return !mDestroyed;
+        }
     }
 
     @CallSuper
     void dump(@NonNull String prefix, @NonNull PrintWriter pw) {
         pw.print(prefix); pw.print("id: "); pw.println(mId);
-        pw.print(prefix); pw.print("destroyed: "); pw.println(mDestroyed.get());
-        if (mChildren != null && !mChildren.isEmpty()) {
-            final String prefix2 = prefix + "  ";
-            final int numberChildren = mChildren.size();
-            pw.print(prefix); pw.print("number children: "); pw.println(numberChildren);
-            for (int i = 0; i < numberChildren; i++) {
-                final ContentCaptureSession child = mChildren.get(i);
-                pw.print(prefix); pw.print(i); pw.println(": "); child.dump(prefix2, pw);
+        synchronized (mLock) {
+            pw.print(prefix); pw.print("destroyed: "); pw.println(mDestroyed);
+            if (mChildren != null && !mChildren.isEmpty()) {
+                final String prefix2 = prefix + "  ";
+                final int numberChildren = mChildren.size();
+                pw.print(prefix); pw.print("number children: "); pw.println(numberChildren);
+                for (int i = 0; i < numberChildren; i++) {
+                    final ContentCaptureSession child = mChildren.get(i);
+                    pw.print(prefix); pw.print(i); pw.println(": "); child.dump(prefix2, pw);
+                }
             }
         }
-
     }
 
     @Override
@@ -329,24 +455,31 @@ public abstract class ContentCaptureSession implements AutoCloseable {
         return mId;
     }
 
-    /**
-     * @hide
-     */
+    /** @hide */
     @NonNull
     protected static String getStateAsString(int state) {
-        switch (state) {
-            case STATE_UNKNOWN:
-                return "UNKNOWN";
-            case STATE_WAITING_FOR_SERVER:
-                return "WAITING_FOR_SERVER";
-            case STATE_ACTIVE:
-                return "ACTIVE";
-            case STATE_DISABLED:
-                return "DISABLED";
-            case STATE_DISABLED_DUPLICATED_ID:
-                return "DISABLED_DUPLICATED_ID";
+        return state + " (" + (state == UNKNWON_STATE ? "UNKNOWN"
+                : DebugUtils.flagsToString(ContentCaptureSession.class, "STATE_", state)) + ")";
+    }
+
+    /** @hide */
+    @NonNull
+    static String getflushReasonAsString(@FlushReason int reason) {
+        switch (reason) {
+            case FLUSH_REASON_FULL:
+                return "FULL";
+            case FLUSH_REASON_ACTIVITY_PAUSED:
+                return "PAUSED";
+            case FLUSH_REASON_ACTIVITY_RESUMED:
+                return "RESUMED";
+            case FLUSH_REASON_SESSION_STARTED:
+                return "STARTED";
+            case FLUSH_REASON_SESSION_FINISHED:
+                return "FINISHED";
+            case FLUSH_REASON_IDLE_TIMEOUT:
+                return "IDLE";
             default:
-                return "INVALID:" + state;
+                return "UNKOWN-" + reason;
         }
     }
 }

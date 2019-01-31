@@ -47,10 +47,9 @@ import android.view.IWindowId;
 import android.view.IWindowSession;
 import android.view.IWindowSessionCallback;
 import android.view.InputChannel;
-import android.view.Surface;
+import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
-import android.view.InsetsState;
 import android.view.WindowManager;
 
 import com.android.internal.os.logging.MetricsLoggerWrapper;
@@ -187,7 +186,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             Rect outFrame, Rect outOverscanInsets, Rect outContentInsets, Rect outVisibleInsets,
             Rect outStableInsets, Rect outsets, Rect outBackdropFrame,
             DisplayCutout.ParcelableWrapper cutout, MergedConfiguration mergedConfiguration,
-            Surface outSurface, InsetsState outInsetsState) {
+            SurfaceControl outSurfaceControl, InsetsState outInsetsState) {
         if (false) Slog.d(TAG_WM, ">>>>>> ENTERED relayout from "
                 + Binder.getCallingPid());
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, mRelayoutTag);
@@ -195,7 +194,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
                 requestedWidth, requestedHeight, viewFlags, flags, frameNumber,
                 outFrame, outOverscanInsets, outContentInsets, outVisibleInsets,
                 outStableInsets, outsets, outBackdropFrame, cutout,
-                mergedConfiguration, outSurface, outInsetsState);
+                mergedConfiguration, outSurfaceControl, outInsetsState);
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         if (false) Slog.d(TAG_WM, "<<<<<< EXITING relayout to "
                 + Binder.getCallingPid());
@@ -432,7 +431,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
 
     @Override
     public void insetsModified(IWindow window, InsetsState state) {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             final WindowState windowState = mService.windowForClientLocked(this, window,
                     false /* throwOnError */);
             if (windowState != null) {

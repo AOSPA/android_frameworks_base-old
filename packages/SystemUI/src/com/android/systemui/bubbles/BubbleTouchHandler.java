@@ -33,7 +33,7 @@ import com.android.systemui.pip.phone.PipDismissViewController;
  * Handles interpreting touches on a {@link BubbleStackView}. This includes expanding, collapsing,
  * dismissing, and flings.
  */
-public class BubbleTouchHandler implements View.OnTouchListener {
+class BubbleTouchHandler implements View.OnTouchListener {
 
     private BubbleController mController = Dependency.get(BubbleController.class);
     private PipDismissViewController mDismissViewController;
@@ -110,7 +110,7 @@ public class BubbleTouchHandler implements View.OnTouchListener {
                 : stack.getTargetView(event);
         boolean isFloating = targetView instanceof FloatingView;
         if (!isFloating || targetView == null || action == MotionEvent.ACTION_OUTSIDE) {
-            stack.animateExpansion(false /* shouldExpand */);
+            stack.collapseStack();
             cleanUpDismissTarget();
             resetTouches();
             return false;
@@ -196,9 +196,13 @@ public class BubbleTouchHandler implements View.OnTouchListener {
                         mMovementHelper.getTranslateAnim(floatingView, toGoTo, 100, 0).start();
                     }
                 } else if (floatingView.equals(stack.getExpandedBubble())) {
-                    stack.animateExpansion(false /* shouldExpand */);
+                    stack.collapseStack();
                 } else if (isBubbleStack) {
-                    stack.animateExpansion(!stack.isExpanded() /* shouldExpand */);
+                    if (stack.isExpanded()) {
+                        stack.collapseStack();
+                    } else {
+                        stack.expandStack();
+                    }
                 } else {
                     stack.setExpandedBubble((BubbleView) floatingView);
                 }

@@ -18,20 +18,26 @@ package com.android.server.display;
 
 import static com.android.server.display.DisplayTransformManager.LEVEL_COLOR_MATRIX_DISPLAY_WHITE_BALANCE;
 import static com.android.server.display.DisplayTransformManager.LEVEL_COLOR_MATRIX_NIGHT_DISPLAY;
+import static com.android.server.display.DisplayTransformManager.LEVEL_COLOR_MATRIX_SATURATION;
 
+import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.TypeEvaluator;
 import android.animation.ValueAnimator;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.Size;
 import android.app.AlarmManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.graphics.ColorSpace;
 import android.hardware.display.ColorDisplayManager;
 import android.hardware.display.IColorDisplayManager;
 import android.net.Uri;
@@ -39,28 +45,35 @@ import android.opengl.Matrix;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.UserHandle;
 import android.provider.Settings.Secure;
 import android.provider.Settings.System;
 import android.util.MathUtils;
 import android.util.Slog;
+import android.view.accessibility.AccessibilityManager;
 import android.view.animation.AnimationUtils;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.ColorDisplayController;
+import com.android.internal.util.DumpUtils;
 import com.android.server.DisplayThread;
 import com.android.server.SystemService;
 import com.android.server.twilight.TwilightListener;
 import com.android.server.twilight.TwilightManager;
 import com.android.server.twilight.TwilightState;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 
 /**
  * Controls the display's color transforms.
@@ -82,6 +95,10 @@ public final class ColorDisplayService extends SystemService {
     static {
         Matrix.setIdentityM(MATRIX_IDENTITY, 0);
     }
+
+    private static final int MSG_APPLY_NIGHT_DISPLAY_IMMEDIATE = 0;
+    private static final int MSG_APPLY_NIGHT_DISPLAY_ANIMATED = 1;
+    private static final int MSG_APPLY_GLOBAL_SATURATION = 2;
 
     /**
      * Evaluator used to animate color matrix transitions.
@@ -139,8 +156,209 @@ public final class ColorDisplayService extends SystemService {
     };
 
     private final TintController mDisplayWhiteBalanceTintController = new TintController() {
+        // Three chromaticity coordinates per color: X, Y, and Z
+        private final int NUM_VALUES_PER_PRIMARY = 3;
+        // Four colors: red, green, blue, and white
+        private final int NUM_DISPLAY_PRIMARIES_VALS = 4 * NUM_VALUES_PER_PRIMARY;
 
+        private final Object mLock = new Object();
+        private int mTemperatureMin;
+        private int mTemperatureMax;
+        private int mTemperatureDefault;
+        private float[] mDisplayNominalWhiteXYZ = new float[NUM_VALUES_PER_PRIMARY];
+        private ColorSpace.Rgb mDisplayColorSpaceRGB;
+        private float[] mChromaticAdaptationMatrix;
+        private int mCurrentColorTemperature;
+        private float[] mCurrentColorTemperatureXYZ;
+        private boolean mSetUp = false;
         private float[] mMatrixDisplayWhiteBalance = new float[16];
+
+        @Override
+        public void setUp(Context context, boolean needsLinear) {
+            mSetUp = false;
+
+            final Resources res = getContext().getResources();
+            final String[] displayPrimariesValues = res.getStringArray(
+                    R.array.config_displayWhiteBalanceDisplayPrimaries);
+            final String[] nominalWhiteValues = res.getStringArray(
+                    R.array.config_displayWhiteBalanceDisplayNominalWhite);
+
+            if (displayPrimariesValues.length != NUM_DISPLAY_PRIMARIES_VALS) {
+                Slog.e(TAG, "Unexpected display white balance primaries resource length " +
+                        displayPrimariesValues.length);
+                return;
+            }
+
+            if (nominalWhiteValues.length != NUM_VALUES_PER_PRIMARY) {
+                Slog.e(TAG, "Unexpected display white balance nominal white resource length " +
+                        nominalWhiteValues.length);
+                return;
+            }
+
+            float[] displayRedGreenBlueXYZ =
+                new float[NUM_DISPLAY_PRIMARIES_VALS - NUM_VALUES_PER_PRIMARY];
+            float[] displayWhiteXYZ = new float[NUM_VALUES_PER_PRIMARY];
+            for (int i = 0; i < displayRedGreenBlueXYZ.length; i++) {
+                displayRedGreenBlueXYZ[i] = Float.parseFloat(displayPrimariesValues[i]);
+            }
+            for (int i = 0; i < displayWhiteXYZ.length; i++) {
+                displayWhiteXYZ[i] = Float.parseFloat(
+                        displayPrimariesValues[displayRedGreenBlueXYZ.length + i]);
+            }
+
+            final ColorSpace.Rgb displayColorSpaceRGB = new ColorSpace.Rgb(
+                "Display Color Space",
+                displayRedGreenBlueXYZ,
+                displayWhiteXYZ,
+                2.2f // gamma, unused for display white balance
+            );
+
+            float[] displayNominalWhiteXYZ = new float[NUM_VALUES_PER_PRIMARY];
+            for (int i = 0; i < nominalWhiteValues.length; i++) {
+                displayNominalWhiteXYZ[i] = Float.parseFloat(nominalWhiteValues[i]);
+            }
+
+            final int colorTemperatureMin = res.getInteger(
+                    R.integer.config_displayWhiteBalanceColorTemperatureMin);
+            if (colorTemperatureMin <= 0) {
+                Slog.e(TAG, "display white balance minimum temperature must be greater than 0");
+                return;
+            }
+
+            final int colorTemperatureMax = res.getInteger(
+                    R.integer.config_displayWhiteBalanceColorTemperatureMax);
+            if (colorTemperatureMax < colorTemperatureMin) {
+                Slog.e(TAG, "display white balance max temp must be greater or equal to min");
+                return;
+            }
+
+            final int colorTemperature = res.getInteger(
+                    R.integer.config_displayWhiteBalanceColorTemperatureDefault);
+
+            synchronized (mLock) {
+                mDisplayColorSpaceRGB = displayColorSpaceRGB;
+                mDisplayNominalWhiteXYZ = displayNominalWhiteXYZ;
+                mTemperatureMin = colorTemperatureMin;
+                mTemperatureMax = colorTemperatureMax;
+                mTemperatureDefault = colorTemperature;
+                mSetUp = true;
+            }
+
+            setMatrix(mTemperatureDefault);
+        }
+
+        @Override
+        public float[] getMatrix() {
+            return mSetUp && isActivated() ? mMatrixDisplayWhiteBalance : MATRIX_IDENTITY;
+        }
+
+        @Override
+        public void setMatrix(int cct) {
+            if (!mSetUp) {
+                Slog.w(TAG, "Can't set display white balance temperature: uninitialized");
+                return;
+            }
+
+            if (cct < mTemperatureMin) {
+                Slog.w(TAG, "Requested display color temperature is below allowed minimum");
+                cct = mTemperatureMin;
+            } else if (cct > mTemperatureMax) {
+                Slog.w(TAG, "Requested display color temperature is above allowed maximum");
+                cct = mTemperatureMax;
+            }
+
+            Slog.d(TAG, "setDisplayWhiteBalanceTemperatureMatrix: cct = " + cct);
+
+            synchronized (mLock) {
+                mCurrentColorTemperature = cct;
+
+                // Adapt the display's nominal white point to match the requested CCT value
+                mCurrentColorTemperatureXYZ = ColorSpace.cctToIlluminantdXyz(cct);
+
+                mChromaticAdaptationMatrix =
+                    ColorSpace.chromaticAdaptation(ColorSpace.Adaptation.BRADFORD,
+                            mDisplayNominalWhiteXYZ, mCurrentColorTemperatureXYZ);
+
+                // Convert the adaptation matrix to RGB space
+                float[] result = ColorSpace.mul3x3(mChromaticAdaptationMatrix,
+                        mDisplayColorSpaceRGB.getTransform());
+                result = ColorSpace.mul3x3(mDisplayColorSpaceRGB.getInverseTransform(), result);
+
+                // Normalize the transform matrix to peak white value in RGB space
+                final float adaptedMaxR = result[0] + result[3] + result[6];
+                final float adaptedMaxG = result[1] + result[4] + result[7];
+                final float adaptedMaxB = result[2] + result[5] + result[8];
+                final float denum = Math.max(Math.max(adaptedMaxR, adaptedMaxG), adaptedMaxB);
+                for (int i = 0; i < result.length; i++) {
+                    result[i] /= denum;
+                }
+
+                Matrix.setIdentityM(mMatrixDisplayWhiteBalance, 0);
+                java.lang.System.arraycopy(result, 0, mMatrixDisplayWhiteBalance, 0, 3);
+                java.lang.System.arraycopy(result, 3, mMatrixDisplayWhiteBalance, 4, 3);
+                java.lang.System.arraycopy(result, 6, mMatrixDisplayWhiteBalance, 8, 3);
+            }
+        }
+
+        @Override
+        public int getLevel() {
+            return LEVEL_COLOR_MATRIX_DISPLAY_WHITE_BALANCE;
+        }
+
+        /**
+         * Format a given matrix into a string.
+         *
+         * @param matrix the matrix to format
+         * @param cols number of columns in the matrix
+         */
+        private String matrixToString(float[] matrix, int cols) {
+            if (matrix == null || cols <= 0) {
+                Slog.e(TAG, "Invalid arguments when formatting matrix to string");
+                return "";
+            }
+
+            StringBuilder sb = new StringBuilder("");
+            for (int i = 0; i < matrix.length; i++) {
+                if (i % cols == 0) {
+                    sb.append("\n    ");
+                }
+                sb.append(String.format("%9.6f ", matrix[i]));
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public void dump(PrintWriter pw) {
+            synchronized (mLock) {
+                pw.println("ColorDisplayService");
+                pw.println("  mSetUp = " + mSetUp);
+
+                if (!mSetUp) {
+                    return;
+                }
+
+                pw.println("  isActivated = " + isActivated());
+                pw.println("  mTemperatureMin = " + mTemperatureMin);
+                pw.println("  mTemperatureMax = " + mTemperatureMax);
+                pw.println("  mTemperatureDefault = " + mTemperatureDefault);
+                pw.println("  mCurrentColorTemperature = " + mCurrentColorTemperature);
+                pw.println("  mCurrentColorTemperatureXYZ = " +
+                        matrixToString(mCurrentColorTemperatureXYZ, 3));
+                pw.println("  mDisplayColorSpaceRGB RGB-to-XYZ = " +
+                        matrixToString(mDisplayColorSpaceRGB.getTransform(), 3));
+                pw.println("  mChromaticAdaptationMatrix = " +
+                        matrixToString(mChromaticAdaptationMatrix, 3));
+                pw.println("  mDisplayColorSpaceRGB XYZ-to-RGB = " +
+                        matrixToString(mDisplayColorSpaceRGB.getInverseTransform(), 3));
+                pw.println("  mMatrixDisplayWhiteBalance = " +
+                        matrixToString(mMatrixDisplayWhiteBalance, 4));
+            }
+        }
+    };
+
+    private final TintController mGlobalSaturationTintController = new TintController() {
+
+        private float[] mMatrixGlobalSaturation = new float[16];
 
         @Override
         public void setUp(Context context, boolean needsLinear) {
@@ -148,20 +366,69 @@ public final class ColorDisplayService extends SystemService {
 
         @Override
         public float[] getMatrix() {
-            return isActivated() ? mMatrixDisplayWhiteBalance : MATRIX_IDENTITY;
+            return Arrays.copyOf(mMatrixGlobalSaturation, mMatrixGlobalSaturation.length);
         }
 
         @Override
-        public void setMatrix(int cct) {
+        public void setMatrix(int saturationLevel) {
+            if (saturationLevel < 0) {
+                saturationLevel = 0;
+            } else if (saturationLevel > 100) {
+                saturationLevel = 100;
+            }
+            Slog.d(TAG, "Setting saturation level: " + saturationLevel);
+
+            if (saturationLevel == 100) {
+                Matrix.setIdentityM(mMatrixGlobalSaturation, 0);
+            } else {
+                float saturation = saturationLevel * 0.1f;
+                float desaturation = 1.0f - saturation;
+                float[] luminance = {0.231f * desaturation, 0.715f * desaturation,
+                    0.072f * desaturation};
+                mMatrixGlobalSaturation[0] = luminance[0] + saturation;
+                mMatrixGlobalSaturation[1] = luminance[0];
+                mMatrixGlobalSaturation[2] = luminance[0];
+                mMatrixGlobalSaturation[4] = luminance[1];
+                mMatrixGlobalSaturation[5] = luminance[1] + saturation;
+                mMatrixGlobalSaturation[6] = luminance[1];
+                mMatrixGlobalSaturation[8] = luminance[2];
+                mMatrixGlobalSaturation[9] = luminance[2];
+                mMatrixGlobalSaturation[10] = luminance[2] + saturation;
+            }
         }
 
         @Override
         public int getLevel() {
-            return LEVEL_COLOR_MATRIX_DISPLAY_WHITE_BALANCE;
+            return LEVEL_COLOR_MATRIX_SATURATION;
         }
     };
 
+    /**
+     * Matrix and offset used for converting color to grayscale.
+     */
+    private static final float[] MATRIX_GRAYSCALE = new float[]{
+            .2126f, .2126f, .2126f, 0f,
+            .7152f, .7152f, .7152f, 0f,
+            .0722f, .0722f, .0722f, 0f,
+            0f, 0f, 0f, 1f
+    };
+
+    /**
+     * Matrix and offset used for luminance inversion. Represents a transform from RGB to YIQ color
+     * space, rotation around the Y axis by 180 degrees, transform back to RGB color space, and
+     * subtraction from 1. The last row represents a non-multiplied addition, see surfaceflinger's
+     * ProgramCache for full implementation details.
+     */
+    private static final float[] MATRIX_INVERT_COLOR = new float[] {
+            0.402f, -0.598f, -0.599f, 0f,
+            -1.174f, -0.174f, -1.175f, 0f,
+            -0.228f, -0.228f, 0.772f, 0f,
+            1f, 1f, 1f, 1f
+    };
+
     private final Handler mHandler;
+
+    private final AppSaturationController mAppSaturationController = new AppSaturationController();
 
     private int mCurrentUser = UserHandle.USER_NULL;
     private ContentObserver mUserSetupObserver;
@@ -174,11 +441,9 @@ public final class ColorDisplayService extends SystemService {
 
     private NightDisplayAutoMode mNightDisplayAutoMode;
 
-    private Integer mDisplayWhiteBalanceColorTemperature;
-
     public ColorDisplayService(Context context) {
         super(context);
-        mHandler = new Handler(Looper.getMainLooper());
+        mHandler = new TintHandler(Looper.getMainLooper());
     }
 
     @Override
@@ -302,12 +567,19 @@ public final class ColorDisplayService extends SystemService {
                             case System.DISPLAY_COLOR_MODE:
                                 onDisplayColorModeChanged(mNightDisplayController.getColorMode());
                                 break;
-                            case Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED:
                             case Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED:
-                                onAccessibilityTransformChanged();
+                                onAccessibilityInversionChanged();
+                                onAccessibilityActivated();
+                                break;
+                            case Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED:
+                                onAccessibilityDaltonizerChanged();
+                                onAccessibilityActivated();
+                                break;
+                            case Secure.ACCESSIBILITY_DISPLAY_DALTONIZER:
+                                onAccessibilityDaltonizerChanged();
                                 break;
                             case Secure.DISPLAY_WHITE_BALANCE_ENABLED:
-                                onDisplayWhiteBalanceEnabled(isDisplayWhiteBalanceSettingEnabled());
+                                updateDisplayWhiteBalanceStatus();
                                 break;
                         }
                     }
@@ -332,6 +604,9 @@ public final class ColorDisplayService extends SystemService {
                 false /* notifyForDescendants */, mContentObserver, mCurrentUser);
         cr.registerContentObserver(
                 Secure.getUriFor(Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(
+                Secure.getUriFor(Secure.ACCESSIBILITY_DISPLAY_DALTONIZER),
                 false /* notifyForDescendants */, mContentObserver, mCurrentUser);
         cr.registerContentObserver(Secure.getUriFor(Secure.DISPLAY_WHITE_BALANCE_ENABLED),
                 false /* notifyForDescendants */, mContentObserver, mCurrentUser);
@@ -360,14 +635,9 @@ public final class ColorDisplayService extends SystemService {
 
         if (ColorDisplayManager.isDisplayWhiteBalanceAvailable(getContext())) {
             // Prepare the display white balance transform matrix.
-            mDisplayWhiteBalanceTintController
-                    .setUp(getContext(), DisplayTransformManager.needsLinearColorMatrix());
-            if (mDisplayWhiteBalanceColorTemperature != null) {
-                mDisplayWhiteBalanceTintController
-                        .setMatrix(mDisplayWhiteBalanceColorTemperature);
-            }
+            mDisplayWhiteBalanceTintController.setUp(getContext(), true /* needsLinear */);
 
-            onDisplayWhiteBalanceEnabled(isDisplayWhiteBalanceSettingEnabled());
+            updateDisplayWhiteBalanceStatus();
         }
     }
 
@@ -403,6 +673,8 @@ public final class ColorDisplayService extends SystemService {
             if (mNightDisplayAutoMode != null) {
                 mNightDisplayAutoMode.onActivated(activated);
             }
+
+            updateDisplayWhiteBalanceStatus();
 
             applyTint(mNightDisplayTintController, false);
         }
@@ -460,20 +732,49 @@ public final class ColorDisplayService extends SystemService {
                 .setUp(getContext(), DisplayTransformManager.needsLinearColorMatrix(mode));
         mNightDisplayTintController.setMatrix(mNightDisplayController.getColorTemperature());
 
-        mDisplayWhiteBalanceTintController
-                .setUp(getContext(), DisplayTransformManager.needsLinearColorMatrix(mode));
-        if (mDisplayWhiteBalanceColorTemperature != null) {
-            mDisplayWhiteBalanceTintController.setMatrix(mDisplayWhiteBalanceColorTemperature);
-        }
+        updateDisplayWhiteBalanceStatus();
 
         final DisplayTransformManager dtm = getLocalService(DisplayTransformManager.class);
         dtm.setColorMode(mode, mNightDisplayTintController.getMatrix());
     }
 
-    private void onAccessibilityTransformChanged() {
+    private void onAccessibilityActivated() {
         onDisplayColorModeChanged(mNightDisplayController.getColorMode());
     }
 
+    /**
+     * Apply the accessibility daltonizer transform based on the settings value.
+     */
+    private void onAccessibilityDaltonizerChanged() {
+        final boolean enabled = Secure.getIntForUser(getContext().getContentResolver(),
+                Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED, 0, mCurrentUser) != 0;
+        final int daltonizerMode = enabled ? Secure.getIntForUser(getContext().getContentResolver(),
+                Secure.ACCESSIBILITY_DISPLAY_DALTONIZER,
+                AccessibilityManager.DALTONIZER_CORRECT_DEUTERANOMALY, mCurrentUser)
+                : AccessibilityManager.DALTONIZER_DISABLED;
+
+        final DisplayTransformManager dtm = getLocalService(DisplayTransformManager.class);
+        if (daltonizerMode == AccessibilityManager.DALTONIZER_SIMULATE_MONOCHROMACY) {
+            // Monochromacy isn't supported by the native Daltonizer implementation; use grayscale.
+            dtm.setColorMatrix(DisplayTransformManager.LEVEL_COLOR_MATRIX_GRAYSCALE,
+                    MATRIX_GRAYSCALE);
+            dtm.setDaltonizerMode(AccessibilityManager.DALTONIZER_DISABLED);
+        } else {
+            dtm.setColorMatrix(DisplayTransformManager.LEVEL_COLOR_MATRIX_GRAYSCALE, null);
+            dtm.setDaltonizerMode(daltonizerMode);
+        }
+    }
+
+    /**
+     * Apply the accessibility inversion transform based on the settings value.
+     */
+    private void onAccessibilityInversionChanged() {
+        final boolean enabled = Secure.getIntForUser(getContext().getContentResolver(),
+                Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED, 0, mCurrentUser) != 0;
+        final DisplayTransformManager dtm = getLocalService(DisplayTransformManager.class);
+        dtm.setColorMatrix(DisplayTransformManager.LEVEL_COLOR_MATRIX_INVERT_COLOR,
+                enabled ? MATRIX_INVERT_COLOR : null);
+    }
 
     /**
      * Applies current color temperature matrix, or removes it if deactivated.
@@ -555,10 +856,15 @@ public final class ColorDisplayService extends SystemService {
         return ldt.isBefore(compareTime) ? ldt.plusDays(1) : ldt;
     }
 
-    private void onDisplayWhiteBalanceEnabled(boolean enabled) {
-        mDisplayWhiteBalanceTintController.setActivated(enabled);
-        if (mDisplayWhiteBalanceListener != null) {
-            mDisplayWhiteBalanceListener.onDisplayWhiteBalanceStatusChanged(enabled);
+    private void updateDisplayWhiteBalanceStatus() {
+        boolean oldActivated = mDisplayWhiteBalanceTintController.isActivated();
+        mDisplayWhiteBalanceTintController.setActivated(isDisplayWhiteBalanceSettingEnabled() &&
+                !mNightDisplayTintController.isActivated() &&
+                DisplayTransformManager.needsLinearColorMatrix());
+        boolean activated = mDisplayWhiteBalanceTintController.isActivated();
+
+        if (mDisplayWhiteBalanceListener != null && oldActivated != activated) {
+            mDisplayWhiteBalanceListener.onDisplayWhiteBalanceStatusChanged(activated);
         }
     }
 
@@ -594,6 +900,22 @@ public final class ColorDisplayService extends SystemService {
             }
         }
         return LocalDateTime.MIN;
+    }
+
+    private boolean setAppSaturationLevelInternal(String packageName, int saturationLevel) {
+        return mAppSaturationController
+                .setSaturationLevel(packageName, mCurrentUser, saturationLevel);
+    }
+
+    private void dumpInternal(PrintWriter pw) {
+        pw.println("COLOR DISPLAY MANAGER dumpsys (color_display)");
+        pw.println("Night Display:");
+        if (ColorDisplayManager.isNightDisplayAvailable(getContext())) {
+            pw.println("    Activated: " + mNightDisplayTintController.isActivated());
+        } else {
+            pw.println("    Not available");
+        }
+        mAppSaturationController.dump(pw);
     }
 
     private abstract class NightDisplayAutoMode {
@@ -840,6 +1162,12 @@ public final class ColorDisplayService extends SystemService {
         }
 
         /**
+         * Dump debug information.
+         */
+        public void dump(PrintWriter pw) {
+        }
+
+        /**
          * Set up any constants needed for computing the matrix.
          */
         public abstract void setUp(Context context, boolean needsLinear);
@@ -873,11 +1201,10 @@ public final class ColorDisplayService extends SystemService {
          */
         public boolean setDisplayWhiteBalanceColorTemperature(int cct) {
             // Update the transform matrix even if it can't be applied.
-            mDisplayWhiteBalanceColorTemperature = cct;
             mDisplayWhiteBalanceTintController.setMatrix(cct);
 
             if (mDisplayWhiteBalanceTintController.isActivated()) {
-                applyTint(mDisplayWhiteBalanceTintController, true);
+                applyTint(mDisplayWhiteBalanceTintController, false);
                 return true;
             }
             return false;
@@ -889,6 +1216,20 @@ public final class ColorDisplayService extends SystemService {
         public boolean setDisplayWhiteBalanceListener(DisplayWhiteBalanceListener listener) {
             mDisplayWhiteBalanceListener = listener;
             return mDisplayWhiteBalanceTintController.isActivated();
+        }
+
+        public void dump(PrintWriter pw) {
+            mDisplayWhiteBalanceTintController.dump(pw);
+        }
+
+        /**
+         * Adds a {@link WeakReference<ColorTransformController>} for a newly started activity, and
+         * invokes {@link ColorTransformController#applyAppSaturation(float[], float[])} if needed.
+         */
+        public boolean attachColorTransformController(String packageName, int uid,
+                WeakReference<ColorTransformController> controller) {
+            return mAppSaturationController
+                    .addColorTransformController(packageName, uid, controller);
         }
     }
 
@@ -904,6 +1245,32 @@ public final class ColorDisplayService extends SystemService {
         void onDisplayWhiteBalanceStatusChanged(boolean enabled);
     }
 
+    private final class TintHandler extends Handler {
+
+        TintHandler(Looper looper) {
+            super(looper, null, true /* async */);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_APPLY_GLOBAL_SATURATION:
+                    mGlobalSaturationTintController.setMatrix(msg.arg1);
+                    applyTint(mGlobalSaturationTintController, false);
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Interface for applying transforms to a given AppWindow.
+     */
+    public interface ColorTransformController {
+
+        /** Apply the given saturation (grayscale) matrix to the associated AppWindow. */
+        void applyAppSaturation(@Size(9) float[] matrix, @Size(3) float[] translation);
+    }
+
     private final class BinderService extends IColorDisplayManager.Stub {
 
         @Override
@@ -911,6 +1278,53 @@ public final class ColorDisplayService extends SystemService {
             final long token = Binder.clearCallingIdentity();
             try {
                 return isDeviceColorManagedInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public boolean setSaturationLevel(int level) {
+            final boolean hasTransformsPermission = getContext()
+                    .checkCallingPermission(Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+                    == PackageManager.PERMISSION_GRANTED;
+            final boolean hasLegacyPermission = getContext()
+                    .checkCallingPermission(Manifest.permission.CONTROL_DISPLAY_SATURATION)
+                    == PackageManager.PERMISSION_GRANTED;
+            if (!hasTransformsPermission && !hasLegacyPermission) {
+                throw new SecurityException("Permission required to set display saturation level");
+            }
+            final long token = Binder.clearCallingIdentity();
+            try {
+                final Message message = mHandler.obtainMessage(MSG_APPLY_GLOBAL_SATURATION);
+                message.arg1 = level;
+                mHandler.sendMessage(message);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+            return true;
+        }
+
+        @Override
+        public boolean setAppSaturationLevel(String packageName, int level) {
+            getContext().enforceCallingPermission(
+                    Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS,
+                    "Permission required to set display saturation level");
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return setAppSaturationLevelInternal(packageName, level);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (!DumpUtils.checkDumpPermission(getContext(), TAG, pw)) return;
+
+            final long token = Binder.clearCallingIdentity();
+            try {
+                dumpInternal(pw);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }

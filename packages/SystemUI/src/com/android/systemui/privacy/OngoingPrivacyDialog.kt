@@ -20,6 +20,7 @@ import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.util.IconDrawableFactory
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -37,11 +38,22 @@ class OngoingPrivacyDialog constructor(
 
     private val iconSize = context.resources.getDimensionPixelSize(
             R.dimen.ongoing_appops_dialog_icon_size)
+    private val plusSize = context.resources.getDimensionPixelSize(
+            R.dimen.ongoing_appops_dialog_app_plus_size)
     private val iconColor = context.resources.getColor(
             com.android.internal.R.color.text_color_primary, context.theme)
+    private val plusColor: Int
     private val iconMargin = context.resources.getDimensionPixelSize(
             R.dimen.ongoing_appops_dialog_icon_margin)
     private val MAX_ITEMS = context.resources.getInteger(R.integer.ongoing_appops_dialog_max_apps)
+    private val iconFactory = IconDrawableFactory.newInstance(context, true)
+
+    init {
+        val a = context.theme.obtainStyledAttributes(
+                intArrayOf(com.android.internal.R.attr.colorAccent))
+        plusColor = a.getColor(0, 0)
+        a.recycle()
+    }
 
     fun createDialog(): Dialog {
         val builder = AlertDialog.Builder(context).apply {
@@ -52,7 +64,8 @@ class OngoingPrivacyDialog constructor(
 
                         @Suppress("DEPRECATION")
                         override fun onClick(dialog: DialogInterface?, which: Int) {
-                            Dependency.get(ActivityStarter::class.java).startActivity(intent, false)
+                            Dependency.get(ActivityStarter::class.java)
+                                    .postStartActivityDismissingKeyguard(intent, 0)
                         }
                     })
         }
@@ -86,9 +99,15 @@ class OngoingPrivacyDialog constructor(
                     numItems - MAX_ITEMS
             )
             val overflowPlus = overflow.findViewById(R.id.app_icon) as ImageView
+            val lp = overflowPlus.layoutParams.apply {
+                height = plusSize
+                width = plusSize
+            }
+            overflowPlus.layoutParams = lp
             overflowPlus.apply {
-                imageTintList = ColorStateList.valueOf(iconColor)
-                setImageDrawable(context.getDrawable(R.drawable.plus))
+                val plus = context.getDrawable(R.drawable.plus)
+                imageTintList = ColorStateList.valueOf(plusColor)
+                setImageDrawable(plus)
             }
         }
 
@@ -113,17 +132,18 @@ class OngoingPrivacyDialog constructor(
         }
 
         app.icon.let {
-            appIcon.setImageDrawable(it)
+            appIcon.setImageDrawable(iconFactory.getShadowedIcon(it))
         }
 
         appName.text = app.applicationName
         if (showIcons) {
-            dialogBuilder.generateIconsForApp(types).forEach {
+            dialogBuilder.generateIconsForApp(types).forEachIndexed { index, it ->
                 it.setBounds(0, 0, iconSize, iconSize)
                 val image = ImageView(context).apply {
                     imageTintList = ColorStateList.valueOf(iconColor)
                     setImageDrawable(it)
                 }
+                image.contentDescription = types[index].getName(context)
                 icons.addView(image, lp)
             }
             icons.visibility = View.VISIBLE

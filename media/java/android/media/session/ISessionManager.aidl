@@ -17,12 +17,14 @@ package android.media.session;
 
 import android.content.ComponentName;
 import android.media.IRemoteVolumeController;
+import android.media.Session2Token;
 import android.media.session.IActiveSessionsListener;
 import android.media.session.ICallback;
 import android.media.session.IOnMediaKeyListener;
 import android.media.session.IOnVolumeKeyLongPressListener;
 import android.media.session.ISession;
-import android.media.session.ISessionCallback;
+import android.media.session.ISession2TokensListener;
+import android.media.session.SessionCallbackLink;
 import android.os.Bundle;
 import android.view.KeyEvent;
 
@@ -31,8 +33,10 @@ import android.view.KeyEvent;
  * @hide
  */
 interface ISessionManager {
-    ISession createSession(String packageName, in ISessionCallback cb, String tag, int userId);
+    ISession createSession(String packageName, in SessionCallbackLink cb, String tag, int userId);
+    void notifySession2Created(in Session2Token sessionToken);
     List<IBinder> getSessions(in ComponentName compName, int userId);
+    List<Session2Token> getSession2Tokens(int userId);
     void dispatchMediaKeyEvent(String packageName, boolean asSystemService, in KeyEvent keyEvent,
             boolean needWakeLock);
     void dispatchVolumeKeyEvent(String packageName, String opPackageName, boolean asSystemService,
@@ -42,6 +46,8 @@ interface ISessionManager {
     void addSessionsListener(in IActiveSessionsListener listener, in ComponentName compName,
             int userId);
     void removeSessionsListener(in IActiveSessionsListener listener);
+    void addSession2TokensListener(in ISession2TokensListener listener, int userId);
+    void removeSession2TokensListener(in ISession2TokensListener listener);
 
     // This is for the system volume UI only
     void setRemoteVolumeController(in IRemoteVolumeController rvc);
@@ -53,6 +59,5 @@ interface ISessionManager {
     void setOnVolumeKeyLongPressListener(in IOnVolumeKeyLongPressListener listener);
     void setOnMediaKeyListener(in IOnMediaKeyListener listener);
 
-    // MediaSession2
     boolean isTrusted(String controllerPackageName, int controllerPid, int controllerUid);
 }

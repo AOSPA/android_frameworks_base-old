@@ -16,6 +16,7 @@
 
 package android.net.wifi;
 
+import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.net.NetworkInfo.DetailedState;
 import android.net.NetworkUtils;
@@ -93,10 +94,20 @@ public class WifiInfo implements Parcelable {
     private int mRssi;
 
     /**
-     * Link speed in Mbps
+     * The unit in which links speeds are expressed.
      */
     public static final String LINK_SPEED_UNITS = "Mbps";
     private int mLinkSpeed;
+
+    /**
+     * Tx(transmit) Link speed in Mbps
+     */
+    private int mTxLinkSpeed;
+
+    /**
+     * Rx(receive) Link speed in Mbps
+     */
+    private int mRxLinkSpeed;
 
     /**
      * Frequency in MHz
@@ -112,6 +123,11 @@ public class WifiInfo implements Parcelable {
     private boolean mEphemeral;
 
     private boolean mTrusted;
+
+    /**
+     * OSU (Online Sign Up) AP for Passpoint R2.
+     */
+    private boolean mOsuAp;
 
     /**
      * Running total count of lost (not ACKed) transmitted unicast data packets.
@@ -187,9 +203,12 @@ public class WifiInfo implements Parcelable {
         setNetworkId(-1);
         setRssi(INVALID_RSSI);
         setLinkSpeed(-1);
+        setTxLinkSpeedMbps(-1);
+        setRxLinkSpeedMbps(-1);
         setFrequency(-1);
         setMeteredHint(false);
         setEphemeral(false);
+        setOsuAp(false);
         txBad = 0;
         txSuccess = 0;
         rxSuccess = 0;
@@ -213,12 +232,15 @@ public class WifiInfo implements Parcelable {
             mNetworkId = source.mNetworkId;
             mRssi = source.mRssi;
             mLinkSpeed = source.mLinkSpeed;
+            mTxLinkSpeed = source.mTxLinkSpeed;
+            mRxLinkSpeed = source.mRxLinkSpeed;
             mFrequency = source.mFrequency;
             mIpAddress = source.mIpAddress;
             mMacAddress = source.mMacAddress;
             mMeteredHint = source.mMeteredHint;
             mEphemeral = source.mEphemeral;
             mTrusted = source.mTrusted;
+            mOsuAp = source.mOsuAp;
             txBad = source.txBad;
             txRetries = source.txRetries;
             txSuccess = source.txSuccess;
@@ -306,7 +328,7 @@ public class WifiInfo implements Parcelable {
 
     /**
      * Returns the current link speed in {@link #LINK_SPEED_UNITS}.
-     * @return the link speed.
+     * @return the link speed or -1 if there is no valid value.
      * @see #LINK_SPEED_UNITS
      */
     public int getLinkSpeed() {
@@ -316,7 +338,39 @@ public class WifiInfo implements Parcelable {
     /** @hide */
     @UnsupportedAppUsage
     public void setLinkSpeed(int linkSpeed) {
-        this.mLinkSpeed = linkSpeed;
+        mLinkSpeed = linkSpeed;
+    }
+
+    /**
+     * Returns the current transmit link speed in Mbps.
+     * @return the Tx link speed or -1 if there is no valid value.
+     */
+    public int getTxLinkSpeedMbps() {
+        return mTxLinkSpeed;
+    }
+
+    /**
+     * Update the last transmitted packet bit rate in Mbps.
+     * @hide
+     */
+    public void setTxLinkSpeedMbps(int txLinkSpeed) {
+        mTxLinkSpeed = txLinkSpeed;
+    }
+
+    /**
+     * Returns the current receive link speed in Mbps.
+     * @return the Rx link speed or -1 if there is no valid value.
+     */
+    public int getRxLinkSpeedMbps() {
+        return mRxLinkSpeed;
+    }
+
+    /**
+     * Update the last received packet bit rate in Mbps.
+     * @hide
+     */
+    public void setRxLinkSpeedMbps(int rxLinkSpeed) {
+        mRxLinkSpeed = rxLinkSpeed;
     }
 
     /**
@@ -411,6 +465,16 @@ public class WifiInfo implements Parcelable {
         return mTrusted;
     }
 
+    /** {@hide} */
+    public void setOsuAp(boolean osuAp) {
+        mOsuAp = osuAp;
+    }
+
+    /** {@hide} */
+    @SystemApi
+    public boolean isOsuAp() {
+        return mOsuAp;
+    }
 
     /** @hide */
     @UnsupportedAppUsage
@@ -513,17 +577,19 @@ public class WifiInfo implements Parcelable {
         StringBuffer sb = new StringBuffer();
         String none = "<none>";
 
-        sb.append("SSID: ").append(mWifiSsid == null ? WifiSsid.NONE : mWifiSsid).
-            append(", BSSID: ").append(mBSSID == null ? none : mBSSID).
-            append(", MAC: ").append(mMacAddress == null ? none : mMacAddress).
-            append(", Supplicant state: ").
-            append(mSupplicantState == null ? none : mSupplicantState).
-            append(", RSSI: ").append(mRssi).
-            append(", Link speed: ").append(mLinkSpeed).append(LINK_SPEED_UNITS).
-            append(", Frequency: ").append(mFrequency).append(FREQUENCY_UNITS).
-            append(", Net ID: ").append(mNetworkId).
-            append(", Metered hint: ").append(mMeteredHint).
-            append(", score: ").append(Integer.toString(score));
+        sb.append("SSID: ").append(mWifiSsid == null ? WifiSsid.NONE : mWifiSsid)
+                .append(", BSSID: ").append(mBSSID == null ? none : mBSSID)
+                .append(", MAC: ").append(mMacAddress == null ? none : mMacAddress)
+                .append(", Supplicant state: ")
+                .append(mSupplicantState == null ? none : mSupplicantState)
+                .append(", RSSI: ").append(mRssi)
+                .append(", Link speed: ").append(mLinkSpeed).append(LINK_SPEED_UNITS)
+                .append(", Tx Link speed: ").append(mTxLinkSpeed).append(LINK_SPEED_UNITS)
+                .append(", Rx Link speed: ").append(mRxLinkSpeed).append(LINK_SPEED_UNITS)
+                .append(", Frequency: ").append(mFrequency).append(FREQUENCY_UNITS)
+                .append(", Net ID: ").append(mNetworkId)
+                .append(", Metered hint: ").append(mMeteredHint)
+                .append(", score: ").append(Integer.toString(score));
         return sb.toString();
     }
 
@@ -537,6 +603,8 @@ public class WifiInfo implements Parcelable {
         dest.writeInt(mNetworkId);
         dest.writeInt(mRssi);
         dest.writeInt(mLinkSpeed);
+        dest.writeInt(mTxLinkSpeed);
+        dest.writeInt(mRxLinkSpeed);
         dest.writeInt(mFrequency);
         if (mIpAddress != null) {
             dest.writeByte((byte)1);
@@ -565,6 +633,7 @@ public class WifiInfo implements Parcelable {
         dest.writeLong(rxSuccess);
         dest.writeDouble(rxSuccessRate);
         mSupplicantState.writeToParcel(dest, flags);
+        dest.writeInt(mOsuAp ? 1 : 0);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -576,6 +645,8 @@ public class WifiInfo implements Parcelable {
                 info.setNetworkId(in.readInt());
                 info.setRssi(in.readInt());
                 info.setLinkSpeed(in.readInt());
+                info.setTxLinkSpeedMbps(in.readInt());
+                info.setRxLinkSpeedMbps(in.readInt());
                 info.setFrequency(in.readInt());
                 if (in.readByte() == 1) {
                     try {
@@ -600,6 +671,7 @@ public class WifiInfo implements Parcelable {
                 info.rxSuccess = in.readLong();
                 info.rxSuccessRate = in.readDouble();
                 info.mSupplicantState = SupplicantState.CREATOR.createFromParcel(in);
+                info.mOsuAp = in.readInt() != 0;
                 return info;
             }
 

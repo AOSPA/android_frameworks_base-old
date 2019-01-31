@@ -57,6 +57,7 @@ import android.content.pm.IPackageInstallerSession;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageInstaller.SessionInfo;
+import android.content.pm.PackageInstaller.SessionInfo.StagedSessionErrorCode;
 import android.content.pm.PackageInstaller.SessionParams;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageParser;
@@ -150,6 +151,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static final String ATTR_MULTI_PACKAGE = "multiPackage";
     private static final String ATTR_PARENT_SESSION_ID = "parentSessionId";
     private static final String ATTR_STAGED_SESSION = "stagedSession";
+    private static final String ATTR_IS_READY = "isReady";
+    private static final String ATTR_IS_FAILED = "isFailed";
+    private static final String ATTR_IS_APPLIED = "isApplied";
+    private static final String ATTR_STAGED_SESSION_ERROR_CODE = "errorCode";
     private static final String ATTR_MODE = "mode";
     private static final String ATTR_INSTALL_FLAGS = "installFlags";
     private static final String ATTR_INSTALL_LOCATION = "installLocation";
@@ -407,7 +412,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             int sessionId, int userId,
             String installerPackageName, int installerUid, SessionParams params, long createdMillis,
             File stageDir, String stageCid, boolean prepared, boolean sealed,
-            @Nullable int[] childSessionIds, int parentSessionId) {
+            @Nullable int[] childSessionIds, int parentSessionId, boolean isReady,
+            boolean isFailed, boolean isApplied, int stagedSessionErrorCode) {
         mCallback = callback;
         mContext = context;
         mPm = pm;
@@ -437,7 +443,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         mPrepared = prepared;
-
+        mStagedSessionReady = isReady;
+        mStagedSessionFailed = isFailed;
+        mStagedSessionApplied = isApplied;
+        mStagedSessionErrorCode = stagedSessionErrorCode;
         if (sealed) {
             synchronized (mLock) {
                 try {
@@ -982,9 +991,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mSealed = true;
 
         // Read transfers from the original owner stay open, but as the session's data
-        // cannot be modified anymore, there is no leak of information.
-        // For staged sessions, the validation is performed by StagingManager.
-        if (!params.isMultiPackage && !params.isStaged) {
+        // cannot be modified anymore, there is no leak of information. For staged sessions,
+        // further validation may be performed by the staging manager.
+        if (!params.isMultiPackage) {
             final PackageInfo pkgInfo = mPm.getPackageInfo(
                     params.appPackageName, PackageManager.GET_SIGNATURES
                             | PackageManager.MATCH_STATIC_SHARED_LIBRARIES /*flags*/, userId);
@@ -1328,18 +1337,15 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mSigningDetails = apk.signingDetails;
         mResolvedBaseFile = addedFile;
 
-        assertApkConsistentLocked(String.valueOf(addedFile), apk);
-
-        if (mSigningDetails == PackageParser.SigningDetails.UNKNOWN) {
-            try {
-                // STOPSHIP: For APEX we should also implement proper APK Signature verification.
-                mSigningDetails = ApkSignatureVerifier.plsCertsNoVerifyOnlyCerts(
-                    pkgInfo.applicationInfo.sourceDir,
-                    PackageParser.SigningDetails.SignatureSchemeVersion.JAR);
-            } catch (PackageParserException e) {
-                throw new PackageManagerException(INSTALL_FAILED_INVALID_APK,
-                    "Couldn't obtain signatures from base APK");
-            }
+        // STOPSHIP: Ensure that we remove the non-staged version of APEX installs in production
+        // because we currently do not verify that signatures are consistent with the previously
+        // installed version in that case.
+        //
+        // When that happens, this hack can be reverted and we can rely on APEXd to map between
+        // APEX files and their package names instead of parsing it out of the AndroidManifest
+        // such as here.
+        if (params.appPackageName == null) {
+            params.appPackageName = mPackageName;
         }
     }
 
@@ -1374,7 +1380,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     "Missing existing base package");
         }
         // Default to require only if existing base has fs-verity.
-        mVerityFound = params.mode == SessionParams.MODE_INHERIT_EXISTING
+        mVerityFound = PackageManagerServiceUtils.isApkVerityEnabled()
+                && params.mode == SessionParams.MODE_INHERIT_EXISTING
                 && VerityUtils.hasFsverity(pkgInfo.applicationInfo.getBaseCodePath());
 
         try {
@@ -2002,6 +2009,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mCallback.onSessionFinished(this, success);
     }
 
+    /** {@hide} */
     void setStagedSessionReady() {
         synchronized (mLock) {
             mStagedSessionReady = true;
@@ -2009,13 +2017,52 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mStagedSessionFailed = false;
             mStagedSessionErrorCode = SessionInfo.NO_ERROR;
         }
+        mCallback.onStagedSessionChanged(this);
+    }
+
+    /** {@hide} */
+    void setStagedSessionFailed(@StagedSessionErrorCode int errorCode) {
+        synchronized (mLock) {
+            mStagedSessionReady = false;
+            mStagedSessionApplied = false;
+            mStagedSessionFailed = true;
+            mStagedSessionErrorCode = errorCode;
+        }
+        mCallback.onStagedSessionChanged(this);
+    }
+
+    /** {@hide} */
+    void setStagedSessionApplied() {
+        synchronized (mLock) {
+            mStagedSessionReady = false;
+            mStagedSessionApplied = true;
+            mStagedSessionFailed = false;
+            mStagedSessionErrorCode = SessionInfo.NO_ERROR;
+        }
+        mCallback.onStagedSessionChanged(this);
+    }
+
+    /** {@hide} */
+    boolean isStagedSessionReady() {
+        return mStagedSessionReady;
+    }
+
+    /** {@hide} */
+    boolean isStagedSessionApplied() {
+        return mStagedSessionApplied;
+    }
+
+    /** {@hide} */
+    boolean isStagedSessionFailed() {
+        return mStagedSessionFailed;
     }
 
     private void destroyInternal() {
         synchronized (mLock) {
             mSealed = true;
-            mDestroyed = true;
-
+            if (!params.isStaged) {
+                mDestroyed = true;
+            }
             // Force shut down all bridges
             for (RevocableFileDescriptor fd : mFds) {
                 fd.revoke();
@@ -2122,6 +2169,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
             writeBooleanAttribute(out, ATTR_MULTI_PACKAGE, params.isMultiPackage);
             writeBooleanAttribute(out, ATTR_STAGED_SESSION, params.isStaged);
+            writeBooleanAttribute(out, ATTR_IS_READY, mStagedSessionReady);
+            writeBooleanAttribute(out, ATTR_IS_FAILED, mStagedSessionFailed);
+            writeBooleanAttribute(out, ATTR_IS_APPLIED, mStagedSessionApplied);
+            writeIntAttribute(out, ATTR_STAGED_SESSION_ERROR_CODE, mStagedSessionErrorCode);
             // TODO(patb,109941548): avoid writing to xml and instead infer / validate this after
             //                       we've read all sessions.
             writeIntAttribute(out, ATTR_PARENT_SESSION_ID, mParentSessionId);
@@ -2199,6 +2250,16 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         return permissionsArray;
     }
 
+    // Sanity check to be performed when the session is restored from an external file. Only one
+    // of the session states should be true, or none of them.
+    private static boolean isStagedSessionStateValid(boolean isReady, boolean isApplied,
+                                                     boolean isFailed) {
+        return (!isReady && !isApplied && !isFailed)
+                || (isReady && !isApplied && !isFailed)
+                || (!isReady && isApplied && !isFailed)
+                || (!isReady && !isApplied && isFailed);
+    }
+
     /**
      * Read new session from a {@link XmlPullParser xml description} and create it.
      *
@@ -2260,10 +2321,20 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             params.appIcon = BitmapFactory.decodeFile(appIconFile.getAbsolutePath());
             params.appIconLastModified = appIconFile.lastModified();
         }
+        final boolean isReady = readBooleanAttribute(in, ATTR_IS_READY);
+        final boolean isFailed = readBooleanAttribute(in, ATTR_IS_FAILED);
+        final boolean isApplied = readBooleanAttribute(in, ATTR_IS_APPLIED);
+        final int stagedSessionErrorCode = readIntAttribute(in, ATTR_STAGED_SESSION_ERROR_CODE);
+
+        if (!isStagedSessionStateValid(isReady, isApplied, isFailed)) {
+            throw new IllegalArgumentException("Can't restore staged session with invalid state.");
+        }
+
         return new PackageInstallerSession(callback, context, pm, sessionProvider,
                 installerThread, stagingManager, sessionId, userId, installerPackageName,
                 installerUid, params, createdMillis, stageDir, stageCid, prepared, sealed,
-                EMPTY_CHILD_SESSION_ARRAY, parentSessionId);
+                EMPTY_CHILD_SESSION_ARRAY, parentSessionId, isReady, isFailed, isApplied,
+                stagedSessionErrorCode);
     }
 
     /**

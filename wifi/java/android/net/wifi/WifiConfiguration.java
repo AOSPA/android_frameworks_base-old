@@ -27,7 +27,6 @@ import android.net.NetworkSpecifier;
 import android.net.ProxyInfo;
 import android.net.StaticIpConfiguration;
 import android.net.Uri;
-import android.net.wifi.WifiInfo;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -150,26 +149,40 @@ public class WifiConfiguration implements Parcelable {
         public static final int SUITE_B_192 = 10;
 
         /**
+         * WPA pre-shared key with stronger SHA256-based algorithms.
+         * @hide
+         */
+        public static final int WPA_PSK_SHA256 = 11;
+
+        /**
+         * WPA using EAP authentication with stronger SHA256-based algorithms.
+         * @hide
+         */
+        public static final int WPA_EAP_SHA256 = 12;
+
+        /**
         * IEEE 802.11ai FILS SK with SHA256
          * @hide
         */
-        public static final int FILS_SHA256 = 11;
+        public static final int FILS_SHA256 = 13;
         /**
          * IEEE 802.11ai FILS SK with SHA384:
          * @hide
          */
-        public static final int FILS_SHA384 = 12;
+        public static final int FILS_SHA384 = 14;
         /**
          * Device Provisioning Protocol
          * @hide
          */
-        public static final int DPP = 13;
+        public static final int DPP = 15;
 
         public static final String varName = "key_mgmt";
 
         public static final String[] strings = { "NONE", "WPA_PSK", "WPA_EAP",
                 "IEEE8021X", "WPA2_PSK", "OSEN", "FT_PSK", "FT_EAP",
-                "SAE", "OWE", "SUITE_B_192", "FILS_SHA256", "FILS_SHA384", "DPP"};
+                "SAE", "OWE", "SUITE_B_192", "FILS_SHA256", "FILS_SHA384",
+                "DPP", "WPA_PSK_SHA256", "WPA_EAP_SHA256",
+        };
     }
 
     /**
@@ -522,7 +535,7 @@ public class WifiConfiguration implements Parcelable {
      * The set of group management ciphers supported by this configuration.
      * See {@link GroupMgmtCipher} for descriptions of the values.
      */
-    public BitSet allowedGroupMgmtCiphers;
+    public BitSet allowedGroupManagementCiphers;
     /**
      * The set of SuiteB ciphers supported by this configuration.
      * To be used for WPA3-Enterprise mode.
@@ -975,9 +988,12 @@ public class WifiConfiguration implements Parcelable {
     }
 
     /**
-     * @hide
      * Returns MAC address set to be the local randomized MAC address.
      * Does not guarantee that the returned address is valid for use.
+     * <p>
+     * Information is restricted to Device Owner, Profile Owner, and Carrier apps
+     * (which will only obtain addresses for configurations which they create). Other callers
+     * will receive a default "02:00:00:00:00:00" MAC address.
      */
     public @NonNull MacAddress getRandomizedMacAddress() {
         return mRandomizedMacAddress;
@@ -1697,7 +1713,7 @@ public class WifiConfiguration implements Parcelable {
         allowedAuthAlgorithms = new BitSet();
         allowedPairwiseCiphers = new BitSet();
         allowedGroupCiphers = new BitSet();
-        allowedGroupMgmtCiphers = new BitSet();
+        allowedGroupManagementCiphers = new BitSet();
         allowedSuiteBCiphers = new BitSet();
         wepKeys = new String[4];
         for (int i = 0; i < wepKeys.length; i++) {
@@ -1894,8 +1910,8 @@ public class WifiConfiguration implements Parcelable {
         }
         sbuf.append('\n');
         sbuf.append(" GroupMgmtCiphers:");
-        for (int gmc = 0; gmc < this.allowedGroupMgmtCiphers.size(); gmc++) {
-            if (this.allowedGroupMgmtCiphers.get(gmc)) {
+        for (int gmc = 0; gmc < this.allowedGroupManagementCiphers.size(); gmc++) {
+            if (this.allowedGroupManagementCiphers.get(gmc)) {
                 sbuf.append(" ");
                 if (gmc < GroupMgmtCipher.strings.length) {
                     sbuf.append(GroupMgmtCipher.strings[gmc]);
@@ -1957,6 +1973,7 @@ public class WifiConfiguration implements Parcelable {
         if (creatorName != null) sbuf.append(" cname=" + creatorName);
         if (lastUpdateUid != 0) sbuf.append(" luid=" + lastUpdateUid);
         if (lastUpdateName != null) sbuf.append(" lname=" + lastUpdateName);
+        if (updateIdentifier != null) sbuf.append(" updateIdentifier=" + updateIdentifier);
         sbuf.append(" lcuid=" + lastConnectUid);
         sbuf.append(" userApproved=" + userApprovedAsString(userApproved));
         sbuf.append(" noInternetAccessExpected=" + noInternetAccessExpected);
@@ -2313,7 +2330,7 @@ public class WifiConfiguration implements Parcelable {
             allowedAuthAlgorithms  = (BitSet) source.allowedAuthAlgorithms.clone();
             allowedPairwiseCiphers = (BitSet) source.allowedPairwiseCiphers.clone();
             allowedGroupCiphers    = (BitSet) source.allowedGroupCiphers.clone();
-            allowedGroupMgmtCiphers    = (BitSet) source.allowedGroupMgmtCiphers.clone();
+            allowedGroupManagementCiphers = (BitSet) source.allowedGroupManagementCiphers.clone();
             allowedSuiteBCiphers    = (BitSet) source.allowedSuiteBCiphers.clone();
             enterpriseConfig = new WifiEnterpriseConfig(source.enterpriseConfig);
 
@@ -2365,6 +2382,7 @@ public class WifiConfiguration implements Parcelable {
 
             macRandomizationSetting = source.macRandomizationSetting;
             requirePMF = source.requirePMF;
+            updateIdentifier = source.updateIdentifier;
         }
     }
 
@@ -2401,7 +2419,7 @@ public class WifiConfiguration implements Parcelable {
         writeBitSet(dest, allowedAuthAlgorithms);
         writeBitSet(dest, allowedPairwiseCiphers);
         writeBitSet(dest, allowedGroupCiphers);
-        writeBitSet(dest, allowedGroupMgmtCiphers);
+        writeBitSet(dest, allowedGroupManagementCiphers);
         writeBitSet(dest, allowedSuiteBCiphers);
 
         dest.writeParcelable(enterpriseConfig, flags);
@@ -2478,7 +2496,7 @@ public class WifiConfiguration implements Parcelable {
                 config.allowedAuthAlgorithms  = readBitSet(in);
                 config.allowedPairwiseCiphers = readBitSet(in);
                 config.allowedGroupCiphers    = readBitSet(in);
-                config.allowedGroupMgmtCiphers = readBitSet(in);
+                config.allowedGroupManagementCiphers = readBitSet(in);
                 config.allowedSuiteBCiphers   = readBitSet(in);
 
                 config.enterpriseConfig = in.readParcelable(null);

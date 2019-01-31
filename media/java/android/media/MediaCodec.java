@@ -1829,8 +1829,13 @@ final public class MediaCodec {
 
         mBufferLock = new Object();
 
+        // save name used at creation
+        mNameAtCreation = nameIsType ? null : name;
+
         native_setup(name, nameIsType, encoder);
     }
+
+    private String mNameAtCreation;
 
     @Override
     protected void finalize() {
@@ -2289,6 +2294,30 @@ final public class MediaCodec {
          */
         public static final int ERROR_UNSUPPORTED_OPERATION = 6;
 
+        /**
+         * This indicates that the security level of the device is not
+         * sufficient to meet the requirements set by the content owner
+         * in the license policy.
+         */
+        public static final int ERROR_INSUFFICIENT_SECURITY = 7;
+
+        /**
+         * This indicates that the video frame being decrypted exceeds
+         * the size of the device's protected output buffers. When
+         * encountering this error the app should try playing content
+         * of a lower resolution.
+         */
+        public static final int ERROR_FRAME_TOO_LARGE = 8;
+
+        /**
+         * This error indicates that session state has been
+         * invalidated. It can occur on devices that are not capable
+         * of retaining crypto session state across device
+         * suspend/resume. The session must be closed and a new
+         * session opened to resume operation.
+         */
+        public static final int ERROR_LOST_STATE = 9;
+
         /** @hide */
         @IntDef({
             ERROR_NO_KEY,
@@ -2296,7 +2325,10 @@ final public class MediaCodec {
             ERROR_RESOURCE_BUSY,
             ERROR_INSUFFICIENT_OUTPUT_PROTECTION,
             ERROR_SESSION_NOT_OPENED,
-            ERROR_UNSUPPORTED_OPERATION
+            ERROR_UNSUPPORTED_OPERATION,
+            ERROR_INSUFFICIENT_SECURITY,
+            ERROR_FRAME_TOO_LARGE,
+            ERROR_LOST_STATE
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface CryptoErrorCode {}
@@ -3290,12 +3322,36 @@ final public class MediaCodec {
     private native void native_setAudioPresentation(int presentationId, int programId);
 
     /**
-     * Get the component name. If the codec was created by createDecoderByType
-     * or createEncoderByType, what component is chosen is not known beforehand.
+     * Retrieve the codec name.
+     *
+     * If the codec was created by createDecoderByType or createEncoderByType, what component is
+     * chosen is not known beforehand. This method returns the name of the codec that was
+     * selected by the platform.
+     *
+     * <strong>Note:</strong> Implementations may provide multiple aliases (codec
+     * names) for the same underlying codec, any of which can be used to instantiate the same
+     * underlying codec in {@link MediaCodec#createByCodecName}. This method returns the
+     * name used to create the codec in this case.
+     *
      * @throws IllegalStateException if in the Released state.
      */
     @NonNull
-    public native final String getName();
+    public final String getName() {
+        // get canonical name to handle exception
+        String canonicalName = getCanonicalName();
+        return mNameAtCreation != null ? mNameAtCreation : canonicalName;
+    }
+
+    /**
+     * Retrieve the underlying codec name.
+     *
+     * This method is similar to {@link #getName}, except that it returns the underlying component
+     * name even if an alias was used to create this MediaCodec object by name,
+     *
+     * @throws IllegalStateException if in the Released state.
+     */
+    @NonNull
+    public native final String getCanonicalName();
 
     /**
      *  Return Metrics data about the current codec instance.

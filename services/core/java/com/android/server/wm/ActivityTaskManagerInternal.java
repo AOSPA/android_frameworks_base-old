@@ -19,6 +19,7 @@ package com.android.server.wm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.ActivityManager;
 import android.app.AppProtoEnums;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
@@ -191,6 +192,8 @@ public abstract class ActivityTaskManagerInternal {
      * Start intents as a package.
      *
      * @param uid Make a call as if this UID did.
+     * @param realCallingPid PID of the real caller.
+     * @param realCallingUid UID of the real caller.
      * @param callingPackage Make a call as if this package did.
      * @param intents Intents to start.
      * @param userId Start the intents on this user.
@@ -200,9 +203,10 @@ public abstract class ActivityTaskManagerInternal {
      * @param allowBackgroundActivityStart Whether the background activity start should be allowed
      *        from originatingPendingIntent
      */
-    public abstract int startActivitiesInPackage(int uid, String callingPackage, Intent[] intents,
-            String[] resolvedTypes, IBinder resultTo, SafeActivityOptions options, int userId,
-            boolean validateIncomingUser, PendingIntentRecord originatingPendingIntent,
+    public abstract int startActivitiesInPackage(int uid, int realCallingPid, int realCallingUid,
+            String callingPackage, Intent[] intents, String[] resolvedTypes, IBinder resultTo,
+            SafeActivityOptions options, int userId, boolean validateIncomingUser,
+            PendingIntentRecord originatingPendingIntent,
             boolean allowBackgroundActivityStart);
 
     public abstract int startActivityInPackage(int uid, int realCallingPid, int realCallingUid,
@@ -479,4 +483,10 @@ public abstract class ActivityTaskManagerInternal {
     public abstract void setProfilerInfo(ProfilerInfo profilerInfo);
 
     public abstract ActivityMetricsLaunchObserverRegistry getLaunchObserverRegistry();
+
+    /**
+     * Gets bitmap snapshot of the provided task id.
+     */
+    public abstract ActivityManager.TaskSnapshot getTaskSnapshot(int taskId,
+            boolean reducedResolution);
 }

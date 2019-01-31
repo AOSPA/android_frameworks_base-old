@@ -27,8 +27,9 @@ import static java.lang.reflect.Modifier.isPublic;
 import static java.lang.reflect.Modifier.isStatic;
 
 import android.platform.test.annotations.Presubmit;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -114,6 +115,7 @@ public class SettingsBackupTest {
                     Settings.Global.ANOMALY_CONFIG_VERSION,
                     Settings.Global.APN_DB_UPDATE_CONTENT_URL,
                     Settings.Global.APN_DB_UPDATE_METADATA_URL,
+                    Settings.Global.APPLY_RAMPING_RINGER,
                     Settings.Global.APP_BINDING_CONSTANTS,
                     Settings.Global.APP_IDLE_CONSTANTS,
                     Settings.Global.APP_OPS_CONSTANTS,
@@ -143,6 +145,7 @@ public class SettingsBackupTest {
                     Settings.Global.BLOCKED_SLICES,
                     Settings.Global.BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT,
                     Settings.Global.BLOCKING_HELPER_STREAK_LIMIT,
+                    Settings.Global.BLUETOOTH_BTSNOOP_DEFAULT_MODE,
                     Settings.Global.BLUETOOTH_A2DP_SINK_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX,
@@ -197,6 +200,7 @@ public class SettingsBackupTest {
                     Settings.Global.DATA_STALL_CONSECUTIVE_DNS_TIMEOUT_THRESHOLD,
                     Settings.Global.DATA_STALL_EVALUATION_TYPE,
                     Settings.Global.DATA_STALL_MIN_EVALUATE_INTERVAL,
+                    Settings.Global.DATA_STALL_RECOVERY_ON_BAD_NETWORK,
                     Settings.Global.DATA_STALL_VALID_DNS_TIME_THRESHOLD,
                     Settings.Global.DEBUG_APP,
                     Settings.Global.DEBUG_VIEW_ATTRIBUTES,
@@ -268,6 +272,7 @@ public class SettingsBackupTest {
                     Settings.Global.GNSS_HAL_LOCATION_REQUEST_DURATION_MILLIS,
                     Settings.Global.GNSS_SATELLITE_BLACKLIST,
                     Settings.Global.GPRS_REGISTER_CHECK_PERIOD_MS,
+                    Settings.Global.HDMI_CEC_SWITCH_ENABLED,
                     Settings.Global.HDMI_CONTROL_AUTO_DEVICE_OFF_ENABLED,
                     Settings.Global.HDMI_CONTROL_AUTO_WAKEUP_ENABLED,
                     Settings.Global.HDMI_CONTROL_ENABLED,
@@ -309,6 +314,7 @@ public class SettingsBackupTest {
                     Settings.Global.MDC_INITIAL_MAX_RETRY,
                     Settings.Global.MHL_INPUT_SWITCHING_ENABLED,
                     Settings.Global.MHL_POWER_CHARGE_ENABLED,
+                    Settings.Global.MIN_DURATION_BETWEEN_RECOVERY_STEPS_IN_MS,
                     Settings.Global.MOBILE_DATA, // Candidate for backup?
                     Settings.Global.MOBILE_DATA_ALWAYS_ON,
                     Settings.Global.MODE_RINGER,
@@ -475,8 +481,10 @@ public class SettingsBackupTest {
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE,
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS,
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES,
+                    Settings.Global.GUP_DEV_ALL_APPS,
                     Settings.Global.GUP_DEV_OPT_IN_APPS,
-                    Settings.Global.GUP_BLACK_LIST,
+                    Settings.Global.GUP_DEV_OPT_OUT_APPS,
+                    Settings.Global.GUP_BLACKLIST,
                     Settings.Global.GPU_DEBUG_LAYER_APP,
                     Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING,
                     Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT,
@@ -547,7 +555,14 @@ public class SettingsBackupTest {
                     Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS,
                     Settings.Global.BACKUP_MULTI_USER_ENABLED,
                     Settings.Global.ISOLATED_STORAGE_LOCAL,
-                    Settings.Global.ISOLATED_STORAGE_REMOTE);
+                    Settings.Global.ISOLATED_STORAGE_REMOTE,
+                    Settings.Global.APPOP_HISTORY_PARAMETERS,
+                    Settings.Global.APPOP_HISTORY_MODE,
+                    Settings.Global.APPOP_HISTORY_INTERVAL_MULTIPLIER,
+                    Settings.Global.APPOP_HISTORY_BASE_INTERVAL_MILLIS,
+                    Settings.Global.ENABLE_RADIO_BUG_DETECTION,
+                    Settings.Global.RADIO_BUG_WAKELOCK_TIMEOUT_COUNT_THRESHOLD,
+                    Settings.Global.RADIO_BUG_SYSTEM_ERROR_COUNT_THRESHOLD);
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
                  Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
@@ -656,6 +671,7 @@ public class SettingsBackupTest {
                  Settings.Secure.SMS_DEFAULT_APPLICATION,
                  Settings.Secure.SPELL_CHECKER_ENABLED,  // Intentionally removed in Q
                  Settings.Secure.TRUST_AGENTS_INITIALIZED,
+                 Settings.Secure.TV_APP_USES_NON_SYSTEM_INPUTS,
                  Settings.Secure.TV_INPUT_CUSTOM_LABELS,
                  Settings.Secure.TV_INPUT_HIDDEN_INPUTS,
                  Settings.Secure.TV_USER_SETUP_COMPLETE,

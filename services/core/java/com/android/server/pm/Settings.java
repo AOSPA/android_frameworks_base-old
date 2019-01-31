@@ -223,6 +223,7 @@ public final class Settings {
     private static final String ATTR_BLOCKED = "blocked";
     // New name for the above attribute.
     private static final String ATTR_HIDDEN = "hidden";
+    private static final String ATTR_DISTRACTION_FLAGS = "distraction_flags";
     private static final String ATTR_SUSPENDED = "suspended";
     private static final String ATTR_SUSPENDING_PACKAGE = "suspending-package";
     /**
@@ -734,6 +735,7 @@ public final class Settings {
                                 true /*stopped*/,
                                 true /*notLaunched*/,
                                 false /*hidden*/,
+                                0 /*distractionFlags*/,
                                 false /*suspended*/,
                                 null /*suspendingPackage*/,
                                 null /*dialogInfo*/,
@@ -1628,6 +1630,7 @@ public final class Settings {
                                 false /*stopped*/,
                                 false /*notLaunched*/,
                                 false /*hidden*/,
+                                0 /*distractionFlags*/,
                                 false /*suspended*/,
                                 null /*suspendingPackage*/,
                                 null /*dialogInfo*/,
@@ -1703,6 +1706,8 @@ public final class Settings {
                     hidden = hiddenStr == null
                             ? hidden : Boolean.parseBoolean(hiddenStr);
 
+                    final int distractionFlags = XmlUtils.readIntAttribute(parser,
+                            ATTR_DISTRACTION_FLAGS, 0);
                     final boolean suspended = XmlUtils.readBooleanAttribute(parser, ATTR_SUSPENDED,
                             false);
                     String suspendingPackage = parser.getAttributeValue(null,
@@ -1781,7 +1786,8 @@ public final class Settings {
                         setBlockUninstallLPw(userId, name, true);
                     }
                     ps.setUserState(userId, ceDataInode, enabled, installed, stopped, notLaunched,
-                            hidden, suspended, suspendingPackage, suspendDialogInfo,
+                            hidden, distractionFlags, suspended, suspendingPackage,
+                            suspendDialogInfo,
                             suspendedAppExtras, suspendedLauncherExtras, instantApp, virtualPreload,
                             enabledCaller, enabledComponents, disabledComponents, verifState,
                             linkGeneration, installReason, harmfulAppWarning);
@@ -2088,6 +2094,10 @@ public final class Settings {
                 }
                 if (ustate.hidden) {
                     serializer.attribute(null, ATTR_HIDDEN, "true");
+                }
+                if (ustate.distractionFlags != 0) {
+                    serializer.attribute(null, ATTR_DISTRACTION_FLAGS,
+                            Integer.toString(ustate.distractionFlags));
                 }
                 if (ustate.suspended) {
                     serializer.attribute(null, ATTR_SUSPENDED, "true");
@@ -2780,13 +2790,13 @@ public final class Settings {
                 // dataPath   - path to package's data path
                 // seinfo     - seinfo label for the app (assigned at install time)
                 // gids       - supplementary gids this app launches with
+                // profileableFromShellFlag  - 0 or 1 if the package is profileable from shell.
                 //
                 // NOTE: We prefer not to expose all ApplicationInfo flags for now.
                 //
                 // DO NOT MODIFY THIS FORMAT UNLESS YOU CAN ALSO MODIFY ITS USERS
                 // FROM NATIVE CODE. AT THE MOMENT, LOOK AT THE FOLLOWING SOURCES:
-                //   frameworks/base/libs/packagelistparser
-                //   system/core/run-as/run-as.c
+                //   system/core/libpackagelistparser
                 //
                 sb.setLength(0);
                 sb.append(ai.packageName);
@@ -2806,6 +2816,8 @@ public final class Settings {
                 } else {
                     sb.append("none");
                 }
+                sb.append(" ");
+                sb.append(ai.isProfileableByShell() ? "1" : "0");
                 sb.append("\n");
                 writer.append(sb);
             }

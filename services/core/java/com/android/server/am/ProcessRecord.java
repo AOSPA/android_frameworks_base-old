@@ -77,6 +77,7 @@ final class ProcessRecord implements WindowProcessListener {
     private final ActivityManagerService mService; // where we came from
     final ApplicationInfo info; // all about the first app in the process
     final boolean isolated;     // true if this is a special isolated process
+    final boolean appZygote;    // true if this is forked from the app zygote
     final int uid;              // uid of process; may be different from 'info' if isolated
     final int userId;           // user of process.
     final String processName;   // name of the process
@@ -560,6 +561,8 @@ final class ProcessRecord implements WindowProcessListener {
         mService = _service;
         info = _info;
         isolated = _info.uid != _uid;
+        appZygote = (UserHandle.getAppId(_uid) >= Process.FIRST_APP_ZYGOTE_ISOLATED_UID
+                && UserHandle.getAppId(_uid) <= Process.LAST_APP_ZYGOTE_ISOLATED_UID);
         uid = _uid;
         userId = UserHandle.getUserId(_uid);
         processName = _processName;
@@ -1168,11 +1171,13 @@ final class ProcessRecord implements WindowProcessListener {
     }
 
     void addAllowBackgroundActivityStartsToken(Binder entity) {
+        if (entity == null) return;
         mAllowBackgroundActivityStartsTokens.add(entity);
         mWindowProcessController.setAllowBackgroundActivityStarts(true);
     }
 
     void removeAllowBackgroundActivityStartsToken(Binder entity) {
+        if (entity == null) return;
         mAllowBackgroundActivityStartsTokens.remove(entity);
         mWindowProcessController.setAllowBackgroundActivityStarts(
                 !mAllowBackgroundActivityStartsTokens.isEmpty());

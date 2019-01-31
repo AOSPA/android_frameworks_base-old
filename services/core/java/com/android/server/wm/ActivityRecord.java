@@ -54,6 +54,7 @@ import static android.content.pm.ActivityInfo.CONFIG_WINDOW_CONFIGURATION;
 import static android.content.pm.ActivityInfo.FLAG_ALWAYS_FOCUSABLE;
 import static android.content.pm.ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS;
 import static android.content.pm.ActivityInfo.FLAG_IMMERSIVE;
+import static android.content.pm.ActivityInfo.FLAG_INHERIT_SHOW_WHEN_LOCKED;
 import static android.content.pm.ActivityInfo.FLAG_MULTIPROCESS;
 import static android.content.pm.ActivityInfo.FLAG_NO_HISTORY;
 import static android.content.pm.ActivityInfo.FLAG_SHOW_FOR_ALL_USERS;
@@ -142,6 +143,7 @@ import static org.xmlpull.v1.XmlPullParser.END_TAG;
 import static org.xmlpull.v1.XmlPullParser.START_TAG;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager.TaskDescription;
 import android.app.ActivityOptions;
 import android.app.PendingIntent;
@@ -396,7 +398,13 @@ public final class ActivityRecord extends ConfigurationContainer {
     int mRotationAnimationHint = -1;
 
     private boolean mShowWhenLocked;
+    private boolean mInheritShownWhenLocked;
     private boolean mTurnScreenOn;
+
+    /**
+     * Current sequencing integer of the configuration, for skipping old activity configurations.
+     */
+    private int mConfigurationSeq;
 
     /**
      * Temp configs used in {@link #ensureActivityConfiguration(int, boolean)}
@@ -737,9 +745,10 @@ public final class ActivityRecord extends ConfigurationContainer {
             mLastReportedMultiWindowMode = inPictureInPictureMode;
             final Configuration newConfig = new Configuration();
             if (targetStackBounds != null && !targetStackBounds.isEmpty()) {
-                task.computeResolvedOverrideConfiguration(newConfig,
-                        task.getParent().getConfiguration(),
-                        task.getRequestedOverrideConfiguration());
+                newConfig.setTo(task.getRequestedOverrideConfiguration());
+                Rect outBounds = newConfig.windowConfiguration.getBounds();
+                task.adjustForMinimalTaskDimensions(outBounds, outBounds);
+                task.computeConfigResourceOverrides(newConfig, task.getParent().getConfiguration());
             }
             schedulePictureInPictureModeChanged(newConfig);
             scheduleMultiWindowModeChanged(newConfig);
@@ -1029,6 +1038,7 @@ public final class ActivityRecord extends ConfigurationContainer {
                 null : ComponentName.unflattenFromString(aInfo.requestedVrComponent);
 
         mShowWhenLocked = (aInfo.flags & FLAG_SHOW_WHEN_LOCKED) != 0;
+        mInheritShownWhenLocked = (aInfo.privateFlags & FLAG_INHERIT_SHOW_WHEN_LOCKED) != 0;
         mTurnScreenOn = (aInfo.flags & FLAG_TURN_SCREEN_ON) != 0;
 
         mRotationAnimationHint = aInfo.rotationAnimation;
@@ -1517,14 +1527,6 @@ public final class ActivityRecord extends ConfigurationContainer {
         return true;
     }
 
-    /**
-     * @return true if the activity contains windows that have
-     *         {@link LayoutParams#FLAG_DISMISS_KEYGUARD} set
-     */
-    boolean hasDismissKeyguardWindows() {
-        return mAtmService.mWindowManager.containsDismissKeyguardWindow(appToken);
-    }
-
     void makeFinishingLocked() {
         if (finishing) {
             return;
@@ -1980,30 +1982,84 @@ public final class ActivityRecord extends ConfigurationContainer {
         try {
             mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
                     WindowVisibilityItem.obtain(true /* showWindow */));
-            if (shouldPauseWhenBecomingVisible()) {
-                // An activity must be in the {@link PAUSING} state for the system to validate
-                // the move to {@link PAUSED}.
-                setState(PAUSING, "makeVisibleIfNeeded");
-                mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
-                        PauseActivityItem.obtain(finishing, false /* userLeaving */,
-                                configChangeFlags, false /* dontReport */));
-            }
+            makeActiveIfNeeded(null /* activeActivity*/);
         } catch (Exception e) {
             Slog.w(TAG, "Exception thrown sending visibility update: " + intent.getComponent(), e);
         }
     }
 
-    /** Check if activity should be moved to PAUSED state when it becomes visible. */
-    private boolean shouldPauseWhenBecomingVisible() {
-        // If the activity is stopped or stopping, cycle to the paused state. We avoid doing
+    /**
+     * Make activity resumed or paused if needed.
+     * @param activeActivity an activity that is resumed or just completed pause action.
+     *                       We won't change the state of this activity.
+     */
+    boolean makeActiveIfNeeded(ActivityRecord activeActivity) {
+        if (shouldResumeActivity(activeActivity)) {
+            if (DEBUG_VISIBILITY) {
+                Slog.v("TAG_VISIBILITY", "Resume visible activity, " + this);
+            }
+            return getActivityStack().resumeTopActivityUncheckedLocked(activeActivity /* prev */,
+                    null /* options */);
+        } else if (shouldPauseActivity(activeActivity)) {
+            if (DEBUG_VISIBILITY) {
+                Slog.v("TAG_VISIBILITY", "Pause visible activity, " + this);
+            }
+            // An activity must be in the {@link PAUSING} state for the system to validate
+            // the move to {@link PAUSED}.
+            setState(PAUSING, "makeVisibleIfNeeded");
+            try {
+                mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
+                        PauseActivityItem.obtain(finishing, false /* userLeaving */,
+                                configChangeFlags, false /* dontReport */));
+            } catch (Exception e) {
+                Slog.w(TAG, "Exception thrown sending pause: " + intent.getComponent(), e);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if activity should be moved to PAUSED state. The activity:
+     * - should be eligible to be made active (see {@link #shouldMakeActive(ActivityRecord)})
+     * - should be non-focusable
+     * - should not be currently pausing or paused
+     * @param activeActivity the activity that is active or just completed pause action. We won't
+     *                       resume if this activity is active.
+     */
+    private boolean shouldPauseActivity(ActivityRecord activeActivity) {
+        return shouldMakeActive(activeActivity) && !isFocusable() && !isState(PAUSING, PAUSED);
+    }
+
+    /**
+     * Check if activity should be moved to RESUMED state. The activity:
+     * - should be eligible to be made active (see {@link #shouldMakeActive(ActivityRecord)})
+     * - should be focusable
+     * @param activeActivity the activity that is active or just completed pause action. We won't
+     *                       resume if this activity is active.
+     */
+    private boolean shouldResumeActivity(ActivityRecord activeActivity) {
+        return shouldMakeActive(activeActivity) && isFocusable() && !isState(RESUMED);
+    }
+
+    /**
+     * Check if activity is eligible to be made active (resumed of paused). The activity:
+     * - should be paused, stopped or stopping
+     * - should not be the currently active one
+     * - should be either the topmost in task, or right below the top activity that is finishing
+     * If all of these conditions are not met at the same time, the activity cannot be made active.
+     */
+    private boolean shouldMakeActive(ActivityRecord activeActivity) {
+        // If the activity is stopped, stopping, cycle to an active state. We avoid doing
         // this when there is an activity waiting to become translucent as the extra binder
         // calls will lead to noticeable jank. A later call to
-        // ActivityStack#ensureActivitiesVisibleLocked will bring the activity to the proper
-        // paused state. We also avoid doing this for the activity the stack supervisor
-        // considers the resumed activity, as normal means will bring the activity from STOPPED
-        // to RESUMED. Adding PAUSING in this scenario will lead to double lifecycles.
-        if (!isState(STOPPED, STOPPING) || getActivityStack().mTranslucentActivityWaiting != null
-                || isResumedActivityOnDisplay()) {
+        // ActivityStack#ensureActivitiesVisibleLocked will bring the activity to a proper
+        // active state.
+        if (!isState(RESUMED, PAUSED, STOPPED, STOPPING)
+                || getActivityStack().mTranslucentActivityWaiting != null) {
+            return false;
+        }
+
+        if (this == activeActivity) {
             return false;
         }
 
@@ -2013,14 +2069,14 @@ public final class ActivityRecord extends ConfigurationContainer {
             throw new IllegalStateException("Activity not found in its task");
         }
         if (positionInTask == task.mActivities.size() - 1) {
-            // It's the topmost activity in the task - should become paused now
+            // It's the topmost activity in the task - should become resumed now
             return true;
         }
         // Check if activity above is finishing now and this one becomes the topmost in task.
         final ActivityRecord activityAbove = task.mActivities.get(positionInTask + 1);
         if (activityAbove.finishing && results == null) {
-            // We will only allow pausing if activity above wasn't launched for result. Otherwise it
-            // will cause this activity to resume before getting result.
+            // We will only allow making active if activity above wasn't launched for result.
+            // Otherwise it will cause this activity to resume before getting result.
             return true;
         }
         return false;
@@ -2555,8 +2611,16 @@ public final class ActivityRecord extends ConfigurationContainer {
             return;
         }
 
-        final IBinder binder = freezeScreenIfNeeded ? appToken.asBinder() : null;
+        final IBinder binder =
+                (freezeScreenIfNeeded && appToken != null) ? appToken.asBinder() : null;
         mAppWindowToken.setOrientation(requestedOrientation, binder, this);
+
+        // Push the new configuration to the requested app in case where it's not pushed, e.g. when
+        // the request is handled at task level with letterbox.
+        if (!getMergedOverrideConfiguration().equals(
+                mLastReportedConfiguration.getMergedConfiguration())) {
+            ensureActivityConfiguration(0 /* globalChanges */, false /* preserveWindow */);
+        }
     }
 
     int getOrientation() {
@@ -2599,7 +2663,6 @@ public final class ActivityRecord extends ConfigurationContainer {
 
     // TODO(b/36505427): Consider moving this method and similar ones to ConfigurationContainer.
     private void updateOverrideConfiguration() {
-        mTmpConfig.unset();
         computeBounds(mTmpBounds);
 
         if (mTmpBounds.equals(getRequestedOverrideBounds())) {
@@ -2610,11 +2673,52 @@ public final class ActivityRecord extends ConfigurationContainer {
 
         // Bounds changed...update configuration to match.
         if (!matchParentBounds()) {
-            task.computeResolvedOverrideConfiguration(mTmpConfig,
-                    task.getParent().getConfiguration(), getRequestedOverrideConfiguration());
+            mTmpConfig.setTo(getRequestedOverrideConfiguration());
+            task.computeConfigResourceOverrides(mTmpConfig, task.getParent().getConfiguration());
+        } else {
+            mTmpConfig.unset();
         }
 
         onRequestedOverrideConfigurationChanged(mTmpConfig);
+    }
+
+    @Override
+    void resolveOverrideConfiguration(Configuration newParentConfiguration) {
+        super.resolveOverrideConfiguration(newParentConfiguration);
+
+        // Assign configuration sequence number into hierarchy because there is a different way than
+        // ensureActivityConfiguration() in this class that uses configuration in WindowState during
+        // layout traversals.
+        mConfigurationSeq = Math.max(++mConfigurationSeq, 1);
+        getResolvedOverrideConfiguration().seq = mConfigurationSeq;
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newParentConfig) {
+        super.onConfigurationChanged(newParentConfig);
+
+        // Configuration's equality doesn't consider seq so if only seq number changes in resolved
+        // override configuration. Therefore ConfigurationContainer doesn't change merged override
+        // configuration, but it's used to push configuration changes so explicitly update that.
+        if (getMergedOverrideConfiguration().seq != getResolvedOverrideConfiguration().seq) {
+            onMergedOverrideConfigurationChanged();
+        }
+
+        // TODO(b/80414790): Remove code below after unification.
+        // Same as above it doesn't notify configuration listeners, and consequently AppWindowToken
+        // can't get updated seq number. However WindowState's merged override configuration needs
+        // to have this seq number because that's also used for activity config pushes during layout
+        // traversal. Therefore explicitly update them here.
+        if (mAppWindowToken == null) {
+            return;
+        }
+        final Configuration appWindowTokenRequestedOverrideConfig =
+                mAppWindowToken.getRequestedOverrideConfiguration();
+        if (appWindowTokenRequestedOverrideConfig.seq != getResolvedOverrideConfiguration().seq) {
+            appWindowTokenRequestedOverrideConfig.seq =
+                    getResolvedOverrideConfiguration().seq;
+            mAppWindowToken.onMergedOverrideConfigurationChanged();
+        }
     }
 
     /** Returns true if the configuration is compatible with this activity. */
@@ -3229,16 +3333,45 @@ public final class ActivityRecord extends ConfigurationContainer {
                 false /* preserveWindows */);
     }
 
+    void setInheritShowWhenLocked(boolean inheritShowWhenLocked) {
+        mInheritShownWhenLocked = inheritShowWhenLocked;
+        mRootActivityContainer.ensureActivitiesVisible(null, 0, false);
+    }
+
     /**
      * @return true if the activity windowing mode is not
-     *         {@link android.app.WindowConfiguration#WINDOWING_MODE_PINNED} and activity contains
-     *         windows that have {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED} set or if the activity
-     *         has set {@link #mShowWhenLocked}.
+     *         {@link android.app.WindowConfiguration#WINDOWING_MODE_PINNED} and a) activity
+     *         contains windows that have {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED} set or if the
+     *         activity has set {@link #mShowWhenLocked}, or b) if the activity has set
+     *         {@link #mInheritShownWhenLocked} and the activity behind this satisfies the
+     *         conditions a) above.
      *         Multi-windowing mode will be exited if true is returned.
      */
     boolean canShowWhenLocked() {
-        return !inPinnedWindowingMode() && (mShowWhenLocked
-                || mAtmService.mWindowManager.containsShowWhenLockedWindow(appToken));
+        if (!inPinnedWindowingMode() && (mShowWhenLocked
+                || (mAppWindowToken != null && mAppWindowToken.containsShowWhenLockedWindow()))) {
+            return true;
+        } else if (mInheritShownWhenLocked) {
+            ActivityRecord r = getActivityBelow();
+            return r != null && !r.inPinnedWindowingMode() && (r.mShowWhenLocked
+                    || (r.mAppWindowToken != null
+                        && r.mAppWindowToken.containsShowWhenLockedWindow()));
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * @return an {@link ActivityRecord} of the activity below this activity, or {@code null} if no
+     * such activity exists.
+     */
+    @Nullable
+    private ActivityRecord getActivityBelow() {
+        final int pos = task.mActivities.indexOf(this);
+        if (pos == -1) {
+            throw new IllegalStateException("Activity not found in its task");
+        }
+        return pos == 0 ? null : task.getChildAt(pos - 1);
     }
 
     void setTurnScreenOn(boolean turnScreenOn) {

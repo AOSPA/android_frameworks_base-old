@@ -46,6 +46,7 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
     protected View mEcaView;
     protected boolean mEnableHaptics;
     private boolean mDismissing;
+    protected boolean mResumed;
     private CountDownTimer mCountdownTimer = null;
 
     // To avoid accidental lockout due to events while the device in in the pocket, ignore
@@ -264,6 +265,8 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
 
     @Override
     public void onPause() {
+        mResumed = false;
+
         if (mCountdownTimer != null) {
             mCountdownTimer.cancel();
             mCountdownTimer = null;
@@ -277,6 +280,7 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
 
     @Override
     public void onResume(int reason) {
+        mResumed = true;
     }
 
     @Override

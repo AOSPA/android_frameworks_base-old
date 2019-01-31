@@ -55,7 +55,7 @@ import com.android.systemui.statusbar.phone.NotificationIconContainer;
  * overflow icons that don't fit into the regular list anymore.
  */
 public class NotificationShelf extends ActivatableNotificationView implements
-        View.OnLayoutChangeListener {
+        View.OnLayoutChangeListener, StateListener {
 
     private static final boolean USE_ANIMATIONS_WHEN_OPENING =
             SystemProperties.getBoolean("debug.icon_opening_animations", true);
@@ -65,12 +65,12 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private static final String TAG = "NotificationShelf";
     private static final long SHELF_IN_TRANSLATION_DURATION = 200;
 
-    private boolean mDark;
     private NotificationIconContainer mShelfIcons;
     private int[] mTmp = new int[2];
     private boolean mHideBackground;
     private int mIconAppearTopPadding;
     private int mShelfAppearTranslation;
+    private float mDarkShelfPadding;
     private int mStatusBarHeight;
     private int mStatusBarPaddingStart;
     private AmbientState mAmbientState;
@@ -94,8 +94,6 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private Rect mClipRect = new Rect();
     private int mCutoutHeight;
     private int mGapHeight;
-
-    private final StateListener mStateListener = this::setStatusBarState;
 
     public NotificationShelf(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -121,13 +119,13 @@ public class NotificationShelf extends ActivatableNotificationView implements
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         Dependency.get(StatusBarStateController.class)
-                .addCallback(mStateListener, StatusBarStateController.RANK_SHELF);
+                .addCallback(this, StatusBarStateController.RANK_SHELF);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        Dependency.get(StatusBarStateController.class).removeCallback(mStateListener);
+        Dependency.get(StatusBarStateController.class).removeCallback(this);
     }
 
     public void bind(AmbientState ambientState, NotificationStackScrollLayout hostLayout) {
@@ -142,6 +140,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mStatusBarPaddingStart = res.getDimensionPixelOffset(R.dimen.status_bar_padding_start);
         mPaddingBetweenElements = res.getDimensionPixelSize(R.dimen.notification_divider_height);
         mShelfAppearTranslation = res.getDimensionPixelSize(R.dimen.shelf_appear_translation);
+        mDarkShelfPadding = res.getDimensionPixelSize(R.dimen.widget_bottom_separator_padding);
 
         ViewGroup.LayoutParams layoutParams = getLayoutParams();
         layoutParams.height = res.getDimensionPixelOffset(R.dimen.notification_shelf_height);
@@ -167,11 +166,29 @@ public class NotificationShelf extends ActivatableNotificationView implements
 
     @Override
     public void setDark(boolean dark, boolean fade, long delay) {
-        super.setDark(dark, fade, delay);
         if (mDark == dark) return;
-        mDark = dark;
+        super.setDark(dark, fade, delay);
         mShelfIcons.setDark(dark, fade, delay);
         updateInteractiveness();
+        updateOutline();
+    }
+
+    /**
+     * Alpha animation with translation played when this view is visible on AOD.
+     */
+    public void fadeInTranslating() {
+        mShelfIcons.setTranslationY(-mShelfAppearTranslation);
+        mShelfIcons.setAlpha(0);
+        mShelfIcons.animate()
+                .setInterpolator(Interpolators.DECELERATE_QUINT)
+                .translationY(0)
+                .setDuration(SHELF_IN_TRANSLATION_DURATION)
+                .start();
+        mShelfIcons.animate()
+                .alpha(1)
+                .setInterpolator(Interpolators.LINEAR)
+                .setDuration(SHELF_IN_TRANSLATION_DURATION)
+                .start();
     }
 
     @Override
@@ -202,10 +219,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
 
             float awakenTranslation = Math.max(Math.min(viewEnd, maxShelfEnd) - viewState.height,
                     getFullyClosedTranslation());
-            float darkTranslation = mAmbientState.getDarkTopPadding();
             float yRatio = mAmbientState.hasPulsingNotifications() ?
                     0 : mAmbientState.getDarkAmount();
-            viewState.yTranslation = MathUtils.lerp(awakenTranslation, darkTranslation, yRatio);
+            viewState.yTranslation = awakenTranslation + mDarkShelfPadding * yRatio;
             viewState.zTranslation = ambientState.getBaseZHeight();
             // For the small display size, it's not enough to make the icon not covered by
             // the top cutout so the denominator add the height of cutout.
@@ -225,7 +241,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
             }
             viewState.hasItemsInStableShelf = lastViewState.inShelf;
             viewState.hidden = !mAmbientState.isShadeExpanded()
-                    || mAmbientState.isQsCustomizerShowing() || mAmbientState.isFullyDark();
+                    || mAmbientState.isQsCustomizerShowing();
             viewState.maxShelfEnd = maxShelfEnd;
         } else {
             viewState.hidden = true;
@@ -420,7 +436,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         float maxTop = row.getTranslationY();
         StatusBarIconView icon = row.getEntry().expandedIcon;
         float shelfIconPosition = getTranslationY() + icon.getTop() + icon.getTranslationY();
-        if (shelfIconPosition < maxTop) {
+        if (shelfIconPosition < maxTop && !mAmbientState.isDark()) {
             int top = (int) (maxTop - shelfIconPosition);
             Rect clipRect = new Rect(0, top, icon.getWidth(), Math.max(top, icon.getHeight()));
             icon.setClipBounds(clipRect);
@@ -431,7 +447,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
 
     private void updateContinuousClipping(final ExpandableNotificationRow row) {
         StatusBarIconView icon = row.getEntry().expandedIcon;
-        boolean needsContinuousClipping = ViewState.isAnimatingY(icon);
+        boolean needsContinuousClipping = ViewState.isAnimatingY(icon) && !mAmbientState.isDark();
         boolean isContinuousClipping = icon.getTag(TAG_CONTINUOUS_CLIPPING) != null;
         if (needsContinuousClipping && !isContinuousClipping) {
             final ViewTreeObserver observer = icon.getViewTreeObserver();
@@ -622,7 +638,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
             iconState.translateContent = false;
         }
         float transitionAmount;
-        if (isLastChild || !USE_ANIMATIONS_WHEN_OPENING || iconState.useFullTransitionAmount
+        if (mAmbientState.isDarkAtAll() && !row.isInShelf()) {
+            transitionAmount = mAmbientState.isFullyDark() ? 1 : 0;
+        } else if (isLastChild || !USE_ANIMATIONS_WHEN_OPENING || iconState.useFullTransitionAmount
                 || iconState.useLinearTransitionAmount) {
             transitionAmount = iconTransitionAmount;
         } else {
@@ -745,18 +763,14 @@ public class NotificationShelf extends ActivatableNotificationView implements
         }
     }
 
-    public boolean hidesBackground() {
-        return mHideBackground;
-    }
-
     @Override
     protected boolean needsOutline() {
-        return !mHideBackground && super.needsOutline();
+        return !mHideBackground && !mDark && super.needsOutline();
     }
 
     @Override
     protected boolean shouldHideBackground() {
-        return super.shouldHideBackground() || mHideBackground;
+        return super.shouldHideBackground() || mHideBackground || mDark;
     }
 
     @Override
@@ -860,8 +874,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mCollapsedIcons.addOnLayoutChangeListener(this);
     }
 
-    private void setStatusBarState(int statusBarState) {
-        mStatusBarState = statusBarState;
+    @Override
+    public void onStateChanged(int newState) {
+        mStatusBarState = newState;
         updateInteractiveness();
     }
 

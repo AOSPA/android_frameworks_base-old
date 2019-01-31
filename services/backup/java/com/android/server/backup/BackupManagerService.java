@@ -39,7 +39,6 @@ import android.os.Binder;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
-import android.os.RemoteException;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.util.Slog;
@@ -127,7 +126,7 @@ public class BackupManagerService {
     protected void startServiceForUser(int userId) {
         UserBackupManagerService userBackupManagerService =
                 UserBackupManagerService.createAndInitializeService(
-                        userId, mContext, mTrampoline, mBackupThread, mTransportWhitelist);
+                        userId, mContext, mTrampoline, mTransportWhitelist);
         startServiceForUser(userId, userBackupManagerService);
     }
 
@@ -139,20 +138,21 @@ public class BackupManagerService {
         mServiceUsers.put(userId, userBackupManagerService);
 
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "backup enable");
-        try {
-            // TODO(b/121198604): Make enable file per-user and clean up indirection.
-            mTrampoline.setBackupEnabledForUser(
-                    userId, UserBackupManagerFilePersistedSettings.readBackupEnableState(userId));
-        } catch (RemoteException e) {
-            // Can't happen, it's a local object.
-        }
+        userBackupManagerService.initializeBackupEnableState();
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     /** Stops the backup service for user {@code userId} when the user is stopped. */
     @VisibleForTesting
     protected void stopServiceForUser(int userId) {
-        mServiceUsers.remove(userId);
+        UserBackupManagerService userBackupManagerService = mServiceUsers.removeReturnOld(userId);
+
+        if (userBackupManagerService != null) {
+            userBackupManagerService.tearDownService();
+
+            KeyValueBackupJob.cancel(userId, mContext);
+            FullBackupJob.cancel(userId, mContext);
+        }
     }
 
     SparseArray<UserBackupManagerService> getServiceUsers() {
@@ -580,9 +580,9 @@ public class BackupManagerService {
      * @return Whether ongoing work will continue. The return value here will be passed along as the
      *     return value to the callback {@link JobService#onStartJob(JobParameters)}.
      */
-    public boolean beginFullBackup(FullBackupJob scheduledJob) {
+    public boolean beginFullBackup(@UserIdInt int userId, FullBackupJob scheduledJob) {
         UserBackupManagerService userBackupManagerService =
-                getServiceForUserIfCallerHasPermission(UserHandle.USER_SYSTEM, "beginFullBackup()");
+                getServiceForUserIfCallerHasPermission(userId, "beginFullBackup()");
 
         return userBackupManagerService != null
                 && userBackupManagerService.beginFullBackup(scheduledJob);
@@ -592,9 +592,9 @@ public class BackupManagerService {
      * Used by the {@link JobScheduler} to end the current full backup task when conditions are no
      * longer met for running the full backup job.
      */
-    public void endFullBackup() {
+    public void endFullBackup(@UserIdInt int userId) {
         UserBackupManagerService userBackupManagerService =
-                getServiceForUserIfCallerHasPermission(UserHandle.USER_SYSTEM, "endFullBackup()");
+                getServiceForUserIfCallerHasPermission(userId, "endFullBackup()");
 
         if (userBackupManagerService != null) {
             userBackupManagerService.endFullBackup();

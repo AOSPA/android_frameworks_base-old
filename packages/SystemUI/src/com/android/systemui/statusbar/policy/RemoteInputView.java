@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.policy;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
@@ -28,6 +29,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.text.Editable;
 import android.text.SpannedString;
 import android.text.TextWatcher;
@@ -56,7 +58,7 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.RemoteInputController;
-import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 
@@ -83,7 +85,7 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
     private RemoteInputController mController;
     private RemoteInputQuickSettingsDisabler mRemoteInputQuickSettingsDisabler;
 
-    private NotificationData.Entry mEntry;
+    private NotificationEntry mEntry;
 
     private boolean mRemoved;
 
@@ -180,7 +182,7 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
     }
 
     public static RemoteInputView inflate(Context context, ViewGroup root,
-            NotificationData.Entry entry,
+            NotificationEntry entry,
             RemoteInputController controller) {
         RemoteInputView v = (RemoteInputView)
                 LayoutInflater.from(context).inflate(R.layout.remote_input, root, false);
@@ -283,6 +285,11 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         focus();
     }
 
+    private static UserHandle computeTextOperationUser(UserHandle notificationUser) {
+        return UserHandle.ALL.equals(notificationUser)
+                ? UserHandle.of(ActivityManager.getCurrentUser()) : notificationUser;
+    }
+
     public void focus() {
         MetricsLogger.action(mContext, MetricsProto.MetricsEvent.ACTION_REMOTE_INPUT_OPEN,
                 mEntry.notification.getPackageName());
@@ -291,6 +298,7 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         if (mWrapper != null) {
             mWrapper.setRemoteInputVisible(true);
         }
+        mEditText.setTextOperationUser(computeTextOperationUser(mEntry.notification.getUser()));
         mEditText.setInnerFocusable(true);
         mEditText.mShowImeOnInputConnection = true;
         mEditText.setText(mEntry.remoteInputText);
@@ -320,6 +328,7 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         mResetting = true;
         mEntry.remoteInputTextWhenReset = SpannedString.valueOf(mEditText.getText());
 
+        mEditText.setTextOperationUser(null);
         mEditText.getText().clear();
         mEditText.setEnabled(true);
         mSendButton.setVisibility(VISIBLE);
