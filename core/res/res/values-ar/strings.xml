@@ -545,11 +545,9 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"للسماح للتطبيق بقراءة المواقع من مجموعة الوسائط التابعة لك."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"يتطلَّب التطبيق <xliff:g id="APP">%s</xliff:g> المصادقة."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"معدّات المقاييس الحيوية غير متاحة."</string>
-    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
-    <skip />
+    <string name="biometric_error_user_canceled" msgid="2260175018114348727">"تم إلغاء المصادقة."</string>
     <string name="biometric_not_recognized" msgid="5770511773560736082">"لم يتم التعرف عليها."</string>
-    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
-    <skip />
+    <string name="biometric_error_canceled" msgid="349665227864885880">"تم إلغاء المصادقة."</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"تم اكتشاف بصمة الإصبع بشكل جزئي؛ يرجى إعادة المحاولة."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"تعذرت معالجة بصمة الإصبع. يُرجى إعادة المحاولة."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"جهاز استشعار بصمات الأصابع متسخ، يرجى تنظيفه وإعادة المحاولة."</string>
@@ -1208,6 +1206,9 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"فتح باستخدام"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"‏فتح باستخدام %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"فتح"</string>
+    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"منح إمكانية الوصول لفتح روابط <xliff:g id="HOST">%1$s</xliff:g> باستخدام"</string>
+    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"منح إمكانية الوصول لفتح روابط <xliff:g id="HOST">%1$s</xliff:g> باستخدام <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
+    <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"منح إذن الوصول"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"تعديل باستخدام"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"‏تعديل باستخدام %1$s"</string>
     <string name="whichEditApplicationLabel" msgid="7183524181625290300">"تعديل"</string>
@@ -1539,7 +1540,7 @@
     <string name="vpn_lockdown_config" msgid="8151951501116759194">"‏تغيير إعدادات الشبكة أو الشبكة الافتراضية الخاصة (VPN)"</string>
     <string name="upload_file" msgid="2897957172366730416">"اختيار ملف"</string>
     <string name="no_file_chosen" msgid="6363648562170759465">"لم يتم اختيار أي ملف"</string>
-    <string name="reset" msgid="2448168080964209908">"إعادة تعيين"</string>
+    <string name="reset" msgid="2448168080964209908">"إعادة الضبط"</string>
     <string name="submit" msgid="1602335572089911941">"إرسال"</string>
     <string name="car_mode_disable_notification_title" msgid="5704265646471239078">"تطبيق القيادة قيد التشغيل"</string>
     <string name="car_mode_disable_notification_message" msgid="7647248420931129377">"انقر للخروج من تطبيق القيادة."</string>
@@ -1658,6 +1659,7 @@
     <string name="SetupCallDefault" msgid="5834948469253758575">"هل تريد قبول المكالمة؟"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"دومًا"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"مرة واحدة فقط"</string>
+    <string name="activity_resolver_app_settings" msgid="8965806928986509855">"الإعدادات"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"‏لا يدعم %1$s الملفات الشخصية للعمل"</string>
     <string name="default_audio_route_name" product="tablet" msgid="4617053898167127471">"الجهاز اللوحي"</string>
     <string name="default_audio_route_name" product="tv" msgid="9158088547603019321">"التلفزيون"</string>
@@ -1741,7 +1743,7 @@
     <string name="color_correction_feature_name" msgid="6779391426096954933">"تصحيح الألوان"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"شغَّل اختصار إمكانية الوصول خدمة <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"أوقف اختصار إمكانية الوصول خدمة <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_shortcut_spoken_feedback" msgid="6143872712930414829">"استخدِم اختصار إمكانية الوصول لبدء ميزة إمكانية الوصول الحالية."</string>
+    <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"اضغط مع الاستمرار على مفتاحي مستوى الصوت لمدة 3 ثوانٍ لاستخدام <xliff:g id="SERVICE_NAME">%1$s</xliff:g>."</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"يمكنك اختيار إحدى الميزات لاستخدامها عند النقر على زر إمكانية الوصول:"</string>
     <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"لتغيير الميزات، يمكنك لمس زر \"إمكانية الوصول\" مع الاستمرار."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"التكبير"</string>
@@ -2115,5 +2117,8 @@
     <string name="notification_appops_camera_active" msgid="5050283058419699771">"كاميرا"</string>
     <string name="notification_appops_microphone_active" msgid="4335305527588191730">"ميكروفون"</string>
     <string name="notification_appops_overlay_active" msgid="633813008357934729">"العرض فوق التطبيقات الأخرى على شاشتك"</string>
+    <string name="dynamic_mode_notification_channel_name" msgid="2348803891571320452">"إشعار معلومات \"وضع سلسلة الإجراءات\""</string>
+    <string name="dynamic_mode_notification_title" msgid="508815255807182035">"قد تنفد طاقة البطارية قبل الشحن المعتاد"</string>
+    <string name="dynamic_mode_notification_summary" msgid="2541166298550402690">"تم تفعيل \"توفير شحن البطارية\" لإطالة عمرها."</string>
     <string name="car_loading_profile" msgid="3545132581795684027">"جارٍ التحميل"</string>
 </resources>

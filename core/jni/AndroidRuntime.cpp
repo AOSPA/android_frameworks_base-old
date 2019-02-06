@@ -101,7 +101,6 @@ extern int register_android_hardware_SoundTrigger(JNIEnv *env);
 extern int register_android_hardware_UsbDevice(JNIEnv *env);
 extern int register_android_hardware_UsbDeviceConnection(JNIEnv *env);
 extern int register_android_hardware_UsbRequest(JNIEnv *env);
-extern int register_android_hardware_location_ActivityRecognitionHardware(JNIEnv* env);
 
 extern int register_android_media_AudioEffectDescriptor(JNIEnv *env);
 extern int register_android_media_AudioRecord(JNIEnv *env);
@@ -219,6 +218,7 @@ extern int register_android_animation_PropertyValuesHolder(JNIEnv *env);
 extern int register_android_security_Scrypt(JNIEnv *env);
 extern int register_com_android_internal_content_NativeLibraryHelper(JNIEnv *env);
 extern int register_com_android_internal_net_NetworkStatsFactory(JNIEnv *env);
+extern int register_com_android_internal_os_AtomicDirectory(JNIEnv *env);
 extern int register_com_android_internal_os_ClassLoaderFactory(JNIEnv* env);
 extern int register_com_android_internal_os_FuseAppLoop(JNIEnv* env);
 extern int register_com_android_internal_os_Zygote(JNIEnv *env);
@@ -1459,7 +1459,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_hardware_UsbDevice),
     REG_JNI(register_android_hardware_UsbDeviceConnection),
     REG_JNI(register_android_hardware_UsbRequest),
-    REG_JNI(register_android_hardware_location_ActivityRecognitionHardware),
     REG_JNI(register_android_media_AudioEffectDescriptor),
     REG_JNI(register_android_media_AudioSystem),
     REG_JNI(register_android_media_AudioRecord),
@@ -1498,6 +1497,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_security_Scrypt),
     REG_JNI(register_com_android_internal_content_NativeLibraryHelper),
     REG_JNI(register_com_android_internal_net_NetworkStatsFactory),
+    REG_JNI(register_com_android_internal_os_AtomicDirectory),
     REG_JNI(register_com_android_internal_os_FuseAppLoop),
     REG_JNI(register_com_android_internal_app_ActivityTrigger),
 };

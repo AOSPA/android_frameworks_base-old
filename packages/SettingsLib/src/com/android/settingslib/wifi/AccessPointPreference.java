@@ -276,7 +276,7 @@ public class AccessPointPreference extends Preference {
         if (savedNetworks) {
             preference.setTitle(ap.getConfigName());
         } else {
-            preference.setTitle(ap.getSsidStr());
+            preference.setTitle(ap.getTitle());
         }
     }
 

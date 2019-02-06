@@ -132,6 +132,9 @@ public final class ActiveServices {
     // calling startForeground() before we ANR + stop it.
     static final int SERVICE_START_FOREGROUND_TIMEOUT = 10*1000;
 
+    // For how long after a whitelisted service's start its process can start a background activity
+    private static final int SERVICE_BG_ACTIVITY_START_TIMEOUT_MS = 10*1000;
+
     final ActivityManagerService mAm;
 
     // Maximum number of services that we allow to start in the background
@@ -404,6 +407,14 @@ public final class ActiveServices {
     ComponentName startServiceLocked(IApplicationThread caller, Intent service, String resolvedType,
             int callingPid, int callingUid, boolean fgRequired, String callingPackage, final int userId)
             throws TransactionTooLargeException {
+        return startServiceLocked(caller, service, resolvedType, callingPid, callingUid, fgRequired,
+                callingPackage, userId, false);
+    }
+
+    ComponentName startServiceLocked(IApplicationThread caller, Intent service, String resolvedType,
+            int callingPid, int callingUid, boolean fgRequired, String callingPackage,
+            final int userId, boolean allowBackgroundActivityStarts)
+            throws TransactionTooLargeException {
         if (DEBUG_DELAYED_STARTS) Slog.v(TAG_SERVICE, "startService: " + service
                 + " type=" + resolvedType + " args=" + service.getExtras());
 
@@ -511,7 +522,7 @@ public final class ActiveServices {
                 }
                 // This app knows it is in the new model where this operation is not
                 // allowed, so tell it what has happened.
-                UidRecord uidRec = mAm.mActiveUids.get(r.appInfo.uid);
+                UidRecord uidRec = mAm.mProcessList.getUidRecordLocked(r.appInfo.uid);
                 return new ComponentName("?", "app is in background uid " + uidRec);
             }
         }
@@ -628,8 +639,26 @@ public final class ActiveServices {
             }
         }
 
+        if (allowBackgroundActivityStarts) {
+            ProcessRecord proc = mAm.getProcessRecordLocked(r.processName, r.appInfo.uid, false);
+            if (proc != null) {
+                proc.addAllowBackgroundActivityStartsToken(r);
+                // schedule removal of the whitelisting token after the timeout
+                removeAllowBackgroundActivityStartsServiceToken(proc, r,
+                        SERVICE_BG_ACTIVITY_START_TIMEOUT_MS);
+            }
+        }
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
         return cmp;
+    }
+
+    private void removeAllowBackgroundActivityStartsServiceToken(ProcessRecord proc,
+            ServiceRecord r, int delayMillis) {
+        mAm.mHandler.postDelayed(() -> {
+            if (proc != null) {
+                proc.removeAllowBackgroundActivityStartsToken(r);
+            }
+        }, delayMillis);
     }
 
     private boolean requestStartTargetPermissionsReviewIfNeededLocked(ServiceRecord r,
@@ -716,7 +745,7 @@ public final class ActiveServices {
 
     private void stopServiceLocked(ServiceRecord service) {
         if (service.delayed) {
-            // If service isn't actually running, but is is being held in the
+            // If service isn't actually running, but is being held in the
             // delayed list, then we need to keep it started but note that it
             // should be stopped once no longer delayed.
             if (DEBUG_DELAYED_STARTS) Slog.v(TAG_SERVICE, "Delaying stop of pending: " + service);
@@ -758,6 +787,9 @@ public final class ActiveServices {
             if (r.record != null) {
                 final long origId = Binder.clearCallingIdentity();
                 try {
+                    // immediately remove bg activity whitelisting token if there was one
+                    removeAllowBackgroundActivityStartsServiceToken(callerApp, r.record,
+                            0 /* delayMillis */);
                     stopServiceLocked(r.record);
                 } finally {
                     Binder.restoreCallingIdentity(origId);
@@ -1658,6 +1690,10 @@ public final class ActiveServices {
                                 s.lastActivity);
                     }
                 }
+            }
+
+            if ((flags & Context.BIND_RESTRICT_ASSOCIATIONS) != 0) {
+                mAm.requireAllowedAssociationsLocked(s.appInfo.packageName);
             }
 
             mAm.startAssociationLocked(callerApp.uid, callerApp.processName,
@@ -2568,6 +2604,9 @@ public final class ActiveServices {
             if (WebViewZygote.isMultiprocessEnabled()
                     && r.serviceInfo.packageName.equals(WebViewZygote.getPackageName())) {
                 hostingType = "webview_service";
+            }
+            if ((r.serviceInfo.flags & ServiceInfo.FLAG_USE_APP_ZYGOTE) != 0) {
+                hostingType = "app_zygote";
             }
         }
 

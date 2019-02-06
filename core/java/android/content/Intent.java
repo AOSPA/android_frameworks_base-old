@@ -33,6 +33,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.ComponentInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.ShortcutInfo;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Rect;
@@ -814,6 +815,28 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_SHOW_APP_INFO
             = "android.intent.action.SHOW_APP_INFO";
+
+    /**
+     * Activity Action: Start an activity to show the app's detailed usage information for
+     * permission protected data.
+     *
+     * The Intent contains an extra {@link #EXTRA_PERMISSION_USAGE_PERMISSIONS} that is of
+     * type {@code String[]} and contains the specific permissions to show information for.
+     *
+     * Apps should handle this intent if they want to provide more information about permission
+     * usage to users beyond the information provided in the manifest.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_PERMISSION_USAGE_DETAILS =
+            "android.intent.action.PERMISSION_USAGE_DETAILS";
+
+    /**
+     * The name of the extra used to contain the permissions in
+     * {@link #ACTION_PERMISSION_USAGE_DETAILS}.
+     * @see #ACTION_PERMISSION_USAGE_DETAILS
+     */
+    public static final String EXTRA_PERMISSION_USAGE_PERMISSIONS =
+            "android.intent.extra.PERMISSION_USAGE_PERMISSIONS";
 
     /**
      * Represents a shortcut/live folder icon resource.
@@ -1811,6 +1834,54 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.REVIEW_PERMISSIONS";
 
     /**
+     * Activity action: Launch UI to manage a default app.
+     * <p>
+     * Input: {@link #EXTRA_ROLE_NAME} specifies the role of the default app which will be managed
+     * by the launched UI.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS)
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SystemApi
+    public static final String ACTION_MANAGE_DEFAULT_APP =
+            "android.intent.action.MANAGE_DEFAULT_APP";
+
+    /**
+     * Intent extra: A role name.
+     * <p>
+     * Type: String
+     * </p>
+     *
+     * @see android.app.role.RoleManager
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_ROLE_NAME = "android.intent.extra.ROLE_NAME";
+
+    /**
+     * Activity action: Launch UI to manage special app accesses.
+     * <p>
+     * Input: Nothing.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS)
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SystemApi
+    public static final String ACTION_MANAGE_SPECIAL_APP_ACCESSES =
+            "android.intent.action.MANAGE_SPECIAL_APP_ACCESSES";
+
+    /**
      * Intent extra: A callback for reporting remote result as a bundle.
      * <p>
      * Type: IRemoteCallback
@@ -1884,6 +1955,17 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_LAUNCHER_EXTRAS = "android.intent.extra.LAUNCHER_EXTRAS";
 
     /**
+     * Intent extra: ID of the shortcut used to send the share intent.
+     *
+     * @see ShortcutInfo#getId()
+     *
+     * <p>
+     * Type: String
+     * </p>
+     */
+    public static final String EXTRA_SHORTCUT_ID = "android.intent.extra.shortcut.ID";
+
+    /**
      * Activity action: Launch UI to manage which apps have a given permission.
      * <p>
      * Input: {@link #EXTRA_PERMISSION_NAME} specifies the permission group
@@ -1914,16 +1996,35 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_PERMISSION_NAME = "android.intent.extra.PERMISSION_NAME";
 
     /**
+     * Intent extra: The name of a permission group.
+     * <p>
+     * Type: String
+     * </p>
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_PERMISSION_GROUP_NAME =
+            "android.intent.extra.PERMISSION_GROUP_NAME";
+
+    /**
      * Activity action: Launch UI to review app uses of permissions.
      * <p>
      * Input: {@link #EXTRA_PERMISSION_NAME} specifies the permission name
-     * that will be displayed by the launched UI.
+     * that will be displayed by the launched UI.  Do not pass both this and
+     * {@link #EXTRA_PERMISSION_GROUP_NAME} .
+     * </p>
+     * <p>
+     * Input: {@link #EXTRA_PERMISSION_GROUP_NAME} specifies the permission group name
+     * that will be displayed by the launched UI.  Do not pass both this and
+     * {@link #EXTRA_PERMISSION_NAME}.
      * </p>
      * <p>
      * Output: Nothing.
      * </p>
      *
      * @see #EXTRA_PERMISSION_NAME
+     * @see #EXTRA_PERMISSION_GROUP_NAME
      *
      * @hide
      */
@@ -2351,6 +2452,25 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PACKAGES_UNSUSPENDED = "android.intent.action.PACKAGES_UNSUSPENDED";
+
+    /**
+     * Broadcast Action: Distracting packages have been changed.
+     * <p>Includes the following extras:
+     * <ul>
+     * <li> {@link #EXTRA_CHANGED_PACKAGE_LIST} is the set of packages which have been changed.
+     * <li> {@link #EXTRA_CHANGED_UID_LIST} is the set of uids which have been changed.
+     * <li> {@link #EXTRA_DISTRACTION_RESTRICTIONS} the new restrictions set on these packages.
+     * </ul>
+     *
+     * <p class="note">This is a protected intent that can only be sent
+     * by the system. It is only sent to registered receivers.
+     *
+     * @see PackageManager#setDistractingPackageRestrictions(String[], int)
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_DISTRACTING_PACKAGES_CHANGED =
+            "android.intent.action.DISTRACTING_PACKAGES_CHANGED";
 
     /**
      * Broadcast Action: Sent to a package that has been suspended by the system. This is sent
@@ -5072,6 +5192,17 @@ public class Intent implements Parcelable, Cloneable {
      */
     public static final String EXTRA_CHANGED_UID_LIST =
             "android.intent.extra.changed_uid_list";
+
+    /**
+     * An integer denoting a bitwise combination of restrictions set on distracting packages via
+     * {@link PackageManager#setDistractingPackageRestrictions(String[], int)}
+     *
+     * @hide
+     * @see PackageManager.DistractionRestriction
+     * @see PackageManager#setDistractingPackageRestrictions(String[], int)
+     */
+    public static final String EXTRA_DISTRACTION_RESTRICTIONS =
+            "android.intent.extra.distraction_restrictions";
 
     /**
      * @hide

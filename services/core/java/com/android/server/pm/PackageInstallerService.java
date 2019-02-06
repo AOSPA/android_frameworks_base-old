@@ -225,6 +225,17 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 Slog.w(TAG, "Deleting orphan icon " + icon);
                 icon.delete();
             }
+
+            // Invalid sessions might have been marked while parsing. Re-write the database with
+            // the updated information.
+            writeSessionsLocked();
+
+            for (int i = 0; i < mSessions.size(); i++) {
+                final PackageInstallerSession session = mSessions.valueAt(i);
+                if (session.isStaged()) {
+                    mStagingManager.restoreSession(session);
+                }
+            }
         }
     }
 
@@ -534,7 +545,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
                 mInstallThread.getLooper(), mStagingManager, sessionId, userId,
                 installerPackageName, callingUid, params, createdMillis, stageDir, stageCid, false,
-                false, null, SessionInfo.INVALID_ID);
+                false, null, SessionInfo.INVALID_ID, false, false, false, SessionInfo.NO_ERROR);
 
         synchronized (mSessions) {
             mSessions.put(sessionId, session);
@@ -1120,6 +1131,11 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             mCallbacks.notifySessionProgressChanged(session.sessionId, session.userId, progress);
         }
 
+        public void onStagedSessionChanged(PackageInstallerSession session) {
+            writeSessionsAsync();
+            mPm.sendSessionUpdatedBroadcast(session.generateInfo(false), session.userId);
+        }
+
         public void onSessionFinished(final PackageInstallerSession session, boolean success) {
             mCallbacks.notifySessionFinished(session.sessionId, session.userId, success);
 
@@ -1132,7 +1148,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         }
                     }
                     synchronized (mSessions) {
-                        mSessions.remove(session.sessionId);
+                        if (!session.isStaged() || !success) {
+                            mSessions.remove(session.sessionId);
+                        }
                         addHistoricalSessionLocked(session);
 
                         final File appIconFile = buildAppIconFile(session.sessionId);

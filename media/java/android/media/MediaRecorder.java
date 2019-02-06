@@ -302,6 +302,34 @@ public class MediaRecorder implements AudioRouting,
          *  {@link #DEFAULT} otherwise. */
         public static final int UNPROCESSED = 9;
 
+
+        /**
+         * Source for capturing audio meant to be processed in real time and played back for live
+         * performance (e.g karaoke).
+         * <p>
+         * The capture path will minimize latency and coupling with
+         * playback path.
+         * </p>
+         */
+        public static final int VOICE_PERFORMANCE = 10;
+
+        /**
+         * Source for an echo canceller to capture the reference signal to be cancelled.
+         * <p>
+         * The echo reference signal will be captured as close as possible to the DAC in order
+         * to include all post processing applied to the playback path.
+         * </p><p>
+         * Capturing the echo reference requires the
+         * {@link android.Manifest.permission#CAPTURE_AUDIO_OUTPUT} permission.
+         * This permission is reserved for use by system components and is not available to
+         * third-party applications.
+         * </p>
+         * @hide
+         */
+        @SystemApi
+        @RequiresPermission(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT)
+        public static final int ECHO_REFERENCE = 1997;
+
         /**
          * Audio source for capturing broadcast radio tuner output.
          * @hide
@@ -343,6 +371,7 @@ public class MediaRecorder implements AudioRouting,
         case AudioSource.VOICE_COMMUNICATION:
         //case REMOTE_SUBMIX:  considered "system" as it requires system permissions
         case AudioSource.UNPROCESSED:
+        case AudioSource.VOICE_PERFORMANCE:
             return false;
         default:
             return true;
@@ -372,6 +401,10 @@ public class MediaRecorder implements AudioRouting,
             return "REMOTE_SUBMIX";
         case AudioSource.UNPROCESSED:
             return "UNPROCESSED";
+        case AudioSource.ECHO_REFERENCE:
+            return "ECHO_REFERENCE";
+        case AudioSource.VOICE_PERFORMANCE:
+            return "VOICE_PERFORMANCE";
         case AudioSource.RADIO_TUNER:
             return "RADIO_TUNER";
         case AudioSource.HOTWORD:
@@ -456,6 +489,9 @@ public class MediaRecorder implements AudioRouting,
         /** VP8/VORBIS data in a WEBM container */
         public static final int WEBM = 9;
 
+        /** @hide HEIC data in a HEIF container */
+        public static final int HEIF = 10;
+
         /** Opus data in a Ogg container */
         public static final int OGG = 11;
 
@@ -533,7 +569,7 @@ public class MediaRecorder implements AudioRouting,
      * @see android.media.MediaRecorder.AudioSource
      */
     public static final int getAudioSourceMax() {
-        return AudioSource.UNPROCESSED;
+        return AudioSource.VOICE_PERFORMANCE;
     }
 
     /**
@@ -711,6 +747,12 @@ public class MediaRecorder implements AudioRouting,
      * is no guarantee that the recorder will have stopped by the time the
      * listener is notified.
      *
+     * <p>When using MPEG-4 container ({@link #setOutputFormat(int)} with
+     * {@link OutputFormat#MPEG_4}), it is recommended to set maximum duration that fits the use
+     * case. Setting a larger than required duration may result in a larger than needed output file
+     * because of space reserved for MOOV box expecting large movie data in this recording session.
+     *  Unused space of MOOV box is turned into FREE box in the output file.</p>
+     *
      * @param max_duration_ms the maximum duration in ms (if zero or negative, disables the duration limit)
      *
      */
@@ -725,6 +767,12 @@ public class MediaRecorder implements AudioRouting,
      * and recording will be stopped. Stopping happens asynchronously, there
      * is no guarantee that the recorder will have stopped by the time the
      * listener is notified.
+     *
+     * <p>When using MPEG-4 container ({@link #setOutputFormat(int)} with
+     * {@link OutputFormat#MPEG_4}), it is recommended to set maximum filesize that fits the use
+     * case. Setting a larger than required filesize may result in a larger than needed output file
+     * because of space reserved for MOOV box expecting large movie data in this recording session.
+     * Unused space of MOOV box is turned into FREE box in the output file.</p>
      *
      * @param max_filesize_bytes the maximum filesize in bytes (if zero or negative, disables the limit)
      *

@@ -18,6 +18,7 @@
 
 #include <private/hwui/WebViewFunctor.h>
 #include "Properties.h"
+#include "renderthread/RenderThread.h"
 
 #include <log/log.h>
 #include <utils/Trace.h>
@@ -85,11 +86,35 @@ void WebViewFunctor::drawGl(const DrawGlInfo& drawInfo) {
     mCallbacks.gles.draw(mFunctor, mData, drawInfo);
 }
 
+void WebViewFunctor::initVk(const VkFunctorInitParams& params) {
+    ATRACE_NAME("WebViewFunctor::initVk");
+    if (!mHasContext) {
+        mHasContext = true;
+    } else {
+        return;
+    }
+    mCallbacks.vk.initialize(mFunctor, mData, params);
+}
+
+void WebViewFunctor::drawVk(const VkFunctorDrawParams& params) {
+    ATRACE_NAME("WebViewFunctor::drawVk");
+    mCallbacks.vk.draw(mFunctor, mData, params);
+}
+
+void WebViewFunctor::postDrawVk() {
+    ATRACE_NAME("WebViewFunctor::postDrawVk");
+    mCallbacks.vk.postDraw(mFunctor, mData);
+}
+
 void WebViewFunctor::destroyContext() {
     if (mHasContext) {
         mHasContext = false;
         ATRACE_NAME("WebViewFunctor::onContextDestroyed");
         mCallbacks.onContextDestroyed(mFunctor, mData);
+
+        // grContext may be null in unit tests.
+        auto* grContext = renderthread::RenderThread::getInstance().getGrContext();
+        if (grContext) grContext->resetContext();
     }
 }
 

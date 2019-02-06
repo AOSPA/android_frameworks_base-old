@@ -32,8 +32,10 @@ import android.util.Size;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Vector;
 
 /**
  * Provides information about a given media codec available on the device. You can
@@ -61,15 +63,25 @@ import java.util.Set;
  *
  */
 public final class MediaCodecInfo {
-    private boolean mIsEncoder;
+    private static final String TAG = "MediaCodecInfo";
+
+    private static final int FLAG_IS_ENCODER = (1 << 0);
+    private static final int FLAG_IS_VENDOR = (1 << 1);
+    private static final int FLAG_IS_SOFTWARE_ONLY = (1 << 2);
+    private static final int FLAG_IS_HARDWARE_ACCELERATED = (1 << 3);
+
+    private int mFlags;
     private String mName;
+    private String mCanonicalName;
     private Map<String, CodecCapabilities> mCaps;
 
     /* package private */ MediaCodecInfo(
-            String name, boolean isEncoder, CodecCapabilities[] caps) {
+            String name, String canonicalName, int flags, CodecCapabilities[] caps) {
         mName = name;
-        mIsEncoder = isEncoder;
+        mCanonicalName = canonicalName;
+        mFlags = flags;
         mCaps = new HashMap<String, CodecCapabilities>();
+
         for (CodecCapabilities c: caps) {
             mCaps.put(c.getMimeType(), c);
         }
@@ -77,16 +89,69 @@ public final class MediaCodecInfo {
 
     /**
      * Retrieve the codec name.
+     *
+     * <strong>Note:</strong> Implementations may provide multiple aliases (codec
+     * names) for the same underlying codec, any of which can be used to instantiate the same
+     * underlying codec in {@link MediaCodec#createByCodecName}.
+     *
+     * Applications targeting SDK < {@link android.os.Build.VERSION_CODES#Q}, cannot determine if
+     * the multiple codec names listed in MediaCodecList are in-fact for the same codec.
      */
+    @NonNull
     public final String getName() {
         return mName;
+    }
+
+    /**
+     * Retrieve the underlying codec name.
+     *
+     * Device implementations may provide multiple aliases (codec names) for the same underlying
+     * codec to maintain backward app compatibility. This method returns the name of the underlying
+     * codec name, which must not be another alias. For non-aliases this is always the name of the
+     * codec.
+     */
+    @NonNull
+    public final String getCanonicalName() {
+        return mCanonicalName;
+    }
+
+    /**
+     * Query if the codec is an alias for another underlying codec.
+     */
+    public final boolean isAlias() {
+        return !mName.equals(mCanonicalName);
     }
 
     /**
      * Query if the codec is an encoder.
      */
     public final boolean isEncoder() {
-        return mIsEncoder;
+        return (mFlags & FLAG_IS_ENCODER) != 0;
+    }
+
+    /**
+     * Query if the codec is provided by the Android platform (false) or the device manufacturer
+     * (true).
+     */
+    public final boolean isVendor() {
+        return (mFlags & FLAG_IS_VENDOR) != 0;
+    }
+
+    /**
+     * Query if the codec is software only. Software-only codecs are more secure as they run in
+     * a tighter security sandbox. On the other hand, software-only codecs do not provide any
+     * performance guarantees.
+     */
+    public final boolean isSoftwareOnly() {
+        return (mFlags & FLAG_IS_SOFTWARE_ONLY) != 0;
+    }
+
+    /**
+     * Query if the codec is hardware accelerated. This attribute is provided by the device
+     * manufacturer. Note that it cannot be tested for correctness.
+     */
+    public final boolean isHardwareAccelerated() {
+        return (mFlags & FLAG_IS_HARDWARE_ACCELERATED) != 0;
     }
 
     /**
@@ -163,7 +228,7 @@ public final class MediaCodecInfo {
         // such as B-frame support, arithmetic coding...
         public CodecProfileLevel[] profileLevels;  // NOTE this array is modifiable by user
 
-        // from OMX_COLOR_FORMATTYPE
+        // from MediaCodecConstants
         /** @deprecated Use {@link #COLOR_Format24bitBGR888}. */
         public static final int COLOR_FormatMonochrome              = 1;
         /** @deprecated Use {@link #COLOR_Format24bitBGR888}. */
@@ -344,7 +409,7 @@ public final class MediaCodecInfo {
         /** @deprecated Use {@link #COLOR_FormatYUV420Flexible}. */
         public static final int COLOR_TI_FormatYUV420PackedSemiPlanar = 0x7f000100;
         // COLOR_FormatSurface indicates that the data will be a GraphicBuffer metadata reference.
-        // In OMX this is called OMX_COLOR_FormatAndroidOpaque.
+        // Note: in OMX this is called OMX_COLOR_FormatAndroidOpaque.
         public static final int COLOR_FormatSurface                   = 0x7F000789;
 
         /**
@@ -435,8 +500,7 @@ public final class MediaCodecInfo {
         public static final int COLOR_QCOM_FormatYUV420SemiPlanar     = 0x7fa30c00;
 
         /**
-         * Defined in the OpenMAX IL specs, color format values are drawn from
-         * OMX_COLOR_FORMATTYPE.
+         * The color format for the media. This is one of the color constants defined in this class.
          */
         public int[] colorFormats; // NOTE this array is modifiable by user
 
@@ -460,6 +524,26 @@ public final class MediaCodecInfo {
          * <b>video or audio decoder only</b>: codec supports tunneled playback.
          */
         public static final String FEATURE_TunneledPlayback       = "tunneled-playback";
+
+        /**
+         * If true, the timestamp of each output buffer is derived from the timestamp of the input
+         * buffer that produced the output. If false, the timestamp of each output buffer is
+         * derived from the timestamp of the first input buffer.
+         */
+        public static final String FEATURE_DynamicTimestamp = "dynamic-timestamp";
+
+        /**
+         * <b>decoder only</b>If true, the codec supports partial (including multiple) access units
+         * per input buffer.
+         */
+        public static final String FEATURE_FrameParsing = "frame-parsing";
+
+        /**
+         * If true, the codec supports multiple access units (for decoding, or to output for
+         * encoders). If false, the codec only supports single access units. Producing multiple
+         * access units for output is an optional feature.
+         */
+        public static final String FEATURE_MultipleFrames = "multiple-frames";
 
         /**
          * <b>video decoder only</b>: codec supports queuing partial frames.
@@ -497,10 +581,15 @@ public final class MediaCodecInfo {
             new Feature(FEATURE_SecurePlayback,   (1 << 1), false),
             new Feature(FEATURE_TunneledPlayback, (1 << 2), false),
             new Feature(FEATURE_PartialFrame,     (1 << 3), false),
+            new Feature(FEATURE_FrameParsing,     (1 << 4), false),
+            new Feature(FEATURE_MultipleFrames,   (1 << 5), false),
+            new Feature(FEATURE_DynamicTimestamp, (1 << 6), false),
         };
 
         private static final Feature[] encoderFeatures = {
             new Feature(FEATURE_IntraRefresh, (1 << 0), false),
+            new Feature(FEATURE_MultipleFrames, (1 << 1), false),
+            new Feature(FEATURE_DynamicTimestamp, (1 << 2), false),
         };
 
         /** @hide */
@@ -869,7 +958,7 @@ public final class MediaCodecInfo {
 
             CodecCapabilities ret = new CodecCapabilities(
                 new CodecProfileLevel[] { pl }, new int[0], true /* encoder */,
-                0 /* flags */, defaultFormat, new MediaFormat() /* info */);
+                defaultFormat, new MediaFormat() /* info */);
             if (ret.mError != 0) {
                 return null;
             }
@@ -878,10 +967,10 @@ public final class MediaCodecInfo {
 
         /* package private */ CodecCapabilities(
                 CodecProfileLevel[] profLevs, int[] colFmts,
-                boolean encoder, int flags,
+                boolean encoder,
                 Map<String, Object>defaultFormatMap,
                 Map<String, Object>capabilitiesMap) {
-            this(profLevs, colFmts, encoder, flags,
+            this(profLevs, colFmts, encoder,
                     new MediaFormat(defaultFormatMap),
                     new MediaFormat(capabilitiesMap));
         }
@@ -889,11 +978,11 @@ public final class MediaCodecInfo {
         private MediaFormat mCapabilitiesInfo;
 
         /* package private */ CodecCapabilities(
-                CodecProfileLevel[] profLevs, int[] colFmts, boolean encoder, int flags,
+                CodecProfileLevel[] profLevs, int[] colFmts, boolean encoder,
                 MediaFormat defaultFormat, MediaFormat info) {
             final Map<String, Object> map = info.getMap();
             colorFormats = colFmts;
-            mFlagsVerified = flags;
+            mFlagsVerified = 0; // TODO: remove as it is unused
             mDefaultFormat = defaultFormat;
             mCapabilitiesInfo = info;
             mMime = mDefaultFormat.getString(MediaFormat.KEY_MIME);
@@ -1243,6 +1332,7 @@ public final class MediaCodecInfo {
         private Range<Rational> mBlockAspectRatioRange;
         private Range<Long> mBlocksPerSecondRange;
         private Map<Size, Range<Long>> mMeasuredFrameRates;
+        private Vector<PerformancePoint> mPerformancePoints;
         private Range<Integer> mFrameRateRange;
 
         private int mBlockWidth;
@@ -1524,6 +1614,158 @@ public final class MediaCodecInfo {
         }
 
         /**
+         * Video performance points are a set of standard performance points defined by pixel rate.
+         */
+        public static final class PerformancePoint {
+            /**
+             * Frame width in pixels.
+             */
+            public final int width;
+
+            /**
+             * Frame height in pixels.
+             */
+            public final int height;
+
+            /**
+             * Frame rate in frames per second.
+             */
+            public final int frameRate;
+
+            /* package private */
+            PerformancePoint(int width_, int height_, int frameRate_) {
+                width = width_;
+                height = height_;
+                frameRate = frameRate_;
+            }
+
+            /**
+             * Checks whether the performance point covers a media format.
+             *
+             * @param format Stream format considered
+             *
+             * @return {@code true} if the performance point covers the format.
+             */
+            public boolean covers(@NonNull MediaFormat format) {
+                // for simplicity, this code assumes a 16x16 block size.
+                long macroBlocks = ((width + 15) / 16) * (long)((height + 15) / 16);
+                long mbps = macroBlocks * frameRate;
+
+                long formatMacroBlocks =
+                    (long)((format.getInteger(MediaFormat.KEY_WIDTH, 0) + 15) / 16)
+                            * ((format.getInteger(MediaFormat.KEY_HEIGHT, 0) + 15) / 16);
+                double formatMbps =
+                    Math.ceil(formatMacroBlocks
+                              * format.getNumber(MediaFormat.KEY_FRAME_RATE, 0).doubleValue());
+                return formatMacroBlocks > 0 && formatMacroBlocks <= macroBlocks
+                        && formatMbps <= mbps;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (o instanceof PerformancePoint) {
+                    PerformancePoint other = (PerformancePoint)o;
+                    return ((long)width * height) == ((long)other.width * other.height)
+                            && frameRate == other.frameRate;
+                }
+                return false;
+            }
+
+            /** 480p 24fps */
+            public static final PerformancePoint SD_24 = new PerformancePoint(720, 480, 24);
+            /** 576p 25fps */
+            public static final PerformancePoint SD_25 = new PerformancePoint(720, 576, 25);
+            /** 480p 30fps */
+            public static final PerformancePoint SD_30 = new PerformancePoint(720, 480, 30);
+            /** 480p 48fps */
+            public static final PerformancePoint SD_48 = new PerformancePoint(720, 480, 48);
+            /** 576p 50fps */
+            public static final PerformancePoint SD_50 = new PerformancePoint(720, 576, 50);
+            /** 480p 60fps */
+            public static final PerformancePoint SD_60 = new PerformancePoint(720, 480, 60);
+
+            /** 720p 24fps */
+            public static final PerformancePoint HD_24 = new PerformancePoint(1280, 720, 24);
+            /** 720p 25fps */
+            public static final PerformancePoint HD_25 = new PerformancePoint(1280, 720, 25);
+            /** 720p 30fps */
+            public static final PerformancePoint HD_30 = new PerformancePoint(1280, 720, 30);
+            /** 720p 50fps */
+            public static final PerformancePoint HD_50 = new PerformancePoint(1280, 720, 50);
+            /** 720p 60fps */
+            public static final PerformancePoint HD_60 = new PerformancePoint(1280, 720, 60);
+            /** 720p 100fps */
+            public static final PerformancePoint HD_100 = new PerformancePoint(1280, 720, 100);
+            /** 720p 120fps */
+            public static final PerformancePoint HD_120 = new PerformancePoint(1280, 720, 120);
+            /** 720p 200fps */
+            public static final PerformancePoint HD_200 = new PerformancePoint(1280, 720, 200);
+            /** 720p 240fps */
+            public static final PerformancePoint HD_240 = new PerformancePoint(1280, 720, 240);
+
+            /** 1080p 24fps */
+            public static final PerformancePoint FHD_24 = new PerformancePoint(1920, 1080, 24);
+            /** 1080p 25fps */
+            public static final PerformancePoint FHD_25 = new PerformancePoint(1920, 1080, 25);
+            /** 1080p 30fps */
+            public static final PerformancePoint FHD_30 = new PerformancePoint(1920, 1080, 30);
+            /** 1080p 50fps */
+            public static final PerformancePoint FHD_50 = new PerformancePoint(1920, 1080, 50);
+            /** 1080p 60fps */
+            public static final PerformancePoint FHD_60 = new PerformancePoint(1920, 1080, 60);
+            /** 1080p 100fps */
+            public static final PerformancePoint FHD_100 = new PerformancePoint(1920, 1080, 100);
+            /** 1080p 120fps */
+            public static final PerformancePoint FHD_120 = new PerformancePoint(1920, 1080, 120);
+            /** 1080p 200fps */
+            public static final PerformancePoint FHD_200 = new PerformancePoint(1920, 1080, 200);
+            /** 1080p 240fps */
+            public static final PerformancePoint FHD_240 = new PerformancePoint(1920, 1080, 240);
+
+            /** 2160p 24fps */
+            public static final PerformancePoint UHD_24 = new PerformancePoint(3840, 2160, 24);
+            /** 2160p 25fps */
+            public static final PerformancePoint UHD_25 = new PerformancePoint(3840, 2160, 25);
+            /** 2160p 30fps */
+            public static final PerformancePoint UHD_30 = new PerformancePoint(3840, 2160, 30);
+            /** 2160p 50fps */
+            public static final PerformancePoint UHD_50 = new PerformancePoint(3840, 2160, 50);
+            /** 2160p 60fps */
+            public static final PerformancePoint UHD_60 = new PerformancePoint(3840, 2160, 60);
+            /** 2160p 100fps */
+            public static final PerformancePoint UHD_100 = new PerformancePoint(3840, 2160, 100);
+            /** 2160p 120fps */
+            public static final PerformancePoint UHD_120 = new PerformancePoint(3840, 2160, 120);
+            /** 2160p 200fps */
+            public static final PerformancePoint UHD_200 = new PerformancePoint(3840, 2160, 200);
+            /** 2160p 240fps */
+            public static final PerformancePoint UHD_240 = new PerformancePoint(3840, 2160, 240);
+        }
+
+        /**
+         * Returns the supported performance points. May return {@code null} if the codec did not
+         * publish any performance point information (e.g. the vendor codecs have not been updated
+         * to the latest android release). May return an empty list if the codec published that
+         * if does not guarantee any performance points.
+         * <p>
+         * This is a performance guarantee provided by the device manufacturer for hardware codecs
+         * based on hardware capabilities of the device.
+         * <p>
+         * The returned list is sorted first by decreasing number of pixels, then by decreasing
+         * width, and finally by decreasing frame rate.
+         * Performance points assume a single active codec. For use cases where multiple
+         * codecs are active, should use that highest pixel count, and add the frame rates of
+         * each individual codec.
+         */
+        @Nullable
+        public List<PerformancePoint> getSupportedPerformancePoints() {
+            if (mPerformancePoints == null) {
+                return null;
+            }
+            return new ArrayList<PerformancePoint>(mPerformancePoints);
+        }
+
+        /**
          * Returns whether a given video size ({@code width} and
          * {@code height}) and {@code frameRate} combination is supported.
          */
@@ -1659,6 +1901,50 @@ public final class MediaCodecInfo {
             mSmallerDimensionUpperLimit = SIZE_RANGE.getUpper();
         }
 
+        private @Nullable Vector<PerformancePoint> getPerformancePoints(Map<String, Object> map) {
+            Vector<PerformancePoint> ret = new Vector<>();
+            final String prefix = "performance-point-";
+            Set<String> keys = map.keySet();
+            for (String key : keys) {
+                // looking for: performance-point-WIDTHxHEIGHT-range
+                if (!key.startsWith(prefix)) {
+                    continue;
+                }
+                String subKey = key.substring(prefix.length());
+                if (subKey.equals("none") && ret.size() == 0) {
+                    // This means that component knowingly did not publish performance points.
+                    // This is different from when the component forgot to publish performance
+                    // points.
+                    return ret;
+                }
+                String[] temp = key.split("-");
+                if (temp.length != 4) {
+                    continue;
+                }
+                String sizeStr = temp[2];
+                Size size = Utils.parseSize(sizeStr, null);
+                if (size == null || size.getWidth() * size.getHeight() <= 0) {
+                    continue;
+                }
+                Range<Long> range = Utils.parseLongRange(map.get(key), null);
+                if (range == null || range.getLower() < 0 || range.getUpper() < 0) {
+                    continue;
+                }
+                ret.add(new PerformancePoint(
+                        size.getWidth(), size.getHeight(), range.getLower().intValue()));
+            }
+            // check if the component specified no performance point indication
+            if (ret.size() == 0) {
+                return null;
+            }
+
+            // sort reversed by area first, then by frame rate
+            ret.sort((a, b) -> (a.width * a.height != b.width * b.height ?
+                                    (b.width * b.height - a.width * a.height) :
+                                    (b.frameRate - a.frameRate)));
+            return ret;
+        }
+
         private Map<Size, Range<Long>> getMeasuredFrameRates(Map<String, Object> map) {
             Map<Size, Range<Long>> ret = new HashMap<Size, Range<Long>>();
             final String prefix = "measured-frame-rate-";
@@ -1770,6 +2056,7 @@ public final class MediaCodecInfo {
             blockRates =
                 Utils.parseLongRange(map.get("blocks-per-second-range"), null);
             mMeasuredFrameRates = getMeasuredFrameRates(map);
+            mPerformancePoints = getPerformancePoints(map);
             Pair<Range<Integer>, Range<Integer>> sizeRanges =
                 parseWidthHeightRanges(map.get("size-range"));
             if (sizeRanges != null) {
@@ -2885,7 +3172,9 @@ public final class MediaCodecInfo {
      * {@link MediaCodecInfo.CodecCapabilities#profileLevels} field.
      */
     public static final class CodecProfileLevel {
-        // from OMX_VIDEO_AVCPROFILETYPE
+        // These constants were originally in-line with OMX values, but this
+        // correspondence is no longer maintained.
+
         public static final int AVCProfileBaseline = 0x01;
         public static final int AVCProfileMain     = 0x02;
         public static final int AVCProfileExtended = 0x04;
@@ -2896,7 +3185,6 @@ public final class MediaCodecInfo {
         public static final int AVCProfileConstrainedBaseline = 0x10000;
         public static final int AVCProfileConstrainedHigh     = 0x80000;
 
-        // from OMX_VIDEO_AVCLEVELTYPE
         public static final int AVCLevel1       = 0x01;
         public static final int AVCLevel1b      = 0x02;
         public static final int AVCLevel11      = 0x04;
@@ -2914,14 +3202,10 @@ public final class MediaCodecInfo {
         public static final int AVCLevel5       = 0x4000;
         public static final int AVCLevel51      = 0x8000;
         public static final int AVCLevel52      = 0x10000;
-        /** @hide */
         public static final int AVCLevel6       = 0x20000;
-        /** @hide */
         public static final int AVCLevel61      = 0x40000;
-        /** @hide */
         public static final int AVCLevel62      = 0x80000;
 
-        // from OMX_VIDEO_H263PROFILETYPE
         public static final int H263ProfileBaseline             = 0x01;
         public static final int H263ProfileH320Coding           = 0x02;
         public static final int H263ProfileBackwardCompatible   = 0x04;
@@ -2932,7 +3216,6 @@ public final class MediaCodecInfo {
         public static final int H263ProfileInterlace            = 0x80;
         public static final int H263ProfileHighLatency          = 0x100;
 
-        // from OMX_VIDEO_H263LEVELTYPE
         public static final int H263Level10      = 0x01;
         public static final int H263Level20      = 0x02;
         public static final int H263Level30      = 0x04;
@@ -2942,7 +3225,6 @@ public final class MediaCodecInfo {
         public static final int H263Level60      = 0x40;
         public static final int H263Level70      = 0x80;
 
-        // from OMX_VIDEO_MPEG4PROFILETYPE
         public static final int MPEG4ProfileSimple              = 0x01;
         public static final int MPEG4ProfileSimpleScalable      = 0x02;
         public static final int MPEG4ProfileCore                = 0x04;
@@ -2960,7 +3242,6 @@ public final class MediaCodecInfo {
         public static final int MPEG4ProfileAdvancedScalable    = 0x4000;
         public static final int MPEG4ProfileAdvancedSimple      = 0x8000;
 
-        // from OMX_VIDEO_MPEG4LEVELTYPE
         public static final int MPEG4Level0      = 0x01;
         public static final int MPEG4Level0b     = 0x02;
         public static final int MPEG4Level1      = 0x04;
@@ -2972,7 +3253,6 @@ public final class MediaCodecInfo {
         public static final int MPEG4Level5      = 0x80;
         public static final int MPEG4Level6      = 0x100;
 
-        // from OMX_VIDEO_MPEG2PROFILETYPE
         public static final int MPEG2ProfileSimple              = 0x00;
         public static final int MPEG2ProfileMain                = 0x01;
         public static final int MPEG2Profile422                 = 0x02;
@@ -2980,14 +3260,12 @@ public final class MediaCodecInfo {
         public static final int MPEG2ProfileSpatial             = 0x04;
         public static final int MPEG2ProfileHigh                = 0x05;
 
-        // from OMX_VIDEO_MPEG2LEVELTYPE
         public static final int MPEG2LevelLL     = 0x00;
         public static final int MPEG2LevelML     = 0x01;
         public static final int MPEG2LevelH14    = 0x02;
         public static final int MPEG2LevelHL     = 0x03;
         public static final int MPEG2LevelHP     = 0x04;
 
-        // from OMX_AUDIO_AACPROFILETYPE
         public static final int AACObjectMain       = 1;
         public static final int AACObjectLC         = 2;
         public static final int AACObjectSSR        = 3;
@@ -3002,16 +3280,13 @@ public final class MediaCodecInfo {
         /** xHE-AAC (includes USAC) */
         public static final int AACObjectXHE        = 42;
 
-        // from OMX_VIDEO_VP8LEVELTYPE
         public static final int VP8Level_Version0 = 0x01;
         public static final int VP8Level_Version1 = 0x02;
         public static final int VP8Level_Version2 = 0x04;
         public static final int VP8Level_Version3 = 0x08;
 
-        // from OMX_VIDEO_VP8PROFILETYPE
         public static final int VP8ProfileMain = 0x01;
 
-        // from OMX_VIDEO_VP9PROFILETYPE
         public static final int VP9Profile0 = 0x01;
         public static final int VP9Profile1 = 0x02;
         public static final int VP9Profile2 = 0x04;
@@ -3022,7 +3297,6 @@ public final class MediaCodecInfo {
         public static final int VP9Profile2HDR10Plus = 0x4000;
         public static final int VP9Profile3HDR10Plus = 0x8000;
 
-        // from OMX_VIDEO_VP9LEVELTYPE
         public static final int VP9Level1  = 0x1;
         public static final int VP9Level11 = 0x2;
         public static final int VP9Level2  = 0x4;
@@ -3038,14 +3312,12 @@ public final class MediaCodecInfo {
         public static final int VP9Level61 = 0x1000;
         public static final int VP9Level62 = 0x2000;
 
-        // from OMX_VIDEO_HEVCPROFILETYPE
         public static final int HEVCProfileMain        = 0x01;
         public static final int HEVCProfileMain10      = 0x02;
         public static final int HEVCProfileMainStill   = 0x04;
         public static final int HEVCProfileMain10HDR10 = 0x1000;
         public static final int HEVCProfileMain10HDR10Plus = 0x2000;
 
-        // from OMX_VIDEO_HEVCLEVELTYPE
         public static final int HEVCMainTierLevel1  = 0x1;
         public static final int HEVCHighTierLevel1  = 0x2;
         public static final int HEVCMainTierLevel2  = 0x4;
@@ -3079,7 +3351,6 @@ public final class MediaCodecInfo {
             HEVCHighTierLevel51 | HEVCHighTierLevel52 | HEVCHighTierLevel6 | HEVCHighTierLevel61 |
             HEVCHighTierLevel62;
 
-        // from OMX_VIDEO_DOLBYVISIONPROFILETYPE
         public static final int DolbyVisionProfileDvavPer = 0x1;
         public static final int DolbyVisionProfileDvavPen = 0x2;
         public static final int DolbyVisionProfileDvheDer = 0x4;
@@ -3091,7 +3362,6 @@ public final class MediaCodecInfo {
         public static final int DolbyVisionProfileDvheSt = 0x100;
         public static final int DolbyVisionProfileDvavSe = 0x200;
 
-        // from OMX_VIDEO_DOLBYVISIONLEVELTYPE
         public static final int DolbyVisionLevelHd24    = 0x1;
         public static final int DolbyVisionLevelHd30    = 0x2;
         public static final int DolbyVisionLevelFhd24   = 0x4;
@@ -3102,17 +3372,44 @@ public final class MediaCodecInfo {
         public static final int DolbyVisionLevelUhd48   = 0x80;
         public static final int DolbyVisionLevelUhd60   = 0x100;
 
+        public static final int AV1Profile0     = 0x1;
+        public static final int AV1Profile1     = 0x2;
+        public static final int AV1Profile2     = 0x4;
+
+        public static final int AV1Level2       = 0x1;
+        public static final int AV1Level21      = 0x2;
+        public static final int AV1Level22      = 0x4;
+        public static final int AV1Level23      = 0x8;
+        public static final int AV1Level3       = 0x10;
+        public static final int AV1Level31      = 0x20;
+        public static final int AV1Level32      = 0x40;
+        public static final int AV1Level33      = 0x80;
+        public static final int AV1Level4       = 0x100;
+        public static final int AV1Level41      = 0x200;
+        public static final int AV1Level42      = 0x400;
+        public static final int AV1Level43      = 0x800;
+        public static final int AV1Level5       = 0x1000;
+        public static final int AV1Level51      = 0x2000;
+        public static final int AV1Level52      = 0x4000;
+        public static final int AV1Level53      = 0x8000;
+        public static final int AV1Level6       = 0x10000;
+        public static final int AV1Level61      = 0x20000;
+        public static final int AV1Level62      = 0x40000;
+        public static final int AV1Level63      = 0x80000;
+        public static final int AV1Level7       = 0x100000;
+        public static final int AV1Level71      = 0x200000;
+        public static final int AV1Level72      = 0x400000;
+        public static final int AV1Level73      = 0x800000;
+
         /**
-         * Defined in the OpenMAX IL specs, depending on the type of media
-         * this can be OMX_VIDEO_AVCPROFILETYPE, OMX_VIDEO_H263PROFILETYPE,
-         * OMX_VIDEO_MPEG4PROFILETYPE, OMX_VIDEO_VP8PROFILETYPE or OMX_VIDEO_VP9PROFILETYPE.
+         * The profile of the media content. Depending on the type of media this can be
+         * one of the profile values defined in this class.
          */
         public int profile;
 
         /**
-         * Defined in the OpenMAX IL specs, depending on the type of media
-         * this can be OMX_VIDEO_AVCLEVELTYPE, OMX_VIDEO_H263LEVELTYPE
-         * OMX_VIDEO_MPEG4LEVELTYPE, OMX_VIDEO_VP8LEVELTYPE or OMX_VIDEO_VP9LEVELTYPE.
+         * The level of the media content. Depending on the type of media this can be
+         * one of the level values defined in this class.
          *
          * Note that VP9 decoder on platforms before {@link android.os.Build.VERSION_CODES#N} may
          * not advertise a profile level support. For those VP9 decoders, please use
@@ -3169,7 +3466,7 @@ public final class MediaCodecInfo {
         }
 
         return new MediaCodecInfo(
-                mName, mIsEncoder,
+                mName, mCanonicalName, mFlags,
                 caps.toArray(new CodecCapabilities[caps.size()]));
     }
 }

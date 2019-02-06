@@ -57,6 +57,8 @@
     <uses-permission android:name="android.permission.SET_PREFERRED_APPLICATIONS" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.READ_DEVICE_CONFIG" />
+    <uses-permission android:name="android.permission.WRITE_DEVICE_CONFIG" />
     <uses-permission android:name="android.permission.BROADCAST_STICKY" />
     <uses-permission android:name="android.permission.MANAGE_ACCESSIBILITY" />
     <!-- Development tool permissions granted to the shell. -->
@@ -129,11 +131,14 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.MANAGE_ACTIVITY_STACKS" />
     <uses-permission android:name="android.permission.START_TASKS_FROM_RECENTS" />
+    <uses-permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND" />
     <uses-permission android:name="android.permission.ACTIVITY_EMBEDDING" />
     <uses-permission android:name="android.permission.CONNECTIVITY_INTERNAL" />
     <uses-permission android:name="android.permission.CHANGE_COMPONENT_ENABLED_STATE" />
     <uses-permission android:name="android.permission.MANAGE_AUTO_FILL" />
     <uses-permission android:name="android.permission.MANAGE_CONTENT_CAPTURE" />
+    <uses-permission android:name="android.permission.MANAGE_CONTENT_SUGGESTIONS" />
+    <uses-permission android:name="android.permission.MANAGE_APP_PREDICTIONS" />
     <uses-permission android:name="android.permission.NETWORK_SETTINGS" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.SET_TIME" />
@@ -161,6 +166,8 @@
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD" />
     <uses-permission android:name="android.permission.SUSPEND_APPS" />
     <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
+
+    <uses-permission android:name="android.permission.MANAGE_APPOPS" />
 
     <application android:label="@string/app_label"
                  android:defaultToDeviceProtectedStorage="true"

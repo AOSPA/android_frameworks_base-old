@@ -24,6 +24,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -84,11 +86,6 @@ public class SignalStrength implements Parcelable {
     CellSignalStrengthTdscdma mTdscdma;
     CellSignalStrengthLte mLte;
 
-    /** Parameters from the framework */
-    @UnsupportedAppUsage
-    private int mLteRsrpBoost; // offset to be reduced from the rsrp threshold while calculating
-                                // signal strength level
-
     /**
      * Create a new SignalStrength from a intent notifier Bundle
      *
@@ -138,7 +135,6 @@ public class SignalStrength implements Parcelable {
         mWcdma = wcdma;
         mTdscdma = tdscdma;
         mLte = lte;
-        mLteRsrpBoost = 0;
     }
 
     /**
@@ -178,9 +174,37 @@ public class SignalStrength implements Parcelable {
         return mLte;
     }
 
+    /**
+     * Returns a List of CellSignalStrength Components of this SignalStrength Report.
+     *
+     * Use this API to access underlying
+     * {@link android.telephony#CellSignalStrength CellSignalStrength} objects that provide more
+     * granular information about the SignalStrength report. Only valid (non-empty)
+     * CellSignalStrengths will be returned. The order of any returned elements is not guaranteed,
+     * and the list may contain more than one instance of a CellSignalStrength type.
+     *
+     * @return a List of CellSignalStrength or an empty List if there are no valid measurements.
+     *
+     * @see android.telephony#CellSignalStrength
+     * @see android.telephony#CellSignalStrengthNr
+     * @see android.telephony#CellSignalStrengthLte
+     * @see android.telephony#CellSignalStrengthTdscdma
+     * @see android.telephony#CellSignalStrengthWcdma
+     * @see android.telephony#CellSignalStrengthCdma
+     * @see android.telephony#CellSignalStrengthGsm
+     */
+    public @NonNull List<CellSignalStrength> getCellSignalStrengths() {
+        List<CellSignalStrength> cssList = new ArrayList<>(2); // Usually have 2 or fewer elems
+        if (mLte.isValid()) cssList.add(mLte);
+        if (mCdma.isValid()) cssList.add(mCdma);
+        if (mTdscdma.isValid()) cssList.add(mTdscdma);
+        if (mWcdma.isValid()) cssList.add(mWcdma);
+        if (mGsm.isValid()) cssList.add(mGsm);
+        return cssList;
+    }
+
     /** @hide */
     public void updateLevel(PersistableBundle cc, ServiceState ss) {
-        mLteRsrpBoost = ss.getLteEarfcnRsrpBoost();
         mCdma.updateLevel(cc, ss);
         mGsm.updateLevel(cc, ss);
         mWcdma.updateLevel(cc, ss);
@@ -210,7 +234,6 @@ public class SignalStrength implements Parcelable {
         mWcdma = new CellSignalStrengthWcdma(s.mWcdma);
         mTdscdma = new CellSignalStrengthTdscdma(s.mTdscdma);
         mLte = new CellSignalStrengthLte(s.mLte);
-        mLteRsrpBoost = s.mLteRsrpBoost;
     }
 
     /**
@@ -227,7 +250,6 @@ public class SignalStrength implements Parcelable {
         mWcdma = in.readParcelable(CellSignalStrengthWcdma.class.getClassLoader());
         mTdscdma = in.readParcelable(CellSignalStrengthTdscdma.class.getClassLoader());
         mLte = in.readParcelable(CellSignalStrengthLte.class.getClassLoader());
-        mLteRsrpBoost = in.readInt();
     }
 
     /**
@@ -239,8 +261,6 @@ public class SignalStrength implements Parcelable {
         out.writeParcelable(mWcdma, flags);
         out.writeParcelable(mTdscdma, flags);
         out.writeParcelable(mLte, flags);
-
-        out.writeInt(mLteRsrpBoost);
     }
 
     /**
@@ -353,11 +373,6 @@ public class SignalStrength implements Parcelable {
         return mLte.getCqi();
     }
 
-    /** @hide */
-    public int getLteRsrpBoost() {
-        return mLteRsrpBoost;
-    }
-
     /**
      * Retrieve an abstract level value for the overall signal strength.
      *
@@ -369,7 +384,7 @@ public class SignalStrength implements Parcelable {
     public int getLevel() {
         int level = getPrimary().getLevel();
         if (level < SIGNAL_STRENGTH_NONE_OR_UNKNOWN || level > SIGNAL_STRENGTH_GREAT) {
-            log("Invalid Level " + level + ", this=" + this);
+            loge("Invalid Level " + level + ", this=" + this);
             return SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
         }
         return getPrimary().getLevel();
@@ -585,7 +600,7 @@ public class SignalStrength implements Parcelable {
      */
     @Override
     public int hashCode() {
-        return Objects.hash(mCdma, mGsm, mWcdma, mTdscdma, mLte, mLteRsrpBoost);
+        return Objects.hash(mCdma, mGsm, mWcdma, mTdscdma, mLte);
     }
 
     /**
@@ -601,8 +616,7 @@ public class SignalStrength implements Parcelable {
             && mGsm.equals(s.mGsm)
             && mWcdma.equals(s.mWcdma)
             && mTdscdma.equals(s.mTdscdma)
-            && mLte.equals(s.mLte)
-            && mLteRsrpBoost == s.mLteRsrpBoost;
+            && mLte.equals(s.mLte);
     }
 
     /**
@@ -616,7 +630,6 @@ public class SignalStrength implements Parcelable {
             .append(",mWcdma=").append(mWcdma)
             .append(",mTdscdma=").append(mTdscdma)
             .append(",mLte=").append(mLte)
-            .append(",mLteRsrpBoost=").append(mLteRsrpBoost)
             .append(",primary=").append(getPrimary().getClass().getSimpleName())
             .append("}")
             .toString();
@@ -635,8 +648,6 @@ public class SignalStrength implements Parcelable {
         mWcdma = m.getParcelable("Wcdma");
         mTdscdma = m.getParcelable("Tdscdma");
         mLte = m.getParcelable("Lte");
-
-        mLteRsrpBoost = m.getInt("LteRsrpBoost");
     }
 
     /**
@@ -652,14 +663,19 @@ public class SignalStrength implements Parcelable {
         m.putParcelable("Wcdma", mWcdma);
         m.putParcelable("Tdscdma", mTdscdma);
         m.putParcelable("Lte", mLte);
-
-        m.putInt("LteRsrpBoost", mLteRsrpBoost);
     }
 
     /**
-     * log
+     * log warning
      */
     private static void log(String s) {
         Rlog.w(LOG_TAG, s);
+    }
+
+    /**
+     * log error
+     */
+    private static void loge(String s) {
+        Rlog.e(LOG_TAG, s);
     }
 }

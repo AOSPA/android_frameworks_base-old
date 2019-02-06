@@ -98,6 +98,12 @@ import java.util.ArrayList;
  * href="{@docRoot}guide/topics/resources/index.html">Application Resources</a>.</p>
  */
 public class Resources {
+    /**
+     * The {@code null} resource ID. This denotes an invalid resource ID that is returned by the
+     * system when a resource is not found or the value is set to {@code @null} in XML.
+     */
+    public static final @AnyRes int ID_NULL = 0;
+
     static final String TAG = "Resources";
 
     private static final Object sSync = new Object();
@@ -168,7 +174,7 @@ public class Resources {
     /** @hide */
     public static int selectSystemTheme(int curTheme, int targetSdkVersion, int orig, int holo,
             int dark, int deviceDefault) {
-        if (curTheme != ResourceId.ID_NULL) {
+        if (curTheme != ID_NULL) {
             return curTheme;
         }
         if (targetSdkVersion < Build.VERSION_CODES.HONEYCOMB) {
@@ -2010,21 +2016,35 @@ public class Resources {
     public String getResourceTypeName(@AnyRes int resid) throws NotFoundException {
         return mResourcesImpl.getResourceTypeName(resid);
     }
-    
+
     /**
      * Return the entry name for a given resource identifier.
-     * 
+     *
      * @param resid The resource identifier whose entry name is to be
      * retrieved.
-     * 
+     *
      * @return A string holding the entry name of the resource.
-     * 
+     *
      * @throws NotFoundException Throws NotFoundException if the given ID does not exist.
-     * 
+     *
      * @see #getResourceName
      */
     public String getResourceEntryName(@AnyRes int resid) throws NotFoundException {
         return mResourcesImpl.getResourceEntryName(resid);
+    }
+
+    /**
+     * Return formatted log of the last retrieved resource's resolution path.
+     *
+     * @return A string holding a formatted log of the steps taken to resolve the last resource.
+     *
+     * @throws NotFoundException Throws NotFoundException if there hasn't been a resource
+     * resolved yet.
+     *
+     * @hide
+     */
+    public String getLastResourceResolution() throws NotFoundException {
+        return mResourcesImpl.getLastResourceResolution();
     }
     
     /**

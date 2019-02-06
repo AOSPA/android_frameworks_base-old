@@ -705,11 +705,17 @@ class SettingsProtoDumpUtil {
                 Settings.Global.GPU_DEBUG_LAYERS_GLES,
                 GlobalSettingsProto.Gpu.DEBUG_LAYERS_GLES);
         dumpSetting(s, p,
+                Settings.Global.GUP_DEV_ALL_APPS,
+                GlobalSettingsProto.Gpu.GUP_DEV_ALL_APPS);
+        dumpSetting(s, p,
                 Settings.Global.GUP_DEV_OPT_IN_APPS,
                 GlobalSettingsProto.Gpu.GUP_DEV_OPT_IN_APPS);
         dumpSetting(s, p,
-                Settings.Global.GUP_BLACK_LIST,
-                GlobalSettingsProto.Gpu.GUP_BLACK_LIST);
+                Settings.Global.GUP_DEV_OPT_OUT_APPS,
+                GlobalSettingsProto.Gpu.GUP_DEV_OPT_OUT_APPS);
+        dumpSetting(s, p,
+                Settings.Global.GUP_BLACKLIST,
+                GlobalSettingsProto.Gpu.GUP_BLACKLIST);
         p.end(gpuToken);
 
         final long hdmiToken = p.start(GlobalSettingsProto.HDMI);
@@ -1557,6 +1563,10 @@ class SettingsProtoDumpUtil {
                 Settings.Global.ZRAM_ENABLED,
                 GlobalSettingsProto.ZRAM_ENABLED);
 
+        dumpSetting(s, p,
+                Global.APP_OPS_CONSTANTS,
+                GlobalSettingsProto.APP_OPS_CONSTANTS);
+
         p.end(token);
         // Please insert new settings using the same order as in GlobalSettingsProto.
 
@@ -1875,6 +1885,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.DOZE_DOUBLE_TAP_GESTURE,
                 SecureSettingsProto.Doze.PULSE_ON_DOUBLE_TAP);
+        dumpSetting(s, p,
+                Settings.Secure.DOZE_TAP_SCREEN_GESTURE,
+                SecureSettingsProto.Doze.PULSE_ON_TAP);
         p.end(dozeToken);
 
         dumpSetting(s, p,
@@ -2358,6 +2371,14 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ZEN_SETTINGS_SUGGESTION_VIEWED,
                 SecureSettingsProto.Zen.SETTINGS_SUGGESTION_VIEWED);
         p.end(zenToken);
+
+        dumpSetting(s, p,
+                Settings.Secure.SKIP_GESTURE,
+                SecureSettingsProto.SKIP_GESTURE_ENABLED);
+
+        dumpSetting(s, p,
+                Settings.Secure.SILENCE_GESTURE,
+                SecureSettingsProto.SILENCE_GESTURE_ENABLED);
 
         // Please insert new settings using the same order as in SecureSettingsProto.
         p.end(token);

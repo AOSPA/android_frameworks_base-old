@@ -487,13 +487,15 @@ android_media_AudioSystem_recording_callback(int event,
 }
 
 static jint
-android_media_AudioSystem_setDeviceConnectionState(JNIEnv *env, jobject thiz, jint device, jint state, jstring device_address, jstring device_name)
+android_media_AudioSystem_setDeviceConnectionState(JNIEnv *env, jobject thiz, jint device, jint state, jstring device_address, jstring device_name,
+                                                   jint codec)
 {
     const char *c_address = env->GetStringUTFChars(device_address, NULL);
     const char *c_name = env->GetStringUTFChars(device_name, NULL);
     int status = check_AudioSystem_Command(AudioSystem::setDeviceConnectionState(static_cast <audio_devices_t>(device),
                                           static_cast <audio_policy_dev_state_t>(state),
-                                          c_address, c_name));
+                                          c_address, c_name,
+                                          static_cast <audio_format_t>(codec)));
     env->ReleaseStringUTFChars(device_address, c_address);
     env->ReleaseStringUTFChars(device_name, c_name);
     return (jint) status;
@@ -510,12 +512,13 @@ android_media_AudioSystem_getDeviceConnectionState(JNIEnv *env, jobject thiz, ji
 }
 
 static jint
-android_media_AudioSystem_handleDeviceConfigChange(JNIEnv *env, jobject thiz, jint device, jstring device_address, jstring device_name)
+android_media_AudioSystem_handleDeviceConfigChange(JNIEnv *env, jobject thiz, jint device, jstring device_address, jstring device_name,
+                                                   jint codec)
 {
     const char *c_address = env->GetStringUTFChars(device_address, NULL);
     const char *c_name = env->GetStringUTFChars(device_name, NULL);
     int status = check_AudioSystem_Command(AudioSystem::handleDeviceConfigChange(static_cast <audio_devices_t>(device),
-                                          c_address, c_name));
+                                          c_address, c_name, static_cast <audio_format_t>(codec)));
     env->ReleaseStringUTFChars(device_address, c_address);
     env->ReleaseStringUTFChars(device_name, c_name);
     return (jint) status;
@@ -2004,7 +2007,7 @@ android_media_AudioSystem_getMicrophones(JNIEnv *env, jobject thiz, jobject jMic
     std::vector<media::MicrophoneInfo> microphones;
     status_t status = AudioSystem::getMicrophones(&microphones);
     if (status != NO_ERROR) {
-        ALOGE_IF(status != NO_ERROR, "AudioSystem::getMicrophones error %d", status);
+        ALOGE("AudioSystem::getMicrophones error %d", status);
         jStatus = nativeToJavaStatus(status);
         return jStatus;
     }
@@ -2022,6 +2025,34 @@ android_media_AudioSystem_getMicrophones(JNIEnv *env, jobject thiz, jobject jMic
         env->DeleteLocalRef(jMicrophoneInfo);
     }
 
+    return jStatus;
+}
+
+static jint
+android_media_AudioSystem_getHwOffloadEncodingFormatsSupportedForA2DP(
+                        JNIEnv *env, jobject thiz, jobject jEncodingFormatList)
+{
+    ALOGV("%s", __FUNCTION__);
+    jint jStatus = AUDIO_JAVA_SUCCESS;
+    if (!env->IsInstanceOf(jEncodingFormatList, gArrayListClass)) {
+        ALOGE("%s: jEncodingFormatList not an ArrayList", __FUNCTION__);
+        return (jint)AUDIO_JAVA_BAD_VALUE;
+    }
+    std::vector<audio_format_t> encodingFormats;
+    status_t status = AudioSystem::getHwOffloadEncodingFormatsSupportedForA2DP(
+                          &encodingFormats);
+    if (status != NO_ERROR) {
+        ALOGE("%s: error %d", __FUNCTION__, status);
+        jStatus = nativeToJavaStatus(status);
+        return jStatus;
+    }
+
+    for (size_t i = 0; i < encodingFormats.size(); i++) {
+        ScopedLocalRef<jobject> jEncodingFormat(
+            env, env->NewObject(gIntegerClass, gIntegerCstor, encodingFormats[i]));
+        env->CallBooleanMethod(jEncodingFormatList, gArrayListMethods.add,
+                               jEncodingFormat.get());
+    }
     return jStatus;
 }
 
@@ -2142,9 +2173,9 @@ static const JNINativeMethod gMethods[] = {
     {"isSourceActive",      "(I)Z",     (void *)android_media_AudioSystem_isSourceActive},
     {"newAudioSessionId",   "()I",      (void *)android_media_AudioSystem_newAudioSessionId},
     {"newAudioPlayerId",    "()I",      (void *)android_media_AudioSystem_newAudioPlayerId},
-    {"setDeviceConnectionState", "(IILjava/lang/String;Ljava/lang/String;)I", (void *)android_media_AudioSystem_setDeviceConnectionState},
+    {"setDeviceConnectionState", "(IILjava/lang/String;Ljava/lang/String;I)I", (void *)android_media_AudioSystem_setDeviceConnectionState},
     {"getDeviceConnectionState", "(ILjava/lang/String;)I",  (void *)android_media_AudioSystem_getDeviceConnectionState},
-    {"handleDeviceConfigChange", "(ILjava/lang/String;Ljava/lang/String;)I", (void *)android_media_AudioSystem_handleDeviceConfigChange},
+    {"handleDeviceConfigChange", "(ILjava/lang/String;Ljava/lang/String;I)I", (void *)android_media_AudioSystem_handleDeviceConfigChange},
     {"setPhoneState",       "(I)I",     (void *)android_media_AudioSystem_setPhoneState},
     {"setForceUse",         "(II)I",    (void *)android_media_AudioSystem_setForceUse},
     {"getForceUse",         "(I)I",     (void *)android_media_AudioSystem_getForceUse},
@@ -2197,6 +2228,8 @@ static const JNINativeMethod gMethods[] = {
     {"setAssistantUid", "(I)I", (void *)android_media_AudioSystem_setAssistantUid},
     {"setA11yServicesUids", "([I)I", (void *)android_media_AudioSystem_setA11yServicesUids},
     {"isHapticPlaybackSupported", "()Z", (void *)android_media_AudioSystem_isHapticPlaybackSupported},
+    {"getHwOffloadEncodingFormatsSupportedForA2DP", "(Ljava/util/ArrayList;)I",
+                    (void*)android_media_AudioSystem_getHwOffloadEncodingFormatsSupportedForA2DP},
 };
 
 static const JNINativeMethod gEventHandlerMethods[] = {

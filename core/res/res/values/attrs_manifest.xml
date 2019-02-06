@@ -274,6 +274,9 @@
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the document manager -->
         <flag name="documenter" value="0x40000" />
+        <!-- Additional flag from base permission type: this permission automatically
+            granted to device configurator -->
+        <flag name="configurator" value="0x80000" />
     </attr>
 
     <!-- Flags indicating more context for a permission group. -->
@@ -593,7 +596,7 @@
          to be set for all windows of this activity -->
     <attr name="showForAllUsers" format="boolean" />
 
-    <!-- Specifies whether an {@link android.app.Activity} should be shown on top of the the lock screen
+    <!-- Specifies whether an {@link android.app.Activity} should be shown on top of the lock screen
          whenever the lockscreen is up and the activity is resumed. Normally an activity will be
          transitioned to the stopped state if it is started while the lockscreen is up, but with
          this flag set the activity will remain in the resumed state visible on-top of the lock
@@ -2412,6 +2415,19 @@
         <attr name="showForAllUsers" />
 
         <attr name="showWhenLocked" />
+        <!-- @hide @SystemApi Specifies whether this {@link android.app.Activity} should be shown on
+             top of the lock screen whenever the lockscreen is up and this activity has another
+             activity behind it with the {@link android.R.attr#showWhenLocked} attribute set. That
+             is, this activity is only visible on the lock screen if there is another activity with
+             the {@link android.R.attr#showWhenLocked} attribute visible at the same time on the
+             lock screen. A use case for this is permission dialogs, that should only be visible on
+             the lock screen if their requesting activity is also visible.
+
+         The default value of this attribute is <code>false</code>. -->
+    <attr name="inheritShowWhenLocked" format="boolean" />
+
+
+        <attr name="inheritShowWhenLocked" />
         <attr name="turnScreenOn" />
 
         <attr name="directBootAware" />
@@ -2781,6 +2797,9 @@
         <attr name="requiredSystemPropertyName" format="string" />
         <!-- @hide This shouldn't be public. -->
         <attr name="requiredSystemPropertyValue" format="string" />
+
+        <!-- The name of the overlayable whose resources will be overlaid. -->
+        <attr name="targetName" />
     </declare-styleable>
 
     <!-- Declaration of an {@link android.content.Intent} object in XML.  May

@@ -35,6 +35,10 @@ import com.android.server.wm.ActivityStackSupervisor;
 import com.android.server.wm.ActivityDisplay;
 import android.util.BoostFramework;
 
+/**
+ * 1. Adjust the top most focus display if touch down on some display.
+ * 2. Adjust the pointer icon when cursor moves to the task bounds.
+ */
 public class TaskTapPointerEventListener implements PointerEventListener {
 
     private final Region mTouchExcludeRegion = new Region();
@@ -72,7 +76,7 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                     return;
                 }
                 WindowContainer parent = mDisplayContent.getParent();
-                if (parent != null) {
+                if (parent != null && parent.getTopChild() != mDisplayContent) {
                     parent.positionChildAt(WindowContainer.POSITION_TOP, mDisplayContent,
                             true /* includingParents */);
                 }
@@ -88,8 +92,7 @@ public class TaskTapPointerEventListener implements PointerEventListener {
         if (motionEvent.getDisplayId() != getDisplayId()) {
             return;
         }
-        final int action = motionEvent.getAction();
-        switch (action & MotionEvent.ACTION_MASK) {
+        switch (motionEvent.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 final int x = (int) motionEvent.getX();
                 final int y = (int) motionEvent.getY();
@@ -105,7 +108,7 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                 }
             }
             break;
-
+            case MotionEvent.ACTION_HOVER_ENTER:
             case MotionEvent.ACTION_HOVER_MOVE: {
                 final int x = (int) motionEvent.getX();
                 final int y = (int) motionEvent.getY();
@@ -133,11 +136,24 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                     mPointerIconType = iconType;
                     if (mPointerIconType == TYPE_NOT_SPECIFIED) {
                         // Find the underlying window and ask it restore the pointer icon.
+                        mService.mH.removeMessages(H.RESTORE_POINTER_ICON);
                         mService.mH.obtainMessage(H.RESTORE_POINTER_ICON,
                                 x, y, mDisplayContent).sendToTarget();
                     } else {
                         InputManager.getInstance().setPointerIconType(mPointerIconType);
                     }
+                }
+            }
+            break;
+            case MotionEvent.ACTION_HOVER_EXIT: {
+                final int x = (int) motionEvent.getX();
+                final int y = (int) motionEvent.getY();
+                if (mPointerIconType != TYPE_NOT_SPECIFIED) {
+                    mPointerIconType = TYPE_NOT_SPECIFIED;
+                    // Find the underlying window and ask it to restore the pointer icon.
+                    mService.mH.removeMessages(H.RESTORE_POINTER_ICON);
+                    mService.mH.obtainMessage(H.RESTORE_POINTER_ICON,
+                            x, y, mDisplayContent).sendToTarget();
                 }
             }
             break;

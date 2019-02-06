@@ -16,6 +16,7 @@
 
 package com.android.server.backup;
 
+import static android.Manifest.permission.BACKUP;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 
 import static com.android.server.backup.testing.BackupManagerServiceTestUtils.startBackupThread;
@@ -45,6 +46,7 @@ import android.platform.test.annotations.Presubmit;
 import android.util.SparseArray;
 
 import com.android.server.backup.testing.TransportData;
+import com.android.server.testing.shadows.ShadowApplicationPackageManager;
 import com.android.server.testing.shadows.ShadowBinder;
 
 import org.junit.After;
@@ -64,7 +66,7 @@ import java.io.PrintWriter;
 
 /** Tests for the user-aware backup/restore system service {@link BackupManagerService}. */
 @RunWith(RobolectricTestRunner.class)
-@Config(shadows = {ShadowBinder.class})
+@Config(shadows = {ShadowApplicationPackageManager.class, ShadowBinder.class})
 @Presubmit
 public class BackupManagerServiceTest {
     private static final String TEST_PACKAGE = "package";
@@ -188,6 +190,19 @@ public class BackupManagerServiceTest {
         assertThat(serviceUsers.size()).isEqualTo(1);
         assertThat(serviceUsers.get(mUserOneId)).isNull();
         assertThat(serviceUsers.get(mUserTwoId)).isEqualTo(mUserTwoService);
+    }
+
+    /** Test that the service unregisters users when stopped. */
+    @Test
+    public void testStopServiceForUser_forRegisteredUser_tearsDownCorrectUser() throws Exception {
+        BackupManagerService backupManagerService =
+                createServiceAndRegisterUser(mUserOneId, mUserOneService);
+        backupManagerService.startServiceForUser(mUserTwoId, mUserTwoService);
+
+        backupManagerService.stopServiceForUser(mUserOneId);
+
+        verify(mUserOneService).tearDownService();
+        verify(mUserTwoService, never()).tearDownService();
     }
 
     /** Test that the service unregisters users when stopped. */
@@ -1061,7 +1076,7 @@ public class BackupManagerServiceTest {
                 createServiceAndRegisterUser(UserHandle.USER_SYSTEM, mUserOneService);
         FullBackupJob job = new FullBackupJob();
 
-        backupManagerService.beginFullBackup(job);
+        backupManagerService.beginFullBackup(UserHandle.USER_SYSTEM, job);
 
         verify(mUserOneService).beginFullBackup(job);
     }
@@ -1072,7 +1087,7 @@ public class BackupManagerServiceTest {
         BackupManagerService backupManagerService = createService();
         FullBackupJob job = new FullBackupJob();
 
-        backupManagerService.beginFullBackup(job);
+        backupManagerService.beginFullBackup(UserHandle.USER_SYSTEM, job);
 
         verify(mUserOneService, never()).beginFullBackup(job);
     }
@@ -1083,7 +1098,7 @@ public class BackupManagerServiceTest {
         BackupManagerService backupManagerService =
                 createServiceAndRegisterUser(UserHandle.USER_SYSTEM, mUserOneService);
 
-        backupManagerService.endFullBackup();
+        backupManagerService.endFullBackup(UserHandle.USER_SYSTEM);
 
         verify(mUserOneService).endFullBackup();
     }
@@ -1093,7 +1108,7 @@ public class BackupManagerServiceTest {
     public void testEndFullBackup_onUnknownUser_doesNotPropagateCall() throws Exception {
         BackupManagerService backupManagerService = createService();
 
-        backupManagerService.endFullBackup();
+        backupManagerService.endFullBackup(UserHandle.USER_SYSTEM);
 
         verify(mUserOneService, never()).endFullBackup();
     }
@@ -1528,6 +1543,7 @@ public class BackupManagerServiceTest {
     }
 
     private BackupManagerService createService() {
+        mShadowContext.grantPermissions(BACKUP);
         return new BackupManagerService(
                 mContext, new Trampoline(mContext), startBackupThread(null));
     }

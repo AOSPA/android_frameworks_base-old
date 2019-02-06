@@ -66,9 +66,7 @@
     <item name="status_bar_icon_scale_factor" format="float" type="dimen">1.0</item>
 
     <dimen name="group_overflow_number_size">@*android:dimen/notification_text_size</dimen>
-    <dimen name="group_overflow_number_size_dark">16sp</dimen>
     <dimen name="group_overflow_number_padding">@*android:dimen/notification_content_margin_end</dimen>
-    <dimen name="group_overflow_number_extra_padding_dark">@*android:dimen/notification_extra_margin_ambient</dimen>
 
     <!-- max height of a notification such that the content can still fade out when closing -->
     <dimen name="max_notification_fadeout_height">100dp</dimen>
@@ -93,9 +91,6 @@
 
     <!-- Height of a large notification in the status bar -->
     <dimen name="notification_max_height">294dp</dimen>
-
-    <!-- Height of an ambient notification on ambient display -->
-    <dimen name="notification_ambient_height">400dp</dimen>
 
     <!-- Height of a heads up notification in the status bar for legacy custom views -->
     <dimen name="notification_max_heads_up_height_legacy">128dp</dimen>
@@ -952,6 +947,8 @@
     <dimen name="ongoing_appops_dialog_icon_margin">8dp</dimen>
     <!-- Height and width of Application icons in Ongoing App Ops dialog -->
     <dimen name="ongoing_appops_dialog_app_icon_size">32dp</dimen>
+    <!-- Height and width of Plus sign in Ongoing App Ops dialog -->
+    <dimen name="ongoing_appops_dialog_app_plus_size">24dp</dimen>
     <!-- Height of line in Ongoing App Ops dialog-->
     <dimen name="ongoing_appops_dialog_line_height">48dp</dimen>
     <!-- Side margin of title in Ongoing App Ops dialog -->
@@ -981,14 +978,16 @@
 
     <!-- How much a bubble is elevated -->
     <dimen name="bubble_elevation">8dp</dimen>
+    <!-- Padding around a collapsed bubble -->
+    <dimen name="bubble_view_padding">0dp</dimen>
     <!-- Padding between bubbles when displayed in expanded state -->
     <dimen name="bubble_padding">8dp</dimen>
-    <!-- Padding around the view displayed when the bubble is expanded -->
-    <dimen name="bubble_expanded_view_padding">8dp</dimen>
     <!-- Size of the collapsed bubble -->
     <dimen name="bubble_size">56dp</dimen>
-    <!-- Size of an icon displayed within the bubble -->
-    <dimen name="bubble_icon_size">24dp</dimen>
+    <!-- How much to inset the icon in the circle -->
+    <dimen name="bubble_icon_inset">16dp</dimen>
+    <!-- Padding around the view displayed when the bubble is expanded -->
+    <dimen name="bubble_expanded_view_padding">8dp</dimen>
     <!-- Default height of the expanded view shown when the bubble is expanded -->
     <dimen name="bubble_expanded_default_height">400dp</dimen>
     <!-- Height of the triangle that points to the expanded bubble -->
@@ -997,4 +996,14 @@
     <dimen name="bubble_pointer_width">6dp</dimen>
     <!-- Extra padding around the dismiss target for bubbles -->
     <dimen name="bubble_dismiss_slop">16dp</dimen>
+    <!-- Height of the header within the expanded view. -->
+    <dimen name="bubble_expanded_header_height">48dp</dimen>
+    <!-- Left and right padding applied to the header. -->
+    <dimen name="bubble_expanded_header_horizontal_padding">24dp</dimen>
+    <!-- Max width of the message bubble-->
+    <dimen name="bubble_message_max_width">144dp</dimen>
+    <!-- Min width of the message bubble -->
+    <dimen name="bubble_message_min_width">32dp</dimen>
+    <!-- Interior padding of the message bubble -->
+    <dimen name="bubble_message_padding">4dp</dimen>
 </resources>

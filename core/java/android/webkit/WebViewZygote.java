@@ -159,7 +159,10 @@ public class WebViewZygote {
                     0,  // runtimeFlags
                     "webview_zygote",  // seInfo
                     sPackage.applicationInfo.primaryCpuAbi,  // abi
-                    null);  // instructionSet
+                    TextUtils.join(",", Build.SUPPORTED_ABIS),
+                    null, // instructionSet
+                    Process.FIRST_ISOLATED_UID,
+                    Process.LAST_ISOLATED_UID);
 
             // All the work below is usually done by LoadedApk, but the zygote can't talk to
             // PackageManager or construct a LoadedApk since it's single-threaded pre-fork, so

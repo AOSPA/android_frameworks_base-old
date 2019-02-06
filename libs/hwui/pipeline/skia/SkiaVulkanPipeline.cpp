@@ -23,6 +23,7 @@
 #include "VkInteropFunctorDrawable.h"
 #include "renderstate/RenderState.h"
 #include "renderthread/Frame.h"
+#include "ShaderCache.h"
 
 #include <SkSurface.h>
 #include <SkTypes.h>
@@ -57,7 +58,8 @@ Frame SkiaVulkanPipeline::getFrame() {
         return Frame(-1, -1, 0);
     }
 
-    Frame frame(backBuffer->width(), backBuffer->height(), mVkManager.getAge(mVkSurface));
+    Frame frame(mVkSurface->windowWidth(), mVkSurface->windowHeight(),
+                mVkManager.getAge(mVkSurface));
     return frame;
 }
 
@@ -72,7 +74,9 @@ bool SkiaVulkanPipeline::draw(const Frame& frame, const SkRect& screenDirty, con
         return false;
     }
     SkiaPipeline::updateLighting(lightGeometry, lightInfo);
-    renderFrame(*layerUpdateQueue, dirty, renderNodes, opaque, contentDrawBounds, backBuffer);
+    renderFrame(*layerUpdateQueue, dirty, renderNodes, opaque, contentDrawBounds,
+            backBuffer, mVkSurface->preTransform());
+    ShaderCache::get().onVkFrameFlushed(mRenderThread.getGrContext());
     layerUpdateQueue->clear();
 
     // Draw visual debugging features

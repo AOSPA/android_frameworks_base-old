@@ -35,23 +35,31 @@
 
         <activity android:name=".ActivityViewActivity"
                   android:label="AV"
-                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density">
+                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density"
+                  android:windowSoftInputMode="stateHidden|adjustResize">
         </activity>
 
         <activity android:name=".ActivityViewResizeActivity"
                   android:label="AV Resize"
-                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density">
+                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density"
+                  android:windowSoftInputMode="stateHidden|adjustResize">
         </activity>
 
         <activity android:name=".ActivityViewScrollActivity"
                   android:label="AV Scroll"
-                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density">
+                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density"
+                  android:windowSoftInputMode="stateHidden">
         </activity>
 
         <activity android:name=".ActivityViewTestActivity"
                   android:resizeableActivity="true"
                   android:theme="@*android:style/Theme.NoTitleBar"
                   android:exported="true"
+                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density">
+        </activity>
+
+        <activity android:name=".ActivityViewVisibilityActivity"
+                  android:label="AV Visibility"
                   android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|colorMode|density">
         </activity>
     </application>

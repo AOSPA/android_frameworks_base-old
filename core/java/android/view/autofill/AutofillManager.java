@@ -26,6 +26,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresFeature;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -62,6 +63,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.SyncResultReceiver;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -75,8 +77,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+
 //TODO: use java.lang.ref.Cleaner once Android supports Java 9
 import sun.misc.Cleaner;
 
@@ -322,6 +323,17 @@ public final class AutofillManager {
      * @hide
      */
     public static final int FC_SERVICE_TIMEOUT = 5000;
+
+    /**
+     * Timeout for calls to system_server.
+     */
+    private static final int SYNC_CALLS_TIMEOUT_MS = 5000;
+
+    /**
+     * @hide
+     */
+    @TestApi
+    public static final int MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS = 1_000 * 60 * 2; // 2 minutes
 
     /**
      * Makes an authentication id from a request id and a dataset id.
@@ -612,7 +624,8 @@ public final class AutofillManager {
 
                 final AutofillClient client = getClient();
                 if (client != null) {
-                    final SyncResultReceiver receiver = new SyncResultReceiver();
+                    final SyncResultReceiver receiver = new SyncResultReceiver(
+                            SYNC_CALLS_TIMEOUT_MS);
                     try {
                         mService.restoreSession(mSessionId, client.autofillClientGetActivityToken(),
                                 mServiceClient.asBinder(), receiver);
@@ -732,9 +745,9 @@ public final class AutofillManager {
      */
     @Nullable public FillEventHistory getFillEventHistory() {
         try {
-            final SyncResultReceiver receiver = new SyncResultReceiver();
+            final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
             mService.getFillEventHistory(receiver);
-            return receiver.getObjectResult(SyncResultReceiver.TYPE_PARCELABLE);
+            return receiver.getParcelableResult();
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return null;
@@ -1287,7 +1300,7 @@ public final class AutofillManager {
     public boolean hasEnabledAutofillServices() {
         if (mService == null) return false;
 
-        final SyncResultReceiver receiver = new SyncResultReceiver();
+        final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         try {
             mService.isServiceEnabled(mContext.getUserId(), mContext.getPackageName(), receiver);
             return receiver.getIntResult() == 1;
@@ -1304,10 +1317,10 @@ public final class AutofillManager {
     public ComponentName getAutofillServiceComponentName() {
         if (mService == null) return null;
 
-        final SyncResultReceiver receiver = new SyncResultReceiver();
+        final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         try {
             mService.getAutofillServiceComponentName(receiver);
-            return receiver.getObjectResult(SyncResultReceiver.TYPE_PARCELABLE);
+            return receiver.getParcelableResult();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1330,9 +1343,9 @@ public final class AutofillManager {
      */
     @Nullable public String getUserDataId() {
         try {
-            final SyncResultReceiver receiver = new SyncResultReceiver();
+            final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
             mService.getUserDataId(receiver);
-            return receiver.getObjectResult(SyncResultReceiver.TYPE_STRING);
+            return receiver.getStringResult();
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return null;
@@ -1352,9 +1365,9 @@ public final class AutofillManager {
      */
     @Nullable public UserData getUserData() {
         try {
-            final SyncResultReceiver receiver = new SyncResultReceiver();
+            final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
             mService.getUserData(receiver);
-            return receiver.getObjectResult(SyncResultReceiver.TYPE_PARCELABLE);
+            return receiver.getParcelableResult();
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return null;
@@ -1390,7 +1403,7 @@ public final class AutofillManager {
      * the user.
      */
     public boolean isFieldClassificationEnabled() {
-        final SyncResultReceiver receiver = new SyncResultReceiver();
+        final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         try {
             mService.isFieldClassificationEnabled(receiver);
             return receiver.getIntResult() == 1;
@@ -1413,10 +1426,10 @@ public final class AutofillManager {
      */
     @Nullable
     public String getDefaultFieldClassificationAlgorithm() {
-        final SyncResultReceiver receiver = new SyncResultReceiver();
+        final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         try {
             mService.getDefaultFieldClassificationAlgorithm(receiver);
-            return receiver.getObjectResult(SyncResultReceiver.TYPE_STRING);
+            return receiver.getStringResult();
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return null;
@@ -1433,11 +1446,10 @@ public final class AutofillManager {
      */
     @NonNull
     public List<String> getAvailableFieldClassificationAlgorithms() {
-        final SyncResultReceiver receiver = new SyncResultReceiver();
+        final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         try {
             mService.getAvailableFieldClassificationAlgorithms(receiver);
-            final String[] algorithms = receiver
-                .getObjectResult(SyncResultReceiver.TYPE_STRING_ARRAY);
+            final String[] algorithms = receiver.getStringArrayResult();
             return algorithms != null ? Arrays.asList(algorithms) : Collections.emptyList();
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
@@ -1458,7 +1470,7 @@ public final class AutofillManager {
     public boolean isAutofillSupported() {
         if (mService == null) return false;
 
-        final SyncResultReceiver receiver = new SyncResultReceiver();
+        final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         try {
             mService.isServiceSupported(mContext.getUserId(), receiver);
             return receiver.getIntResult() == 1;
@@ -1582,7 +1594,7 @@ public final class AutofillManager {
             final AutofillClient client = getClient();
             if (client == null) return; // NOTE: getClient() already logged it..
 
-            final SyncResultReceiver receiver = new SyncResultReceiver();
+            final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
             mService.startSession(client.autofillClientGetActivityToken(),
                     mServiceClient.asBinder(), id, bounds, value, mContext.getUserId(),
                     mCallback != null, flags, client.autofillClientGetComponentName(),
@@ -1665,7 +1677,7 @@ public final class AutofillManager {
             mServiceClient = new AutofillManagerClient(this);
             try {
                 final int userId = mContext.getUserId();
-                final SyncResultReceiver receiver = new SyncResultReceiver();
+                final SyncResultReceiver receiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
                 mService.addClient(mServiceClient, userId, receiver);
                 final int flags = receiver.getIntResult();
                 mEnabled = (flags & FLAG_ADD_CLIENT_ENABLED) != 0;
@@ -2985,105 +2997,23 @@ public final class AutofillManager {
                 afm.post(() -> afm.autofill(sessionId, ids, values));
             }
         }
-    }
 
-    /**
-     * @hide
-     */
-    public static final class SyncResultReceiver extends IResultReceiver.Stub {
-
-        private static final String EXTRA = "EXTRA";
-
-        /**
-         * How long to block waiting for {@link IResultReceiver} callbacks when calling server.
-         */
-        private static final long BINDER_TIMEOUT_MS = 5000;
-
-        private static final int TYPE_STRING = 0;
-        private static final int TYPE_STRING_ARRAY = 1;
-        private static final int TYPE_PARCELABLE = 2;
-
-        private final CountDownLatch mLatch  = new CountDownLatch(1);
-        private int mResult;
-        private Bundle mBundle;
-
-        private void waitResult() {
-            try {
-                if (!mLatch.await(BINDER_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                    throw new IllegalStateException("Not called in " + BINDER_TIMEOUT_MS + "ms");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        /**
-         * Gets the result from an operation that returns an {@code int}.
-         */
-        int getIntResult() {
-            waitResult();
-            return mResult;
-        }
-
-        /**
-         * Gets the result from an operation that returns an {@code Object}.
-         *
-         * @param type type of expected object.
-         */
-        @Nullable
-        @SuppressWarnings("unchecked")
-        <T> T getObjectResult(int type) {
-            waitResult();
-            if (mBundle == null) {
-                return null;
-            }
-            switch (type) {
-                case TYPE_STRING:
-                    return (T) mBundle.getString(EXTRA);
-                case TYPE_STRING_ARRAY:
-                    return (T) mBundle.getStringArray(EXTRA);
-                case TYPE_PARCELABLE:
-                    return (T) mBundle.getParcelable(EXTRA);
-                default:
-                    throw new IllegalArgumentException("unsupported type: " + type);
+        @Override
+        public void requestShowFillUi(int sessionId, AutofillId id, int width, int height,
+                Rect anchorBounds, IAutofillWindowPresenter presenter) {
+            final AutofillManager afm = mAfm.get();
+            if (afm != null) {
+                afm.post(() -> afm.requestShowFillUi(sessionId, id, width, height, anchorBounds,
+                        presenter));
             }
         }
 
         @Override
-        public void send(int resultCode, Bundle resultData) {
-            mResult = resultCode;
-            mBundle = resultData;
-            mLatch.countDown();
-        }
-
-        /**
-         * Creates a bundle for a {@code String} value.
-         */
-        @NonNull
-        public static Bundle bundleFor(@Nullable String value) {
-            final Bundle bundle = new Bundle();
-            bundle.putString(EXTRA, value);
-            return bundle;
-        }
-
-        /**
-         * Creates a bundle for a {@code String[]} value.
-         */
-        @NonNull
-        public static Bundle bundleFor(@Nullable String[] value) {
-            final Bundle bundle = new Bundle();
-            bundle.putStringArray(EXTRA, value);
-            return bundle;
-        }
-
-        /**
-         * Creates a bundle for a {@code Parcelable} value.
-         */
-        @NonNull
-        public static Bundle bundleFor(@Nullable Parcelable value) {
-            final Bundle bundle = new Bundle();
-            bundle.putParcelable(EXTRA, value);
-            return bundle;
+        public void requestHideFillUi(int sessionId, AutofillId id) {
+            final AutofillManager afm = mAfm.get();
+            if (afm != null) {
+                afm.post(() -> afm.requestHideFillUi(id, false));
+            }
         }
     }
 }

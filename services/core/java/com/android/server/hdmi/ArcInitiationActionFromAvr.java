@@ -21,14 +21,15 @@ import android.hardware.tv.cec.V1_0.SendMessageResult;
  * Feature action that handles Audio Return Channel initiated by AVR devices.
  */
 public class ArcInitiationActionFromAvr extends HdmiCecFeatureAction {
-    // TODO(shubang): add tests
-
     // State in which waits for ARC response.
     private static final int STATE_WAITING_FOR_INITIATE_ARC_RESPONSE = 1;
     private static final int STATE_ARC_INITIATED = 2;
 
     // the required maximum response time specified in CEC 9.2
     private static final int TIMEOUT_MS = 1000;
+    private static final int MAX_RETRY_COUNT = 5;
+
+    private int mSendRequestActiveSourceRetryCount = 0;
 
     ArcInitiationActionFromAvr(HdmiCecLocalDevice source) {
         super(source);
@@ -50,13 +51,25 @@ public class ArcInitiationActionFromAvr extends HdmiCecFeatureAction {
         }
         switch (cmd.getOpcode()) {
             case Constants.MESSAGE_FEATURE_ABORT:
+                if ((cmd.getParams()[0] & 0xFF) == Constants.MESSAGE_INITIATE_ARC) {
+                    audioSystem().setArcStatus(false);
+                    finish();
+                    return true;
+                } else {
+                    return false;
+                }
             case Constants.MESSAGE_REPORT_ARC_TERMINATED:
                 audioSystem().setArcStatus(false);
                 finish();
                 return true;
             case Constants.MESSAGE_REPORT_ARC_INITIATED:
                 mState = STATE_ARC_INITIATED;
-                finish();
+                if (audioSystem().getActiveSource().physicalAddress != getSourcePath()
+                        && audioSystem().isSystemAudioActivated()) {
+                    sendRequestActiveSource();
+                } else {
+                    finish();
+                }
                 return true;
         }
         return false;
@@ -91,4 +104,19 @@ public class ArcInitiationActionFromAvr extends HdmiCecFeatureAction {
         finish();
     }
 
+    protected void sendRequestActiveSource() {
+        sendCommand(HdmiCecMessageBuilder.buildRequestActiveSource(getSourceAddress()),
+                result -> {
+                    if (result != SendMessageResult.SUCCESS) {
+                        if (mSendRequestActiveSourceRetryCount < MAX_RETRY_COUNT) {
+                            mSendRequestActiveSourceRetryCount++;
+                            sendRequestActiveSource();
+                        } else {
+                            finish();
+                        }
+                    } else {
+                        finish();
+                    }
+                });
+    }
 }

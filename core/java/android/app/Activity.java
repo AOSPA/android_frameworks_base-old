@@ -17,6 +17,7 @@
 package android.app;
 
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
+import static android.os.Process.myUid;
 
 import static java.lang.Character.MIN_VALUE;
 
@@ -121,7 +122,9 @@ import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.autofill.AutofillPopupWindow;
 import android.view.autofill.IAutofillWindowPresenter;
+import android.view.contentcapture.ContentCaptureContext;
 import android.view.contentcapture.ContentCaptureManager;
+import android.view.contentcapture.ContentCaptureSession;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
@@ -1022,7 +1025,9 @@ public class Activity extends ContextThemeWrapper
      *
      * @return The content capture manager
      */
-    @NonNull private ContentCaptureManager getContentCaptureManager() {
+    @Nullable private ContentCaptureManager getContentCaptureManager() {
+        // ContextCapture disabled for system apps
+        if (!UserHandle.isApp(myUid())) return null;
         if (mContentCaptureManager == null) {
             mContentCaptureManager = getSystemService(ContentCaptureManager.class);
         }
@@ -1030,13 +1035,15 @@ public class Activity extends ContextThemeWrapper
     }
 
     /** @hide */ private static final int CONTENT_CAPTURE_START = 1;
-    /** @hide */ private static final int CONTENT_CAPTURE_FLUSH = 2;
-    /** @hide */ private static final int CONTENT_CAPTURE_STOP = 3;
+    /** @hide */ private static final int CONTENT_CAPTURE_PAUSE = 2;
+    /** @hide */ private static final int CONTENT_CAPTURE_RESUME = 3;
+    /** @hide */ private static final int CONTENT_CAPTURE_STOP = 4;
 
     /** @hide */
     @IntDef(prefix = { "CONTENT_CAPTURE_" }, value = {
             CONTENT_CAPTURE_START,
-            CONTENT_CAPTURE_FLUSH,
+            CONTENT_CAPTURE_PAUSE,
+            CONTENT_CAPTURE_RESUME,
             CONTENT_CAPTURE_STOP
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -1045,17 +1052,24 @@ public class Activity extends ContextThemeWrapper
 
     private void notifyContentCaptureManagerIfNeeded(@ContentCaptureNotificationType int type) {
         final ContentCaptureManager cm = getContentCaptureManager();
-        if (cm == null || !cm.isContentCaptureEnabled()) {
-            return;
-        }
+        if (cm == null) return;
+
         switch (type) {
             case CONTENT_CAPTURE_START:
                 //TODO(b/111276913): decide whether the InteractionSessionId should be
                 // saved / restored in the activity bundle - probably not
-                cm.onActivityStarted(mToken, getComponentName());
+                int flags = 0;
+                if ((getWindow().getAttributes().flags
+                        & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
+                    flags |= ContentCaptureContext.FLAG_DISABLED_BY_FLAG_SECURE;
+                }
+                cm.onActivityStarted(mToken, getComponentName(), flags);
                 break;
-            case CONTENT_CAPTURE_FLUSH:
-                cm.flush();
+            case CONTENT_CAPTURE_PAUSE:
+                cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_PAUSED);
+                break;
+            case CONTENT_CAPTURE_RESUME:
+                cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_RESUMED);
                 break;
             case CONTENT_CAPTURE_STOP:
                 cm.onActivityStopped();
@@ -1747,7 +1761,7 @@ public class Activity extends ContextThemeWrapper
             }
         }
         mCalled = true;
-        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_FLUSH);
+        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_RESUME);
     }
 
     /**
@@ -2141,7 +2155,7 @@ public class Activity extends ContextThemeWrapper
             }
         }
         mCalled = true;
-        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_FLUSH);
+        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_PAUSE);
     }
 
     /**
@@ -2158,6 +2172,7 @@ public class Activity extends ContextThemeWrapper
      * for helping activities determine the proper time to cancel a notification.
      *
      * @see #onUserInteraction()
+     * @see android.content.Intent#FLAG_ACTIVITY_NO_USER_ACTION
      */
     protected void onUserLeaveHint() {
     }
@@ -8278,6 +8293,33 @@ public class Activity extends ContextThemeWrapper
             ActivityTaskManager.getService().setShowWhenLocked(mToken, showWhenLocked);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call setShowWhenLocked", e);
+        }
+    }
+
+    /**
+     * Specifies whether this {@link Activity} should be shown on top of the lock screen whenever
+     * the lockscreen is up and this activity has another activity behind it with the showWhenLock
+     * attribute set. That is, this activity is only visible on the lock screen if there is another
+     * activity with the showWhenLock attribute visible at the same time on the lock screen. A use
+     * case for this is permission dialogs, that should only be visible on the lock screen if their
+     * requesting activity is also visible. This value can be set as a manifest attribute using
+     * android.R.attr#inheritShowWhenLocked.
+     *
+     * @param inheritShowWhenLocked {@code true} to show the {@link Activity} on top of the lock
+     *                              screen when this activity has another activity behind it with
+     *                              the showWhenLock attribute set; {@code false} otherwise.
+     * @see #setShowWhenLocked(boolean)
+     * See android.R.attr#inheritShowWhenLocked
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public void setInheritShowWhenLocked(boolean inheritShowWhenLocked) {
+        try {
+            ActivityTaskManager.getService().setInheritShowWhenLocked(
+                    mToken, inheritShowWhenLocked);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to call setInheritShowWhenLocked", e);
         }
     }
 

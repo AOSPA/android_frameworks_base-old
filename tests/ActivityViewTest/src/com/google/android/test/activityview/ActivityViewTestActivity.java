@@ -24,31 +24,31 @@ import static android.view.MotionEvent.ACTION_UP;
 import android.app.Activity;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.widget.TextView;
 
-public class ActivityViewTestActivity extends Activity implements View.OnTouchListener {
+public class ActivityViewTestActivity extends Activity {
+    private static final String TAG = "ActivityViewTestActivity";
 
+    private View mRoot;
     private TextView mTextView;
     private TextView mWidthTextView;
     private TextView mHeightTextView;
     private TextView mTouchStateTextView;
-    private View mTouchInterceptView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_view_test_activity);
-
+        mRoot = findViewById(R.id.test_activity_root);
         mTextView = findViewById(R.id.test_activity_title);
         mWidthTextView = findViewById(R.id.test_activity_width_text);
         mHeightTextView = findViewById(R.id.test_activity_height_text);
         mTouchStateTextView = findViewById(R.id.test_activity_touch_state);
-        mTouchInterceptView = findViewById(R.id.touch_intercept_view);
-        mTouchInterceptView.setOnTouchListener(this);
-        ViewTreeObserver viewTreeObserver = mTouchInterceptView.getViewTreeObserver();
+        ViewTreeObserver viewTreeObserver = mRoot.getViewTreeObserver();
         if (viewTreeObserver.isAlive()) {
             viewTreeObserver.addOnGlobalLayoutListener(this::updateDimensionTexts);
         }
@@ -86,12 +86,13 @@ public class ActivityViewTestActivity extends Activity implements View.OnTouchLi
     }
 
     private void updateStateText(String state) {
+        Log.d(TAG, state);
         mTextView.setText(state);
     }
 
     private void updateDimensionTexts() {
-        mWidthTextView.setText("" + mTouchInterceptView.getWidth());
-        mHeightTextView.setText("" + mTouchInterceptView.getHeight());
+        mWidthTextView.setText("" + mRoot.getWidth());
+        mHeightTextView.setText("" + mRoot.getHeight());
     }
 
     private void updateTouchState(MotionEvent event) {
@@ -108,8 +109,8 @@ public class ActivityViewTestActivity extends Activity implements View.OnTouchLi
     }
 
     @Override
-    public boolean onTouch(View v, MotionEvent event) {
+    public boolean dispatchTouchEvent(MotionEvent event) {
         updateTouchState(event);
-        return true;
+        return super.dispatchTouchEvent(event);
     }
 }

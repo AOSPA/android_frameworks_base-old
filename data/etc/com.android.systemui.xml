@@ -29,7 +29,6 @@
         <permission name="android.permission.DUMP"/>
         <permission name="android.permission.GET_APP_OPS_STATS"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
-        <permission name="android.permission.MANAGE_ACTIVITY_STACKS"/>
         <permission name="android.permission.MANAGE_DEBUGGING"/>
         <permission name="android.permission.MANAGE_SENSOR_PRIVACY"/>
         <permission name="android.permission.MANAGE_USB"/>
@@ -45,6 +44,7 @@
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.REAL_GET_TASKS"/>
         <permission name="android.permission.RECEIVE_MEDIA_RESOURCE_USAGE"/>
+        <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND" />
         <permission name="android.permission.START_ACTIVITY_AS_CALLER"/>
         <permission name="android.permission.START_TASKS_FROM_RECENTS"/>
         <permission name="android.permission.STATUS_BAR"/>

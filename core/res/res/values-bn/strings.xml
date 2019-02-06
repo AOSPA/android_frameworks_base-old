@@ -533,11 +533,9 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"আপনার মিডিয়া সংগ্রহ থেকে লোকেশন দেখতে অ্যাপকে অনুমতি দিন।"</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"<xliff:g id="APP">%s</xliff:g> অ্যাপ্লিকেশন যাচাই করতে চাইছে।"</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"বায়োমেট্রিক হার্ডওয়্যার পাওয়া যাবে না"</string>
-    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
-    <skip />
+    <string name="biometric_error_user_canceled" msgid="2260175018114348727">"যাচাইকরণ বাতিল হয়েছে"</string>
     <string name="biometric_not_recognized" msgid="5770511773560736082">"স্বীকৃত নয়"</string>
-    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
-    <skip />
+    <string name="biometric_error_canceled" msgid="349665227864885880">"যাচাইকরণ বাতিল হয়েছে"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"আঙ্গুলের ছাপ আংশিক শনাক্ত করা হয়েছে৷ অনুগ্রহ করে আবার চেষ্টা করুন৷"</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"আঙ্গুলের ছাপ প্রক্রিয়া করা যায়নি৷ অনুগ্রহ করে আবার চেষ্টা করুন৷"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"আঙ্গুলের ছাপ নেওয়ার সেন্সরটি অপরিস্কার৷ অনুগ্রহ করে পরিষ্কার করে আবার চেষ্টা করুন৷"</string>
@@ -1128,6 +1126,9 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"এর মাধ্যমে খুলুন"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s দিয়ে খুলুন"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"খুলুন"</string>
+    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"ব্যবহার করে <xliff:g id="HOST">%1$s</xliff:g> লিঙ্ক খুলতে অ্যাক্সেস দিন"</string>
+    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> ব্যবহার করে <xliff:g id="HOST">%1$s</xliff:g> লিঙ্ক খুলতে অ্যাক্সেস দিন"</string>
+    <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"অ্যাক্সেস দিন"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"এর মাধ্যমে সম্পাদনা করুন"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s দিয়ে সম্পাদনা করুন"</string>
     <string name="whichEditApplicationLabel" msgid="7183524181625290300">"সম্পাদনা করুন"</string>
@@ -1567,6 +1568,7 @@
     <string name="SetupCallDefault" msgid="5834948469253758575">"কল গ্রহণ করবেন?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"সবসময়"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"শুধু একবার"</string>
+    <string name="activity_resolver_app_settings" msgid="8965806928986509855">"সেটিংস"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s কর্মস্থলের প্রোফাইল সমর্থন করে না।"</string>
     <string name="default_audio_route_name" product="tablet" msgid="4617053898167127471">"ট্যাবলেট"</string>
     <string name="default_audio_route_name" product="tv" msgid="9158088547603019321">"টিভি"</string>
@@ -1646,7 +1648,7 @@
     <string name="color_correction_feature_name" msgid="6779391426096954933">"রঙ সংশোধন"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"অ্যাক্সেসযোগ্যতা শর্টকাট <xliff:g id="SERVICE_NAME">%1$s</xliff:g> কে চালু করেছে"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"অ্যাক্সেসযোগ্যতা শর্টকাট <xliff:g id="SERVICE_NAME">%1$s</xliff:g> কে বন্ধ করেছে"</string>
-    <string name="accessibility_shortcut_spoken_feedback" msgid="6143872712930414829">"বর্তমান অ্যাক্সেসিবিলিটি বৈশিষ্ট্য শুরু করার জন্য অ্যাক্সেসিবিলিটি শর্টকাটটি আবার ব্যবহার করুন"</string>
+    <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> ব্যবহার করতে ভলিউম কী বোতাম ৩ সেকেন্ডের জন্য চেপে ধরে রাখুন"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"অ্যাক্সেসযোগ্যতা বোতামের সাহায্যে যে বৈশিষ্ট্যটি নিয়ন্ত্রণ করতে চান, সেটি বেছে নিন:"</string>
     <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"বৈশিষ্ট্যগুলি পরিবর্তন করতে অ্যাক্সেসযোগ্যতা বোতামটি ট্যাপ করে ধরে রাখুন।"</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"বড় করে দেখা"</string>
@@ -1976,5 +1978,8 @@
     <string name="notification_appops_camera_active" msgid="5050283058419699771">"ক্যামেরা"</string>
     <string name="notification_appops_microphone_active" msgid="4335305527588191730">"মাইক্রোফোন"</string>
     <string name="notification_appops_overlay_active" msgid="633813008357934729">"স্ক্রিনে অন্যান্য অ্যাপের উপরে দেখানো হচ্ছে"</string>
+    <string name="dynamic_mode_notification_channel_name" msgid="2348803891571320452">"রুটিন মোডের তথ্য সংক্রান্ত বিজ্ঞপ্তি"</string>
+    <string name="dynamic_mode_notification_title" msgid="508815255807182035">"সাধারণত যখন চার্জ দেন, তার আগে চার্জ শেষ হয়ে যেতে পারে"</string>
+    <string name="dynamic_mode_notification_summary" msgid="2541166298550402690">"ডিভাইস বেশিক্ষণ চালু রাখতে ব্যাটারি সেভার চালু করা হয়েছে"</string>
     <string name="car_loading_profile" msgid="3545132581795684027">"লোড হচ্ছে"</string>
 </resources>

@@ -18,13 +18,9 @@ package android.content.pm;
 
 import android.annotation.Nullable;
 import android.annotation.UnsupportedAppUsage;
-import android.apex.ApexInfo;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Overall information about the contents of a package.  This corresponds
@@ -374,6 +370,14 @@ public class PackageInfo implements Parcelable {
     public String overlayTarget;
 
     /**
+     * What overlayable set of elements package, if any, this package will overlay.
+     *
+     * Overlayable name defined within the target package, or null.
+     * @hide
+     */
+    public String overlayTargetName;
+
+    /**
      * The overlay category, if any, of this package
      *
      * @hide
@@ -571,15 +575,6 @@ public class PackageInfo implements Parcelable {
             propagateApplicationInfo(applicationInfo, services);
             propagateApplicationInfo(applicationInfo, providers);
         }
-    }
-
-    /**
-     * @hide
-     */
-    public PackageInfo(ApexInfo apexInfo) {
-        packageName = apexInfo.packageName;
-        setLongVersionCode(apexInfo.versionCode);
-        isApex = true;
     }
 
     private void propagateApplicationInfo(ApplicationInfo appInfo, ComponentInfo[] components) {

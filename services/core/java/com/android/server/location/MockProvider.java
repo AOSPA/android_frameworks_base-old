@@ -43,7 +43,7 @@ public class MockProvider extends AbstractLocationProvider {
 
     public MockProvider(
             LocationProviderManager locationProviderManager, ProviderProperties properties) {
-        super(locationProviderManager, true);
+        super(locationProviderManager);
 
         mEnabled = true;
         mLocation = null;
@@ -63,8 +63,11 @@ public class MockProvider extends AbstractLocationProvider {
     /** Sets the location to report for this mock provider. */
     public void setLocation(Location l) {
         mLocation = new Location(l);
+        if (!mLocation.isFromMockProvider()) {
+            mLocation.setIsFromMockProvider(true);
+        }
         if (mEnabled) {
-            reportLocation(l);
+            reportLocation(mLocation);
         }
     }
 

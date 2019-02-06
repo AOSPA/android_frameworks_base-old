@@ -77,6 +77,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 
 import static com.android.server.am.PendingIntentRecord.FLAG_ACTIVITY_SENDER;
 import static com.android.server.am.PendingIntentRecord.FLAG_BROADCAST_SENDER;
+import static com.android.server.am.PendingIntentRecord.FLAG_SERVICE_SENDER;
 import static com.android.server.utils.PriorityDump.PRIORITY_ARG;
 import static com.android.server.utils.PriorityDump.PRIORITY_ARG_CRITICAL;
 import static com.android.server.utils.PriorityDump.PRIORITY_ARG_NORMAL;
@@ -765,8 +766,7 @@ public class NotificationManagerService extends SystemService {
                         .addTaggedData(MetricsEvent.NOTIFICATION_SHADE_INDEX, nv.rank)
                         .addTaggedData(MetricsEvent.NOTIFICATION_SHADE_COUNT, nv.count)
                         .addTaggedData(MetricsEvent.NOTIFICATION_ACTION_IS_SMART,
-                                (Notification.Action.SEMANTIC_ACTION_CONTEXTUAL_SUGGESTION
-                                        == action.getSemanticAction()) ? 1 : 0)
+                                action.isContextual() ? 1 : 0)
                         .addTaggedData(
                                 MetricsEvent.NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED,
                                 generatedByAssistant ? 1 : 0));
@@ -878,7 +878,6 @@ public class NotificationManagerService extends SystemService {
                     if (r.hasBeenVisiblyExpanded()) {
                         logSmartSuggestionsVisible(r);
                     }
-                    final long now = System.currentTimeMillis();
                     if (userAction) {
                         MetricsLogger.action(r.getItemLogMaker()
                                 .setType(expanded ? MetricsEvent.TYPE_DETAIL
@@ -888,9 +887,6 @@ public class NotificationManagerService extends SystemService {
                         r.recordExpanded();
                         reportUserInteraction(r);
                     }
-                    EventLogTags.writeNotificationExpansion(key,
-                            userAction ? 1 : 0, expanded ? 1 : 0,
-                            r.getLifespanMs(now), r.getFreshnessMs(now), r.getExposureMs(now));
                     mAssistants.notifyAssistantExpansionChangedLocked(r.sbn, userAction, expanded);
                 }
             }
@@ -970,7 +966,7 @@ public class NotificationManagerService extends SystemService {
                             r.getNumSmartActionsAdded())
                     .addTaggedData(
                             MetricsEvent.NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED,
-                            r.getSuggestionsGeneratedByAssistant());
+                            r.getSuggestionsGeneratedByAssistant() ? 1 : 0);
             mMetricsLogger.write(logMaker);
         }
     }
@@ -1581,6 +1577,9 @@ public class NotificationManagerService extends SystemService {
 
         mIsAutomotive =
                 mPackageManagerClient.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0);
+
+        mPreferencesHelper.lockChannelsForOEM(getContext().getResources().getStringArray(
+                com.android.internal.R.array.config_nonBlockableNotificationPackages));
     }
 
     @Override
@@ -1702,8 +1701,16 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void sendRegisteredOnlyBroadcast(String action) {
-        getContext().sendBroadcastAsUser(new Intent(action)
-                .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY), UserHandle.ALL, null);
+        Intent intent = new Intent(action);
+        getContext().sendBroadcastAsUser(intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY),
+                UserHandle.ALL, null);
+        // explicitly send the broadcast to all DND packages, even if they aren't currently running
+        intent.setFlags(0);
+        final Set<String> dndApprovedPackages = mConditionProviders.getAllowedPackages();
+        for (String pkg : dndApprovedPackages) {
+            intent.setPackage(pkg);
+            getContext().sendBroadcastAsUser(intent, UserHandle.ALL);
+        }
     }
 
     @Override
@@ -2300,22 +2307,22 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
-        public boolean areAppOverlaysAllowed(String pkg) {
-            return areAppOverlaysAllowedForPackage(pkg, Binder.getCallingUid());
+        public boolean areBubblesAllowed(String pkg) {
+            return areBubblesAllowedForPackage(pkg, Binder.getCallingUid());
         }
 
         @Override
-        public boolean areAppOverlaysAllowedForPackage(String pkg, int uid) {
-            checkCallerIsSystemOrSameApp(pkg);
-
-            return mPreferencesHelper.areAppOverlaysAllowed(pkg, uid);
+        public boolean areBubblesAllowedForPackage(String pkg, int uid) {
+            enforceSystemOrSystemUIOrSamePackage(pkg,
+                    "Caller not system or systemui or same package");
+            return mPreferencesHelper.areBubblessAllowed(pkg, uid);
         }
 
         @Override
-        public void setAppOverlaysAllowed(String pkg, int uid, boolean allowed) {
+        public void setBubblesAllowed(String pkg, int uid, boolean allowed) {
             checkCallerIsSystem();
 
-            mPreferencesHelper.setAppOverlaysAllowed(pkg, uid, allowed);
+            mPreferencesHelper.setBubblesAllowed(pkg, uid, allowed);
             handleSavePolicyFile();
         }
 
@@ -2641,6 +2648,9 @@ public class NotificationManagerService extends SystemService {
 
             // Zen
             mConditionProviders.onPackagesChanged(true, packages, uids);
+
+            // Snoozing
+            mSnoozeHelper.clearData(UserHandle.getUserId(uid), packageName);
 
             // Reset notification preferences
             if (!fromApp) {
@@ -3495,7 +3505,7 @@ public class NotificationManagerService extends SystemService {
                     getContext().sendBroadcastAsUser(new Intent(
                             NotificationManager.ACTION_NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED)
                                     .setPackage(pkg)
-                                    .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY),
+                                    .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT),
                             UserHandle.of(userId), null);
                     handleSavePolicyFile();
                 }
@@ -4442,7 +4452,8 @@ public class NotificationManagerService extends SystemService {
                         am.setPendingIntentWhitelistDuration(pendingIntent.getTarget(),
                                 WHITELIST_TOKEN, duration);
                         am.setPendingIntentAllowBgActivityStarts(pendingIntent.getTarget(),
-                                WHITELIST_TOKEN, (FLAG_ACTIVITY_SENDER | FLAG_BROADCAST_SENDER));
+                                WHITELIST_TOKEN, (FLAG_ACTIVITY_SENDER | FLAG_BROADCAST_SENDER
+                                        | FLAG_SERVICE_SENDER));
                     }
                 }
             }
@@ -5698,19 +5709,17 @@ public class NotificationManagerService extends SystemService {
             }
             int indexBefore = findNotificationRecordIndexLocked(record);
             boolean interceptBefore = record.isIntercepted();
-            float contactAffinityBefore = record.getContactAffinity();
             int visibilityBefore = record.getPackageVisibilityOverride();
             recon.applyChangesLocked(record);
             applyZenModeLocked(record);
             mRankingHelper.sort(mNotificationList);
             int indexAfter = findNotificationRecordIndexLocked(record);
             boolean interceptAfter = record.isIntercepted();
-            float contactAffinityAfter = record.getContactAffinity();
             int visibilityAfter = record.getPackageVisibilityOverride();
             changed = indexBefore != indexAfter || interceptBefore != interceptAfter
                     || visibilityBefore != visibilityAfter;
             if (interceptBefore && !interceptAfter
-                    && Float.compare(contactAffinityBefore, contactAffinityAfter) != 0) {
+                    && record.isNewEnoughForAlerting(System.currentTimeMillis())) {
                 buzzBeepBlinkLocked(record);
             }
         }

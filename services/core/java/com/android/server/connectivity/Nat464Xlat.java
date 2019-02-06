@@ -16,8 +16,9 @@
 
 package com.android.server.connectivity;
 
-import android.net.InterfaceConfiguration;
 import android.net.ConnectivityManager;
+import android.net.INetd;
+import android.net.InterfaceConfiguration;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.NetworkInfo;
@@ -60,6 +61,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
         NetworkInfo.State.SUSPENDED,
     };
 
+    private final INetd mNetd;
     private final INetworkManagementService mNMService;
 
     // The network we're running on, and its type.
@@ -77,7 +79,8 @@ public class Nat464Xlat extends BaseNetworkObserver {
     private String mIface;
     private State mState = State.IDLE;
 
-    public Nat464Xlat(INetworkManagementService nmService, NetworkAgentInfo nai) {
+    public Nat464Xlat(NetworkAgentInfo nai, INetd netd, INetworkManagementService nmService) {
+        mNetd = netd;
         mNMService = nmService;
         mNetwork = nai;
     }
@@ -142,7 +145,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
             return;
         }
         try {
-            mNMService.startClatd(baseIface);
+            mNetd.clatdStart(baseIface);
         } catch(RemoteException|IllegalStateException e) {
             Slog.e(TAG, "Error starting clatd on " + baseIface, e);
         }
@@ -164,7 +167,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
      */
     private void enterStoppingState() {
         try {
-            mNMService.stopClatd(mBaseIface);
+            mNetd.clatdStop(mBaseIface);
         } catch(RemoteException|IllegalStateException e) {
             Slog.e(TAG, "Error stopping clatd on " + mBaseIface, e);
         }
@@ -206,7 +209,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
             Slog.e(TAG, "startClat: Can't start clat on null interface");
             return;
         }
-        // TODO: should we only do this if mNMService.startClatd() succeeds?
+        // TODO: should we only do this if mNetd.clatdStart() succeeds?
         Slog.i(TAG, "Starting clatd on " + baseIface);
         enterStartingState(baseIface);
     }

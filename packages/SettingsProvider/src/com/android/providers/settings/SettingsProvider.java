@@ -84,6 +84,8 @@ import com.android.providers.settings.SettingsState.Setting;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
 
+import com.google.android.collect.Sets;
+
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
@@ -957,12 +959,12 @@ public class SettingsProvider extends ContentProvider {
         UserManagerInternal userManager = LocalServices.getService(UserManagerInternal.class);
         userManager.addUserRestrictionsListener((int userId, Bundle newRestrictions,
                 Bundle prevRestrictions) -> {
+            Set<String> changedRestrictions = getRestrictionDiff(prevRestrictions, newRestrictions);
             // We are changing the settings affected by restrictions to their current
             // value with a forced update to ensure that all cross profile dependencies
             // are taken into account. Also make sure the settings update to.. the same
             // value passes the security checks, so clear binder calling id.
-            if (newRestrictions.getBoolean(UserManager.DISALLOW_SHARE_LOCATION)
-                    != prevRestrictions.getBoolean(UserManager.DISALLOW_SHARE_LOCATION)) {
+            if (changedRestrictions.contains(UserManager.DISALLOW_SHARE_LOCATION)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     synchronized (mLock) {
@@ -976,11 +978,8 @@ public class SettingsProvider extends ContentProvider {
                     Binder.restoreCallingIdentity(identity);
                 }
             }
-            if (newRestrictions.getBoolean(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
-                    != prevRestrictions.getBoolean(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES) ||
-                    newRestrictions.getBoolean(
-                            UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY)
-                    != prevRestrictions.getBoolean(
+            if (changedRestrictions.contains(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+                    || changedRestrictions.contains(
                             UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
@@ -994,8 +993,7 @@ public class SettingsProvider extends ContentProvider {
                     Binder.restoreCallingIdentity(identity);
                 }
             }
-            if (newRestrictions.getBoolean(UserManager.DISALLOW_DEBUGGING_FEATURES)
-                    != prevRestrictions.getBoolean(UserManager.DISALLOW_DEBUGGING_FEATURES)) {
+            if (changedRestrictions.contains(UserManager.DISALLOW_DEBUGGING_FEATURES)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     synchronized (mLock) {
@@ -1008,8 +1006,7 @@ public class SettingsProvider extends ContentProvider {
                     Binder.restoreCallingIdentity(identity);
                 }
             }
-            if (newRestrictions.getBoolean(UserManager.ENSURE_VERIFY_APPS)
-                    != prevRestrictions.getBoolean(UserManager.ENSURE_VERIFY_APPS)) {
+            if (changedRestrictions.contains(UserManager.ENSURE_VERIFY_APPS)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     synchronized (mLock) {
@@ -1028,8 +1025,7 @@ public class SettingsProvider extends ContentProvider {
                     Binder.restoreCallingIdentity(identity);
                 }
             }
-            if (newRestrictions.getBoolean(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)
-                    != prevRestrictions.getBoolean(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
+            if (changedRestrictions.contains(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     synchronized (mLock) {
@@ -1046,13 +1042,27 @@ public class SettingsProvider extends ContentProvider {
         });
     }
 
+    private static Set<String> getRestrictionDiff(Bundle prevRestrictions, Bundle newRestrictions) {
+        Set<String> restrictionNames = Sets.newArraySet();
+        restrictionNames.addAll(prevRestrictions.keySet());
+        restrictionNames.addAll(newRestrictions.keySet());
+        Set<String> diff = Sets.newArraySet();
+        for (String restrictionName : restrictionNames) {
+            if (prevRestrictions.getBoolean(restrictionName) != newRestrictions.getBoolean(
+                    restrictionName)) {
+                diff.add(restrictionName);
+            }
+        }
+        return diff;
+    }
+
     private Setting getConfigSetting(String name) {
         if (DEBUG) {
             Slog.v(LOG_TAG, "getConfigSetting(" + name + ")");
         }
 
         // TODO(b/117663715): Ensure the caller can access the setting.
-        // enforceSettingReadable(name, SETTINGS_TYPE_CONFIG, UserHandle.getCallingUserId());
+        // enforceReadPermission(READ_DEVICE_CONFIG);
 
         // Get the value.
         synchronized (mLock) {
@@ -1088,8 +1098,9 @@ public class SettingsProvider extends ContentProvider {
 
     private boolean mutateConfigSetting(String name, String value, String prefix,
             boolean makeDefault, int operation, int mode) {
-        // TODO(b/117663715): check the new permission when it's added.
-        // enforceWritePermission(Manifest.permission.WRITE_SECURE_SETTINGS);
+
+        // TODO(b/117663715): Ensure the caller can access the setting.
+        // enforceReadPermission(WRITE_DEVICE_CONFIG);
 
         // Perform the mutation.
         synchronized (mLock) {

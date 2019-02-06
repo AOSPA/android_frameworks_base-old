@@ -110,6 +110,7 @@ struct EventWhat {
     jint kWhatDrmEvent;
     jint kWhatExpirationUpdate;
     jint kWhatKeyStatusChange;
+    jint kWhatSessionLostState;
 } gEventWhat;
 
 struct KeyTypes {
@@ -141,6 +142,16 @@ struct StateExceptionFields {
     jclass classId;
 };
 
+struct SessionExceptionFields {
+    jmethodID init;
+    jclass classId;
+    jfieldID errorCode;
+};
+
+struct SessionExceptionErrorCodes {
+    jint kResourceContention;
+} gSessionExceptionErrorCodes;
+
 struct HDCPLevels {
     jint kHdcpLevelUnknown;
     jint kHdcpNone;
@@ -148,6 +159,7 @@ struct HDCPLevels {
     jint kHdcpV2;
     jint kHdcpV2_1;
     jint kHdcpV2_2;
+    jint kHdcpV2_3;
     jint kHdcpNoOutput;
 } gHdcpLevels;
 
@@ -180,6 +192,7 @@ struct fields_t {
     EntryFields entry;
     CertificateFields certificate;
     StateExceptionFields stateException;
+    SessionExceptionFields sessionException;
     jclass certificateClassId;
     jclass hashmapClassId;
     jclass arraylistClassId;
@@ -310,6 +323,9 @@ void JNIDrmListener::notify(DrmPlugin::EventType eventType, int extra,
          case DrmPlugin::kDrmPluginEventKeysChange:
             jwhat = gEventWhat.kWhatKeyStatusChange;
             break;
+         case DrmPlugin::kDrmPluginEventSessionLostState:
+            jwhat = gEventWhat.kWhatSessionLostState;
+            break;
         default:
             ALOGE("Invalid event DrmPlugin::EventType %d, ignored", (int)eventType);
             return;
@@ -343,6 +359,30 @@ static void throwStateException(JNIEnv *env, const char *msg, status_t err) {
     env->Throw(static_cast<jthrowable>(exception));
 }
 
+static void throwSessionException(JNIEnv *env, const char *msg, status_t err) {
+    ALOGE("Session exception: %s (%d)", msg, err);
+
+    jint jErrorCode = 0;
+    switch(err) {
+        case ERROR_DRM_RESOURCE_CONTENTION:
+            jErrorCode = gSessionExceptionErrorCodes.kResourceContention;
+            break;
+        default:
+            break;
+    }
+
+    jobject exception = env->NewObject(gFields.sessionException.classId,
+            gFields.sessionException.init, static_cast<int>(err),
+            env->NewStringUTF(msg));
+
+    env->SetIntField(exception, gFields.sessionException.errorCode, jErrorCode);
+    env->Throw(static_cast<jthrowable>(exception));
+}
+
+static bool isSessionException(status_t err) {
+    return err == ERROR_DRM_RESOURCE_CONTENTION;
+}
+
 static bool throwExceptionAsNecessary(
         JNIEnv *env, status_t err, const char *msg = NULL) {
 
@@ -370,7 +410,7 @@ static bool throwExceptionAsNecessary(
     case ERROR_DRM_CANNOT_HANDLE:
         drmMessage = "Invalid parameter or data format";
         break;
-    case ERROR_DRM_TAMPER_DETECTED:
+    case ERROR_DRM_INVALID_STATE:
         drmMessage = "Invalid state";
         break;
     default:
@@ -398,6 +438,9 @@ static bool throwExceptionAsNecessary(
     } else if (err == DEAD_OBJECT) {
         jniThrowException(env, "android/media/MediaDrmResetException",
                 "mediaserver died");
+        return true;
+    } else if (isSessionException(err)) {
+        throwSessionException(env, msg, err);
         return true;
     } else if (err != OK) {
         String8 errbuf;
@@ -705,6 +748,8 @@ static void android_media_MediaDrm_native_init(JNIEnv *env) {
     gEventWhat.kWhatExpirationUpdate = env->GetStaticIntField(clazz, field);
     GET_STATIC_FIELD_ID(field, clazz, "KEY_STATUS_CHANGE", "I");
     gEventWhat.kWhatKeyStatusChange = env->GetStaticIntField(clazz, field);
+    GET_STATIC_FIELD_ID(field, clazz, "SESSION_LOST_STATE", "I");
+    gEventWhat.kWhatSessionLostState = env->GetStaticIntField(clazz, field);
 
     GET_STATIC_FIELD_ID(field, clazz, "KEY_TYPE_STREAMING", "I");
     gKeyTypes.kKeyTypeStreaming = env->GetStaticIntField(clazz, field);
@@ -730,6 +775,8 @@ static void android_media_MediaDrm_native_init(JNIEnv *env) {
     gHdcpLevels.kHdcpV2_1 = env->GetStaticIntField(clazz, field);
     GET_STATIC_FIELD_ID(field, clazz, "HDCP_V2_2", "I");
     gHdcpLevels.kHdcpV2_2 = env->GetStaticIntField(clazz, field);
+    GET_STATIC_FIELD_ID(field, clazz, "HDCP_V2_3", "I");
+    gHdcpLevels.kHdcpV2_3 = env->GetStaticIntField(clazz, field);
     GET_STATIC_FIELD_ID(field, clazz, "HDCP_NO_DIGITAL_OUTPUT", "I");
     gHdcpLevels.kHdcpNoOutput = env->GetStaticIntField(clazz, field);
 
@@ -831,6 +878,14 @@ static void android_media_MediaDrm_native_init(JNIEnv *env) {
     FIND_CLASS(clazz, "android/media/MediaDrm$MediaDrmStateException");
     GET_METHOD_ID(gFields.stateException.init, clazz, "<init>", "(ILjava/lang/String;)V");
     gFields.stateException.classId = static_cast<jclass>(env->NewGlobalRef(clazz));
+
+    FIND_CLASS(clazz, "android/media/MediaDrm$SessionException");
+    GET_METHOD_ID(gFields.sessionException.init, clazz, "<init>", "(ILjava/lang/String;)V");
+    gFields.sessionException.classId = static_cast<jclass>(env->NewGlobalRef(clazz));
+    GET_FIELD_ID(gFields.sessionException.errorCode, clazz, "mErrorCode", "I");
+
+    GET_STATIC_FIELD_ID(field, clazz, "ERROR_RESOURCE_CONTENTION", "I");
+    gSessionExceptionErrorCodes.kResourceContention = env->GetStaticIntField(clazz, field);
 }
 
 static void android_media_MediaDrm_native_setup(
@@ -1338,6 +1393,8 @@ static jint HdcpLevelTojint(DrmPlugin::HdcpLevel level) {
         return gHdcpLevels.kHdcpV2_1;
     case DrmPlugin::kHdcpV2_2:
         return gHdcpLevels.kHdcpV2_2;
+    case DrmPlugin::kHdcpV2_3:
+        return gHdcpLevels.kHdcpV2_3;
     case DrmPlugin::kHdcpNoOutput:
         return gHdcpLevels.kHdcpNoOutput;
     }

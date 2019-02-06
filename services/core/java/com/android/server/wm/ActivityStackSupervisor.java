@@ -335,9 +335,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
      */
     PowerManager.WakeLock mGoingToSleep;
 
-    /** Used to keep resumeTopActivityUncheckedLocked() from being entered recursively */
-    boolean inResumeTopActivity;
-
     /**
      * Temporary rect used during docked stack resize calculation so we don't need to create a new
      * object each time.
@@ -955,6 +952,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         final WindowProcessController wpc =
                 mService.getProcessController(r.processName, r.info.applicationInfo.uid);
 
+        boolean knownToBeDead = false;
         if (wpc != null && wpc.hasThread()) {
             try {
                 if ((r.info.flags & ActivityInfo.FLAG_MULTIPROCESS) == 0
@@ -973,6 +971,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
             // If a dead object exception was thrown -- fall through to
             // restart the application.
+            knownToBeDead = true;
         }
 
         // Suppress transition until the new activity becomes ready, otherwise the keyguard can
@@ -986,7 +985,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         // ATMS lock held.
         final Message msg = PooledLambda.obtainMessage(
                 ActivityManagerInternal::startProcess, mService.mAmInternal, r.processName,
-                r.info.applicationInfo, true, "activity", r.intent.getComponent());
+                r.info.applicationInfo, knownToBeDead, "activity", r.intent.getComponent());
         mService.mH.sendMessage(msg);
     }
 
@@ -1690,8 +1689,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void resizePinnedStackLocked(Rect pinnedBounds, Rect tempPinnedTaskBounds) {
-        // TODO(multi-display): Pinned stack display should be passed in.
-        final PinnedActivityStack stack =
+        // TODO(multi-display): The display containing the stack should be passed in.
+        final ActivityStack stack =
                 mRootActivityContainer.getDefaultDisplay().getPinnedStack();
         if (stack == null) {
             Slog.w(TAG, "resizePinnedStackLocked: pinned stack not found");
@@ -1702,7 +1701,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         // another AM call that is holding the AMS lock. In such a case, the pinnedBounds may be
         // incorrect if AMS.resizeStackWithBoundsFromWindowManager() is already called while waiting
         // for the AMS lock to be freed. So check and make sure these bounds are still good.
-        final PinnedStackWindowController stackController = stack.getWindowContainerController();
+        final TaskStack stackController = stack.getTaskStack();
         if (stackController.pinnedStackResizeDisallowed()) {
             return;
         }
@@ -1746,15 +1745,14 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
              * invisible as well and added to the stopping list.  After which we process the
              * stopping list by handling the idle.
              */
-            final PinnedActivityStack pinnedStack = (PinnedActivityStack) stack;
-            pinnedStack.mForceHidden = true;
-            pinnedStack.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
-            pinnedStack.mForceHidden = false;
+            stack.mForceHidden = true;
+            stack.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
+            stack.mForceHidden = false;
             activityIdleInternalLocked(null, false /* fromTimeout */,
                     true /* processPausingActivites */, null /* configuration */);
 
             // Move all the tasks to the bottom of the fullscreen stack
-            moveTasksToFullscreenStackLocked(pinnedStack, !ON_TOP);
+            moveTasksToFullscreenStackLocked(stack, !ON_TOP);
         } else {
             for (int i = tasks.size() - 1; i >= 0; i--) {
                 removeTaskByIdLocked(tasks.get(i).taskId, true /* killProcess */,
@@ -2682,6 +2680,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 try {
                     mService.moveTaskToFrontLocked(task.taskId, 0, options,
                             true /* fromRecents */);
+                    // Apply options to prevent pendingOptions be taken by client to make sure
+                    // the override pending app transition will be applied immediately.
+                    targetActivity.applyOptionsLocked();
                 } finally {
                     mActivityMetricsLogger.notifyActivityLaunched(START_TASK_TO_FRONT,
                             targetActivity);

@@ -118,7 +118,6 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
     @Before
     public void setUp() throws Exception {
-        setupActivityTaskManagerService();
         mController = mock(ActivityStartController.class);
         mActivityMetricsLogger = mock(ActivityMetricsLogger.class);
         clearInvocations(mActivityMetricsLogger);
@@ -144,7 +143,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 .setStack(mService.mRootActivityContainer.getDefaultDisplay().createStack(
                         WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD, true /* onTop */))
                 .build();
-        assertThat((Object) task2.getStack()).isInstanceOf(PinnedActivityStack.class);
+        assertThat((Object) task2.getStack()).isInstanceOf(ActivityStack.class);
         mStarter.updateBounds(task2, bounds);
 
         verify(mService, times(1)).resizeStack(eq(task2.getStack().mStackId),
@@ -648,10 +647,10 @@ public class ActivityStarterTests extends ActivityTestsBase {
             boolean hasForegroundActivities, boolean callerIsRecents,
             boolean callerIsTempWhitelisted) {
         // window visibility
-        doReturn(callingUidHasVisibleWindow).when(mService.mWindowManager).isAnyWindowVisibleForUid(
-                callingUid);
-        doReturn(realCallingUidHasVisibleWindow).when(mService.mWindowManager)
-                .isAnyWindowVisibleForUid(realCallingUid);
+        doReturn(callingUidHasVisibleWindow).when(mService.mWindowManager.mRoot)
+                .isAnyNonToastWindowVisibleForUid(callingUid);
+        doReturn(realCallingUidHasVisibleWindow).when(mService.mWindowManager.mRoot)
+                .isAnyNonToastWindowVisibleForUid(realCallingUid);
         // process importance
         doReturn(callingUidProcState).when(mService).getUidStateLocked(callingUid);
         doReturn(realCallingUidProcState).when(mService).getUidStateLocked(realCallingUid);
