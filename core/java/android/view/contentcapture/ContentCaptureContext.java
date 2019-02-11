@@ -22,10 +22,12 @@ import android.annotation.SystemApi;
 import android.app.TaskInfo;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.view.Display;
 import android.view.View;
 
 import com.android.internal.util.Preconditions;
@@ -84,13 +86,13 @@ public final class ContentCaptureContext implements Parcelable {
     // Fields below are set by app on Builder
     private final @Nullable Bundle mExtras;
     private final @Nullable Uri mUri;
+    private final @Nullable String mAction;
 
     // Fields below are set by server when the session starts
-    // TODO(b/111276913): create new object for taskId + componentName / reuse on other places
     private final @Nullable ComponentName mComponentName;
     private final int mTaskId;
-    private final int mDisplayId;
     private final int mFlags;
+    private final int mDisplayId;
 
     // Fields below are set by the service upon "delivery" and are not marshalled in the parcel
     private @Nullable String mParentSessionId;
@@ -102,10 +104,12 @@ public final class ContentCaptureContext implements Parcelable {
             mHasClientContext = true;
             mExtras = clientContext.mExtras;
             mUri = clientContext.mUri;
+            mAction = clientContext.mAction;
         } else {
             mHasClientContext = false;
             mExtras = null;
             mUri = null;
+            mAction = null;
         }
         mComponentName = Preconditions.checkNotNull(componentName);
         mTaskId = taskId;
@@ -117,13 +121,15 @@ public final class ContentCaptureContext implements Parcelable {
         mHasClientContext = true;
         mExtras = builder.mExtras;
         mUri = builder.mUri;
+        mAction = builder.mAction;
 
         mComponentName  = null;
-        mTaskId = mFlags = mDisplayId = 0;
+        mTaskId = mFlags = 0;
+        mDisplayId = Display.INVALID_DISPLAY;
     }
 
     /**
-     * Gets the (optional) extras set by the app.
+     * Gets the (optional) extras set by the app (through {@link Builder#setExtras(Bundle)}).
      *
      * <p>It can be used to provide vendor-specific data that can be modified and examined.
      *
@@ -136,7 +142,7 @@ public final class ContentCaptureContext implements Parcelable {
     }
 
     /**
-     * Gets the (optional) URI set by the app.
+     * Gets the (optional) URI set by the app (through {@link Builder#setUri(Uri)}).
      *
      * @hide
      */
@@ -144,6 +150,17 @@ public final class ContentCaptureContext implements Parcelable {
     @Nullable
     public Uri getUri() {
         return mUri;
+    }
+
+    /**
+     * Gets the (optional) action set by the app (through {@link Builder#setAction(String)}).
+     *
+     * @hide
+     */
+    @SystemApi
+    @Nullable
+    public String getAction() {
+        return mAction;
     }
 
     /**
@@ -213,6 +230,8 @@ public final class ContentCaptureContext implements Parcelable {
     public static final class Builder {
         private Bundle mExtras;
         private Uri mUri;
+        private boolean mDestroyed;
+        private String mAction;
 
         /**
          * Sets extra options associated with this context.
@@ -221,11 +240,13 @@ public final class ContentCaptureContext implements Parcelable {
          *
          * @param extras extra options.
          * @return this builder.
+         *
+         * @throws IllegalStateException if {@link #build()} was already called.
          */
         @NonNull
         public Builder setExtras(@NonNull Bundle extras) {
-            // TODO(b/111276913): check build just once / throw exception / test / document
             mExtras = Preconditions.checkNotNull(extras);
+            throwIfDestroyed();
             return this;
         }
 
@@ -236,22 +257,50 @@ public final class ContentCaptureContext implements Parcelable {
          *
          * @param uri URI associated with this context.
          * @return this builder.
+         *
+         * @throws IllegalStateException if {@link #build()} was already called.
          */
         @NonNull
         public Builder setUri(@NonNull Uri uri) {
-            // TODO(b/111276913): check build just once / throw exception / test / document
             mUri = Preconditions.checkNotNull(uri);
+            throwIfDestroyed();
+            return this;
+        }
+
+        /**
+         * Sets an {@link Intent#getAction() intent action} associated with this context.
+         *
+         * @param action intent action
+         *
+         * @return this builder
+         *
+         * @throws IllegalStateException if {@link #build()} was already called.
+         */
+        @NonNull
+        public Builder setAction(@NonNull String action) {
+            mAction = Preconditions.checkNotNull(action);
+            throwIfDestroyed();
             return this;
         }
 
         /**
          * Builds the {@link ContentCaptureContext}.
+         *
+         * @throws IllegalStateException if {@link #build()} was already called or no call to either
+         * {@link #setExtras(Bundle)}, {@link #setAction(String)}, or {@link #setUri(Uri)} was made.
+         *
+         * @return the built {@code ContentCaptureContext}
          */
         public ContentCaptureContext build() {
-            // TODO(b/111276913): check build just once / throw exception / test / document
-            // TODO(b/111276913): make sure it at least one property (uri / extras) / test /
-            // throw exception / documment
+            throwIfDestroyed();
+            Preconditions.checkState(mExtras != null || mUri != null || mAction != null,
+                    "Must call setUri() or setExtras() or setUri() before calling build()");
+            mDestroyed = true;
             return new ContentCaptureContext(this);
+        }
+
+        private void throwIfDestroyed() {
+            Preconditions.checkState(!mDestroyed, "Already called #build()");
         }
     }
 
@@ -277,6 +326,10 @@ public final class ContentCaptureContext implements Parcelable {
             // NOTE: cannot dump because it could contain PII
             pw.print(", hasUri");
         }
+        if (mAction != null) {
+            // NOTE: cannot dump because it could contain PII
+            pw.print(", hasAction");
+        }
     }
 
     @Override
@@ -297,6 +350,10 @@ public final class ContentCaptureContext implements Parcelable {
             // NOTE: cannot print because it could contain PII
             builder.append(", hasUri");
         }
+        if (mAction != null) {
+            // NOTE: cannot print because it could contain PII
+            builder.append(", hasAction");
+        }
         return builder.append(']').toString();
     }
 
@@ -310,6 +367,7 @@ public final class ContentCaptureContext implements Parcelable {
         parcel.writeInt(mHasClientContext ? 1 : 0);
         if (mHasClientContext) {
             parcel.writeParcelable(mUri, flags);
+            parcel.writeString(mAction);
             parcel.writeBundle(mExtras);
         }
         parcel.writeParcelable(mComponentName, flags);
@@ -329,12 +387,14 @@ public final class ContentCaptureContext implements Parcelable {
 
             final ContentCaptureContext clientContext;
             if (hasClientContext) {
+                // Must reconstruct the client context using the Builder API
                 final Builder builder = new Builder();
                 final Uri uri = parcel.readParcelable(null);
+                final String action = parcel.readString();
                 final Bundle extras = parcel.readBundle();
                 if (uri != null) builder.setUri(uri);
+                if (action != null) builder.setAction(action);
                 if (extras != null) builder.setExtras(extras);
-                // Must reconstruct the client context using the Builder API
                 clientContext = new ContentCaptureContext(builder);
             } else {
                 clientContext = null;

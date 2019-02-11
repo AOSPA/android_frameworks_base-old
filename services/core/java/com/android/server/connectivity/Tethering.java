@@ -124,7 +124,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
-
 /**
  * @hide
  *
@@ -226,7 +225,8 @@ public class Tethering extends BaseNetworkObserver {
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(ACTION_CARRIER_CONFIG_CHANGED);
-        mEntitlementMgr = mDeps.getEntitlementManager(mContext, mLog, systemProperties);
+        mEntitlementMgr = mDeps.getEntitlementManager(mContext, mTetherMasterSM,
+                mLog, systemProperties);
         mCarrierConfigChange = new VersionedBroadcastListener(
                 "CarrierConfigChangeListener", mContext, smHandler, filter,
                 (Intent ignored) -> {
@@ -477,6 +477,7 @@ public class Tethering extends BaseNetworkObserver {
                 } else {
                     sendTetherResult(receiver, resultCode);
                 }
+                mEntitlementMgr.updateEntitlementCacheValue(type, resultCode);
             }
         };
 
@@ -1668,6 +1669,14 @@ public class Tethering extends BaseNetworkObserver {
 
     public void systemReady() {
         mUpstreamNetworkMonitor.startTrackDefaultNetwork(mDeps.getDefaultNetworkRequest());
+    }
+
+    /** Get the latest value of the tethering entitlement check. */
+    public void getLatestTetheringEntitlementValue(int type, ResultReceiver receiver,
+            boolean showEntitlementUi) {
+        if (receiver != null) {
+            mEntitlementMgr.getLatestTetheringEntitlementValue(type, receiver, showEntitlementUi);
+        }
     }
 
     @Override

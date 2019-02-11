@@ -175,7 +175,7 @@ struct SecurityLevels {
 
 struct OfflineLicenseState {
     jint kOfflineLicenseStateUsable;
-    jint kOfflineLicenseStateInactive;
+    jint kOfflineLicenseStateReleased;
     jint kOfflineLicenseStateUnknown;
 } gOfflineLicenseStates;
 
@@ -426,6 +426,9 @@ static bool throwExceptionAsNecessary(
     if (err == BAD_VALUE || err == ERROR_DRM_CANNOT_HANDLE) {
         jniThrowException(env, "java/lang/IllegalArgumentException", msg);
         return true;
+    } else if (err == ERROR_UNSUPPORTED) {
+        jniThrowException(env, "java/lang/UnsupportedOperationException", msg);
+        return true;
     } else if (err == ERROR_DRM_NOT_PROVISIONED) {
         jniThrowException(env, "android/media/NotProvisionedException", msg);
         return true;
@@ -542,14 +545,15 @@ void JDrm::disconnect() {
 
 
 // static
-bool JDrm::IsCryptoSchemeSupported(const uint8_t uuid[16], const String8 &mimeType) {
+status_t JDrm::IsCryptoSchemeSupported(const uint8_t uuid[16], const String8 &mimeType,
+                                       DrmPlugin::SecurityLevel securityLevel, bool *isSupported) {
     sp<IDrm> drm = MakeDrm();
 
     if (drm == NULL) {
-        return false;
+        return BAD_VALUE;
     }
 
-    return drm->isCryptoSchemeSupported(uuid, mimeType);
+    return drm->isCryptoSchemeSupported(uuid, mimeType, securityLevel, isSupported);
 }
 
 status_t JDrm::initCheck() const {
@@ -793,10 +797,10 @@ static void android_media_MediaDrm_native_init(JNIEnv *env) {
     GET_STATIC_FIELD_ID(field, clazz, "SECURITY_LEVEL_HW_SECURE_ALL", "I");
     gSecurityLevels.kSecurityLevelHwSecureAll = env->GetStaticIntField(clazz, field);
 
-    GET_STATIC_FIELD_ID(field, clazz, "OFFLINE_LICENSE_USABLE", "I");
+    GET_STATIC_FIELD_ID(field, clazz, "OFFLINE_LICENSE_STATE_USABLE", "I");
     gOfflineLicenseStates.kOfflineLicenseStateUsable = env->GetStaticIntField(clazz, field);
-    GET_STATIC_FIELD_ID(field, clazz, "OFFLINE_LICENSE_INACTIVE", "I");
-    gOfflineLicenseStates.kOfflineLicenseStateInactive = env->GetStaticIntField(clazz, field);
+    GET_STATIC_FIELD_ID(field, clazz, "OFFLINE_LICENSE_STATE_RELEASED", "I");
+    gOfflineLicenseStates.kOfflineLicenseStateReleased = env->GetStaticIntField(clazz, field);
     GET_STATIC_FIELD_ID(field, clazz, "OFFLINE_LICENSE_STATE_UNKNOWN", "I");
     gOfflineLicenseStates.kOfflineLicenseStateUnknown = env->GetStaticIntField(clazz, field);
 
@@ -930,8 +934,30 @@ static void android_media_MediaDrm_native_setup(
     setDrm(env, thiz, drm);
 }
 
+DrmPlugin::SecurityLevel jintToSecurityLevel(jint jlevel) {
+    DrmPlugin::SecurityLevel level;
+
+    if (jlevel == gSecurityLevels.kSecurityLevelMax) {
+        level = DrmPlugin::kSecurityLevelMax;
+    }  else if (jlevel == gSecurityLevels.kSecurityLevelSwSecureCrypto) {
+        level = DrmPlugin::kSecurityLevelSwSecureCrypto;
+    } else if (jlevel == gSecurityLevels.kSecurityLevelSwSecureDecode) {
+        level = DrmPlugin::kSecurityLevelSwSecureDecode;
+    } else if (jlevel == gSecurityLevels.kSecurityLevelHwSecureCrypto) {
+        level = DrmPlugin::kSecurityLevelHwSecureCrypto;
+    } else if (jlevel == gSecurityLevels.kSecurityLevelHwSecureDecode) {
+        level = DrmPlugin::kSecurityLevelHwSecureDecode;
+    } else if (jlevel == gSecurityLevels.kSecurityLevelHwSecureAll) {
+        level = DrmPlugin::kSecurityLevelHwSecureAll;
+    } else {
+        level = DrmPlugin::kSecurityLevelUnknown;
+    }
+    return level;
+}
+
 static jboolean android_media_MediaDrm_isCryptoSchemeSupportedNative(
-    JNIEnv *env, jobject /* thiz */, jbyteArray uuidObj, jstring jmimeType) {
+        JNIEnv *env, jobject /* thiz */, jbyteArray uuidObj, jstring jmimeType,
+        jint jSecurityLevel) {
 
     if (uuidObj == NULL) {
         jniThrowException(env, "java/lang/IllegalArgumentException", NULL);
@@ -952,8 +978,16 @@ static jboolean android_media_MediaDrm_isCryptoSchemeSupportedNative(
     if (jmimeType != NULL) {
         mimeType = JStringToString8(env, jmimeType);
     }
+    DrmPlugin::SecurityLevel securityLevel = jintToSecurityLevel(jSecurityLevel);
 
-    return JDrm::IsCryptoSchemeSupported(uuid.array(), mimeType);
+    bool isSupported;
+    status_t err = JDrm::IsCryptoSchemeSupported(uuid.array(), mimeType,
+            securityLevel, &isSupported);
+
+    if (throwExceptionAsNecessary(env, err, "Failed to query crypto scheme support")) {
+        return false;
+    }
+    return isSupported;
 }
 
 static jbyteArray android_media_MediaDrm_openSession(
@@ -965,21 +999,8 @@ static jbyteArray android_media_MediaDrm_openSession(
     }
 
     Vector<uint8_t> sessionId;
-    DrmPlugin::SecurityLevel level;
-
-    if (jlevel == gSecurityLevels.kSecurityLevelMax) {
-        level = DrmPlugin::kSecurityLevelMax;
-    }  else if (jlevel == gSecurityLevels.kSecurityLevelSwSecureCrypto) {
-        level = DrmPlugin::kSecurityLevelSwSecureCrypto;
-    } else if (jlevel == gSecurityLevels.kSecurityLevelSwSecureDecode) {
-        level = DrmPlugin::kSecurityLevelSwSecureDecode;
-    } else if (jlevel == gSecurityLevels.kSecurityLevelHwSecureCrypto) {
-        level = DrmPlugin::kSecurityLevelHwSecureCrypto;
-    } else if (jlevel == gSecurityLevels.kSecurityLevelHwSecureDecode) {
-        level = DrmPlugin::kSecurityLevelHwSecureDecode;
-    } else if (jlevel == gSecurityLevels.kSecurityLevelHwSecureAll) {
-        level = DrmPlugin::kSecurityLevelHwSecureAll;
-    } else {
+    DrmPlugin::SecurityLevel level = jintToSecurityLevel(jlevel);
+    if (level == DrmPlugin::kSecurityLevelUnknown) {
         jniThrowException(env, "java/lang/IllegalArgumentException", "Invalid security level");
         return NULL;
     }
@@ -1560,8 +1581,8 @@ static jint android_media_MediaDrm_getOfflineLicenseState(JNIEnv *env,
     switch(state) {
     case DrmPlugin::kOfflineLicenseStateUsable:
         return gOfflineLicenseStates.kOfflineLicenseStateUsable;
-    case DrmPlugin::kOfflineLicenseStateInactive:
-        return gOfflineLicenseStates.kOfflineLicenseStateInactive;
+    case DrmPlugin::kOfflineLicenseStateReleased:
+        return gOfflineLicenseStates.kOfflineLicenseStateReleased;
     default:
         return gOfflineLicenseStates.kOfflineLicenseStateUnknown;
     }
@@ -1903,7 +1924,7 @@ static const JNINativeMethod gMethods[] = {
     { "native_setup", "(Ljava/lang/Object;[BLjava/lang/String;)V",
       (void *)android_media_MediaDrm_native_setup },
 
-    { "isCryptoSchemeSupportedNative", "([BLjava/lang/String;)Z",
+    { "isCryptoSchemeSupportedNative", "([BLjava/lang/String;I)Z",
       (void *)android_media_MediaDrm_isCryptoSchemeSupportedNative },
 
     { "openSession", "(I)[B",

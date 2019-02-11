@@ -57,7 +57,8 @@ public class Surface implements Parcelable {
             throws OutOfResourcesException;
 
     private static native long nativeCreateFromSurfaceControl(long surfaceControlNativeObject);
-    private static native long nativeGetFromSurfaceControl(long surfaceControlNativeObject);
+    private static native long nativeGetFromSurfaceControl(long surfaceObject,
+            long surfaceControlNativeObject);
 
     private static native long nativeLockCanvas(long nativeObject, Canvas canvas, Rect dirty)
             throws OutOfResourcesException;
@@ -182,6 +183,18 @@ public class Surface implements Parcelable {
      */
     @UnsupportedAppUsage
     public Surface() {
+    }
+
+    /**
+     * Create a Surface assosciated with a given {@link SurfaceControl}. Buffers submitted to this
+     * surface will be displayed by the system compositor according to the parameters
+     * specified by the control. Multiple surfaces may be constructed from one SurfaceControl,
+     * but only one can be connected (e.g. have an active EGL context) at a time.
+     *
+     * @param from The SurfaceControl to assosciate this Surface with
+     */
+    public Surface(SurfaceControl from) {
+        copyFrom(from);
     }
 
     /**
@@ -494,7 +507,6 @@ public class Surface implements Parcelable {
      * in to it.
      *
      * @param other {@link SurfaceControl} to copy from.
-     *
      * @hide
      */
     @UnsupportedAppUsage
@@ -508,9 +520,12 @@ public class Surface implements Parcelable {
             throw new NullPointerException(
                     "null SurfaceControl native object. Are you using a released SurfaceControl?");
         }
-        long newNativeObject = nativeGetFromSurfaceControl(surfaceControlPtr);
+        long newNativeObject = nativeGetFromSurfaceControl(mNativeObject, surfaceControlPtr);
 
         synchronized (mLock) {
+            if (newNativeObject == mNativeObject) {
+                return;
+            }
             if (mNativeObject != 0) {
                 nativeRelease(mNativeObject);
             }

@@ -82,7 +82,7 @@ public class NightDisplayTile extends QSTileImpl<BooleanState>
         if ("1".equals(Settings.Global.getString(mContext.getContentResolver(),
                 Settings.Global.NIGHT_DISPLAY_FORCED_AUTO_MODE_AVAILABLE))
                 && mController.getAutoModeRaw() == -1) {
-            mController.setAutoMode(ColorDisplayController.AUTO_MODE_CUSTOM);
+            mController.setAutoMode(ColorDisplayManager.AUTO_MODE_CUSTOM_TIME);
             Log.i("NightDisplayTile", "Enrolled in forced night display auto mode");
         }
 
@@ -111,7 +111,7 @@ public class NightDisplayTile extends QSTileImpl<BooleanState>
     protected void handleUpdateState(BooleanState state, Object arg) {
         state.value = mController.isActivated();
         state.label = mContext.getString(R.string.quick_settings_night_display_label);
-        state.icon = ResourceIcon.get(R.drawable.ic_qs_night_display_on);
+        state.icon = ResourceIcon.get(com.android.internal.R.drawable.ic_qs_night_display_on);
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.secondaryLabel = getSecondaryLabel(state.value);
@@ -127,7 +127,7 @@ public class NightDisplayTile extends QSTileImpl<BooleanState>
     @Nullable
     private String getSecondaryLabel(boolean isNightLightActivated) {
         switch(mController.getAutoMode()) {
-            case ColorDisplayController.AUTO_MODE_TWILIGHT:
+            case ColorDisplayManager.AUTO_MODE_TWILIGHT:
                 // Auto mode related to sunrise & sunset. If the light is on, it's guaranteed to be
                 // turned off at sunrise. If it's off, it's guaranteed to be turned on at sunset.
                 return isNightLightActivated
@@ -136,7 +136,7 @@ public class NightDisplayTile extends QSTileImpl<BooleanState>
                         : mContext.getString(
                                 R.string.quick_settings_night_secondary_label_on_at_sunset);
 
-            case ColorDisplayController.AUTO_MODE_CUSTOM:
+            case ColorDisplayManager.AUTO_MODE_CUSTOM_TIME:
                 // User-specified time, approximated to the nearest hour.
                 final @StringRes int toggleTimeStringRes;
                 final LocalTime toggleTime;

@@ -131,6 +131,7 @@ int android_view_Surface_mapPublicFormatToHalFormat(PublicFormat f) {
     switch(f) {
         case PublicFormat::JPEG:
         case PublicFormat::DEPTH_POINT_CLOUD:
+        case PublicFormat::DEPTH_JPEG:
             return HAL_PIXEL_FORMAT_BLOB;
         case PublicFormat::DEPTH16:
             return HAL_PIXEL_FORMAT_Y16;
@@ -161,6 +162,8 @@ android_dataspace android_view_Surface_mapPublicFormatToHalDataspace(
         case PublicFormat::NV21:
         case PublicFormat::YV12:
             return HAL_DATASPACE_V0_JFIF;
+        case PublicFormat::DEPTH_JPEG:
+            return static_cast<android_dataspace> (HAL_DATASPACE_DYNAMIC_DEPTH);
         default:
             // Most formats map to UNKNOWN
             return HAL_DATASPACE_UNKNOWN;
@@ -223,8 +226,12 @@ PublicFormat android_view_Surface_mapHalFormatDataspaceToPublicFormat(
                 case HAL_DATASPACE_V0_JFIF:
                     return PublicFormat::JPEG;
                 default:
-                    // Assume otherwise-marked blobs are also JPEG
-                    return PublicFormat::JPEG;
+                    if (dataSpace == static_cast<android_dataspace>(HAL_DATASPACE_DYNAMIC_DEPTH)) {
+                        return PublicFormat::DEPTH_JPEG;
+                    } else {
+                        // Assume otherwise-marked blobs are also JPEG
+                        return PublicFormat::JPEG;
+                    }
             }
             break;
         case HAL_PIXEL_FORMAT_BGRA_8888:
@@ -408,18 +415,23 @@ static jlong nativeCreateFromSurfaceControl(JNIEnv* env, jclass clazz,
 }
 
 static jlong nativeGetFromSurfaceControl(JNIEnv* env, jclass clazz,
+        jlong nativeObject,
         jlong surfaceControlNativeObj) {
-    /*
-     * This is used by the WindowManagerService just after constructing
-     * a Surface and is necessary for returning the Surface reference to
-     * the caller. At this point, we should only have a SurfaceControl.
-     */
-
+    Surface* self(reinterpret_cast<Surface *>(nativeObject));
     sp<SurfaceControl> ctrl(reinterpret_cast<SurfaceControl *>(surfaceControlNativeObj));
+
+    // If the underlying IGBP's are the same, we don't need to do anything.
+    if (self != nullptr &&
+            IInterface::asBinder(self->getIGraphicBufferProducer()) ==
+            IInterface::asBinder(ctrl->getIGraphicBufferProducer())) {
+        return nativeObject;
+    }
+
     sp<Surface> surface(ctrl->getSurface());
     if (surface != NULL) {
         surface->incStrong(&sRefBaseOwner);
     }
+
     return reinterpret_cast<jlong>(surface.get());
 }
 
@@ -607,7 +619,7 @@ static const JNINativeMethod gSurfaceMethods[] = {
             (void*)nativeAllocateBuffers },
     {"nativeCreateFromSurfaceControl", "(J)J",
             (void*)nativeCreateFromSurfaceControl },
-    {"nativeGetFromSurfaceControl", "(J)J",
+    {"nativeGetFromSurfaceControl", "(JJ)J",
             (void*)nativeGetFromSurfaceControl },
     {"nativeReadFromParcel", "(JLandroid/os/Parcel;)J",
             (void*)nativeReadFromParcel },

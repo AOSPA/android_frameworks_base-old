@@ -949,6 +949,10 @@ public class LockSettingsService extends ILockSettings.Stub {
     public void setSeparateProfileChallengeEnabled(int userId, boolean enabled,
             String managedUserPassword) {
         checkWritePermission(userId);
+        if (!mLockPatternUtils.hasSecureLockScreen()) {
+            throw new UnsupportedOperationException(
+                    "This operation requires secure lock screen feature.");
+        }
         synchronized (mSeparateChallengeLock) {
             setSeparateProfileChallengeEnabledLocked(userId, enabled, managedUserPassword);
         }
@@ -1346,6 +1350,10 @@ public class LockSettingsService extends ILockSettings.Stub {
     public void setLockCredential(String credential, int type, String savedCredential,
             int requestedQuality, int userId)
             throws RemoteException {
+        if (!mLockPatternUtils.hasSecureLockScreen()) {
+            throw new UnsupportedOperationException(
+                    "This operation requires secure lock screen feature");
+        }
         checkWritePermission(userId);
         synchronized (mSeparateChallengeLock) {
             setLockCredentialInternal(credential, type, savedCredential, requestedQuality, userId);
@@ -2965,6 +2973,10 @@ public class LockSettingsService extends ILockSettings.Stub {
         @Override
         public boolean setLockCredentialWithToken(String credential, int type, long tokenHandle,
                 byte[] token, int requestedQuality, int userId) {
+            if (!mLockPatternUtils.hasSecureLockScreen()) {
+                throw new UnsupportedOperationException(
+                        "This operation requires secure lock screen feature.");
+            }
             try {
                 return LockSettingsService.this.setLockCredentialWithToken(credential, type,
                         tokenHandle, token, requestedQuality, userId);

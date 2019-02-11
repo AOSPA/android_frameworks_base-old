@@ -16,31 +16,28 @@
 
 package com.android.server.pm.dex;
 
+import static android.provider.DeviceConfig.DexBoot;
+
 import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.dex.PackageDexUsage.DexUseInfo;
 import static com.android.server.pm.dex.PackageDexUsage.PackageUseInfo;
 
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageParser;
-import android.database.ContentObserver;
-import android.os.Build;
 import android.os.FileUtils;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
-import android.provider.Settings.Global;
+import android.provider.DeviceConfig;
 import android.util.Log;
 import android.util.Slog;
 import android.util.jar.StrictJarFile;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.util.ArrayUtils;
 import com.android.server.pm.Installer;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.PackageDexOptimizer;
@@ -134,10 +131,6 @@ public class DexManager {
 
     public DexLogger getDexLogger() {
         return mDexLogger;
-    }
-
-    public void systemReady() {
-        registerSettingObserver();
     }
 
     /**
@@ -235,7 +228,7 @@ public class DexManager {
                     continue;
                 }
 
-                mDexLogger.record(loaderUserId, dexPath, searchResult.mOwningPackageName,
+                mDexLogger.recordDex(loaderUserId, dexPath, searchResult.mOwningPackageName,
                         loadingAppInfo.packageName);
 
                 if (classLoaderContexts != null) {
@@ -699,47 +692,10 @@ public class DexManager {
         mDexLogger.writeNow();
     }
 
-    private void registerSettingObserver() {
-        final ContentResolver resolver = mContext.getContentResolver();
-
-        // This observer provides a one directional mapping from Global.PRIV_APP_OOB_ENABLED to
-        // pm.dexopt.priv-apps-oob property. This is only for experiment and should be removed once
-        // it is done.
-        ContentObserver privAppOobObserver = new ContentObserver(null) {
-            @Override
-            public void onChange(boolean selfChange) {
-                int oobEnabled = Global.getInt(resolver, Global.PRIV_APP_OOB_ENABLED, 0);
-                SystemProperties.set(PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB,
-                        oobEnabled == 1 ? "true" : "false");
-            }
-        };
-        resolver.registerContentObserver(
-                Global.getUriFor(Global.PRIV_APP_OOB_ENABLED), false, privAppOobObserver,
-                UserHandle.USER_SYSTEM);
-        // At boot, restore the value from the setting, which persists across reboot.
-        privAppOobObserver.onChange(true);
-
-        ContentObserver privAppOobListObserver = new ContentObserver(null) {
-            @Override
-            public void onChange(boolean selfChange) {
-                String oobList = Global.getString(resolver, Global.PRIV_APP_OOB_LIST);
-                if (oobList == null) {
-                    oobList = "ALL";
-                }
-                SystemProperties.set(PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB_LIST, oobList);
-            }
-        };
-        resolver.registerContentObserver(
-                Global.getUriFor(Global.PRIV_APP_OOB_LIST), false, privAppOobListObserver,
-                UserHandle.USER_SYSTEM);
-        // At boot, restore the value from the setting, which persists across reboot.
-        privAppOobListObserver.onChange(true);
-    }
-
     /**
      * Returns whether the given package is in the list of privilaged apps that should run out of
-     * box. This only makes sense if PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB is true. Note that when
-     * the the OOB list is empty, all priv apps will run in OOB mode.
+     * box. This only makes sense if the feature is enabled. Note that when the the OOB list is
+     * empty, all priv apps will run in OOB mode.
      */
     public static boolean isPackageSelectedToRunOob(String packageName) {
         return isPackageSelectedToRunOob(Arrays.asList(packageName));
@@ -747,19 +703,35 @@ public class DexManager {
 
     /**
      * Returns whether any of the given packages are in the list of privilaged apps that should run
-     * out of box. This only makes sense if PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB is true. Note that
-     * when the the OOB list is empty, all priv apps will run in OOB mode.
+     * out of box. This only makes sense if the feature is enabled. Note that when the the OOB list
+     * is empty, all priv apps will run in OOB mode.
      */
     public static boolean isPackageSelectedToRunOob(Collection<String> packageNamesInSameProcess) {
-        if (!SystemProperties.getBoolean(PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB, false)) {
+        return isPackageSelectedToRunOobInternal(
+                SystemProperties.getBoolean(PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB, false),
+                SystemProperties.get(PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB_LIST, "ALL"),
+                DeviceConfig.getProperty(DexBoot.NAMESPACE, DexBoot.PRIV_APPS_OOB_ENABLED),
+                DeviceConfig.getProperty(DexBoot.NAMESPACE, DexBoot.PRIV_APPS_OOB_WHITELIST),
+                packageNamesInSameProcess);
+    }
+
+    @VisibleForTesting
+    /* package */ static boolean isPackageSelectedToRunOobInternal(
+            boolean isDefaultEnabled, String defaultWhitelist, String overrideEnabled,
+            String overrideWhitelist, Collection<String> packageNamesInSameProcess) {
+        // Allow experiment (if exists) to override device configuration.
+        boolean enabled = overrideEnabled != null ? overrideEnabled.equals("true")
+                : isDefaultEnabled;
+        if (!enabled) {
             return false;
         }
-        String oobListProperty = SystemProperties.get(
-                PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB_LIST, "ALL");
-        if ("ALL".equals(oobListProperty)) {
+
+        // Similarly, experiment flag can override the whitelist.
+        String whitelist = overrideWhitelist != null ? overrideWhitelist : defaultWhitelist;
+        if ("ALL".equals(whitelist)) {
             return true;
         }
-        for (String oobPkgName : oobListProperty.split(",")) {
+        for (String oobPkgName : whitelist.split(",")) {
             if (packageNamesInSameProcess.contains(oobPkgName)) {
                 return true;
             }
@@ -768,36 +740,10 @@ public class DexManager {
     }
 
     /**
-     * Generates package related log if the package has code stored in unexpected way.
+     * Generates log if the archive located at {@code fileName} has uncompressed dex file that can
+     * be direclty mapped.
      */
-    public static void maybeLogUnexpectedPackageDetails(PackageParser.Package pkg) {
-        if (!Build.IS_DEBUGGABLE) {
-            return;
-        }
-
-        if (pkg.isPrivileged() && isPackageSelectedToRunOob(pkg.packageName)) {
-            logIfPackageHasUncompressedCode(pkg);
-        }
-    }
-
-    /**
-     * Generates log if the APKs in the given package have uncompressed dex file and so
-     * files that can be direclty mapped.
-     */
-    private static void logIfPackageHasUncompressedCode(PackageParser.Package pkg) {
-        auditUncompressedCodeInApk(pkg.baseCodePath);
-        if (!ArrayUtils.isEmpty(pkg.splitCodePaths)) {
-            for (int i = 0; i < pkg.splitCodePaths.length; i++) {
-                auditUncompressedCodeInApk(pkg.splitCodePaths[i]);
-            }
-        }
-    }
-
-    /**
-     * Generates log if the archive located at {@code fileName} has uncompressed dex file and so
-     * files that can be direclty mapped.
-     */
-    public static boolean auditUncompressedCodeInApk(String fileName) {
+    public static boolean auditUncompressedDexInApk(String fileName) {
         StrictJarFile jarFile = null;
         try {
             jarFile = new StrictJarFile(fileName,
@@ -814,16 +760,6 @@ public class DexManager {
                     } else if ((entry.getDataOffset() & 0x3) != 0) {
                         allCorrect = false;
                         Slog.w(TAG, "APK " + fileName + " has unaligned dex code " +
-                                entry.getName());
-                    }
-                } else if (entry.getName().endsWith(".so")) {
-                    if (entry.getMethod() != ZipEntry.STORED) {
-                        allCorrect = false;
-                        Slog.w(TAG, "APK " + fileName + " has compressed native code " +
-                                entry.getName());
-                    } else if ((entry.getDataOffset() & (0x1000 - 1)) != 0) {
-                        allCorrect = false;
-                        Slog.w(TAG, "APK " + fileName + " has unaligned native code " +
                                 entry.getName());
                     }
                 }

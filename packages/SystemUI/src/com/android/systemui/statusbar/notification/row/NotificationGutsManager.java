@@ -159,7 +159,8 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         return bindGuts(row, mGutsMenuItem);
     }
 
-    private boolean bindGuts(final ExpandableNotificationRow row,
+    @VisibleForTesting
+    protected boolean bindGuts(final ExpandableNotificationRow row,
             NotificationMenuRowPlugin.MenuItem item) {
         StatusBarNotification sbn = row.getStatusBarNotification();
 
@@ -298,7 +299,8 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 row.getIsNonblockable(),
                 isForBlockingHelper,
                 row.getEntry().userSentiment == USER_SENTIMENT_NEGATIVE,
-                row.getEntry().importance);
+                row.getEntry().importance,
+                row.getEntry().isHighPriority());
 
     }
 
@@ -388,8 +390,6 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
             // This view has no guts. Examples are the more card or the dismiss all view
             return false;
         }
-
-        mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_NOTE_CONTROLS);
 
         // ensure that it's laid but not visible until actually laid out
         guts.setVisibility(View.INVISIBLE);

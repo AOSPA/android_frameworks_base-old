@@ -206,6 +206,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mAdmin1Context.binder.callingUid = DpmMockContext.CALLER_UID;
 
         setUpUserManager();
+
+        when(getServices().lockPatternUtils.hasSecureLockScreen()).thenReturn(true);
     }
 
     private TransferOwnershipMetadataManager getMockTransferMetadataManager() {
@@ -836,6 +838,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 MockUtils.checkIntent(intent),
                 MockUtils.checkUserHandle(MANAGED_PROFILE_USER_ID));
     }
+
     /**
      * Test for: {@link DevicePolicyManager#setDeviceOwner} DO on system user installs successfully.
      */
@@ -2618,6 +2621,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         when(getServices().lockPatternUtils
                 .isSeparateProfileChallengeEnabled(eq(PROFILE_USER))).thenReturn(false);
         dpmi.reportSeparateProfileChallengeChanged(PROFILE_USER);
+        when(getServices().lockPatternUtils.hasSecureLockScreen()).thenReturn(true);
 
         verifyScreenTimeoutCall(Long.MAX_VALUE, PROFILE_USER);
         verifyScreenTimeoutCall(10L , UserHandle.USER_SYSTEM);
@@ -4233,6 +4237,41 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertTrue(dpm.isActivePasswordSufficient());
     }
 
+    public void testIsActivePasswordSufficient_noLockScreen() throws Exception {
+        // If there is no lock screen, the password is considered empty no matter what, because
+        // it provides no security.
+        when(getServices().lockPatternUtils.hasSecureLockScreen()).thenReturn(false);
+
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        mContext.packageName = admin1.getPackageName();
+        setupDeviceOwner();
+
+        // If no password requirements are set, isActivePasswordSufficient should succeed.
+        assertTrue(dpm.isActivePasswordSufficient());
+
+        // Now set some password quality requirements.
+        dpm.setPasswordQuality(admin1, DevicePolicyManager.PASSWORD_QUALITY_SOMETHING);
+
+        reset(mContext.spiedContext);
+        final int userHandle = UserHandle.getUserId(mContext.binder.callingUid);
+        PasswordMetrics passwordMetricsNoSymbols = new PasswordMetrics(
+                DevicePolicyManager.PASSWORD_QUALITY_COMPLEX, 9,
+                8, 2,
+                6, 1,
+                0, 1);
+        // This should be ignored, as there is no lock screen.
+        dpm.setActivePasswordState(passwordMetricsNoSymbols, userHandle);
+        dpm.reportPasswordChanged(userHandle);
+
+        // No broadcast should be sent.
+        verify(mContext.spiedContext, times(0)).sendBroadcastAsUser(
+                MockUtils.checkIntentAction(DeviceAdminReceiver.ACTION_PASSWORD_CHANGED),
+                MockUtils.checkUserHandle(userHandle));
+
+        // The active (nonexistent) password doesn't comply with the requirements.
+        assertFalse(dpm.isActivePasswordSufficient());
+    }
+
     private void setActivePasswordState(PasswordMetrics passwordMetrics)
             throws Exception {
         final int userHandle = UserHandle.getUserId(mContext.binder.callingUid);
@@ -5198,6 +5237,74 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 PasswordMetrics.computeForPassword("parentUser"));
 
         assertEquals(PASSWORD_COMPLEXITY_HIGH, dpm.getPasswordComplexity());
+    }
+
+    public void testCrossProfileCalendarPackages_initiallyEmpty() {
+        setAsProfileOwner(admin1);
+        final Set<String> packages = dpm.getCrossProfileCalendarPackages(admin1);
+        assertCrossProfileCalendarPackagesEqual(packages, Collections.emptySet());
+    }
+
+    public void testCrossProfileCalendarPackages_reopenDpms() {
+        setAsProfileOwner(admin1);
+        dpm.setCrossProfileCalendarPackages(admin1, null);
+        Set<String> packages = dpm.getCrossProfileCalendarPackages(admin1);
+        assertTrue(packages == null);
+        initializeDpms();
+        packages = dpm.getCrossProfileCalendarPackages(admin1);
+        assertTrue(packages == null);
+
+        dpm.setCrossProfileCalendarPackages(admin1, Collections.emptySet());
+        packages = dpm.getCrossProfileCalendarPackages(admin1);
+        assertCrossProfileCalendarPackagesEqual(packages, Collections.emptySet());
+        initializeDpms();
+        packages = dpm.getCrossProfileCalendarPackages(admin1);
+        assertCrossProfileCalendarPackagesEqual(packages, Collections.emptySet());
+
+        final String dummyPackageName = "test";
+        final Set<String> testPackages = new ArraySet<String>(Arrays.asList(dummyPackageName));
+        dpm.setCrossProfileCalendarPackages(admin1, testPackages);
+        packages = dpm.getCrossProfileCalendarPackages(admin1);
+        assertCrossProfileCalendarPackagesEqual(packages, testPackages);
+        initializeDpms();
+        packages = dpm.getCrossProfileCalendarPackages(admin1);
+        assertCrossProfileCalendarPackagesEqual(packages, testPackages);
+    }
+
+    private void assertCrossProfileCalendarPackagesEqual(Set<String> expected, Set<String> actual) {
+        assertTrue(expected != null);
+        assertTrue(actual != null);
+        assertTrue(expected.containsAll(actual));
+        assertTrue(actual.containsAll(expected));
+    }
+
+    public void testIsPackageAllowedToAccessCalendar_adminNotAllowed() {
+        setAsProfileOwner(admin1);
+        dpm.setCrossProfileCalendarPackages(admin1, Collections.emptySet());
+        when(getServices().settings.settingsSecureGetIntForUser(
+                Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED,
+                0, DpmMockContext.CALLER_USER_HANDLE)).thenReturn(1);
+        assertFalse(dpm.isPackageAllowedToAccessCalendar("TEST_PACKAGE"));
+    }
+
+    public void testIsPackageAllowedToAccessCalendar_settingOff() {
+        final String testPackage = "TEST_PACKAGE";
+        setAsProfileOwner(admin1);
+        dpm.setCrossProfileCalendarPackages(admin1, Collections.singleton(testPackage));
+        when(getServices().settings.settingsSecureGetIntForUser(
+                Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED,
+                0, DpmMockContext.CALLER_USER_HANDLE)).thenReturn(0);
+        assertFalse(dpm.isPackageAllowedToAccessCalendar(testPackage));
+    }
+
+    public void testIsPackageAllowedToAccessCalendar_bothAllowed() {
+        final String testPackage = "TEST_PACKAGE";
+        setAsProfileOwner(admin1);
+        dpm.setCrossProfileCalendarPackages(admin1, null);
+        when(getServices().settings.settingsSecureGetIntForUser(
+                Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED,
+                0, DpmMockContext.CALLER_USER_HANDLE)).thenReturn(1);
+        assertTrue(dpm.isPackageAllowedToAccessCalendar(testPackage));
     }
 
     private void configureProfileOwnerForDeviceIdAccess(ComponentName who, int userId) {

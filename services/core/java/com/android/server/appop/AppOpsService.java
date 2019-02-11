@@ -16,12 +16,13 @@
 
 package com.android.server.appop;
 
-import static android.app.AppOpsManager.OP_PLAY_AUDIO;
 import static android.app.AppOpsManager.OP_NONE;
+import static android.app.AppOpsManager.OP_PLAY_AUDIO;
 import static android.app.AppOpsManager.UID_STATE_BACKGROUND;
 import static android.app.AppOpsManager.UID_STATE_CACHED;
 import static android.app.AppOpsManager.UID_STATE_FOREGROUND;
 import static android.app.AppOpsManager.UID_STATE_FOREGROUND_SERVICE;
+import static android.app.AppOpsManager.UID_STATE_FOREGROUND_SERVICE_LOCATION;
 import static android.app.AppOpsManager.UID_STATE_LAST_NON_RESTRICTED;
 import static android.app.AppOpsManager.UID_STATE_PERSISTENT;
 import static android.app.AppOpsManager.UID_STATE_TOP;
@@ -94,9 +95,9 @@ import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
-
 import com.android.server.LocalServices;
 import com.android.server.LockGuard;
+
 import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -141,6 +142,8 @@ public class AppOpsService extends IAppOpsService.Stub {
         UID_STATE_PERSISTENT,           // ActivityManager.PROCESS_STATE_PERSISTENT
         UID_STATE_PERSISTENT,           // ActivityManager.PROCESS_STATE_PERSISTENT_UI
         UID_STATE_TOP,                  // ActivityManager.PROCESS_STATE_TOP
+        UID_STATE_FOREGROUND_SERVICE_LOCATION,
+                                        // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION
         UID_STATE_FOREGROUND_SERVICE,   // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
         UID_STATE_FOREGROUND,           // ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
         UID_STATE_FOREGROUND,           // ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND
@@ -163,6 +166,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     static final String[] UID_STATE_NAMES = new String[] {
             "pers ",    // UID_STATE_PERSISTENT
             "top  ",    // UID_STATE_TOP
+            "fgsvcl",   // UID_STATE_FOREGROUND_SERVICE_LOCATION
             "fgsvc",    // UID_STATE_FOREGROUND_SERVICE
             "fg   ",    // UID_STATE_FOREGROUND
             "bg   ",    // UID_STATE_BACKGROUND
@@ -172,6 +176,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     static final String[] UID_STATE_TIME_ATTRS = new String[] {
             "tp",       // UID_STATE_PERSISTENT
             "tt",       // UID_STATE_TOP
+            "tfsl",     // UID_STATE_FOREGROUND_SERVICE_LOCATION
             "tfs",      // UID_STATE_FOREGROUND_SERVICE
             "tf",       // UID_STATE_FOREGROUND
             "tb",       // UID_STATE_BACKGROUND
@@ -181,6 +186,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     static final String[] UID_STATE_REJECT_ATTRS = new String[] {
             "rp",       // UID_STATE_PERSISTENT
             "rt",       // UID_STATE_TOP
+            "rfsl",     // UID_STATE_FOREGROUND_SERVICE_LOCATION
             "rfs",      // UID_STATE_FOREGROUND_SERVICE
             "rf",       // UID_STATE_FOREGROUND
             "rb",       // UID_STATE_BACKGROUND
@@ -843,7 +849,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     public void updateUidProcState(int uid, int procState) {
         synchronized (this) {
             final UidState uidState = getUidStateLocked(uid, true);
-            final int newState = PROCESS_STATE_TO_UID_STATE[procState];
+            int newState = PROCESS_STATE_TO_UID_STATE[procState];
             if (uidState != null && uidState.pendingState != newState) {
                 final int oldPendingState = uidState.pendingState;
                 uidState.pendingState = newState;
@@ -1277,6 +1283,46 @@ public class AppOpsService extends IAppOpsService.Stub {
                     mHandler.sendMessage(PooledLambda.obtainMessage(
                             AppOpsService::notifyOpChanged,
                             this, callback, code, uid, reportedPackageName));
+                }
+            }
+        }
+    }
+
+    /**
+     * Set all {@link #setMode (package) modes} for this uid to the default value.
+     *
+     * @param code The app-op
+     * @param uid The uid
+     */
+    private void setAllPkgModesToDefault(int code, int uid) {
+        synchronized (this) {
+            UidState uidState = getUidStateLocked(uid, false);
+            if (uidState == null) {
+                return;
+            }
+
+            ArrayMap<String, Ops> pkgOps = uidState.pkgOps;
+            if (pkgOps == null) {
+                return;
+            }
+
+            int numPkgs = pkgOps.size();
+            for (int pkgNum = 0; pkgNum < numPkgs; pkgNum++) {
+                Ops ops = pkgOps.valueAt(pkgNum);
+
+                Op op = ops.get(code);
+                if (op == null) {
+                    continue;
+                }
+
+                int defaultMode = AppOpsManager.opToDefaultMode(code);
+                if (op.mode != defaultMode) {
+                    Slog.w(TAG, "resetting app-op mode for " + AppOpsManager.opToName(code) + " of "
+                            + pkgOps.keyAt(pkgNum));
+
+                    op.mode = defaultMode;
+
+                    scheduleWriteLocked();
                 }
             }
         }
@@ -2751,9 +2797,13 @@ public class AppOpsService extends IAppOpsService.Stub {
                         case "tt":
                             op.time[AppOpsManager.UID_STATE_TOP] = Long.parseLong(value);
                             break;
+                        case "tfsl":
+                            op.time[AppOpsManager.UID_STATE_FOREGROUND_SERVICE_LOCATION] =
+                                    Long.parseLong(value);
+                            break;
                         case "tfs":
-                            op.time[AppOpsManager.UID_STATE_FOREGROUND_SERVICE]
-                                    = Long.parseLong(value);
+                            op.time[AppOpsManager.UID_STATE_FOREGROUND_SERVICE] =
+                                    Long.parseLong(value);
                             break;
                         case "tf":
                             op.time[AppOpsManager.UID_STATE_FOREGROUND] = Long.parseLong(value);
@@ -2765,27 +2815,31 @@ public class AppOpsService extends IAppOpsService.Stub {
                             op.time[AppOpsManager.UID_STATE_CACHED] = Long.parseLong(value);
                             break;
                         case "rp":
-                            op.rejectTime[AppOpsManager.UID_STATE_PERSISTENT]
-                                    = Long.parseLong(value);
+                            op.rejectTime[AppOpsManager.UID_STATE_PERSISTENT] =
+                                    Long.parseLong(value);
                             break;
                         case "rt":
                             op.rejectTime[AppOpsManager.UID_STATE_TOP] = Long.parseLong(value);
                             break;
+                        case "rfsl":
+                            op.rejectTime[AppOpsManager.UID_STATE_FOREGROUND_SERVICE_LOCATION] =
+                                    Long.parseLong(value);
+                            break;
                         case "rfs":
-                            op.rejectTime[AppOpsManager.UID_STATE_FOREGROUND_SERVICE]
-                                    = Long.parseLong(value);
+                            op.rejectTime[AppOpsManager.UID_STATE_FOREGROUND_SERVICE] =
+                                    Long.parseLong(value);
                             break;
                         case "rf":
-                            op.rejectTime[AppOpsManager.UID_STATE_FOREGROUND]
-                                    = Long.parseLong(value);
+                            op.rejectTime[AppOpsManager.UID_STATE_FOREGROUND] =
+                                    Long.parseLong(value);
                             break;
                         case "rb":
-                            op.rejectTime[AppOpsManager.UID_STATE_BACKGROUND]
-                                    = Long.parseLong(value);
+                            op.rejectTime[AppOpsManager.UID_STATE_BACKGROUND] =
+                                    Long.parseLong(value);
                             break;
                         case "rc":
-                            op.rejectTime[AppOpsManager.UID_STATE_CACHED]
-                                    = Long.parseLong(value);
+                            op.rejectTime[AppOpsManager.UID_STATE_CACHED] =
+                                    Long.parseLong(value);
                             break;
                         case "t":
                             // Backwards compat.
@@ -4386,6 +4440,11 @@ public class AppOpsService extends IAppOpsService.Stub {
         @Override
         public void setUidMode(int code, int uid, int mode) {
             AppOpsService.this.setUidMode(code, uid, mode);
+        }
+
+        @Override
+        public void setAllPkgModesToDefault(int code, int uid) {
+            AppOpsService.this.setAllPkgModesToDefault(code, uid);
         }
     }
 }

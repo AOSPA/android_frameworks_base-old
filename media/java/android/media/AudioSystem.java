@@ -17,6 +17,7 @@
 package android.media;
 
 import android.annotation.NonNull;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.bluetooth.BluetoothCodecConfig;
 import android.content.Context;
@@ -39,6 +40,8 @@ import java.util.Map;
  */
 public class AudioSystem
 {
+    private static final boolean DEBUG_VOLUME = true;
+
     private static final String TAG = "AudioSystem";
     /* These values must be kept in sync with system/audio.h */
     /*
@@ -879,6 +882,15 @@ public class AudioSystem
         }
     }
 
+    /** Wrapper for native methods called from AudioService */
+    public static int setStreamVolumeIndexAS(int stream, int index, int device) {
+        if (DEBUG_VOLUME) {
+            Log.i(TAG, "setStreamVolumeIndex: " + STREAM_NAMES[stream]
+                    + " dev=" + Integer.toHexString(device) + " idx=" + index);
+        }
+        return setStreamVolumeIndex(stream, index, device);
+    }
+
     // usage for AudioRecord.startRecordingSync(), must match AudioSystem::sync_event_t
     public static final int SYNC_EVENT_NONE = 0;
     public static final int SYNC_EVENT_PRESENTATION_COMPLETE = 1;
@@ -906,7 +918,7 @@ public class AudioSystem
     @UnsupportedAppUsage
     public static native int initStreamVolume(int stream, int indexMin, int indexMax);
     @UnsupportedAppUsage
-    public static native int setStreamVolumeIndex(int stream, int index, int device);
+    private static native int setStreamVolumeIndex(int stream, int index, int device);
     public static native int getStreamVolumeIndex(int stream, int device);
     public static native int setMasterVolume(float value);
     public static native float getMasterVolume();
@@ -921,6 +933,13 @@ public class AudioSystem
     public static native boolean getMasterMono();
     /** @hide enables or disables the master mono mode. */
     public static native int setMasterMono(boolean mono);
+
+    /** @hide returns master balance value in range -1.f -> 1.f, where 0.f is dead center. */
+    @TestApi
+    public static native float getMasterBalance();
+    /** @hide changes the audio balance of the device. */
+    @TestApi
+    public static native int setMasterBalance(float balance);
 
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 112561552)
@@ -1100,7 +1119,8 @@ public class AudioSystem
             (1 << STREAM_RING) |
             (1 << STREAM_NOTIFICATION) |
             (1 << STREAM_SYSTEM) |
-            (1 << STREAM_VOICE_CALL);
+            (1 << STREAM_VOICE_CALL) |
+            (1 << STREAM_BLUETOOTH_SCO);
 
     /**
      * Event posted by AudioTrack and AudioRecord JNI (JNIDeviceCallback) when routing changes.

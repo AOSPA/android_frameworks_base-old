@@ -59,6 +59,7 @@ import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLES
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_BOOT_PROGRESS;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
@@ -2116,7 +2117,8 @@ public class DisplayPolicy {
                     of.set(displayFrames.mRestricted);
                     df.set(displayFrames.mRestricted);
                     pf.set(displayFrames.mRestricted);
-                } else if (type == TYPE_TOAST || type == TYPE_SYSTEM_ALERT) {
+                } else if (type == TYPE_TOAST || type == TYPE_SYSTEM_ALERT
+                        || type == TYPE_APPLICATION_OVERLAY) {
                     // These dialogs are stable to interim decor changes.
                     cf.set(displayFrames.mStable);
                     of.set(displayFrames.mStable);
@@ -2657,6 +2659,10 @@ public class DisplayPolicy {
         } else {
             return mNavigationBarWidthForRotationDefault[rotation];
         }
+    }
+
+    void notifyDisplayReady() {
+        mHandler.post(() -> getStatusBarManagerInternal().onDisplayReady(getDisplayId()));
     }
 
     /**

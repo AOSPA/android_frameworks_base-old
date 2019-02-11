@@ -74,6 +74,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.StrictMode;
 import android.os.SystemProperties;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.text.Selection;
 import android.text.SpannableStringBuilder;
@@ -1049,33 +1050,56 @@ public class Activity extends ContextThemeWrapper
     @Retention(RetentionPolicy.SOURCE)
     @interface ContentCaptureNotificationType{}
 
-
-    private void notifyContentCaptureManagerIfNeeded(@ContentCaptureNotificationType int type) {
-        final ContentCaptureManager cm = getContentCaptureManager();
-        if (cm == null) return;
-
+    private String getContentCaptureTypeAsString(@ContentCaptureNotificationType int type) {
         switch (type) {
             case CONTENT_CAPTURE_START:
-                //TODO(b/111276913): decide whether the InteractionSessionId should be
-                // saved / restored in the activity bundle - probably not
-                int flags = 0;
-                if ((getWindow().getAttributes().flags
-                        & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
-                    flags |= ContentCaptureContext.FLAG_DISABLED_BY_FLAG_SECURE;
-                }
-                cm.onActivityStarted(mToken, getComponentName(), flags);
-                break;
+                return "START";
             case CONTENT_CAPTURE_PAUSE:
-                cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_PAUSED);
-                break;
+                return "PAUSE";
             case CONTENT_CAPTURE_RESUME:
-                cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_RESUMED);
-                break;
+                return "RESUME";
             case CONTENT_CAPTURE_STOP:
-                cm.onActivityStopped();
-                break;
+                return "STOP";
             default:
-                Log.wtf(TAG, "Invalid @ContentCaptureNotificationType: " + type);
+                return "UNKNOW-" + type;
+        }
+    }
+
+    private void notifyContentCaptureManagerIfNeeded(@ContentCaptureNotificationType int type) {
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                    "notifyContentCapture(" + getContentCaptureTypeAsString(type) + ") for "
+                            + mComponent.toShortString());
+        }
+        try {
+            final ContentCaptureManager cm = getContentCaptureManager();
+            if (cm == null) return;
+
+            switch (type) {
+                case CONTENT_CAPTURE_START:
+                    //TODO(b/111276913): decide whether the InteractionSessionId should be
+                    // saved / restored in the activity bundle - probably not
+                    int flags = 0;
+                    if ((getWindow().getAttributes().flags
+                            & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
+                        flags |= ContentCaptureContext.FLAG_DISABLED_BY_FLAG_SECURE;
+                    }
+                    cm.onActivityStarted(mToken, getComponentName(), flags);
+                    break;
+                case CONTENT_CAPTURE_PAUSE:
+                    cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_PAUSED);
+                    break;
+                case CONTENT_CAPTURE_RESUME:
+                    cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_RESUMED);
+                    break;
+                case CONTENT_CAPTURE_STOP:
+                    cm.onActivityStopped();
+                    break;
+                default:
+                    Log.wtf(TAG, "Invalid @ContentCaptureNotificationType: " + type);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
@@ -1744,7 +1768,7 @@ public class Activity extends ContextThemeWrapper
     protected void onResume() {
         if (DEBUG_LIFECYCLE) Slog.v(TAG, "onResume " + this);
         dispatchActivityResumed();
-        mActivityTransitionState.onResume(this, isTopOfTask());
+        mActivityTransitionState.onResume(this);
         enableAutofillCompatibilityIfNeeded();
         if (mAutoFillResetNeeded) {
             if (!mAutoFillIgnoreFirstResumePause) {
@@ -1782,6 +1806,29 @@ public class Activity extends ContextThemeWrapper
         if (win != null) win.makeActive();
         if (mActionBar != null) mActionBar.setShowHideAnimationEnabled(true);
         mCalled = true;
+    }
+
+    /**
+     * Called when activity gets or looses the top resumed position in the system.
+     *
+     * <p>Starting with {@link android.os.Build.VERSION_CODES#Q} multiple activities can be resumed
+     * at the same time in multi-window and multi-display modes. This callback should be used
+     * instead of {@link #onResume()} as an indication that the activity can try to open
+     * exclusive-access devices like camera.</p>
+     *
+     * <p>It will always be delivered after the activity was resumed and before it is paused. In
+     * some cases it might be skipped and activity can go straight from {@link #onResume()} to
+     * {@link #onPause()} without receiving the top resumed state.</p>
+     *
+     * @param isTopResumedActivity {@code true} if it's the topmost resumed activity in the system,
+     *                             {@code false} otherwise. A call with this as {@code true} will
+     *                             always be followed by another one with {@code false}.
+     *
+     * @see #onResume()
+     * @see #onPause()
+     * @see #onWindowFocusChanged(boolean)
+     */
+    public void onTopResumedActivityChanged(boolean isTopResumedActivity) {
     }
 
     void setVoiceInteractor(IVoiceInteractor voiceInteractor) {
@@ -8194,10 +8241,10 @@ public class Activity extends ContextThemeWrapper
             final AutofillId autofillId = autofillIds[i];
             final View view = autofillClientFindViewByAutofillIdTraversal(autofillId);
             if (view != null) {
-                if (!autofillId.isVirtual()) {
+                if (!autofillId.isVirtualInt()) {
                     visible[i] = view.isVisibleToUser();
                 } else {
-                    visible[i] = view.isVisibleToUserForAutofill(autofillId.getVirtualChildId());
+                    visible[i] = view.isVisibleToUserForAutofill(autofillId.getVirtualChildIntId());
                 }
             }
         }

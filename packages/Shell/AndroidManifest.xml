@@ -145,6 +145,7 @@
     <uses-permission android:name="android.permission.SET_TIME_ZONE" />
     <uses-permission android:name="android.permission.DISABLE_HIDDEN_API_CHECKS" />
     <uses-permission android:name="android.permission.MANAGE_ROLE_HOLDERS" />
+    <uses-permission android:name="android.permission.STATUS_BAR_SERVICE" />
     <!-- Permission needed to rename bugreport notifications (so they're not shown as Shell) -->
     <uses-permission android:name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
     <!-- Permission needed to hold a wakelock in dumpstate.cpp (drop_root_user()) -->
@@ -166,6 +167,8 @@
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD" />
     <uses-permission android:name="android.permission.SUSPEND_APPS" />
     <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
+    <!-- Permission needed to wipe the device for Test Harness Mode -->
+    <uses-permission android:name="android.permission.ENABLE_TEST_HARNESS_MODE" />
 
     <uses-permission android:name="android.permission.MANAGE_APPOPS" />
 

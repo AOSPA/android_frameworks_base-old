@@ -15,6 +15,8 @@
  */
 package com.android.server.stats;
 
+import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
+import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.os.Process.getPidsForCommands;
 import static android.os.Process.getUidForPid;
 
@@ -23,6 +25,7 @@ import static com.android.server.am.MemoryStatUtil.readCmdlineFromProcfs;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromProcfs;
 import static com.android.server.am.MemoryStatUtil.readRssHighWaterMarkFromProcfs;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
@@ -40,6 +43,7 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PermissionInfo;
 import android.content.pm.UserInfo;
 import android.hardware.fingerprint.FingerprintManager;
 import android.net.ConnectivityManager;
@@ -83,6 +87,7 @@ import android.os.storage.StorageManager;
 import android.telephony.ModemActivityInfo;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 import android.util.StatsLog;
@@ -96,10 +101,11 @@ import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BinderCallsStats.ExportedCallStat;
 import com.android.internal.os.KernelCpuSpeedReader;
 import com.android.internal.os.KernelCpuThreadReader;
-import com.android.internal.os.KernelUidCpuActiveTimeReader;
-import com.android.internal.os.KernelUidCpuClusterTimeReader;
-import com.android.internal.os.KernelUidCpuFreqTimeReader;
-import com.android.internal.os.KernelUidCpuTimeReader;
+import com.android.internal.os.KernelCpuThreadReaderSettingsObserver;
+import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidActiveTimeReader;
+import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidClusterTimeReader;
+import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidFreqTimeReader;
+import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidUserSysTimeReader;
 import com.android.internal.os.KernelWakelockReader;
 import com.android.internal.os.KernelWakelockStats;
 import com.android.internal.os.LooperStats;
@@ -112,6 +118,7 @@ import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
 import com.android.server.am.MemoryStatUtil.MemoryStat;
+import com.android.server.role.RoleManagerInternal;
 import com.android.server.storage.DiskStatsFileLogger;
 import com.android.server.storage.DiskStatsLoggingService;
 
@@ -200,7 +207,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             "zygote64",
     };
 
-    private static final int CPU_TIME_PER_THREAD_FREQ_NUM_FREQUENCIES = 8;
+    private static final int CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES = 8;
 
     static final class CompanionHandler extends Handler {
         CompanionHandler(Looper looper) {
@@ -231,19 +238,25 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private final HashMap<Long, String> mDeletedFiles = new HashMap<>();
     private final CompanionHandler mHandler;
 
-    private KernelUidCpuTimeReader mKernelUidCpuTimeReader = new KernelUidCpuTimeReader();
+    // Disables throttler on CPU time readers.
+    private KernelCpuUidUserSysTimeReader mCpuUidUserSysTimeReader =
+            new KernelCpuUidUserSysTimeReader(false);
     private KernelCpuSpeedReader[] mKernelCpuSpeedReaders;
-    private KernelUidCpuFreqTimeReader mKernelUidCpuFreqTimeReader =
-            new KernelUidCpuFreqTimeReader();
-    private KernelUidCpuActiveTimeReader mKernelUidCpuActiveTimeReader =
-            new KernelUidCpuActiveTimeReader();
-    private KernelUidCpuClusterTimeReader mKernelUidCpuClusterTimeReader =
-            new KernelUidCpuClusterTimeReader();
+    private KernelCpuUidFreqTimeReader mCpuUidFreqTimeReader =
+            new KernelCpuUidFreqTimeReader(false);
+    private KernelCpuUidActiveTimeReader mCpuUidActiveTimeReader =
+            new KernelCpuUidActiveTimeReader(false);
+    private KernelCpuUidClusterTimeReader mCpuUidClusterTimeReader =
+            new KernelCpuUidClusterTimeReader(false);
     private StoragedUidIoStatsReader mStoragedUidIoStatsReader =
             new StoragedUidIoStatsReader();
     @Nullable
     private final KernelCpuThreadReader mKernelCpuThreadReader;
 
+    private long mDebugElapsedClockPreviousValue = 0;
+    private long mDebugElapsedClockPullCount = 0;
+    private long mDebugFailingElapsedClockPreviousValue = 0;
+    private long mDebugFailingElapsedClockPullCount = 0;
     private BatteryStatsHelper mBatteryStatsHelper = null;
     private static final int MAX_BATTERY_STATS_HELPER_FREQUENCY_MS = 1000;
     private long mBatteryStatsHelperTimestampMs = -MAX_BATTERY_STATS_HELPER_FREQUENCY_MS;
@@ -294,12 +307,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                     numSpeedSteps);
             firstCpuOfCluster += powerProfile.getNumCoresInCpuCluster(i);
         }
-        // use default throttling in
-        // frameworks/base/core/java/com/android/internal/os/KernelCpuProcReader
-        mKernelUidCpuFreqTimeReader.setThrottleInterval(0);
-        long[] freqs = mKernelUidCpuFreqTimeReader.readFreqs(powerProfile);
-        mKernelUidCpuClusterTimeReader.setThrottleInterval(0);
-        mKernelUidCpuActiveTimeReader.setThrottleInterval(0);
 
         // Enable push notifications of throttling from vendor thermal
         // management subsystem via thermalservice.
@@ -329,7 +336,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         handlerThread.start();
         mHandler = new CompanionHandler(handlerThread.getLooper());
 
-        mKernelCpuThreadReader = KernelCpuThreadReader.create();
+        mKernelCpuThreadReader =
+                KernelCpuThreadReaderSettingsObserver.getSettingsModifiedReader(mContext);
     }
 
     @Override
@@ -914,7 +922,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullKernelUidCpuTime(
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
-        mKernelUidCpuTimeReader.readAbsolute((uid, userTimeUs, systemTimeUs) -> {
+        mCpuUidUserSysTimeReader.readAbsolute((uid, timesUs) -> {
+            long userTimeUs = timesUs[0], systemTimeUs = timesUs[1];
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(uid);
             e.writeLong(userTimeUs);
@@ -926,7 +935,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullKernelUidCpuFreqTime(
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
-        mKernelUidCpuFreqTimeReader.readAbsolute((uid, cpuFreqTimeMs) -> {
+        mCpuUidFreqTimeReader.readAbsolute((uid, cpuFreqTimeMs) -> {
             for (int freqIndex = 0; freqIndex < cpuFreqTimeMs.length; ++freqIndex) {
                 if (cpuFreqTimeMs[freqIndex] != 0) {
                     StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos,
@@ -943,7 +952,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullKernelUidCpuClusterTime(
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
-        mKernelUidCpuClusterTimeReader.readAbsolute((uid, cpuClusterTimesMs) -> {
+        mCpuUidClusterTimeReader.readAbsolute((uid, cpuClusterTimesMs) -> {
             for (int i = 0; i < cpuClusterTimesMs.length; i++) {
                 StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos,
                         wallClockNanos);
@@ -958,7 +967,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullKernelUidCpuActiveTime(
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
-        mKernelUidCpuActiveTimeReader.readAbsolute((uid, cpuActiveTimesMs) -> {
+        mCpuUidActiveTimeReader.readAbsolute((uid, cpuActiveTimesMs) -> {
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(uid);
             e.writeLong((long) cpuActiveTimesMs);
@@ -1674,8 +1683,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             return;
         }
         int[] cpuFrequencies = mKernelCpuThreadReader.getCpuFrequenciesKhz();
-        if (cpuFrequencies.length != CPU_TIME_PER_THREAD_FREQ_NUM_FREQUENCIES) {
-            Slog.w(TAG, "Expected " + CPU_TIME_PER_THREAD_FREQ_NUM_FREQUENCIES
+        if (cpuFrequencies.length > CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES) {
+            Slog.w(TAG, "Expected maximum " + CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES
                     + " frequencies, but got " + cpuFrequencies.length);
             return;
         }
@@ -1699,12 +1708,204 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 e.writeInt(threadCpuUsage.threadId);
                 e.writeString(processCpuUsage.processName);
                 e.writeString(threadCpuUsage.threadName);
-                for (int k = 0; k < CPU_TIME_PER_THREAD_FREQ_NUM_FREQUENCIES; k++) {
-                    e.writeInt(cpuFrequencies[k]);
-                    e.writeInt(threadCpuUsage.usageTimesMillis[k]);
+                for (int k = 0; k < CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES; k++) {
+                    if (k < cpuFrequencies.length) {
+                        e.writeInt(cpuFrequencies[k]);
+                        e.writeInt(threadCpuUsage.usageTimesMillis[k]);
+                    } else {
+                        // If we have no more frequencies to write, we still must write empty data.
+                        // We know that this data is empty (and not just zero) because all
+                        // frequencies are expected to be greater than zero
+                        e.writeInt(0);
+                        e.writeInt(0);
+                    }
                 }
                 pulledData.add(e);
             }
+        }
+    }
+
+    private void pullTemperature(int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        long callingToken = Binder.clearCallingIdentity();
+        try {
+            List<Temperature> temperatures = sThermalService.getCurrentTemperatures();
+            for (Temperature temp : temperatures) {
+                StatsLogEventWrapper e =
+                        new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+                e.writeInt(temp.getType());
+                e.writeString(temp.getName());
+                e.writeInt((int) (temp.getValue() * 10));
+                pulledData.add(e);
+            }
+        } catch (RemoteException e) {
+            // Should not happen.
+            Slog.e(TAG, "Disconnected from thermal service. Cannot pull temperatures.");
+        } finally {
+            Binder.restoreCallingIdentity(callingToken);
+        }
+    }
+
+    private void pullDebugElapsedClock(int tagId,
+            long elapsedNanos, final long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
+        final long elapsedMillis = SystemClock.elapsedRealtime();
+        final long clockDiffMillis = mDebugElapsedClockPreviousValue == 0
+                ? 0 : elapsedMillis - mDebugElapsedClockPreviousValue;
+
+        StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+        e.writeLong(mDebugElapsedClockPullCount);
+        e.writeLong(elapsedMillis);
+        // Log it twice to be able to test multi-value aggregation from ValueMetric.
+        e.writeLong(elapsedMillis);
+        e.writeLong(clockDiffMillis);
+        e.writeInt(1 /* always set */);
+        pulledData.add(e);
+
+        if (mDebugElapsedClockPullCount % 2 == 1) {
+            StatsLogEventWrapper e2 = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+            e2.writeLong(mDebugElapsedClockPullCount);
+            e2.writeLong(elapsedMillis);
+            // Log it twice to be able to test multi-value aggregation from ValueMetric.
+            e2.writeLong(elapsedMillis);
+            e2.writeLong(clockDiffMillis);
+            e2.writeInt(2 /* set on odd pulls */);
+            pulledData.add(e2);
+        }
+
+        mDebugElapsedClockPullCount++;
+        mDebugElapsedClockPreviousValue = elapsedMillis;
+    }
+
+    private void pullDebugFailingElapsedClock(int tagId,
+            long elapsedNanos, final long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
+        StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+        final long elapsedMillis = SystemClock.elapsedRealtime();
+        // Fails every 10 buckets.
+        if (mDebugFailingElapsedClockPullCount++ % 10 == 0) {
+            mDebugFailingElapsedClockPreviousValue = elapsedMillis;
+            throw new RuntimeException("Failing debug elapsed clock");
+        }
+
+        e.writeLong(mDebugFailingElapsedClockPullCount);
+        e.writeLong(elapsedMillis);
+        // Log it twice to be able to test multi-value aggregation from ValueMetric.
+        e.writeLong(elapsedMillis);
+        e.writeLong(mDebugFailingElapsedClockPreviousValue == 0
+                ? 0 : elapsedMillis - mDebugFailingElapsedClockPreviousValue);
+        mDebugFailingElapsedClockPreviousValue = elapsedMillis;
+        pulledData.add(e);
+    }
+
+    private void pullDangerousPermissionState(long elapsedNanos, final long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        long token = Binder.clearCallingIdentity();
+        try {
+            PackageManager pm = mContext.getPackageManager();
+
+            List<UserInfo> users = mContext.getSystemService(UserManager.class).getUsers();
+
+            int numUsers = users.size();
+            for (int userNum = 0; userNum < numUsers; userNum++) {
+                UserHandle user = users.get(userNum).getUserHandle();
+
+                List<PackageInfo> pkgs = pm.getInstalledPackagesAsUser(
+                        PackageManager.GET_PERMISSIONS, user.getIdentifier());
+
+                int numPkgs = pkgs.size();
+                for (int pkgNum = 0; pkgNum < numPkgs; pkgNum++) {
+                    PackageInfo pkg = pkgs.get(pkgNum);
+
+                    if (pkg.requestedPermissions == null) {
+                        continue;
+                    }
+
+                    int numPerms = pkg.requestedPermissions.length;
+                    for (int permNum  = 0; permNum < numPerms; permNum++) {
+                        String permName = pkg.requestedPermissions[permNum];
+
+                        PermissionInfo permissionInfo;
+                        try {
+                            permissionInfo = pm.getPermissionInfo(permName, 0);
+                        } catch (PackageManager.NameNotFoundException ignored) {
+                            continue;
+                        }
+
+                        if (permissionInfo.getProtection() != PROTECTION_DANGEROUS) {
+                            continue;
+                        }
+
+                        StatsLogEventWrapper e = new StatsLogEventWrapper(
+                                StatsLog.DANGEROUS_PERMISSION_STATE, elapsedNanos, wallClockNanos);
+
+                        e.writeString(permName);
+                        e.writeInt(pkg.applicationInfo.uid);
+                        e.writeString(pkg.packageName);
+
+                        e.writeBoolean((pkg.requestedPermissionsFlags[permNum]
+                                & REQUESTED_PERMISSION_GRANTED) != 0);
+
+                        pulledData.add(e);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Could not read permissions", t);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Add a RoleHolder atom for each package that holds a role.
+     *
+     * @param elapsedNanos the time since boot
+     * @param wallClockNanos the time on the clock
+     * @param pulledData the data sink to write to
+     */
+    private void pullRoleHolders(long elapsedNanos, final long wallClockNanos,
+            @NonNull List<StatsLogEventWrapper> pulledData) {
+        long callingToken = Binder.clearCallingIdentity();
+        try {
+            PackageManager pm = mContext.getPackageManager();
+            RoleManagerInternal rmi = LocalServices.getService(RoleManagerInternal.class);
+
+            List<UserInfo> users = mContext.getSystemService(UserManager.class).getUsers();
+
+            int numUsers = users.size();
+            for (int userNum = 0; userNum < numUsers; userNum++) {
+                int userId = users.get(userNum).getUserHandle().getIdentifier();
+
+                ArrayMap<String, ArraySet<String>> roles = rmi.getRolesAndHolders(
+                        userId);
+
+                int numRoles = roles.size();
+                for (int roleNum = 0; roleNum < numRoles; roleNum++) {
+                    String roleName = roles.keyAt(roleNum);
+                    ArraySet<String> holders = roles.valueAt(roleNum);
+
+                    int numHolders = holders.size();
+                    for (int holderNum = 0; holderNum < numHolders; holderNum++) {
+                        String holderName = holders.valueAt(holderNum);
+
+                        PackageInfo pkg;
+                        try {
+                            pkg = pm.getPackageInfoAsUser(holderName, 0, userId);
+                        } catch (PackageManager.NameNotFoundException e) {
+                            Log.w(TAG, "Role holder " + holderName + " not found");
+                            return;
+                        }
+
+                        StatsLogEventWrapper e = new StatsLogEventWrapper(StatsLog.ROLE_HOLDER,
+                                elapsedNanos, wallClockNanos);
+                        e.writeInt(pkg.applicationInfo.uid);
+                        e.writeString(holderName);
+                        e.writeString(roleName);
+                        pulledData.add(e);
+                    }
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(callingToken);
         }
     }
 
@@ -1825,7 +2026,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 pullCategorySize(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
-            case StatsLog.NUM_FINGERPRINTS: {
+            case StatsLog.NUM_FINGERPRINTS_ENROLLED: {
                 pullNumFingerprints(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
@@ -1868,6 +2069,26 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             case StatsLog.DEVICE_CALCULATED_POWER_BLAME_OTHER: {
                 pullDeviceCalculatedPowerBlameOther(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.TEMPERATURE: {
+                pullTemperature(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.DEBUG_ELAPSED_CLOCK: {
+                pullDebugElapsedClock(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.DEBUG_FAILING_ELAPSED_CLOCK: {
+                pullDebugFailingElapsedClock(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.ROLE_HOLDER: {
+                pullRoleHolders(elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.DANGEROUS_PERMISSION_STATE: {
+                pullDangerousPermissionState(elapsedNanos, wallClockNanos, ret);
                 break;
             }
             default:

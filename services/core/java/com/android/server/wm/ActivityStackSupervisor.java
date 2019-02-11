@@ -728,6 +728,11 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
             r.setProcess(proc);
 
+            // Ensure activity is allowed to be resumed after process has set.
+            if (andResume && !r.canResumeByCompat()) {
+                andResume = false;
+            }
+
             if (getKeyguardController().isKeyguardLocked()) {
                 r.notifyUnknownVisibilityLaunched();
             }
@@ -848,6 +853,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
                 // Schedule transaction.
                 mService.getLifecycleManager().scheduleTransaction(clientTransaction);
+                mRootActivityContainer.updateTopResumedActivityIfNeeded();
 
                 if ((proc.mInfo.privateFlags & ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE) != 0
                         && mService.mHasHeavyWeightFeature) {

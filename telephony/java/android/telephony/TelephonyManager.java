@@ -23,6 +23,7 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
+import android.annotation.LongDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -71,6 +72,7 @@ import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.Pair;
 
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.annotations.VisibleForTesting;
@@ -93,6 +95,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.regex.Matcher;
@@ -226,10 +229,9 @@ public class TelephonyManager {
     public static final int SRVCC_STATE_HANDOVER_CANCELED  = 3;
 
     /**
-     * An invalid card identifier.
-     * @hide
+     * An invalid UICC card identifier. See {@link #getCardIdForDefaultEuicc()} and
+     * {@link UiccCardInfo#getCardId()}.
      */
-    @SystemApi
     public static final int INVALID_CARD_ID = -1;
 
     /** @hide */
@@ -349,32 +351,20 @@ public class TelephonyManager {
      * Returns 0 if none of voice, sms, data is not supported
      * Returns 1 for Single standby mode (Single SIM functionality)
      * Returns 2 for Dual standby mode.(Dual SIM functionality)
+     * Returns 3 for Tri standby mode.(Tri SIM functionality)
      */
     public int getPhoneCount() {
         int phoneCount = 1;
         switch (getMultiSimConfiguration()) {
             case UNKNOWN:
-                // if voice or sms or data is supported, return 1 otherwise 0
-                if (isVoiceCapable() || isSmsCapable()) {
-                    phoneCount = 1;
+                ConnectivityManager cm = mContext == null ? null : (ConnectivityManager) mContext
+                        .getSystemService(Context.CONNECTIVITY_SERVICE);
+                // check for voice and data support, 0 if not supported
+                if (!isVoiceCapable() && !isSmsCapable() && cm != null
+                        && !cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE)) {
+                    phoneCount = 0;
                 } else {
-                    // todo: try to clean this up further by getting rid of the nested conditions
-                    if (mContext == null) {
-                        phoneCount = 1;
-                    } else {
-                        // check for data support
-                        ConnectivityManager cm = (ConnectivityManager)mContext.getSystemService(
-                                Context.CONNECTIVITY_SERVICE);
-                        if (cm == null) {
-                            phoneCount = 1;
-                        } else {
-                            if (cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE)) {
-                                phoneCount = 1;
-                            } else {
-                                phoneCount = 0;
-                            }
-                        }
-                    }
+                    phoneCount = 1;
                 }
                 break;
             case DSDS:
@@ -3165,14 +3155,8 @@ public class TelephonyManager {
      * unique to a device, and always refer to the same UICC or eUICC card unless the device goes
      * through a factory reset.
      *
-     * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
-     *
      * @return card ID of the default eUICC card.
-     * @hide
      */
-    @SystemApi
-    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
-    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public int getCardIdForDefaultEuicc() {
         try {
             ITelephony telephony = getITelephony();
@@ -3186,25 +3170,37 @@ public class TelephonyManager {
     }
 
     /**
-     * Gets information about currently inserted UICCs and eUICCs. See {@link UiccCardInfo} for more
-     * details on the kind of information available.
+     * Gets information about currently inserted UICCs and enabled eUICCs.
+     * <p>
+     * Requires that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     * <p>
+     * If the caller has carrier priviliges on any active subscription, then they have permission to
+     * get simple information like the card ID ({@link UiccCardInfo#getCardId()}), whether the card
+     * is an eUICC ({@link UiccCardInfo#isEuicc()}), and the slot index where the card is inserted
+     * ({@link UiccCardInfo#getSlotIndex()}).
+     * <p>
+     * To get private information such as the EID ({@link UiccCardInfo#getEid()}) or ICCID
+     * ({@link UiccCardInfo#getIccId()}), the caller must have carrier priviliges on that specific
+     * UICC or eUICC card.
+     * <p>
+     * See {@link UiccCardInfo} for more details on the kind of information available.
      *
-     * @return UiccCardInfo an array of UiccCardInfo objects, representing information on the
-     * currently inserted UICCs and eUICCs.
-     *
-     * @hide
+     * @return a list of UiccCardInfo objects, representing information on the currently inserted
+     * UICCs and eUICCs. Each UiccCardInfo in the list will have private information filtered out if
+     * the caller does not have adequate permissions for that card.
      */
-    @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public UiccCardInfo[] getUiccCardsInfo() {
+    public List<UiccCardInfo> getUiccCardsInfo() {
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null) {
-                return null;
+                Log.e(TAG, "Error in getUiccCardsInfo: unable to connect to Telephony service.");
+                return new ArrayList<UiccCardInfo>();
             }
-            return telephony.getUiccCardsInfo();
+            return telephony.getUiccCardsInfo(mContext.getOpPackageName());
         } catch (RemoteException e) {
-            return null;
+            Log.e(TAG, "Error in getUiccCardsInfo: " + e);
+            return new ArrayList<UiccCardInfo>();
         }
     }
 
@@ -3270,6 +3266,35 @@ public class TelephonyManager {
         } catch (RemoteException e) {
             return false;
         }
+    }
+
+    /**
+     * Get the mapping from logical slots to physical slots. The mapping represent by a pair list.
+     * The key of the piar is the logical slot id and the value of the pair is the physical
+     * slots id mapped to this logical slot id.
+     *
+     * @return an pair list indicates the mapping from logical slots to physical slots. The size of
+     * the list should be {@link #getPhoneCount()} if success, otherwise return an empty list.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @NonNull
+    public List<Pair<Integer, Integer>> getLogicalToPhysicalSlotMapping() {
+        List<Pair<Integer, Integer>> slotMapping = new ArrayList<>();
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                int[] slotMappingArray = telephony.getSlotsMapping();
+                for (int i = 0; i < slotMappingArray.length; i++) {
+                    slotMapping.add(new Pair(i, slotMappingArray[i]));
+                }
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "getSlotsMapping RemoteException", e);
+        }
+        return slotMapping;
     }
 
     //
@@ -6539,17 +6564,17 @@ public class TelephonyManager {
      * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
      * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
-     * @return a 32-bit bitmap.
+     * @return The bitmap of preferred network types.
      *
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     @SystemApi
-    public @NetworkTypeBitMask int getPreferredNetworkTypeBitmap() {
+    public @NetworkTypeBitMask long getPreferredNetworkTypeBitmap() {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return RadioAccessFamily.getRafFromNetworkType(
+                return (long) RadioAccessFamily.getRafFromNetworkType(
                         telephony.getPreferredNetworkType(getSubId()));
             }
         } catch (RemoteException ex) {
@@ -6784,18 +6809,19 @@ public class TelephonyManager {
      * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the calling
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
-     * @param networkTypeBitmap a 32-bit bitmap.
+     * @param networkTypeBitmap The bitmap of preferred network types.
      * @return true on success; false on any failure.
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     @SystemApi
-    public boolean setPreferredNetworkTypeBitmap(@NetworkTypeBitMask int networkTypeBitmap) {
+    public boolean setPreferredNetworkTypeBitmap(@NetworkTypeBitMask long networkTypeBitmap) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
                 return telephony.setPreferredNetworkType(
-                        getSubId(), RadioAccessFamily.getNetworkTypeFromRaf(networkTypeBitmap));
+                        getSubId(), RadioAccessFamily.getNetworkTypeFromRaf(
+                                (int) networkTypeBitmap));
             }
         } catch (RemoteException ex) {
             Rlog.e(TAG, "setPreferredNetworkType RemoteException", ex);
@@ -6853,13 +6879,13 @@ public class TelephonyManager {
     /**
      * Values used to return status for hasCarrierPrivileges call.
      */
-    /** @hide */ @SystemApi
+    /** @hide */ @SystemApi @TestApi
     public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1;
-    /** @hide */ @SystemApi
+    /** @hide */ @SystemApi @TestApi
     public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0;
-    /** @hide */ @SystemApi
+    /** @hide */ @SystemApi @TestApi
     public static final int CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED = -1;
-    /** @hide */ @SystemApi
+    /** @hide */ @SystemApi @TestApi
     public static final int CARRIER_PRIVILEGE_STATUS_ERROR_LOADING_RULES = -2;
 
     /**
@@ -7061,6 +7087,7 @@ public class TelephonyManager {
 
     /** @hide */
     @SystemApi
+    @TestApi
     @SuppressLint("Doclava125")
     public int checkCarrierPrivilegesForPackage(String pkgName) {
         try {
@@ -8591,17 +8618,46 @@ public class TelephonyManager {
     }
 
 
-    /** @hide */
-    public String getLocaleFromDefaultSim() {
+    /**
+     * Returns a well-formed IETF BCP 47 language tag representing the locale from the SIM, e.g,
+     * en-US. Returns {@code null} if no locale could be derived from subscriptions.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
+     *
+     * @see Locale#toLanguageTag()
+     * @see Locale#forLanguageTag(String)
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @Nullable public String getSimLocale() {
         try {
             final ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.getLocaleFromDefaultSim();
+                return telephony.getSimLocaleForSubscriber(getSubId());
             }
         } catch (RemoteException ex) {
         }
         return null;
     }
+
+    /**
+     * TODO delete after SuW migrates to new API.
+     * @hide
+     */
+    public String getLocaleFromDefaultSim() {
+        try {
+            final ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getSimLocaleForSubscriber(getSubId());
+            }
+        } catch (RemoteException ex) {
+        }
+        return null;
+    }
+
 
     /**
      * Requests the modem activity info. The recipient will place the result
@@ -9070,6 +9126,9 @@ public class TelephonyManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public int setAllowedCarriers(int slotIndex, List<CarrierIdentifier> carriers) {
+        if (carriers == null || !SubscriptionManager.isValidPhoneId(slotIndex)) {
+            return -1;
+        }
         // Execute the method setCarrierRestrictionRules with an empty excluded list and
         // indicating priority for the allowed list.
         CarrierRestrictionRules carrierRestrictionRules = CarrierRestrictionRules.newBuilder()
@@ -9080,7 +9139,7 @@ public class TelephonyManager {
 
         int result = setCarrierRestrictionRules(carrierRestrictionRules);
 
-        // Convert boolean result into int, as required by this method.
+        // Convert result into int, as required by this method.
         if (result == SET_CARRIER_RESTRICTION_SUCCESS) {
             return carriers.size();
         } else {
@@ -9173,9 +9232,11 @@ public class TelephonyManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public List<CarrierIdentifier> getAllowedCarriers(int slotIndex) {
-        CarrierRestrictionRules carrierRestrictionRule = getCarrierRestrictionRules();
-        if (carrierRestrictionRule != null) {
-            return carrierRestrictionRule.getAllowedCarriers();
+        if (SubscriptionManager.isValidPhoneId(slotIndex)) {
+            CarrierRestrictionRules carrierRestrictionRule = getCarrierRestrictionRules();
+            if (carrierRestrictionRule != null) {
+                return carrierRestrictionRule.getAllowedCarriers();
+            }
         }
         return new ArrayList<CarrierIdentifier>(0);
     }
@@ -9669,7 +9730,7 @@ public class TelephonyManager {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(flag = true, prefix = {"NETWORK_TYPE_BITMASK_"},
+    @LongDef(flag = true, prefix = {"NETWORK_TYPE_BITMASK_"},
             value = {NETWORK_TYPE_BITMASK_UNKNOWN,
                     NETWORK_TYPE_BITMASK_GSM,
                     NETWORK_TYPE_BITMASK_GPRS,
@@ -9698,118 +9759,125 @@ public class TelephonyManager {
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_UNKNOWN = (1 << NETWORK_TYPE_UNKNOWN);
+    public static final long NETWORK_TYPE_BITMASK_UNKNOWN = 0L;
     /**
      * network type bitmask indicating the support of radio tech GSM.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_GSM = (1 << NETWORK_TYPE_GSM);
+    public static final long NETWORK_TYPE_BITMASK_GSM = (1 << (NETWORK_TYPE_GSM -1));
     /**
      * network type bitmask indicating the support of radio tech GPRS.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_GPRS = (1 << NETWORK_TYPE_GPRS);
+    public static final long NETWORK_TYPE_BITMASK_GPRS = (1 << (NETWORK_TYPE_GPRS -1));
     /**
      * network type bitmask indicating the support of radio tech EDGE.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_EDGE = (1 << NETWORK_TYPE_EDGE);
+    public static final long NETWORK_TYPE_BITMASK_EDGE = (1 << (NETWORK_TYPE_EDGE -1));
     /**
      * network type bitmask indicating the support of radio tech CDMA(IS95A/IS95B).
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_CDMA = (1 << NETWORK_TYPE_CDMA);
+    public static final long NETWORK_TYPE_BITMASK_CDMA = (1 << (NETWORK_TYPE_CDMA -1));
     /**
      * network type bitmask indicating the support of radio tech 1xRTT.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_1xRTT = (1 << NETWORK_TYPE_1xRTT);
+    public static final long NETWORK_TYPE_BITMASK_1xRTT = (1 << (NETWORK_TYPE_1xRTT - 1));
     // 3G
     /**
      * network type bitmask indicating the support of radio tech EVDO 0.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_EVDO_0 = (1 << NETWORK_TYPE_EVDO_0);
+    public static final long NETWORK_TYPE_BITMASK_EVDO_0 = (1 << (NETWORK_TYPE_EVDO_0 -1));
     /**
      * network type bitmask indicating the support of radio tech EVDO A.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_EVDO_A = (1 << NETWORK_TYPE_EVDO_A);
+    public static final long NETWORK_TYPE_BITMASK_EVDO_A = (1 << (NETWORK_TYPE_EVDO_A - 1));
     /**
      * network type bitmask indicating the support of radio tech EVDO B.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_EVDO_B = (1 << NETWORK_TYPE_EVDO_B);
+    public static final long NETWORK_TYPE_BITMASK_EVDO_B = (1 << (NETWORK_TYPE_EVDO_B -1));
     /**
      * network type bitmask indicating the support of radio tech EHRPD.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_EHRPD = (1 << NETWORK_TYPE_EHRPD);
+    public static final long NETWORK_TYPE_BITMASK_EHRPD = (1 << (NETWORK_TYPE_EHRPD -1));
     /**
      * network type bitmask indicating the support of radio tech HSUPA.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_HSUPA = (1 << NETWORK_TYPE_HSUPA);
+    public static final long NETWORK_TYPE_BITMASK_HSUPA = (1 << (NETWORK_TYPE_HSUPA -1));
     /**
      * network type bitmask indicating the support of radio tech HSDPA.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_HSDPA = (1 << NETWORK_TYPE_HSDPA);
+    public static final long NETWORK_TYPE_BITMASK_HSDPA = (1 << (NETWORK_TYPE_HSDPA -1));
     /**
      * network type bitmask indicating the support of radio tech HSPA.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_HSPA = (1 << NETWORK_TYPE_HSPA);
+    public static final long NETWORK_TYPE_BITMASK_HSPA = (1 << (NETWORK_TYPE_HSPA -1));
     /**
      * network type bitmask indicating the support of radio tech HSPAP.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_HSPAP = (1 << NETWORK_TYPE_HSPAP);
+    public static final long NETWORK_TYPE_BITMASK_HSPAP = (1 << (NETWORK_TYPE_HSPAP -1));
     /**
      * network type bitmask indicating the support of radio tech UMTS.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_UMTS = (1 << NETWORK_TYPE_UMTS);
+    public static final long NETWORK_TYPE_BITMASK_UMTS = (1 << (NETWORK_TYPE_UMTS -1));
     /**
      * network type bitmask indicating the support of radio tech TD_SCDMA.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_TD_SCDMA = (1 << NETWORK_TYPE_TD_SCDMA);
+    public static final long NETWORK_TYPE_BITMASK_TD_SCDMA = (1 << (NETWORK_TYPE_TD_SCDMA -1));
     // 4G
     /**
      * network type bitmask indicating the support of radio tech LTE.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_LTE = (1 << NETWORK_TYPE_LTE);
+    public static final long NETWORK_TYPE_BITMASK_LTE = (1 << (NETWORK_TYPE_LTE -1));
     /**
      * network type bitmask indicating the support of radio tech LTE CA (carrier aggregation).
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_LTE_CA = (1 << NETWORK_TYPE_LTE_CA);
+    public static final long NETWORK_TYPE_BITMASK_LTE_CA = (1 << (NETWORK_TYPE_LTE_CA -1));
 
     /**
      * network type bitmask indicating the support of radio tech NR(New Radio) 5G.
      * @hide
      */
     @SystemApi
-    public static final int NETWORK_TYPE_BITMASK_NR = (1 << NETWORK_TYPE_NR);
+    public static final long NETWORK_TYPE_BITMASK_NR = (1 << (NETWORK_TYPE_NR -1));
+
+    /**
+     * network type bitmask indicating the support of radio tech IWLAN.
+     * @hide
+     */
+    @SystemApi
+    public static final long NETWORK_TYPE_BITMASK_IWLAN = (1 << (NETWORK_TYPE_IWLAN -1));
 
     /**
      * @return Modem supported radio access family bitmask
@@ -9820,11 +9888,11 @@ public class TelephonyManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public @NetworkTypeBitMask int getSupportedRadioAccessFamily() {
+    public @NetworkTypeBitMask long getSupportedRadioAccessFamily() {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.getRadioAccessFamily(getSlotIndex(), getOpPackageName());
+                return (long) telephony.getRadioAccessFamily(getSlotIndex(), getOpPackageName());
             } else {
                 // This can happen when the ITelephony interface is not up yet.
                 return NETWORK_TYPE_BITMASK_UNKNOWN;
@@ -10108,5 +10176,122 @@ public class TelephonyManager {
             Log.e(TAG, "enableModem RemoteException", ex);
         }
         return ret;
+    }
+
+    /**
+     * Broadcast intent action for network country code changes.
+     *
+     * <p>
+     * The {@link #EXTRA_NETWORK_COUNTRY} extra indicates the country code of the current
+     * network returned by {@link #getNetworkCountryIso()}.
+     *
+     * @see #EXTRA_NETWORK_COUNTRY
+     * @see #getNetworkCountryIso()
+     */
+    public static final String ACTION_NETWORK_COUNTRY_CHANGED =
+            "android.telephony.action.NETWORK_COUNTRY_CHANGED";
+
+    /**
+     * The extra used with an {@link #ACTION_NETWORK_COUNTRY_CHANGED} to specify the
+     * the country code in ISO 3166 format.
+     * <p class="note">
+     * Retrieve with {@link android.content.Intent#getStringExtra(String)}.
+     */
+    public static final String EXTRA_NETWORK_COUNTRY =
+            "android.telephony.extra.NETWORK_COUNTRY";
+
+    /**
+     * Indicate if the user is allowed to use multiple SIM cards at the same time to register
+     * on the network (e.g. Dual Standby or Dual Active) when the device supports it, or if the
+     * usage is restricted. This API is used to prevent usage of multiple SIM card, based on
+     * policies of the carrier.
+     * <p>Note: the API does not prevent access to the SIM cards for operations that don't require
+     * access to the network.
+     *
+     * @param isMultisimCarrierRestricted true if usage of multiple SIMs is restricted, false
+     * otherwise.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public void setMultisimCarrierRestriction(boolean isMultisimCarrierRestricted) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                service.setMultisimCarrierRestriction(isMultisimCarrierRestricted);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "setMultisimCarrierRestriction RemoteException", e);
+        }
+    }
+
+    /**
+     * Returns if the usage of multiple SIM cards at the same time to register on the network
+     * (e.g. Dual Standby or Dual Active) is restricted.
+     *
+     * @return true if usage of multiple SIMs is restricted, false otherwise.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public boolean isMultisimCarrierRestricted() {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isMultisimCarrierRestricted();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "isMultisimCarrierRestricted RemoteException", e);
+        }
+        return true;
+    }
+
+    /**
+     * Switch configs to enable multi-sim or switch back to single-sim
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the
+     * calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     * @param numOfSims number of live SIMs we want to switch to
+     * @throws android.os.RemoteException
+     */
+    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public void switchMultiSimConfig(int numOfSims) {
+        //only proceed if multi-sim is not restricted
+        if (isMultisimCarrierRestricted()) {
+            Rlog.e(TAG, "switchMultiSimConfig not possible. It is restricted.");
+            return;
+        }
+
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.switchMultiSimConfig(numOfSims);
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "switchMultiSimConfig RemoteException", ex);
+        }
+    }
+
+    /**
+     * Get whether reboot is required or not after making changes to modem configurations.
+     * @Return {@code True} if reboot is required after making changes to modem configurations,
+     * otherwise return {@code False}.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public boolean isRebootRequiredForModemConfigChange() {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isRebootRequiredForModemConfigChange();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "isRebootRequiredForModemConfigChange RemoteException", e);
+        }
+        return false;
     }
 }

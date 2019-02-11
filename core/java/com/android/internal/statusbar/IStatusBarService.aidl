@@ -38,6 +38,7 @@ interface IStatusBarService
     void disableForUser(int what, IBinder token, String pkg, int userId);
     void disable2(int what, IBinder token, String pkg);
     void disable2ForUser(int what, IBinder token, String pkg, int userId);
+    int[] getDisableFlags(IBinder token, int userId);
     void setIcon(String slot, String iconPackage, int iconId, int iconLevel, String contentDescription);
     void setIconVisibility(String slot, boolean visible);
     void removeIcon(String slot);
@@ -65,11 +66,11 @@ interface IStatusBarService
             int dismissalSurface, int dismissalSentiment, in NotificationVisibility nv);
     void onNotificationVisibilityChanged( in NotificationVisibility[] newlyVisibleKeys,
             in NotificationVisibility[] noLongerVisibleKeys);
-    void onNotificationExpansionChanged(in String key, in boolean userAction, in boolean expanded);
+    void onNotificationExpansionChanged(in String key, in boolean userAction, in boolean expanded, in int notificationLocation);
     void onNotificationDirectReplied(String key);
     void onNotificationSmartSuggestionsAdded(String key, int smartReplyCount, int smartActionCount,
             boolean generatedByAsssistant);
-    void onNotificationSmartReplySent(in String key, in int replyIndex, in CharSequence reply, boolean generatedByAssistant);
+    void onNotificationSmartReplySent(in String key, in int replyIndex, in CharSequence reply, boolean generatedByAssistant, in int notificationLocation);
     void onNotificationSettingsViewed(String key);
     void setSystemUiVisibility(int displayId, int vis, int mask, String cause);
 

@@ -15,8 +15,8 @@
  */
 package android.view.contentcapture;
 
-import static android.view.contentcapture.ContentCaptureManager.DEBUG;
-import static android.view.contentcapture.ContentCaptureManager.VERBOSE;
+import static android.view.contentcapture.ContentCaptureHelper.DEBUG;
+import static android.view.contentcapture.ContentCaptureHelper.VERBOSE;
 
 import android.annotation.CallSuper;
 import android.annotation.IntDef;
@@ -33,8 +33,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
-
-import dalvik.system.CloseGuard;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -56,7 +54,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      * @hide
      */
     // NOTE: not prefixed by STATE_ so it's not printed on getStateAsString()
-    public static final int UNKNWON_STATE = 0x0;
+    public static final int UNKNOWN_STATE = 0x0;
 
     /**
      * Service's startSession() was called, but server didn't confirm it was created yet.
@@ -101,7 +99,8 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     public static final int STATE_FLAG_SECURE = 0x20;
 
     /**
-     * Session is disabled manually by the specific app.
+     * Session is disabled manually by the specific app
+     * (through {@link ContentCaptureManager#setContentCaptureEnabled(boolean)}).
      *
      * @hide
      */
@@ -148,9 +147,6 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     @Retention(RetentionPolicy.SOURCE)
     @interface FlushReason{}
 
-
-    private final CloseGuard mCloseGuard = CloseGuard.get();
-
     private final Object mLock = new Object();
 
     /**
@@ -164,7 +160,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     @Nullable
     protected final String mId;
 
-    private int mState = UNKNWON_STATE;
+    private int mState = UNKNOWN_STATE;
 
     // Lazily created on demand.
     private ContentCaptureSessionId mContentCaptureSessionId;
@@ -185,7 +181,6 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     @VisibleForTesting
     public ContentCaptureSession(@NonNull String id) {
         mId = Preconditions.checkNotNull(id);
-        mCloseGuard.open("destroy");
     }
 
     /** @hide */
@@ -246,12 +241,10 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     public final void destroy() {
         synchronized (mLock) {
             if (mDestroyed) {
-                Log.e(TAG, "destroy(" + mId + "): already destroyed");
+                if (DEBUG) Log.d(TAG, "destroy(" + mId + "): already destroyed");
                 return;
             }
             mDestroyed = true;
-
-            mCloseGuard.close();
 
             // TODO(b/111276913): check state (for example, how to handle if it's waiting for remote
             // id) and send it to the cache of batched commands
@@ -286,18 +279,6 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     @Override
     public void close() {
         destroy();
-    }
-
-    @Override
-    protected void finalize() throws Throwable {
-        try {
-            if (mCloseGuard != null) {
-                mCloseGuard.warnIfOpen();
-            }
-            destroy();
-        } finally {
-            super.finalize();
-        }
     }
 
     /**
@@ -352,14 +333,14 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      * @throws IllegalArgumentException if {@code virtualIds} is empty
      */
     public final void notifyViewsDisappeared(@NonNull AutofillId hostId,
-            @NonNull int[] virtualIds) {
-        Preconditions.checkArgument(!hostId.isVirtual(), "parent cannot be virtual");
+            @NonNull long[] virtualIds) {
+        Preconditions.checkArgument(hostId.isNonVirtual(), "parent cannot be virtual");
         Preconditions.checkArgument(!ArrayUtils.isEmpty(virtualIds), "virtual ids cannot be empty");
         if (!isContentCaptureEnabled()) return;
 
         // TODO(b/123036895): use a internalNotifyViewsDisappeared that optimizes how the event is
         // parcelized
-        for (int id : virtualIds) {
+        for (long id : virtualIds) {
             internalNotifyViewDisappeared(new AutofillId(hostId, id, getIdAsInt()));
         }
     }
@@ -369,10 +350,8 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      *
      * @param id of the node.
      * @param text new text.
-     * @param flags currently ignored.
      */
-    public final void notifyViewTextChanged(@NonNull AutofillId id, @Nullable CharSequence text,
-            int flags) {
+    public final void notifyViewTextChanged(@NonNull AutofillId id, @Nullable CharSequence text) {
         Preconditions.checkNotNull(id);
 
         if (!isContentCaptureEnabled()) return;
@@ -405,9 +384,9 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      *
      * @throws IllegalArgumentException if the {@code parentId} is a virtual child id.
      */
-    public @NonNull AutofillId newAutofillId(@NonNull AutofillId parentId, int virtualChildId) {
+    public @NonNull AutofillId newAutofillId(@NonNull AutofillId parentId, long virtualChildId) {
         Preconditions.checkNotNull(parentId);
-        Preconditions.checkArgument(!parentId.isVirtual(), "virtual ids cannot have children");
+        Preconditions.checkArgument(parentId.isNonVirtual(), "virtual ids cannot have children");
         return new AutofillId(parentId, virtualChildId, getIdAsInt());
     }
 
@@ -423,7 +402,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      */
     @NonNull
     public final ViewStructure newVirtualViewStructure(@NonNull AutofillId parentId,
-            int virtualId) {
+            long virtualId) {
         return new ViewNode.ViewStructureImpl(parentId, virtualId, getIdAsInt());
     }
 
@@ -458,7 +437,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     /** @hide */
     @NonNull
     protected static String getStateAsString(int state) {
-        return state + " (" + (state == UNKNWON_STATE ? "UNKNOWN"
+        return state + " (" + (state == UNKNOWN_STATE ? "UNKNOWN"
                 : DebugUtils.flagsToString(ContentCaptureSession.class, "STATE_", state)) + ")";
     }
 

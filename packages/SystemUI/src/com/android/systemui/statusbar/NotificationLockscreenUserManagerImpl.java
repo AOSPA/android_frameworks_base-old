@@ -49,11 +49,14 @@ import com.android.systemui.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Handles keeping track of the current user, profiles, and various things related to hiding
@@ -77,6 +80,7 @@ public class NotificationLockscreenUserManagerImpl implements
     private final SparseBooleanArray mUsersAllowingNotifications = new SparseBooleanArray();
     private final UserManager mUserManager;
     private final IStatusBarService mBarService;
+    private final List<UserChangedListener> mListeners = new ArrayList<>();
 
     private boolean mShowLockscreenNotifications;
     private boolean mAllowLockscreenRemoteInput;
@@ -111,6 +115,10 @@ public class NotificationLockscreenUserManagerImpl implements
                 updatePublicMode();
                 mPresenter.onUserSwitched(mCurrentUserId);
                 getEntryManager().getNotificationData().filterAndSort();
+
+                for (UserChangedListener listener : mListeners) {
+                    listener.onUserChanged(mCurrentUserId);
+                }
             } else if (Intent.ACTION_USER_ADDED.equals(action)) {
                 updateCurrentProfilesCache();
             } else if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
@@ -130,8 +138,11 @@ public class NotificationLockscreenUserManagerImpl implements
                     final int count =
                             getEntryManager().getNotificationData().getActiveNotifications().size();
                     final int rank = getEntryManager().getNotificationData().getRank(notificationKey);
+                    NotificationVisibility.NotificationLocation location =
+                            NotificationLogger.getNotificationLocation(
+                                    getEntryManager().getNotificationData().get(notificationKey));
                     final NotificationVisibility nv = NotificationVisibility.obtain(notificationKey,
-                            rank, count, true);
+                            rank, count, true, location);
                     try {
                         mBarService.onNotificationClick(notificationKey, nv);
                     } catch (RemoteException e) {
@@ -498,6 +509,10 @@ public class NotificationLockscreenUserManagerImpl implements
         }
     }
 
+    @Override
+    public void addUserChangedListener(UserChangedListener listener) {
+        mListeners.add(listener);
+    }
 
 //    public void updatePublicMode() {
 //        //TODO: I think there may be a race condition where mKeyguardViewManager.isShowing() returns
@@ -537,6 +552,7 @@ public class NotificationLockscreenUserManagerImpl implements
     public void destroy() {
         mContext.unregisterReceiver(mBaseBroadcastReceiver);
         mContext.unregisterReceiver(mAllUsersReceiver);
+        mListeners.clear();
     }
 
     @Override

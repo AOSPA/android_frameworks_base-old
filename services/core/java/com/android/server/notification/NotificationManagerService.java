@@ -121,6 +121,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
@@ -197,6 +198,7 @@ import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.Preconditions;
@@ -769,7 +771,10 @@ public class NotificationManagerService extends SystemService {
                                 action.isContextual() ? 1 : 0)
                         .addTaggedData(
                                 MetricsEvent.NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED,
-                                generatedByAssistant ? 1 : 0));
+                                generatedByAssistant ? 1 : 0)
+                        .addTaggedData(MetricsEvent.NOTIFICATION_LOCATION,
+                                nv.location.toMetricsEventEnum()));
+
                 EventLogTags.writeNotificationActionClicked(key, actionIndex,
                         r.getLifespanMs(now), r.getFreshnessMs(now), r.getExposureMs(now),
                         nv.rank, nv.count);
@@ -845,10 +850,12 @@ public class NotificationManagerService extends SystemService {
                         reportSeen(r);
                     }
                     r.setVisibility(true, nv.rank, nv.count);
+                    boolean isHun = (nv.location
+                            == NotificationVisibility.NotificationLocation.LOCATION_FIRST_HEADS_UP);
                     // hasBeenVisiblyExpanded must be called after updating the expansion state of
                     // the NotificationRecord to ensure the expansion state is up-to-date.
-                    if (r.hasBeenVisiblyExpanded()) {
-                        logSmartSuggestionsVisible(r);
+                    if (isHun || r.hasBeenVisiblyExpanded()) {
+                        logSmartSuggestionsVisible(r, nv.location.toMetricsEventEnum());
                     }
                     maybeRecordInterruptionLocked(r);
                     nv.recycle();
@@ -868,7 +875,7 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void onNotificationExpansionChanged(String key,
-                boolean userAction, boolean expanded) {
+                boolean userAction, boolean expanded, int notificationLocation) {
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
@@ -876,7 +883,7 @@ public class NotificationManagerService extends SystemService {
                     // hasBeenVisiblyExpanded must be called after updating the expansion state of
                     // the NotificationRecord to ensure the expansion state is up-to-date.
                     if (r.hasBeenVisiblyExpanded()) {
-                        logSmartSuggestionsVisible(r);
+                        logSmartSuggestionsVisible(r, notificationLocation);
                     }
                     if (userAction) {
                         MetricsLogger.action(r.getItemLogMaker()
@@ -923,14 +930,19 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void onNotificationSmartReplySent(String key, int replyIndex, CharSequence reply,
-                boolean generatedByAssistant) {
+                boolean generatedByAssistant, int notificationLocation) {
 
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
                     LogMaker logMaker = r.getLogMaker()
                             .setCategory(MetricsEvent.SMART_REPLY_ACTION)
-                            .setSubtype(replyIndex);
+                            .setSubtype(replyIndex)
+                            .addTaggedData(
+                                    MetricsEvent.NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED,
+                                    generatedByAssistant ? 1 : 0)
+                            .addTaggedData(MetricsEvent.NOTIFICATION_LOCATION,
+                                    notificationLocation);
                     mMetricsLogger.write(logMaker);
                     // Treat clicking on a smart reply as a user interaction.
                     reportUserInteraction(r);
@@ -952,7 +964,7 @@ public class NotificationManagerService extends SystemService {
     };
 
     @VisibleForTesting
-    void logSmartSuggestionsVisible(NotificationRecord r) {
+    void logSmartSuggestionsVisible(NotificationRecord r, int notificationLocation) {
         // If the newly visible notification has smart suggestions
         // then log that the user has seen them.
         if ((r.getNumSmartRepliesAdded() > 0 || r.getNumSmartActionsAdded() > 0)
@@ -966,7 +978,10 @@ public class NotificationManagerService extends SystemService {
                             r.getNumSmartActionsAdded())
                     .addTaggedData(
                             MetricsEvent.NOTIFICATION_SMART_SUGGESTION_ASSISTANT_GENERATED,
-                            r.getSuggestionsGeneratedByAssistant() ? 1 : 0);
+                            r.getSuggestionsGeneratedByAssistant() ? 1 : 0)
+                    // The fields in the NotificationVisibility.NotificationLocation enum map
+                    // directly to the fields in the MetricsEvent.NotificationLocation enum.
+                    .addTaggedData(MetricsEvent.NOTIFICATION_LOCATION, notificationLocation);
             mMetricsLogger.write(logMaker);
         }
     }
@@ -1082,7 +1097,8 @@ public class NotificationManagerService extends SystemService {
                     || (queryRestart=action.equals(Intent.ACTION_QUERY_PACKAGE_RESTART))
                     || action.equals(Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE)
                     || action.equals(Intent.ACTION_PACKAGES_SUSPENDED)
-                    || action.equals(Intent.ACTION_PACKAGES_UNSUSPENDED)) {
+                    || action.equals(Intent.ACTION_PACKAGES_UNSUSPENDED)
+                    || action.equals(Intent.ACTION_DISTRACTING_PACKAGES_CHANGED)) {
                 int changeUserId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE,
                         UserHandle.USER_ALL);
                 String pkgList[] = null;
@@ -1103,6 +1119,23 @@ public class NotificationManagerService extends SystemService {
                     uidList = intent.getIntArrayExtra(Intent.EXTRA_CHANGED_UID_LIST);
                     cancelNotifications = false;
                     unhideNotifications = true;
+                } else if (action.equals(Intent.ACTION_DISTRACTING_PACKAGES_CHANGED)) {
+                    final int distractionRestrictions =
+                            intent.getIntExtra(Intent.EXTRA_DISTRACTION_RESTRICTIONS,
+                                    PackageManager.RESTRICTION_NONE);
+                    if ((distractionRestrictions
+                            & PackageManager.RESTRICTION_HIDE_NOTIFICATIONS) != 0) {
+                        pkgList = intent.getStringArrayExtra(Intent.EXTRA_CHANGED_PACKAGE_LIST);
+                        uidList = intent.getIntArrayExtra(Intent.EXTRA_CHANGED_UID_LIST);
+                        cancelNotifications = false;
+                        hideNotifications = true;
+                    } else {
+                        pkgList = intent.getStringArrayExtra(Intent.EXTRA_CHANGED_PACKAGE_LIST);
+                        uidList = intent.getIntArrayExtra(Intent.EXTRA_CHANGED_UID_LIST);
+                        cancelNotifications = false;
+                        unhideNotifications = true;
+                    }
+
                 } else if (queryRestart) {
                     pkgList = intent.getStringArrayExtra(Intent.EXTRA_PACKAGES);
                     uidList = new int[] {intent.getIntExtra(Intent.EXTRA_UID, -1)};
@@ -1646,6 +1679,7 @@ public class NotificationManagerService extends SystemService {
         IntentFilter suspendedPkgFilter = new IntentFilter();
         suspendedPkgFilter.addAction(Intent.ACTION_PACKAGES_SUSPENDED);
         suspendedPkgFilter.addAction(Intent.ACTION_PACKAGES_UNSUSPENDED);
+        suspendedPkgFilter.addAction(Intent.ACTION_DISTRACTING_PACKAGES_CHANGED);
         getContext().registerReceiverAsUser(mPackageIntentReceiver, UserHandle.ALL,
                 suspendedPkgFilter, null, null);
 
@@ -2315,15 +2349,43 @@ public class NotificationManagerService extends SystemService {
         public boolean areBubblesAllowedForPackage(String pkg, int uid) {
             enforceSystemOrSystemUIOrSamePackage(pkg,
                     "Caller not system or systemui or same package");
-            return mPreferencesHelper.areBubblessAllowed(pkg, uid);
+            return mPreferencesHelper.areBubblesAllowed(pkg, uid);
         }
 
         @Override
         public void setBubblesAllowed(String pkg, int uid, boolean allowed) {
-            checkCallerIsSystem();
-
+            enforceSystemOrSystemUI("Caller not system or systemui");
             mPreferencesHelper.setBubblesAllowed(pkg, uid, allowed);
             handleSavePolicyFile();
+        }
+
+        @Override
+        public boolean hasUserApprovedBubblesForPackage(String pkg, int uid) {
+            enforceSystemOrSystemUI("Caller not system or systemui");
+            int lockedFields = mPreferencesHelper.getAppLockedFields(pkg, uid);
+            return (lockedFields & PreferencesHelper.LockableAppFields.USER_LOCKED_BUBBLE) != 0;
+        }
+
+        @Override
+        public boolean shouldHideSilentStatusIcons(String callingPkg) {
+            checkCallerIsSameApp(callingPkg);
+
+            if (isCallerSystemOrPhone()
+                    || mListeners.isListenerPackage(callingPkg)) {
+                return mPreferencesHelper.shouldHideSilentStatusIcons();
+            } else {
+                throw new SecurityException("Only available for notification listeners");
+            }
+        }
+
+        @Override
+        public void setHideSilentStatusIcons(boolean hide) {
+            checkCallerIsSystem();
+
+            mPreferencesHelper.setHideSilentStatusIcons(hide);
+            handleSavePolicyFile();
+
+            mListeners.onStatusBarIconsBehaviorChanged(hide);
         }
 
         @Override
@@ -3594,6 +3656,22 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
+        public ComponentName getAllowedNotificationAssistantForUser(int userId) {
+            checkCallerIsSystem();
+            List<ComponentName> allowedComponents = mAssistants.getAllowedComponents(userId);
+            if (allowedComponents.size() > 1) {
+                throw new IllegalStateException(
+                        "At most one NotificationAssistant: " + allowedComponents.size());
+            }
+            return CollectionUtils.firstOrNull(allowedComponents);
+        }
+
+        @Override
+        public ComponentName getAllowedNotificationAssistant() {
+            return getAllowedNotificationAssistantForUser(getCallingUserHandle().getIdentifier());
+        }
+
+        @Override
         public boolean isNotificationListenerAccessGranted(ComponentName listener) {
             Preconditions.checkNotNull(listener);
             checkCallerIsSystemOrSameApp(listener.getPackageName());
@@ -3661,8 +3739,15 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void setNotificationAssistantAccessGrantedForUser(ComponentName assistant,
                 int userId, boolean granted) throws RemoteException {
-            Preconditions.checkNotNull(assistant);
             checkCallerIsSystemOrShell();
+            if (assistant == null) {
+                ComponentName allowedAssistant = CollectionUtils.firstOrNull(
+                        mAssistants.getAllowedComponents(userId));
+                if (allowedAssistant != null) {
+                    setNotificationAssistantAccessGrantedForUser(allowedAssistant, userId, false);
+                }
+                return;
+            }
             final long identity = Binder.clearCallingIdentity();
             try {
                 if (mAllowedManagedServicePackages.test(assistant.getPackageName())) {
@@ -3833,6 +3918,24 @@ public class NotificationManagerService extends SystemService {
                         "Requires CONTROL_KEYGUARD_SECURE_NOTIFICATIONS permission");
             }
             return mLockScreenAllowSecureNotifications;
+        }
+
+        @Override
+        public boolean isPackagePaused(String pkg) {
+            Preconditions.checkNotNull(pkg);
+            checkCallerIsSameApp(pkg);
+
+            boolean isPaused;
+
+            final PackageManagerInternal pmi = LocalServices.getService(
+                    PackageManagerInternal.class);
+            int flags = pmi.getDistractingPackageRestrictions(
+                    pkg, Binder.getCallingUserHandle().getIdentifier());
+            isPaused = ((flags & PackageManager.RESTRICTION_HIDE_NOTIFICATIONS) != 0);
+
+            isPaused |= isPackageSuspendedForUser(pkg, Binder.getCallingUid());
+
+            return isPaused;
         }
 
         private void verifyPrivilegedListener(INotificationListener token, UserHandle user,
@@ -7185,6 +7288,26 @@ public class NotificationManagerService extends SystemService {
                 }
             }
         }
+
+        @Override
+        protected void setPackageOrComponentEnabled(String pkgOrComponent, int userId,
+                boolean isPrimary, boolean enabled) {
+            // Ensures that only one component is enabled at a time
+            if (enabled) {
+                List<ComponentName> allowedComponents = getAllowedComponents(userId);
+                if (!allowedComponents.isEmpty()) {
+                    ComponentName currentComponent = CollectionUtils.firstOrNull(allowedComponents);
+                    if (currentComponent.flattenToString().equals(pkgOrComponent)) return;
+                    try {
+                        getBinderService().setNotificationAssistantAccessGrantedForUser(
+                                currentComponent, userId, false);
+                    } catch (RemoteException e) {
+                        e.rethrowFromSystemServer();
+                    }
+                }
+            }
+            super.setPackageOrComponentEnabled(pkgOrComponent, userId, isPrimary, enabled);
+        }
     }
 
     public class NotificationListeners extends ManagedServices {
@@ -7265,6 +7388,20 @@ public class NotificationManagerService extends SystemService {
 
         public int getOnNotificationPostedTrim(ManagedServiceInfo info) {
             return mLightTrimListeners.contains(info) ? TRIM_LIGHT : TRIM_FULL;
+        }
+
+        public void onStatusBarIconsBehaviorChanged(boolean hideSilentStatusIcons) {
+            for (final ManagedServiceInfo info : getServices()) {
+                mHandler.post(() -> {
+                    final INotificationListener listener = (INotificationListener) info.service;
+                     try {
+                        listener.onStatusBarIconsBehaviorChanged(hideSilentStatusIcons);
+                    } catch (RemoteException ex) {
+                        Log.e(TAG, "unable to notify listener "
+                                + "(hideSilentStatusIcons): " + listener, ex);
+                    }
+                });
+            }
         }
 
         /**
@@ -7733,6 +7870,20 @@ public class NotificationManagerService extends SystemService {
         final String action = suspend ? Intent.ACTION_PACKAGES_SUSPENDED
                 : Intent.ACTION_PACKAGES_UNSUSPENDED;
         final Intent intent = new Intent(action);
+        intent.putExtras(extras);
+
+        mPackageIntentReceiver.onReceive(getContext(), intent);
+    }
+
+    @VisibleForTesting
+    protected void simulatePackageDistractionBroadcast(int flag, String[] pkgs) {
+        // only use for testing: mimic receive broadcast that package is (un)distracting
+        // but does not actually register that info with packagemanager
+        final Bundle extras = new Bundle();
+        extras.putStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST, pkgs);
+        extras.putInt(Intent.EXTRA_DISTRACTION_RESTRICTIONS, flag);
+
+        final Intent intent = new Intent(Intent.ACTION_DISTRACTING_PACKAGES_CHANGED);
         intent.putExtras(extras);
 
         mPackageIntentReceiver.onReceive(getContext(), intent);

@@ -102,7 +102,9 @@ public final class NotificationEntry {
     /** Smart Actions provided by the NotificationAssistantService. */
     @NonNull
     public List<Notification.Action> systemGeneratedSmartActions = Collections.emptyList();
-    public CharSequence[] smartReplies = new CharSequence[0];
+    /** Smart replies provided by the NotificationAssistantService. */
+    @NonNull
+    public CharSequence[] systemGeneratedSmartReplies = new CharSequence[0];
     @VisibleForTesting
     public int suppressedVisualEffects;
     public boolean suspended;
@@ -153,6 +155,12 @@ public final class NotificationEntry {
      */
     private boolean mUserDismissedBubble;
 
+    /**
+     * Whether this notification is shown to the user as a high priority notification: visible on
+     * the lock screen/status bar and in the top section in the shade.
+     */
+    private boolean mHighPriority;
+
     public NotificationEntry(StatusBarNotification n) {
         this(n, null);
     }
@@ -176,7 +184,7 @@ public final class NotificationEntry {
         userSentiment = ranking.getUserSentiment();
         systemGeneratedSmartActions = ranking.getSmartActions() == null
                 ? Collections.emptyList() : ranking.getSmartActions();
-        smartReplies = ranking.getSmartReplies() == null
+        systemGeneratedSmartReplies = ranking.getSmartReplies() == null
                 ? new CharSequence[0]
                 : ranking.getSmartReplies().toArray(new CharSequence[0]);
         suppressedVisualEffects = ranking.getSuppressedVisualEffects();
@@ -189,6 +197,14 @@ public final class NotificationEntry {
 
     public boolean hasInterrupted() {
         return interruption;
+    }
+
+    public boolean isHighPriority() {
+        return mHighPriority;
+    }
+
+    public void setIsHighPriority(boolean highPriority) {
+        this.mHighPriority = highPriority;
     }
 
     public void setIsBubble(boolean bubbleable) {
@@ -222,6 +238,13 @@ public final class NotificationEntry {
     public boolean showInShadeWhenBubble() {
         // We always show it in the shade if non-clearable
         return !isClearable() || mShowInShadeWhenBubble;
+    }
+
+    /**
+     * Returns the data needed for a bubble for this notification, if it exists.
+     */
+    public Notification.BubbleMetadata getBubbleMetadata() {
+        return notification.getNotification().getBubbleMetadata();
     }
 
     /**

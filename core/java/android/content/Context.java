@@ -771,7 +771,9 @@ public abstract class Context {
      * <p>
      * This is not generally intended for third party application developers.
      */
-    public abstract String getOpPackageName();
+    public String getOpPackageName() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /** Return the full application info for this context's package. */
     public abstract ApplicationInfo getApplicationInfo();
@@ -2980,9 +2982,11 @@ public abstract class Context {
      *
      * @see #bindService
      */
-    public abstract boolean bindIsolatedService(@RequiresPermission Intent service,
+    public boolean bindIsolatedService(@RequiresPermission Intent service,
             @NonNull ServiceConnection conn, @BindServiceFlags int flags,
-            @NonNull String instanceName);
+            @NonNull String instanceName) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Same as {@link #bindService(Intent, ServiceConnection, int)}, but with an explicit userHandle
@@ -3037,8 +3041,10 @@ public abstract class Context {
      *                   a related groups -- higher importance values will be killed before
      *                   lower ones.
      */
-    public abstract void updateServiceGroup(@NonNull ServiceConnection conn, int group,
-            int importance);
+    public void updateServiceGroup(@NonNull ServiceConnection conn, int group,
+            int importance) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Disconnect from an application service.  You will no longer receive
@@ -3174,12 +3180,12 @@ public abstract class Context {
             //@hide: CONTEXTHUB_SERVICE,
             SYSTEM_HEALTH_SERVICE,
             //@hide: INCIDENT_SERVICE,
+            //@hide: INCIDENT_COMPANION_SERVICE,
             //@hide: STATS_COMPANION_SERVICE,
             COMPANION_DEVICE_SERVICE,
             CROSS_PROFILE_APPS_SERVICE,
             //@hide: SYSTEM_UPDATE_SERVICE,
             //@hide: TIME_DETECTOR_SERVICE,
-            //@hide: TIME_ZONE_DETECTOR_SERVICE,
             PERMISSION_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -3614,9 +3620,10 @@ public abstract class Context {
      *
      * @see #getSystemService(String)
      * @see android.app.StatusBarManager
+     *
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public static final String STATUS_BAR_SERVICE = "statusbar";
 
     /**
@@ -3628,6 +3635,16 @@ public abstract class Context {
      * @see android.net.ConnectivityManager
      */
     public static final String CONNECTIVITY_SERVICE = "connectivity";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.net.INetd} for communicating with the network stack
+     * @hide
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @SystemApi
+    public static final String NETD_SERVICE = "netd";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4450,6 +4467,13 @@ public abstract class Context {
     public static final String INCIDENT_SERVICE = "incident";
 
     /**
+     * Service to assist incidentd and dumpstated in reporting status to the user
+     * and in confirming authorization to take an incident report or bugreport
+     * @hide
+     */
+    public static final String INCIDENT_COMPANION_SERVICE = "incidentcompanion";
+
+    /**
      * Service to assist statsd in obtaining general stats.
      * @hide
      */
@@ -4539,15 +4563,6 @@ public abstract class Context {
     public static final String TIME_DETECTOR_SERVICE = "time_detector";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an
-     * {@link android.app.timezonedetector.ITimeZoneDetectorService}.
-     * @hide
-     *
-     * @see #getSystemService(String)
-     */
-    public static final String TIME_ZONE_DETECTOR_SERVICE = "time_zone_detector";
-
-    /**
      * Binder service name for {@link AppBindingService}.
      * @hide
      */
@@ -4559,6 +4574,14 @@ public abstract class Context {
      * @hide
      */
     public static final String TELEPHONY_RCS_SERVICE = "ircs";
+
+     /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.os.DynamicAndroidManager}.
+     * @hide
+     */
+    @SystemApi
+    public static final String DYNAMIC_ANDROID_SERVICE = "dynamic_android";
 
     /**
      * Determine whether the given permission is allowed for a particular

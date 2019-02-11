@@ -56,6 +56,8 @@ public abstract class PackageManagerInternal {
     public static final int PACKAGE_WELLBEING = 7;
     public static final int PACKAGE_DOCUMENTER = 8;
     public static final int PACKAGE_CONFIGURATOR = 9;
+    public static final int PACKAGE_INCIDENT_REPORT_APPROVER = 10;
+    public static final int PACKAGE_APP_PREDICTOR = 11;
     @IntDef(value = {
         PACKAGE_SYSTEM,
         PACKAGE_SETUP_WIZARD,
@@ -67,6 +69,8 @@ public abstract class PackageManagerInternal {
         PACKAGE_WELLBEING,
         PACKAGE_DOCUMENTER,
         PACKAGE_CONFIGURATOR,
+        PACKAGE_INCIDENT_REPORT_APPROVER,
+        PACKAGE_APP_PREDICTOR,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface KnownPackage {}
@@ -130,6 +134,32 @@ public abstract class PackageManagerInternal {
          * @return The package names.
          */
         public String[] getPackages(String authority, int userId);
+    }
+
+    /**
+     * Provider for default browser
+     */
+    public interface DefaultBrowserProvider {
+
+        /**
+         * Get the package name of the default browser.
+         *
+         * @param userId the user id
+         *
+         * @return the package name of the default browser, or {@code null} if none
+         */
+        @Nullable
+        String getDefaultBrowser(@UserIdInt int userId);
+
+        /**
+         * Set the package name of the default browser.
+         *
+         * @param packageName package name of the default browser, or {@code null} to remove
+         * @param userId the user id
+         *
+         * @return whether the default browser was successfully set.
+         */
+        boolean setDefaultBrowser(@Nullable String packageName, @UserIdInt int userId);
     }
 
     /**
@@ -794,6 +824,12 @@ public abstract class PackageManagerInternal {
             "android.content.pm.extra.ENABLE_ROLLBACK_INSTALL_FLAGS";
 
     /**
+     * Extra field name for the set of installed users for a given rollback package.
+     */
+    public static final String EXTRA_ENABLE_ROLLBACK_INSTALLED_USERS =
+            "android.content.pm.extra.ENABLE_ROLLBACK_INSTALLED_USERS";
+
+    /**
      * Used as the {@code enableRollbackCode} argument for
      * {@link PackageManagerInternal#setEnableRollbackCode} to indicate that
      * enabling rollback succeeded.
@@ -827,4 +863,27 @@ public abstract class PackageManagerInternal {
      * Ask the package manager to compile layouts in the given package.
      */
     public abstract boolean compileLayouts(String packageName);
+
+    /*
+     * Inform the package manager that the pending package install identified by
+     * {@code token} can be completed.
+     */
+    public abstract void finishPackageInstall(int token, boolean didLaunch);
+
+    /**
+     * Remove the default browser stored in the legacy package settings.
+     *
+     * @param userId the user id
+     *
+     * @return the package name of the default browser, or {@code null} if none
+     */
+    @Nullable
+    public abstract String removeLegacyDefaultBrowserPackageName(int userId);
+
+    /**
+     * Sets the default browser provider.
+     *
+     * @param provider the provider
+     */
+    public abstract void setDefaultBrowserProvider(@NonNull DefaultBrowserProvider provider);
 }

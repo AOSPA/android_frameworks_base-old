@@ -22,6 +22,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
 import android.app.PendingIntent;
@@ -233,6 +234,29 @@ public final class UsageStatsManager {
      */
     @SystemApi
     public static final String EXTRA_TIME_USED = "android.app.usage.extra.TIME_USED";
+
+
+    /**
+     * App usage observers will consider the task root package the source of usage.
+     * @hide
+     */
+    @SystemApi
+    public static final int USAGE_SOURCE_TASK_ROOT_ACTIVITY = 1;
+
+    /**
+     * App usage observers will consider the visible activity's package the source of usage.
+     * @hide
+     */
+    @SystemApi
+    public static final int USAGE_SOURCE_CURRENT_ACTIVITY = 2;
+
+    /** @hide */
+    @IntDef(prefix = { "USAGE_SOURCE_" }, value = {
+            USAGE_SOURCE_TASK_ROOT_ACTIVITY,
+            USAGE_SOURCE_CURRENT_ACTIVITY,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UsageSource {}
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private static final UsageEvents sEmptyResults = new UsageEvents();
@@ -595,7 +619,7 @@ public final class UsageStatsManager {
      * @param timeLimit The total time the set of apps can be in the foreground before the
      *                  callbackIntent is delivered. Must be at least one minute.
      * @param timeUnit The unit for time specified in {@code timeLimit}. Cannot be null.
-     * @param callbackIntent The PendingIntent that will be dispatched when the time limit is
+     * @param callbackIntent The PendingIntent that will be dispatched when the usage limit is
      *                       exceeded by the group of apps. The delivered Intent will also contain
      *                       the extras {@link #EXTRA_OBSERVER_ID}, {@link #EXTRA_TIME_LIMIT} and
      *                       {@link #EXTRA_TIME_USED}. Cannot be null.
@@ -658,14 +682,14 @@ public final class UsageStatsManager {
      * @param sessionThresholdTimeUnit The unit for time specified in {@code sessionThreshold}.
      *                                 Cannot be null.
      * @param limitReachedCallbackIntent The {@link PendingIntent} that will be dispatched when the
-     *                                   time limit is exceeded by the group of apps. The delivered
-     *                                   Intent will also contain the extras {@link
+     *                                   usage limit is exceeded by the group of apps. The
+     *                                   delivered Intent will also contain the extras {@link
      *                                   #EXTRA_OBSERVER_ID}, {@link #EXTRA_TIME_LIMIT} and {@link
      *                                   #EXTRA_TIME_USED}. Cannot be null.
      * @param sessionEndCallbackIntent The {@link PendingIntent}  that will be dispatched when the
-     *                                 session has ended after the time limit has been exceeded. The
-     *                                 session is considered at its end after the {@code observed}
-     *                                 usage has stopped and an additional {@code
+     *                                 session has ended after the usage limit has been exceeded.
+     *                                 The session is considered at its end after the {@code
+     *                                 observed} usage has stopped and an additional {@code
      *                                 sessionThresholdTime} has passed. The delivered Intent will
      *                                 also contain the extras {@link #EXTRA_OBSERVER_ID} and {@link
      *                                 #EXTRA_TIME_USED}. Can be null.
@@ -712,6 +736,74 @@ public final class UsageStatsManager {
     }
 
     /**
+     * Register a usage limit observer that receives a callback on the provided intent when the
+     * sum of usages of apps and tokens in the provided {@code observedEntities} array exceeds the
+     * {@code timeLimit} specified. The structure of a token is a {@link String} with the reporting
+     * package's name and a token that the calling app will use, separated by the forward slash
+     * character. Example: com.reporting.package/5OM3*0P4QU3-7OK3N
+     * <p>
+     * Registering an {@code observerId} that was already registered will override the previous one.
+     * No more than 1000 unique {@code observerId} may be registered by a single uid
+     * at any one time.
+     * A limit may be unregistered via {@link #unregisterAppUsageLimitObserver}
+     * <p>
+     * This method is similar to {@link #registerAppUsageObserver}, but the usage limit set here
+     * will be visible to the launcher so that it can report the limit to the user and how much
+     * of it is remaining.
+     * @see android.content.pm.LauncherApps#getAppUsageLimit
+     *
+     * @param observerId A unique id associated with the group of apps to be monitored. There can
+     *                  be multiple groups with common packages and different time limits.
+     * @param observedEntities The list of packages and token to observe for usage time. Cannot be
+     *                         null and must include at least one package or token.
+     * @param timeLimit The total time the set of apps can be in the foreground before the
+     *                  callbackIntent is delivered. Must be at least one minute.
+     * @param timeUnit The unit for time specified in {@code timeLimit}. Cannot be null.
+     * @param callbackIntent The PendingIntent that will be dispatched when the  usage limit is
+     *                       exceeded by the group of apps. The delivered Intent will also contain
+     *                       the extras {@link #EXTRA_OBSERVER_ID}, {@link #EXTRA_TIME_LIMIT} and
+     *                       {@link #EXTRA_TIME_USED}. Cannot be null.
+     * @throws SecurityException if the caller doesn't have both SUSPEND_APPS and OBSERVE_APP_USAGE
+     *                           permissions.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.SUSPEND_APPS,
+            android.Manifest.permission.OBSERVE_APP_USAGE})
+    public void registerAppUsageLimitObserver(int observerId, @NonNull String[] observedEntities,
+            long timeLimit, @NonNull TimeUnit timeUnit, @NonNull PendingIntent callbackIntent) {
+        try {
+            mService.registerAppUsageLimitObserver(observerId, observedEntities,
+                    timeUnit.toMillis(timeLimit), callbackIntent, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Unregister the app usage limit observer specified by the {@code observerId}.
+     * This will only apply to any observer registered by this application. Unregistering
+     * an observer that was already unregistered or never registered will have no effect.
+     *
+     * @param observerId The id of the observer that was previously registered.
+     * @throws SecurityException if the caller doesn't have both SUSPEND_APPS and OBSERVE_APP_USAGE
+     *                           permissions.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.SUSPEND_APPS,
+            android.Manifest.permission.OBSERVE_APP_USAGE})
+    public void unregisterAppUsageLimitObserver(int observerId) {
+        try {
+            mService.unregisterAppUsageLimitObserver(observerId, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Report usage associated with a particular {@code token} has started. Tokens are app defined
      * strings used to represent usage of in-app features. Apps with the {@link
      * android.Manifest.permission#OBSERVE_APP_USAGE} permission can register time limit observers
@@ -719,6 +811,7 @@ public final class UsageStatsManager {
      * and usage will be considered stopped if the activity stops or crashes.
      * @see #registerAppUsageObserver
      * @see #registerUsageSessionObserver
+     * @see #registerAppUsageLimitObserver
      *
      * @param activity The activity {@code token} is associated with.
      * @param token The token to report usage against.
@@ -742,6 +835,7 @@ public final class UsageStatsManager {
      * {@code activity} and usage will be considered stopped if the activity stops or crashes.
      * @see #registerAppUsageObserver
      * @see #registerUsageSessionObserver
+     * @see #registerAppUsageLimitObserver
      *
      * @param activity The activity {@code token} is associated with.
      * @param token The token to report usage against.
@@ -771,6 +865,38 @@ public final class UsageStatsManager {
         try {
             mService.reportUsageStop(activity.getActivityToken(), token,
                     mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get what App Usage Observers will consider the source of usage for an activity. Usage Source
+     * is decided at boot and will not change until next boot.
+     * @see #USAGE_SOURCE_TASK_ROOT_ACTIVITY
+     * @see #USAGE_SOURCE_CURRENT_ACTIVITY
+     *
+     * @throws SecurityException if the caller doesn't have the OBSERVE_APP_USAGE permission and
+     *                           is not the profile owner of this user.
+     * @hide
+     */
+    @SystemApi
+    public @UsageSource int getUsageSource() {
+        try {
+            return mService.getUsageSource();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Force the Usage Source be reread from global settings.
+     * @hide
+     */
+    @TestApi
+    public void forceUsageSourceSettingRead() {
+        try {
+            mService.forceUsageSourceSettingRead();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -843,6 +969,22 @@ public final class UsageStatsManager {
                 break;
         }
         return sb.toString();
+    }
+
+    /** @hide */
+    public static String usageSourceToString(int usageSource) {
+        switch (usageSource) {
+            case USAGE_SOURCE_TASK_ROOT_ACTIVITY:
+                return "TASK_ROOT_ACTIVITY";
+            case USAGE_SOURCE_CURRENT_ACTIVITY:
+                return "CURRENT_ACTIVITY";
+            default:
+                StringBuilder sb = new StringBuilder();
+                sb.append("UNKNOWN(");
+                sb.append(usageSource);
+                sb.append(")");
+                return sb.toString();
+        }
     }
 
     /**

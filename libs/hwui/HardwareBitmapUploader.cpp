@@ -86,7 +86,7 @@ static EGLDisplay getUploadEglDisplay() {
     return sEglManager.eglDisplay();
 }
 
-static bool hasFP16Support() {
+bool HardwareBitmapUploader::hasFP16Support() {
     static std::once_flag sOnce;
     static bool hasFP16Support = false;
 
@@ -116,7 +116,6 @@ struct FormatInfo {
 
 static FormatInfo determineFormat(const SkBitmap& skBitmap) {
     FormatInfo formatInfo;
-    // TODO: add support for linear blending (when ANDROID_ENABLE_LINEAR_BLENDING is defined)
     switch (skBitmap.info().colorType()) {
         case kRGBA_8888_SkColorType:
             formatInfo.isSupported = true;
@@ -127,7 +126,7 @@ static FormatInfo determineFormat(const SkBitmap& skBitmap) {
             formatInfo.type = GL_UNSIGNED_BYTE;
             break;
         case kRGBA_F16_SkColorType:
-            formatInfo.isSupported = hasFP16Support();
+            formatInfo.isSupported = HardwareBitmapUploader::hasFP16Support();
             if (formatInfo.isSupported) {
                 formatInfo.type = GL_HALF_FLOAT;
                 formatInfo.pixelFormat = PIXEL_FORMAT_RGBA_FP16;
@@ -164,15 +163,11 @@ static SkBitmap makeHwCompatible(const FormatInfo& format, const SkBitmap& sourc
         const SkImageInfo& info = source.info();
         bitmap.allocPixels(
                 SkImageInfo::MakeN32(info.width(), info.height(), info.alphaType(), nullptr));
-        bitmap.eraseColor(0);
-        if (info.colorType() == kRGBA_F16_SkColorType) {
-            // Drawing RGBA_F16 onto ARGB_8888 is not supported
-            source.readPixels(bitmap.info().makeColorSpace(SkColorSpace::MakeSRGB()),
-                              bitmap.getPixels(), bitmap.rowBytes(), 0, 0);
-        } else {
-            SkCanvas canvas(bitmap);
-            canvas.drawBitmap(source, 0.0f, 0.0f, nullptr);
-        }
+
+        SkCanvas canvas(bitmap);
+        canvas.drawColor(0);
+        canvas.drawBitmap(source, 0.0f, 0.0f, nullptr);
+
         return bitmap;
     }
 }
@@ -253,8 +248,8 @@ sk_sp<Bitmap> HardwareBitmapUploader::allocateHardwareBitmap(const SkBitmap& sou
         eglDestroySyncKHR(display, fence);
     }
 
-    return Bitmap::createFrom(buffer.get(), bitmap.refColorSpace(), bitmap.alphaType(),
-                              Bitmap::computePalette(bitmap));
+    return Bitmap::createFrom(buffer.get(), bitmap.colorType(), bitmap.refColorSpace(),
+                              bitmap.alphaType(), Bitmap::computePalette(bitmap));
 }
 
 void HardwareBitmapUploader::terminate() {

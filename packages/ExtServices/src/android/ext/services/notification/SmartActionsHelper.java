@@ -92,6 +92,23 @@ public class SmartActionsHelper {
         mSettings = settings;
     }
 
+    @NonNull
+    SmartSuggestions suggest(@NonNull NotificationEntry entry) {
+        // Whenever suggest() is called on a notification, its previous session is ended.
+        mNotificationKeyToResultIdCache.remove(entry.getSbn().getKey());
+
+        ArrayList<Notification.Action> actions = suggestActions(entry);
+        ArrayList<CharSequence> replies = suggestReplies(entry);
+
+        // Not logging subsequent events of this notification if we didn't generate any suggestion
+        // for it.
+        if (replies.isEmpty() && actions.isEmpty()) {
+            mNotificationKeyToResultIdCache.remove(entry.getSbn().getKey());
+        }
+
+        return new SmartSuggestions(replies, actions);
+    }
+
     /**
      * Adds action adjustments based on the notification contents.
      */
@@ -115,6 +132,7 @@ public class SmartActionsHelper {
                 messages.get(messages.size() - 1).getText(), MAX_SMART_ACTIONS);
     }
 
+    @NonNull
     ArrayList<CharSequence> suggestReplies(@NonNull NotificationEntry entry) {
         if (!mSettings.mGenerateReplies) {
             return EMPTY_REPLY_LIST;
@@ -146,7 +164,7 @@ public class SmartActionsHelper {
                 .collect(Collectors.toCollection(ArrayList::new));
 
         String resultId = conversationActionsResult.getId();
-        if (resultId != null && !replies.isEmpty()) {
+        if (resultId != null) {
             mNotificationKeyToResultIdCache.put(entry.getSbn().getKey(), resultId);
         }
         return replies;
@@ -202,7 +220,7 @@ public class SmartActionsHelper {
         }
         TextClassifierEvent textClassifierEvent =
                 createTextClassifierEventBuilder(TextClassifierEvent.TYPE_SMART_ACTION, resultId)
-                        .setEntityType(ConversationAction.TYPE_TEXT_REPLY)
+                        .setEntityTypes(ConversationAction.TYPE_TEXT_REPLY)
                         .build();
         mTextClassifier.onTextClassifierEvent(textClassifierEvent);
     }
@@ -225,7 +243,7 @@ public class SmartActionsHelper {
         }
         TextClassifierEvent textClassifierEvent =
                 createTextClassifierEventBuilder(TextClassifierEvent.TYPE_SMART_ACTION, resultId)
-                        .setEntityType(actionType)
+                        .setEntityTypes(actionType)
                         .build();
         mTextClassifier.onTextClassifierEvent(textClassifierEvent);
     }
@@ -291,7 +309,7 @@ public class SmartActionsHelper {
         Parcelable[] messages = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES);
         if (messages == null || messages.length == 0) {
             return Arrays.asList(new ConversationActions.Message.Builder(
-                    ConversationActions.Message.PERSON_USER_REMOTE)
+                    ConversationActions.Message.PERSON_USER_OTHERS)
                     .setText(notification.extras.getCharSequence(Notification.EXTRA_TEXT))
                     .build());
         }
@@ -310,7 +328,7 @@ public class SmartActionsHelper {
                 break;
             }
             Person author = localUser != null && localUser.equals(senderPerson)
-                    ? ConversationActions.Message.PERSON_USER_LOCAL : senderPerson;
+                    ? ConversationActions.Message.PERSON_USER_SELF : senderPerson;
             extractMessages.push(new ConversationActions.Message.Builder(author)
                     .setText(message.getText())
                     .setReferenceTime(
@@ -384,5 +402,16 @@ public class SmartActionsHelper {
             }
         }
         return actions;
+    }
+
+    static class SmartSuggestions {
+        public final ArrayList<CharSequence> replies;
+        public final ArrayList<Notification.Action> actions;
+
+        SmartSuggestions(
+                ArrayList<CharSequence> replies, ArrayList<Notification.Action> actions) {
+            this.replies = replies;
+            this.actions = actions;
+        }
     }
 }

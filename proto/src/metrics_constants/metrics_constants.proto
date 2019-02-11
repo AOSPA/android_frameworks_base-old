@@ -73,6 +73,10 @@ message MetricsEvent {
 
     // The view switched to summary mode (most relevant for notifications)
     TYPE_COLLAPSE = 14;
+
+    // The notification was adjusted by the assistant. Enum value is
+    // out of sequence due to b/122737498.
+    TYPE_NOTIFICATION_ASSISTANT_ADJUSTMENT = 1573;
   }
 
   // Types of alerts, as bit field values
@@ -230,6 +234,17 @@ message MetricsEvent {
     BLOCKING_HELPER_CLICK_ALERT_ME = 6;
     // "undo" was clicked (enables the user to undo "stop notification" action).
     BLOCKING_HELPER_CLICK_UNDO = 7;
+  }
+
+  // The (visual) location of a Notification.
+  enum NotificationLocation {
+    LOCATION_UNKNOWN = 0;
+    LOCATION_FIRST_HEADS_UP = 1; // visible heads-up
+    LOCATION_HIDDEN_TOP = 2; // hidden/scrolled away on the top
+    LOCATION_MAIN_AREA = 3; // visible in the shade
+    LOCATION_BOTTOM_STACK_PEEKING = 4; // in the bottom stack, and peeking
+    LOCATION_BOTTOM_STACK_HIDDEN = 5; // in the bottom stack, and hidden
+    LOCATION_GONE = 6; // the view isn't laid out at all
   }
 
   // Known visual elements: views or controls.
@@ -4049,6 +4064,8 @@ message MetricsEvent {
     // - AUTOFILL_INVALID_DATASET_AUTHENTICATION
     // NOTE: starting on OS Q, it also added the following fields:
     // Tag FIELD_AUTOFILL_TEXT_LEN: length of the error message provided by the service
+    // Tag FIELD_AUTOFILL_NUMBER_AUGMENTED_REQUESTS: number of requests made to the augmented
+    //     autofill service
     AUTOFILL_REQUEST = 907;
 
     // Tag of a field for a package of an autofill service
@@ -6749,10 +6766,10 @@ message MetricsEvent {
     // OS: Q
     ZEN_CUSTOM_SETTINGS_DIALOG = 1612;
 
-    // OPEN: Settings > Developer Options > Game Update Packages
+    // OPEN: Settings > Developer Options > Game Driver Preferences
     // CATEGORY: SETTINGS
     // OS: Q
-    SETTINGS_GUP_DASHBOARD = 1613;
+    SETTINGS_GAME_DRIVER_DASHBOARD = 1613;
 
     // CATEGORY: The category for all actions relating to language detection logging.
     // OS: Q
@@ -6763,22 +6780,22 @@ message MetricsEvent {
     CONVERSATION_ACTIONS = 1615;
 
     // ACTION: Actions from a text classifier are shown to user.
-    // CATEGORY: CONVERSATION_ACTIONS
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
     // OS: Q
     ACTION_TEXT_CLASSIFIER_ACTIONS_SHOWN = 1616;
 
-    // ACTION: Event time of a text classifier event in unix timestamp.
-    // CATEGORY: CONVERSATION_ACTIONS, LANGUAGE_DETECTION
+    // FIELD: Event time of a text classifier event in unix timestamp.
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
     // OS: Q
     FIELD_TEXT_CLASSIFIER_EVENT_TIME = 1617;
 
     // ACTION: Users compose their own replies instead of using suggested ones.
-    // CATEGORY: CONVERSATION_ACTIONS
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
     // OS: Q
     ACTION_TEXT_CLASSIFIER_MANUAL_REPLY = 1618;
 
     // ACTION: Text classifier generates an action.
-    // CATEGORY: CONVERSATION_ACTIONS
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
     // OS: Q
     ACTION_TEXT_CLASSIFIER_ACTIONS_GENERATED = 1619;
 
@@ -6819,6 +6836,105 @@ message MetricsEvent {
     // CATEGORY: SETTINGS
     // OS: Q
     MOBILE_NETWORK_LIST = 1627;
+
+    // OPEN: Settings > Display > Adaptive sleep
+    // OS: Q
+    SETTINGS_ADAPTIVE_SLEEP = 1628;
+
+    // Tagged data for SMART_REPLY_VISIBLE and NOTIFICATION_ITEM_ACTION.
+    // The UI location of the notification containing the smart suggestions.
+    // This is a NotificationLocation object (see the NotificationLocation
+    // enum).
+    // OS: Q
+    NOTIFICATION_LOCATION = 1629;
+
+    // The autofill system made request to the system-provided augmented autofill service.
+    // OS: Q
+    // Package: Package of app that is autofilled
+    // Tag FIELD_CLASS_NAME: Class name of the activity that is autofilled.
+    // Tag FIELD_AUTOFILL_SERVICE: Package of the augmented autofill service that processed the
+    // request
+    // Tag FIELD_AUTOFILL_SESSION_ID: id of the autofill session associated with this metric.
+    // Tag FIELD_AUTOFILL_COMPAT_MODE: package is being autofilled on compatibility mode.
+    AUTOFILL_AUGMENTED_REQUEST = 1630;
+
+    // Tag of a field for the number of augmented autofill requests in a session
+    // OS: Q
+    FIELD_AUTOFILL_NUMBER_AUGMENTED_REQUESTS = 1631;
+
+    // OPEN: Settings > System > Aware
+    // OS: Q
+    SETTINGS_AWARE = 1632;
+
+    // OPEN: Settings > System > Aware > Disable > Dialog
+    // OS: Q
+    DIALOG_AWARE_DISABLE = 1633;
+
+    // FIELD: Session ID of TextClassifierEvent.
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_SESSION_ID = 1634;
+
+    // FIELD: First entity type.
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_FIRST_ENTITY_TYPE = 1635;
+    // FIELD: Second entity type.
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_SECOND_ENTITY_TYPE = 1636;
+
+    // FIELD: Third entity type.
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_THIRD_ENTITY_TYPE = 1637;
+
+    // FIELD: Score of the suggestion.
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_SCORE = 1638;
+
+    // FIELD: widget type, e.g: notification, textview
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_WIDGET_TYPE = 1639;
+
+    // FIELD: version of the widget.
+    // CATEGORY: LANGUAGE_DETECTION, CONVERSATION_ACTIONS
+    // OS: Q
+    FIELD_TEXT_CLASSIFIER_WIDGET_VERSION = 1640;
+
+    // Tagged data for NOTIFICATION_ITEM. One of the CATEGORY String constants from
+    // https://developer.android.com/reference/android/app/Notification .
+    // OS: Q
+    // CATEGORY: NOTIFICATION
+    FIELD_NOTIFICATION_CATEGORY = 1641;
+
+    // OPEN: Settings > Settings > Network & internet > Click Mobile network to land on page with
+    // details for a SIM/eSIM mobile network > Click edit icon to bring up a rename dialog.
+    // OS: Q
+    MOBILE_NETWORK_RENAME_DIALOG = 1642;
+
+    // ACTION: Settings > Search Bar > Avatar
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACTION_CLICK_ACCOUNT_AVATAR = 1643;
+
+    // OPEN: Set new password (action intents android.app.action.SET_NEW_PASSWORD or
+    // android.app.action.SET_NEW_PARENT_PROFILE_PASSWORD)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    SET_NEW_PASSWORD_ACTIVITY = 1644;
+
+    // ACTION: Set new password (action intent android.app.action.SET_NEW_PASSWORD)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACTION_SET_NEW_PASSWORD = 1645;
+
+    // ACTION: Set new password (action intent android.app.action.SET_NEW_PARENT_PROFILE_PASSWORD)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACTION_SET_NEW_PARENT_PROFILE_PASSWORD = 1646;
 
     // ---- End Q Constants, all Q constants go above this line ----
     // Add new aosp constants above this line.

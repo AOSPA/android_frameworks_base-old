@@ -39,11 +39,12 @@ import android.content.pm.IPackageManager;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
+import android.content.pm.PackageInstaller.SessionInfo;
 import android.content.pm.PackageInstaller.SessionParams;
-import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageParser;
 import android.content.pm.PackageParser.ApkLite;
 import android.content.pm.PackageParser.PackageLite;
@@ -60,6 +61,10 @@ import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.dex.ISnapshotRuntimeProfileCallback;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
+import android.content.rollback.IRollbackManager;
+import android.content.rollback.PackageRollbackInfo;
+import android.content.rollback.RollbackInfo;
+import android.content.rollback.RollbackManager;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -258,8 +263,12 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runSetHarmfulAppWarning();
                 case "get-harmful-app-warning":
                     return runGetHarmfulAppWarning();
+                case "get-stagedsessions":
+                    return getStagedSessions();
                 case "uninstall-system-updates":
                     return uninstallSystemUpdates();
+                case "rollback-app":
+                    return runRollbackApp();
                 default: {
                     String nextArg = getNextArg();
                     if (nextArg == null) {
@@ -280,6 +289,28 @@ class PackageManagerShellCommand extends ShellCommand {
             pw.println("Remote exception: " + e);
         }
         return -1;
+    }
+
+    private int getStagedSessions() {
+        final PrintWriter pw = getOutPrintWriter();
+        try {
+            List<SessionInfo> stagedSessionsList =
+                    mInterface.getPackageInstaller().getStagedSessions().getList();
+            for (SessionInfo session: stagedSessionsList) {
+                pw.println("appPackageName = " + session.getAppPackageName()
+                        + "; sessionId = " + session.getSessionId()
+                        + "; isStaged = " + session.isStaged()
+                        + "; isSessionReady = " + session.isSessionReady()
+                        + "; isSessionApplied = " + session.isSessionApplied()
+                        + "; isSessionFailed = " + session.isSessionFailed() + ";");
+            }
+        } catch (RemoteException e) {
+            pw.println("Failure ["
+                    + e.getClass().getName() + " - "
+                    + e.getMessage() + "]");
+            return 0;
+        }
+        return 1;
     }
 
     private int uninstallSystemUpdates() {
@@ -321,6 +352,55 @@ class PackageManagerShellCommand extends ShellCommand {
         }
         pw.println("Success");
         return 1;
+    }
+
+    private int runRollbackApp() {
+        final PrintWriter pw = getOutPrintWriter();
+
+        final String packageName = getNextArgRequired();
+        if (packageName == null) {
+            pw.println("Error: package name not specified");
+            return 1;
+        }
+
+        final LocalIntentReceiver receiver = new LocalIntentReceiver();
+        try {
+            IRollbackManager rm = IRollbackManager.Stub.asInterface(
+                    ServiceManager.getService(Context.ROLLBACK_SERVICE));
+
+            RollbackInfo rollback = null;
+            for (RollbackInfo r : (List<RollbackInfo>) rm.getAvailableRollbacks().getList()) {
+                for (PackageRollbackInfo info : r.getPackages()) {
+                    if (packageName.equals(info.getPackageName())) {
+                        rollback = r;
+                        break;
+                    }
+                }
+            }
+
+            if (rollback == null) {
+                pw.println("No available rollbacks for: " + packageName);
+                return 1;
+            }
+
+            rm.commitRollback(rollback.getRollbackId(),
+                    ParceledListSlice.<VersionedPackage>emptyList(),
+                    "com.android.shell", receiver.getIntentSender());
+        } catch (RemoteException re) {
+            // Cannot happen.
+        }
+
+        final Intent result = receiver.getResult();
+        final int status = result.getIntExtra(RollbackManager.EXTRA_STATUS,
+                RollbackManager.STATUS_FAILURE);
+        if (status == RollbackManager.STATUS_SUCCESS) {
+            pw.println("Success");
+            return 0;
+        } else {
+            pw.println("Failure ["
+                    + result.getStringExtra(RollbackManager.EXTRA_STATUS_MESSAGE) + "]");
+            return 1;
+        }
     }
 
     private void setParamsSize(InstallParams params, String inPath) {
@@ -634,9 +714,9 @@ class PackageManagerShellCommand extends ShellCommand {
                 if (showVersionCode) {
                     pw.print(" versionCode:");
                     if (info.applicationInfo != null) {
-                        pw.print(info.applicationInfo.versionCode);
+                        pw.print(info.applicationInfo.longVersionCode);
                     } else {
-                        pw.print(info.versionCode);
+                        pw.print(info.getLongVersionCode());
                     }
                 }
                 if (listInstaller && !isApex) {
@@ -2307,7 +2387,7 @@ class PackageManagerShellCommand extends ShellCommand {
                     sessionParams.installFlags |= PackageManager.INSTALL_FORCE_SDK;
                     break;
                 case "--apex":
-                    sessionParams.installFlags |= PackageManager.INSTALL_APEX;
+                    sessionParams.setInstallAsApex();
                     sessionParams.setStaged();
                     break;
                 case "--multi-package":

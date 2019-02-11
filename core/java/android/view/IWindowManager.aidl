@@ -34,6 +34,7 @@ import android.os.ParcelFileDescriptor;
 import android.view.IApplicationToken;
 import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.IDockedStackListener;
+import android.view.IDisplayFoldListener;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
 import android.view.RemoteAnimationAdapter;
@@ -51,6 +52,7 @@ import android.view.IInputFilter;
 import android.view.AppTransitionAnimationSpec;
 import android.view.WindowContentFrameStats;
 import android.view.WindowManager;
+import android.view.SurfaceControl;
 
 /**
  * System private interface to the window manager.
@@ -402,6 +404,16 @@ interface IWindowManager
     Region getCurrentImeTouchRegion();
 
     /**
+     * Registers an IDisplayFoldListener.
+     */
+    void registerDisplayFoldListener(IDisplayFoldListener listener);
+
+    /**
+     * Unregisters an IDisplayFoldListener.
+     */
+    void unregisterDisplayFoldListener(IDisplayFoldListener listener);
+
+    /**
      * Starts a window trace.
      */
     void startWindowTrace();
@@ -555,8 +567,8 @@ interface IWindowManager
      * display content info to any SurfaceControl, as this would be a security issue.
      *
      * @param displayId The id of the display.
-     * @param surfaceControlHandle The SurfaceControl handle that the top level layers for the
+     * @param surfaceControlHandle The SurfaceControl that the top level layers for the
      *        display should be re-parented to.
      */
-    void reparentDisplayContent(int displayId, in IBinder surfaceControlHandle);
+    void reparentDisplayContent(int displayId, in SurfaceControl sc);
 }

@@ -7,6 +7,25 @@
                     "include-filter": "com.google.android.permission.gts.DefaultPermissionGrantPolicyTest"
                 }
             ]
+        },
+        {
+            "name": "CtsPermissionTestCases",
+            "options": [
+                {
+                    "include-filter": "android.permission.cts.BackgroundPermissionsTest"
+                },
+                {
+                    "include-filter": "android.permission.cts.SplitPermissionTest"
+                }
+            ]
+        },
+        {
+            "name": "CtsStatsdHostTestCases",
+            "options": [
+                {
+                    "include-filter": "android.cts.statsd.atom.UidAtomTests#testDangerousPermissionState"
+                }
+            ]
         }
     ]
 }

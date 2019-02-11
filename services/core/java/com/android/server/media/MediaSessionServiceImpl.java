@@ -49,12 +49,12 @@ import android.media.session.IActiveSessionsListener;
 import android.media.session.ICallback;
 import android.media.session.IOnMediaKeyListener;
 import android.media.session.IOnVolumeKeyLongPressListener;
-import android.media.session.ISession;
 import android.media.session.ISession2TokensListener;
 import android.media.session.ISessionManager;
 import android.media.session.MediaSession;
 import android.media.session.MediaSessionManager;
 import android.media.session.SessionCallbackLink;
+import android.media.session.SessionLink;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
@@ -288,7 +288,7 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
             return;
         }
         try {
-            mRvc.remoteVolumeChanged(session.getControllerBinder(), flags);
+            mRvc.remoteVolumeChanged(session.getSessionToken(), flags);
         } catch (Exception e) {
             Log.wtf(TAG, "Error sending volume change to system UI.", e);
         }
@@ -614,7 +614,7 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
             int size = records.size();
             ArrayList<MediaSession.Token> tokens = new ArrayList<MediaSession.Token>();
             for (int i = 0; i < size; i++) {
-                tokens.add(new MediaSession.Token(records.get(i).getControllerBinder()));
+                tokens.add(records.get(i).getSessionToken());
             }
             pushRemoteVolumeUpdateLocked(userId);
             for (int i = mSessionsListeners.size() - 1; i >= 0; i--) {
@@ -641,7 +641,7 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
                     return;
                 }
                 MediaSessionRecord record = user.mPriorityStack.getDefaultRemoteSession(userId);
-                mRvc.updateRemoteController(record == null ? null : record.getControllerBinder());
+                mRvc.updateRemoteController(record == null ? null : record.getSessionToken());
             } catch (RemoteException e) {
                 Log.wtf(TAG, "Error sending default remote volume to sys ui.", e);
             }
@@ -708,6 +708,14 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
             return null;
         }
         return mUserRecords.get(fullUserId);
+    }
+
+    private MediaSessionRecord getMediaSessionRecordLocked(MediaSession.Token sessionToken) {
+        FullUserRecord user = getFullUserRecordLocked(UserHandle.getUserId(sessionToken.getUid()));
+        if (user != null) {
+            return user.mPriorityStack.getMediaSessionRecord(sessionToken);
+        }
+        return null;
     }
 
     /**
@@ -858,7 +866,7 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
                 MediaSessionRecord mediaButtonSession = getMediaButtonSessionLocked();
                 if (mediaButtonSession != null) {
                     mCallback.onAddressedPlayerChangedToMediaSession(
-                            new MediaSession.Token(mediaButtonSession.getControllerBinder()));
+                            mediaButtonSession.getSessionToken());
                 } else if (mCurrentFullUserRecord.mLastMediaButtonReceiver != null) {
                     mCallback.onAddressedPlayerChangedToMediaButtonReceiver(
                             mCurrentFullUserRecord.mLastMediaButtonReceiver
@@ -978,7 +986,7 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
         private boolean mVoiceButtonHandled = false;
 
         @Override
-        public ISession createSession(String packageName, SessionCallbackLink cb, String tag,
+        public SessionLink createSession(String packageName, SessionCallbackLink cb, String tag,
                 int userId) throws RemoteException {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
@@ -1023,21 +1031,21 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
         }
 
         @Override
-        public List<IBinder> getSessions(ComponentName componentName, int userId) {
+        public List<MediaSession.Token> getSessions(ComponentName componentName, int userId) {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
 
             try {
                 int resolvedUserId = verifySessionsRequest(componentName, userId, pid, uid);
-                ArrayList<IBinder> binders = new ArrayList<IBinder>();
+                ArrayList<MediaSession.Token> tokens = new ArrayList<>();
                 synchronized (mLock) {
                     List<MediaSessionRecord> records = getActiveSessionsLocked(resolvedUserId);
                     for (MediaSessionRecord record : records) {
-                        binders.add(record.getControllerBinder().asBinder());
+                        tokens.add(record.getSessionToken());
                     }
                 }
-                return binders;
+                return tokens;
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1235,6 +1243,34 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
                         dispatchMediaKeyEventLocked(packageName, pid, uid, asSystemService,
                                 keyEvent, needWakeLock);
                     }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public boolean dispatchMediaKeyEventToSessionAsSystemService(String packageName,
+                MediaSession.Token sessionToken, KeyEvent keyEvent) {
+            final int pid = Binder.getCallingPid();
+            final int uid = Binder.getCallingUid();
+            final long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    MediaSessionRecord record = getMediaSessionRecordLocked(sessionToken);
+                    if (record == null) {
+                        if (DEBUG) {
+                            Log.d(TAG, "Failed to find session to dispatch key event.");
+                        }
+                        return false;
+                    }
+                    if (DEBUG) {
+                        Log.d(TAG, "dispatchMediaKeyEventToSessionAsSystemService, pkg="
+                                + packageName + ", pid=" + pid + ", uid=" + uid + ", sessionToken="
+                                + sessionToken + ", event=" + keyEvent + ", session=" + record);
+                    }
+                    return record.sendMediaButton(packageName, pid, uid, true /* asSystemService */,
+                            keyEvent, 0, null);
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -1547,6 +1583,62 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
         }
 
         @Override
+        public void dispatchVolumeKeyEventToSessionAsSystemService(String packageName,
+                String opPackageName, MediaSession.Token sessionToken, KeyEvent keyEvent) {
+            int pid = Binder.getCallingPid();
+            int uid = Binder.getCallingUid();
+            final long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    MediaSessionRecord record = getMediaSessionRecordLocked(sessionToken);
+                    if (record == null) {
+                        if (DEBUG) {
+                            Log.d(TAG, "Failed to find session to dispatch key event.");
+                        }
+                        return;
+                    }
+                    if (DEBUG) {
+                        Log.d(TAG, "dispatchVolumeKeyEventToSessionAsSystemService, pkg="
+                                + packageName + ", opPkg=" + opPackageName + ", pid=" + pid
+                                + ", uid=" + uid + ", sessionToken=" + sessionToken + ", event="
+                                + keyEvent + ", session=" + record);
+                    }
+                    switch (keyEvent.getAction()) {
+                        case KeyEvent.ACTION_DOWN: {
+                            int direction = 0;
+                            switch (keyEvent.getKeyCode()) {
+                                case KeyEvent.KEYCODE_VOLUME_UP:
+                                    direction = AudioManager.ADJUST_RAISE;
+                                    break;
+                                case KeyEvent.KEYCODE_VOLUME_DOWN:
+                                    direction = AudioManager.ADJUST_LOWER;
+                                    break;
+                                case KeyEvent.KEYCODE_VOLUME_MUTE:
+                                    direction = AudioManager.ADJUST_TOGGLE_MUTE;
+                                    break;
+                            }
+                            record.adjustVolume(packageName, opPackageName, pid, uid,
+                                    null /* caller */, true /* asSystemService */, direction,
+                                    AudioManager.FLAG_SHOW_UI, false /* useSuggested */);
+                            break;
+                        }
+
+                        case KeyEvent.ACTION_UP: {
+                            final int flags =
+                                    AudioManager.FLAG_PLAY_SOUND | AudioManager.FLAG_VIBRATE
+                                            | AudioManager.FLAG_FROM_KEY;
+                            record.adjustVolume(packageName, opPackageName, pid, uid,
+                                    null /* caller */, true /* asSystemService */, 0,
+                                    flags, false /* useSuggested */);
+                        }
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
         public void dispatchAdjustVolume(String packageName, String opPackageName,
                 int suggestedStream, int delta, int flags) {
             final int pid = Binder.getCallingPid();
@@ -1798,7 +1890,7 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
                 if (mCurrentFullUserRecord.mCallback != null) {
                     try {
                         mCurrentFullUserRecord.mCallback.onMediaKeyEventDispatchedToMediaSession(
-                                keyEvent, new MediaSession.Token(session.getControllerBinder()));
+                                keyEvent, session.getSessionToken());
                     } catch (RemoteException e) {
                         Log.w(TAG, "Failed to send callback", e);
                     }

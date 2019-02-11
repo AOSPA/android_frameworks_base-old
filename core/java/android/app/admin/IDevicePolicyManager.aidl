@@ -187,8 +187,10 @@ interface IDevicePolicyManager {
     void setCertInstallerPackage(in ComponentName who, String installerPackage);
     String getCertInstallerPackage(in ComponentName who);
 
-    boolean setAlwaysOnVpnPackage(in ComponentName who, String vpnPackage, boolean lockdown);
+    boolean setAlwaysOnVpnPackage(in ComponentName who, String vpnPackage, boolean lockdown, in List<String> lockdownWhitelist);
     String getAlwaysOnVpnPackage(in ComponentName who);
+    boolean isAlwaysOnVpnLockdownEnabled(in ComponentName who);
+    List<String> getAlwaysOnVpnLockdownWhitelist(in ComponentName who);
 
     void addPersistentPreferredActivity(in ComponentName admin, in IntentFilter filter, in ComponentName activity);
     void clearPackagePersistentPreferredActivities(in ComponentName admin, String packageName);
@@ -424,8 +426,7 @@ interface IDevicePolicyManager {
 
     void installUpdateFromFile(in ComponentName admin, in ParcelFileDescriptor updateFileDescriptor, in StartInstallingUpdateCallback listener);
 
-    void addCrossProfileCalendarPackage(in ComponentName admin, String packageName);
-    boolean removeCrossProfileCalendarPackage(in ComponentName admin, String packageName);
+    void setCrossProfileCalendarPackages(in ComponentName admin, in List<String> packageNames);
     List<String> getCrossProfileCalendarPackages(in ComponentName admin);
     boolean isPackageAllowedToAccessCalendarForUser(String packageName, int userHandle);
     List<String> getCrossProfileCalendarPackagesForUser(int userHandle);

@@ -804,7 +804,7 @@ public class UserBackupManagerService {
     public BackupAgent makeMetadataAgent() {
         PackageManagerBackupAgent pmAgent = new PackageManagerBackupAgent(mPackageManager, mUserId);
         pmAgent.attach(mContext);
-        pmAgent.onCreate();
+        pmAgent.onCreate(UserHandle.of(mUserId));
         return pmAgent;
     }
 
@@ -815,7 +815,7 @@ public class UserBackupManagerService {
         PackageManagerBackupAgent pmAgent =
                 new PackageManagerBackupAgent(mPackageManager, packages, mUserId);
         pmAgent.attach(mContext);
-        pmAgent.onCreate();
+        pmAgent.onCreate(UserHandle.of(mUserId));
         return pmAgent;
     }
 
@@ -910,10 +910,10 @@ public class UserBackupManagerService {
                     long lastBackup = in.readLong();
                     foundApps.add(pkgName); // all apps that we've addressed already
                     try {
-                        PackageInfo pkg = mPackageManager.getPackageInfo(pkgName, 0);
+                        PackageInfo pkg = mPackageManager.getPackageInfoAsUser(pkgName, 0, mUserId);
                         if (AppBackupUtils.appGetsFullBackup(pkg)
-                                && AppBackupUtils.appIsEligibleForBackup(
-                                pkg.applicationInfo, mPackageManager)) {
+                                && AppBackupUtils.appIsEligibleForBackup(pkg.applicationInfo,
+                                mUserId)) {
                             schedule.add(new FullBackupEntry(pkgName, lastBackup));
                         } else {
                             if (DEBUG) {
@@ -933,8 +933,8 @@ public class UserBackupManagerService {
                 // scan to make sure that we're tracking all full-backup candidates properly
                 for (PackageInfo app : apps) {
                     if (AppBackupUtils.appGetsFullBackup(app)
-                            && AppBackupUtils.appIsEligibleForBackup(
-                            app.applicationInfo, mPackageManager)) {
+                            && AppBackupUtils.appIsEligibleForBackup(app.applicationInfo,
+                            mUserId)) {
                         if (!foundApps.contains(app.packageName)) {
                             if (MORE_DEBUG) {
                                 Slog.i(TAG, "New full backup app " + app.packageName + " found");
@@ -960,7 +960,7 @@ public class UserBackupManagerService {
             schedule = new ArrayList<>(apps.size());
             for (PackageInfo info : apps) {
                 if (AppBackupUtils.appGetsFullBackup(info) && AppBackupUtils.appIsEligibleForBackup(
-                        info.applicationInfo, mPackageManager)) {
+                        info.applicationInfo, mUserId)) {
                     schedule.add(new FullBackupEntry(info.packageName, 0));
                 }
             }
@@ -1222,8 +1222,8 @@ public class UserBackupManagerService {
                                 mPackageManager.getPackageInfoAsUser(
                                         packageName, /* flags */ 0, mUserId);
                         if (AppBackupUtils.appGetsFullBackup(app)
-                                && AppBackupUtils.appIsEligibleForBackup(
-                                app.applicationInfo, mPackageManager)) {
+                                && AppBackupUtils.appIsEligibleForBackup(app.applicationInfo,
+                                mUserId)) {
                             enqueueFullBackup(packageName, now);
                             scheduleNextFullBackupJob(0);
                         } else {
@@ -1618,8 +1618,7 @@ public class UserBackupManagerService {
             try {
                 PackageInfo packageInfo = mPackageManager.getPackageInfoAsUser(packageName,
                         PackageManager.GET_SIGNING_CERTIFICATES, mUserId);
-                if (!AppBackupUtils.appIsEligibleForBackup(packageInfo.applicationInfo,
-                        mPackageManager)) {
+                if (!AppBackupUtils.appIsEligibleForBackup(packageInfo.applicationInfo, mUserId)) {
                     BackupObserverUtils.sendBackupOnPackageResult(observer, packageName,
                             BackupManager.ERROR_BACKUP_NOT_ALLOWED);
                     continue;
@@ -1864,7 +1863,7 @@ public class UserBackupManagerService {
             // The agent was running with a stub Application object, so shut it down.
             // !!! We hardcode the confirmation UI's package name here rather than use a
             //     manifest flag!  TODO something less direct.
-            if (app.uid >= Process.FIRST_APPLICATION_UID
+            if (!UserHandle.isCore(app.uid)
                     && !app.packageName.equals("com.android.backupconfirm")) {
                 if (MORE_DEBUG) Slog.d(TAG, "Killing agent host process");
                 mActivityManager.killApplicationProcess(app.processName, app.uid);
@@ -1907,13 +1906,7 @@ public class UserBackupManagerService {
                 final long interval = mConstants.getFullBackupIntervalMilliseconds();
                 final long appLatency = (timeSinceLast < interval) ? (interval - timeSinceLast) : 0;
                 final long latency = Math.max(transportMinLatency, appLatency);
-                Runnable r = new Runnable() {
-                    @Override
-                    public void run() {
-                        FullBackupJob.schedule(mUserId, mContext, latency, mConstants);
-                    }
-                };
-                mBackupHandler.postDelayed(r, 2500);
+                FullBackupJob.schedule(mUserId, mContext, latency, mConstants);
             } else {
                 if (DEBUG_SCHEDULING) {
                     Slog.i(TAG, "Full backup queue empty; not scheduling");
@@ -2095,7 +2088,8 @@ public class UserBackupManagerService {
                     }
 
                     try {
-                        PackageInfo appInfo = mPackageManager.getPackageInfo(entry.packageName, 0);
+                        PackageInfo appInfo = mPackageManager.getPackageInfoAsUser(
+                                entry.packageName, 0, mUserId);
                         if (!AppBackupUtils.appGetsFullBackup(appInfo)) {
                             // The head app isn't supposed to get full-data backups [any more];
                             // so we cull it and force a loop around to consider the new head
@@ -2144,12 +2138,7 @@ public class UserBackupManagerService {
                     Slog.i(TAG, "Nothing pending full backup; rescheduling +" + latency);
                 }
                 final long deferTime = latency;     // pin for the closure
-                mBackupHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        FullBackupJob.schedule(mUserId, mContext, deferTime, mConstants);
-                    }
-                });
+                FullBackupJob.schedule(mUserId, mContext, deferTime, mConstants);
                 return false;
             }
 

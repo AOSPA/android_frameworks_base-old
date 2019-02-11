@@ -16,6 +16,8 @@
 
 package android.location;
 
+import android.Manifest;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.os.Build;
@@ -161,6 +163,7 @@ public final class LocationRequest implements Parcelable {
     private WorkSource mWorkSource = null;
     @UnsupportedAppUsage
     private boolean mHideFromAppOps = false; // True if this request shouldn't be counted by AppOps
+    private boolean mLocationSettingsIgnored = false;
 
     @UnsupportedAppUsage
     private String mProvider = LocationManager.FUSED_PROVIDER;
@@ -261,6 +264,7 @@ public final class LocationRequest implements Parcelable {
         mWorkSource = src.mWorkSource;
         mHideFromAppOps = src.mHideFromAppOps;
         mLowPowerMode = src.mLowPowerMode;
+        mLocationSettingsIgnored = src.mLocationSettingsIgnored;
     }
 
     /**
@@ -372,6 +376,32 @@ public final class LocationRequest implements Parcelable {
     @SystemApi
     public boolean isLowPowerMode() {
         return mLowPowerMode;
+    }
+
+    /**
+     * Requests that user location settings be ignored in order to satisfy this request. This API
+     * is only for use in extremely rare scenarios where it is appropriate to ignore user location
+     * settings, such as a user initiated emergency (dialing 911 for instance).
+     *
+     * @param locationSettingsIgnored Whether to ignore location settings
+     * @return the same object, so that setters can be chained
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+    @SystemApi
+    public LocationRequest setLocationSettingsIgnored(boolean locationSettingsIgnored) {
+        mLocationSettingsIgnored = locationSettingsIgnored;
+        return this;
+    }
+
+    /**
+     * Returns true if location settings will be ignored in order to satisfy this request.
+     *
+     * @hide
+     */
+    @SystemApi
+    public boolean isLocationSettingsIgnored() {
+        return mLocationSettingsIgnored;
     }
 
     /**
@@ -653,6 +683,7 @@ public final class LocationRequest implements Parcelable {
                     request.setSmallestDisplacement(in.readFloat());
                     request.setHideFromAppOps(in.readInt() != 0);
                     request.setLowPowerMode(in.readInt() != 0);
+                    request.setLocationSettingsIgnored(in.readInt() != 0);
                     String provider = in.readString();
                     if (provider != null) request.setProvider(provider);
                     WorkSource workSource = in.readParcelable(null);
@@ -681,6 +712,7 @@ public final class LocationRequest implements Parcelable {
         parcel.writeFloat(mSmallestDisplacement);
         parcel.writeInt(mHideFromAppOps ? 1 : 0);
         parcel.writeInt(mLowPowerMode ? 1 : 0);
+        parcel.writeInt(mLocationSettingsIgnored ? 1 : 0);
         parcel.writeString(mProvider);
         parcel.writeParcelable(mWorkSource, 0);
     }
@@ -725,6 +757,9 @@ public final class LocationRequest implements Parcelable {
             s.append(" num=").append(mNumUpdates);
         }
         s.append(" lowPowerMode=").append(mLowPowerMode);
+        if (mLocationSettingsIgnored) {
+            s.append(" ignoreSettings");
+        }
         s.append(']');
         return s.toString();
     }

@@ -17,21 +17,23 @@
 package android.content.rollback;
 
 import android.content.pm.ParceledListSlice;
-import android.content.pm.StringParceledListSlice;
 import android.content.rollback.RollbackInfo;
 import android.content.IntentSender;
 
 /** {@hide} */
 interface IRollbackManager {
 
-    RollbackInfo getAvailableRollback(String packageName);
-
-    StringParceledListSlice getPackagesWithAvailableRollbacks();
-
+    ParceledListSlice getAvailableRollbacks();
     ParceledListSlice getRecentlyExecutedRollbacks();
 
-    void executeRollback(in RollbackInfo rollback, String callerPackageName,
-            in IntentSender statusReceiver);
+    void commitRollback(int rollbackId, in ParceledListSlice causePackages,
+            String callerPackageName, in IntentSender statusReceiver);
+
+    // Exposed for use from the system server only. Callback from the package
+    // manager during the install flow when user data can be restored for a given
+    // package.
+    void restoreUserData(String packageName, in int[] userIds, int appId, long ceDataInode,
+            String seInfo, int token);
 
     // Exposed for test purposes only.
     void reloadPersistedData();

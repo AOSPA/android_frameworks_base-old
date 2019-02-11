@@ -20,8 +20,11 @@ import android.content.ContentResolver;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.KeyValueListParser;
+import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -29,6 +32,7 @@ import com.android.internal.annotations.VisibleForTesting;
  * Observes the settings for {@link Assistant}.
  */
 final class AssistantSettings extends ContentObserver {
+    private static final String LOG_TAG = "AssistantSettings";
     public static Factory FACTORY = AssistantSettings::createAndRegister;
     private static final boolean DEFAULT_GENERATE_REPLIES = true;
     private static final boolean DEFAULT_GENERATE_ACTIONS = true;
@@ -39,18 +43,14 @@ final class AssistantSettings extends ContentObserver {
     private static final Uri DISMISS_TO_VIEW_RATIO_LIMIT_URI =
             Settings.Global.getUriFor(
                     Settings.Global.BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT);
-    private static final Uri SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS_URI =
-            Settings.Global.getUriFor(
-                    Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS);
     private static final Uri NOTIFICATION_NEW_INTERRUPTION_MODEL_URI =
             Settings.Secure.getUriFor(Settings.Secure.NOTIFICATION_NEW_INTERRUPTION_MODEL);
-
-    private static final String KEY_GENERATE_REPLIES = "generate_replies";
-    private static final String KEY_GENERATE_ACTIONS = "generate_actions";
 
     private final KeyValueListParser mParser = new KeyValueListParser(',');
     private final ContentResolver mResolver;
     private final int mUserId;
+
+    private final Handler mHandler;
 
     @VisibleForTesting
     protected final Runnable mOnUpdateRunnable;
@@ -65,6 +65,7 @@ final class AssistantSettings extends ContentObserver {
     private AssistantSettings(Handler handler, ContentResolver resolver, int userId,
             Runnable onUpdateRunnable) {
         super(handler);
+        mHandler = handler;
         mResolver = resolver;
         mUserId = userId;
         mOnUpdateRunnable = onUpdateRunnable;
@@ -75,6 +76,7 @@ final class AssistantSettings extends ContentObserver {
         AssistantSettings assistantSettings =
                 new AssistantSettings(handler, resolver, userId, onUpdateRunnable);
         assistantSettings.register();
+        assistantSettings.registerDeviceConfigs();
         return assistantSettings;
     }
 
@@ -91,11 +93,60 @@ final class AssistantSettings extends ContentObserver {
         mResolver.registerContentObserver(
                 DISMISS_TO_VIEW_RATIO_LIMIT_URI, false, this, mUserId);
         mResolver.registerContentObserver(STREAK_LIMIT_URI, false, this, mUserId);
-        mResolver.registerContentObserver(
-                SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS_URI, false, this, mUserId);
 
         // Update all uris on creation.
         update(null);
+    }
+
+    private void registerDeviceConfigs() {
+        DeviceConfig.addOnPropertyChangedListener(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                this::postToHandler,
+                this::onDeviceConfigPropertyChanged);
+
+        // Update the fields in this class from the current state of the device config.
+        updateFromDeviceConfigFlags();
+    }
+
+    private void postToHandler(Runnable r) {
+        this.mHandler.post(r);
+    }
+
+    @VisibleForTesting
+    void onDeviceConfigPropertyChanged(String namespace, String name, String value) {
+        if (!DeviceConfig.NotificationAssistant.NAMESPACE.equals(namespace)) {
+            Log.e(LOG_TAG, "Received update from DeviceConfig for unrelated namespace: "
+                    + namespace + " " + name + "=" + value);
+            return;
+        }
+
+        updateFromDeviceConfigFlags();
+    }
+
+    private void updateFromDeviceConfigFlags() {
+        String generateRepliesFlag = DeviceConfig.getProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES);
+        if (TextUtils.isEmpty(generateRepliesFlag)) {
+            mGenerateReplies = DEFAULT_GENERATE_REPLIES;
+        } else {
+            // parseBoolean returns false for everything that isn't 'true' so there's no need to
+            // sanitise the flag string here.
+            mGenerateReplies = Boolean.parseBoolean(generateRepliesFlag);
+        }
+
+        String generateActionsFlag = DeviceConfig.getProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS);
+        if (TextUtils.isEmpty(generateActionsFlag)) {
+            mGenerateActions = DEFAULT_GENERATE_ACTIONS;
+        } else {
+            // parseBoolean returns false for everything that isn't 'true' so there's no need to
+            // sanitise the flag string here.
+            mGenerateActions = Boolean.parseBoolean(generateActionsFlag);
+        }
+
+        mOnUpdateRunnable.run();
     }
 
     @Override
@@ -113,15 +164,6 @@ final class AssistantSettings extends ContentObserver {
             mStreakLimit = Settings.Global.getInt(
                     mResolver, Settings.Global.BLOCKING_HELPER_STREAK_LIMIT,
                     ChannelImpressions.DEFAULT_STREAK_LIMIT);
-        }
-        if (uri == null || SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS_URI.equals(uri)) {
-            mParser.setString(
-                    Settings.Global.getString(mResolver,
-                            Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS));
-            mGenerateReplies =
-                    mParser.getBoolean(KEY_GENERATE_REPLIES, DEFAULT_GENERATE_REPLIES);
-            mGenerateActions =
-                    mParser.getBoolean(KEY_GENERATE_ACTIONS, DEFAULT_GENERATE_ACTIONS);
         }
         if (uri == null || NOTIFICATION_NEW_INTERRUPTION_MODEL_URI.equals(uri)) {
             int mNewInterruptionModelInt = Settings.Secure.getInt(

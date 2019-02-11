@@ -27,7 +27,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
-import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -36,6 +35,7 @@ import com.android.systemui.statusbar.NotificationUpdateHandler;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationData.KeyguardEnvironment;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.NotificationInflater;
 import com.android.systemui.statusbar.notification.row.NotificationInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
@@ -47,6 +47,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * NotificationEntryManager is responsible for the adding, removing, and updating of notifications.
@@ -61,12 +62,11 @@ public class NotificationEntryManager implements
     private static final String TAG = "NotificationEntryMgr";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    private final Context mContext;
     @VisibleForTesting
     protected final HashMap<String, NotificationEntry> mPendingNotifications = new HashMap<>();
 
-    private final ForegroundServiceController mForegroundServiceController =
-            Dependency.get(ForegroundServiceController.class);
+    private final Map<NotificationEntry, NotificationLifetimeExtender> mRetainedNotifications =
+            new ArrayMap<>();
 
     // Lazily retrieved dependencies
     private NotificationRemoteInputManager mRemoteInputManager;
@@ -93,10 +93,19 @@ public class NotificationEntryManager implements
                 pw.println(entry.notification);
             }
         }
+        pw.println("  Lifetime-extended notifications:");
+        if (mRetainedNotifications.isEmpty()) {
+            pw.println("    None");
+        } else {
+            for (Map.Entry<NotificationEntry, NotificationLifetimeExtender> entry
+                    : mRetainedNotifications.entrySet()) {
+                pw.println("    " + entry.getKey().notification + " retained by "
+                        + entry.getValue().getClass().getName());
+            }
+        }
     }
 
     public NotificationEntryManager(Context context) {
-        mContext = context;
         mNotificationData = new NotificationData();
     }
 
@@ -160,8 +169,10 @@ public class NotificationEntryManager implements
     public void performRemoveNotification(StatusBarNotification n) {
         final int rank = mNotificationData.getRank(n.getKey());
         final int count = mNotificationData.getActiveNotifications().size();
+        NotificationVisibility.NotificationLocation location =
+                NotificationLogger.getNotificationLocation(getNotificationData().get(n.getKey()));
         final NotificationVisibility nv = NotificationVisibility.obtain(n.getKey(), rank, count,
-                true);
+                true, location);
         removeNotificationInternal(
                 n.getKey(), null, nv, false /* forceRemove */, true /* removedByUser */);
     }
@@ -247,7 +258,7 @@ public class NotificationEntryManager implements
                 for (NotificationLifetimeExtender extender : mNotificationLifetimeExtenders) {
                     if (extender.shouldExtendLifetime(entry)) {
                         mLatestRankingMap = ranking;
-                        extender.setShouldManageLifetime(entry, true /* shouldManage */);
+                        extendLifetime(entry, extender);
                         lifetimeExtended = true;
                         break;
                     }
@@ -258,9 +269,7 @@ public class NotificationEntryManager implements
                 // At this point, we are guaranteed the notification will be removed
 
                 // Ensure any managers keeping the lifetime extended stop managing the entry
-                for (NotificationLifetimeExtender extender : mNotificationLifetimeExtenders) {
-                    extender.setShouldManageLifetime(entry, false /* shouldManage */);
-                }
+                cancelLifetimeExtension(entry);
 
                 if (entry.rowExists()) {
                     entry.removeRow();
@@ -371,9 +380,7 @@ public class NotificationEntryManager implements
 
         // Notification is updated so it is essentially re-added and thus alive again.  Don't need
         // to keep its lifetime extended.
-        for (NotificationLifetimeExtender extender : mNotificationLifetimeExtenders) {
-            extender.setShouldManageLifetime(entry, false /* shouldManage */);
-        }
+        cancelLifetimeExtension(entry);
 
         mNotificationData.update(entry, ranking, notification);
 
@@ -466,5 +473,21 @@ public class NotificationEntryManager implements
      */
     public Iterable<NotificationEntry> getPendingNotificationsIterator() {
         return mPendingNotifications.values();
+    }
+
+    private void extendLifetime(NotificationEntry entry, NotificationLifetimeExtender extender) {
+        NotificationLifetimeExtender activeExtender = mRetainedNotifications.get(entry);
+        if (activeExtender != null && activeExtender != extender) {
+            activeExtender.setShouldManageLifetime(entry, false);
+        }
+        mRetainedNotifications.put(entry, extender);
+        extender.setShouldManageLifetime(entry, true);
+    }
+
+    private void cancelLifetimeExtension(NotificationEntry entry) {
+        NotificationLifetimeExtender activeExtender = mRetainedNotifications.remove(entry);
+        if (activeExtender != null) {
+            activeExtender.setShouldManageLifetime(entry, false);
+        }
     }
 }

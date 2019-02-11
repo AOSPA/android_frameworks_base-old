@@ -28,7 +28,6 @@ import android.media.AudioManager;
 import android.media.IRemoteVolumeController;
 import android.media.MediaSession2;
 import android.media.Session2Token;
-import android.media.browse.MediaBrowser;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -37,6 +36,7 @@ import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.service.media.MediaBrowserService;
 import android.service.notification.NotificationListenerService;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -104,9 +104,14 @@ public final class MediaSessionManager {
      * @return The binder object from the system
      * @hide
      */
-    public @NonNull ISession createSession(@NonNull SessionCallbackLink cbStub,
-            @NonNull String tag, int userId) throws RemoteException {
-        return mService.createSession(mContext.getPackageName(), cbStub, tag, userId);
+    @NonNull
+    public SessionLink createSession(@NonNull SessionCallbackLink cbStub, @NonNull String tag) {
+        try {
+            return mService.createSession(mContext.getPackageName(), cbStub, tag,
+                    UserHandle.myUserId());
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -117,7 +122,6 @@ public final class MediaSessionManager {
      * {@link MediaSession2.Builder} instead.
      *
      * @param token newly created session2 token
-     * @hide
      */
     public void notifySession2Created(@NonNull Session2Token token) {
         if (token == null) {
@@ -171,11 +175,10 @@ public final class MediaSessionManager {
             @Nullable ComponentName notificationListener, int userId) {
         ArrayList<MediaController> controllers = new ArrayList<MediaController>();
         try {
-            List<IBinder> binders = mService.getSessions(notificationListener, userId);
-            int size = binders.size();
+            List<MediaSession.Token> tokens = mService.getSessions(notificationListener, userId);
+            int size = tokens.size();
             for (int i = 0; i < size; i++) {
-                MediaController controller = new MediaController(mContext, ISessionController.Stub
-                        .asInterface(binders.get(i)));
+                MediaController controller = new MediaController(mContext, tokens.get(i));
                 controllers.add(controller);
             }
         } catch (RemoteException e) {
@@ -192,9 +195,7 @@ public final class MediaSessionManager {
      * reject your uses of {@link MediaSession2}.
      *
      * @return A list of {@link Session2Token}.
-     * @hide
      */
-    // TODO: unhide
     @NonNull
     public List<Session2Token> getSession2Tokens() {
         return getSession2Tokens(UserHandle.myUserId());
@@ -205,13 +206,12 @@ public final class MediaSessionManager {
      * given user.
      * <p>
      * If you want to get tokens for another user, you must hold the
-     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} permission.
+     * android.Manifest.permission#INTERACT_ACROSS_USERS_FULL permission.
      *
      * @param userId The user id to fetch sessions for.
      * @return A list of {@link Session2Token}
      * @hide
      */
-    // TODO: unhide
     @NonNull
     public List<Session2Token> getSession2Tokens(int userId) {
         try {
@@ -338,13 +338,25 @@ public final class MediaSessionManager {
      * for consistent behavior across all devices.
      *
      * @param listener The listener to add
-     * @param handler The handler to call listener on. If {@code null}, calling thread's looper will
-     *                be used.
-     * @hide
      */
-    // TODO(jaewan): Unhide
     public void addOnSession2TokensChangedListener(
-            @NonNull OnSession2TokensChangedListener listener, @Nullable Handler handler) {
+            @NonNull OnSession2TokensChangedListener listener) {
+        addOnSession2TokensChangedListener(UserHandle.myUserId(), listener, new Handler());
+    }
+
+    /**
+     * Adds a listener to be notified when the {@link #getSession2Tokens()} changes.
+     * <p>
+     * This API is not generally intended for third party application developers.
+     * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+     * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
+     * for consistent behavior across all devices.
+     *
+     * @param listener The listener to add
+     * @param handler The handler to call listener on.
+     */
+    public void addOnSession2TokensChangedListener(
+            @NonNull OnSession2TokensChangedListener listener, @NonNull Handler handler) {
         addOnSession2TokensChangedListener(UserHandle.myUserId(), listener, handler);
     }
 
@@ -388,9 +400,7 @@ public final class MediaSessionManager {
      * Removes the {@link OnSession2TokensChangedListener} to stop receiving session token updates.
      *
      * @param listener The listener to remove.
-     * @hide
      */
-    // TODO(jaewan): Unhide
     public void removeOnSession2TokensChangedListener(
             @NonNull OnSession2TokensChangedListener listener) {
         if (listener == null) {
@@ -471,6 +481,37 @@ public final class MediaSessionManager {
     }
 
     /**
+     * Dispatches the media button event as system service to the session.
+     * <p>
+     * Should be only called by the {@link com.android.internal.policy.PhoneWindow} when the
+     * foreground activity didn't consume the key from the hardware devices.
+     *
+     * @param sessionToken session token
+     * @param keyEvent media key event
+     * @return {@code true} if the event was sent to the session, {@code false} otherwise
+     * @hide
+     */
+    public boolean dispatchMediaKeyEventAsSystemService(@NonNull MediaSession.Token sessionToken,
+            @NonNull KeyEvent keyEvent) {
+        if (sessionToken == null) {
+            throw new IllegalArgumentException("sessionToken shouldn't be null");
+        }
+        if (keyEvent == null) {
+            throw new IllegalArgumentException("keyEvent shouldn't be null");
+        }
+        if (!KeyEvent.isMediaSessionKey(keyEvent.getKeyCode())) {
+            return false;
+        }
+        try {
+            return mService.dispatchMediaKeyEventToSessionAsSystemService(mContext.getPackageName(),
+                    sessionToken, keyEvent);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to send key event.", e);
+        }
+        return false;
+    }
+
+    /**
      * Send a volume key event. The receiver will be selected automatically.
      *
      * @param keyEvent The volume KeyEvent to send.
@@ -503,6 +544,32 @@ public final class MediaSessionManager {
                     asSystemService, keyEvent, stream, musicOnly);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send volume key event.", e);
+        }
+    }
+
+    /**
+     * Dispatches the volume key event as system service to the session.
+     * <p>
+     * Should be only called by the {@link com.android.internal.policy.PhoneWindow} when the
+     * foreground activity didn't consume the key from the hardware devices.
+     *
+     * @param sessionToken sessionToken
+     * @param keyEvent volume key event
+     * @hide
+     */
+    public void dispatchVolumeKeyEventAsSystemService(@NonNull MediaSession.Token sessionToken,
+            @NonNull KeyEvent keyEvent) {
+        if (sessionToken == null) {
+            throw new IllegalArgumentException("sessionToken shouldn't be null");
+        }
+        if (keyEvent == null) {
+            throw new IllegalArgumentException("keyEvent shouldn't be null");
+        }
+        try {
+            mService.dispatchVolumeKeyEventToSessionAsSystemService(mContext.getPackageName(),
+                    mContext.getOpPackageName(), sessionToken, keyEvent);
+        } catch (RemoteException e) {
+            Log.wtf(TAG, "Error calling dispatchVolumeKeyEventAsSystemService", e);
         }
     }
 
@@ -684,8 +751,6 @@ public final class MediaSessionManager {
      * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
      * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
      * for consistent behavior across all devices.
-     *
-     * @hide
      */
     public interface OnSession2TokensChangedListener {
         /**
@@ -789,7 +854,6 @@ public final class MediaSessionManager {
         private final String mPackageName;
         private final int mPid;
         private final int mUid;
-        private final IBinder mCallerBinder;
 
         /**
          * Create a new remote user information.
@@ -799,22 +863,9 @@ public final class MediaSessionManager {
          * @param uid The uid of the remote user
          */
         public RemoteUserInfo(@NonNull String packageName, int pid, int uid) {
-            this(packageName, pid, uid, null);
-        }
-
-        /**
-         * Create a new remote user information.
-         *
-         * @param packageName The package name of the remote user
-         * @param pid The pid of the remote user
-         * @param uid The uid of the remote user
-         * @param callerBinder The binder of the remote user. Can be {@code null}.
-         */
-        public RemoteUserInfo(String packageName, int pid, int uid, IBinder callerBinder) {
             mPackageName = packageName;
             mPid = pid;
             mUid = uid;
-            mCallerBinder = callerBinder;
         }
 
         /**
@@ -839,13 +890,8 @@ public final class MediaSessionManager {
         }
 
         /**
-         * Returns equality of two RemoteUserInfo. Two RemoteUserInfos are the same only if they're
-         * sent to the same controller (either {@link MediaController} or
-         * {@link MediaBrowser}. If it's not nor one of them is triggered by the key presses, they
-         * would be considered as different one.
-         * <p>
-         * If you only want to compare the caller's package, compare them with the
-         * {@link #getPackageName()}, {@link #getPid()}, and/or {@link #getUid()} directly.
+         * Returns equality of two RemoteUserInfo. Two RemoteUserInfo objects are equal
+         * if and only if they have the same package name, same pid, and same uid.
          *
          * @param obj the reference object with which to compare.
          * @return {@code true} if equals, {@code false} otherwise
@@ -859,8 +905,9 @@ public final class MediaSessionManager {
                 return true;
             }
             RemoteUserInfo otherUserInfo = (RemoteUserInfo) obj;
-            return (mCallerBinder == null || otherUserInfo.mCallerBinder == null) ? false
-                    : mCallerBinder.equals(otherUserInfo.mCallerBinder);
+            return TextUtils.equals(mPackageName, otherUserInfo.mPackageName)
+                    && mPid == otherUserInfo.mPid
+                    && mUid == otherUserInfo.mUid;
         }
 
         @Override

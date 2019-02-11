@@ -24,6 +24,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.content.ContentResolver;
 import android.database.ContentObserver;
@@ -44,6 +45,7 @@ import java.util.concurrent.Executor;
  * @hide
  */
 @SystemApi
+@TestApi
 public final class DeviceConfig {
     /**
      * The content:// style URL for the config table.
@@ -54,6 +56,7 @@ public final class DeviceConfig {
 
     /**
      * Namespace for all Game Driver features.
+     *
      * @hide
      */
     @SystemApi
@@ -67,6 +70,39 @@ public final class DeviceConfig {
      */
     @SystemApi
     public static final String NAMESPACE_AUTOFILL = "autofill";
+
+    /**
+     * ContentCapture-related properties definitions.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface ContentCapture {
+        String NAMESPACE = "content_capture";
+
+        /**
+         * Property used by {@code com.android.server.SystemServer} on start to decide whether
+         * the Content Capture service should be created or not.
+         *
+         * <p>Possible values are:
+         *
+         * <ul>
+         *   <li>If set to {@code default}, it will only be set if the OEM provides and defines the
+         *   service name by overlaying {@code config_defaultContentCaptureService} (this is the
+         *   "default" mode)
+         *   <li>If set to {@code always}, it will always be enabled, even when the resource is not
+         *   overlaid (this is useful during development and to run the CTS tests on AOSP builds).
+         *   <li>Otherwise, it's explicitly disabled (this could work as a "kill switch" so OEMs
+         *   can disable it remotely in case of emergency by setting to something else (like
+         *   {@code "false"}); notice that it's also disabled if the OEM doesn't explicitly set one
+         *   of the values above).
+         * </ul>
+         *
+         * @hide
+         */
+        // TODO(b/121153631): revert back to SERVICE_EXPLICITLY_ENABLED approach
+        String PROPERTY_CONTENTCAPTURE_ENABLED = "enable_contentcapture";
+    }
 
     /**
      * Namespace for content capture feature used by on-device machine intelligence
@@ -86,6 +122,202 @@ public final class DeviceConfig {
     @SystemApi
     public static final String NAMESPACE_INPUT_NATIVE_BOOT = "input_native_boot";
 
+    /**
+     * Namespace for all netd related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_NETD_NATIVE = "netd_native";
+
+    /**
+     * Namespace for features related to the ExtServices Notification Assistant.
+     * These features are applied immediately.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface NotificationAssistant {
+        String NAMESPACE = "notification_assistant";
+        /**
+         * Whether the Notification Assistant should generate replies for notifications.
+         */
+        String GENERATE_REPLIES = "generate_replies";
+        /**
+         * Whether the Notification Assistant should generate contextual actions for notifications.
+         */
+        String GENERATE_ACTIONS = "generate_actions";
+    }
+
+    /**
+     * Namespace for all runtime native related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface RuntimeNative {
+        String NAMESPACE = "runtime_native";
+    }
+
+    /**
+     * Namespace for all runtime native boot related features. Boot in this case refers to the
+     * fact that the properties only take affect after rebooting the device.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface RuntimeNativeBoot {
+        String NAMESPACE = "runtime_native_boot";
+    }
+
+    /**
+     * Namespace for all activity manager related features that are used at the native level.
+     * These features are applied at reboot.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface ActivityManagerNativeBoot {
+        String NAMESPACE = "activity_manager_native_boot";
+        String OFFLOAD_QUEUE_ENABLED = "offload_queue_enabled";
+    }
+
+    /**
+     * Namespace for attention-based features provided by on-device machine intelligence.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface IntelligenceAttention {
+        String NAMESPACE = "intelligence_attention";
+
+        /** If {@code true}, enables the attention features. */
+        String ATTENTION_ENABLED = "attention_enabled";
+
+        /** Settings for the attention features. */
+        String ATTENTION_SETTINGS = "attention_settings";
+    }
+
+    /**
+     * Privacy related properties definitions.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public interface Privacy {
+        String NAMESPACE = "privacy";
+
+        /**
+         * Whether to show the Permissions Hub.
+         *
+         * @hide
+         */
+        @SystemApi
+        String PROPERTY_PERMISSIONS_HUB_ENABLED = "permissions_hub_enabled";
+
+        /**
+         * Whether to show location access check notifications.
+         */
+        String PROPERTY_LOCATION_ACCESS_CHECK_ENABLED = "location_access_check_enabled";
+    }
+
+    /**
+     * Telephony related properties definitions.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface Telephony {
+        String NAMESPACE = "telephony";
+        /**
+         * Ringer ramping time in milliseconds.
+         */
+        String RAMPING_RINGER_DURATION = "ramping_ringer_duration";
+        /**
+         * Whether to apply ramping ringer on incoming phone calls.
+         */
+        String RAMPING_RINGER_ENABLED = "ramping_ringer_enabled";
+        /**
+         * Vibration time in milliseconds before ramping ringer starts.
+         */
+        String RAMPING_RINGER_VIBRATION_DURATION = "ramping_ringer_vibration_duration";
+    }
+
+    /**
+     * Namespace for how dex runs.  The feature may requires reboot to a clean state.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface DexBoot {
+        String NAMESPACE = "dex_boot";
+        String PRIV_APPS_OOB_ENABLED = "priv_apps_oob_enabled";
+        String PRIV_APPS_OOB_WHITELIST = "priv_apps_oob_whitelist";
+    }
+
+    /**
+     * Namespace for activity manager related features. These features will be applied
+     * immediately upon change.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface ActivityManager {
+        String NAMESPACE = "activity_manager";
+
+        /**
+         * App compaction flags. See {@link com.android.server.am.AppCompactor}.
+         */
+        String KEY_USE_COMPACTION = "use_compaction";
+        String KEY_COMPACT_ACTION_1 = "compact_action_1";
+        String KEY_COMPACT_ACTION_2 = "compact_action_2";
+        String KEY_COMPACT_THROTTLE_1 = "compact_throttle_1";
+        String KEY_COMPACT_THROTTLE_2 = "compact_throttle_2";
+        String KEY_COMPACT_THROTTLE_3 = "compact_throttle_3";
+        String KEY_COMPACT_THROTTLE_4 = "compact_throttle_4";
+        String KEY_COMPACT_STATSD_SAMPLE_RATE = "compact_statsd_sample_rate";
+
+        /**
+         * Maximum number of cached processes. See
+         * {@link com.android.server.am.ActivityManagerConstants}.
+         */
+        String KEY_MAX_CACHED_PROCESSES = "max_cached_processes";
+    }
+
+    /**
+     * Namespace for {@link AttentionManagerService} related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface AttentionManagerService {
+        String NAMESPACE = "attention_manager_service";
+
+        /** If {@code true}, enables {@link AttentionManagerService} features. */
+        String SERVICE_ENABLED = "service_enabled";
+
+        /** Allows a CTS to inject a fake implementation. */
+        String COMPONENT_NAME = "component_name";
+    }
+
+    /**
+     * Namespace for storage-related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface Storage {
+        String NAMESPACE = "storage";
+
+        /**
+         * If {@code 1}, enables the isolated storage feature. If {@code -1},
+         * disables the isolated storage feature. If {@code 0}, uses the default
+         * value from the build system.
+         */
+        String ISOLATED_STORAGE_ENABLED = "isolated_storage_enabled";
+    }
+
     private static final Object sLock = new Object();
     @GuardedBy("sLock")
     private static Map<OnPropertyChangedListener, Pair<String, Executor>> sListeners =
@@ -101,9 +333,8 @@ public final class DeviceConfig {
      * Look up the value of a property for a particular namespace.
      *
      * @param namespace The namespace containing the property to look up.
-     * @param name The name of the property to look up.
+     * @param name      The name of the property to look up.
      * @return the corresponding value, or null if not present.
-     *
      * @hide
      */
     @SystemApi
@@ -125,16 +356,16 @@ public final class DeviceConfig {
      * All properties stored for a particular scope can be reverted to their default values
      * by passing the namespace to {@link #resetToDefaults(int, String)}.
      *
-     * @param namespace The namespace containing the property to create or update.
-     * @param name The name of the property to create or update.
-     * @param value The value to store for the property.
+     * @param namespace   The namespace containing the property to create or update.
+     * @param name        The name of the property to create or update.
+     * @param value       The value to store for the property.
      * @param makeDefault Whether to make the new value the default one.
      * @return True if the value was set, false if the storage implementation throws errors.
-     * @see #resetToDefaults(int, String).
-     *
      * @hide
+     * @see #resetToDefaults(int, String).
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(WRITE_DEVICE_CONFIG)
     public static boolean setProperty(
             String namespace, String name, String value, boolean makeDefault) {
@@ -151,11 +382,11 @@ public final class DeviceConfig {
      *
      * @param resetMode The reset mode to use.
      * @param namespace Optionally, the specific namespace which resets will be limited to.
-     * @see #setProperty(String, String, String, boolean)
-     *
      * @hide
+     * @see #setProperty(String, String, String, boolean)
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(WRITE_DEVICE_CONFIG)
     public static void resetToDefaults(@ResetMode int resetMode, @Nullable String namespace) {
         ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
@@ -170,12 +401,11 @@ public final class DeviceConfig {
      * will replace the old namespace and executor. Remove the listener entirely by calling
      * {@link #removeOnPropertyChangedListener(OnPropertyChangedListener)}.
      *
-     * @param namespace The namespace containing properties to monitor.
-     * @param executor The executor which will be used to run callbacks.
+     * @param namespace                 The namespace containing properties to monitor.
+     * @param executor                  The executor which will be used to run callbacks.
      * @param onPropertyChangedListener The listener to add.
-     * @see #removeOnPropertyChangedListener(OnPropertyChangedListener)
-     *
      * @hide
+     * @see #removeOnPropertyChangedListener(OnPropertyChangedListener)
      */
     @SystemApi
     @RequiresPermission(READ_DEVICE_CONFIG)
@@ -207,9 +437,8 @@ public final class DeviceConfig {
      * property changes.
      *
      * @param onPropertyChangedListener The listener to remove.
-     * @see #addOnPropertyChangedListener(String, Executor, OnPropertyChangedListener)
-     *
      * @hide
+     * @see #addOnPropertyChangedListener(String, Executor, OnPropertyChangedListener)
      */
     @SystemApi
     public static void removeOnPropertyChangedListener(
@@ -304,14 +533,17 @@ public final class DeviceConfig {
      * Interface for monitoring to properties.
      * <p>
      * Override {@link #onPropertyChanged(String, String, String)} to handle callbacks for changes.
+     *
+     * @hide
      */
+    @SystemApi
     public interface OnPropertyChangedListener {
         /**
          * Called when a property has changed.
          *
          * @param namespace The namespace containing the property which has changed.
-         * @param name The name of the property which has changed.
-         * @param value The new value of the property which has changed.
+         * @param name      The name of the property which has changed.
+         * @param value     The new value of the property which has changed.
          */
         void onPropertyChanged(String namespace, String name, String value);
     }

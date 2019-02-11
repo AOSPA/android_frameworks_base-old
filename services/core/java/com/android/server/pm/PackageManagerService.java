@@ -120,6 +120,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.apex.ApexInfo;
+import android.apex.ApexSessionInfo;
 import android.apex.IApexService;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -202,6 +203,7 @@ import android.content.pm.dex.ArtManager;
 import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.dex.IArtManager;
 import android.content.res.Resources;
+import android.content.rollback.IRollbackManager;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.hardware.display.DisplayManager;
@@ -448,8 +450,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     private static final long BACKUP_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(60);
 
-    private static final boolean PRECOMPILED_LAYOUT_ENABLED =
-            SystemProperties.getBoolean("view.precompiled_layout_enabled", false);
+    private static final String PRECOMPILE_LAYOUTS = "pm.precompile_layouts";
 
     private static final int RADIO_UID = Process.PHONE_UID;
     private static final int LOG_UID = Process.LOG_UID;
@@ -984,6 +985,9 @@ public class PackageManagerService extends IPackageManager.Stub
     @GuardedBy("mPackages")
     private CheckPermissionDelegate mCheckPermissionDelegate;
 
+    @GuardedBy("mPackages")
+    private PackageManagerInternal.DefaultBrowserProvider mDefaultBrowserProvider;
+
     private class IntentVerifierProxy implements IntentFilterVerifier<ActivityIntentInfo> {
         private Context mContext;
         private ComponentName mIntentFilterVerifierComponent;
@@ -1352,6 +1356,7 @@ public class PackageManagerService extends IPackageManager.Stub
     final @Nullable String mDocumenterPackage;
     final @Nullable String mConfiguratorPackage;
     final @Nullable String mAppPredictionServicePackage;
+    final @Nullable String mIncidentReportApproverPackage;
     final @NonNull String mServicesSystemSharedLibraryPackageName;
     final @NonNull String mSharedSystemSharedLibraryPackageName;
 
@@ -1927,7 +1932,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             final PackageSetting pkgSetting = mSettings.mPackages.get(packageName);
                             if (pkgSetting.getInstallReason(userId)
                                     != PackageManager.INSTALL_REASON_DEVICE_RESTORE) {
-                                mSettings.setDefaultBrowserPackageNameLPw(null, userId);
+                                setDefaultBrowserPackageName(null, userId);
                             }
                         }
 
@@ -2881,6 +2886,7 @@ public class PackageManagerService extends IPackageManager.Stub
             mConfiguratorPackage =
                     mContext.getString(R.string.config_deviceConfiguratorPackageName);
             mAppPredictionServicePackage = getAppPredictionServicePackageName();
+            mIncidentReportApproverPackage = getIncidentReportApproverPackageName();
 
             // Now that we know all of the shared libraries, update all clients to have
             // the correct library paths.
@@ -2940,7 +2946,6 @@ public class PackageManagerService extends IPackageManager.Stub
             if (!onlyCore && (mPromoteSystemApps || mFirstBoot)) {
                 for (UserInfo user : sUserManager.getUsers(true)) {
                     mSettings.applyDefaultPreferredAppsLPw(user.id);
-                    applyFactoryDefaultBrowserLPw(user.id);
                     primeDomainVerificationsLPw(user.id);
                 }
             }
@@ -3013,8 +3018,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 ver.fingerprint = Build.FINGERPRINT;
             }
 
-            checkDefaultBrowser();
-
             // clear only after permissions and other defaults have been updated
             mExistingSystemPackages.clear();
             mPromoteSystemApps = false;
@@ -3047,7 +3050,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 mSharedSystemSharedLibraryPackageName = getRequiredSharedLibraryLPr(
                         PackageManager.SYSTEM_SHARED_LIBRARY_SHARED,
                         SharedLibraryInfo.VERSION_UNDEFINED);
-                mRequiredPermissionControllerPackage = getRequiredPermissionControllerLPr();
             } else {
                 mRequiredVerifierPackage = null;
                 mOptionalVerifierPackage = null;
@@ -3057,8 +3059,10 @@ public class PackageManagerService extends IPackageManager.Stub
                 mIntentFilterVerifier = null;
                 mServicesSystemSharedLibraryPackageName = null;
                 mSharedSystemSharedLibraryPackageName = null;
-                mRequiredPermissionControllerPackage = null;
             }
+            // PermissionController hosts default permission granting and role management, so it's a
+            // critical part of the core system.
+            mRequiredPermissionControllerPackage = getRequiredPermissionControllerLPr();
 
             // Initialize InstantAppRegistry's Instant App list for all users.
             final int[] userIds = UserManagerService.getInstance().getUserIds();
@@ -3697,58 +3701,6 @@ public class PackageManagerService extends IPackageManager.Stub
         scheduleWriteSettingsLocked();
     }
 
-    @GuardedBy("mPackages")
-    private void applyFactoryDefaultBrowserLPw(int userId) {
-        // The default browser app's package name is stored in a string resource,
-        // with a product-specific overlay used for vendor customization.
-        String browserPkg = mContext.getResources().getString(
-                com.android.internal.R.string.default_browser);
-        if (!TextUtils.isEmpty(browserPkg)) {
-            // non-empty string => required to be a known package
-            PackageSetting ps = mSettings.mPackages.get(browserPkg);
-            if (ps == null) {
-                Slog.e(TAG, "Product default browser app does not exist: " + browserPkg);
-                browserPkg = null;
-            } else {
-                mSettings.setDefaultBrowserPackageNameLPw(browserPkg, userId);
-            }
-        }
-
-        // Nothing valid explicitly set? Make the factory-installed browser the explicit
-        // default.  If there's more than one, just leave everything alone.
-        if (browserPkg == null) {
-            calculateDefaultBrowserLPw(userId);
-        }
-    }
-
-    @GuardedBy("mPackages")
-    private void calculateDefaultBrowserLPw(int userId) {
-        List<String> allBrowsers = resolveAllBrowserApps(userId);
-        final String browserPkg = (allBrowsers.size() == 1) ? allBrowsers.get(0) : null;
-        mSettings.setDefaultBrowserPackageNameLPw(browserPkg, userId);
-    }
-
-    private List<String> resolveAllBrowserApps(int userId) {
-        // Resolve the canonical browser intent and check that the handleAllWebDataURI boolean is set
-        List<ResolveInfo> list = queryIntentActivitiesInternal(sBrowserIntent, null,
-                PackageManager.MATCH_ALL, userId);
-
-        final int count = list.size();
-        List<String> result = new ArrayList<>(count);
-        for (int i=0; i<count; i++) {
-            ResolveInfo info = list.get(i);
-            if (info.activityInfo == null
-                    || !info.handleAllWebDataURI
-                    || (info.activityInfo.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0
-                    || result.contains(info.activityInfo.packageName)) {
-                continue;
-            }
-            result.add(info.activityInfo.packageName);
-        }
-
-        return result;
-    }
-
     private boolean packageIsBrowser(String packageName, int userId) {
         List<ResolveInfo> list = queryIntentActivitiesInternal(sBrowserIntent, null,
                 PackageManager.MATCH_ALL, userId);
@@ -3760,20 +3712,6 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         return false;
-    }
-
-    private void checkDefaultBrowser() {
-        final int myUserId = UserHandle.myUserId();
-        final String packageName = getDefaultBrowserPackageName(myUserId);
-        if (packageName != null) {
-            PackageInfo info = getPackageInfo(packageName, 0, myUserId);
-            if (info == null) {
-                Slog.w(TAG, "Default browser no longer installed: " + packageName);
-                synchronized (mPackages) {
-                    applyFactoryDefaultBrowserLPw(myUserId);    // leaves ambiguous when > 1
-                }
-            }
-        }
     }
 
     @Override
@@ -3996,6 +3934,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                     return generatePackageInfo(ps, flags, userId);
                 }
+                // TODO(b/123680735): support MATCH_APEX|MATCH_FACTORY_ONLY case
             }
 
             PackageParser.Package p = mPackages.get(packageName);
@@ -4024,6 +3963,30 @@ public class PackageManagerService extends IPackageManager.Stub
                     return null;
                 }
                 return generatePackageInfo(ps, flags, userId);
+            }
+            //
+            if (!matchFactoryOnly && (flags & MATCH_APEX) != 0) {
+                //TODO(b/123052859) Don't do file operations every time there is a query.
+                final IApexService apex = IApexService.Stub.asInterface(
+                        ServiceManager.getService("apexservice"));
+                if (apex != null) {
+                    try {
+                        final ApexInfo activePkg = apex.getActivePackage(packageName);
+                        if (activePkg != null && !TextUtils.isEmpty(activePkg.packagePath)) {
+                            try {
+                                return PackageParser.generatePackageInfoFromApex(
+                                        new File(activePkg.packagePath), true /* collect certs */);
+                            } catch (PackageParserException pe) {
+                                Log.e(TAG, "Unable to parse package at "
+                                        + activePkg.packagePath, pe);
+                            }
+                        }
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Unable to retrieve packages from apexservice: " + e.toString());
+                    }
+                } else {
+                    Log.e(TAG, "Unable to connect to apexservice for querying packages.");
+                }
             }
         }
         return null;
@@ -7918,6 +7881,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
             if (listApex) {
+                // TODO(b/119767311): include uninstalled/inactive APEX if
+                //  MATCH_UNINSTALLED_PACKAGES is set.
                 final IApexService apex = IApexService.Stub.asInterface(
                         ServiceManager.getService("apexservice"));
                 if (apex != null) {
@@ -9148,7 +9113,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 pkgCompilationReason = PackageManagerService.REASON_BACKGROUND_DEXOPT;
             }
 
-            if (PRECOMPILED_LAYOUT_ENABLED) {
+            if (SystemProperties.getBoolean(PRECOMPILE_LAYOUTS, false)) {
                 mArtManagerService.compileLayouts(pkg);
             }
 
@@ -10602,8 +10567,6 @@ public class PackageManagerService extends IPackageManager.Stub
             if ((parseFlags & PackageParser.PARSE_CHATTY) != 0)
                 Log.d(TAG, "Scanning package " + pkg.packageName);
         }
-
-        DexManager.maybeLogUnexpectedPackageDetails(pkg);
 
         // Initialize package source and resource directories
         final File scanFile = new File(pkg.codePath);
@@ -13647,15 +13610,28 @@ public class PackageManagerService extends IPackageManager.Stub
             mContext.enforceCallingOrSelfPermission(
                     android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
         }
-
-        synchronized (mPackages) {
-            boolean result = mSettings.setDefaultBrowserPackageNameLPw(packageName, userId);
-            if (packageName != null) {
-                mDefaultPermissionPolicy.grantDefaultPermissionsToDefaultBrowser(
-                        packageName, userId);
-            }
-            return result;
+        if (userId == UserHandle.USER_ALL) {
+            return false;
         }
+        PackageManagerInternal.DefaultBrowserProvider provider;
+        synchronized (mPackages) {
+            provider = mDefaultBrowserProvider;
+        }
+        if (provider == null) {
+            Slog.e(TAG, "mDefaultBrowserProvider is null");
+            return false;
+        }
+        boolean successful = provider.setDefaultBrowser(packageName, userId);
+        if (!successful) {
+            return false;
+        }
+        if (packageName != null) {
+            synchronized (mPackages) {
+                mDefaultPermissionPolicy.grantDefaultPermissionsToDefaultBrowser(packageName,
+                        userId);
+            }
+        }
+        return true;
     }
 
     @Override
@@ -13667,9 +13643,15 @@ public class PackageManagerService extends IPackageManager.Stub
         if (getInstantAppPackageName(Binder.getCallingUid()) != null) {
             return null;
         }
+        PackageManagerInternal.DefaultBrowserProvider provider;
         synchronized (mPackages) {
-            return mSettings.getDefaultBrowserPackageNameLPw(userId);
+            provider = mDefaultBrowserProvider;
         }
+        if (provider == null) {
+            Slog.e(TAG, "mDefaultBrowserProvider is null");
+            return null;
+        }
+        return provider.getDefaultBrowser(userId);
     }
 
     /**
@@ -13900,6 +13882,46 @@ public class PackageManagerService extends IPackageManager.Stub
             } else {
                 Slog.e(TAG, "Backup Manager not found!");
                 doRestore = false;
+            }
+        }
+
+        // If this is an update to a package that might be potentially downgraded, then we
+        // need to check with the rollback manager whether there's any userdata that might
+        // need to be restored for the package.
+        //
+        // TODO(narayan): Get this working for cases where userId == UserHandle.USER_ALL.
+        if (res.returnCode == PackageManager.INSTALL_SUCCEEDED && !doRestore && update) {
+            IRollbackManager rm = IRollbackManager.Stub.asInterface(
+                    ServiceManager.getService(Context.ROLLBACK_SERVICE));
+
+            final String packageName = res.pkg.applicationInfo.packageName;
+            final String seInfo = res.pkg.applicationInfo.seInfo;
+            final int[] allUsers = sUserManager.getUserIds();
+            final int[] installedUsers;
+
+            final PackageSetting ps;
+            int appId = -1;
+            long ceDataInode = -1;
+            synchronized (mSettings) {
+                ps = mSettings.getPackageLPr(packageName);
+                if (ps != null) {
+                    appId = ps.appId;
+                    ceDataInode = ps.getCeDataInode(userId);
+                }
+
+                // NOTE: We ignore the user specified in the InstallParam because we know this is
+                // an update, and hence need to restore data for all installed users.
+                installedUsers = ps.queryInstalledUsers(allUsers, true);
+            }
+
+            if (ps != null) {
+                try {
+                    rm.restoreUserData(packageName, installedUsers, appId, ceDataInode,
+                            seInfo, token);
+                } catch (RemoteException re) {
+                    // Cannot happen, the RollbackManager is hosted in the same process.
+                }
+                doRestore = true;
             }
         }
 
@@ -14626,6 +14648,17 @@ public class PackageManagerService extends IPackageManager.Stub
                             TRACE_TAG_PACKAGE_MANAGER, "enable_rollback", enableRollbackToken);
                     mPendingEnableRollback.append(enableRollbackToken, this);
 
+                    final int[] installedUsers;
+                    synchronized (mPackages) {
+                        PackageSetting ps = mSettings.getPackageLPr(pkgLite.packageName);
+                        if (ps != null) {
+                            installedUsers = ps.queryInstalledUsers(sUserManager.getUserIds(),
+                                    true);
+                        } else {
+                            installedUsers = new int[0];
+                        }
+                    }
+
                     // TODO(ruhler) b/112431924: What user? Test for multi-user.
                     Intent enableRollbackIntent = new Intent(Intent.ACTION_PACKAGE_ENABLE_ROLLBACK);
                     enableRollbackIntent.putExtra(
@@ -14634,6 +14667,9 @@ public class PackageManagerService extends IPackageManager.Stub
                     enableRollbackIntent.putExtra(
                             PackageManagerInternal.EXTRA_ENABLE_ROLLBACK_INSTALL_FLAGS,
                             installFlags);
+                    enableRollbackIntent.putExtra(
+                            PackageManagerInternal.EXTRA_ENABLE_ROLLBACK_INSTALLED_USERS,
+                            installedUsers);
                     enableRollbackIntent.setDataAndType(Uri.fromFile(new File(origin.resolvedPath)),
                             PACKAGE_MIME_TYPE);
                     enableRollbackIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -16243,7 +16279,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             if (performDexopt) {
                 // Compile the layout resources.
-                if (PRECOMPILED_LAYOUT_ENABLED) {
+                if (SystemProperties.getBoolean(PRECOMPILE_LAYOUTS, false)) {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "compileLayouts");
                     mViewCompiler.compileLayouts(pkg);
                     Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
@@ -19414,7 +19450,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 // significant refactoring to keep all default apps in the package
                 // manager (cleaner but more work) or have the services provide
                 // callbacks to the package manager to request a default app reset.
-                applyFactoryDefaultBrowserLPw(userId);
+                setDefaultBrowserPackageName(null, userId);
                 clearIntentFilterVerificationsLPw(userId);
                 primeDomainVerificationsLPw(userId);
                 resetUserChangesToRuntimePermissionsAndFlagsLPw(userId);
@@ -20125,7 +20161,8 @@ public class PackageManagerService extends IPackageManager.Stub
         return mContext.getString(R.string.config_defaultWellbeingPackage);
     }
 
-    private String getAppPredictionServicePackageName() {
+    @Override
+    public String getAppPredictionServicePackageName() {
         String flattenedAppPredictionServiceComponentName =
                 mContext.getString(R.string.config_defaultAppPredictionService);
         if (flattenedAppPredictionServiceComponentName == null) {
@@ -20137,6 +20174,28 @@ public class PackageManagerService extends IPackageManager.Stub
             return null;
         }
         return appPredictionServiceComponentName.getPackageName();
+    }
+
+    @Override
+    public String getContentCaptureServicePackageName() {
+        String contentCaptureServiceName =
+                mContext.getString(R.string.config_defaultContentCaptureService);
+
+        if (TextUtils.isEmpty(contentCaptureServiceName)) {
+            return null;
+        }
+
+        int separatorIndex = contentCaptureServiceName.indexOf("/");
+
+        if (separatorIndex < 0) {
+            return null;
+        }
+
+        return contentCaptureServiceName.substring(0, separatorIndex);
+    }
+
+    public String getIncidentReportApproverPackageName() {
+        return mContext.getString(R.string.config_incidentReportApproverPackage);
     }
 
     @Override
@@ -20713,7 +20772,6 @@ public class PackageManagerService extends IPackageManager.Stub
         storage.registerListener(mStorageListener);
 
         mInstallerService.systemReady();
-        mDexManager.systemReady();
         mPackageDexOptimizer.systemReady();
 
         getStorageManagerInternal().addExternalStoragePolicy(
@@ -20755,6 +20813,11 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         mModuleInfoProvider.systemReady();
+
+        // Installer service might attempt to install some packages that have been staged for
+        // installation on reboot. Make sure this is the last component to be call since the
+        // installation might require other components to be ready.
+        mInstallerService.restoreAndApplyStagedSessionIfNeeded();
     }
 
     public void waitForAppDataPrepared() {
@@ -20828,6 +20891,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 pw.println("    -h: print this help");
                 pw.println("    --all-components: include all component names in package dump");
                 pw.println("  cmd may be one of:");
+                pw.println("    apex: list active APEXes and APEX session state");
                 pw.println("    l[ibraries]: list known shared libraries");
                 pw.println("    f[eatures]: list device features");
                 pw.println("    k[eysets]: print known keysets");
@@ -21355,6 +21419,54 @@ public class PackageManagerService extends IPackageManager.Stub
             // the given package is involved with.
             if (dumpState.onTitlePrinted()) pw.println();
             mInstallerService.dump(new IndentingPrintWriter(pw, "  ", 120));
+        }
+
+        if (!checkin && dumpState.isDumping(DumpState.DUMP_APEX)) {
+            final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
+            ipw.println();
+            ipw.println("Active APEX packages:");
+            ipw.increaseIndent();
+            final IApexService apex = IApexService.Stub.asInterface(
+                    ServiceManager.getService("apexservice"));
+            try {
+                final ApexInfo[] activeApexes = apex.getActivePackages();
+                for (ApexInfo ai : activeApexes) {
+                    if (packageName != null && !packageName.equals(ai.packageName)) {
+                        continue;
+                    }
+                    ipw.println(ai.packageName);
+                    ipw.increaseIndent();
+                    ipw.println("Version: " + Long.toString(ai.versionCode));
+                    ipw.println("Path: " + ai.packagePath);
+                    ipw.decreaseIndent();
+                }
+                ipw.decreaseIndent();
+                ipw.println();
+                ipw.println("APEX session state:");
+                ipw.increaseIndent();
+                final ApexSessionInfo[] sessions = apex.getSessions();
+                for (ApexSessionInfo si : sessions) {
+                    ipw.println("Session ID: " + Integer.toString(si.sessionId));
+                    ipw.increaseIndent();
+                    if (si.isUnknown) {
+                        ipw.println("State: UNKNOWN");
+                    } else if (si.isVerified) {
+                        ipw.println("State: VERIFIED");
+                    } else if (si.isStaged) {
+                        ipw.println("State: STAGED");
+                    } else if (si.isActivated) {
+                        ipw.println("State: ACTIVATED");
+                    } else if (si.isActivationPendingRetry) {
+                        ipw.println("State: ACTIVATION PENDING RETRY");
+                    } else if (si.isActivationFailed) {
+                        ipw.println("State: ACTIVATION FAILED");
+                    }
+                    ipw.decreaseIndent();
+                }
+                ipw.decreaseIndent();
+            } catch (RemoteException e) {
+                ipw.println("Couldn't communicate with apexd.");
+            }
         }
     }
 
@@ -22680,7 +22792,6 @@ public class PackageManagerService extends IPackageManager.Stub
         synchronized (mPackages) {
             scheduleWritePackageRestrictionsLocked(userId);
             scheduleWritePackageListLocked(userId);
-            applyFactoryDefaultBrowserLPw(userId);
             primeDomainVerificationsLPw(userId);
         }
     }
@@ -23303,6 +23414,10 @@ public class PackageManagerService extends IPackageManager.Stub
                     return mDocumenterPackage;
                 case PackageManagerInternal.PACKAGE_CONFIGURATOR:
                     return mConfiguratorPackage;
+                case PackageManagerInternal.PACKAGE_INCIDENT_REPORT_APPROVER:
+                    return mIncidentReportApproverPackage;
+                case PackageManagerInternal.PACKAGE_APP_PREDICTOR:
+                    return mAppPredictionServicePackage;
             }
             return null;
         }
@@ -23868,6 +23983,26 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
             return mArtManagerService.compileLayouts(pkg);
+        }
+
+        @Override
+        public void finishPackageInstall(int token, boolean didLaunch) {
+            PackageManagerService.this.finishPackageInstall(token, didLaunch);
+        }
+
+        @Nullable
+        @Override
+        public String removeLegacyDefaultBrowserPackageName(int userId) {
+            synchronized (mPackages) {
+                return mSettings.removeDefaultBrowserPackageNameLPw(userId);
+            }
+        }
+
+        @Override
+        public void setDefaultBrowserProvider(@NonNull DefaultBrowserProvider provider) {
+            synchronized (mPackages) {
+                mDefaultBrowserProvider = provider;
+            }
         }
     }
 
