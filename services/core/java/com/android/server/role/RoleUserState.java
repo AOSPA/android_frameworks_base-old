@@ -570,7 +570,20 @@ public class RoleUserState {
         dumpOutputStream.end(fieldToken);
     }
 
+    /**
+     * Get the roles and their holders.
+     *
+     * @return A copy of the roles and their holders
+     */
+    @NonNull
+    public ArrayMap<String, ArraySet<String>> getRolesAndHolders() {
+        synchronized (mLock) {
+            return snapshotRolesLocked();
+        }
+    }
+
     @GuardedBy("mLock")
+    @NonNull
     private ArrayMap<String, ArraySet<String>> snapshotRolesLocked() {
         ArrayMap<String, ArraySet<String>> roles = new ArrayMap<>();
         for (int i = 0, size = CollectionUtils.size(mRoles); i < size; ++i) {
@@ -603,7 +616,8 @@ public class RoleUserState {
         }
     }
 
-    private static @NonNull File getFile(@UserIdInt int userId) {
+    @NonNull
+    private static File getFile(@UserIdInt int userId) {
         return new File(Environment.getUserSystemDirectory(userId), ROLES_FILE_NAME);
     }
 

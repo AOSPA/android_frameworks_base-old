@@ -28,8 +28,10 @@ import android.app.NotificationManager;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
 import android.app.admin.DevicePolicyManagerInternal;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.IntentSender.SendIntentException;
 import android.content.pm.ApplicationInfo;
@@ -57,7 +59,6 @@ import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SELinux;
-import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
 import android.system.ErrnoException;
@@ -105,6 +106,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
+import java.util.function.IntPredicate;
 
 /** The service responsible for installing packages. */
 public class PackageInstallerService extends IPackageInstaller.Stub implements
@@ -137,6 +139,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     private final Handler mInstallHandler;
 
     private final Callbacks mCallbacks;
+
+    private volatile boolean mBootCompleted = false;
 
     /**
      * File storing persisted {@link #mSessions} metadata.
@@ -200,12 +204,27 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mSessionsDir = new File(Environment.getDataSystemDirectory(), "install_sessions");
         mSessionsDir.mkdirs();
 
-        mStagingManager = new StagingManager(pm);
+        mStagingManager = new StagingManager(pm, this);
+    }
+
+    private void setBootCompleted()  {
+        mBootCompleted = true;
+    }
+
+    boolean isBootCompleted()  {
+        return mBootCompleted;
     }
 
     public void systemReady() {
         mAppOps = mContext.getSystemService(AppOpsManager.class);
 
+        mContext.registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                setBootCompleted();
+                mContext.unregisterReceiver(this);
+            }
+        }, new IntentFilter(Intent.ACTION_BOOT_COMPLETED));
         synchronized (mSessions) {
             readSessionsLocked();
 
@@ -230,12 +249,23 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             // the updated information.
             writeSessionsLocked();
 
+        }
+    }
+
+    void restoreAndApplyStagedSessionIfNeeded() {
+        List<PackageInstallerSession> stagedSessionsToRestore = new ArrayList<>();
+        synchronized (mSessions) {
             for (int i = 0; i < mSessions.size(); i++) {
                 final PackageInstallerSession session = mSessions.valueAt(i);
                 if (session.isStaged()) {
-                    mStagingManager.restoreSession(session);
+                    stagedSessionsToRestore.add(session);
                 }
             }
+        }
+        // Don't hold mSessions lock when calling restoreSession, since it might trigger an APK
+        // atomic install which needs to query sessions, which requires lock on mSessions.
+        for (PackageInstallerSession session : stagedSessionsToRestore) {
+            mStagingManager.restoreSession(session);
         }
     }
 
@@ -310,7 +340,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             in.setInput(fis, StandardCharsets.UTF_8.name());
 
             int type;
-            PackageInstallerSession currentSession = null;
             while ((type = in.next()) != END_DOCUMENT) {
                 if (type == START_TAG) {
                     final String tag = in.getName();
@@ -320,9 +349,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                             session = PackageInstallerSession.readFromXml(in, mInternalCallback,
                                     mContext, mPm, mInstallThread.getLooper(), mStagingManager,
                                     mSessionsDir, this);
-                            currentSession = session;
                         } catch (Exception e) {
-                            currentSession = null;
                             Slog.e(TAG, "Could not read session", e);
                             continue;
                         }
@@ -347,10 +374,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                             addHistoricalSessionLocked(session);
                         }
                         mAllocatedSessions.put(session.sessionId, true);
-                    } else if (currentSession != null
-                            && PackageInstallerSession.TAG_CHILD_SESSION.equals(tag)) {
-                        currentSession.addChildSessionIdInternal(
-                                PackageInstallerSession.readChildSessionIdFromXml(in));
                     }
                 }
             }
@@ -545,7 +568,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
                 mInstallThread.getLooper(), mStagingManager, sessionId, userId,
                 installerPackageName, callingUid, params, createdMillis, stageDir, stageCid, false,
-                false, null, SessionInfo.INVALID_ID, false, false, false, SessionInfo.NO_ERROR);
+                false, null, SessionInfo.INVALID_ID, false, false, false,
+                SessionInfo.STAGED_SESSION_NO_ERROR, "");
 
         synchronized (mSessions) {
             mSessions.put(sessionId, session);
@@ -796,7 +820,14 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     public void registerCallback(IPackageInstallerCallback callback, int userId) {
         mPermissionManager.enforceCrossUserPermission(
                 Binder.getCallingUid(), userId, true, false, "registerCallback");
-        mCallbacks.register(callback, userId);
+        registerCallback(callback, eventUserId -> userId == eventUserId);
+    }
+
+    /**
+     * Assume permissions already checked and caller's identity cleared
+     */
+    public void registerCallback(IPackageInstallerCallback callback, IntPredicate userCheck) {
+        mCallbacks.register(callback, userCheck);
     }
 
     @Override
@@ -1018,8 +1049,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             super(looper);
         }
 
-        public void register(IPackageInstallerCallback callback, int userId) {
-            mCallbacks.register(callback, new UserHandle(userId));
+        public void register(IPackageInstallerCallback callback, IntPredicate userCheck) {
+            mCallbacks.register(callback, userCheck);
         }
 
         public void unregister(IPackageInstallerCallback callback) {
@@ -1032,9 +1063,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             final int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 final IPackageInstallerCallback callback = mCallbacks.getBroadcastItem(i);
-                final UserHandle user = (UserHandle) mCallbacks.getBroadcastCookie(i);
-                // TODO: dispatch notifications for slave profiles
-                if (userId == user.getIdentifier()) {
+                final IntPredicate userCheck = (IntPredicate) mCallbacks.getBroadcastCookie(i);
+                if (userCheck.test(userId)) {
                     try {
                         invokeCallback(callback, msg);
                     } catch (RemoteException ignored) {
@@ -1133,7 +1163,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         public void onStagedSessionChanged(PackageInstallerSession session) {
             writeSessionsAsync();
-            mPm.sendSessionUpdatedBroadcast(session.generateInfo(false), session.userId);
+            if (mBootCompleted) {
+                mPm.sendSessionUpdatedBroadcast(session.generateInfo(false),
+                        session.userId);
+            }
         }
 
         public void onSessionFinished(final PackageInstallerSession session, boolean success) {

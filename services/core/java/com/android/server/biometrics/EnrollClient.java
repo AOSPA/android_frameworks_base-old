@@ -19,6 +19,7 @@ package com.android.server.biometrics;
 import android.content.Context;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
+import android.hardware.biometrics.BiometricsProtoEnums;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Slog;
@@ -36,6 +37,8 @@ public abstract class EnrollClient extends ClientMonitor {
     private final BiometricUtils mBiometricUtils;
     private final int[] mDisabledFeatures;
 
+    public abstract boolean shouldVibrate();
+
     public EnrollClient(Context context, Metrics metrics,
             BiometricServiceBase.DaemonWrapper daemon, long halDeviceId, IBinder token,
             BiometricServiceBase.ServiceListener listener, int userId, int groupId,
@@ -49,11 +52,17 @@ public abstract class EnrollClient extends ClientMonitor {
     }
 
     @Override
+    protected int statsAction() {
+        return BiometricsProtoEnums.ACTION_ENROLL;
+    }
+
+    @Override
     public boolean onEnrollResult(BiometricAuthenticator.Identifier identifier,
             int remaining) {
         if (remaining == 0) {
             mBiometricUtils.addBiometricForUser(getContext(), getTargetUserId(), identifier);
         }
+        notifyUserActivity();
         return sendEnrollResult(identifier, remaining);
     }
 
@@ -62,7 +71,9 @@ public abstract class EnrollClient extends ClientMonitor {
      */
     private boolean sendEnrollResult(BiometricAuthenticator.Identifier identifier,
             int remaining) {
-        vibrateSuccess();
+        if (shouldVibrate()) {
+            vibrateSuccess();
+        }
         mMetricsLogger.action(mMetrics.actionBiometricEnroll());
         try {
             getListener().onEnrollResult(identifier, remaining);

@@ -41,6 +41,8 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.annotations.VisibleForTesting;
+
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
@@ -329,6 +331,10 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
         return boundsChange;
     }
 
+    boolean hasOverrideConfiguration() {
+        return mHasOverrideConfiguration;
+    }
+
     public WindowConfiguration getWindowConfiguration() {
         return mFullConfiguration.windowConfiguration;
     }
@@ -522,10 +528,15 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
         mChangeListeners.remove(listener);
     }
 
+    @VisibleForTesting
+    boolean containsListener(ConfigurationContainerListener listener) {
+        return mChangeListeners.contains(listener);
+    }
+
     /**
      * Must be called when new parent for the container was set.
      */
-    protected void onParentChanged() {
+    void onParentChanged() {
         final ConfigurationContainer parent = getParent();
         // Removing parent usually means that we've detached this entity to destroy it or to attach
         // to another parent. In both cases we don't need to update the configuration now.
@@ -544,18 +555,24 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
      * @param proto    Stream to write the ConfigurationContainer object to.
      * @param fieldId  Field Id of the ConfigurationContainer as defined in the parent
      *                 message.
-     * @param trim     If true, reduce amount of data written.
+     * @param logLevel Determines the amount of data to be written to the Protobuf.
      * @hide
      */
     @CallSuper
-    public void writeToProto(ProtoOutputStream proto, long fieldId, boolean trim) {
-        final long token = proto.start(fieldId);
-        if (!trim || mHasOverrideConfiguration) {
-            mRequestedOverrideConfiguration.writeToProto(proto, OVERRIDE_CONFIGURATION);
+    protected void writeToProto(ProtoOutputStream proto, long fieldId,
+            @WindowTraceLogLevel int logLevel) {
+        // Critical log level logs only visible elements to mitigate performance overheard
+        if (logLevel != WindowTraceLogLevel.ALL && !mHasOverrideConfiguration) {
+            return;
         }
-        if (!trim) {
-            mFullConfiguration.writeToProto(proto, FULL_CONFIGURATION);
-            mMergedOverrideConfiguration.writeToProto(proto, MERGED_OVERRIDE_CONFIGURATION);
+
+        final long token = proto.start(fieldId);
+        mRequestedOverrideConfiguration.writeToProto(proto, OVERRIDE_CONFIGURATION,
+                logLevel != WindowTraceLogLevel.CRITICAL);
+        if (logLevel == WindowTraceLogLevel.ALL) {
+            mFullConfiguration.writeToProto(proto, FULL_CONFIGURATION, false /* critical */);
+            mMergedOverrideConfiguration.writeToProto(proto, MERGED_OVERRIDE_CONFIGURATION,
+                    false /* critical */);
         }
         proto.end(token);
     }

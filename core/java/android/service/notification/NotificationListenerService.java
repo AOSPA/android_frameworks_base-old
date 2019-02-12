@@ -469,6 +469,17 @@ public abstract class NotificationListenerService extends Service {
     }
 
     /**
+     * Implement this method to be notified when the behavior of silent notifications in the status
+     * bar changes. See {@link NotificationManager#shouldHideSilentStatusBarIcons()}.
+     *
+     * @param hideSilentStatusIcons whether or not status bar icons should be hidden for silent
+     *                              notifications
+     */
+    public void onStatusBarIconsBehaviorChanged(boolean hideSilentStatusIcons) {
+        // optional
+    }
+
+    /**
      * Implement this method to learn about notification channel modifications.
      *
      * <p>The caller must have {@link CompanionDeviceManager#getAssociations() an associated
@@ -1411,6 +1422,12 @@ public abstract class NotificationListenerService extends Service {
             mHandler.obtainMessage(
                     MyHandler.MSG_ON_NOTIFICATION_CHANNEL_GROUP_MODIFIED, args).sendToTarget();
         }
+
+        @Override
+        public void onStatusBarIconsBehaviorChanged(boolean hideSilentStatusIcons) {
+            mHandler.obtainMessage(MyHandler.MSG_ON_STATUS_BAR_ICON_BEHAVIOR_CHANGED,
+                    hideSilentStatusIcons).sendToTarget();
+        }
     }
 
     /**
@@ -1617,14 +1634,16 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
-         * @hide
+         * Returns a list of smart {@link Notification.Action} that can be added by the
+         * {@link NotificationAssistantService}
          */
         public List<Notification.Action> getSmartActions() {
             return mSmartActions;
         }
 
         /**
-         * @hide
+         * Returns a list of smart replies that can be added by the
+         * {@link NotificationAssistantService}
          */
         public List<CharSequence> getSmartReplies() {
             return mSmartReplies;
@@ -2140,6 +2159,7 @@ public abstract class NotificationListenerService extends Service {
         public static final int MSG_ON_INTERRUPTION_FILTER_CHANGED = 6;
         public static final int MSG_ON_NOTIFICATION_CHANNEL_MODIFIED = 7;
         public static final int MSG_ON_NOTIFICATION_CHANNEL_GROUP_MODIFIED = 8;
+        public static final int MSG_ON_STATUS_BAR_ICON_BEHAVIOR_CHANGED = 9;
 
         public MyHandler(Looper looper) {
             super(looper, null, false);
@@ -2204,6 +2224,10 @@ public abstract class NotificationListenerService extends Service {
                     NotificationChannelGroup group = (NotificationChannelGroup) args.arg3;
                     int modificationType = (int) args.arg4;
                     onNotificationChannelGroupModified(pkgName, user, group, modificationType);
+                } break;
+
+                case MSG_ON_STATUS_BAR_ICON_BEHAVIOR_CHANGED: {
+                    onStatusBarIconsBehaviorChanged((Boolean) msg.obj);
                 } break;
             }
         }

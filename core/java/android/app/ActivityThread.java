@@ -77,9 +77,7 @@ import android.graphics.ImageDecoder;
 import android.hardware.display.DisplayManagerGlobal;
 import android.net.ConnectivityManager;
 import android.net.IConnectivityManager;
-import android.net.Network;
 import android.net.Proxy;
-import android.net.ProxyInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Binder;
@@ -132,6 +130,7 @@ import android.util.MergedConfiguration;
 import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
+import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.SuperNotCalledException;
 import android.util.proto.ProtoOutputStream;
@@ -180,7 +179,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.text.DateFormat;
@@ -309,8 +307,14 @@ public final class ActivityThread extends ClientTransactionHandler {
     @UnsupportedAppUsage
     final ArrayList<Application> mAllApplications
             = new ArrayList<Application>();
-    // set of instantiated backup agents, keyed by package name
-    final ArrayMap<String, BackupAgent> mBackupAgents = new ArrayMap<String, BackupAgent>();
+    /**
+     * Bookkeeping of instantiated backup agents indexed first by user id, then by package name.
+     * Indexing by user id supports parallel backups across users on system packages as they run in
+     * the same process with the same package name. Indexing by package name supports multiple
+     * distinct applications running in the same process.
+     */
+    private final SparseArray<ArrayMap<String, BackupAgent>> mBackupAgentsByUser =
+            new SparseArray<>();
     /** Reference to singleton {@link ActivityThread} */
     @UnsupportedAppUsage
     private static volatile ActivityThread sCurrentActivityThread;
@@ -451,6 +455,14 @@ public final class ActivityThread extends ClientTransactionHandler {
         // Callback used for updating activity override config.
         ViewRootImpl.ActivityConfigCallback configCallback;
         ActivityClientRecord nextIdle;
+
+        // Indicates whether this activity is currently the topmost resumed one in the system.
+        // This holds the last reported value from server.
+        boolean isTopResumedActivity;
+        // This holds the value last sent to the activity. This is needed, because an update from
+        // server may come at random time, but we always need to report changes between ON_RESUME
+        // and ON_PAUSE to the app.
+        boolean lastReportedTopResumedState;
 
         ProfilerInfo profilerInfo;
 
@@ -655,10 +667,11 @@ public final class ActivityThread extends ClientTransactionHandler {
         ApplicationInfo appInfo;
         CompatibilityInfo compatInfo;
         int backupMode;
+        int userId;
         public String toString() {
             return "CreateBackupAgentData{appInfo=" + appInfo
                     + " backupAgent=" + appInfo.backupAgentName
-                    + " mode=" + backupMode + "}";
+                    + " mode=" + backupMode + " userId=" + userId + "}";
         }
     }
 
@@ -873,20 +886,22 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         public final void scheduleCreateBackupAgent(ApplicationInfo app,
-                CompatibilityInfo compatInfo, int backupMode) {
+                CompatibilityInfo compatInfo, int backupMode, int userId) {
             CreateBackupAgentData d = new CreateBackupAgentData();
             d.appInfo = app;
             d.compatInfo = compatInfo;
             d.backupMode = backupMode;
+            d.userId = userId;
 
             sendMessage(H.CREATE_BACKUP_AGENT, d);
         }
 
         public final void scheduleDestroyBackupAgent(ApplicationInfo app,
-                CompatibilityInfo compatInfo) {
+                CompatibilityInfo compatInfo, int userId) {
             CreateBackupAgentData d = new CreateBackupAgentData();
             d.appInfo = app;
             d.compatInfo = compatInfo;
+            d.userId = userId;
 
             sendMessage(H.DESTROY_BACKUP_AGENT, d);
         }
@@ -1034,15 +1049,10 @@ public final class ActivityThread extends ClientTransactionHandler {
             NetworkEventDispatcher.getInstance().onNetworkConfigurationChanged();
         }
 
-        public void setHttpProxy(String host, String port, String exclList, Uri pacFileUrl) {
+        public void updateHttpProxy() {
             final ConnectivityManager cm = ConnectivityManager.from(
                     getApplication() != null ? getApplication() : getSystemContext());
-            final Network network = cm.getBoundNetworkForProcess();
-            if (network != null) {
-                Proxy.setHttpProxySystemProperty(cm.getDefaultProxy());
-            } else {
-                Proxy.setHttpProxySystemProperty(host, port, exclList, pacFileUrl);
-            }
+            Proxy.setHttpProxySystemProperty(cm.getDefaultProxy());
         }
 
         public void processInBackground() {
@@ -3303,16 +3313,14 @@ public final class ActivityThread extends ClientTransactionHandler {
         final boolean resumed = !r.paused;
         if (resumed) {
             r.activity.mTemporaryPause = true;
-            mInstrumentation.callActivityOnPause(r.activity);
+            performPauseActivityIfNeeded(r, "performNewIntents");
         }
         checkAndBlockForNetworkAccess();
         deliverNewIntents(r, intents);
         if (resumed) {
-            r.activity.performResume(false, "performNewIntents");
+            performResumeActivity(token, false, "performNewIntents");
             r.activity.mTemporaryPause = false;
-        }
-
-        if (r.paused && andPause) {
+        } else if (andPause) {
             // In this case the activity was in the paused state when we delivered the intent,
             // to guarantee onResume gets called after onNewIntent we temporarily resume the
             // activity and pause again as the caller wanted.
@@ -3619,7 +3627,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         try {
             IBinder binder = null;
-            BackupAgent agent = mBackupAgents.get(packageName);
+            ArrayMap<String, BackupAgent> backupAgents = getBackupAgentsForUser(data.userId);
+            BackupAgent agent = backupAgents.get(packageName);
             if (agent != null) {
                 // reusing the existing instance
                 if (DEBUG_BACKUP) {
@@ -3638,9 +3647,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                     context.setOuterContext(agent);
                     agent.attach(context);
 
-                    agent.onCreate();
+                    agent.onCreate(UserHandle.of(data.userId));
                     binder = agent.onBind();
-                    mBackupAgents.put(packageName, agent);
+                    backupAgents.put(packageName, agent);
                 } catch (Exception e) {
                     // If this is during restore, fail silently; otherwise go
                     // ahead and let the user see the crash.
@@ -3656,7 +3665,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
             // tell the OS that we're live now
             try {
-                ActivityManager.getService().backupAgentCreated(packageName, binder);
+                ActivityManager.getService().backupAgentCreated(packageName, binder, data.userId);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -3672,7 +3681,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         LoadedApk packageInfo = getPackageInfoNoCheck(data.appInfo, data.compatInfo);
         String packageName = packageInfo.mPackageName;
-        BackupAgent agent = mBackupAgents.get(packageName);
+        ArrayMap<String, BackupAgent> backupAgents = getBackupAgentsForUser(data.userId);
+        BackupAgent agent = backupAgents.get(packageName);
         if (agent != null) {
             try {
                 agent.onDestroy();
@@ -3680,10 +3690,19 @@ public final class ActivityThread extends ClientTransactionHandler {
                 Slog.w(TAG, "Exception thrown in onDestroy by backup agent of " + data.appInfo);
                 e.printStackTrace();
             }
-            mBackupAgents.remove(packageName);
+            backupAgents.remove(packageName);
         } else {
             Slog.w(TAG, "Attempt to destroy unknown backup agent " + data);
         }
+    }
+
+    private ArrayMap<String, BackupAgent> getBackupAgentsForUser(int userId) {
+        ArrayMap<String, BackupAgent> backupAgents = mBackupAgentsByUser.get(userId);
+        if (backupAgents == null) {
+            backupAgents = new ArrayMap<>();
+            mBackupAgentsByUser.put(userId, backupAgents);
+        }
+        return backupAgents;
     }
 
     @UnsupportedAppUsage
@@ -3965,6 +3984,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             r.state = null;
             r.persistentState = null;
             r.setState(ON_RESUME);
+
+            reportTopResumedActivityChanged(r, r.isTopResumedActivity);
         } catch (Exception e) {
             if (!mInstrumentation.onException(r.activity, e)) {
                 throw new RuntimeException("Unable to resume activity "
@@ -4119,6 +4140,45 @@ public final class ActivityThread extends ClientTransactionHandler {
         Looper.myQueue().addIdleHandler(new Idler());
     }
 
+
+    @Override
+    public void handleTopResumedActivityChanged(IBinder token, boolean onTop, String reason) {
+        ActivityClientRecord r = mActivities.get(token);
+        if (r == null || r.activity == null) {
+            Slog.w(TAG, "Not found target activity to report position change for token: " + token);
+            return;
+        }
+
+        if (DEBUG_ORDER) {
+            Slog.d(TAG, "Received position change to top: " + onTop + " for activity: " + r);
+        }
+
+        if (r.isTopResumedActivity == onTop) {
+            throw new IllegalStateException("Activity top position already set to onTop=" + onTop);
+        }
+
+        r.isTopResumedActivity = onTop;
+
+        if (r.getLifecycleState() == ON_RESUME) {
+            reportTopResumedActivityChanged(r, onTop);
+        } else {
+            if (DEBUG_ORDER) {
+                Slog.d(TAG, "Won't deliver top position change in state=" + r.getLifecycleState());
+            }
+        }
+    }
+
+    /**
+     * Call {@link Activity#onTopResumedActivityChanged(boolean)} if its top resumed state changed
+     * since the last report.
+     */
+    private void reportTopResumedActivityChanged(ActivityClientRecord r, boolean onTop) {
+        if (r.lastReportedTopResumedState != onTop) {
+            r.lastReportedTopResumedState = onTop;
+            r.activity.onTopResumedActivityChanged(onTop);
+        }
+    }
+
     @Override
     public void handlePauseActivity(IBinder token, boolean finished, boolean userLeaving,
             int configChanges, PendingTransactionActions pendingActions, String reason) {
@@ -4209,6 +4269,10 @@ public final class ActivityThread extends ClientTransactionHandler {
             // You are already paused silly...
             return;
         }
+
+        // Always reporting top resumed position loss when pausing an activity. If necessary, it
+        // will be restored in performResumeActivity().
+        reportTopResumedActivityChanged(r, false /* onTop */);
 
         try {
             r.activity.mCalled = false;
@@ -5902,18 +5966,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         StrictMode.initThreadDefaults(data.appInfo);
         StrictMode.initVmDefaults(data.appInfo);
 
-        // We deprecated Build.SERIAL and only apps that target pre NMR1
-        // SDK can see it. Since access to the serial is now behind a
-        // permission we push down the value and here we fix it up
-        // before any app code has been loaded.
-        try {
-            Field field = Build.class.getDeclaredField("SERIAL");
-            field.setAccessible(true);
-            field.set(Build.class, data.buildSerial);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            /* ignore */
-        }
-
         if (data.debugMode != ApplicationThreadConstants.DEBUG_OFF) {
             // XXX should have option to change the port.
             Debug.changeDebugPort(8100);
@@ -5949,6 +6001,11 @@ public final class ActivityThread extends ClientTransactionHandler {
             Binder.enableTracing();
         }
 
+        // Initialize heap profiling.
+        if (isAppProfileable || Build.IS_DEBUGGABLE) {
+            nInitZygoteChildHeapProfiling();
+        }
+
         // Allow renderer debugging features if we're debuggable.
         boolean isAppDebuggable = (data.appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
         HardwareRenderer.setDebuggingEnabled(isAppDebuggable || Build.IS_DEBUGGABLE);
@@ -5965,8 +6022,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             // crash if we can't get it.
             final IConnectivityManager service = IConnectivityManager.Stub.asInterface(b);
             try {
-                final ProxyInfo proxyInfo = service.getProxyForNetwork(null);
-                Proxy.setHttpProxySystemProperty(proxyInfo);
+                Proxy.setHttpProxySystemProperty(service.getProxyForNetwork(null));
             } catch (RemoteException e) {
                 Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                 throw e.rethrowFromSystemServer();
@@ -6054,7 +6110,12 @@ public final class ActivityThread extends ClientTransactionHandler {
             instrApp.initForUser(UserHandle.myUserId());
             final LoadedApk pi = getPackageInfo(instrApp, data.compatInfo,
                     appContext.getClassLoader(), false, true, false);
-            final ContextImpl instrContext = ContextImpl.createAppContext(this, pi);
+
+            // The test context's op package name == the target app's op package name, because
+            // the app ops manager checks the op package name against the real calling UID,
+            // which is what the target package name is associated with.
+            final ContextImpl instrContext = ContextImpl.createAppContext(this, pi,
+                    appContext.getOpPackageName());
 
             try {
                 final ClassLoader cl = instrContext.getClassLoader();
@@ -6993,4 +7054,5 @@ public final class ActivityThread extends ClientTransactionHandler {
     // ------------------ Regular JNI ------------------------
     private native void nPurgePendingResources();
     private native void nDumpGraphicsInfo(FileDescriptor fd);
+    private native void nInitZygoteChildHeapProfiling();
 }

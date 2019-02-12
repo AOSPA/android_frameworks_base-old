@@ -15,19 +15,29 @@
 package android.telecom;
 
 import android.app.ActivityManager;
+import android.app.role.RoleManager;
+import android.app.role.RoleManagerCallback;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.Binder;
 import android.os.Process;
 import android.os.UserHandle;
-import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.Slog;
+
+import com.android.internal.util.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Class for managing the default dialer application that will receive incoming calls, and be
@@ -64,25 +74,20 @@ public class DefaultDialerManager {
      * */
     public static boolean setDefaultDialerApplication(Context context, String packageName,
             int user) {
-        // Get old package name
-        String oldPackageName = Settings.Secure.getStringForUser(context.getContentResolver(),
-                Settings.Secure.DIALER_DEFAULT_APPLICATION, user);
-
-        if (packageName != null && oldPackageName != null && packageName.equals(oldPackageName)) {
-            // No change
-            return false;
-        }
-
-        // Only make the change if the new package belongs to a valid phone application
-        List<String> packageNames = getInstalledDialerApplications(context, user);
-
-        if (packageNames.contains(packageName)) {
-            // Update the secure setting.
-            Settings.Secure.putStringForUser(context.getContentResolver(),
-                    Settings.Secure.DIALER_DEFAULT_APPLICATION, packageName, user);
+        long identity = Binder.clearCallingIdentity();
+        try {
+            RoleManagerCallback.Future cb = new RoleManagerCallback.Future();
+            context.getSystemService(RoleManager.class).addRoleHolderAsUser(
+                    RoleManager.ROLE_DIALER, packageName, UserHandle.of(user),
+                    AsyncTask.THREAD_POOL_EXECUTOR, cb);
+            cb.get(5, TimeUnit.SECONDS);
             return true;
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            Slog.e(TAG, "Failed to set default dialer to " + packageName + " for user " + user, e);
+            return false;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
-        return false;
     }
 
     /**
@@ -116,28 +121,12 @@ public class DefaultDialerManager {
      * @hide
      * */
     public static String getDefaultDialerApplication(Context context, int user) {
-        String defaultPackageName = Settings.Secure.getStringForUser(context.getContentResolver(),
-                Settings.Secure.DIALER_DEFAULT_APPLICATION, user);
-
-        final List<String> packageNames = getInstalledDialerApplications(context, user);
-
-        // Verify that the default dialer has not been disabled or uninstalled.
-        if (packageNames.contains(defaultPackageName)) {
-            return defaultPackageName;
-        }
-
-        // No user-set dialer found, fallback to system dialer
-        String systemDialerPackageName = getTelecomManager(context).getSystemDialerPackage();
-
-        if (TextUtils.isEmpty(systemDialerPackageName)) {
-            // No system dialer configured at build time
-            return null;
-        }
-
-        if (packageNames.contains(systemDialerPackageName)) {
-            return systemDialerPackageName;
-        } else {
-            return null;
+        long identity = Binder.clearCallingIdentity();
+        try {
+            return CollectionUtils.firstOrNull(context.getSystemService(RoleManager.class)
+                    .getRoleHoldersAsUser(RoleManager.ROLE_DIALER, UserHandle.of(user)));
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
     }
 
@@ -174,7 +163,9 @@ public class DefaultDialerManager {
 
         final Intent dialIntentWithTelScheme = new Intent(Intent.ACTION_DIAL);
         dialIntentWithTelScheme.setData(Uri.fromParts(PhoneAccount.SCHEME_TEL, "", null));
-        return filterByIntent(context, packageNames, dialIntentWithTelScheme, userId);
+        packageNames = filterByIntent(context, packageNames, dialIntentWithTelScheme, userId);
+        packageNames = requireInCallService(packageNames, userId, context);
+        return packageNames;
     }
 
     public static List<String> getInstalledDialerApplications(Context context) {
@@ -232,6 +223,35 @@ public class DefaultDialerManager {
         return result;
     }
 
+    private static List<String> requireInCallService(List<String> packageNames, int userId,
+            Context context) {
+        if (packageNames == null || packageNames.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        final Intent intent = new Intent(InCallService.SERVICE_INTERFACE);
+        final List<ResolveInfo> resolveInfoList = context.getPackageManager()
+                .queryIntentServicesAsUser(intent, PackageManager.GET_META_DATA, userId);
+        final List<String> result = new ArrayList<>();
+        final int length = resolveInfoList.size();
+        for (int i = 0; i < length; i++) {
+            final ServiceInfo info = resolveInfoList.get(i).serviceInfo;
+            if (info == null || info.metaData == null) {
+                continue;
+            }
+            if (!info.metaData.getBoolean(TelecomManager.METADATA_IN_CALL_SERVICE_UI)) {
+                continue;
+            }
+            if (info.metaData.getBoolean(TelecomManager.METADATA_IN_CALL_SERVICE_CAR_MODE_UI)) {
+                continue;
+            }
+            if (packageNames.contains(info.packageName) && !result.contains(info.packageName)) {
+                result.add(info.packageName);
+            }
+        }
+
+        return result;
+    }
 
     private static TelecomManager getTelecomManager(Context context) {
         return (TelecomManager) context.getSystemService(Context.TELECOM_SERVICE);

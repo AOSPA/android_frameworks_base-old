@@ -33,6 +33,7 @@
 #include "android_util_Binder.h"
 #include "core_jni_helpers.h"
 
+#include <HardwareBitmapUploader.h>
 #include <nativehelper/JNIHelp.h>
 #include <androidfw/Asset.h>
 #include <binder/Parcel.h>
@@ -124,7 +125,7 @@ static jobject nativeNewInstanceFromAsset(JNIEnv* env, jobject clazz,
  * reportSizeToVM not supported
  */
 static jobject nativeDecodeRegion(JNIEnv* env, jobject, jlong brdHandle, jint inputX,
-        jint inputY, jint inputWidth, jint inputHeight, jobject options) {
+        jint inputY, jint inputWidth, jint inputHeight, jobject options, jlong colorSpaceHandle) {
 
     // Set default options.
     int sampleSize = 1;
@@ -132,14 +133,12 @@ static jobject nativeDecodeRegion(JNIEnv* env, jobject, jlong brdHandle, jint in
     bool requireUnpremul = false;
     jobject javaBitmap = NULL;
     bool isHardware = false;
-    sk_sp<SkColorSpace> colorSpace = nullptr;
+    sk_sp<SkColorSpace> colorSpace = GraphicsJNI::getNativeColorSpace(colorSpaceHandle);
     // Update the default options with any options supplied by the client.
     if (NULL != options) {
         sampleSize = env->GetIntField(options, gOptions_sampleSizeFieldID);
         jobject jconfig = env->GetObjectField(options, gOptions_configFieldID);
         colorType = GraphicsJNI::getNativeBitmapColorType(env, jconfig);
-        jobject jcolorSpace = env->GetObjectField(options, gOptions_colorSpaceFieldID);
-        colorSpace = GraphicsJNI::getNativeColorSpace(env, jcolorSpace);
         isHardware = GraphicsJNI::isHardwareConfig(env, jconfig);
         requireUnpremul = !env->GetBooleanField(options, gOptions_premultipliedFieldID);
         javaBitmap = env->GetObjectField(options, gOptions_bitmapFieldID);
@@ -168,6 +167,10 @@ static jobject nativeDecodeRegion(JNIEnv* env, jobject, jlong brdHandle, jint in
 
     SkBitmapRegionDecoder* brd = reinterpret_cast<SkBitmapRegionDecoder*>(brdHandle);
     SkColorType decodeColorType = brd->computeOutputColorType(colorType);
+    if (decodeColorType == kRGBA_F16_SkColorType && isHardware &&
+            !uirenderer::HardwareBitmapUploader::hasFP16Support()) {
+        decodeColorType = kN32_SkColorType;
+    }
 
     // Set up the pixel allocator
     SkBRDAllocator* allocator = nullptr;
@@ -255,7 +258,7 @@ static void nativeClean(JNIEnv* env, jobject, jlong brdHandle) {
 
 static const JNINativeMethod gBitmapRegionDecoderMethods[] = {
     {   "nativeDecodeRegion",
-        "(JIIIILandroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;",
+        "(JIIIILandroid/graphics/BitmapFactory$Options;J)Landroid/graphics/Bitmap;",
         (void*)nativeDecodeRegion},
 
     {   "nativeGetHeight", "(J)I", (void*)nativeGetHeight},

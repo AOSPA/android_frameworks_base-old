@@ -91,20 +91,6 @@ public class EuiccManager {
             "android.telephony.euicc.action.NOTIFY_CARRIER_SETUP_INCOMPLETE";
 
     /**
-     * Intent action to select a profile to enable before download a new eSIM profile.
-     *
-     * May be called during device provisioning when there are multiple slots having profiles on
-     * them. This Intent launches a screen for all the current existing profiles and let users to
-     * choose which one they want to enable. In this case, the slot contains the profile will be
-     * activated.
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final String ACTION_PROFILE_SELECTION =
-            "android.telephony.euicc.action.PROFILE_SELECTION";
-
-    /**
      * Intent action to provision an embedded subscription.
      *
      * <p>May be called during device provisioning to launch a screen to perform embedded SIM
@@ -127,6 +113,66 @@ public class EuiccManager {
      */
     public static final String ACTION_RESOLVE_ERROR =
             "android.telephony.euicc.action.RESOLVE_ERROR";
+
+    /**
+     * Intent action sent by system apps (such as the Settings app) to the Telephony framework to
+     * enable or disable a subscription. Must be accompanied with {@link #EXTRA_SUBSCRIPTION_ID} and
+     * {@link #EXTRA_ENABLE_SUBSCRIPTION}.
+     *
+     * <p>Unlike {@link #switchToSubscription(int, PendingIntent)}, using this action allows the
+     * underlying eUICC service (i.e. the LPA app) to control the UI experience during this
+     * operation. The action is received by the Telephony framework, which in turn selects and
+     * launches an appropriate LPA activity to present UI to the user. For example, the activity may
+     * show a confirmation dialog, a progress dialog, or an error dialog when necessary.
+     *
+     * <p>The launched activity will immediately finish with
+     * {@link android.app.Activity#RESULT_CANCELED} if {@link #isEnabled} is false.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED =
+            "android.telephony.euicc.action.TOGGLE_SUBSCRIPTION_PRIVILEGED";
+
+    /**
+     * Intent action sent by system apps (such as the Settings app) to the Telephony framework to
+     * delete a subscription. Must be accompanied with {@link #EXTRA_SUBSCRIPTION_ID}.
+     *
+     * <p>Unlike {@link #deleteSubscription(int, PendingIntent)}, using this action allows the
+     * underlying eUICC service (i.e. the LPA app) to control the UI experience during this
+     * operation. The action is received by the Telephony framework, which in turn selects and
+     * launches an appropriate LPA activity to present UI to the user. For example, the activity may
+     * show a confirmation dialog, a progress dialog, or an error dialog when necessary.
+     *
+     * <p>The launched activity will immediately finish with
+     * {@link android.app.Activity#RESULT_CANCELED} if {@link #isEnabled} is false.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String ACTION_DELETE_SUBSCRIPTION_PRIVILEGED =
+            "android.telephony.euicc.action.DELETE_SUBSCRIPTION_PRIVILEGED";
+
+    /**
+     * Intent action sent by system apps (such as the Settings app) to the Telephony framework to
+     * rename a subscription. Must be accompanied with {@link #EXTRA_SUBSCRIPTION_ID} and
+     * {@link #EXTRA_SUBSCRIPTION_NICKNAME}.
+     *
+     * <p>Unlike {@link #updateSubscriptionNickname(int, String, PendingIntent)}, using this action
+     * allows the the underlying eUICC service (i.e. the LPA app) to control the UI experience
+     * during this operation. The action is received by the Telephony framework, which in turn
+     * selects and launches an appropriate LPA activity to present UI to the user. For example, the
+     * activity may show a confirmation dialog, a progress dialog, or an error dialog when
+     * necessary.
+     *
+     * <p>The launched activity will immediately finish with
+     * {@link android.app.Activity#RESULT_CANCELED} if {@link #isEnabled} is false.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String ACTION_RENAME_SUBSCRIPTION_PRIVILEGED =
+            "android.telephony.euicc.action.RENAME_SUBSCRIPTION_PRIVILEGED";
 
     /**
      * Result code for an operation indicating that the operation succeeded.
@@ -219,6 +265,37 @@ public class EuiccManager {
             "android.telephony.euicc.extra.FORCE_PROVISION";
 
     /**
+     * Key for an extra set on privileged actions {@link #ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED},
+     * {@link #ACTION_DELETE_SUBSCRIPTION_PRIVILEGED}, and
+     * {@link #ACTION_RENAME_SUBSCRIPTION_PRIVILEGED} providing the ID of the targeted subscription.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_SUBSCRIPTION_ID =
+            "android.telephony.euicc.extra.SUBSCRIPTION_ID";
+
+    /**
+     * Key for an extra set on {@link #ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED} providing a boolean
+     * value of whether to enable or disable the targeted subscription.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_ENABLE_SUBSCRIPTION =
+            "android.telephony.euicc.extra.ENABLE_SUBSCRIPTION";
+
+    /**
+     * Key for an extra set on {@link #ACTION_RENAME_SUBSCRIPTION_PRIVILEGED} providing a new
+     * nickname for the targeted subscription.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_SUBSCRIPTION_NICKNAME =
+            "android.telephony.euicc.extra.SUBSCRIPTION_NICKNAME";
+
+    /**
      * Optional meta-data attribute for a carrier app providing an icon to use to represent the
      * carrier. If not provided, the app's launcher icon will be used as a fallback.
      */
@@ -234,8 +311,8 @@ public class EuiccManager {
     @IntDef(prefix = {"EUICC_ACTIVATION_"}, value = {
             EUICC_ACTIVATION_TYPE_DEFAULT,
             EUICC_ACTIVATION_TYPE_BACKUP,
-            EUICC_ACTIVATION_TYPE_TRANSFER
-
+            EUICC_ACTIVATION_TYPE_TRANSFER,
+            EUICC_ACTIVATION_TYPE_ACCOUNT_REQUIRED,
     })
     public @interface EuiccActivationType{}
 
@@ -269,6 +346,14 @@ public class EuiccManager {
     @SystemApi
     public static final int EUICC_ACTIVATION_TYPE_TRANSFER = 3;
 
+    /**
+     * The activation flow of eSIM requiring user account will be started. This can only be used
+     * when there is user account signed in. Otherwise, the flow will be failed.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EUICC_ACTIVATION_TYPE_ACCOUNT_REQUIRED = 4;
 
     /**
      * Euicc OTA update status which can be got by {@link #getOtaStatus}
@@ -323,7 +408,7 @@ public class EuiccManager {
     public static final int EUICC_OTA_STATUS_UNAVAILABLE = 5;
 
     private final Context mContext;
-    private final int mCardId;
+    private int mCardId;
 
     /** @hide */
     public EuiccManager(Context context) {
@@ -361,7 +446,7 @@ public class EuiccManager {
     public boolean isEnabled() {
         // In the future, this may reach out to IEuiccController (if non-null) to check any dynamic
         // restrictions.
-        return getIEuiccController() != null && mCardId != TelephonyManager.INVALID_CARD_ID;
+        return getIEuiccController() != null;
     }
 
     /**
@@ -371,15 +456,15 @@ public class EuiccManager {
      * current eUICC. A calling app with carrier privileges for one eUICC may not necessarily have
      * access to the EID of another eUICC.
      *
-     * @return the EID. May be null if {@link #isEnabled()} is false or the eUICC is not ready.
+     * @return the EID. May be null if the eUICC is not ready.
      */
     @Nullable
     public String getEid() {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             return null;
         }
         try {
-            return getIEuiccController().getEid(mCardId);
+            return getIEuiccController().getEid(mCardId, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -390,15 +475,15 @@ public class EuiccManager {
      *
      * <p>Requires the {@link android.Manifest.permission#WRITE_EMBEDDED_SUBSCRIPTIONS} permission.
      *
-     * @return the status of eUICC OTA. If {@link #isEnabled()} is false or the eUICC is not ready,
-     *     {@link OtaStatus#EUICC_OTA_STATUS_UNAVAILABLE} will be returned.
+     * @return the status of eUICC OTA. If the eUICC is not ready,
+     *         {@link OtaStatus#EUICC_OTA_STATUS_UNAVAILABLE} will be returned.
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public int getOtaStatus() {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             return EUICC_OTA_STATUS_UNAVAILABLE;
         }
         try {
@@ -417,6 +502,15 @@ public class EuiccManager {
      * Without the former, an {@link #EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR} will be
      * returned in the callback intent to prompt the user to accept the download.
      *
+     * <p>On a multi-active SIM device, requires the
+     * {@code android.Manifest.permission#WRITE_EMBEDDED_SUBSCRIPTIONS} permission, or a calling app
+     * only if the targeted eUICC does not currently have an active subscription or the calling app
+     * is authorized to manage the active subscription on the target eUICC, and the calling app is
+     * authorized to manage any active subscription on any SIM. Without it, an
+     * {@link #EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR} will be returned in the callback
+     * intent to prompt the user to accept the download. The caller should also be authorized to
+     * manage the subscription to be downloaded.
+     *
      * @param subscription the subscription to download.
      * @param switchAfterDownload if true, the profile will be activated upon successful download.
      * @param callbackIntent a PendingIntent to launch when the operation completes.
@@ -424,7 +518,7 @@ public class EuiccManager {
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void downloadSubscription(DownloadableSubscription subscription,
             boolean switchAfterDownload, PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -486,7 +580,7 @@ public class EuiccManager {
     @SystemApi
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void continueOperation(Intent resolutionIntent, Bundle resolutionExtras) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             PendingIntent callbackIntent =
                     resolutionIntent.getParcelableExtra(
                             EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_RESOLUTION_CALLBACK_INTENT);
@@ -523,7 +617,7 @@ public class EuiccManager {
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void getDownloadableSubscriptionMetadata(
             DownloadableSubscription subscription, PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -553,7 +647,7 @@ public class EuiccManager {
     @SystemApi
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void getDefaultDownloadableSubscriptionList(PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -568,12 +662,11 @@ public class EuiccManager {
     /**
      * Returns information about the eUICC chip/device.
      *
-     * @return the {@link EuiccInfo}. May be null if {@link #isEnabled()} is false or the eUICC is
-     *     not ready.
+     * @return the {@link EuiccInfo}. May be null if the eUICC is not ready.
      */
     @Nullable
     public EuiccInfo getEuiccInfo() {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             return null;
         }
         try {
@@ -598,7 +691,7 @@ public class EuiccManager {
      */
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void deleteSubscription(int subscriptionId, PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -619,14 +712,26 @@ public class EuiccManager {
      * an {@link #EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR} will be returned in the callback
      * intent to prompt the user to accept the download.
      *
+     * <p>On a multi-active SIM device, requires the
+     * {@code android.Manifest.permission#WRITE_EMBEDDED_SUBSCRIPTIONS} permission, or a calling app
+     *  only if the targeted eUICC does not currently have an active subscription or the calling app
+     * is authorized to manage the active subscription on the target eUICC, and the calling app is
+     * authorized to manage any active subscription on any SIM. Without it, an
+     * {@link #EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR} will be returned in the callback
+     * intent to prompt the user to accept the download. The caller should also be authorized to
+     * manage the subscription to be enabled.
+     *
      * @param subscriptionId the ID of the subscription to enable. May be
      *     {@link android.telephony.SubscriptionManager#INVALID_SUBSCRIPTION_ID} to deactivate the
-     *     current profile without activating another profile to replace it.
+     *     current profile without activating another profile to replace it. If it's a disable
+     *     operation, requires the {@code android.Manifest.permission#WRITE_EMBEDDED_SUBSCRIPTIONS}
+     *     permission, or the calling app must be authorized to manage the active subscription on
+     *     the target eUICC.
      * @param callbackIntent a PendingIntent to launch when the operation completes.
      */
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void switchToSubscription(int subscriptionId, PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -652,7 +757,7 @@ public class EuiccManager {
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void updateSubscriptionNickname(
             int subscriptionId, String nickname, PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -676,7 +781,7 @@ public class EuiccManager {
     @SystemApi
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void eraseSubscriptions(PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -706,7 +811,7 @@ public class EuiccManager {
      * @hide
      */
     public void retainSubscriptionsForFactoryReset(PendingIntent callbackIntent) {
-        if (!isEnabled()) {
+        if (!refreshCardIdIfInvalid()) {
             sendUnavailableError(callbackIntent);
             return;
         }
@@ -715,6 +820,19 @@ public class EuiccManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    private boolean refreshCardIdIfInvalid() {
+        if (!isEnabled()) {
+            return false;
+        }
+        // Refresh mCardId if it's invalid.
+        if (mCardId == TelephonyManager.INVALID_CARD_ID) {
+            TelephonyManager tm = (TelephonyManager)
+                    mContext.getSystemService(Context.TELEPHONY_SERVICE);
+            mCardId = tm.getCardIdForDefaultEuicc();
+        }
+        return true;
     }
 
     private static void sendUnavailableError(PendingIntent callbackIntent) {

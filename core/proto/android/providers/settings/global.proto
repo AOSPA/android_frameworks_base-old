@@ -230,13 +230,6 @@ message GlobalSettingsProto {
     }
     optional Connectivity connectivity = 32;
 
-    message ContentCapture {
-      option (android.msg_privacy).dest = DEST_EXPLICIT;
-
-      optional SettingProto service_explicitly_enabled = 1 [ (android.privacy).dest = DEST_AUTOMATIC ];
-    }
-    optional ContentCapture content_capture = 145;
-
     optional SettingProto contact_metadata_sync_enabled = 33 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto contacts_database_wal_enabled = 34 [ (android.privacy).dest = DEST_AUTOMATIC ];
 
@@ -436,19 +429,23 @@ message GlobalSettingsProto {
         // Ordered GPU debug layer list for GLES
         // i.e. <layer1>:<layer2>:...:<layerN>
         optional SettingProto debug_layers_gles = 7;
-        // GUP - Game Update Package global preference for all Apps
+        // Game Driver - global preference for all Apps
         // 0 = Default
-        // 1 = All Apps use Game Update Package
+        // 1 = All Apps use Game Driver
         // 2 = All Apps use system graphics driver
-        optional SettingProto gup_dev_all_apps = 8;
-        // GUP - List of Apps selected to use Game Update Package
+        optional SettingProto game_driver_all_apps = 8;
+        // Game Driver - List of Apps selected to use Game Driver
         // i.e. <pkg1>,<pkg2>,...,<pkgN>
-        optional SettingProto gup_dev_opt_in_apps = 9;
-        // GUP - List of Apps selected not to use Game Update Package
+        optional SettingProto game_driver_opt_in_apps = 9;
+        // Game Driver - List of Apps selected not to use Game Driver
         // i.e. <pkg1>,<pkg2>,...,<pkgN>
-        optional SettingProto gup_dev_opt_out_apps = 10;
-        // GUP - List of Apps that are forbidden to use Game Update Package
-        optional SettingProto gup_blacklist = 11;
+        optional SettingProto game_driver_opt_out_apps = 10;
+        // Game Driver - List of Apps that are forbidden to use Game Driver
+        optional SettingProto game_driver_blacklist = 11;
+        // Game Driver - List of Apps that are allowed to use Game Driver
+        optional SettingProto game_driver_whitelist = 12;
+        // ANGLE - List of Apps that can check ANGLE rules
+        optional SettingProto angle_whitelist = 13;
     }
     optional Gpu gpu = 59;
 
@@ -518,6 +515,8 @@ message GlobalSettingsProto {
         optional SettingProto global_kill_switch = 5 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto gnss_satellite_blacklist = 6 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto gnss_hal_location_request_duration_millis = 7 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        // Packages that are whitelisted for ignoring location settings (during emergencies)
+        optional SettingProto ignore_settings_package_whitelist = 8 [ (android.privacy).dest = DEST_AUTOMATIC ];
     }
     optional Location location = 69;
 
@@ -535,6 +534,16 @@ message GlobalSettingsProto {
         // Whether automatic battery saver mode is controlled via percentage,
         // {@link #DYNAMIC_POWER_SAVINGS_ENABLED} or disabled.
         optional SettingProto automatic_power_saver_mode = 4 [ (android.privacy).dest = DEST_AUTOMATIC];
+        // If 1, battery saver (low_power_mode) will be re-activated after the device is
+        // unplugged from a charger or rebooted.
+        optional SettingProto sticky_enabled = 5;
+        // Whether sticky battery saver should be deactivated once the battery level has reached the
+        // threshold specified by sticky_disable_level.
+        optional SettingProto sticky_auto_disable_enabled = 6;
+        // When a device is unplugged from a changer (or is rebooted), do not re-activate battery
+        // saver even if {@link #LOW_POWER_MODE_STICKY} is 1, if the battery level is equal to or
+        // above this threshold.
+        optional SettingProto sticky_auto_disable_level = 7;
     }
     optional LowPowerMode low_power_mode = 70;
 
@@ -733,8 +742,7 @@ message GlobalSettingsProto {
     // Defines global runtime overrides to window policy.
     optional SettingProto policy_control = 92;
     optional SettingProto power_manager_constants = 93;
-    // If true, out-of-the-box execution for priv apps is enabled.
-    optional SettingProto priv_app_oob_enabled = 94 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    reserved 94; // Used to be priv_app_oob_enabled
 
     message PrepaidSetup {
         option (android.msg_privacy).dest = DEST_EXPLICIT;
@@ -991,7 +999,7 @@ message GlobalSettingsProto {
         optional SettingProto watchdog_poor_network_test_enabled = 22 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto suspend_optimizations_enabled = 23 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto verbose_logging_enabled = 24 [ (android.privacy).dest = DEST_AUTOMATIC ];
-        optional SettingProto connected_mac_randomization_enabled = 25 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        reserved 25; // connected_mac_randomization_enabled
         optional SettingProto max_dhcp_retry_count = 26 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto mobile_data_transition_wakelock_timeout_ms = 27 [ (android.privacy).dest = DEST_AUTOMATIC ];
         // Controls whether WiFi configurations created by a Device Owner app should
@@ -1031,5 +1039,5 @@ message GlobalSettingsProto {
 
     // Please insert fields in alphabetical order and group them into messages
     // if possible (to avoid reaching the method limit).
-    // Next tag = 149;
+    // Next tag = 145 then 149; // (145 was removed)
 }

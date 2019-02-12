@@ -322,6 +322,7 @@ void ValueMetricProducer::onConditionChangedLocked(const bool condition,
     if (eventTimeNs < mCurrentBucketStartTimeNs) {
         VLOG("Skip event due to late arrival: %lld vs %lld", (long long)eventTimeNs,
              (long long)mCurrentBucketStartTimeNs);
+        StatsdStats::getInstance().noteConditionChangeInNextBucket(mMetricId);
         return;
     }
 
@@ -359,6 +360,12 @@ void ValueMetricProducer::pullAndMatchEventsLocked(const int64_t timestampNs) {
     }
     StatsdStats::getInstance().notePullDelay(mPullTagId, pullDelayNs);
 
+    if (timestampNs < mCurrentBucketStartTimeNs) {
+        // The data will be skipped in onMatchedLogEventInternalLocked, but we don't want to report
+        // for every event, just the pull
+        StatsdStats::getInstance().noteLateLogEventSkipped(mMetricId);
+    }
+
     for (const auto& data : allData) {
         // make a copy before doing and changes
         LogEvent localCopy = data->makeCopy();
@@ -380,6 +387,7 @@ void ValueMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEven
     if (mCondition) {
         if (allData.size() == 0) {
             VLOG("Data pulled is empty");
+            StatsdStats::getInstance().noteEmptyData(mPullTagId);
             return;
         }
         // For scheduled pulled data, the effective event time is snap to the nearest
@@ -394,6 +402,7 @@ void ValueMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEven
         if (bucketEndTime < mCurrentBucketStartTimeNs) {
             VLOG("Skip bucket end pull due to late arrival: %lld vs %lld", (long long)bucketEndTime,
                  (long long)mCurrentBucketStartTimeNs);
+            StatsdStats::getInstance().noteLateLogEventSkipped(mMetricId);
             return;
         }
         for (const auto& data : allData) {
@@ -442,6 +451,7 @@ bool ValueMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
         if (newTupleCount > mDimensionHardLimit) {
             ALOGE("ValueMetric %lld dropping data for dimension key %s", (long long)mMetricId,
                   newKey.toString().c_str());
+            StatsdStats::getInstance().noteHardDimensionLimitReached(mMetricId);
             return true;
         }
     }
@@ -524,6 +534,14 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
         multiIntervals.resize(mFieldMatchers.size());
     }
 
+    // We only use anomaly detection under certain cases.
+    // N.B.: The anomaly detection cases were modified in order to fix an issue with value metrics
+    // containing multiple values. We tried to retain all previous behaviour, but we are unsure the
+    // previous behaviour was correct. At the time of the fix, anomaly detection had no owner.
+    // Whoever next works on it should look into the cases where it is triggered in this function.
+    // Discussion here: http://ag/6124370.
+    bool useAnomalyDetection = true;
+
     for (int i = 0; i < (int)mFieldMatchers.size(); i++) {
         const Matcher& matcher = mFieldMatchers[i];
         Interval& interval = multiIntervals[i];
@@ -531,6 +549,7 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
         Value value;
         if (!getDoubleOrLong(event, matcher, value)) {
             VLOG("Failed to get value %d from event %s", i, event.ToString().c_str());
+            StatsdStats::getInstance().noteBadValueType(mMetricId);
             return;
         }
         interval.seenNewData = true;
@@ -546,7 +565,11 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
                     // no base. just update base and return.
                     interval.base = value;
                     interval.hasBase = true;
-                    return;
+                    // If we're missing a base, do not use anomaly detection on incomplete data
+                    useAnomalyDetection = false;
+                    // Continue (instead of return) here in order to set interval.base and
+                    // interval.hasBase for other intervals
+                    continue;
                 }
             }
             Value diff;
@@ -560,7 +583,9 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
                         VLOG("Unexpected decreasing value");
                         StatsdStats::getInstance().notePullDataError(mPullTagId);
                         interval.base = value;
-                        return;
+                        // If we've got bad data, do not use anomaly detection
+                        useAnomalyDetection = false;
+                        continue;
                     }
                     break;
                 case ValueMetric::DECREASING:
@@ -572,7 +597,9 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
                         VLOG("Unexpected increasing value");
                         StatsdStats::getInstance().notePullDataError(mPullTagId);
                         interval.base = value;
-                        return;
+                        // If we've got bad data, do not use anomaly detection
+                        useAnomalyDetection = false;
+                        continue;
                     }
                     break;
                 case ValueMetric::ANY:
@@ -608,14 +635,18 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
         interval.sampleSize += 1;
     }
 
-    // TODO: propgate proper values down stream when anomaly support doubles
-    long wholeBucketVal = multiIntervals[0].value.long_value;
-    auto prev = mCurrentFullBucket.find(eventKey);
-    if (prev != mCurrentFullBucket.end()) {
-        wholeBucketVal += prev->second;
-    }
-    for (auto& tracker : mAnomalyTrackers) {
-        tracker->detectAndDeclareAnomaly(eventTimeNs, mCurrentBucketNum, eventKey, wholeBucketVal);
+    // Only trigger the tracker if all intervals are correct
+    if (useAnomalyDetection) {
+        // TODO: propgate proper values down stream when anomaly support doubles
+        long wholeBucketVal = multiIntervals[0].value.long_value;
+        auto prev = mCurrentFullBucket.find(eventKey);
+        if (prev != mCurrentFullBucket.end()) {
+            wholeBucketVal += prev->second;
+        }
+        for (auto& tracker : mAnomalyTrackers) {
+            tracker->detectAndDeclareAnomaly(
+                eventTimeNs, mCurrentBucketNum, eventKey, wholeBucketVal);
+        }
     }
 }
 
@@ -636,6 +667,7 @@ void ValueMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
 
     if (numBucketsForward > 1) {
         VLOG("Skipping forward %lld buckets", (long long)numBucketsForward);
+        StatsdStats::getInstance().noteSkippedForwardBuckets(mMetricId);
         // take base again in future good bucket.
         resetBase();
     }

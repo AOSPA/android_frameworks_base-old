@@ -53,7 +53,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.Signature;
 import android.os.Bundle;
-import android.os.Process;
+import android.os.UserHandle;
 import android.util.Slog;
 
 import com.android.server.backup.FileMetadata;
@@ -383,11 +383,12 @@ public class TarBackupReader {
      * @param allowApks - allow restore set to include apks.
      * @param info - file metadata.
      * @param signatures - array of signatures parsed from backup file.
+     * @param userId - ID of the user for which restore is performed.
      * @return a restore policy constant.
      */
     public RestorePolicy chooseRestorePolicy(PackageManager packageManager,
             boolean allowApks, FileMetadata info, Signature[] signatures,
-            PackageManagerInternal pmi) {
+            PackageManagerInternal pmi, int userId) {
         if (signatures == null) {
             return RestorePolicy.IGNORE;
         }
@@ -396,15 +397,14 @@ public class TarBackupReader {
 
         // Okay, got the manifest info we need...
         try {
-            PackageInfo pkgInfo = packageManager.getPackageInfo(
-                    info.packageName, PackageManager.GET_SIGNING_CERTIFICATES);
+            PackageInfo pkgInfo = packageManager.getPackageInfoAsUser(
+                    info.packageName, PackageManager.GET_SIGNING_CERTIFICATES, userId);
             // Fall through to IGNORE if the app explicitly disallows backup
             final int flags = pkgInfo.applicationInfo.flags;
             if ((flags & ApplicationInfo.FLAG_ALLOW_BACKUP) != 0) {
                 // Restore system-uid-space packages only if they have
                 // defined a custom backup agent
-                if ((pkgInfo.applicationInfo.uid
-                        >= Process.FIRST_APPLICATION_UID)
+                if (!UserHandle.isCore(pkgInfo.applicationInfo.uid)
                         || (pkgInfo.applicationInfo.backupAgentName != null)) {
                     // Verify signatures against any installed version; if they
                     // don't match, then we fall though and ignore the data.  The

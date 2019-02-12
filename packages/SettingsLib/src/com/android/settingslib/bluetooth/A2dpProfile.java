@@ -74,6 +74,7 @@ public class A2dpProfile implements LocalBluetoothProfile {
                 device.refresh();
             }
             mIsProfileReady=true;
+            mProfileManager.callServiceConnectedListeners();
         }
 
         public void onServiceDisconnected(int profile) {
@@ -298,7 +299,7 @@ public class A2dpProfile implements LocalBluetoothProfile {
     }
 
     public int getDrawableResource(BluetoothClass btClass) {
-        return R.drawable.ic_bt_headphones_a2dp;
+        return com.android.internal.R.drawable.ic_bt_headphones_a2dp;
     }
 
     protected void finalize() {

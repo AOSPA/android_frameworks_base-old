@@ -127,17 +127,28 @@ public final class OomAdjuster {
     private final ActivityManagerService mService;
     private final ProcessList mProcessList;
 
-    OomAdjuster(ActivityManagerService service, ProcessList processList, ActiveUids activeUids) {
+    /**
+     * Used to lock {@link #updateOomAdjImpl} for state consistency. It also reduces frequency lock
+     * and unlock when getting and setting value to {@link ProcessRecord#mWindowProcessController}.
+     * Note it is declared as Object type so the locked-region-code-injection won't wrap the
+     * unnecessary priority booster.
+     */
+    private final Object mAtmGlobalLock;
+
+    OomAdjuster(ActivityManagerService service, ProcessList processList, ActiveUids activeUids,
+            Object atmGlobalLock) {
         mService = service;
+        mAtmGlobalLock = atmGlobalLock;
         mProcessList = processList;
         mActiveUids = activeUids;
 
         mLocalPowerManager = LocalServices.getService(PowerManagerInternal.class);
         mConstants = mService.mConstants;
-        // mConstants can be null under test, which causes AppCompactor to crash
-        if (mConstants != null) {
-            mAppCompact = new AppCompactor(mService);
-        }
+        mAppCompact = new AppCompactor(mService);
+    }
+
+    void initSettings() {
+        mAppCompact.init();
     }
 
     /**
@@ -185,6 +196,13 @@ public final class OomAdjuster {
 
     @GuardedBy("mService")
     final void updateOomAdjLocked() {
+        synchronized (mAtmGlobalLock) {
+            updateOomAdjImpl();
+        }
+    }
+
+    @GuardedBy({"mService", "mAtmGlobalLock"})
+    private void updateOomAdjImpl() {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "updateOomAdj");
         mService.mOomAdjProfiler.oomAdjStarted();
         final ProcessRecord TOP_APP = mService.getTopAppLocked();
@@ -533,6 +551,7 @@ public final class OomAdjuster {
                 uidRec.setProcState = uidRec.getCurProcState();
                 uidRec.setWhitelist = uidRec.curWhitelist;
                 uidRec.setIdle = uidRec.idle;
+                mService.mAtmInternal.onUidProcStateChanged(uidRec.uid, uidRec.setProcState);
                 mService.enqueueUidChangeLocked(uidRec, -1, uidChange);
                 mService.noteUidProcessState(uidRec.uid, uidRec.getCurProcState());
                 if (uidRec.foregroundServices) {
@@ -896,11 +915,13 @@ public final class OomAdjuster {
         }
 
         if (adj > ProcessList.PERCEPTIBLE_APP_ADJ
-                || procState > ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
+                || procState > ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION) {
             if (app.hasForegroundServices()) {
                 // The user is aware of this app, so make it visible.
                 adj = ProcessList.PERCEPTIBLE_APP_ADJ;
-                procState = ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
+                procState = app.hasLocationForegroundServices()
+                        ? ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION
+                        : ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
                 app.cached = false;
                 app.adjType = "fg-service";
                 schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
@@ -1506,6 +1527,7 @@ public final class OomAdjuster {
             switch (procState) {
                 case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
                 case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
+                case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
                     // Something else is keeping it at this level, just leave it.
                     break;
                 case ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND:
@@ -1679,7 +1701,7 @@ public final class OomAdjuster {
 
         if (app.curAdj != app.setAdj) {
             // don't compact during bootup
-            if (mConstants.USE_COMPACTION && mService.mBooted) {
+            if (mAppCompact.useCompaction() && mService.mBooted) {
                 // Perform a minor compaction when a perceptible app becomes the prev/home app
                 // Perform a major compaction when any app enters cached
                 // reminder: here, setAdj is previous state, curAdj is upcoming state
@@ -2104,4 +2126,8 @@ public final class OomAdjuster {
                 + " mNewNumServiceProcs=" + mNewNumServiceProcs);
     }
 
+    @GuardedBy("mService")
+    void dumpAppCompactorSettings(PrintWriter pw) {
+        mAppCompact.dump(pw);
+    }
 }

@@ -185,7 +185,6 @@ import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
-import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.util.proto.ProtoOutputStream;
@@ -194,6 +193,7 @@ import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.IAppTransitionAnimationSpecsFuture;
+import android.view.IDisplayFoldListener;
 import android.view.IDockedStackListener;
 import android.view.IInputFilter;
 import android.view.IOnKeyguardExitResult;
@@ -437,11 +437,12 @@ public class WindowManagerService extends IWindowManager.Stub
     final long mDrawLockTimeoutMillis;
     final boolean mAllowAnimationsInLowPowerMode;
 
+    // TODO(b/122671846) Remove the flag below in favor of isLowRam once feature is stable
     /**
      * Use very low resolution task snapshots. Replaces task snapshot starting windows with
      * splashscreen starting windows. Used on low RAM devices to save memory.
      */
-    final boolean mLowRamTaskSnapshots;
+    final boolean mLowRamTaskSnapshotsAndRecents;
 
     final boolean mAllowBootMessages;
 
@@ -844,11 +845,8 @@ public class WindowManagerService extends IWindowManager.Stub
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "closeSurfaceTransaction");
             synchronized (mGlobalLock) {
-                try {
-                    traceStateLocked(where);
-                } finally {
-                    SurfaceControl.closeTransaction();
-                }
+                SurfaceControl.closeTransaction();
+                traceStateLocked(where);
             }
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
@@ -860,12 +858,12 @@ public class WindowManagerService extends IWindowManager.Stub
 
         @Override
         public void onAppTransitionCancelledLocked(int transit) {
-            mH.sendEmptyMessage(H.NOTIFY_APP_TRANSITION_CANCELLED);
+            mAtmInternal.notifyAppTransitionCancelled();
         }
 
         @Override
         public void onAppTransitionFinishedLocked(IBinder token) {
-            mH.sendEmptyMessage(H.NOTIFY_APP_TRANSITION_FINISHED);
+            mAtmInternal.notifyAppTransitionFinished();
             final AppWindowToken atoken = mRoot.getAppWindowToken(token);
             if (atoken == null) {
                 return;
@@ -959,7 +957,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 com.android.internal.R.bool.config_disableTransitionAnimation);
         mPerDisplayFocusEnabled = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_perDisplayFocusEnabled);
-        mLowRamTaskSnapshots = context.getResources().getBoolean(
+        mLowRamTaskSnapshotsAndRecents = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_lowRamTaskSnapshotsAndRecents);
         mInputManager = inputManager; // Must be before createDisplayContentLocked.
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
@@ -1849,9 +1847,9 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mGlobalLock) {
             if (mAccessibilityController != null) {
                 WindowState window = mWindowMap.get(token);
-                //TODO (multidisplay): Magnification is supported only for the default display.
-                if (window != null && window.getDisplayId() == DEFAULT_DISPLAY) {
-                    mAccessibilityController.onRectangleOnScreenRequestedLocked(rectangle);
+                if (window != null) {
+                    mAccessibilityController.onRectangleOnScreenRequestedLocked(
+                            window.getDisplayId(), rectangle);
                 }
             }
         }
@@ -2240,8 +2238,7 @@ public class WindowManagerService extends IWindowManager.Stub
             win.mDestroying = true;
             win.destroySurface(false, stopped);
         }
-        // TODO(multidisplay): Magnification is supported only for the default display.
-        if (mAccessibilityController != null && win.getDisplayId() == DEFAULT_DISPLAY) {
+        if (mAccessibilityController != null) {
             mAccessibilityController.onWindowTransitionLocked(win, transit);
         }
 
@@ -2606,7 +2603,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void notifyKeyguardTrustedChanged() {
-        mH.sendEmptyMessage(H.NOTIFY_KEYGUARD_TRUSTED_CHANGED);
+        mAtmInternal.notifyKeyguardTrustedChanged();
     }
 
     @Override
@@ -2671,11 +2668,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * @param callback Runnable to be called when activity manager is done reevaluating visibilities
      */
     void notifyKeyguardFlagsChanged(@Nullable Runnable callback, int displayId) {
-        final Runnable wrappedCallback = callback != null
-                ? () -> { synchronized (mGlobalLock) { callback.run(); } }
-                : null;
-        mH.obtainMessage(H.NOTIFY_KEYGUARD_FLAGS_CHANGED, displayId, 0,
-                wrappedCallback).sendToTarget();
+        mAtmInternal.notifyKeyguardFlagsChanged(callback, displayId);
     }
 
     public boolean isKeyguardTrusted() {
@@ -2826,7 +2819,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public boolean isShowingDream() {
         synchronized (mGlobalLock) {
-            // TODO: fix this when dream can be shown on non-default display.
+            // TODO(b/123372519): Fix this when dream can be shown on non-default display.
             return getDefaultDisplayContentLocked().getDisplayPolicy().isShowingDreamLw();
         }
     }
@@ -3773,6 +3766,16 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
+    public void registerDisplayFoldListener(IDisplayFoldListener listener) {
+        mPolicy.registerDisplayFoldListener(listener);
+    }
+
+    @Override
+    public void unregisterDisplayFoldListener(IDisplayFoldListener listener) {
+        mPolicy.unregisterDisplayFoldListener(listener);
+    }
+
+    @Override
     public int getPreferredOptionsPanelGravity(int displayId) {
         synchronized (mGlobalLock) {
             final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
@@ -4383,16 +4386,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
         public static final int WINDOW_REPLACEMENT_TIMEOUT = 46;
 
-        public static final int NOTIFY_APP_TRANSITION_STARTING = 47;
-        public static final int NOTIFY_APP_TRANSITION_CANCELLED = 48;
-        public static final int NOTIFY_APP_TRANSITION_FINISHED = 49;
         public static final int UPDATE_ANIMATION_SCALE = 51;
         public static final int WINDOW_HIDE_TIMEOUT = 52;
-        public static final int NOTIFY_DOCKED_STACK_MINIMIZED_CHANGED = 53;
         public static final int SEAMLESS_ROTATION_TIMEOUT = 54;
         public static final int RESTORE_POINTER_ICON = 55;
-        public static final int NOTIFY_KEYGUARD_FLAGS_CHANGED = 56;
-        public static final int NOTIFY_KEYGUARD_TRUSTED_CHANGED = 57;
         public static final int SET_HAS_OVERLAY_UI = 58;
         public static final int SET_RUNNING_REMOTE_ANIMATION = 59;
         public static final int ANIMATION_FAILSAFE = 60;
@@ -4456,7 +4453,8 @@ public class WindowManagerService extends IWindowManager.Stub
                         if (DEBUG_FOCUS_LIGHT) Slog.i(TAG_WM, "Losing focus: " + lastFocus);
                         lastFocus.reportFocusChangedSerialized(false, mInTouchMode);
                     }
-                } break;
+                    break;
+                }
 
                 case REPORT_LOSING_FOCUS: {
                     final DisplayContent displayContent = (DisplayContent) msg.obj;
@@ -4473,7 +4471,8 @@ public class WindowManagerService extends IWindowManager.Stub
                                 losers.get(i));
                         losers.get(i).reportFocusChangedSerialized(false, mInTouchMode);
                     }
-                } break;
+                    break;
+                }
 
                 case WINDOW_FREEZE_TIMEOUT: {
                     final DisplayContent displayContent = (DisplayContent) msg.obj;
@@ -4637,12 +4636,13 @@ public class WindowManagerService extends IWindowManager.Stub
                     break;
                 }
 
-                case NOTIFY_ACTIVITY_DRAWN:
+                case NOTIFY_ACTIVITY_DRAWN: {
                     try {
                         mActivityTaskManager.notifyActivityDrawn((IBinder) msg.obj);
                     } catch (RemoteException e) {
                     }
                     break;
+                }
                 case ALL_WINDOWS_DRAWN: {
                     Runnable callback;
                     synchronized (mGlobalLock) {
@@ -4679,8 +4679,8 @@ public class WindowManagerService extends IWindowManager.Stub
                             }
                         }
                     }
+                    break;
                 }
-                break;
                 case CHECK_IF_BOOT_ANIMATION_FINISHED: {
                     final boolean bootAnimationComplete;
                     synchronized (mGlobalLock) {
@@ -4690,15 +4690,15 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (bootAnimationComplete) {
                         performEnableScreen();
                     }
+                    break;
                 }
-                break;
                 case RESET_ANR_MESSAGE: {
                     synchronized (mGlobalLock) {
                         mLastANRState = null;
                     }
                     mAtmInternal.clearSavedANRState();
+                    break;
                 }
-                break;
                 case WALLPAPER_DRAW_PENDING_TIMEOUT: {
                     synchronized (mGlobalLock) {
                         final WallpaperController wallpaperController =
@@ -4708,16 +4708,16 @@ public class WindowManagerService extends IWindowManager.Stub
                             mWindowPlacerLocked.performSurfacePlacement();
                         }
                     }
+                    break;
                 }
-                break;
                 case UPDATE_DOCKED_STACK_DIVIDER: {
                     synchronized (mGlobalLock) {
                         final DisplayContent displayContent = getDefaultDisplayContentLocked();
                         displayContent.getDockedDividerController().reevaluateVisibility(false);
                         displayContent.adjustForImeIfNeeded();
                     }
+                    break;
                 }
-                break;
                 case WINDOW_REPLACEMENT_TIMEOUT: {
                     synchronized (mGlobalLock) {
                         for (int i = mWindowReplacementTimeouts.size() - 1; i >= 0; i--) {
@@ -4726,21 +4726,8 @@ public class WindowManagerService extends IWindowManager.Stub
                         }
                         mWindowReplacementTimeouts.clear();
                     }
+                    break;
                 }
-                break;
-                case NOTIFY_APP_TRANSITION_STARTING: {
-                    mAtmInternal.notifyAppTransitionStarting((SparseIntArray) msg.obj,
-                            msg.getWhen());
-                }
-                break;
-                case NOTIFY_APP_TRANSITION_CANCELLED: {
-                    mAtmInternal.notifyAppTransitionCancelled();
-                }
-                break;
-                case NOTIFY_APP_TRANSITION_FINISHED: {
-                    mAtmInternal.notifyAppTransitionFinished();
-                }
-                break;
                 case WINDOW_HIDE_TIMEOUT: {
                     final WindowState window = (WindowState) msg.obj;
                     synchronized (mGlobalLock) {
@@ -4760,56 +4747,44 @@ public class WindowManagerService extends IWindowManager.Stub
                         window.setDisplayLayoutNeeded();
                         mWindowPlacerLocked.performSurfacePlacement();
                     }
+                    break;
                 }
-                break;
-                case NOTIFY_DOCKED_STACK_MINIMIZED_CHANGED: {
-                    mAtmInternal.notifyDockedStackMinimizedChanged(msg.arg1 == 1);
-                }
-                break;
                 case RESTORE_POINTER_ICON: {
                     synchronized (mGlobalLock) {
                         restorePointerIconLocked((DisplayContent)msg.obj, msg.arg1, msg.arg2);
                     }
+                    break;
                 }
-                break;
                 case SEAMLESS_ROTATION_TIMEOUT: {
                     final DisplayContent displayContent = (DisplayContent) msg.obj;
                     synchronized (mGlobalLock) {
                         displayContent.onSeamlessRotationTimeout();
                     }
+                    break;
                 }
-                break;
-                case NOTIFY_KEYGUARD_FLAGS_CHANGED: {
-                    mAtmInternal.notifyKeyguardFlagsChanged((Runnable) msg.obj, msg.arg1);
-                }
-                break;
-                case NOTIFY_KEYGUARD_TRUSTED_CHANGED: {
-                    mAtmInternal.notifyKeyguardTrustedChanged();
-                }
-                break;
                 case SET_HAS_OVERLAY_UI: {
                     mAmInternal.setHasOverlayUi(msg.arg1, msg.arg2 == 1);
+                    break;
                 }
-                break;
                 case SET_RUNNING_REMOTE_ANIMATION: {
                     mAmInternal.setRunningRemoteAnimation(msg.arg1, msg.arg2 == 1);
+                    break;
                 }
-                break;
                 case ANIMATION_FAILSAFE: {
                     synchronized (mGlobalLock) {
                         if (mRecentsAnimationController != null) {
                             mRecentsAnimationController.scheduleFailsafe();
                         }
                     }
+                    break;
                 }
-                break;
                 case RECOMPUTE_FOCUS: {
                     synchronized (mGlobalLock) {
                         updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
                                 true /* updateInputWindows */);
                     }
+                    break;
                 }
-                break;
             }
             if (DEBUG_WINDOW_TRACE) {
                 Slog.v(TAG_WM, "handleMessage: exit");
@@ -5796,11 +5771,11 @@ public class WindowManagerService extends IWindowManager.Stub
      * {@link com.android.server.wm.WindowManagerServiceDumpProto}.
      *
      * @param proto     Stream to write the WindowContainer object to.
-     * @param trim      If true, reduce the amount of data written.
+     * @param logLevel  Determines the amount of data to be written to the Protobuf.
      */
-    void writeToProtoLocked(ProtoOutputStream proto, boolean trim) {
+    void writeToProtoLocked(ProtoOutputStream proto, @WindowTraceLogLevel int logLevel) {
         mPolicy.writeToProto(proto, POLICY);
-        mRoot.writeToProto(proto, ROOT_WINDOW_CONTAINER, trim);
+        mRoot.writeToProto(proto, ROOT_WINDOW_CONTAINER, logLevel);
         final DisplayContent topFocusedDisplayContent = mRoot.getTopFocusedDisplayContent();
         if (topFocusedDisplayContent.mCurrentFocus != null) {
             topFocusedDisplayContent.mCurrentFocus.writeIdentifierToProto(proto, FOCUSED_WINDOW);
@@ -5819,13 +5794,13 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     void traceStateLocked(String where) {
-        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "traceStateLocked");
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "traceStateLocked");
         try {
             mWindowTracing.traceStateLocked(where, this);
         } catch (Exception e) {
             Log.wtf(TAG, "Exception while tracing state", e);
         } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
     }
 
@@ -6110,6 +6085,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 pw.println("    d[isplays]: active display contents");
                 pw.println("    t[okens]: token list");
                 pw.println("    w[indows]: window list");
+                pw.println("    trace: write Winscope trace to file");
                 pw.println("  cmd may also be a NAME to dump windows.  NAME may");
                 pw.println("    be a partial substring in a window name, a");
                 pw.println("    Window hex object identifier, or");
@@ -6127,7 +6103,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (useProto) {
             final ProtoOutputStream proto = new ProtoOutputStream(fd);
             synchronized (mGlobalLock) {
-                writeToProtoLocked(proto, false /* trim */);
+                writeToProtoLocked(proto, WindowTraceLogLevel.ALL);
             }
             proto.flush();
             return;
@@ -6181,6 +6157,11 @@ public class WindowManagerService extends IWindowManager.Stub
                     mRoot.dumpChildrenNames(pw, " ");
                     pw.println(" ");
                     mRoot.forAllWindows(w -> {pw.println(w);}, true /* traverseTopToBottom */);
+                }
+                return;
+            } else if ("trace".equals(cmd)) {
+                synchronized (mGlobalLock) {
+                    mWindowTracing.writeTraceToFile();
                 }
                 return;
             } else {
@@ -6580,8 +6561,13 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /**
      * Update a tap exclude region with a rectangular area in the window identified by the provided
-     * id. Touches on this region will not switch focus to this window. Passing an empty rect will
-     * remove the area from the exclude region of this window.
+     * id. Touches down on this region will not:
+     * <ol>
+     * <li>Switch focus to this window.</li>
+     * <li>Move the display of this window to top.</li>
+     * <li>Send the touch events to this window.</li>
+     * </ol>
+     * Passing an empty rect will remove the area from the exclude region of this window.
      */
     void updateTapExcludeRegion(IWindow client, int regionId, int left, int top, int width,
             int height) {
@@ -6851,10 +6837,10 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void setMagnificationSpec(MagnificationSpec spec) {
+        public void setMagnificationSpec(int displayId, MagnificationSpec spec) {
             synchronized (mGlobalLock) {
                 if (mAccessibilityController != null) {
-                    mAccessibilityController.setMagnificationSpecLocked(spec);
+                    mAccessibilityController.setMagnificationSpecLocked(displayId, spec);
                 } else {
                     throw new IllegalStateException("Magnification callbacks not set!");
                 }
@@ -6865,10 +6851,10 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void setForceShowMagnifiableBounds(boolean show) {
+        public void setForceShowMagnifiableBounds(int displayId, boolean show) {
             synchronized (mGlobalLock) {
                 if (mAccessibilityController != null) {
-                    mAccessibilityController.setForceShowMagnifiableBoundsLocked(show);
+                    mAccessibilityController.setForceShowMagnifiableBoundsLocked(displayId, show);
                 } else {
                     throw new IllegalStateException("Magnification callbacks not set!");
                 }
@@ -6876,10 +6862,11 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void getMagnificationRegion(@NonNull Region magnificationRegion) {
+        public void getMagnificationRegion(int displayId, @NonNull Region magnificationRegion) {
             synchronized (mGlobalLock) {
                 if (mAccessibilityController != null) {
-                    mAccessibilityController.getMagnificationRegionLocked(magnificationRegion);
+                    mAccessibilityController.getMagnificationRegionLocked(displayId,
+                            magnificationRegion);
                 } else {
                     throw new IllegalStateException("Magnification callbacks not set!");
                 }
@@ -6907,16 +6894,19 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void setMagnificationCallbacks(@Nullable MagnificationCallbacks callbacks) {
+        public boolean setMagnificationCallbacks(int displayId,
+                @Nullable MagnificationCallbacks callbacks) {
             synchronized (mGlobalLock) {
                 if (mAccessibilityController == null) {
                     mAccessibilityController = new AccessibilityController(
                             WindowManagerService.this);
                 }
-                mAccessibilityController.setMagnificationCallbacksLocked(callbacks);
+                boolean result = mAccessibilityController.setMagnificationCallbacksLocked(
+                        displayId, callbacks);
                 if (!mAccessibilityController.hasCallbacksLocked()) {
                     mAccessibilityController = null;
                 }
+                return result;
             }
         }
 
@@ -6995,6 +6985,16 @@ public class WindowManagerService extends IWindowManager.Stub
             if (allWindowsDrawn) {
                 callback.run();
             }
+        }
+
+        @Override
+        public void setForcedDisplaySize(int displayId, int width, int height) {
+            WindowManagerService.this.setForcedDisplaySize(displayId, width, height);
+        }
+
+        @Override
+        public void clearForcedDisplaySize(int displayId) {
+            WindowManagerService.this.clearForcedDisplaySize(displayId);
         }
 
         @Override
@@ -7295,8 +7295,12 @@ public class WindowManagerService extends IWindowManager.Stub
         }, false /* traverseTopToBottom */);
     }
 
-    public void applyMagnificationSpec(MagnificationSpec spec) {
-        getDefaultDisplayContentLocked().applyMagnificationSpec(spec);
+    /** Called from Accessibility Controller to apply magnification spec */
+    public void applyMagnificationSpecLocked(int displayId, MagnificationSpec spec) {
+        final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+        if (displayContent != null) {
+            displayContent.applyMagnificationSpec(spec);
+        }
     }
 
     SurfaceControl.Builder makeSurfaceBuilder(SurfaceSession s) {
@@ -7355,7 +7359,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void reparentDisplayContent(int displayId, IBinder surfaceControlHandle) {
+    public void reparentDisplayContent(int displayId, SurfaceControl sc) {
         final Display display = mDisplayManager.getDisplay(displayId);
         if (display == null) {
             throw new IllegalArgumentException(
@@ -7372,7 +7376,7 @@ public class WindowManagerService extends IWindowManager.Stub
             long token = Binder.clearCallingIdentity();
             try {
                 DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
-                displayContent.reparentDisplayContent(surfaceControlHandle);
+                displayContent.reparentDisplayContent(sc);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }

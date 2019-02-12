@@ -16,15 +16,24 @@
 
 package com.android.systemui;
 
+import static android.view.Display.DEFAULT_DISPLAY;
+
 import android.app.WallpaperManager;
+import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks2;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region.Op;
+import android.hardware.display.DisplayManager;
+import android.opengl.GLSurfaceView;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Trace;
 import android.service.wallpaper.WallpaperService;
@@ -33,9 +42,9 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.Surface;
 import android.view.SurfaceHolder;
-import android.view.WindowManager;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.glwallpaper.ImageWallpaperRenderer;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -48,12 +57,17 @@ import java.io.PrintWriter;
 public class ImageWallpaper extends WallpaperService {
     private static final String TAG = "ImageWallpaper";
     private static final String GL_LOG_TAG = "ImageWallpaperGL";
+    // TODO: Testing purpose, need to remove later, b/123616712.
+    private static final String SENSOR_EVENT_AWAKE = "systemui.test.event.awake";
+    // TODO: Testing purpose, need to remove later, b/123616712.
+    private static final String SENSOR_EVENT_SLEEP = "systemui.test.event.sleep";
     private static final boolean DEBUG = false;
     private static final String PROPERTY_KERNEL_QEMU = "ro.kernel.qemu";
     private static final long DELAY_FORGET_WALLPAPER = 5000;
 
     private WallpaperManager mWallpaperManager;
     private DrawableEngine mEngine;
+    private GLEngine mGlEngine;
 
     @Override
     public void onCreate() {
@@ -70,10 +84,112 @@ public class ImageWallpaper extends WallpaperService {
 
     @Override
     public Engine onCreateEngine() {
-        mEngine = new DrawableEngine();
-        return mEngine;
+        mGlEngine = new GLEngine(this);
+        return mGlEngine;
     }
 
+    class GLEngine extends Engine {
+        private GLWallpaperSurfaceView mWallpaperSurfaceView;
+
+        GLEngine(Context context) {
+            mWallpaperSurfaceView = new GLWallpaperSurfaceView(context);
+            mWallpaperSurfaceView.setRenderer(
+                    new ImageWallpaperRenderer(context, mWallpaperSurfaceView));
+            mWallpaperSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+            setOffsetNotificationsEnabled(true);
+        }
+
+        @Override
+        public void onAmbientModeChanged(boolean inAmbientMode, long animationDuration) {
+            if (mWallpaperSurfaceView != null) {
+                mWallpaperSurfaceView.notifyAmbientModeChanged(inAmbientMode);
+            }
+        }
+
+        @Override
+        public void onOffsetsChanged(float xOffset, float yOffset, float xOffsetStep,
+                float yOffsetStep, int xPixelOffset, int yPixelOffset) {
+            if (mWallpaperSurfaceView != null) {
+                mWallpaperSurfaceView.notifyOffsetsChanged(xOffset, yOffset);
+            }
+        }
+
+        private class GLWallpaperSurfaceView extends GLSurfaceView implements ImageGLView {
+            private SensorEventListener mEventListener;
+            private WallpaperStatusListener mWallpaperChangedListener;
+
+            // TODO: Testing purpose, need to remove later, b/123616712.
+            /**
+             * For testing only: adb shell am broadcast -a <INTENT>
+             */
+            private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent == null) {
+                        return;
+                    }
+                    switch (intent.getAction()) {
+                        case SENSOR_EVENT_AWAKE:
+                            notifySensorEvents(true);
+                            break;
+                        case SENSOR_EVENT_SLEEP:
+                            notifySensorEvents(false);
+                            break;
+                    }
+                }
+            };
+
+            GLWallpaperSurfaceView(Context context) {
+                super(context);
+                setEGLContextClientVersion(2);
+                // TODO: Testing purpose, need to remove later, b/123616712.
+                if (Build.IS_DEBUGGABLE) {
+                    IntentFilter filter = new IntentFilter();
+                    filter.addAction(SENSOR_EVENT_AWAKE);
+                    filter.addAction(SENSOR_EVENT_SLEEP);
+                    registerReceiver(mReceiver, filter);
+                }
+            }
+
+            @Override
+            public SurfaceHolder getHolder() {
+                return getSurfaceHolder();
+            }
+
+            @Override
+            public void setRenderer(Renderer renderer) {
+                super.setRenderer(renderer);
+                mEventListener = (SensorEventListener) renderer;
+                mWallpaperChangedListener = (WallpaperStatusListener) renderer;
+            }
+
+            private void notifySensorEvents(boolean reach) {
+                if (mEventListener != null) {
+                    mEventListener.onSensorEvent(reach);
+                }
+            }
+
+            private void notifyAmbientModeChanged(boolean inAmbient) {
+                if (mWallpaperChangedListener != null) {
+                    mWallpaperChangedListener.onAmbientModeChanged(inAmbient);
+                }
+            }
+
+            private void notifyOffsetsChanged(float xOffset, float yOffset) {
+                if (mWallpaperChangedListener != null) {
+                    mWallpaperChangedListener.onOffsetsChanged(
+                            xOffset, yOffset, getHolder().getSurfaceFrame());
+                }
+            }
+
+            @Override
+            public void render() {
+                requestRender();
+            }
+        }
+    }
+
+    // TODO: Remove this engine, tracking on b/123617158.
     class DrawableEngine extends Engine {
         private final Runnable mUnloadWallpaperCallback = () -> {
             unloadWallpaper(false /* forgetSize */);
@@ -94,7 +210,7 @@ public class ImageWallpaper extends WallpaperService {
         float mYOffset = 0f;
         float mScale = 1f;
 
-        private Display mDefaultDisplay;
+        private Display mDisplay;
         private final DisplayInfo mTmpDisplayInfo = new DisplayInfo();
 
         boolean mVisible = true;
@@ -138,10 +254,20 @@ public class ImageWallpaper extends WallpaperService {
             super.onCreate(surfaceHolder);
 
             //noinspection ConstantConditions
-            mDefaultDisplay = getSystemService(WindowManager.class).getDefaultDisplay();
+            final Context displayContext = getDisplayContext();
+            final int displayId = displayContext == null ? DEFAULT_DISPLAY :
+                    displayContext.getDisplayId();
+            DisplayManager dm = getSystemService(DisplayManager.class);
+            if (dm != null) {
+                mDisplay = dm.getDisplay(displayId);
+                if (mDisplay == null) {
+                    Log.e(TAG, "Cannot find display! Fallback to default.");
+                    mDisplay = dm.getDisplay(DEFAULT_DISPLAY);
+                }
+            }
             setOffsetNotificationsEnabled(false);
 
-            updateSurfaceSize(surfaceHolder, getDefaultDisplayInfo(), false /* forDraw */);
+            updateSurfaceSize(surfaceHolder, getDisplayInfo(), false /* forDraw */);
         }
 
         @Override
@@ -165,9 +291,26 @@ public class ImageWallpaper extends WallpaperService {
                 hasWallpaper = false;
             }
 
-            // Set surface size equal to bitmap size, prevent memory waste
-            int surfaceWidth = Math.max(MIN_BACKGROUND_WIDTH, mBackgroundWidth);
-            int surfaceHeight = Math.max(MIN_BACKGROUND_HEIGHT, mBackgroundHeight);
+            // Expected surface size.
+            int surfaceWidth = Math.max(displayInfo.logicalWidth, mBackgroundWidth);
+            int surfaceHeight = Math.max(displayInfo.logicalHeight, mBackgroundHeight);
+
+            // Calculate the minimum drawing area of the surface, which saves memory and does not
+            // distort the image.
+            final float scale = Math.min(
+                    (float) mBackgroundHeight / (float) surfaceHeight,
+                    (float) mBackgroundWidth / (float) surfaceWidth);
+            surfaceHeight = (int) (scale * surfaceHeight);
+            surfaceWidth = (int) (scale * surfaceWidth);
+
+            // Set surface size to at least MIN size.
+            if (surfaceWidth < MIN_BACKGROUND_WIDTH || surfaceHeight < MIN_BACKGROUND_HEIGHT) {
+                final float scaleUp = Math.max(
+                        (float) MIN_BACKGROUND_WIDTH / (float) surfaceWidth,
+                        (float) MIN_BACKGROUND_HEIGHT / (float) surfaceHeight);
+                surfaceWidth = (int) ((float) surfaceWidth * scaleUp);
+                surfaceHeight = (int) ((float) surfaceHeight * scaleUp);
+            }
 
             // Used a fixed size surface, because we are special.  We can do
             // this because we know the current design of window animations doesn't
@@ -267,8 +410,8 @@ public class ImageWallpaper extends WallpaperService {
         }
 
         @VisibleForTesting
-        DisplayInfo getDefaultDisplayInfo() {
-            mDefaultDisplay.getDisplayInfo(mTmpDisplayInfo);
+        DisplayInfo getDisplayInfo() {
+            mDisplay.getDisplayInfo(mTmpDisplayInfo);
             return mTmpDisplayInfo;
         }
 
@@ -278,7 +421,7 @@ public class ImageWallpaper extends WallpaperService {
             }
             try {
                 Trace.traceBegin(Trace.TRACE_TAG_VIEW, "drawWallpaper");
-                DisplayInfo displayInfo = getDefaultDisplayInfo();
+                DisplayInfo displayInfo = getDisplayInfo();
                 int newRotation = displayInfo.rotation;
 
                 // Sometimes a wallpaper is not large enough to cover the screen in one dimension.
@@ -445,7 +588,7 @@ public class ImageWallpaper extends WallpaperService {
             if (DEBUG) {
                 Log.d(TAG, "Wallpaper loaded: " + mBackground);
             }
-            updateSurfaceSize(getSurfaceHolder(), getDefaultDisplayInfo(),
+            updateSurfaceSize(getSurfaceHolder(), getDisplayInfo(),
                     false /* forDraw */);
         }
 
@@ -533,5 +676,47 @@ public class ImageWallpaper extends WallpaperService {
                 }
             }
         }
+    }
+
+    /**
+     * A listener to trace sensor event.
+     */
+    public interface SensorEventListener {
+
+        /**
+         * Called back while sensor event comes.
+         * @param reach The status of sensor.
+         */
+        void onSensorEvent(boolean reach);
+    }
+
+    /**
+     * A listener to trace status of image wallpaper.
+     */
+    public interface WallpaperStatusListener {
+
+        /**
+         * Called back while ambient mode changes.
+         * @param inAmbientMode true if is in ambient mode, false otherwise.
+         */
+        void onAmbientModeChanged(boolean inAmbientMode);
+
+        /**
+         * Called back while wallpaper offsets.
+         * @param xOffset The offset portion along x.
+         * @param yOffset The offset portion along y.
+         */
+        void onOffsetsChanged(float xOffset, float yOffset, Rect frame);
+    }
+
+    /**
+     * An abstraction for view of GLRenderer.
+     */
+    public interface ImageGLView {
+
+        /**
+         * Ask the view to render.
+         */
+        void render();
     }
 }

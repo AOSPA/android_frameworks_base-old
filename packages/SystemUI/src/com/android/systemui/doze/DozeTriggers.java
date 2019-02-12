@@ -33,8 +33,10 @@ import android.os.UserHandle;
 import android.text.format.Formatter;
 import android.util.Log;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.hardware.AmbientDisplayConfiguration;
 import com.android.internal.util.Preconditions;
+import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.util.Assert;
 import com.android.systemui.util.wakelock.WakeLock;
@@ -71,6 +73,8 @@ public class DozeTriggers implements DozeMachine.Part {
     private final boolean mAllowPulseTriggers;
     private final UiModeManager mUiModeManager;
     private final TriggerReceiver mBroadcastReceiver = new TriggerReceiver();
+    private final DockEventListener mDockEventListener = new DockEventListener();
+    private final DockManager mDockManager;
 
     private long mNotificationPulseTime;
     private boolean mPulsePending;
@@ -79,7 +83,7 @@ public class DozeTriggers implements DozeMachine.Part {
     public DozeTriggers(Context context, DozeMachine machine, DozeHost dozeHost,
             AlarmManager alarmManager, AmbientDisplayConfiguration config,
             DozeParameters dozeParameters, SensorManager sensorManager, Handler handler,
-            WakeLock wakeLock, boolean allowPulseTriggers) {
+            WakeLock wakeLock, boolean allowPulseTriggers, DockManager dockManager) {
         mContext = context;
         mMachine = machine;
         mDozeHost = dozeHost;
@@ -93,6 +97,7 @@ public class DozeTriggers implements DozeMachine.Part {
                 config, wakeLock, this::onSensor, this::onProximityFar,
                 dozeParameters.getPolicy());
         mUiModeManager = mContext.getSystemService(UiModeManager.class);
+        mDockManager = dockManager;
     }
 
     private void onNotification() {
@@ -101,10 +106,6 @@ public class DozeTriggers implements DozeMachine.Part {
         if (!mConfig.pulseOnNotificationEnabled(UserHandle.USER_CURRENT)) return;
         requestPulse(DozeLog.PULSE_REASON_NOTIFICATION, false /* performedProxCheck */);
         DozeLog.traceNotificationPulse(mContext);
-    }
-
-    private void onWhisper() {
-        requestPulse(DozeLog.PULSE_REASON_NOTIFICATION, false /* performedProxCheck */);
     }
 
     private void proximityCheckThenCall(IntConsumer callback,
@@ -129,18 +130,19 @@ public class DozeTriggers implements DozeMachine.Part {
         }
     }
 
-    private void onSensor(int pulseReason, boolean sensorPerformedProxCheck,
+    @VisibleForTesting
+    void onSensor(int pulseReason, boolean sensorPerformedProxCheck,
             float screenX, float screenY, float[] rawValues) {
-        boolean isDoubleTap = pulseReason == DozeLog.PULSE_REASON_SENSOR_DOUBLE_TAP;
-        boolean isTap = pulseReason == DozeLog.PULSE_REASON_SENSOR_TAP;
-        boolean isPickup = pulseReason == DozeLog.PULSE_REASON_SENSOR_PICKUP;
+        boolean isDoubleTap = pulseReason == DozeLog.REASON_SENSOR_DOUBLE_TAP;
+        boolean isTap = pulseReason == DozeLog.REASON_SENSOR_TAP;
+        boolean isPickup = pulseReason == DozeLog.REASON_SENSOR_PICKUP;
         boolean isLongPress = pulseReason == DozeLog.PULSE_REASON_SENSOR_LONG_PRESS;
         boolean isWakeDisplay = pulseReason == DozeLog.REASON_SENSOR_WAKE_UP;
         boolean isWakeLockScreen = pulseReason == DozeLog.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN;
         boolean wakeEvent = rawValues != null && rawValues.length > 0 && rawValues[0] != 0;
 
         if (isWakeDisplay) {
-            onWakeScreen(wakeEvent);
+            onWakeScreen(wakeEvent, mMachine.getState());
         } else if (isLongPress || isWakeLockScreen) {
             requestPulse(pulseReason, sensorPerformedProxCheck);
         } else {
@@ -159,7 +161,7 @@ public class DozeTriggers implements DozeMachine.Part {
                 } else {
                     mDozeHost.extendPulse();
                 }
-            }, sensorPerformedProxCheck, pulseReason);
+            }, sensorPerformedProxCheck || mDockManager.isDocked(), pulseReason);
         }
 
         if (isPickup) {
@@ -193,9 +195,8 @@ public class DozeTriggers implements DozeMachine.Part {
         }
     }
 
-    private void onWakeScreen(boolean wake) {
+    private void onWakeScreen(boolean wake, DozeMachine.State state) {
         DozeLog.traceWakeDisplay(wake);
-        DozeMachine.State state = mMachine.getState();
         boolean paused = (state == DozeMachine.State.DOZE_AOD_PAUSED);
         boolean pausing = (state == DozeMachine.State.DOZE_AOD_PAUSING);
         sWakeDisplaySensorState = wake;
@@ -206,7 +207,7 @@ public class DozeTriggers implements DozeMachine.Part {
                     // In pocket, drop event.
                     return;
                 }
-                if (mMachine.getState() == DozeMachine.State.DOZE) {
+                if (state == DozeMachine.State.DOZE) {
                     mMachine.requestState(DozeMachine.State.DOZE_AOD);
                 }
             }, false /* alreadyPerformedProxCheck */, DozeLog.REASON_SENSOR_WAKE_UP);
@@ -223,6 +224,7 @@ public class DozeTriggers implements DozeMachine.Part {
             case INITIALIZED:
                 mBroadcastReceiver.register(mContext);
                 mDozeHost.addCallback(mHostCallback);
+                mDockManager.addListener(mDockEventListener);
                 checkTriggersAtInit();
                 break;
             case DOZE:
@@ -233,7 +235,7 @@ public class DozeTriggers implements DozeMachine.Part {
                 }
                 mDozeSensors.setListening(true);
                 if (newState == DozeMachine.State.DOZE_AOD && !sWakeDisplaySensorState) {
-                    onWakeScreen(false);
+                    onWakeScreen(false, newState);
                 }
                 break;
             case DOZE_AOD_PAUSED:
@@ -248,6 +250,7 @@ public class DozeTriggers implements DozeMachine.Part {
             case FINISH:
                 mBroadcastReceiver.unregister(mContext);
                 mDozeHost.removeCallback(mHostCallback);
+                mDockManager.removeListener(mDockEventListener);
                 mDozeSensors.setListening(false);
                 mDozeSensors.setProxListening(false);
                 break;
@@ -420,6 +423,24 @@ public class DozeTriggers implements DozeMachine.Part {
             }
             context.unregisterReceiver(this);
             mRegistered = false;
+        }
+    }
+
+    private class DockEventListener implements DockManager.DockEventListener {
+        @Override
+        public void onEvent(int event) {
+            if (DEBUG) Log.d(TAG, "dock event = " + event);
+            switch (event) {
+                case DockManager.STATE_DOCKED:
+                case DockManager.STATE_DOCKED_HIDE:
+                    mDozeSensors.ignoreTouchScreenSensorsSettingInterferingWithDocking(true);
+                    break;
+                case DockManager.STATE_NONE:
+                    mDozeSensors.ignoreTouchScreenSensorsSettingInterferingWithDocking(false);
+                    break;
+                default:
+                    // no-op
+            }
         }
     }
 

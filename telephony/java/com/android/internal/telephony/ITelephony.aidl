@@ -1178,12 +1178,12 @@ interface ITelephony {
     void factoryReset(int subId);
 
     /**
-     * An estimate of the users's current locale based on the default SIM.
+     * Returns users's current locale based on the SIM.
      *
      * The returned string will be a well formed BCP-47 language tag, or {@code null}
      * if no locale could be derived.
      */
-    String getLocaleFromDefaultSim();
+    String getSimLocaleForSubscriber(int subId);
 
     /**
      * Requests the modem activity info asynchronously.
@@ -1492,25 +1492,34 @@ interface ITelephony {
      * Get the card ID of the default eUICC card. If there is no eUICC, returns
      * {@link #INVALID_CARD_ID}.
      *
-     * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
-     *
      * @param subId subscription ID used for authentication
      * @param callingPackage package making the call
      * @return card ID of the default eUICC card.
-     * @hide
      */
-    int getCardIdForDefaultEuicc(int subId, String callingPackage); 
+    int getCardIdForDefaultEuicc(int subId, String callingPackage);
 
     /**
-     * Gets information about currently inserted UICCs and eUICCs. See {@link UiccCardInfo} for more
-     * details on the kind of information available.
+     * Gets information about currently inserted UICCs and enabled eUICCs.
+     * <p>
+     * Requires that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     * <p>
+     * If the caller has carrier priviliges on any active subscription, then they have permission to
+     * get simple information like the card ID ({@link UiccCardInfo#getCardId()}), whether the card
+     * is an eUICC ({@link UiccCardInfo#isEuicc()}), and the slot index where the card is inserted
+     * ({@link UiccCardInfo#getSlotIndex()}).
+     * <p>
+     * To get private information such as the EID ({@link UiccCardInfo#getEid()}) or ICCID
+     * ({@link UiccCardInfo#getIccId()}), the caller must have carrier priviliges on that specific
+     * UICC or eUICC card.
+     * <p>
+     * See {@link UiccCardInfo} for more details on the kind of information available.
      *
-     * @return UiccCardInfo an array of UiccCardInfo objects, representing information on the
-     * currently inserted UICCs and eUICCs.
-     *
-     * @hide
+     * @param callingPackage package making the call, used to evaluate carrier privileges 
+     * @return a list of UiccCardInfo objects, representing information on the currently inserted
+     * UICCs and eUICCs. Each UiccCardInfo in the list will have private information filtered out if
+     * the caller does not have adequate permissions for that card.
      */
-    UiccCardInfo[] getUiccCardsInfo();
+    List<UiccCardInfo> getUiccCardsInfo(String callingPackage);
 
     /**
      * Get slot info for all the UICC slots.
@@ -1765,6 +1774,24 @@ interface ITelephony {
     void unregisterImsProvisioningChangedCallback(int subId, IImsConfigCallback callback);
 
     /**
+     * Set the provisioning status for the IMS MmTel capability using the specified subscription.
+     */
+    void setImsProvisioningStatusForCapability(int subId, int capability, int tech,
+            boolean isProvisioned);
+
+    /**
+     * Get the provisioning status for the IMS MmTel capability specified.
+     */
+    boolean getImsProvisioningStatusForCapability(int subId, int capability, int tech);
+
+    /** Is the capability and tech flagged as provisioned in the cache */
+    boolean isMmTelCapabilityProvisionedInCache(int subId, int capability, int tech);
+
+    /** Set the provisioning for the capability and tech in the cache */
+    void cacheMmTelCapabilityProvisioning(int subId, int capability, int tech,
+            boolean isProvisioned);
+
+    /**
      * Return an integer containing the provisioning value for the specified provisioning key.
      */
     int getImsProvisioningInt(int subId, int key);
@@ -1798,4 +1825,32 @@ interface ITelephony {
      * Enable or disable a logical modem stack associated with the slotIndex.
      */
     boolean enableModemForSlot(int slotIndex, boolean enable);
+
+    /**
+     * Indicate if the enablement of multi SIM functionality is restricted.
+     * @hide
+     */
+    void setMultisimCarrierRestriction(boolean isMultisimCarrierRestricted);
+
+    /**
+     * Returns if the usage of multiple SIM cards at the same time is restricted.
+     * @hide
+     */
+    boolean isMultisimCarrierRestricted();
+    
+    /**
+     * Switch configs to enable multi-sim or switch back to single-sim
+     * @hide
+     */
+    void switchMultiSimConfig(int numOfSims);
+
+    /**
+     * Get if reboot is required upon altering modems configurations
+     */
+    boolean isRebootRequiredForModemConfigChange();
+
+    /**
+     * Get the mapping from logical slots to physical slots.
+     */
+    int[] getSlotsMapping();
 }

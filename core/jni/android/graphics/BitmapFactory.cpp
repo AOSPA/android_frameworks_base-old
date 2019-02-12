@@ -15,6 +15,7 @@
 #include "Utils.h"
 #include "core_jni_helpers.h"
 
+#include <HardwareBitmapUploader.h>
 #include <nativehelper/JNIHelp.h>
 #include <androidfw/Asset.h>
 #include <androidfw/ResourceTypes.h>
@@ -179,7 +180,7 @@ static bool needsFineScale(const SkISize fullSize, const SkISize decodedSize,
 }
 
 static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
-                        jobject padding, jobject options) {
+                        jobject padding, jobject options, jlong colorSpaceHandle) {
     // Set default values for the options parameters.
     int sampleSize = 1;
     bool onlyDecodeSize = false;
@@ -189,7 +190,7 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
     float scale = 1.0f;
     bool requireUnpremultiplied = false;
     jobject javaBitmap = NULL;
-    sk_sp<SkColorSpace> prefColorSpace = nullptr;
+    sk_sp<SkColorSpace> prefColorSpace = GraphicsJNI::getNativeColorSpace(colorSpaceHandle);
 
     // Update with options supplied by the client.
     if (options != NULL) {
@@ -213,8 +214,6 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
 
         jobject jconfig = env->GetObjectField(options, gOptions_configFieldID);
         prefColorType = GraphicsJNI::getNativeBitmapColorType(env, jconfig);
-        jobject jcolorSpace = env->GetObjectField(options, gOptions_colorSpaceFieldID);
-        prefColorSpace = GraphicsJNI::getNativeColorSpace(env, jcolorSpace);
         isHardware = GraphicsJNI::isHardwareConfig(env, jconfig);
         isMutable = env->GetBooleanField(options, gOptions_mutableFieldID);
         requireUnpremultiplied = !env->GetBooleanField(options, gOptions_premultipliedFieldID);
@@ -280,6 +279,11 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
 
     // Set the decode colorType
     SkColorType decodeColorType = codec->computeOutputColorType(prefColorType);
+    if (decodeColorType == kRGBA_F16_SkColorType && isHardware &&
+            !uirenderer::HardwareBitmapUploader::hasFP16Support()) {
+        decodeColorType = kN32_SkColorType;
+    }
+
     sk_sp<SkColorSpace> decodeColorSpace = codec->computeOutputColorSpace(
             decodeColorType, prefColorSpace);
 
@@ -356,13 +360,7 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
     const SkImageInfo decodeInfo = SkImageInfo::Make(size.width(), size.height(),
             decodeColorType, alphaType, decodeColorSpace);
 
-    // For wide gamut images, we will leave the color space on the SkBitmap.  Otherwise,
-    // use the default.
     SkImageInfo bitmapInfo = decodeInfo;
-    if (decodeInfo.colorSpace() && decodeInfo.colorSpace()->isSRGB()) {
-        bitmapInfo = bitmapInfo.makeColorSpace(decodeInfo.refColorSpace());
-    }
-
     if (decodeColorType == kGray_8_SkColorType) {
         // The legacy implementation of BitmapFactory used kAlpha8 for
         // grayscale images (before kGray8 existed).  While the codec
@@ -515,7 +513,7 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
 }
 
 static jobject nativeDecodeStream(JNIEnv* env, jobject clazz, jobject is, jbyteArray storage,
-        jobject padding, jobject options) {
+        jobject padding, jobject options, jlong colorSpaceHandle) {
 
     jobject bitmap = NULL;
     std::unique_ptr<SkStream> stream(CreateJavaInputStreamAdaptor(env, is, storage));
@@ -524,13 +522,13 @@ static jobject nativeDecodeStream(JNIEnv* env, jobject clazz, jobject is, jbyteA
         std::unique_ptr<SkStreamRewindable> bufferedStream(
                 SkFrontBufferedStream::Make(std::move(stream), SkCodec::MinBufferedBytesNeeded()));
         SkASSERT(bufferedStream.get() != NULL);
-        bitmap = doDecode(env, std::move(bufferedStream), padding, options);
+        bitmap = doDecode(env, std::move(bufferedStream), padding, options, colorSpaceHandle);
     }
     return bitmap;
 }
 
 static jobject nativeDecodeFileDescriptor(JNIEnv* env, jobject clazz, jobject fileDescriptor,
-        jobject padding, jobject bitmapFactoryOptions) {
+        jobject padding, jobject bitmapFactoryOptions, jlong colorSpaceHandle) {
 
     NPE_CHECK_RETURN_ZERO(env, fileDescriptor);
 
@@ -551,7 +549,7 @@ static jobject nativeDecodeFileDescriptor(JNIEnv* env, jobject clazz, jobject fi
     // if we only close the file descriptor and not the file object it is used to
     // create.  If we don't explicitly clean up the file (which in turn closes the
     // descriptor) the buffers allocated internally by fseek will be leaked.
-    int dupDescriptor = dup(descriptor);
+    int dupDescriptor = fcntl(descriptor, F_DUPFD_CLOEXEC, 0);
 
     FILE* file = fdopen(dupDescriptor, "r");
     if (file == NULL) {
@@ -566,7 +564,8 @@ static jobject nativeDecodeFileDescriptor(JNIEnv* env, jobject clazz, jobject fi
     // If there is no offset for the file descriptor, we use SkFILEStream directly.
     if (::lseek(descriptor, 0, SEEK_CUR) == 0) {
         assert(isSeekable(dupDescriptor));
-        return doDecode(env, std::move(fileStream), padding, bitmapFactoryOptions);
+        return doDecode(env, std::move(fileStream), padding, bitmapFactoryOptions,
+                colorSpaceHandle);
     }
 
     // Use a buffered stream. Although an SkFILEStream can be rewound, this
@@ -575,24 +574,25 @@ static jobject nativeDecodeFileDescriptor(JNIEnv* env, jobject clazz, jobject fi
     std::unique_ptr<SkStreamRewindable> stream(SkFrontBufferedStream::Make(std::move(fileStream),
             SkCodec::MinBufferedBytesNeeded()));
 
-    return doDecode(env, std::move(stream), padding, bitmapFactoryOptions);
+    return doDecode(env, std::move(stream), padding, bitmapFactoryOptions, colorSpaceHandle);
 }
 
 static jobject nativeDecodeAsset(JNIEnv* env, jobject clazz, jlong native_asset,
-        jobject padding, jobject options) {
+        jobject padding, jobject options, jlong colorSpaceHandle) {
 
     Asset* asset = reinterpret_cast<Asset*>(native_asset);
     // since we know we'll be done with the asset when we return, we can
     // just use a simple wrapper
-    return doDecode(env, skstd::make_unique<AssetStreamAdaptor>(asset), padding, options);
+    return doDecode(env, skstd::make_unique<AssetStreamAdaptor>(asset), padding, options,
+            colorSpaceHandle);
 }
 
 static jobject nativeDecodeByteArray(JNIEnv* env, jobject, jbyteArray byteArray,
-        jint offset, jint length, jobject options) {
+        jint offset, jint length, jobject options, jlong colorSpaceHandle) {
 
     AutoJavaByteArray ar(env, byteArray);
     return doDecode(env, skstd::make_unique<SkMemoryStream>(ar.ptr() + offset, length, false),
-                    nullptr, options);
+                    nullptr, options, colorSpaceHandle);
 }
 
 static jboolean nativeIsSeekable(JNIEnv* env, jobject, jobject fileDescriptor) {
@@ -600,31 +600,26 @@ static jboolean nativeIsSeekable(JNIEnv* env, jobject, jobject fileDescriptor) {
     return isSeekable(descriptor) ? JNI_TRUE : JNI_FALSE;
 }
 
-jobject decodeBitmap(JNIEnv* env, void* data, size_t size) {
-    return doDecode(env, skstd::make_unique<SkMemoryStream>(data, size),
-                    nullptr, nullptr);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 static const JNINativeMethod gMethods[] = {
     {   "nativeDecodeStream",
-        "(Ljava/io/InputStream;[BLandroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;",
+        "(Ljava/io/InputStream;[BLandroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;J)Landroid/graphics/Bitmap;",
         (void*)nativeDecodeStream
     },
 
     {   "nativeDecodeFileDescriptor",
-        "(Ljava/io/FileDescriptor;Landroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;",
+        "(Ljava/io/FileDescriptor;Landroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;J)Landroid/graphics/Bitmap;",
         (void*)nativeDecodeFileDescriptor
     },
 
     {   "nativeDecodeAsset",
-        "(JLandroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;",
+        "(JLandroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;J)Landroid/graphics/Bitmap;",
         (void*)nativeDecodeAsset
     },
 
     {   "nativeDecodeByteArray",
-        "([BIILandroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;",
+        "([BIILandroid/graphics/BitmapFactory$Options;J)Landroid/graphics/Bitmap;",
         (void*)nativeDecodeByteArray
     },
 

@@ -336,6 +336,13 @@ public final class PowerManager {
     public static final int USER_ACTIVITY_EVENT_ACCESSIBILITY = 3;
 
     /**
+     * User activity event type: {@link android.service.attention.AttentionService} taking action
+     * on behalf of user.
+     * @hide
+     */
+    public static final int USER_ACTIVITY_EVENT_ATTENTION = 4;
+
+    /**
      * User activity flag: If already dimmed, extend the dim timeout
      * but do not brighten.  This flag is useful for keeping the screen on
      * a little longer without causing a visible change such as when
@@ -632,6 +639,9 @@ public final class PowerManager {
      * should only be provided to foreground apps.
      */
     public static final int LOCATION_MODE_FOREGROUND_ONLY = 3;
+
+    static final int MIN_LOCATION_MODE = LOCATION_MODE_NO_CHANGE;
+    static final int MAX_LOCATION_MODE = LOCATION_MODE_FOREGROUND_ONLY;
 
     /**
      * @hide
@@ -1265,6 +1275,48 @@ public final class PowerManager {
     }
 
     /**
+     * Sets the policy for adaptive power save.
+     *
+     * @return true if there was an effectual change. If full battery saver is enabled or the
+     * adaptive policy is not enabled, then this will return false.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.DEVICE_POWER,
+            android.Manifest.permission.POWER_SAVER
+    })
+    public boolean setAdaptivePowerSavePolicy(@NonNull BatterySaverPolicyConfig config) {
+        try {
+            return mService.setAdaptivePowerSavePolicy(config);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Enables or disables adaptive power save.
+     *
+     * @return true if there was an effectual change. If full battery saver is enabled, then this
+     * will return false.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.DEVICE_POWER,
+            android.Manifest.permission.POWER_SAVER
+    })
+    public boolean setAdaptivePowerSaveEnabled(boolean enabled) {
+        try {
+            return mService.setAdaptivePowerSaveEnabled(enabled);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Indicates automatic battery saver toggling by the system will be based on percentage.
      *
      * @see PowerManager#getPowerSaveMode()
@@ -1722,6 +1774,25 @@ public final class PowerManager {
     @SystemApi @Deprecated
     public static final String ACTION_SCREEN_BRIGHTNESS_BOOST_CHANGED
             = "android.os.action.SCREEN_BRIGHTNESS_BOOST_CHANGED";
+
+    /**
+     * Constant for PreIdleTimeout normal mode (default mode, not short nor extend timeout) .
+     * @hide
+     */
+    public static final int PRE_IDLE_TIMEOUT_MODE_NORMAL = 0;
+
+    /**
+     * Constant for PreIdleTimeout long mode (extend timeout to keep in inactive mode
+     * longer).
+     * @hide
+     */
+    public static final int PRE_IDLE_TIMEOUT_MODE_LONG = 1;
+
+    /**
+     * Constant for PreIdleTimeout short mode (short timeout to go to doze mode quickly)
+     * @hide
+     */
+    public static final int PRE_IDLE_TIMEOUT_MODE_SHORT = 2;
 
     /**
      * A wake lock is a mechanism to indicate that your application needs

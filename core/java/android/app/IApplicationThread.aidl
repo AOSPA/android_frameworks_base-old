@@ -88,9 +88,9 @@ oneway interface IApplicationThread {
     void profilerControl(boolean start, in ProfilerInfo profilerInfo, int profileType);
     void setSchedulingGroup(int group);
     void scheduleCreateBackupAgent(in ApplicationInfo app, in CompatibilityInfo compatInfo,
-            int backupMode);
+            int backupMode, int userId);
     void scheduleDestroyBackupAgent(in ApplicationInfo app,
-            in CompatibilityInfo compatInfo);
+            in CompatibilityInfo compatInfo, int userId);
     void scheduleOnNewActivityOptions(IBinder token, in Bundle options);
     void scheduleSuicide();
     void dispatchPackageBroadcast(int cmd, in String[] packages);
@@ -100,8 +100,7 @@ oneway interface IApplicationThread {
     void dumpActivity(in ParcelFileDescriptor fd, IBinder servicetoken, in String prefix,
             in String[] args);
     void clearDnsCache();
-    void setHttpProxy(in String proxy, in String port, in String exclList,
-            in Uri pacFileUrl);
+    void updateHttpProxy();
     void setCoreSettings(in Bundle coreSettings);
     void updatePackageCompatibilityInfo(in String pkg, in CompatibilityInfo info);
     void scheduleTrimMemory(int level);

@@ -17,8 +17,8 @@
 package android.view;
 
 import android.annotation.Nullable;
-import android.view.SurfaceControl.Transaction;
 import android.view.InsetsState.InternalInsetType;
+import android.view.SurfaceControl.Transaction;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -30,12 +30,12 @@ import java.util.function.Supplier;
  */
 public class InsetsSourceConsumer {
 
+    protected final InsetsController mController;
+    protected boolean mVisible;
     private final Supplier<Transaction> mTransactionSupplier;
     private final @InternalInsetType int mType;
     private final InsetsState mState;
-    private final InsetsController mController;
     private @Nullable InsetsSourceControl mSourceControl;
-    private boolean mVisible;
 
     public InsetsSourceConsumer(@InternalInsetType int type, InsetsState state,
             Supplier<Transaction> transactionSupplier, InsetsController controller) {
@@ -43,7 +43,7 @@ public class InsetsSourceConsumer {
         mState = state;
         mTransactionSupplier = transactionSupplier;
         mController = controller;
-        mVisible = InsetsState.getDefaultVisibly(type);
+        mVisible = InsetsState.getDefaultVisibility(type);
     }
 
     public void setControl(@Nullable InsetsSourceControl control) {
@@ -76,6 +76,16 @@ public class InsetsSourceConsumer {
         setVisible(false);
     }
 
+    /**
+     * Called when current window gains focus
+     */
+    public void onWindowFocusGained() {}
+
+    /**
+     * Called when current window loses focus.
+     */
+    public void onWindowFocusLost() {}
+
     boolean applyLocalVisibilityOverride() {
 
         // If we don't have control, we are not able to change the visibility.
@@ -89,12 +99,16 @@ public class InsetsSourceConsumer {
         return true;
     }
 
+    @VisibleForTesting
+    public boolean isVisible() {
+        return mVisible;
+    }
+
     private void setVisible(boolean visible) {
         if (mVisible == visible) {
             return;
         }
         mVisible = visible;
-        applyHiddenToControl();
         applyLocalVisibilityOverride();
         mController.notifyVisibilityChanged();
     }
@@ -104,7 +118,6 @@ public class InsetsSourceConsumer {
             return;
         }
 
-        // TODO: Animation
         final Transaction t = mTransactionSupplier.get();
         if (mVisible) {
             t.show(mSourceControl.getLeash());

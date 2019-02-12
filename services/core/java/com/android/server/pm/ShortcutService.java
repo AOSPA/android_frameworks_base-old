@@ -2154,6 +2154,8 @@ public class ShortcutService extends IShortcutService.Stub {
     public ParceledListSlice<ShortcutManager.ShareShortcutInfo> getShareTargets(String packageName,
             IntentFilter filter, @UserIdInt int userId) {
         verifyCaller(packageName, userId);
+        enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_APP_PREDICTIONS,
+                "getShareTargets");
 
         synchronized (mLock) {
             throwIfUserLockedL(userId);
@@ -2164,6 +2166,19 @@ public class ShortcutService extends IShortcutService.Stub {
             user.forAllPackages(p -> shortcutInfoList.addAll(p.getMatchingShareTargets(filter)));
 
             return new ParceledListSlice<>(shortcutInfoList);
+        }
+    }
+
+    @Override
+    public boolean hasShareTargets(String packageName, String packageToCheck,
+            @UserIdInt int userId) {
+        verifyCaller(packageName, userId);
+        enforceSystem();
+
+        synchronized (mLock) {
+            throwIfUserLockedL(userId);
+
+            return getPackageShortcutsLocked(packageToCheck, userId).hasShareTargets();
         }
     }
 

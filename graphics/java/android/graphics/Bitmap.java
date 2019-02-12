@@ -21,17 +21,17 @@ import android.annotation.ColorInt;
 import android.annotation.ColorLong;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.Size;
-import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.annotation.WorkerThread;
 import android.content.res.ResourcesImpl;
 import android.hardware.HardwareBuffer;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.StrictMode;
 import android.os.Trace;
 import android.util.DisplayMetrics;
+import android.util.Half;
 import android.util.Log;
 import android.view.ThreadedRenderer;
 
@@ -78,7 +78,7 @@ public final class Bitmap implements Parcelable {
      */
     private boolean mRequestPremultiplied;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769491)
     private byte[] mNinePatchChunk; // may be null
     @UnsupportedAppUsage
     private NinePatch.InsetStruct mNinePatchInsets; // may be null
@@ -713,18 +713,6 @@ public final class Bitmap implements Parcelable {
     }
 
     /**
-     * Create hardware bitmap backed GraphicBuffer.
-     *
-     * @return Bitmap or null if this GraphicBuffer has unsupported PixelFormat.
-     *         currently PIXEL_FORMAT_RGBA_8888 is the only supported format
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static Bitmap createHardwareBitmap(@NonNull GraphicBuffer graphicBuffer) {
-        return nativeCreateHardwareBitmap(graphicBuffer);
-    }
-
-    /**
      * Create a hardware bitmap backed by a {@link HardwareBuffer}.
      *
      * <p>The passed HardwareBuffer's usage flags must contain
@@ -748,22 +736,10 @@ public final class Bitmap implements Parcelable {
             throw new IllegalArgumentException("usage flags must contain USAGE_GPU_SAMPLED_IMAGE.");
         }
         int format = hardwareBuffer.getFormat();
-        ColorSpace.Rgb rgb = null;
-        if (colorSpace != null) {
-            if (!(colorSpace instanceof ColorSpace.Rgb)) {
-                throw new IllegalArgumentException("colorSpace must be an RGB color space");
-            }
-            rgb = (ColorSpace.Rgb) colorSpace;
-        } else {
-            rgb = (ColorSpace.Rgb) ColorSpace.get(ColorSpace.Named.SRGB);
+        if (colorSpace == null) {
+            colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
         }
-        ColorSpace.Rgb.TransferParameters parameters = rgb.getTransferParameters();
-        if (parameters == null) {
-            throw new IllegalArgumentException("colorSpace must use an ICC "
-                    + "parametric transfer function");
-        }
-        ColorSpace.Rgb d50 = (ColorSpace.Rgb) ColorSpace.adapt(rgb, ColorSpace.ILLUMINANT_D50);
-        return nativeWrapHardwareBufferBitmap(hardwareBuffer, d50.getTransform(), parameters);
+        return nativeWrapHardwareBufferBitmap(hardwareBuffer, colorSpace.getNativeInstance());
     }
 
     /**
@@ -1103,26 +1079,18 @@ public final class Bitmap implements Parcelable {
             throw new IllegalArgumentException("can't create bitmap without a color space");
         }
 
-        Bitmap bm;
-        // nullptr color spaces have a particular meaning in native and are interpreted as sRGB
-        // (we also avoid the unnecessary extra work of the else branch)
-        if (config != Config.ARGB_8888 || colorSpace == ColorSpace.get(ColorSpace.Named.SRGB)) {
-            bm = nativeCreate(null, 0, width, width, height, config.nativeInt, true, null, null);
-        } else {
-            if (!(colorSpace instanceof ColorSpace.Rgb)) {
-                throw new IllegalArgumentException("colorSpace must be an RGB color space");
+        if (config != Config.ARGB_8888) {
+            if (config == Config.RGBA_F16) {
+                // FIXME: This should be LINEAR_EXTENDED_SRGB, but that would fail a CTS test. See
+                // b/120960866. SRGB matches the old (incorrect) behavior.
+                //colorSpace = ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
+                colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+            } else {
+                colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
             }
-            ColorSpace.Rgb rgb = (ColorSpace.Rgb) colorSpace;
-            ColorSpace.Rgb.TransferParameters parameters = rgb.getTransferParameters();
-            if (parameters == null) {
-                throw new IllegalArgumentException("colorSpace must use an ICC "
-                        + "parametric transfer function");
-            }
-
-            ColorSpace.Rgb d50 = (ColorSpace.Rgb) ColorSpace.adapt(rgb, ColorSpace.ILLUMINANT_D50);
-            bm = nativeCreate(null, 0, width, width, height, config.nativeInt, true,
-                    d50.getTransform(), parameters);
         }
+        Bitmap bm = nativeCreate(null, 0, width, width, height, config.nativeInt, true,
+                colorSpace.getNativeInstance());
 
         if (display != null) {
             bm.mDensity = display.densityDpi;
@@ -1200,8 +1168,9 @@ public final class Bitmap implements Parcelable {
         if (width <= 0 || height <= 0) {
             throw new IllegalArgumentException("width and height must be > 0");
         }
+        ColorSpace sRGB = ColorSpace.get(ColorSpace.Named.SRGB);
         Bitmap bm = nativeCreate(colors, offset, stride, width, height,
-                            config.nativeInt, false, null, null);
+                            config.nativeInt, false, sRGB.getNativeInstance());
         if (display != null) {
             bm.mDensity = display.densityDpi;
         }
@@ -1731,20 +1700,22 @@ public final class Bitmap implements Parcelable {
      */
     @Nullable
     public final ColorSpace getColorSpace() {
-        // A reconfigure can change the configuration and rgba16f is
-        // always linear scRGB at this time
-        if (getConfig() == Config.RGBA_F16) {
-            // Reset the color space for potential future reconfigurations
-            mColorSpace = null;
-            return ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
-        }
-
+        checkRecycled("getColorSpace called on a recycled bitmap");
         // Cache the color space retrieval since it can be fairly expensive
         if (mColorSpace == null) {
-            if (nativeIsSRGB(mNativePtr)) {
+            if (nativeIsConfigF16(mNativePtr)) {
+                // an F16 bitmaps is intended to always be linear extended, but due to
+                // inconsistencies in Bitmap.create() functions it is possible to have
+                // rendered into a bitmap in non-linear sRGB.
+                if (nativeIsSRGB(mNativePtr)) {
+                    mColorSpace = ColorSpace.get(ColorSpace.Named.EXTENDED_SRGB);
+                } else {
+                    mColorSpace = ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
+                }
+            } else if (nativeIsSRGB(mNativePtr)) {
                 mColorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
-            } else if (getConfig() == Config.HARDWARE && nativeIsSRGBLinear(mNativePtr)) {
-                mColorSpace = ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
+            } else if (nativeIsSRGBLinear(mNativePtr)) {
+                mColorSpace = ColorSpace.get(ColorSpace.Named.LINEAR_SRGB);
             } else {
                 float[] xyz = new float[9];
                 float[] params = new float[7];
@@ -1769,6 +1740,48 @@ public final class Bitmap implements Parcelable {
     }
 
     /**
+     * <p>Modifies the bitmap to have the specified {@link ColorSpace}, without
+     * affecting the underlying allocation backing the bitmap.</p>
+     *
+     * @throws IllegalArgumentException If the specified color space is {@code null}, not
+     *         {@link ColorSpace.Model#RGB RGB}, has a transfer function that is not an
+     *         {@link ColorSpace.Rgb.TransferParameters ICC parametric curve}, or whose
+     *         components min/max values reduce the numerical range compared to the
+     *         previously assigned color space.
+     *
+     * @param colorSpace to assign to the bitmap
+     */
+    public void setColorSpace(@NonNull ColorSpace colorSpace) {
+        checkRecycled("setColorSpace called on a recycled bitmap");
+        if (colorSpace == null) {
+            throw new IllegalArgumentException("The colorSpace cannot be set to null");
+        }
+        if (getColorSpace() != null) {
+            if (mColorSpace.getComponentCount() != colorSpace.getComponentCount()) {
+                throw new IllegalArgumentException("The new ColorSpace must have the same "
+                        + "component count as the current ColorSpace");
+            }
+            for (int i = 0; i < mColorSpace.getComponentCount(); i++) {
+                if (mColorSpace.getMinValue(i) < colorSpace.getMinValue(i)) {
+                    throw new IllegalArgumentException("The new ColorSpace cannot increase the "
+                            + "minimum value for any of the components compared to the current "
+                            + "ColorSpace. To perform this type of conversion create a new Bitmap "
+                            + "in the desired ColorSpace and draw this Bitmap into it.");
+                }
+                if (mColorSpace.getMaxValue(i) > colorSpace.getMaxValue(i)) {
+                    throw new IllegalArgumentException("The new ColorSpace cannot decrease the "
+                            + "maximum value for any of the components compared to the current "
+                            + "ColorSpace/ To perform this type of conversion create a new Bitmap"
+                            + "in the desired ColorSpace and draw this Bitmap into it.");
+                }
+            }
+        }
+
+        nativeSetColorSpace(mNativePtr, colorSpace.getNativeInstance());
+        mColorSpace = colorSpace;
+    }
+
+    /**
      * Fills the bitmap's pixels with the specified {@link Color}.
      *
      * @throws IllegalStateException if the bitmap is not mutable.
@@ -1788,9 +1801,7 @@ public final class Bitmap implements Parcelable {
      * @throws IllegalArgumentException if the color space encoded in the long
      *                                  is invalid or unknown.
      *
-     * @hide pending API approval
      */
-    @TestApi
     public void eraseColor(@ColorLong long c) {
         checkRecycled("Can't erase a recycled bitmap");
         if (!isMutable()) {
@@ -1798,11 +1809,7 @@ public final class Bitmap implements Parcelable {
         }
 
         ColorSpace cs = Color.colorSpace(c);
-        float r = Color.red(c);
-        float g = Color.green(c);
-        float b = Color.blue(c);
-        float a = Color.alpha(c);
-        nativeErase(mNativePtr, cs, r, g, b, a);
+        nativeErase(mNativePtr, cs.getNativeInstance(), c);
     }
 
     /**
@@ -1824,6 +1831,45 @@ public final class Bitmap implements Parcelable {
                 + "pixel access is not supported on Config#HARDWARE bitmaps");
         checkPixelAccess(x, y);
         return nativeGetPixel(mNativePtr, x, y);
+    }
+
+    private static float clamp(float value, @NonNull ColorSpace cs, int index) {
+        return Math.max(Math.min(value, cs.getMaxValue(index)), cs.getMinValue(index));
+    }
+
+    /**
+     * Returns the {@link Color} at the specified location. Throws an exception
+     * if x or y are out of bounds (negative or >= to the width or height
+     * respectively).
+     *
+     * @param x    The x coordinate (0...width-1) of the pixel to return
+     * @param y    The y coordinate (0...height-1) of the pixel to return
+     * @return     The {@link Color} at the specified coordinate
+     * @throws IllegalArgumentException if x, y exceed the bitmap's bounds
+     * @throws IllegalStateException if the bitmap's config is {@link Config#HARDWARE}
+     *
+     */
+    public Color getColor(int x, int y) {
+        checkRecycled("Can't call getColor() on a recycled bitmap");
+        checkHardware("unable to getColor(), "
+                + "pixel access is not supported on Config#HARDWARE bitmaps");
+        checkPixelAccess(x, y);
+
+        final ColorSpace cs = getColorSpace();
+        if (cs.equals(ColorSpace.get(ColorSpace.Named.SRGB))) {
+            return Color.valueOf(nativeGetPixel(mNativePtr, x, y));
+        }
+        // The returned value is in kRGBA_F16_SkColorType, which is packed as
+        // four half-floats, r,g,b,a.
+        long rgba = nativeGetColor(mNativePtr, x, y);
+        float r = Half.toFloat((short) ((rgba >>  0) & 0xffff));
+        float g = Half.toFloat((short) ((rgba >> 16) & 0xffff));
+        float b = Half.toFloat((short) ((rgba >> 32) & 0xffff));
+        float a = Half.toFloat((short) ((rgba >> 48) & 0xffff));
+
+        // Skia may draw outside of the numerical range of the colorSpace.
+        // Clamp to get an expected value.
+        return Color.valueOf(clamp(r, cs, 0), clamp(g, cs, 1), clamp(b, cs, 2), a, cs);
     }
 
     /**
@@ -2133,8 +2179,7 @@ public final class Bitmap implements Parcelable {
     private static native Bitmap nativeCreate(int[] colors, int offset,
                                               int stride, int width, int height,
                                               int nativeConfig, boolean mutable,
-                                              @Nullable @Size(9) float[] xyzD50,
-                                              @Nullable ColorSpace.Rgb.TransferParameters p);
+                                              long nativeColorSpace);
     private static native Bitmap nativeCopy(long nativeSrcBitmap, int nativeConfig,
                                             boolean isMutable);
     private static native Bitmap nativeCopyAshmem(long nativeSrcBitmap);
@@ -2149,12 +2194,13 @@ public final class Bitmap implements Parcelable {
                                             int quality, OutputStream stream,
                                             byte[] tempStorage);
     private static native void nativeErase(long nativeBitmap, int color);
-    private static native void nativeErase(long nativeBitmap, ColorSpace cs,
-                                           float r, float g, float b, float a);
+    private static native void nativeErase(long nativeBitmap, long colorSpacePtr, long color);
     private static native int nativeRowBytes(long nativeBitmap);
     private static native int nativeConfig(long nativeBitmap);
+    private static native boolean nativeIsConfigF16(long nativeBitmap);
 
     private static native int nativeGetPixel(long nativeBitmap, int x, int y);
+    private static native long nativeGetColor(long nativeBitmap, int x, int y);
     private static native void nativeGetPixels(long nativeBitmap, int[] pixels,
                                                int offset, int stride, int x, int y,
                                                int width, int height);
@@ -2192,12 +2238,11 @@ public final class Bitmap implements Parcelable {
     private static native void nativePrepareToDraw(long nativeBitmap);
     private static native int nativeGetAllocationByteCount(long nativeBitmap);
     private static native Bitmap nativeCopyPreserveInternalConfig(long nativeBitmap);
-    private static native Bitmap nativeCreateHardwareBitmap(GraphicBuffer buffer);
     private static native Bitmap nativeWrapHardwareBufferBitmap(HardwareBuffer buffer,
-                                                              @Size(9) float[] xyzD50,
-                                                              ColorSpace.Rgb.TransferParameters p);
+                                                                long nativeColorSpace);
     private static native GraphicBuffer nativeCreateGraphicBufferHandle(long nativeBitmap);
     private static native boolean nativeGetColorSpace(long nativePtr, float[] xyz, float[] params);
+    private static native void nativeSetColorSpace(long nativePtr, long nativeColorSpace);
     private static native boolean nativeIsSRGB(long nativePtr);
     private static native boolean nativeIsSRGBLinear(long nativePtr);
     private static native void nativeCopyColorSpace(long srcBitmap, long dstBitmap);

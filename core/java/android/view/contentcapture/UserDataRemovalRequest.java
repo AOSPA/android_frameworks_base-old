@@ -16,11 +16,15 @@
 package android.view.contentcapture;
 
 import android.annotation.NonNull;
-import android.annotation.SystemApi;
+import android.app.ActivityThread;
 import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.IntArray;
 
+import com.android.internal.util.Preconditions;
+
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,49 +33,70 @@ import java.util.List;
  */
 public final class UserDataRemovalRequest implements Parcelable {
 
-    private UserDataRemovalRequest(Builder builder) {
-        // TODO(b/111276913): implement
+    private final String mPackageName;
+
+    private final boolean mForEverything;
+    private ArrayList<UriRequest> mUriRequests;
+
+    private UserDataRemovalRequest(@NonNull Builder builder) {
+        mPackageName = ActivityThread.currentActivityThread().getApplication().getPackageName();
+        mForEverything = builder.mForEverything;
+        if (builder.mUris != null) {
+            final int size = builder.mUris.size();
+            mUriRequests = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                mUriRequests.add(new UriRequest(builder.mUris.get(i),
+                        builder.mRecursive.get(i) == 1));
+            }
+        }
+    }
+
+    private UserDataRemovalRequest(@NonNull Parcel parcel) {
+        mPackageName = parcel.readString();
+        mForEverything = parcel.readBoolean();
+        if (!mForEverything) {
+            final int size = parcel.readInt();
+            mUriRequests = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                mUriRequests.add(new UriRequest((Uri) parcel.readValue(null),
+                        parcel.readBoolean()));
+            }
+        }
     }
 
     /**
      * Gets the name of the app that's making the request.
-     * @hide
      */
-    @SystemApi
     @NonNull
     public String getPackageName() {
-        // TODO(b/111276913): implement
-        // TODO(b/111276913): make sure it's set on system_service so it cannot be faked by app
-        return null;
+        return mPackageName;
     }
 
     /**
      * Checks if app is requesting to remove all user data associated with its package.
-     *
-     * @hide
      */
-    @SystemApi
     public boolean isForEverything() {
-        // TODO(b/111276913): implement
-        return false;
+        return mForEverything;
     }
 
     /**
      * Gets the list of {@code Uri}s the apps is requesting to remove.
-     *
-     * @hide
      */
-    @SystemApi
     @NonNull
     public List<UriRequest> getUriRequests() {
-        // TODO(b/111276913): implement
-        return null;
+        return mUriRequests;
     }
 
     /**
      * Builder for {@link UserDataRemovalRequest} objects.
      */
     public static final class Builder {
+
+        private boolean mForEverything;
+        private ArrayList<Uri> mUris;
+        private IntArray mRecursive;
+
+        private boolean mDestroyed;
 
         /**
          * Requests servive to remove all user data associated with the app's package.
@@ -80,7 +105,12 @@ public final class UserDataRemovalRequest implements Parcelable {
          */
         @NonNull
         public Builder forEverything() {
-            // TODO(b/111276913): implement
+            throwIfDestroyed();
+            if (mUris != null) {
+                throw new IllegalStateException("Already added Uris");
+            }
+
+            mForEverything = true;
             return this;
         }
 
@@ -94,7 +124,19 @@ public final class UserDataRemovalRequest implements Parcelable {
          * @return this builder
          */
         public Builder addUri(@NonNull Uri uri, boolean recursive) {
-            // TODO(b/111276913): implement
+            throwIfDestroyed();
+            if (mForEverything) {
+                throw new IllegalStateException("Already is for everything");
+            }
+            Preconditions.checkNotNull(uri);
+
+            if (mUris == null) {
+                mUris = new ArrayList<>();
+                mRecursive = new IntArray();
+            }
+
+            mUris.add(uri);
+            mRecursive.add(recursive ? 1 : 0);
             return this;
         }
 
@@ -103,8 +145,16 @@ public final class UserDataRemovalRequest implements Parcelable {
          */
         @NonNull
         public UserDataRemovalRequest build() {
-            // TODO(b/111276913): implement / unit test / check built / document exceptions
-            return null;
+            throwIfDestroyed();
+
+            Preconditions.checkState(mForEverything || mUris != null);
+
+            mDestroyed = true;
+            return new UserDataRemovalRequest(this);
+        }
+
+        private void throwIfDestroyed() {
+            Preconditions.checkState(!mDestroyed, "Already destroyed!");
         }
     }
 
@@ -115,7 +165,17 @@ public final class UserDataRemovalRequest implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel parcel, int flags) {
-        // TODO(b/111276913): implement
+        parcel.writeString(mPackageName);
+        parcel.writeBoolean(mForEverything);
+        if (!mForEverything) {
+            final int size = mUriRequests.size();
+            parcel.writeInt(size);
+            for (int i = 0; i < size; i++) {
+                final UriRequest request = mUriRequests.get(i);
+                parcel.writeValue(request.getUri());
+                parcel.writeBoolean(request.isRecursive());
+            }
+        }
     }
 
     public static final Parcelable.Creator<UserDataRemovalRequest> CREATOR =
@@ -123,8 +183,7 @@ public final class UserDataRemovalRequest implements Parcelable {
 
         @Override
         public UserDataRemovalRequest createFromParcel(Parcel parcel) {
-            // TODO(b/111276913): implement
-            return null;
+            return new UserDataRemovalRequest(parcel);
         }
 
         @Override
@@ -135,9 +194,7 @@ public final class UserDataRemovalRequest implements Parcelable {
 
     /**
      * Representation of a request to remove data associated with an {@link Uri}.
-     * @hide
      */
-    @SystemApi
     public final class UriRequest {
         private final @NonNull Uri mUri;
         private final boolean mRecursive;

@@ -58,7 +58,6 @@ import android.content.res.Resources;
 import android.graphics.Point;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
-import android.net.Uri;
 import android.os.AppZygote;
 import android.os.Binder;
 import android.os.Build;
@@ -144,6 +143,11 @@ public final class ProcessList {
     // so it can be killed without any disruption.
     static final int CACHED_APP_MAX_ADJ = 999;
     static final int CACHED_APP_MIN_ADJ = 900;
+
+    // This is the oom_adj level that we allow to die first. This cannot be equal to
+    // CACHED_APP_MAX_ADJ unless processes are actively being assigned an oom_score_adj of
+    // CACHED_APP_MAX_ADJ.
+    static final int CACHED_APP_LMK_FIRST_ADJ = 950;
 
     // Number of levels we have available for different service connection group importance
     // levels.
@@ -266,7 +270,7 @@ public final class ProcessList {
     // can't give it a different value for every possible kind of process.
     private final int[] mOomAdj = new int[] {
             FOREGROUND_APP_ADJ, VISIBLE_APP_ADJ, PERCEPTIBLE_APP_ADJ,
-            BACKUP_APP_ADJ, CACHED_APP_MIN_ADJ, CACHED_APP_MAX_ADJ
+            BACKUP_APP_ADJ, CACHED_APP_MIN_ADJ, CACHED_APP_LMK_FIRST_ADJ
     };
     // These are the low-end OOM level limits.  This is appropriate for an
     // HVGA or smaller phone with less than 512MB.  Values are in KB.
@@ -733,6 +737,9 @@ public final class ProcessList {
             case ActivityManager.PROCESS_STATE_TOP:
                 procState = "TOP ";
                 break;
+            case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
+                procState = "FGSL";
+                break;
             case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
                 procState = "FGS ";
                 break;
@@ -799,10 +806,11 @@ public final class ProcessList {
                 return AppProtoEnums.PROCESS_STATE_PERSISTENT_UI;
             case ActivityManager.PROCESS_STATE_TOP:
                 return AppProtoEnums.PROCESS_STATE_TOP;
-            case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
-                return AppProtoEnums.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
+            case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
             case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
                 return AppProtoEnums.PROCESS_STATE_FOREGROUND_SERVICE;
+            case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
+                return AppProtoEnums.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
             case ActivityManager.PROCESS_STATE_TOP_SLEEPING:
                 return AppProtoEnums.PROCESS_STATE_TOP_SLEEPING;
             case ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND:
@@ -927,6 +935,7 @@ public final class ProcessList {
         PROC_MEM_PERSISTENT,            // ActivityManager.PROCESS_STATE_PERSISTENT
         PROC_MEM_PERSISTENT,            // ActivityManager.PROCESS_STATE_PERSISTENT_UI
         PROC_MEM_TOP,                   // ActivityManager.PROCESS_STATE_TOP
+        PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND
@@ -1471,6 +1480,9 @@ public final class ProcessList {
                     mService.mSafeMode == true) {
                 runtimeFlags |= Zygote.DEBUG_ENABLE_SAFEMODE;
             }
+            if ((app.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL) != 0) {
+                runtimeFlags |= Zygote.PROFILE_FROM_SHELL;
+            }
             if ("1".equals(SystemProperties.get("debug.checkjni"))) {
                 runtimeFlags |= Zygote.DEBUG_ENABLE_CHECKJNI;
             }
@@ -1497,7 +1509,7 @@ public final class ProcessList {
                 mService.mNativeDebuggingApp = null;
             }
 
-            if ((app.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_PREFER_CODE_INTEGRITY) != 0
+            if (app.info.isEmbeddedDexUsed()
                     || (app.info.isPrivilegedApp()
                         && DexManager.isPackageSelectedToRunOob(app.pkgList.mPkgList.keySet()))) {
                 runtimeFlags |= Zygote.ONLY_USE_SYSTEM_OAT_FILES;
@@ -1730,7 +1742,7 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        packageNames, visibleVolIds,
+                        packageNames, visibleVolIds, /*useBlastulaPool=*/ false,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
@@ -2033,25 +2045,25 @@ public final class ProcessList {
                     // We don't kill persistent processes.
                     continue;
                 }
-                if (app.removed) {
-                    procs.add(app);
-                } else if (app.setAdj >= ProcessList.CACHED_APP_MIN_ADJ) {
-                    app.removed = true;
+                if (app.removed || app.setAdj >= ProcessList.CACHED_APP_MIN_ADJ) {
                     procs.add(app);
                 }
             }
         }
+    }
 
-        final int N = procs.size();
-        for (int i = 0; i < N; i++) {
-            removeProcessLocked(procs.get(i), false, true, "kill all background");
-        }
+    @GuardedBy("mService")
+    boolean killPackageProcessesLocked(String packageName, int appId, int userId, int minOomAdj,
+            String reason) {
+        return killPackageProcessesLocked(packageName, appId, userId, minOomAdj,
+                false /* callerWillRestart */, true /* allowRestart */, true /* doit */,
+                false /* evenPersistent */, false /* setRemoved */, reason);
     }
 
     @GuardedBy("mService")
     final boolean killPackageProcessesLocked(String packageName, int appId,
             int userId, int minOomAdj, boolean callerWillRestart, boolean allowRestart,
-            boolean doit, boolean evenPersistent, String reason) {
+            boolean doit, boolean evenPersistent, boolean setRemoved, String reason) {
         ArrayList<ProcessRecord> procs = new ArrayList<>();
 
         // Remove all processes this package may have touched: all with the
@@ -2109,7 +2121,9 @@ public final class ProcessList {
                 if (!doit) {
                     return true;
                 }
-                app.removed = true;
+                if (setRemoved) {
+                    app.removed = true;
+                }
                 procs.add(app);
             }
         }
@@ -2185,7 +2199,7 @@ public final class ProcessList {
         }
         UidRecord uidRec = mActiveUids.get(proc.uid);
         if (uidRec == null) {
-            uidRec = new UidRecord(proc.uid, mService.mAtmInternal);
+            uidRec = new UidRecord(proc.uid);
             // This is the first appearance of the uid, report it now!
             if (DEBUG_UID_OBSERVERS) Slog.i(TAG_UID_OBSERVERS,
                     "Creating new process uid: " + uidRec);
@@ -2343,11 +2357,8 @@ public final class ProcessList {
             final int NA = apps.size();
             for (int ia = 0; ia < NA; ia++) {
                 final ProcessRecord app = apps.valueAt(ia);
-                if (app.removed) {
-                    procs.add(app);
-                } else if ((minTargetSdk < 0 || app.info.targetSdkVersion < minTargetSdk)
-                        && (maxProcState < 0 || app.setProcState > maxProcState)) {
-                    app.removed = true;
+                if (app.removed || ((minTargetSdk < 0 || app.info.targetSdkVersion < minTargetSdk)
+                        && (maxProcState < 0 || app.setProcState > maxProcState))) {
                     procs.add(app);
                 }
             }
@@ -2379,14 +2390,14 @@ public final class ProcessList {
     }
 
     @GuardedBy("mService")
-    void setAllHttpProxyLocked(String host, String port, String exclList, Uri pacFileUrl) {
+    void setAllHttpProxyLocked() {
         for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
             ProcessRecord r = mLruProcesses.get(i);
             // Don't dispatch to isolated processes as they can't access
             // ConnectivityManager and don't have network privileges anyway.
             if (r.thread != null && !r.isolated) {
                 try {
-                    r.thread.setHttpProxy(host, port, exclList, pacFileUrl);
+                    r.thread.updateHttpProxy();
                 } catch (RemoteException ex) {
                     Slog.w(TAG, "Failed to update http proxy for: " +
                             r.info.processName);

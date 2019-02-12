@@ -23,6 +23,7 @@ import android.net.Uri;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodSubtype;
 
 import com.android.internal.annotations.GuardedBy;
@@ -100,6 +101,7 @@ public final class InputMethodPrivilegedOperations {
      * @param backDisposition disposition flags
      * @see android.inputmethodservice.InputMethodService#IME_ACTIVE
      * @see android.inputmethodservice.InputMethodService#IME_VISIBLE
+     * @see android.inputmethodservice.InputMethodService#IME_INVISIBLE
      * @see android.inputmethodservice.InputMethodService#BACK_DISPOSITION_DEFAULT
      * @see android.inputmethodservice.InputMethodService#BACK_DISPOSITION_ADJUST_NOTHING
      */
@@ -342,6 +344,42 @@ public final class InputMethodPrivilegedOperations {
         }
         try {
             ops.notifyUserAction();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Calls {@link IInputMethodPrivilegedOperations#reportPreRendered(info)}.
+     *
+     * @param info {@link EditorInfo} of the currently rendered {@link TextView}.
+     */
+    @AnyThread
+    public void reportPreRendered(EditorInfo info) {
+        final IInputMethodPrivilegedOperations ops = mOps.getAndWarnIfNull();
+        if (ops == null) {
+            return;
+        }
+        try {
+            ops.reportPreRendered(info);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Calls {@link IInputMethodPrivilegedOperations#applyImeVisibility(boolean)}.
+     *
+     * @param setVisible {@code true} to set IME visible, else hidden.
+     */
+    @AnyThread
+    public void applyImeVisibility(boolean setVisible) {
+        final IInputMethodPrivilegedOperations ops = mOps.getAndWarnIfNull();
+        if (ops == null) {
+            return;
+        }
+        try {
+            ops.applyImeVisibility(setVisible);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

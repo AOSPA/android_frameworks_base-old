@@ -18,15 +18,15 @@ package com.android.systemui.bubbles;
 
 import static android.view.View.INVISIBLE;
 import static android.view.View.VISIBLE;
-import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
+import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 
-import static com.android.systemui.bubbles.BubbleMovementHelper.EDGE_OVERLAP;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
 import static com.android.systemui.statusbar.notification.NotificationAlertingManager.alertAgain;
 
 import android.annotation.Nullable;
 import android.app.INotificationManager;
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
@@ -41,6 +41,8 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+
+import androidx.annotation.MainThread;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.NotificationVisibility;
@@ -76,11 +78,14 @@ public class BubbleController {
     // Enables some subset of notifs to automatically become bubbles
     private static final boolean DEBUG_ENABLE_AUTO_BUBBLE = false;
 
-    // Secure settings
+    // Secure settings flags
+    // Feature level flag
+    private static final String ENABLE_BUBBLES = "experiment_enable_bubbles";
+    // Auto bubble flags set whether different notification types should be presented as a bubble
     private static final String ENABLE_AUTO_BUBBLE_MESSAGES = "experiment_autobubble_messaging";
     private static final String ENABLE_AUTO_BUBBLE_ONGOING = "experiment_autobubble_ongoing";
     private static final String ENABLE_AUTO_BUBBLE_ALL = "experiment_autobubble_all";
-    private static final String ENABLE_BUBBLE_ACTIVITY_VIEW = "experiment_bubble_activity_view";
+    // Use an activity view for an auto-bubbled notification if it has an appropriate content intent
     private static final String ENABLE_BUBBLE_CONTENT_INTENT = "experiment_bubble_content_intent";
 
     private final Context mContext;
@@ -229,10 +234,6 @@ public class BubbleController {
         }
         mStackView.stackDismissed();
 
-        // Reset the position of the stack (TODO - or should we save / respect last user position?)
-        Point startPoint = getStartPoint(mStackView.getStackWidth(), mDisplaySize);
-        mStackView.setPosition(startPoint.x, startPoint.y);
-
         updateVisibility();
         mNotificationEntryManager.updateNotifications();
     }
@@ -249,16 +250,14 @@ public class BubbleController {
             BubbleView bubble = mBubbles.get(notif.key);
             mStackView.updateBubble(bubble, notif, updatePosition);
         } else {
-            boolean setPosition = mStackView != null && mStackView.getVisibility() != VISIBLE;
             if (mStackView == null) {
-                setPosition = true;
                 mStackView = new BubbleStackView(mContext);
                 ViewGroup sbv = mStatusBarWindowController.getStatusBarView();
                 // XXX: Bug when you expand the shade on top of expanded bubble, there is no scrim
                 // between bubble and the shade
                 int bubblePosition = sbv.indexOfChild(sbv.findViewById(R.id.scrim_behind)) + 1;
                 sbv.addView(mStackView, bubblePosition,
-                        new FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT));
+                        new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
                 if (mExpandListener != null) {
                     mStackView.setExpandListener(mExpandListener);
                 }
@@ -267,39 +266,22 @@ public class BubbleController {
             BubbleView bubble = (BubbleView) mInflater.inflate(
                     R.layout.bubble_view, mStackView, false /* attachToRoot */);
             bubble.setNotif(notif);
-            if (shouldUseActivityView(mContext)) {
-                bubble.setAppOverlayIntent(getAppOverlayIntent(notif));
+            PendingIntent bubbleIntent = getValidBubbleIntent(notif);
+            if (bubbleIntent != null) {
+                bubble.setBubbleIntent(bubbleIntent);
             }
             mBubbles.put(bubble.getKey(), bubble);
             mStackView.addBubble(bubble);
-            if (setPosition) {
-                // Need to add the bubble to the stack before we can know the width
-                Point startPoint = getStartPoint(mStackView.getStackWidth(), mDisplaySize);
-                mStackView.setPosition(startPoint.x, startPoint.y);
-            }
         }
         updateVisibility();
     }
 
-    @Nullable
-    private PendingIntent getAppOverlayIntent(NotificationEntry notif) {
-        Notification notification = notif.notification.getNotification();
-        if (canLaunchInActivityView(notification.getBubbleMetadata() != null
-                ? notification.getBubbleMetadata().getIntent() : null)) {
-            return notification.getBubbleMetadata().getIntent();
-        } else if (shouldUseContentIntent(mContext)
-                && canLaunchInActivityView(notification.contentIntent)) {
-            Log.d(TAG, "[addBubble " + notif.key
-                    + "]: No appOverlayIntent, using contentIntent.");
-            return notification.contentIntent;
-        }
-        Log.d(TAG, "[addBubble " + notif.key + "]: No supported intent for ActivityView.");
-        return null;
-    }
-
     /**
      * Removes the bubble associated with the {@param uri}.
+     * <p>
+     * Must be called from the main thread.
      */
+    @MainThread
     void removeBubble(String key) {
         BubbleView bv = mBubbles.remove(key);
         if (mStackView != null && bv != null) {
@@ -319,7 +301,10 @@ public class BubbleController {
     private final NotificationEntryListener mEntryListener = new NotificationEntryListener() {
         @Override
         public void onPendingEntryAdded(NotificationEntry entry) {
-            if (shouldAutoBubble(mContext, entry) || shouldBubble(entry)) {
+            if (!areBubblesEnabled(mContext)) {
+                return;
+            }
+            if (shouldAutoBubbleForFlags(mContext, entry) || shouldBubble(entry)) {
                 // TODO: handle group summaries
                 // It's a new notif, it shows in the shade and as a bubble
                 entry.setIsBubble(true);
@@ -330,6 +315,9 @@ public class BubbleController {
         @Override
         public void onEntryInflated(NotificationEntry entry,
                 @NotificationInflater.InflationFlag int inflatedFlags) {
+            if (!areBubblesEnabled(mContext)) {
+                return;
+            }
             if (entry.isBubble() && mNotificationInterruptionStateProvider.shouldBubbleUp(entry)) {
                 updateBubble(entry, true /* updatePosition */);
             }
@@ -337,6 +325,9 @@ public class BubbleController {
 
         @Override
         public void onPreEntryUpdated(NotificationEntry entry) {
+            if (!areBubblesEnabled(mContext)) {
+                return;
+            }
             if (mNotificationInterruptionStateProvider.shouldBubbleUp(entry)
                     && alertAgain(entry, entry.notification.getNotification())) {
                 entry.setShowInShadeWhenBubble(true);
@@ -352,6 +343,9 @@ public class BubbleController {
         public void onEntryRemoved(NotificationEntry entry,
                 @Nullable NotificationVisibility visibility,
                 boolean removedByUser) {
+            if (!areBubblesEnabled(mContext)) {
+                return;
+            }
             entry.setShowInShadeWhenBubble(false);
             if (mBubbles.containsKey(entry.key)) {
                 mBubbles.get(entry.key).updateDotVisibility();
@@ -406,6 +400,30 @@ public class BubbleController {
         return mTempRect;
     }
 
+    @VisibleForTesting
+    BubbleStackView getStackView() {
+        return mStackView;
+    }
+
+    @Nullable
+    private PendingIntent getValidBubbleIntent(NotificationEntry notif) {
+        Notification notification = notif.notification.getNotification();
+        Notification.BubbleMetadata data = notif.getBubbleMetadata();
+        if (data != null && canLaunchInActivityView(data.getIntent())) {
+            return data.getIntent();
+        } else if (shouldUseContentIntent(mContext)
+                && canLaunchInActivityView(notification.contentIntent)) {
+            Log.d(TAG, "[addBubble " + notif.key
+                    + "]: No appOverlayIntent, using contentIntent.");
+            return notification.contentIntent;
+        }
+        Log.d(TAG, "[addBubble " + notif.key + "]: No supported intent for ActivityView.");
+        return null;
+    }
+
+    /**
+     * Whether an intent is properly configured to display in an {@link android.app.ActivityView}.
+     */
     private boolean canLaunchInActivityView(PendingIntent intent) {
         if (intent == null) {
             return false;
@@ -417,33 +435,11 @@ public class BubbleController {
                 && (info.flags & ActivityInfo.FLAG_ALLOW_EMBEDDED) != 0;
     }
 
-    @VisibleForTesting
-    BubbleStackView getStackView() {
-        return mStackView;
-    }
-
-    // TODO: factor in PIP location / maybe last place user had it
-    /**
-     * Gets an appropriate starting point to position the bubble stack.
-     */
-    private static Point getStartPoint(int size, Point displaySize) {
-        final int x = displaySize.x - size + EDGE_OVERLAP;
-        final int y = displaySize.y / 4;
-        return new Point(x, y);
-    }
-
-    /**
-     * Gets an appropriate position for the bubble when the stack is expanded.
-     */
-    static Point getExpandPoint(BubbleStackView view, int size, Point displaySize) {
-        // Same place for now..
-        return new Point(EDGE_OVERLAP, size);
-    }
-
     /**
      * Whether the notification has been developer configured to bubble and is allowed by the user.
      */
-    private boolean shouldBubble(NotificationEntry entry) {
+    @VisibleForTesting
+    protected boolean shouldBubble(NotificationEntry entry) {
         StatusBarNotification n = entry.notification;
         boolean canAppOverlay = false;
         try {
@@ -453,21 +449,19 @@ public class BubbleController {
             Log.w(TAG, "Error calling NoMan to determine if app can overlay", e);
         }
 
-        boolean canChannelOverlay = mNotificationEntryManager.getNotificationData().getChannel(
-                entry.key).canBubble();
+        NotificationChannel channel = mNotificationEntryManager.getNotificationData().getChannel(
+                entry.key);
+        boolean canChannelOverlay = channel != null && channel.canBubble();
         boolean hasOverlayIntent = n.getNotification().getBubbleMetadata() != null
                 && n.getNotification().getBubbleMetadata().getIntent() != null;
         return hasOverlayIntent && canChannelOverlay && canAppOverlay;
     }
 
     /**
-     * Whether the notification should bubble or not. Gated by debug flag.
-     * <p>
-     * If a notification has been set to bubble via proper bubble APIs or if it is an important
-     * message-like notification.
-     * </p>
+     * Whether the notification should automatically bubble or not. Gated by secure settings flags.
      */
-    private boolean shouldAutoBubble(Context context, NotificationEntry entry) {
+    @VisibleForTesting
+    protected boolean shouldAutoBubbleForFlags(Context context, NotificationEntry entry) {
         if (entry.isBubbleDismissed()) {
             return false;
         }
@@ -514,13 +508,13 @@ public class BubbleController {
                 ENABLE_AUTO_BUBBLE_ALL, 0) != 0;
     }
 
-    private static boolean shouldUseActivityView(Context context) {
-        return Settings.Secure.getInt(context.getContentResolver(),
-                ENABLE_BUBBLE_ACTIVITY_VIEW, 0) != 0;
-    }
-
     private static boolean shouldUseContentIntent(Context context) {
         return Settings.Secure.getInt(context.getContentResolver(),
                 ENABLE_BUBBLE_CONTENT_INTENT, 0) != 0;
+    }
+
+    private static boolean areBubblesEnabled(Context context) {
+        return Settings.Secure.getInt(context.getContentResolver(),
+                ENABLE_BUBBLES, 1) != 0;
     }
 }

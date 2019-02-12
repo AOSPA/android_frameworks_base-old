@@ -42,7 +42,13 @@ namespace uirenderer {
 namespace skiapipeline {
 
 SkiaVulkanPipeline::SkiaVulkanPipeline(renderthread::RenderThread& thread)
-        : SkiaPipeline(thread), mVkManager(thread.vulkanManager()) {}
+        : SkiaPipeline(thread), mVkManager(thread.vulkanManager()) {
+    thread.renderState().registerContextCallback(this);
+}
+
+SkiaVulkanPipeline::~SkiaVulkanPipeline() {
+    mRenderThread.renderState().removeContextCallback(this);
+}
 
 MakeCurrentResult SkiaVulkanPipeline::makeCurrent() {
     return MakeCurrentResult::AlreadyCurrent;
@@ -53,6 +59,8 @@ Frame SkiaVulkanPipeline::getFrame() {
                         "drawRenderNode called on a context with no surface!");
 
     SkSurface* backBuffer = mVkManager.getBackbufferSurface(&mVkSurface);
+    LOG_ALWAYS_FATAL_IF(mVkSurface == nullptr,
+                        "drawRenderNode called on a context with an invalid surface");
     if (backBuffer == nullptr) {
         SkDebugf("failed to get backbuffer");
         return Frame(-1, -1, 0);
@@ -129,7 +137,7 @@ bool SkiaVulkanPipeline::setSurface(ANativeWindow* surface, SwapBehavior swapBeh
     setSurfaceColorProperties(colorMode);
     if (surface) {
         mVkSurface = mVkManager.createSurface(surface, colorMode, mSurfaceColorSpace,
-                                              mSurfaceColorGamut, mSurfaceColorType);
+                                              mSurfaceColorType);
     }
 
     return mVkSurface != nullptr;
@@ -149,20 +157,15 @@ void SkiaVulkanPipeline::invokeFunctor(const RenderThread& thread, Functor* func
 
 sk_sp<Bitmap> SkiaVulkanPipeline::allocateHardwareBitmap(renderthread::RenderThread& renderThread,
                                                          SkBitmap& skBitmap) {
-    // TODO: implement this function for Vulkan pipeline
-    // code below is a hack to avoid crashing because of missing HW Bitmap support
-    sp<GraphicBuffer> buffer = new GraphicBuffer(
-            skBitmap.info().width(), skBitmap.info().height(), PIXEL_FORMAT_RGBA_8888,
-            GraphicBuffer::USAGE_HW_TEXTURE | GraphicBuffer::USAGE_SW_WRITE_NEVER |
-                    GraphicBuffer::USAGE_SW_READ_NEVER,
-            std::string("SkiaVulkanPipeline::allocateHardwareBitmap pid [") +
-                    std::to_string(getpid()) + "]");
-    status_t error = buffer->initCheck();
-    if (error < 0) {
-        ALOGW("SkiaVulkanPipeline::allocateHardwareBitmap() failed in GraphicBuffer.create()");
-        return nullptr;
+    LOG_ALWAYS_FATAL("Unimplemented");
+    return nullptr;
+}
+
+void SkiaVulkanPipeline::onContextDestroyed() {
+    if (mVkSurface) {
+        mVkManager.destroySurface(mVkSurface);
+        mVkSurface = nullptr;
     }
-    return Bitmap::createFrom(buffer, skBitmap.refColorSpace());
 }
 
 } /* namespace skiapipeline */

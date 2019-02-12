@@ -16,11 +16,14 @@
 
 package android.content.rollback;
 
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
+import android.content.pm.VersionedPackage;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.IntArray;
 
-import java.util.Objects;
+import java.util.ArrayList;
 
 /**
  * Information about a rollback available for a particular package.
@@ -29,59 +32,104 @@ import java.util.Objects;
  */
 @SystemApi
 public final class PackageRollbackInfo implements Parcelable {
-    /**
-     * The name of a package being rolled back.
-     */
-    public final String packageName;
+
+    private final VersionedPackage mVersionRolledBackFrom;
+    private final VersionedPackage mVersionRolledBackTo;
 
     /**
-     * The version the package was rolled back from.
+     * Encapsulates information required to restore a snapshot of an app's userdata.
+     *
+     * @hide
      */
-    public final PackageVersion higherVersion;
+    public static class RestoreInfo {
+        public final int userId;
+        public final int appId;
+        public final String seInfo;
 
-    /**
-     * The version the package was rolled back to.
-     */
-    public final PackageVersion lowerVersion;
-
-    /**
-     * Represents a version of a package.
-     */
-    public static class PackageVersion {
-        public final long versionCode;
-
-        // TODO(b/120200473): Include apk sha or some other way to distinguish
-        // between two different apks with the same version code.
-        public PackageVersion(long versionCode) {
-            this.versionCode = versionCode;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (other instanceof PackageVersion)  {
-                PackageVersion otherVersion = (PackageVersion) other;
-                return versionCode == otherVersion.versionCode;
-            }
-            return false;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(versionCode);
+        public RestoreInfo(int userId, int appId, String seInfo) {
+            this.userId = userId;
+            this.appId = appId;
+            this.seInfo = seInfo;
         }
     }
 
-    public PackageRollbackInfo(String packageName,
-            PackageVersion higherVersion, PackageVersion lowerVersion) {
-        this.packageName = packageName;
-        this.higherVersion = higherVersion;
-        this.lowerVersion = lowerVersion;
+    /*
+     * The list of users for which we need to backup userdata for this package. Backups of
+     * credential encrypted data are listed as pending if the user hasn't unlocked their device
+     * with credentials yet.
+     */
+    // NOTE: Not a part of the Parcelable representation of this object.
+    private final IntArray mPendingBackups;
+
+    /**
+     * The list of users for which we need to restore userdata for this package. This field is
+     * non-null only after a rollback for this package has been committed.
+     */
+    // NOTE: Not a part of the Parcelable representation of this object.
+    private final ArrayList<RestoreInfo> mPendingRestores;
+
+    /**
+     * Returns the name of the package to roll back from.
+     */
+    public String getPackageName() {
+        return mVersionRolledBackFrom.getPackageName();
+    }
+
+    /**
+     * Returns the version of the package rolled back from.
+     */
+    public VersionedPackage getVersionRolledBackFrom() {
+        return mVersionRolledBackFrom;
+    }
+
+    /**
+     * Returns the version of the package rolled back to.
+     */
+    public VersionedPackage getVersionRolledBackTo() {
+        return mVersionRolledBackTo;
+    }
+
+    /** @hide */
+    public IntArray getPendingBackups() {
+        return mPendingBackups;
+    }
+
+    /** @hide */
+    public ArrayList<RestoreInfo> getPendingRestores() {
+        return mPendingRestores;
+    }
+
+    /** @hide */
+    public RestoreInfo getRestoreInfo(int userId) {
+        for (RestoreInfo ri : mPendingRestores) {
+            if (ri.userId == userId) {
+                return ri;
+            }
+        }
+
+        return null;
+    }
+
+    /** @hide */
+    public void removeRestoreInfo(RestoreInfo ri) {
+        mPendingRestores.remove(ri);
+    }
+
+    /** @hide */
+    public PackageRollbackInfo(VersionedPackage packageRolledBackFrom,
+            VersionedPackage packageRolledBackTo,
+            @NonNull IntArray pendingBackups, @NonNull ArrayList<RestoreInfo> pendingRestores) {
+        this.mVersionRolledBackFrom = packageRolledBackFrom;
+        this.mVersionRolledBackTo = packageRolledBackTo;
+        this.mPendingBackups = pendingBackups;
+        this.mPendingRestores = pendingRestores;
     }
 
     private PackageRollbackInfo(Parcel in) {
-        this.packageName = in.readString();
-        this.higherVersion = new PackageVersion(in.readLong());
-        this.lowerVersion = new PackageVersion(in.readLong());
+        this.mVersionRolledBackFrom = VersionedPackage.CREATOR.createFromParcel(in);
+        this.mVersionRolledBackTo = VersionedPackage.CREATOR.createFromParcel(in);
+        this.mPendingRestores = null;
+        this.mPendingBackups = null;
     }
 
     @Override
@@ -91,9 +139,8 @@ public final class PackageRollbackInfo implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel out, int flags) {
-        out.writeString(packageName);
-        out.writeLong(higherVersion.versionCode);
-        out.writeLong(lowerVersion.versionCode);
+        mVersionRolledBackFrom.writeToParcel(out, flags);
+        mVersionRolledBackTo.writeToParcel(out, flags);
     }
 
     public static final Parcelable.Creator<PackageRollbackInfo> CREATOR =

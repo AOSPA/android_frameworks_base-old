@@ -16,7 +16,6 @@
 
 package android.provider;
 
-import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.internal.util.Preconditions.checkCollectionElementsNotNull;
 import static com.android.internal.util.Preconditions.checkCollectionNotEmpty;
 
@@ -49,6 +48,8 @@ import android.os.Parcelable;
 import android.os.ParcelableException;
 import android.os.RemoteException;
 import android.util.Log;
+
+import com.android.internal.util.Preconditions;
 
 import dalvik.system.VMRuntime;
 
@@ -640,6 +641,28 @@ public final class DocumentsContract {
         public static final String COLUMN_MIME_TYPES = "mime_types";
 
         /**
+         * Query arguments supported by this root. This column is optional
+         * and related to {@link #COLUMN_FLAGS} and {@link #FLAG_SUPPORTS_SEARCH}.
+         * If the flags include {@link #FLAG_SUPPORTS_SEARCH}, and the column is
+         * {@code null}, the root is assumed to support {@link #QUERY_ARG_DISPLAY_NAME}
+         * search of {@link Document#COLUMN_DISPLAY_NAME}. Multiple query arguments
+         * can be separated by a newline. For example, a root supporting
+         * {@link #QUERY_ARG_MIME_TYPES} and {@link #QUERY_ARG_DISPLAY_NAME} might
+         * return "android:query-arg-mime-types\nandroid:query-arg-display-name".
+         * <p>
+         * Type: STRING
+         * @see #COLUMN_FLAGS
+         * @see #FLAG_SUPPORTS_SEARCH
+         * @see #QUERY_ARG_DISPLAY_NAME
+         * @see #QUERY_ARG_FILE_SIZE_OVER
+         * @see #QUERY_ARG_LAST_MODIFIED_AFTER
+         * @see #QUERY_ARG_MIME_TYPES
+         * @see DocumentsProvider#querySearchDocuments(String, String[],
+         *      Bundle)
+         */
+        public static final String COLUMN_QUERY_ARGS = "query_args";
+
+        /**
          * MIME type for a root.
          */
         public static final String MIME_TYPE_ITEM = "vnd.android.document/root";
@@ -680,6 +703,8 @@ public final class DocumentsContract {
          *      String)
          * @see DocumentsProvider#querySearchDocuments(String, String,
          *      String[])
+         * @see DocumentsProvider#querySearchDocuments(String, String[],
+         *      Bundle)
          */
         public static final int FLAG_SUPPORTS_SEARCH = 1 << 3;
 
@@ -1109,11 +1134,13 @@ public final class DocumentsContract {
     }
 
     /**
-     * Test if the given URI represents roots backed by {@link DocumentsProvider}.
+     * Test if the given URI represents all roots of the authority
+     * backed by {@link DocumentsProvider}.
      *
      * @see #buildRootsUri(String)
      */
-    public static boolean isRootsUri(Context context, @Nullable Uri uri) {
+    public static boolean isRootsUri(@NonNull Context context, @Nullable Uri uri) {
+        Preconditions.checkNotNull(context, "context can not be null");
         return isRootUri(context, uri, 1 /* pathSize */);
     }
 
@@ -1122,7 +1149,8 @@ public final class DocumentsContract {
      *
      * @see #buildRootUri(String, String)
      */
-    public static boolean isRootUri(Context context, @Nullable Uri uri) {
+    public static boolean isRootUri(@NonNull Context context, @Nullable Uri uri) {
+        Preconditions.checkNotNull(context, "context can not be null");
         return isRootUri(context, uri, 2 /* pathSize */);
     }
 
@@ -1215,6 +1243,7 @@ public final class DocumentsContract {
      * {@hide}
      */
     public static String getSearchDocumentsQuery(@NonNull Bundle bundle) {
+        Preconditions.checkNotNull(bundle, "bundle can not be null");
         return bundle.getString(QUERY_ARG_DISPLAY_NAME, "" /* defaultValue */);
     }
 
@@ -1315,8 +1344,12 @@ public final class DocumentsContract {
      * @return if given document is a descendant of the given parent.
      * @see Root#FLAG_SUPPORTS_IS_CHILD
      */
-    public static boolean isChildDocument(ContentInterface content, Uri parentDocumentUri,
-            Uri childDocumentUri) throws FileNotFoundException {
+    public static boolean isChildDocument(@NonNull ContentInterface content,
+            @NonNull Uri parentDocumentUri, @NonNull Uri childDocumentUri)
+            throws FileNotFoundException {
+        Preconditions.checkNotNull(content, "content can not be null");
+        Preconditions.checkNotNull(parentDocumentUri, "parentDocumentUri can not be null");
+        Preconditions.checkNotNull(childDocumentUri, "childDocumentUri can not be null");
         try {
             final Bundle in = new Bundle();
             in.putParcelable(DocumentsContract.EXTRA_URI, parentDocumentUri);
@@ -1325,7 +1358,7 @@ public final class DocumentsContract {
             final Bundle out = content.call(parentDocumentUri.getAuthority(),
                     METHOD_IS_CHILD_DOCUMENT, null, in);
             if (out == null) {
-                throw new RemoteException("Failed to get a reponse from isChildDocument query.");
+                throw new RemoteException("Failed to get a response from isChildDocument query.");
             }
             if (!out.containsKey(DocumentsContract.EXTRA_RESULT)) {
                 throw new RemoteException("Response did not include result field..");
@@ -1559,8 +1592,10 @@ public final class DocumentsContract {
      * @param documentUri a Document URI
      * @return a Bundle of Bundles.
      */
-    public static Bundle getDocumentMetadata(ContentInterface content, Uri documentUri)
-            throws FileNotFoundException {
+    public static @Nullable Bundle getDocumentMetadata(@NonNull ContentInterface content,
+            @NonNull Uri documentUri) throws FileNotFoundException {
+        Preconditions.checkNotNull(content, "content can not be null");
+        Preconditions.checkNotNull(documentUri, "documentUri can not be null");
         try {
             final Bundle in = new Bundle();
             in.putParcelable(EXTRA_URI, documentUri);
@@ -1595,8 +1630,6 @@ public final class DocumentsContract {
      */
     public static Path findDocumentPath(ContentInterface content, Uri treeUri)
             throws FileNotFoundException {
-        checkArgument(isTreeUri(treeUri), treeUri + " is not a tree uri.");
-
         try {
             final Bundle in = new Bundle();
             in.putParcelable(DocumentsContract.EXTRA_URI, treeUri);

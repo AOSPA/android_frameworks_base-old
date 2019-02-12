@@ -30,8 +30,12 @@ import com.android.systemui.Dependency
 import com.android.systemui.appops.AppOpItem
 import com.android.systemui.appops.AppOpsController
 import com.android.systemui.R
+import java.lang.ref.WeakReference
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class PrivacyItemController(val context: Context, val callback: Callback) {
+@Singleton
+class PrivacyItemController @Inject constructor(val context: Context) {
 
     companion object {
         val OPS = intArrayOf(AppOpsManager.OP_CAMERA,
@@ -55,10 +59,12 @@ class PrivacyItemController(val context: Context, val callback: Callback) {
     @Suppress("DEPRECATION")
     private val uiHandler = Dependency.get(Dependency.MAIN_HANDLER)
     private var listening = false
-    val systemApp = PrivacyApplication(context.getString(R.string.device_services), context)
+    val systemApp =
+            PrivacyApplication(context.getString(R.string.device_services), SYSTEM_UID, context)
+    private val callbacks = mutableListOf<WeakReference<Callback>>()
 
     private val notifyChanges = Runnable {
-        callback.privacyChanged(privacyList)
+        callbacks.forEach { it.get()?.privacyChanged(privacyList) }
     }
 
     private val updateListAndNotifyChanges = Runnable {
@@ -88,8 +94,8 @@ class PrivacyItemController(val context: Context, val callback: Callback) {
             registerReceiver()
         }
 
-    init {
-        registerReceiver()
+    private fun unregisterReceiver() {
+        context.unregisterReceiver(userSwitcherReceiver)
     }
 
     private fun registerReceiver() {
@@ -108,15 +114,39 @@ class PrivacyItemController(val context: Context, val callback: Callback) {
         bgHandler.post(updateListAndNotifyChanges)
     }
 
-    fun setListening(listen: Boolean) {
+    @VisibleForTesting
+    internal fun setListening(listen: Boolean) {
         if (listening == listen) return
         listening = listen
         if (listening) {
             appOpsController.addCallback(OPS, cb)
+            registerReceiver()
             update(true)
         } else {
             appOpsController.removeCallback(OPS, cb)
+            unregisterReceiver()
         }
+    }
+
+    private fun addCallback(callback: WeakReference<Callback>) {
+        callbacks.add(callback)
+        if (callbacks.isNotEmpty() && !listening) setListening(true)
+        // Notify this callback if we didn't set to listening
+        else uiHandler.post(NotifyChangesToCallback(callback.get(), privacyList))
+    }
+
+    private fun removeCallback(callback: WeakReference<Callback>) {
+        // Removes also if the callback is null
+        callbacks.removeIf { it.get()?.equals(callback.get()) ?: true }
+        if (callbacks.isEmpty()) setListening(false)
+    }
+
+    fun addCallback(callback: Callback) {
+        addCallback(WeakReference(callback))
+    }
+
+    fun removeCallback(callback: Callback) {
+        removeCallback(WeakReference(callback))
     }
 
     private fun updatePrivacyList() {
@@ -133,7 +163,7 @@ class PrivacyItemController(val context: Context, val callback: Callback) {
             else -> return null
         }
         if (appOpItem.uid == SYSTEM_UID) return PrivacyItem(type, systemApp)
-        val app = PrivacyApplication(appOpItem.packageName, context)
+        val app = PrivacyApplication(appOpItem.packageName, appOpItem.uid, context)
         return PrivacyItem(type, app)
     }
 
@@ -147,6 +177,15 @@ class PrivacyItemController(val context: Context, val callback: Callback) {
             if (intent?.action in intents) {
                 update(true)
             }
+        }
+    }
+
+    private class NotifyChangesToCallback(
+        private val callback: Callback?,
+        private val list: List<PrivacyItem>
+    ) : Runnable {
+        override fun run() {
+            callback?.privacyChanged(list)
         }
     }
 }

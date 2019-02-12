@@ -27,10 +27,6 @@ cc_library_shared {
         "-Wno-error=deprecated-declarations",
         "-Wunused",
         "-Wunreachable-code",
-
-        // TODO: Linear blending should be enabled by default, but we are
-        // TODO: making it an opt-in while it's a work in progress
-        //"-DANDROID_ENABLE_LINEAR_BLENDING",
     ],
 
     cppflags: ["-Wno-conversion-null"],
@@ -62,8 +58,11 @@ cc_library_shared {
         "android_database_SQLiteConnection.cpp",
         "android_database_SQLiteGlobal.cpp",
         "android_database_SQLiteDebug.cpp",
+        "android_graphics_Canvas.cpp",
+        "android_graphics_ColorSpace.cpp",
         "android_graphics_drawable_AnimatedVectorDrawable.cpp",
         "android_graphics_drawable_VectorDrawable.cpp",
+        "android_graphics_Picture.cpp",
         "android_view_DisplayEventReceiver.cpp",
         "android_view_DisplayListCanvas.cpp",
         "android_view_TextureLayer.cpp",
@@ -118,8 +117,6 @@ cc_library_shared {
         "android_util_StringBlock.cpp",
         "android_util_XmlBlock.cpp",
         "android_util_jar_StrictJarFile.cpp",
-        "android_graphics_Canvas.cpp",
-        "android_graphics_Picture.cpp",
         "android/graphics/AnimatedImageDrawable.cpp",
         "android/graphics/Bitmap.cpp",
         "android/graphics/BitmapFactory.cpp",
@@ -166,6 +163,7 @@ cc_library_shared {
         "android_media_AudioRecord.cpp",
         "android_media_AudioSystem.cpp",
         "android_media_AudioTrack.cpp",
+        "android_media_AudioAttributes.cpp",
         "android_media_DeviceCallback.cpp",
         "android_media_JetPlayer.cpp",
         "android_media_MediaMetricsJNI.cpp",
@@ -186,6 +184,7 @@ cc_library_shared {
         "android_hardware_UsbDevice.cpp",
         "android_hardware_UsbDeviceConnection.cpp",
         "android_hardware_UsbRequest.cpp",
+        "android_hardware_location_ActivityRecognitionHardware.cpp",
         "android_util_FileObserver.cpp",
         "android/opengl/poly_clip.cpp", // TODO: .arm
         "android/opengl/util.cpp",
@@ -275,9 +274,11 @@ cc_library_shared {
         "libselinux",
         "libandroidicu",
         "libmedia",
+        "libmedia_helper",
         "libmediametrics",
         "libmeminfo",
         "libaudioclient",
+        "libaudiopolicy",
         "libjpeg",
         "libusbhost",
         "libharfbuzz_ng",
@@ -299,6 +300,7 @@ cc_library_shared {
         "libhwui",
         "libdl",
         "libstatslog",
+        "server_configurable_flags",
     ],
 
     generated_sources: ["android_util_StatsLog.cpp"],

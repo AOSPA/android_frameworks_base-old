@@ -193,14 +193,33 @@ public class NotificationContentViewTest extends SysuiTestCase {
     }
 
     @Test
-    public void chooseSmartRepliesAndActions_smartRepliesOff_noAppGeneratedSmartReplies() {
-        setupAppGeneratedReplies(new String[] {"Reply1", "Reply2"});
+    public void chooseSmartRepliesAndActions_smartRepliesOff_noAppGeneratedSmartSuggestions() {
+        CharSequence[] smartReplies = new String[] {"Reply1", "Reply2"};
+        List<Notification.Action> smartActions =
+                createActions(new String[] {"Test Action 1", "Test Action 2"});
+        setupAppGeneratedSuggestions(smartReplies, smartActions);
         when(mSmartReplyConstants.isEnabled()).thenReturn(false);
 
         NotificationContentView.SmartRepliesAndActions repliesAndActions =
                 NotificationContentView.chooseSmartRepliesAndActions(mSmartReplyConstants, mEntry);
 
         assertThat(repliesAndActions.smartReplies).isNull();
+        assertThat(repliesAndActions.smartActions).isNull();
+    }
+
+    @Test
+    public void chooseSmartRepliesAndActions_smartRepliesOff_noSystemGeneratedSmartSuggestions() {
+        mEntry.systemGeneratedSmartReplies =
+                new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
+        mEntry.systemGeneratedSmartActions =
+                createActions(new String[] {"Sys Smart Action 1", "Sys Smart Action 2"});
+        when(mSmartReplyConstants.isEnabled()).thenReturn(false);
+
+        NotificationContentView.SmartRepliesAndActions repliesAndActions =
+                NotificationContentView.chooseSmartRepliesAndActions(mSmartReplyConstants, mEntry);
+
+        assertThat(repliesAndActions.smartReplies).isNull();
+        assertThat(repliesAndActions.smartActions).isNull();
     }
 
     @Test
@@ -238,11 +257,13 @@ public class NotificationContentViewTest extends SysuiTestCase {
         // replies.
         setupAppGeneratedReplies(null /* smartReplies */);
 
-        mEntry.smartReplies = new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
+        mEntry.systemGeneratedSmartReplies =
+                new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
         NotificationContentView.SmartRepliesAndActions repliesAndActions =
                 NotificationContentView.chooseSmartRepliesAndActions(mSmartReplyConstants, mEntry);
 
-        assertThat(repliesAndActions.smartReplies.choices).isEqualTo(mEntry.smartReplies);
+        assertThat(repliesAndActions.smartReplies.choices).isEqualTo(
+                mEntry.systemGeneratedSmartReplies);
         assertThat(repliesAndActions.smartReplies.fromAssistant).isTrue();
         assertThat(repliesAndActions.smartActions).isNull();
     }
@@ -253,7 +274,7 @@ public class NotificationContentViewTest extends SysuiTestCase {
         // replies.
         setupAppGeneratedReplies(null /* smartReplies */, false /* allowSystemGeneratedReplies */);
 
-        mEntry.smartReplies =
+        mEntry.systemGeneratedSmartReplies =
                 new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
         NotificationContentView.SmartRepliesAndActions repliesAndActions =
                 NotificationContentView.chooseSmartRepliesAndActions(mSmartReplyConstants, mEntry);
@@ -288,7 +309,8 @@ public class NotificationContentViewTest extends SysuiTestCase {
                 createActions(new String[] {"Test Action 1", "Test Action 2"});
         setupAppGeneratedSuggestions(appGenSmartReplies, appGenSmartActions);
 
-        mEntry.smartReplies = new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
+        mEntry.systemGeneratedSmartReplies =
+                new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
         mEntry.systemGeneratedSmartActions =
                 createActions(new String[] {"Sys Smart Action 1", "Sys Smart Action 2"});
 
@@ -307,7 +329,8 @@ public class NotificationContentViewTest extends SysuiTestCase {
         // actions.
         setupAppGeneratedReplies(null /* smartReplies */, false /* allowSystemGeneratedReplies */);
         when(mNotification.getAllowSystemGeneratedContextualActions()).thenReturn(false);
-        mEntry.smartReplies = new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
+        mEntry.systemGeneratedSmartReplies =
+                new String[] {"Sys Smart Reply 1", "Sys Smart Reply 2"};
         mEntry.systemGeneratedSmartActions =
                 createActions(new String[] {"Sys Smart Action 1", "Sys Smart Action 2"});
 

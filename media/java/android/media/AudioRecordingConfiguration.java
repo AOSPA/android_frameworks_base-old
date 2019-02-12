@@ -356,11 +356,11 @@ public final class AudioRecordingConfiguration implements Parcelable {
         dest.writeInt(mDeviceSource);
         dest.writeInt(mClientEffects.length);
         for (int i = 0; i < mClientEffects.length; i++) {
-            mClientEffects[i].writeToParcel(dest, 0);
+            mClientEffects[i].writeToParcel(dest);
         }
         dest.writeInt(mDeviceEffects.length);
         for (int i = 0; i < mDeviceEffects.length; i++) {
-            mDeviceEffects[i].writeToParcel(dest, 0);
+            mDeviceEffects[i].writeToParcel(dest);
         }
     }
 
@@ -375,13 +375,13 @@ public final class AudioRecordingConfiguration implements Parcelable {
         mClientPortId = in.readInt();
         mClientSilenced = in.readBoolean();
         mDeviceSource = in.readInt();
-        mClientEffects = AudioEffect.Descriptor.CREATOR.newArray(in.readInt());
+        mClientEffects = new AudioEffect.Descriptor[in.readInt()];
         for (int i = 0; i < mClientEffects.length; i++) {
-            mClientEffects[i] = AudioEffect.Descriptor.CREATOR.createFromParcel(in);
+            mClientEffects[i] = new AudioEffect.Descriptor(in);
         }
-        mDeviceEffects = AudioEffect.Descriptor.CREATOR.newArray(in.readInt());
-        for (int i = 0; i < mClientEffects.length; i++) {
-            mDeviceEffects[i] = AudioEffect.Descriptor.CREATOR.createFromParcel(in);
+        mDeviceEffects = new AudioEffect.Descriptor[in.readInt()];
+        for (int i = 0; i < mDeviceEffects.length; i++) {
+            mDeviceEffects[i] = new AudioEffect.Descriptor(in);
         }
     }
 
@@ -402,7 +402,7 @@ public final class AudioRecordingConfiguration implements Parcelable {
                 && (mClientPortId == that.mClientPortId)
                 && (mClientSilenced == that.mClientSilenced)
                 && (mDeviceSource == that.mDeviceSource)
-                && (mClientEffects.equals(that.mClientEffects))
-                && (mDeviceEffects.equals(that.mDeviceEffects)));
+                && (Arrays.equals(mClientEffects, that.mClientEffects))
+                && (Arrays.equals(mDeviceEffects, that.mDeviceEffects)));
     }
 }

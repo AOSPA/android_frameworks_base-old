@@ -31,6 +31,7 @@
 #include <binder/Parcel.h>
 #include <utils/threads.h>
 #include <cutils/properties.h>
+#include <server_configurable_flags/get_flags.h>
 
 #include <SkGraphics.h>
 
@@ -101,11 +102,13 @@ extern int register_android_hardware_SoundTrigger(JNIEnv *env);
 extern int register_android_hardware_UsbDevice(JNIEnv *env);
 extern int register_android_hardware_UsbDeviceConnection(JNIEnv *env);
 extern int register_android_hardware_UsbRequest(JNIEnv *env);
+extern int register_android_hardware_location_ActivityRecognitionHardware(JNIEnv* env);
 
 extern int register_android_media_AudioEffectDescriptor(JNIEnv *env);
 extern int register_android_media_AudioRecord(JNIEnv *env);
 extern int register_android_media_AudioSystem(JNIEnv *env);
 extern int register_android_media_AudioTrack(JNIEnv *env);
+extern int register_android_media_AudioAttributes(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_JetPlayer(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
@@ -131,6 +134,7 @@ extern int register_android_content_res_ApkAssets(JNIEnv* env);
 extern int register_android_graphics_Canvas(JNIEnv* env);
 extern int register_android_graphics_CanvasProperty(JNIEnv* env);
 extern int register_android_graphics_ColorFilter(JNIEnv* env);
+extern int register_android_graphics_ColorSpace(JNIEnv* env);
 extern int register_android_graphics_DrawFilter(JNIEnv* env);
 extern int register_android_graphics_FontFamily(JNIEnv* env);
 extern int register_android_graphics_Matrix(JNIEnv* env);
@@ -151,6 +155,8 @@ extern int register_android_graphics_text_MeasuredText(JNIEnv* env);
 extern int register_android_graphics_text_LineBreaker(JNIEnv *env);
 extern int register_android_view_DisplayEventReceiver(JNIEnv* env);
 extern int register_android_view_DisplayListCanvas(JNIEnv* env);
+extern int register_android_view_InputApplicationHandle(JNIEnv* env);
+extern int register_android_view_InputWindowHandle(JNIEnv* env);
 extern int register_android_view_TextureLayer(JNIEnv* env);
 extern int register_android_view_RenderNode(JNIEnv* env);
 extern int register_android_view_RenderNodeAnimator(JNIEnv* env);
@@ -771,7 +777,17 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
       addOption("-XX:LowMemoryMode");
     }
 
-    parseRuntimeOption("dalvik.vm.gctype", gctypeOptsBuf, "-Xgc:");
+    std::string gc_type_override =
+            server_configurable_flags::GetServerConfigurableFlag("runtime_native", "gctype", "");
+    std::string gc_type_override_temp;
+    if (gc_type_override.empty()) {
+        parseRuntimeOption("dalvik.vm.gctype", gctypeOptsBuf, "-Xgc:");
+    } else {
+        // Copy the string so it doesn't go out of scope since addOption does not make a copy.
+        gc_type_override_temp = "-Xgc:" + gc_type_override;
+        addOption(gc_type_override_temp.c_str());
+    }
+
     parseRuntimeOption("dalvik.vm.backgroundgctype", backgroundgcOptsBuf, "-XX:BackgroundGC=");
 
     /*
@@ -1363,11 +1379,16 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_VintfRuntimeInfo),
     REG_JNI(register_android_nio_utils),
     REG_JNI(register_android_graphics_Canvas),
+    // This needs to be before register_android_graphics_Graphics, or the latter
+    // will not be able to find the jmethodID for ColorSpace.get().
+    REG_JNI(register_android_graphics_ColorSpace),
     REG_JNI(register_android_graphics_Graphics),
     REG_JNI(register_android_view_DisplayEventReceiver),
     REG_JNI(register_android_view_RenderNode),
     REG_JNI(register_android_view_RenderNodeAnimator),
     REG_JNI(register_android_view_DisplayListCanvas),
+    REG_JNI(register_android_view_InputApplicationHandle),
+    REG_JNI(register_android_view_InputWindowHandle),
     REG_JNI(register_android_view_TextureLayer),
     REG_JNI(register_android_view_ThreadedRenderer),
     REG_JNI(register_android_view_Surface),
@@ -1459,10 +1480,12 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_hardware_UsbDevice),
     REG_JNI(register_android_hardware_UsbDeviceConnection),
     REG_JNI(register_android_hardware_UsbRequest),
+    REG_JNI(register_android_hardware_location_ActivityRecognitionHardware),
     REG_JNI(register_android_media_AudioEffectDescriptor),
     REG_JNI(register_android_media_AudioSystem),
     REG_JNI(register_android_media_AudioRecord),
     REG_JNI(register_android_media_AudioTrack),
+    REG_JNI(register_android_media_AudioAttributes),
     REG_JNI(register_android_media_JetPlayer),
     REG_JNI(register_android_media_MicrophoneInfo),
     REG_JNI(register_android_media_RemoteDisplay),

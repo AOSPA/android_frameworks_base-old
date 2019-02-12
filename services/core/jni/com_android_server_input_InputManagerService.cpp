@@ -782,7 +782,7 @@ void NativeInputManager::setInputWindows(JNIEnv* env, jobjectArray windowHandleO
             }
 
             sp<InputWindowHandle> windowHandle =
-                    android_server_InputWindowHandle_getHandle(env, windowHandleObj);
+                    android_view_InputWindowHandle_getHandle(env, windowHandleObj);
             if (windowHandle != nullptr) {
                 windowHandles.push(windowHandle);
             }
@@ -822,7 +822,7 @@ void NativeInputManager::setInputWindows(JNIEnv* env, jobjectArray windowHandleO
 void NativeInputManager::setFocusedApplication(JNIEnv* env, int32_t displayId,
         jobject applicationHandleObj) {
     sp<InputApplicationHandle> applicationHandle =
-            android_server_InputApplicationHandle_getHandle(env, applicationHandleObj);
+            android_view_InputApplicationHandle_getHandle(env, applicationHandleObj);
     mInputManager->getDispatcher()->setFocusedApplication(displayId, applicationHandle);
 }
 
@@ -1652,6 +1652,13 @@ static void nativeSetCustomPointerIcon(JNIEnv* env, jclass /* clazz */,
     im->setCustomPointerIcon(spriteIcon);
 }
 
+static jboolean nativeCanDispatchToDisplay(JNIEnv* env, jclass /* clazz */, jlong ptr,
+        jint deviceId, jint displayId) {
+
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+    return im->getInputManager()->getReader()->canDispatchToDisplay(deviceId, displayId);
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gInputManagerMethods[] = {
@@ -1726,6 +1733,8 @@ static const JNINativeMethod gInputManagerMethods[] = {
             (void*) nativeReloadPointerIcons },
     { "nativeSetCustomPointerIcon", "(JLandroid/view/PointerIcon;)V",
             (void*) nativeSetCustomPointerIcon },
+    { "nativeCanDispatchToDisplay", "(JII)Z",
+            (void*) nativeCanDispatchToDisplay },
 };
 
 #define FIND_CLASS(var, className) \

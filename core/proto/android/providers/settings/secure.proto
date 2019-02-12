@@ -72,6 +72,9 @@ message SecureSettingsProto {
         // List of the accessibility services to which the user has granted
         // permission to put the device into touch exploration mode.
         optional SettingProto touch_exploration_granted_accessibility_services = 31;
+        // Settings for accessibility timeout
+        optional SettingProto non_interactive_ui_timeout_ms = 32 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        optional SettingProto interactive_ui_timeout_ms = 33 [ (android.privacy).dest = DEST_AUTOMATIC ];
     }
     optional Accessibility accessibility = 2;
 
@@ -528,8 +531,11 @@ message SecureSettingsProto {
 
     optional SettingProto skip_gesture_enabled = 74 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto silence_gesture_enabled = 75 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto theme_customization_overlay_packages = 76 [ (android.privacy).dest = DEST_AUTOMATIC ];
+
+    optional SettingProto aware_enabled = 77 [ (android.privacy).dest = DEST_AUTOMATIC ];
 
     // Please insert fields in alphabetical order and group them into messages
     // if possible (to avoid reaching the method limit).
-    // Next tag = 76;
+    // Next tag = 78;
 }

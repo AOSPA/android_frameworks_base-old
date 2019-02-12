@@ -21,7 +21,6 @@ import static android.app.NotificationManager.IMPORTANCE_HIGH;
 import static android.app.NotificationManager.IMPORTANCE_LOW;
 import static android.app.NotificationManager.IMPORTANCE_MIN;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
-import static android.app.NotificationManager.IMPORTANCE_UNSPECIFIED;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -97,8 +96,12 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     private int mNumUniqueChannelsInRow;
     private NotificationChannel mSingleNotificationChannel;
     private int mStartingChannelImportance;
-    private int mStartingChannelOrNotificationImportance;
-    private int mChosenImportance;
+    private boolean mWasShownHighPriority;
+    /**
+     * The last importance level chosen by the user.  Null if the user has not chosen an importance
+     * level; non-null once the user takes an action which indicates an explicit preference.
+     */
+    @Nullable private Integer mChosenImportance;
     private boolean mIsSingleDefaultChannel;
     private boolean mIsNonblockable;
     private StatusBarNotification mSbn;
@@ -123,15 +126,23 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     private OnClickListener mOnKeepShowing = v -> {
         mExitReason = NotificationCounters.BLOCKING_HELPER_KEEP_SHOWING;
         closeControls(v);
-        mMetricsLogger.write(getLogMaker().setType(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
-                .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_STAY_SILENT));
+        if (mIsForBlockingHelper) {
+            mMetricsLogger.write(getLogMaker().setCategory(
+                    MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
+                    .setType(MetricsEvent.TYPE_ACTION)
+                    .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_STAY_SILENT));
+        }
     };
 
     private OnClickListener mOnToggleSilent = v -> {
         Runnable saveImportance = () -> {
             swapContent(ACTION_TOGGLE_SILENT, true /* animate */);
-            mMetricsLogger.write(getLogMaker().setType(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
-                    .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_ALERT_ME));
+            if (mIsForBlockingHelper) {
+                mMetricsLogger.write(getLogMaker()
+                        .setCategory(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
+                        .setType(MetricsEvent.TYPE_ACTION)
+                        .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_ALERT_ME));
+            }
         };
         if (mCheckSaveListener != null) {
             mCheckSaveListener.checkSave(saveImportance, mSbn);
@@ -143,8 +154,12 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     private OnClickListener mOnStopOrMinimizeNotifications = v -> {
         Runnable saveImportance = () -> {
             swapContent(ACTION_BLOCK, true /* animate */);
-            mMetricsLogger.write(getLogMaker().setType(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
-                    .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_BLOCKED));
+            if (mIsForBlockingHelper) {
+                mMetricsLogger.write(getLogMaker()
+                        .setCategory(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
+                        .setType(MetricsEvent.TYPE_ACTION)
+                        .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_BLOCKED));
+            }
         };
         if (mCheckSaveListener != null) {
             mCheckSaveListener.checkSave(saveImportance, mSbn);
@@ -156,11 +171,16 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     private OnClickListener mOnUndo = v -> {
         // Reset exit counter that we'll log and record an undo event separately (not an exit event)
         mExitReason = NotificationCounters.BLOCKING_HELPER_DISMISSED;
-        logBlockingHelperCounter(NotificationCounters.BLOCKING_HELPER_UNDO);
-        mMetricsLogger.write(importanceChangeLogMaker().setType(MetricsEvent.TYPE_DISMISS));
+        if (mIsForBlockingHelper) {
+            logBlockingHelperCounter(NotificationCounters.BLOCKING_HELPER_UNDO);
+            mMetricsLogger.write(getLogMaker().setCategory(
+                    MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
+                    .setType(MetricsEvent.TYPE_DISMISS)
+                    .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_UNDO));
+        } else {
+            mMetricsLogger.write(importanceChangeLogMaker().setType(MetricsEvent.TYPE_DISMISS));
+        }
         swapContent(ACTION_UNDO, true /* animate */);
-        mMetricsLogger.write(getLogMaker().setType(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
-                .setSubtype(MetricsEvent.BLOCKING_HELPER_CLICK_UNDO));
     };
 
     public NotificationInfo(Context context, AttributeSet attrs) {
@@ -195,13 +215,14 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             final OnAppSettingsClickListener onAppSettingsClick,
             boolean isDeviceProvisioned,
             boolean isNonblockable,
-            int importance)
+            int importance,
+            boolean wasShownHighPriority)
             throws RemoteException {
         bindNotification(pm, iNotificationManager, pkg, notificationChannel,
                 numUniqueChannelsInRow, sbn, checkSaveListener, onSettingsClick,
                 onAppSettingsClick, isDeviceProvisioned, isNonblockable,
                 false /* isBlockingHelper */, false /* isUserSentimentNegative */,
-                importance);
+                importance, wasShownHighPriority);
     }
 
     public void bindNotification(
@@ -218,7 +239,8 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             boolean isNonblockable,
             boolean isForBlockingHelper,
             boolean isUserSentimentNegative,
-            int importance)
+            int importance,
+            boolean wasShownHighPriority)
             throws RemoteException {
         mINotificationManager = iNotificationManager;
         mMetricsLogger = Dependency.get(MetricsLogger.class);
@@ -231,10 +253,8 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
         mCheckSaveListener = checkSaveListener;
         mOnSettingsClickListener = onSettingsClick;
         mSingleNotificationChannel = notificationChannel;
-        int channelImportance = mSingleNotificationChannel.getImportance();
-        mStartingChannelImportance = mChosenImportance = channelImportance;
-        mStartingChannelOrNotificationImportance =
-                channelImportance == IMPORTANCE_UNSPECIFIED ? importance : channelImportance;
+        mStartingChannelImportance = mSingleNotificationChannel.getImportance();
+        mWasShownHighPriority = wasShownHighPriority;
         mNegativeUserSentiment = isUserSentimentNegative;
         mIsNonblockable = isNonblockable;
         mIsForeground =
@@ -260,9 +280,10 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
         bindPrompt();
         bindButtons();
 
-        mMetricsLogger.write(getLogMaker().setType(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
-                .setSubtype(MetricsEvent.BLOCKING_HELPER_DISPLAY));
+        mMetricsLogger.write(notificationControlsLogMaker());
     }
+
+
 
     private void bindHeader() throws RemoteException {
         // Package name
@@ -394,25 +415,20 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
         }
     }
 
-    /**
-     * Returns an initialized LogMaker for logging importance changes.
-     * The caller may override the type (to DISMISS) before passing it to mMetricsLogger.
-     * @return new LogMaker
-     */
-    private LogMaker importanceChangeLogMaker() {
-        return new LogMaker(MetricsEvent.ACTION_SAVE_IMPORTANCE)
-                .setType(MetricsEvent.TYPE_ACTION)
-                .setSubtype(mChosenImportance - mStartingChannelImportance);
-    }
-
     private boolean hasImportanceChanged() {
         return mSingleNotificationChannel != null
-                && mStartingChannelImportance != mChosenImportance;
+                && mChosenImportance != null
+                && (mStartingChannelImportance != mChosenImportance
+                || (mWasShownHighPriority && mChosenImportance < IMPORTANCE_DEFAULT)
+                || (!mWasShownHighPriority && mChosenImportance >= IMPORTANCE_DEFAULT));
     }
 
     private void saveImportance() {
         if (!mIsNonblockable
                 || mExitReason != NotificationCounters.BLOCKING_HELPER_STOP_NOTIFICATIONS) {
+            if (mChosenImportance == null) {
+                mChosenImportance = mStartingChannelImportance;
+            }
             updateImportance();
         }
     }
@@ -421,12 +437,15 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
      * Commits the updated importance values on the background thread.
      */
     private void updateImportance() {
-        mMetricsLogger.write(importanceChangeLogMaker());
+        if (mChosenImportance != null) {
+            mMetricsLogger.write(importanceChangeLogMaker());
 
-        Handler bgHandler = new Handler(Dependency.get(Dependency.BG_LOOPER));
-        bgHandler.post(new UpdateImportanceRunnable(mINotificationManager, mPackageName, mAppUid,
-                mNumUniqueChannelsInRow == 1 ? mSingleNotificationChannel : null,
-                mStartingChannelImportance, mChosenImportance));
+            Handler bgHandler = new Handler(Dependency.get(Dependency.BG_LOOPER));
+            bgHandler.post(
+                    new UpdateImportanceRunnable(mINotificationManager, mPackageName, mAppUid,
+                            mNumUniqueChannelsInRow == 1 ? mSingleNotificationChannel : null,
+                            mStartingChannelImportance, mChosenImportance));
+        }
     }
 
     private void bindButtons() {
@@ -444,11 +463,8 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             TextView silent = findViewById(R.id.int_silent);
             TextView alert = findViewById(R.id.int_alert);
 
-            boolean isCurrentlyAlerting =
-                    mStartingChannelOrNotificationImportance >= IMPORTANCE_DEFAULT;
-
             block.setOnClickListener(mOnStopOrMinimizeNotifications);
-            if (isCurrentlyAlerting) {
+            if (mWasShownHighPriority) {
                 silent.setOnClickListener(mOnToggleSilent);
                 silent.setText(R.string.inline_silent_button_silent);
                 alert.setOnClickListener(mOnKeepShowing);
@@ -517,7 +533,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
                 break;
             case ACTION_TOGGLE_SILENT:
                 mExitReason = NotificationCounters.BLOCKING_HELPER_TOGGLE_SILENT;
-                if (mStartingChannelOrNotificationImportance >= IMPORTANCE_DEFAULT) {
+                if (mWasShownHighPriority) {
                     mChosenImportance = IMPORTANCE_LOW;
                     confirmationText.setText(R.string.notification_channel_silenced);
                 } else {
@@ -584,9 +600,8 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
 
     @Override
     public void onFinishedClosing() {
-        mStartingChannelImportance = mChosenImportance;
-        if (mChosenImportance != IMPORTANCE_UNSPECIFIED) {
-            mStartingChannelOrNotificationImportance = mChosenImportance;
+        if (mChosenImportance != null) {
+            mStartingChannelImportance = mChosenImportance;
         }
         mExitReason = NotificationCounters.BLOCKING_HELPER_DISMISSED;
 
@@ -599,8 +614,8 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
         confirmation.setAlpha(1f);
         header.setVisibility(VISIBLE);
         header.setAlpha(1f);
-        mMetricsLogger.write(getLogMaker().setType(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
-                .setSubtype(MetricsEvent.BLOCKING_HELPER_DISMISS));
+
+        mMetricsLogger.write(notificationControlsLogMaker().setType(MetricsEvent.TYPE_CLOSE));
     }
 
     @Override
@@ -747,7 +762,39 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
         }
     }
 
+    /**
+     * Returns a LogMaker with all available notification information.
+     * Caller should set category, type, and maybe subtype, before passing it to mMetricsLogger.
+     * @return LogMaker
+     */
     private LogMaker getLogMaker() {
-        return mSbn.getLogMaker().setCategory(MetricsEvent.NOTIFICATION_ITEM);
+        // The constructor requires a category, so also do it in the other branch for consistency.
+        return mSbn == null ? new LogMaker(MetricsEvent.NOTIFICATION_BLOCKING_HELPER)
+                : mSbn.getLogMaker().setCategory(MetricsEvent.NOTIFICATION_BLOCKING_HELPER);
+    }
+
+    /**
+     * Returns an initialized LogMaker for logging importance changes.
+     * The caller may override the type before passing it to mMetricsLogger.
+     * @return LogMaker
+     */
+    private LogMaker importanceChangeLogMaker() {
+        Integer chosenImportance =
+                mChosenImportance != null ? mChosenImportance : mStartingChannelImportance;
+        return getLogMaker().setCategory(MetricsEvent.ACTION_SAVE_IMPORTANCE)
+                .setType(MetricsEvent.TYPE_ACTION)
+                .setSubtype(chosenImportance - mStartingChannelImportance);
+    }
+
+    /**
+     * Returns an initialized LogMaker for logging open/close of the info display.
+     * The caller may override the type before passing it to mMetricsLogger.
+     * @return LogMaker
+     */
+    private LogMaker notificationControlsLogMaker() {
+        return getLogMaker().setCategory(MetricsEvent.ACTION_NOTE_CONTROLS)
+                .setType(MetricsEvent.TYPE_OPEN)
+                .setSubtype(mIsForBlockingHelper ? MetricsEvent.BLOCKING_HELPER_DISPLAY
+                        : MetricsEvent.BLOCKING_HELPER_UNKNOWN);
     }
 }

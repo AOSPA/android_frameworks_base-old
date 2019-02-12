@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import android.annotation.IntDef;
 import android.content.Context;
+import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
@@ -34,13 +35,18 @@ import java.lang.annotation.RetentionPolicy;
 public class NavigationPrototypeController extends ContentObserver {
     private static final String HIDE_BACK_BUTTON_SETTING = "quickstepcontroller_hideback";
     private static final String HIDE_HOME_BUTTON_SETTING = "quickstepcontroller_hidehome";
+    private static final String PROTOTYPE_ENABLED = "prototype_enabled";
 
+    private static final String EDGE_SENSITIVITY_HEIGHT_SETTING =
+            "quickstepcontroller_edge_height_sensitivity";
+    public static final String EDGE_SENSITIVITY_WIDTH_SETTING =
+            "quickstepcontroller_edge_width_sensitivity";
     private final String GESTURE_MATCH_SETTING = "quickstepcontroller_gesture_match_map";
     public static final String NAV_COLOR_ADAPT_ENABLE_SETTING = "navbar_color_adapt_enable";
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({ACTION_DEFAULT, ACTION_QUICKSTEP, ACTION_QUICKSCRUB, ACTION_BACK,
-            ACTION_QUICKSWITCH, ACTION_NOTHING, ACTION_ASSISTANT})
+            ACTION_QUICKSWITCH, ACTION_NOTHING, ACTION_ASSISTANT, ACTION_EXPAND_NOTIFICATION})
     @interface GestureAction {}
     static final int ACTION_DEFAULT = 0;
     static final int ACTION_QUICKSTEP = 1;
@@ -49,6 +55,7 @@ public class NavigationPrototypeController extends ContentObserver {
     static final int ACTION_QUICKSWITCH = 4;
     static final int ACTION_NOTHING = 5;
     static final int ACTION_ASSISTANT = 6;
+    static final int ACTION_EXPAND_NOTIFICATION = 7;
 
     private OnPrototypeChangedListener mListener;
 
@@ -78,6 +85,8 @@ public class NavigationPrototypeController extends ContentObserver {
         registerObserver(HIDE_HOME_BUTTON_SETTING);
         registerObserver(GESTURE_MATCH_SETTING);
         registerObserver(NAV_COLOR_ADAPT_ENABLE_SETTING);
+        registerObserver(EDGE_SENSITIVITY_WIDTH_SETTING);
+        registerObserver(EDGE_SENSITIVITY_HEIGHT_SETTING);
     }
 
     /**
@@ -105,8 +114,24 @@ public class NavigationPrototypeController extends ContentObserver {
             } else if (path.endsWith(NAV_COLOR_ADAPT_ENABLE_SETTING)) {
                 mListener.onColorAdaptChanged(
                         NavBarTintController.isEnabled(mContext));
+            } else if (path.endsWith(EDGE_SENSITIVITY_WIDTH_SETTING)
+                    || path.endsWith(EDGE_SENSITIVITY_HEIGHT_SETTING)) {
+                mListener.onEdgeSensitivityChanged(getEdgeSensitivityWidth(),
+                        getEdgeSensitivityHeight());
             }
         }
+    }
+
+    public int getEdgeSensitivityWidth() {
+        return convertDpToPixel(getGlobalInt(EDGE_SENSITIVITY_WIDTH_SETTING, 0));
+    }
+
+    public int getEdgeSensitivityHeight() {
+        return convertDpToPixel(getGlobalInt(EDGE_SENSITIVITY_HEIGHT_SETTING, 0));
+    }
+
+    public boolean isEnabled() {
+        return getGlobalBool(PROTOTYPE_ENABLED, false);
     }
 
     /**
@@ -143,9 +168,17 @@ public class NavigationPrototypeController extends ContentObserver {
         return Settings.Global.getInt(mContext.getContentResolver(), name, defaultVal ? 1 : 0) == 1;
     }
 
+    private int getGlobalInt(String name, int defaultVal) {
+        return Settings.Global.getInt(mContext.getContentResolver(), name, defaultVal);
+    }
+
     private void registerObserver(String name) {
         mContext.getContentResolver()
                 .registerContentObserver(Settings.Global.getUriFor(name), false, this);
+    }
+
+    private static int convertDpToPixel(float dp) {
+        return (int) (dp * Resources.getSystem().getDisplayMetrics().density);
     }
 
     public interface OnPrototypeChangedListener {
@@ -153,5 +186,6 @@ public class NavigationPrototypeController extends ContentObserver {
         void onBackButtonVisibilityChanged(boolean visible);
         void onHomeButtonVisibilityChanged(boolean visible);
         void onColorAdaptChanged(boolean enabled);
+        void onEdgeSensitivityChanged(int width, int height);
     }
 }

@@ -23,6 +23,7 @@ import android.content.IIntentReceiver;
 import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.UserInfo;
 import android.os.Bundle;
@@ -219,9 +220,11 @@ public abstract class ActivityManagerInternal {
      * @param userId
      * @param event
      * @param appToken ActivityRecord's appToken.
+     * @param taskRoot TaskRecord's root
      */
     public abstract void updateActivityUsageStats(
-            ComponentName activity, int userId, int event, IBinder appToken);
+            ComponentName activity, int userId, int event, IBinder appToken,
+            ComponentName taskRoot);
     public abstract void updateForegroundTimeIfOnBattery(
             String packageName, int uid, long cpuTimeDiff);
     public abstract void sendForegroundProfileChanged(int userId);
@@ -244,6 +247,9 @@ public abstract class ActivityManagerInternal {
 
     /** Gets the task id for a given activity. */
     public abstract int getTaskIdForActivity(@NonNull IBinder token, boolean onlyRoot);
+
+    /** Gets the basic info for a given activity. */
+    public abstract ActivityPresentationInfo getActivityPresentationInfo(@NonNull IBinder token);
 
     public abstract void setBooting(boolean booting);
     public abstract boolean isBooting();

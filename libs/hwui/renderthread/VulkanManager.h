@@ -39,9 +39,9 @@ class RenderThread;
 class VulkanSurface {
 public:
     VulkanSurface(ColorMode colorMode, ANativeWindow* window, sk_sp<SkColorSpace> colorSpace,
-                  SkColorSpace::Gamut colorGamut, SkColorType colorType)
+                  SkColorType colorType)
             : mColorMode(colorMode), mNativeWindow(window), mColorSpace(colorSpace),
-              mColorGamut(colorGamut), mColorType(colorType) {}
+              mColorType(colorType) {}
 
     sk_sp<SkSurface> getBackBufferSurface() { return mBackbuffer; }
 
@@ -90,7 +90,6 @@ private:
     int mWindowWidth = 0;
     int mWindowHeight = 0;
     sk_sp<SkColorSpace> mColorSpace;
-    SkColorSpace::Gamut mColorGamut;
     SkColorType mColorType;
     VkSurfaceTransformFlagBitsKHR mTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     SkMatrix mPreTransform;
@@ -113,7 +112,6 @@ public:
     // VulkanSurface object which is returned.
     VulkanSurface* createSurface(ANativeWindow* window, ColorMode colorMode,
                                  sk_sp<SkColorSpace> surfaceColorSpace,
-                                 SkColorSpace::Gamut surfaceColorGamut,
                                  SkColorType surfaceColorType);
 
     // Destroy the VulkanSurface and all associated vulkan objects.
@@ -153,7 +151,7 @@ private:
 
     // Sets up the VkInstance and VkDevice objects. Also fills out the passed in
     // VkPhysicalDeviceFeatures struct.
-    bool setupDevice(GrVkExtensions&, VkPhysicalDeviceFeatures2&);
+    void setupDevice(GrVkExtensions&, VkPhysicalDeviceFeatures2&);
 
     void destroyBuffers(VulkanSurface* surface);
 
@@ -248,7 +246,7 @@ private:
     VkCommandBuffer mDummyCB = VK_NULL_HANDLE;
 
     // Variables saved to populate VkFunctorInitParams.
-    uint32_t mInstanceVersion = 0u;
+    static const uint32_t mAPIVersion = VK_MAKE_VERSION(1, 1, 0);
     std::vector<const char*> mInstanceExtensions;
     std::vector<const char*> mDeviceExtensions;
     VkPhysicalDeviceFeatures2 mPhysicalDeviceFeatures2{};

@@ -21,13 +21,14 @@ import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
-import android.content.rollback.RollbackInfo;
+import android.content.pm.VersionedPackage;
 import android.content.rollback.RollbackManager;
 import android.support.test.InstrumentationRegistry;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Arrays;
 
 /**
  * Utilities to facilitate testing rollbacks.
@@ -90,13 +91,21 @@ class RollbackTestUtils {
     }
 
     /**
-     * Execute the given rollback.
+     * Commit the given rollback.
      * @throws AssertionError if the rollback fails.
      */
-    static void rollback(RollbackInfo rollback) throws InterruptedException {
+    static void rollback(int rollbackId, VersionedPackage... causePackages)
+            throws InterruptedException {
         RollbackManager rm = getRollbackManager();
-        rm.executeRollback(rollback, LocalIntentSender.getIntentSender());
-        assertStatusSuccess(LocalIntentSender.getIntentSenderResult());
+        rm.commitRollback(rollbackId, Arrays.asList(causePackages),
+                LocalIntentSender.getIntentSender());
+        Intent result = LocalIntentSender.getIntentSenderResult();
+        int status = result.getIntExtra(RollbackManager.EXTRA_STATUS,
+                RollbackManager.STATUS_FAILURE);
+        if (status != RollbackManager.STATUS_SUCCESS) {
+            String message = result.getStringExtra(RollbackManager.EXTRA_STATUS_MESSAGE);
+            throw new AssertionError(message);
+        }
     }
 
     /**
@@ -133,6 +142,17 @@ class RollbackTestUtils {
         // Commit the session (this will start the installation workflow).
         session.commit(LocalIntentSender.getIntentSender());
         assertStatusSuccess(LocalIntentSender.getIntentSenderResult());
+    }
+
+    /** Launches {@code packageName} with {@link Intent#ACTION_MAIN}. */
+    static void launchPackage(String packageName)
+            throws InterruptedException, IOException {
+        Context context = InstrumentationRegistry.getContext();
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setPackage(packageName);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        context.startActivity(intent);
     }
 
     /**

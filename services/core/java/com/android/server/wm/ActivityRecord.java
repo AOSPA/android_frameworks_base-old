@@ -161,6 +161,7 @@ import android.app.servertransaction.NewIntentItem;
 import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.PipModeChangeItem;
 import android.app.servertransaction.ResumeActivityItem;
+import android.app.servertransaction.TopResumedActivityChangeItem;
 import android.app.servertransaction.WindowVisibilityItem;
 import android.app.usage.UsageEvents.Event;
 import android.content.ComponentName;
@@ -696,6 +697,26 @@ public final class ActivityRecord extends ConfigurationContainer {
 
             mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
                     ActivityConfigurationChangeItem.obtain(config));
+        } catch (RemoteException e) {
+            // If process died, whatever.
+        }
+    }
+
+    void scheduleTopResumedActivityChanged(boolean onTop) {
+        if (!attachedToProcess()) {
+            if (DEBUG_CONFIGURATION) {
+                Slog.w(TAG, "Can't report activity position update - client not running"
+                                + ", activityRecord=" + this);
+            }
+            return;
+        }
+        try {
+            if (DEBUG_CONFIGURATION) {
+                Slog.v(TAG, "Sending position change to " + this + ", onTop: " + onTop);
+            }
+
+            mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
+                    TopResumedActivityChangeItem.obtain(onTop));
         } catch (RemoteException e) {
             // If process died, whatever.
         }
@@ -1931,6 +1952,8 @@ public final class ActivityRecord extends ConfigurationContainer {
      * @return true if the input activity should be made visible, ignoring any effect Keyguard
      * might have on the visibility
      *
+     * TODO(b/123540470): Combine this method and {@link #shouldBeVisible(boolean)}.
+     *
      * @see {@link ActivityStack#checkKeyguardVisibility}
      */
     boolean shouldBeVisibleIgnoringKeyguard(boolean behindFullscreenActivity) {
@@ -1939,6 +1962,36 @@ public final class ActivityRecord extends ConfigurationContainer {
         }
 
         return !behindFullscreenActivity || mLaunchTaskBehind;
+    }
+
+    boolean shouldBeVisible(boolean behindFullscreenActivity) {
+        // Check whether activity should be visible without Keyguard influence
+        visibleIgnoringKeyguard = shouldBeVisibleIgnoringKeyguard(behindFullscreenActivity);
+
+        final ActivityStack stack = getActivityStack();
+        if (stack == null) {
+            return false;
+        }
+
+        // Whether this activity is the top activity of this stack.
+        final boolean isTop = this == stack.getTopActivity();
+        // Exclude the case where this is the top activity in a pinned stack.
+        final boolean isTopNotPinnedStack = stack.isAttached()
+                && stack.getDisplay().isTopNotPinnedStack(stack);
+        // Now check whether it's really visible depending on Keyguard state.
+        return stack.checkKeyguardVisibility(this,
+                visibleIgnoringKeyguard, isTop && isTopNotPinnedStack);
+    }
+
+    boolean shouldBeVisible() {
+        final ActivityStack stack = getActivityStack();
+        if (stack == null) {
+            return false;
+        }
+
+        // TODO: Use real value of behindFullscreenActivity calculated using the same logic in
+        // ActivityStack#ensureActivitiesVisibleLocked().
+        return shouldBeVisible(!stack.shouldBeVisible(null /* starting */));
     }
 
     void makeVisibleIfNeeded(ActivityRecord starting, boolean reportToClient) {
@@ -2044,11 +2097,12 @@ public final class ActivityRecord extends ConfigurationContainer {
     /**
      * Check if activity is eligible to be made active (resumed of paused). The activity:
      * - should be paused, stopped or stopping
-     * - should not be the currently active one
+     * - should not be the currently active one or launching behind other tasks
      * - should be either the topmost in task, or right below the top activity that is finishing
      * If all of these conditions are not met at the same time, the activity cannot be made active.
      */
-    private boolean shouldMakeActive(ActivityRecord activeActivity) {
+    @VisibleForTesting
+    boolean shouldMakeActive(ActivityRecord activeActivity) {
         // If the activity is stopped, stopping, cycle to an active state. We avoid doing
         // this when there is an activity waiting to become translucent as the extra binder
         // calls will lead to noticeable jank. A later call to
@@ -2060,6 +2114,17 @@ public final class ActivityRecord extends ConfigurationContainer {
         }
 
         if (this == activeActivity) {
+            return false;
+        }
+
+        if (!mStackSupervisor.readyToResume()) {
+            // Making active is currently deferred (e.g. because an activity launch is in progress).
+            return false;
+        }
+
+        if (this.mLaunchTaskBehind) {
+            // This activity is being launched from behind, which means that it's not intended to be
+            // presented to user right now, even if it's set to be visible.
             return false;
         }
 
@@ -2873,11 +2938,7 @@ public final class ActivityRecord extends ConfigurationContainer {
             return true;
         }
 
-        // TODO: We should add ActivityRecord.shouldBeVisible() that checks if the activity should
-        // be visible based on the stack, task, and lockscreen state and use that here instead. The
-        // method should be based on the logic in ActivityStack.ensureActivitiesVisibleLocked().
-        // Skip updating configuration for activity is a stack that shouldn't be visible.
-        if (!stack.shouldBeVisible(null /* starting */)) {
+        if (!shouldBeVisible()) {
             if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
                     "Skipping config check invisible stack: " + this);
             return true;
@@ -3145,6 +3206,7 @@ public final class ActivityRecord extends ConfigurationContainer {
             transaction.addCallback(callbackItem);
             transaction.setLifecycleStateRequest(lifecycleItem);
             mAtmService.getLifecycleManager().scheduleTransaction(transaction);
+            mRootActivityContainer.updateTopResumedActivityIfNeeded();
             // Note: don't need to call pauseIfSleepingLocked() here, because the caller will only
             // request resume if this activity is currently resumed, which implies we aren't
             // sleeping.
@@ -3391,6 +3453,16 @@ public final class ActivityRecord extends ConfigurationContainer {
                 stack.checkKeyguardVisibility(this, true /* shouldBeVisible */, true /* isTop */);
     }
 
+    /**
+     * Check if this activity is able to resume. For pre-Q apps, only the topmost activities of each
+     * process are allowed to be resumed.
+     *
+     * @return true if this activity can be resumed.
+     */
+    boolean canResumeByCompat() {
+        return app == null || app.updateTopResumingActivityInProcessIfNeeded(this);
+    }
+
     boolean getTurnScreenOnFlag() {
         return mTurnScreenOn;
     }
@@ -3447,7 +3519,7 @@ public final class ActivityRecord extends ConfigurationContainer {
      * {@code ActivityRecordProto} is the outer-most proto data.
      */
     void writeToProto(ProtoOutputStream proto) {
-        super.writeToProto(proto, CONFIGURATION_CONTAINER, false /* trim */);
+        super.writeToProto(proto, CONFIGURATION_CONTAINER, WindowTraceLogLevel.ALL);
         writeIdentifierToProto(proto, IDENTIFIER);
         proto.write(STATE, mState.toString());
         proto.write(VISIBLE, visible);
