@@ -445,15 +445,19 @@ static void get_cpuset_cores_for_policy(SchedPolicy policy, cpu_set_t *cpu_set)
             }
             break;
         case SP_FOREGROUND:
-            filename = "/dev/cpuset/foreground/cpus";
+            if (!CgroupGetAttributePath("HighCapacityCPUs", &filename)) {
+                return;
+            }
             break;
         case SP_AUDIO_APP:
         case SP_AUDIO_SYS:
-            filename = "/dev/cpuset/foreground/cpus";
-            if (!access("/dev/cpuset/audio-app/cpus", F_OK)) {
-                filename = "/dev/cpuset/audio-app/cpus";
-            } else {
-                filename = "/dev/cpuset/foreground/cpus";
+            if (!CgroupGetAttributePath("AudioAppCapacityCPUs", &filename)) {
+                return;
+            }
+            if (access(filename.c_str(), F_OK) != 0) {
+                if (!CgroupGetAttributePath("HighCapacityCPUs", &filename)) {
+                    return;
+                }
             }
             break;
         case SP_RT_APP:
