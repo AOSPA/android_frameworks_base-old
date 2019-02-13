@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "359ea55a_d2abc395",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 97,
+      "author": {
+        "id": 1000126
+      },
+      "writtenOn": "2019-02-13T14:02:36Z",
+      "side": 1,
+      "message": "Error: var `mDeltaSpeedTimes` not defined.",
+      "range": {
+        "startLine": 96,
+        "startChar": 0,
+        "endLine": 97,
+        "endChar": 36
+      },
+      "revId": "bd7967694d42a0a81cc1112179d40c0f3206a3ac",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
