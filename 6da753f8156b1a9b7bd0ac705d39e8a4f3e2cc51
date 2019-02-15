@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "cfecde1b_d2e389f8",
+        "filename": "packages/SystemUI/src/com/android/systemui/BatteryMeterView.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1000008
+      },
+      "writtenOn": "2019-02-15T17:11:18Z",
+      "side": 1,
+      "message": "Where is that used?",
+      "revId": "6da753f8156b1a9b7bd0ac705d39e8a4f3e2cc51",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ea980791_aaa0f9fb",
+        "filename": "packages/SystemUI/src/com/android/systemui/BatteryMeterView.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 254,
+      "author": {
+        "id": 1000008
+      },
+      "writtenOn": "2019-02-15T17:11:18Z",
+      "side": 1,
+      "message": "charging \u0026\u0026 isFastCharge()",
+      "revId": "6da753f8156b1a9b7bd0ac705d39e8a4f3e2cc51",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
