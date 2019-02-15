@@ -243,6 +243,7 @@ public class BatteryMeterView extends LinearLayout implements
 
         mDrawable.setBatteryLevel(level);
         mDrawable.setCharging(pluggedIn);
+        mDrawable.setFastCharging(isFastCharge());
         mLevel = level;
         if (mCharging != pluggedIn) {
             mCharging = pluggedIn;
@@ -252,6 +253,29 @@ public class BatteryMeterView extends LinearLayout implements
         setContentDescription(
                 getContext().getString(charging ? R.string.accessibility_battery_level_charging
                         : R.string.accessibility_battery_level, level));
+    }
+
+    private boolean isFastCharge() {
+        Resources res = context.getResources();
+        mFastThreshold = res.getInteger(R.integer.config_chargingFastThreshold);
+
+        final int maxChargingMicroAmp = intent.getIntExtra(EXTRA_MAX_CHARGING_CURRENT, -1);
+        int maxChargingMicroVolt = intent.getIntExtra(EXTRA_MAX_CHARGING_VOLTAGE, -1);
+        final int maxChargingMicroWatt;
+
+        if (maxChargingMicroVolt <= 0) {
+            maxChargingMicroVolt = DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT;
+        }
+        if (maxChargingMicroAmp > 0) {
+            // Calculating muW = muA * muV / (10^6 mu^2 / mu); splitting up the divisor
+            // to maintain precision equally on both factors.
+            maxChargingMicroWatt = (maxChargingMicroAmp / 1000)
+                    * (maxChargingMicroVolt / 1000);
+        } else {
+            maxChargingMicroWatt = -1;
+        }
+
+        return maxChargingWatt > mFastThreshold;
     }
 
     @Override
