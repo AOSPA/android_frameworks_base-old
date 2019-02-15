@@ -243,7 +243,9 @@ public class BatteryMeterDrawableBase extends Drawable {
 
     public void setFastCharging(boolean val) {
         mFastCharging = val;
-        cancelChargingAnimation();
+        if (mFastCharging) {
+            cancelChargingAnimation();
+        }
         postInvalidate();
     }
 
