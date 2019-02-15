@@ -168,7 +168,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
      */
     private static final int FINGERPRINT_STATE_CANCELLING_RESTARTING = 3;
 
-    private static final int DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT = 5000000;
+    public static final int DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT = 5000000;
 
     private static final ComponentName FALLBACK_HOME_COMPONENT = new ComponentName(
             "com.android.settings", "com.android.settings.FallbackHome");
