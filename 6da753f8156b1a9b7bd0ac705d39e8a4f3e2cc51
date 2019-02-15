@@ -87,6 +87,23 @@
       "revId": "6da753f8156b1a9b7bd0ac705d39e8a4f3e2cc51",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "56009f52_5552211d",
+        "filename": "packages/SystemUI/src/com/android/systemui/BatteryMeterView.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 278,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2019-02-15T17:41:41Z",
+      "side": 1,
+      "message": "Maybe \"maxChargingMicroVolt \u003d KeyguardUpdateMonitor.DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT;\" in case it´s made public on the other one?",
+      "revId": "6da753f8156b1a9b7bd0ac705d39e8a4f3e2cc51",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
     }
   ]
 }
