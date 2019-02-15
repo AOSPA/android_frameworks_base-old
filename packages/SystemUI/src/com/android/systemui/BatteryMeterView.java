@@ -17,12 +17,16 @@ package com.android.systemui;
 
 import static android.app.StatusBarManager.DISABLE2_SYSTEM_ICONS;
 import static android.app.StatusBarManager.DISABLE_NONE;
+import static android.os.BatteryManager.EXTRA_MAX_CHARGING_CURRENT;
+import static android.os.BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE;
 import static android.provider.Settings.System.SHOW_BATTERY_PERCENT;
 import static android.provider.Settings.Secure.STATUS_BAR_BATTERY_STYLE;
 
 import android.animation.ArgbEvaluator;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.ContentObserver;
@@ -42,6 +46,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.settingslib.Utils;
 import com.android.settingslib.graph.BatteryMeterDrawableBase;
 import com.android.systemui.settings.CurrentUserTracker;
@@ -85,6 +90,8 @@ public class BatteryMeterView extends LinearLayout implements
 
     private final Context mContext;
     private final int mFrameColor;
+
+    private int mFastThreshold;
 
     /**
      * Whether we should use colors that adapt based on wallpaper/the scrim behind quick settings.
@@ -243,6 +250,7 @@ public class BatteryMeterView extends LinearLayout implements
 
         mDrawable.setBatteryLevel(level);
         mDrawable.setCharging(pluggedIn);
+        mDrawable.setFastCharging(pluggedIn && isFastCharge());
         mLevel = level;
         if (mCharging != pluggedIn) {
             mCharging = pluggedIn;
@@ -252,6 +260,32 @@ public class BatteryMeterView extends LinearLayout implements
         setContentDescription(
                 getContext().getString(charging ? R.string.accessibility_battery_level_charging
                         : R.string.accessibility_battery_level, level));
+    }
+
+    private boolean isFastCharge() {
+        Resources res = getContext().getResources();
+        mFastThreshold = res.getInteger(R.integer.config_chargingFastThreshold);
+
+        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        Intent batteryStatus = getContext().registerReceiver(null, intentFilter);
+
+        int maxChargingMicroAmp = batteryStatus.getIntExtra(EXTRA_MAX_CHARGING_CURRENT, -1);
+        int maxChargingMicroVolt = batteryStatus.getIntExtra(EXTRA_MAX_CHARGING_VOLTAGE, -1);
+        int maxChargingMicroWatt;
+
+        if (maxChargingMicroVolt <= 0) {
+            maxChargingMicroVolt = KeyguardUpdateMonitor.DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT;
+        }
+        if (maxChargingMicroAmp > 0) {
+            // Calculating muW = muA * muV / (10^6 mu^2 / mu); splitting up the divisor
+            // to maintain precision equally on both factors.
+            maxChargingMicroWatt = (maxChargingMicroAmp / 1000)
+                    * (maxChargingMicroVolt / 1000);
+        } else {
+            maxChargingMicroWatt = -1;
+        }
+
+        return maxChargingMicroWatt > mFastThreshold;
     }
 
     @Override
