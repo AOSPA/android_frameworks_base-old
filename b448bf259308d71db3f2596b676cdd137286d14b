@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3b6df078_8fb169f9",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/graph/BatteryMeterDrawableBase.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 246,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2019-02-15T18:57:43Z",
+      "side": 1,
+      "message": "I think this should be:\n\nif(val) cancelChargingAnimation();\n\nOnly cancel animation if FastCharging is true.",
+      "revId": "b448bf259308d71db3f2596b676cdd137286d14b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
