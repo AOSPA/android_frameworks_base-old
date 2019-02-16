@@ -27,6 +27,8 @@ import android.os.PowerManager;
 import android.os.PowerSaveState;
 import android.util.Log;
 
+import com.android.systemui.R;
+
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.fuelgauge.BatterySaverUtils;
 
@@ -44,15 +46,19 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
     public static final String ACTION_LEVEL_TEST = "com.android.systemui.BATTERY_LEVEL_TEST";
 
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final int DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT = 5000000;
 
     private final ArrayList<BatteryController.BatteryStateChangeCallback> mChangeCallbacks = new ArrayList<>();
     private final PowerManager mPowerManager;
     private final Handler mHandler;
     private final Context mContext;
 
+    protected final int mFastChargingThreshold;
+
     protected int mLevel;
     protected boolean mPluggedIn;
     protected boolean mCharging;
+    protected boolean mFastCharging;
     protected boolean mCharged;
     protected boolean mPowerSave;
     protected boolean mAodPowerSave;
@@ -68,6 +74,8 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
         mContext = context;
         mHandler = new Handler();
         mPowerManager = powerManager;
+        mFastChargingThreshold = mContext.getResources().getInteger(
+                R.integer.config_chargingFastThreshold);
 
         registerReceiver();
         updatePowerSave();
@@ -88,6 +96,7 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
         pw.print("  mLevel="); pw.println(mLevel);
         pw.print("  mPluggedIn="); pw.println(mPluggedIn);
         pw.print("  mCharging="); pw.println(mCharging);
+        pw.print("  mFastCharging="); pw.println(mFastCharging);
         pw.print("  mCharged="); pw.println(mCharged);
         pw.print("  mPowerSave="); pw.println(mPowerSave);
     }
@@ -103,7 +112,7 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
             mChangeCallbacks.add(cb);
         }
         if (!mHasReceivedBattery) return;
-        cb.onBatteryLevelChanged(mLevel, mPluggedIn, mCharging);
+        cb.onBatteryLevelChanged(mLevel, mPluggedIn, mCharging, mFastCharging);
         cb.onPowerSaveChanged(mPowerSave);
     }
 
@@ -129,6 +138,24 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
                     BatteryManager.BATTERY_STATUS_UNKNOWN);
             mCharged = status == BatteryManager.BATTERY_STATUS_FULL;
             mCharging = mCharged || status == BatteryManager.BATTERY_STATUS_CHARGING;
+
+            final int maxChargingMicroAmp = intent.getIntExtra(
+                    BatteryManager.EXTRA_MAX_CHARGING_CURRENT, -1);
+            int maxChargingMicroWatt = -1;
+            int maxChargingMicroVolt = intent.getIntExtra(
+                    BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE, -1);
+            if (maxChargingMicroVolt <= 0) {
+                maxChargingMicroVolt = DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT;
+            }
+
+            if (maxChargingMicroAmp > 0) {
+                // Calculating muW = muA * muV / (10^6 mu^2 / mu); splitting up the divisor
+                // to maintain precision equally on both factors.
+                maxChargingMicroWatt = (maxChargingMicroAmp / 1000)
+                        * (maxChargingMicroVolt / 1000);
+            }
+            mFastCharging = mCharging && (maxChargingMicroWatt > mFastChargingThreshold
+                    || intent.getBooleanExtra(BatteryManager.EXTRA_DASH_CHARGER, false));
 
             fireBatteryLevelChanged();
         } else if (action.equals(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)) {
@@ -200,7 +227,8 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
         synchronized (mChangeCallbacks) {
             final int N = mChangeCallbacks.size();
             for (int i = 0; i < N; i++) {
-                mChangeCallbacks.get(i).onBatteryLevelChanged(mLevel, mPluggedIn, mCharging);
+                mChangeCallbacks.get(i).onBatteryLevelChanged(mLevel, mPluggedIn, mCharging,
+                        mFastCharging);
             }
         }
     }
