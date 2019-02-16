@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The ParanoidAndroid Project
+ * Copyright (C) 2016-2019 The ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import android.animation.Animator;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.os.Handler;
+import android.provider.Settings;
+import android.text.format.DateUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -42,6 +44,8 @@ public class PocketLock {
 
     private boolean mAttached;
     private boolean mAnimating;
+
+    private int mOldSleepTimeout;
 
     /**
      * Creates pocket lock objects, inflate view and set layout parameters.
@@ -67,6 +71,18 @@ public class PocketLock {
                 if (mAnimating) {
                     mView.animate().cancel();
                 }
+
+                // Backup old user set screen off timeout.
+                try {
+                    mOldSleepTimeout = Settings.System.getInt(mContext.getContentResolver(),
+                            Settings.System.SCREEN_OFF_TIMEOUT);
+                } catch (Settings.SettingNotFoundException e) {
+                    e.printStackTrace();
+                }
+                // Set screen off timeout to 10 secs for pocket lock.
+                Settings.System.putInt(mContext.getContentResolver(),
+                        Settings.System.SCREEN_OFF_TIMEOUT,
+                        (int) (10 * DateUtils.SECOND_IN_MILLIS));
 
                 if (animate) {
                     mView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
@@ -117,6 +133,10 @@ public class PocketLock {
                 if (mAnimating) {
                     mView.animate().cancel();
                 }
+
+                // Restore screen off timeout
+                Settings.System.putInt(mContext.getContentResolver(),
+                        Settings.System.SCREEN_OFF_TIMEOUT, mOldSleepTimeout);
 
                 if (animate) {
                     mView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
