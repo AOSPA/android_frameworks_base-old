@@ -92,7 +92,8 @@ public class BatterySaverTile extends QSTileImpl<BooleanState> implements
     }
 
     @Override
-    public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+    public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging,
+            boolean fastCharging) {
         mLevel = level;
         mPluggedIn = pluggedIn;
         mCharging = charging;

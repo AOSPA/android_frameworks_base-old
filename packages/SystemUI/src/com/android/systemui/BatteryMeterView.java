@@ -235,8 +235,8 @@ public class BatteryMeterView extends LinearLayout implements
     }
 
     @Override
-    public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
-
+    public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging,
+            boolean fastCharging) {
         // text battery will always show percentage
         if (isCircleBattery()
                 || getMeterStyle() == BatteryMeterDrawableBase.BATTERY_STYLE_PORTRAIT) {
@@ -248,6 +248,7 @@ public class BatteryMeterView extends LinearLayout implements
 
         mDrawable.setBatteryLevel(level);
         mDrawable.setCharging(pluggedIn);
+        mDrawable.setFastCharging(fastCharging);
         mLevel = level;
         if (mCharging != pluggedIn) {
             mCharging = pluggedIn;

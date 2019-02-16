@@ -104,7 +104,7 @@ public class CarBatteryController extends BroadcastReceiver implements BatteryCo
 
         // There is no way to know if the phone is plugged in or charging via bluetooth, so pass
         // false for these values.
-        cb.onBatteryLevelChanged(mLevel, false /* pluggedIn */, false /* charging */);
+        cb.onBatteryLevelChanged(mLevel, false /* pluggedIn */, false /* charging */, false);
         cb.onPowerSaveChanged(false /* isPowerSave */);
     }
 
@@ -257,7 +257,7 @@ public class CarBatteryController extends BroadcastReceiver implements BatteryCo
     private void notifyBatteryLevelChanged() {
         for (int i = 0, size = mChangeCallbacks.size(); i < size; i++) {
             mChangeCallbacks.get(i)
-                    .onBatteryLevelChanged(mLevel, false /* pluggedIn */, false /* charging */);
+                    .onBatteryLevelChanged(mLevel, false /* pluggedIn */, false /* charging */, false);
         }
     }
 

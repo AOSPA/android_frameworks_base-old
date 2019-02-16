@@ -349,7 +349,8 @@ public class KeyguardStatusBarView extends RelativeLayout
     }
 
     @Override
-    public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+    public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging,
+            boolean fastCharging) {
         if (mBatteryCharging != charging) {
             mBatteryCharging = charging;
             updateVisibilities();
