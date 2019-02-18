@@ -25,7 +25,7 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.AmbientPulseManager;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
@@ -75,7 +75,6 @@ public class AmbientState {
     private int mIntrinsicPadding;
     private int mExpandAnimationTopChange;
     private ExpandableNotificationRow mExpandingNotification;
-    private int mDarkTopPadding;
     private float mDarkAmount;
     private boolean mAppearing;
 
@@ -351,14 +350,15 @@ public class AmbientState {
     }
 
     public boolean hasPulsingNotifications() {
-        return mPulsing;
+        return mPulsing && mAmbientPulseManager != null
+                && mAmbientPulseManager.hasNotifications();
     }
 
     public void setPulsing(boolean hasPulsing) {
         mPulsing = hasPulsing;
     }
 
-    public boolean isPulsing(NotificationData.Entry entry) {
+    public boolean isPulsing(NotificationEntry entry) {
         if (!mPulsing || mAmbientPulseManager == null) {
             return false;
         }
@@ -456,14 +456,6 @@ public class AmbientState {
 
     public boolean isDarkAtAll() {
         return mDarkAmount != 0;
-    }
-
-    public void setDarkTopPadding(int darkTopPadding) {
-        mDarkTopPadding = darkTopPadding;
-    }
-
-    public int getDarkTopPadding() {
-        return mDarkTopPadding;
     }
 
     public void setAppearing(boolean appearing) {

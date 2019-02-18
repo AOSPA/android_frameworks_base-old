@@ -328,14 +328,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private int mLastOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
 
     /**
-     * Flag indicating that the application is receiving an orientation that has different metrics
-     * than it expected. E.g. Portrait instead of Landscape.
-     *
-     * @see #updateRotationUnchecked()
-     */
-    private boolean mAltOrientation = false;
-
-    /**
      * Orientation forced by some window. If there is no visible window that specifies orientation
      * it is set to {@link android.content.pm.ActivityInfo#SCREEN_ORIENTATION_UNSPECIFIED}.
      *
@@ -1085,10 +1077,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return mLastOrientation;
     }
 
-    boolean getAltOrientation() {
-        return mAltOrientation;
-    }
-
     int getLastWindowForcedOrientation() {
         return mLastWindowForcedOrientation;
     }
@@ -1130,15 +1118,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     boolean rotationNeedsUpdate() {
         final int lastOrientation = getLastOrientation();
         final int oldRotation = getRotation();
-        final boolean oldAltOrientation = getAltOrientation();
 
         final int rotation = mDisplayRotation.rotationForOrientation(lastOrientation, oldRotation);
-        final boolean altOrientation = !mDisplayRotation.rotationHasCompatibleMetrics(
-                lastOrientation, rotation);
-        if (oldRotation == rotation && oldAltOrientation == altOrientation) {
-            return false;
-        }
-        return true;
+        return oldRotation != rotation;
     }
 
     /**
@@ -1160,12 +1142,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     @Override
     boolean onDescendantOrientationChanged(IBinder freezeDisplayToken,
             ConfigurationContainer requestingContainer) {
+        final int previousRotation = mRotation;
         final Configuration config = updateOrientationFromAppTokens(
                 getRequestedOverrideConfiguration(), freezeDisplayToken, false);
-        // If display rotation class tells us that it doesn't consider app requested orientation,
-        // this display won't rotate just because of an app changes its requested orientation. Thus
-        // it indicates that this display chooses not to handle this request.
-        final boolean handled = getDisplayRotation().respectAppRequestedOrientation();
+        // This event is considered handled iff a configuration propagation is triggered, because
+        // that's the only place lower level containers check if they need to do something to this
+        // request. The only guaranteed signal is that the display is rotated to a different
+        // orientation (i.e. rotating 180 degrees doesn't count).
+        final boolean handled = (mRotation - previousRotation) % 2 != 0;
         if (config == null) {
             return handled;
         }
@@ -1334,7 +1318,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         final int oldRotation = mRotation;
         final int lastOrientation = mLastOrientation;
-        final boolean oldAltOrientation = mAltOrientation;
         final int rotation = mDisplayRotation.rotationForOrientation(lastOrientation, oldRotation);
         if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Computed rotation=" + rotation + " for display id="
                 + mDisplayId + " based on lastOrientation=" + lastOrientation
@@ -1366,35 +1349,26 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
         final boolean rotateSeamlessly = mayRotateSeamlessly;
 
-        // TODO: Implement forced rotation changes.
-        //       Set mAltOrientation to indicate that the application is receiving
-        //       an orientation that has different metrics than it expected.
-        //       eg. Portrait instead of Landscape.
-
-        final boolean altOrientation = !mDisplayRotation.rotationHasCompatibleMetrics(
-                lastOrientation, rotation);
-
         if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Display id=" + mDisplayId
                 + " selected orientation " + lastOrientation
                 + ", got rotation " + rotation + " which has "
-                + (altOrientation ? "incompatible" : "compatible") + " metrics");
+                + " metrics");
 
-        if (oldRotation == rotation && oldAltOrientation == altOrientation) {
+        if (oldRotation == rotation) {
             // No change.
             return false;
         }
 
         if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Display id=" + mDisplayId
                 + " rotation changed to " + rotation
-                + (altOrientation ? " (alt)" : "") + " from " + oldRotation
-                + (oldAltOrientation ? " (alt)" : "") + ", lastOrientation=" + lastOrientation);
+                + " from " + oldRotation
+                + ", lastOrientation=" + lastOrientation);
 
         if (DisplayContent.deltaRotation(rotation, oldRotation) != 2) {
             mWaitingForConfig = true;
         }
 
         mRotation = rotation;
-        mAltOrientation = altOrientation;
 
         mWmService.mWindowsFreezingScreen = WINDOWS_FREEZING_SCREENS_ACTIVE;
         mWmService.mH.sendNewMessageDelayed(WindowManagerService.H.WINDOW_FREEZE_TIMEOUT,
@@ -1536,26 +1510,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private DisplayInfo updateDisplayAndOrientation(int uiMode) {
         // Use the effective "visual" dimensions based on current rotation
         final boolean rotated = (mRotation == ROTATION_90 || mRotation == ROTATION_270);
-        final int realdw = rotated ? mBaseDisplayHeight : mBaseDisplayWidth;
-        final int realdh = rotated ? mBaseDisplayWidth : mBaseDisplayHeight;
-        int dw = realdw;
-        int dh = realdh;
-
-        if (mAltOrientation) {
-            if (realdw > realdh) {
-                // Turn landscape into portrait.
-                int maxw = (int)(realdh/1.3f);
-                if (maxw < realdw) {
-                    dw = maxw;
-                }
-            } else {
-                // Turn portrait into landscape.
-                int maxh = (int)(realdw/1.3f);
-                if (maxh < realdh) {
-                    dh = maxh;
-                }
-            }
-        }
+        final int dw = rotated ? mBaseDisplayHeight : mBaseDisplayWidth;
+        final int dh = rotated ? mBaseDisplayWidth : mBaseDisplayHeight;
 
         // Update application display metrics.
         final WmDisplayCutout wmDisplayCutout = calculateDisplayCutoutForRotation(mRotation);
@@ -2307,13 +2263,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         out.set(mDisplayFrames.mStable);
     }
 
-    TaskStack createStack(int stackId, boolean onTop, StackWindowController controller) {
-        if (DEBUG_STACK) Slog.d(TAG_WM, "Create new stackId=" + stackId + " on displayId="
-                + mDisplayId);
+    void setStackOnDisplay(int stackId, boolean onTop, TaskStack stack) {
+        if (DEBUG_STACK) {
+            Slog.d(TAG_WM, "Create new stackId=" + stackId + " on displayId=" + mDisplayId);
+        }
 
-        final TaskStack stack = new TaskStack(mWmService, stackId, controller);
         mTaskStackContainers.addStackToDisplay(stack, onTop);
-        return stack;
     }
 
     void moveStackToDisplay(TaskStack stack, boolean onTop) {
@@ -3656,6 +3611,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
     }
 
+    /** @returns the orientation of the display when it's rotation is ROTATION_0. */
+    int getNaturalOrientation() {
+        return mBaseDisplayWidth < mBaseDisplayHeight
+                ? ORIENTATION_PORTRAIT : ORIENTATION_LANDSCAPE;
+    }
+
     void performLayout(boolean initial, boolean updateInputWindows) {
         if (!isLayoutNeeded()) {
             return;
@@ -4009,7 +3970,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         /**
          * Adds the stack to this container.
-         * @see DisplayContent#createStack(int, boolean, StackWindowController)
          */
         void addStackToDisplay(TaskStack stack, boolean onTop) {
             addStackReferenceIfNeeded(stack);

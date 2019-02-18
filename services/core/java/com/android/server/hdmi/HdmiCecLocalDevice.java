@@ -18,19 +18,24 @@ package com.android.server.hdmi;
 
 import android.annotation.Nullable;
 import android.hardware.hdmi.HdmiDeviceInfo;
+import android.hardware.hdmi.IHdmiControlCallback;
 import android.hardware.input.InputManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.Slog;
 import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.server.hdmi.Constants.LocalActivePort;
 import com.android.server.hdmi.HdmiAnnotations.ServiceThreadOnly;
 import com.android.server.hdmi.HdmiControlService.SendMessageCallback;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -56,6 +61,7 @@ abstract class HdmiCecLocalDevice {
     protected final int mDeviceType;
     protected int mAddress;
     protected int mPreferredAddress;
+    @GuardedBy("mLock")
     protected HdmiDeviceInfo mDeviceInfo;
     protected int mLastKeycode = HdmiCecKeycode.UNSUPPORTED_KEYCODE;
     protected int mLastKeyRepeatCount = 0;
@@ -125,9 +131,6 @@ abstract class HdmiCecLocalDevice {
             return s.toString();
         }
     }
-    // Logical address of the active source.
-    @GuardedBy("mLock")
-    protected final ActiveSource mActiveSource = new ActiveSource();
 
     // Active routing path. Physical address of the active source but not all the time, such as
     // when the new active source does not claim itself to be one. Note that we don't keep
@@ -434,10 +437,14 @@ abstract class HdmiCecLocalDevice {
         return true;
     }
 
+    // Audio System device with no Playback device type
+    // needs to refactor this function if it's also a switch
     protected boolean handleRoutingChange(HdmiCecMessage message) {
         return false;
     }
 
+    // Audio System device with no Playback device type
+    // needs to refactor this function if it's also a switch
     protected boolean handleRoutingInformation(HdmiCecMessage message) {
         return false;
     }
@@ -706,16 +713,18 @@ abstract class HdmiCecLocalDevice {
         return mDeviceType;
     }
 
-    @ServiceThreadOnly
+    @GuardedBy("mLock")
     HdmiDeviceInfo getDeviceInfo() {
-        assertRunOnServiceThread();
-        return mDeviceInfo;
+        synchronized (mLock) {
+            return mDeviceInfo;
+        }
     }
 
-    @ServiceThreadOnly
+    @GuardedBy("mLock")
     void setDeviceInfo(HdmiDeviceInfo info) {
-        assertRunOnServiceThread();
-        mDeviceInfo = info;
+        synchronized (mLock) {
+            mDeviceInfo = info;
+        }
     }
 
     // Returns true if the logical address is same as the argument.
@@ -855,9 +864,7 @@ abstract class HdmiCecLocalDevice {
     }
 
     ActiveSource getActiveSource() {
-        synchronized (mLock) {
-            return mActiveSource;
-        }
+        return mService.getActiveSource();
     }
 
     void setActiveSource(ActiveSource newActive) {
@@ -869,10 +876,7 @@ abstract class HdmiCecLocalDevice {
     }
 
     void setActiveSource(int logicalAddress, int physicalAddress) {
-        synchronized (mLock) {
-            mActiveSource.logicalAddress = logicalAddress;
-            mActiveSource.physicalAddress = physicalAddress;
-        }
+        mService.setActiveSource(logicalAddress, physicalAddress);
         mService.setLastInputForMhl(Constants.INVALID_PORT_ID);
     }
 
@@ -908,6 +912,11 @@ abstract class HdmiCecLocalDevice {
         // We update active routing path instead, since we get the active port id from
         // the active routing path.
         setActivePath(mService.portIdToPath(portId));
+    }
+
+    // Returns the id of the port that the target device is connected to.
+    int getPortId(int physicalAddress) {
+        return mService.pathToPortId(physicalAddress);
     }
 
     @ServiceThreadOnly
@@ -1017,6 +1026,19 @@ abstract class HdmiCecLocalDevice {
         return Constants.ADDR_INVALID;
     }
 
+    @ServiceThreadOnly
+    void invokeCallback(IHdmiControlCallback callback, int result) {
+        assertRunOnServiceThread();
+        if (callback == null) {
+            return;
+        }
+        try {
+            callback.onComplete(result);
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Invoking callback failed:" + e);
+        }
+    }
+
     void sendUserControlPressedAndReleased(int targetAddress, int cecKeycode) {
         mService.sendCecCommand(
                 HdmiCecMessageBuilder.buildUserControlPressed(mAddress, targetAddress, cecKeycode));
@@ -1030,7 +1052,30 @@ abstract class HdmiCecLocalDevice {
         pw.println("mAddress: " + mAddress);
         pw.println("mPreferredAddress: " + mPreferredAddress);
         pw.println("mDeviceInfo: " + mDeviceInfo);
-        pw.println("mActiveSource: " + mActiveSource);
+        pw.println("mActiveSource: " + getActiveSource());
         pw.println(String.format("mActiveRoutingPath: 0x%04x", mActiveRoutingPath));
+    }
+
+    /** Calculates the physical address for {@code activePortId}.
+     *
+     * <p>This method assumes current device physical address is valid.
+     * <p>If the current device is already the leaf of the whole CEC system
+     * and can't have devices under it, will return its own physical address.
+     *
+     * @param activePortId is the local active port Id
+     * @return the calculated physical address of the port
+     */
+    protected int getActivePathOnSwitchFromActivePortId(@LocalActivePort int activePortId) {
+        int myPhysicalAddress = mService.getPhysicalAddress();
+        int finalMask = activePortId << 8;
+        int mask;
+        for (mask = 0x0F00; mask > 0x000F;  mask >>= 4) {
+            if ((myPhysicalAddress & mask) == 0)  {
+                break;
+            } else {
+                finalMask >>= 4;
+            }
+        }
+        return finalMask | myPhysicalAddress;
     }
 }

@@ -618,15 +618,6 @@
     <!-- Integer indicating wpa_supplicant scan interval when p2p is connected in milliseconds -->
     <integer translatable="false" name="config_wifi_scan_interval_p2p_connected">60000</integer>
 
-    <!-- Integer indicating the framework scan interval in milliseconds. This is used in the scenario
-         where the chipset does not support background scanning (config_wifi_background_scan_suport
-         is false) to set up a periodic wake up scan so that the device can connect to a new access
-         point on the move. A value of 0 means no periodic scans will be used in the framework. -->
-    <integer translatable="false" name="config_wifi_framework_scan_interval">300000</integer>
-
-    <!-- Integer indicating the framework no networks periodic scan interval in milliseconds. -->
-    <integer translatable="false" name="config_wifi_no_network_periodic_scan_interval">300000</integer>
-
     <!-- Integer indicating disconnect mode short scan interval in milliseconds -->
     <integer translatable="false" name="config_wifi_disconnected_short_scan_interval">15000</integer>
 
@@ -647,6 +638,9 @@
 
     <!-- Integer indicating RSSI boost given to current network -->
     <integer translatable="false" name="config_wifi_framework_current_network_boost">16</integer>
+
+    <!-- Integer delay in milliseconds before set wlan interface up during watchdog recovery -->
+    <integer translatable="false" name="config_wifi_framework_recovery_timeout_delay">2000</integer>
 
     <!-- Integer indicating how to handle beacons with uninitialized RSSI value of 0 -->
     <integer translatable="false" name="config_wifi_framework_scan_result_rssi_level_patchup_value">-85</integer>
@@ -692,12 +686,20 @@
     <!-- Wifi driver supports Automatic channel selection (ACS) for softap -->
     <bool translatable="false" name="config_wifi_softap_acs_supported">false</bool>
 
+    <!-- Channel list restriction to Automatic channel selection (ACS) for softap. If the device
+         doesn't want to restrict channels this should be empty. Value is a comma separated channel
+         string and/or channel range string like '1-6,11' -->
+    <string translatable="false" name="config_wifi_softap_acs_supported_channel_list"></string>
+
     <!-- Wifi driver supports IEEE80211AC for softap -->
     <bool translatable="false" name="config_wifi_softap_ieee80211ac_supported">false</bool>
 
     <!-- Indicates that local-only hotspot should be brought up at 5GHz.  This option is
          for automotive builds only (the one that have PackageManager#FEATURE_AUTOMOTIVE) -->
     <bool translatable="false" name="config_wifi_local_only_hotspot_5ghz">false</bool>
+
+    <!-- Indicates that connected MAC randomization is supported on this device -->
+    <bool translatable="false" name="config_wifi_connected_mac_randomization_supported">false</bool>
 
     <!-- Flag indicating whether we should enable the automatic brightness.
          Software implementation will be used if config_hardware_auto_brightness_available is not set -->
@@ -929,9 +931,6 @@
          in hardware. -->
     <bool name="config_setColorTransformAccelerated">false</bool>
 
-    <!-- Boolean indicating whether display white balance is supported. -->
-    <bool name="config_displayWhiteBalanceAvailable">false</bool>
-
     <!-- Control whether Night display is available. This should only be enabled on devices
          that have a HWC implementation that can apply the matrix passed to setColorTransform
          without impacting power, performance, and app compatibility (e.g. protected content). -->
@@ -985,6 +984,44 @@
         <!-- B a-coefficient --> <item>-0.0000000189359041</item>
         <!-- B b-coefficient --> <item>0.000302412211</item>
         <!-- B y-intercept --> <item>-0.198650895</item>
+    </string-array>
+
+    <!-- Boolean indicating whether display white balance is supported. -->
+    <bool name="config_displayWhiteBalanceAvailable">false</bool>
+
+    <!-- Minimum color temperature, in Kelvin, supported by display white balance. -->
+    <integer name="config_displayWhiteBalanceColorTemperatureMin">4000</integer>
+
+    <!-- Maximum color temperature, in Kelvin, supported by display white balance. -->
+    <integer name="config_displayWhiteBalanceColorTemperatureMax">8000</integer>
+
+    <!-- Default color temperature, in Kelvin, used by display white balance. -->
+    <integer name="config_displayWhiteBalanceColorTemperatureDefault">6500</integer>
+
+    <!-- The display primaries, in CIE1931 XYZ color space, for display
+         white balance to use in its calculations. -->
+    <string-array name="config_displayWhiteBalanceDisplayPrimaries">
+        <!-- Red X -->   <item>0.412315</item>
+        <!-- Red Y -->   <item>0.212600</item>
+        <!-- Red Z -->   <item>0.019327</item>
+        <!-- Green X --> <item>0.357600</item>
+        <!-- Green Y --> <item>0.715200</item>
+        <!-- Green Z --> <item>0.119200</item>
+        <!-- Blue X -->  <item>0.180500</item>
+        <!-- Blue Y -->  <item>0.072200</item>
+        <!-- Blue Z -->  <item>0.950633</item>
+        <!-- White X --> <item>0.950456</item>
+        <!-- White Y --> <item>1.000000</item>
+        <!-- White Z --> <item>1.089058</item>
+    </string-array>
+
+    <!-- The nominal white coordinates, in CIE1931 XYZ color space, for Display White Balance to
+         use in its calculations. AWB will adapt this white point to the target ambient white
+         point. -->
+    <string-array name="config_displayWhiteBalanceDisplayNominalWhite">
+        <!-- Nominal White X --> <item>0.950456</item>
+        <!-- Nominal White Y --> <item>1.000000</item>
+        <!-- Nominal White Z --> <item>1.089058</item>
     </string-array>
 
 
@@ -1152,6 +1189,10 @@
          Settings.System.NOTIFICATION_VIBRATION_INTENSITY more details on the constant values and
          meanings. -->
     <integer name="config_defaultNotificationVibrationIntensity">2</integer>
+    <!-- The default intensity level for ring vibrations. See
+         Settings.System.RING_VIBRATION_INTENSITY more details on the constant values and
+         meanings. -->
+    <integer name="config_defaultRingVibrationIntensity">2</integer>
 
     <bool name="config_use_strict_phone_number_comparation">false</bool>
 
@@ -1169,7 +1210,7 @@
     <integer name="config_lowBatteryAutoTriggerDefaultLevel">15</integer>
 
     <!-- The app which will handle routine based automatic battery saver, if empty the UI for
-             routine based battery saver will be hidden -->
+         routine based battery saver will be hidden -->
     <string name="config_batterySaverScheduleProvider"></string>
 
     <!-- Close low battery warning when battery level reaches the lowBatteryWarningLevel
@@ -1404,6 +1445,13 @@
     <integer-array name="config_autoBrightnessLevels">
     </integer-array>
 
+    <!-- Timeout (in milliseconds) after which we remove the effects any user interactions might've
+         had on the brightness mapping. This timeout doesn't start until we transition to a
+         non-interactive display policy so that we don't reset while users are using their devices,
+         but also so that we don't erroneously keep the short-term model if the device is dozing
+         but the display is fully on. -->
+    <integer name="config_autoBrightnessShortTermModelTimeout">300000</integer>
+
     <!-- Array of output values for LCD backlight corresponding to the lux values
          in the config_autoBrightnessLevels array.  This array should have size one greater
          than the size of the config_autoBrightnessLevels array.
@@ -1519,7 +1567,7 @@
     <integer-array name="config_screenBrighteningThresholds">
         <item>100</item>
     </integer-array>
- 
+
     <!-- Array of hysteresis constraint values for darkening, represented as tenths of a
          percent. The length of this array is assumed to be one greater than
          config_screenThresholdLevels. The darkening threshold is calculated as
@@ -1643,6 +1691,8 @@
          config_enableFusedLocationOverlay is false. -->
     <string name="config_fusedLocationProviderPackageName" translatable="false">com.android.location.fused</string>
 
+    <string-array name="config_locationExtraPackageNames" translatable="false"></string-array>
+
     <!-- The package name of the default network recommendation app.
          A network recommendation provider must:
              * Be granted the SCORE_NETWORKS permission.
@@ -1692,19 +1742,6 @@
     <!-- Package name providing geofence API support. Used only when
          config_enableGeofenceOverlay is false. -->
     <string name="config_geofenceProviderPackageName" translatable="false">@null</string>
-
-    <!-- Whether to enable Hardware Activity-Recognition overlay which allows Hardware
-         Activity-Recognition to be replaced by an app at run-time. When disabled, only the
-         config_activityRecognitionHardwarePackageName package will be searched for
-         its implementation, otherwise packages whose signature matches the
-         signatures of config_locationProviderPackageNames will be searched, and
-         the service with the highest version number will be picked. Anyone who
-         wants to disable the overlay mechanism can set it to false.
-         -->
-    <bool name="config_enableActivityRecognitionHardwareOverlay" translatable="false">true</bool>
-    <!-- Package name providing Hardware Activity-Recognition API support. Used only when
-         config_enableActivityRecognitionHardwareOverlay is false. -->
-    <string name="config_activityRecognitionHardwarePackageName" translatable="false">@null</string>
 
     <!-- Package name(s) containing location provider support.
          These packages can contain services implementing location providers,
@@ -1847,6 +1884,8 @@
                cell broadcasting sms, and MMS. -->
     <bool name="config_sms_capable">true</bool>
 
+    <!-- TODO: STOPSHIP(b/110557011): Remove this from framework and overlays as we use
+         config_defaultRoleHolders now. -->
     <!-- Default SMS Application. This will be the default SMS application when
          the phone first boots. The user can then change the default app to one
          of their choosing.
@@ -1864,6 +1903,12 @@
          If this string is empty or the specified package does not exist, then
          the behavior will be as though no app was named as an explicit default. -->
     <string name="default_browser" translatable="false"></string>
+
+    <!-- Default role holders. This will be an array of roles and package names of their default
+         holders, with each item in the format of "ROLE_NAME: PACKAGE_NAME_1, PACKAGE_NAME_2". -->
+    <string-array name="config_defaultRoleHolders" translatable="false">
+        <item>android.app.role.SMS: com.android.messaging</item>
+    </string-array>
 
     <!-- Enable/disable default bluetooth profiles:
         HSP_AG, ObexObjectPush, Audio, NAP -->
@@ -2159,6 +2204,9 @@
 
     <!-- Type of the double tap sensor. Empty if double tap is not supported. -->
     <string name="config_dozeDoubleTapSensorType" translatable="false"></string>
+
+    <!-- Type of the tap sensor. Empty if tap is not supported. -->
+    <string name="config_dozeTapSensorType" translatable="false"></string>
 
     <!-- Type of the long press sensor. Empty if long press is not supported. -->
     <string name="config_dozeLongPressSensorType" translatable="false"></string>
@@ -2756,6 +2804,9 @@
 
     <!-- Flag indicating which package name can access the persistent data partition -->
     <string name="config_persistentDataPackageName" translatable="false"></string>
+
+    <!-- Flag indicating which package name can access DeviceConfig table -->
+    <string name="config_deviceConfiguratorPackageName" translatable="false"></string>
 
     <!--  Define optional package verifier name -->
     <string name="config_optionalPackageVerifierName" translatable="false"></string>
@@ -3394,13 +3445,19 @@
          See android.view.textclassifier.TextClassificationManager.
     -->
     <string name="config_defaultTextClassifierPackage" translatable="false"></string>
-    
+
     <!-- The package name for the default wellbeing app.
          This package must be trusted, as it has the permissions to control other applications
          on the device.
          Example: "com.android.wellbeing"
      -->
     <string name="config_defaultWellbeingPackage" translatable="false"></string>
+
+    <!-- The component name for the default system attention service.
+         This service must be trusted, as it can be activated without explicit consent of the user.
+         See android.attention.AttentionManagerService.
+    -->
+    <string name="config_defaultAttentionService" translatable="false"></string>
 
     <!-- The package name for the system's content capture service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -3417,6 +3474,23 @@
          Example: "com.android.augmentedautofill/.AugmentedAutofillService"
     -->
     <string name="config_defaultAugmentedAutofillService" translatable="false"></string>
+
+    <!-- The package name for the system's app prediction service.
+         This service must be trusted, as it can be activated without explicit consent of the user.
+         Example: "com.android.intelligence/.AppPredictionService"
+    -->
+    <string name="config_defaultAppPredictionService" translatable="false"></string>
+
+    <!-- The package name for the system's content suggestions service.
+         Provides suggestions for text and image selection regions in snapshots of apps and should
+         be able to classify the type of entities in those selections.
+
+         This service must be trusted, as it can be activated without explicit consent of the user.
+         If no service with the specified name exists on the device, content suggestions wil be
+         disabled.
+         Example: "com.android.contentsuggestions/.ContentSuggestionsService"
+    -->
+    <string name="config_defaultContentSuggestionsService" translatable="false"></string>
 
     <!-- Whether the device uses the default focus highlight when focus state isn't specified. -->
     <bool name="config_useDefaultFocusHighlight">true</bool>
@@ -3652,7 +3726,7 @@
     <string name="config_inputEventCompatProcessorOverrideClassName" translatable="false"></string>
 
     <!-- Component name for the default module metadata provider on this device -->
-    <string name="config_defaultModuleMetadataProvider">com.android.modulemetadata</string>
+    <string name="config_defaultModuleMetadataProvider" translatable="false">com.android.modulemetadata</string>
 
     <!-- This is the default launcher component to use on secondary displays that support system
          decorations.
@@ -3660,4 +3734,17 @@
          set in AndroidManifest.
          {@see android.view.Display#FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS} -->
     <string name="config_secondaryHomeComponent" translatable="false">com.android.launcher3/com.android.launcher3.SecondaryDisplayLauncher</string>
+
+    <!-- If device supports corner radius on windows.
+         This should be turned off on low-end devices to improve animation performance. -->
+    <bool name="config_supportsRoundedCornersOnWindows">true</bool>
+
+    <!-- If the sensor that skips media is available or not. -->
+    <bool name="config_skipSensorAvailable">false</bool>
+
+    <!-- If the sensor that silences alerts is available or not. -->
+    <bool name="config_silenceSensorAvailable">false</bool>
+
+    <!-- Enable Zram writeback feature to allow unused pages in zram be written to flash. -->
+    <bool name="config_zramWriteback">false</bool>
 </resources>

@@ -22,6 +22,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.Service;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -41,6 +42,7 @@ import android.util.TimeUtils;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillValue;
 import android.view.autofill.IAugmentedAutofillManagerClient;
+import android.view.autofill.IAutofillWindowPresenter;
 
 import com.android.internal.annotations.GuardedBy;
 
@@ -58,6 +60,9 @@ import java.util.List;
  * @hide
  */
 @SystemApi
+@TestApi
+// TODO(b/122654591): @TestApi is needed because CtsAutoFillServiceTestCases hosts the service
+// in the same package as the test, and that module is compiled with SDK=test_current
 public abstract class AugmentedAutofillService extends Service {
 
     private static final String TAG = AugmentedAutofillService.class.getSimpleName();
@@ -91,10 +96,10 @@ public abstract class AugmentedAutofillService extends Service {
         }
 
         @Override
-        public void onDestroyFillWindowRequest(int sessionId) {
+        public void onDestroyAllFillWindowsRequest() {
             mHandler.sendMessage(
-                    obtainMessage(AugmentedAutofillService::handleOnDestroyFillWindowRequest,
-                            AugmentedAutofillService.this, sessionId));
+                    obtainMessage(AugmentedAutofillService::handleOnDestroyAllFillWindowsRequest,
+                            AugmentedAutofillService.this));
         }
     };
 
@@ -181,18 +186,21 @@ public abstract class AugmentedAutofillService extends Service {
                 new FillCallback(proxy));
     }
 
-    private void handleOnDestroyFillWindowRequest(@NonNull int sessionId) {
-        AutofillProxy proxy = null;
+    private void handleOnDestroyAllFillWindowsRequest() {
         if (mAutofillProxies != null) {
-            proxy = mAutofillProxies.get(sessionId);
+            final int size = mAutofillProxies.size();
+            for (int i = 0; i < size; i++) {
+                final int sessionId = mAutofillProxies.keyAt(i);
+                final AutofillProxy proxy = mAutofillProxies.valueAt(i);
+                if (proxy == null) {
+                    // TODO(b/111330312): this might be fine, in which case we should logv it
+                    Log.w(TAG, "No proxy for session " + sessionId);
+                    return;
+                }
+                proxy.destroy();
+            }
+            mAutofillProxies.clear();
         }
-        if (proxy == null) {
-            // TODO(b/111330312): this might be fine, in which case we should logv it
-            Log.w(TAG, "No proxy for session " + sessionId);
-            return;
-        }
-        proxy.destroy();
-        mAutofillProxies.remove(sessionId);
     }
 
     private void handleOnUnbind() {
@@ -214,7 +222,7 @@ public abstract class AugmentedAutofillService extends Service {
     }
 
     @Override
-    protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+    protected final void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (mAutofillProxies != null) {
             final int size = mAutofillProxies.size();
             pw.print("Number proxies: "); pw.println(size);
@@ -225,6 +233,15 @@ public abstract class AugmentedAutofillService extends Service {
                 proxy.dump("  ", pw);
             }
         }
+        dump(pw, args);
+    }
+
+    /**
+     * Implementation specific {@code dump}.
+     */
+    protected void dump(@NonNull PrintWriter pw,
+            @SuppressWarnings("unused") @NonNull String[] args) {
+        pw.print(getClass().getName()); pw.println(": nothing to dump");
     }
 
     /** @hide */
@@ -259,7 +276,6 @@ public abstract class AugmentedAutofillService extends Service {
          *
          * <p>Used to make sure the SmartSuggestionsParams is updated when a new fields is focused.
          */
-        // TODO(b/111330312): might not be needed when using IME
         @GuardedBy("mLock")
         private AutofillId mLastShownId;
 
@@ -336,6 +352,16 @@ public abstract class AugmentedAutofillService extends Service {
             synchronized (mLock) {
                 return mFillWindow;
             }
+        }
+
+        public void requestShowFillUi(int width, int height, Rect anchorBounds,
+                IAutofillWindowPresenter presenter) throws RemoteException {
+            mClient.requestShowFillUi(mSessionId, mFocusedId, width, height, anchorBounds,
+                    presenter);
+        }
+
+        public void requestHideFillUi() throws RemoteException {
+            mClient.requestHideFillUi(mSessionId, mFocusedId);
         }
 
         private void update(@NonNull AutofillId focusedId, @NonNull AutofillValue focusedValue) {

@@ -2934,6 +2934,8 @@
         <public name="foregroundServiceType" />
         <public name="hasFragileUserData" />
         <public name="minAspectRatio" />
+        <!-- @hide @SystemApi -->
+        <public name="inheritShowWhenLocked" />
     </public-group>
 
     <public-group type="drawable" first-id="0x010800b4">
@@ -2981,6 +2983,11 @@
     <public-group type="color" first-id="0x0106001c">
         <!-- @hide @SystemApi -->
         <public name="system_notification_accent_color" />
+    </public-group>
+
+    <public-group type="array" first-id="0x01070006">
+      <!-- @hide @SystemApi -->
+      <public name="config_defaultRoleHolders" />
     </public-group>
 
   <!-- ===============================================================

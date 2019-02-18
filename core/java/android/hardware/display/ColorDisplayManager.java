@@ -16,7 +16,11 @@
 
 package android.hardware.display;
 
+import android.Manifest;
+import android.annotation.IntRange;
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.content.Context;
 import android.os.IBinder;
@@ -31,6 +35,7 @@ import com.android.internal.R;
  *
  * @hide
  */
+@SystemApi
 @SystemService(Context.COLOR_DISPLAY_SERVICE)
 public final class ColorDisplayManager {
 
@@ -48,13 +53,43 @@ public final class ColorDisplayManager {
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    @RequiresPermission(Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
     public boolean isDeviceColorManaged() {
         return mManager.isDeviceColorManaged();
     }
 
     /**
+     * Set the level of color saturation to apply to the display.
+     *
+     * @param saturationLevel 0-100 (inclusive), where 100 is full saturation
+     * @return whether the saturation level change was applied successfully
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean setSaturationLevel(@IntRange(from = 0, to = 100) int saturationLevel) {
+        return mManager.setSaturationLevel(saturationLevel);
+    }
+
+    /**
+     * Set the level of color saturation to apply to a specific app.
+     *
+     * @param packageName the package name of the app whose windows should be desaturated
+     * @param saturationLevel 0-100 (inclusive), where 100 is full saturation
+     * @return whether the saturation level change was applied successfully
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean setAppSaturationLevel(@NonNull String packageName,
+            @IntRange(from = 0, to = 100) int saturationLevel) {
+        return mManager.setAppSaturationLevel(packageName, saturationLevel);
+    }
+
+    /**
      * Returns {@code true} if Night Display is supported by the device.
+     *
+     * @hide
      */
     public static boolean isNightDisplayAvailable(Context context) {
         return context.getResources().getBoolean(R.bool.config_nightDisplayAvailable);
@@ -62,9 +97,21 @@ public final class ColorDisplayManager {
 
     /**
      * Returns {@code true} if display white balance is supported by the device.
+     *
+     * @hide
      */
     public static boolean isDisplayWhiteBalanceAvailable(Context context) {
         return context.getResources().getBoolean(R.bool.config_displayWhiteBalanceAvailable);
+    }
+
+    /**
+     * Check if the color transforms are color accelerated. Some transforms are experimental only
+     * on non-accelerated platforms due to the performance implications.
+     *
+     * @hide
+     */
+    public static boolean isColorTransformAccelerated(Context context) {
+        return context.getResources().getBoolean(R.bool.config_setColorTransformAccelerated);
     }
 
     private static class ColorDisplayManagerInternal {
@@ -95,6 +142,22 @@ public final class ColorDisplayManager {
         boolean isDeviceColorManaged() {
             try {
                 return mCdm.isDeviceColorManaged();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean setSaturationLevel(int saturationLevel) {
+            try {
+                return mCdm.setSaturationLevel(saturationLevel);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean setAppSaturationLevel(String packageName, int saturationLevel) {
+            try {
+                return mCdm.setAppSaturationLevel(packageName, saturationLevel);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

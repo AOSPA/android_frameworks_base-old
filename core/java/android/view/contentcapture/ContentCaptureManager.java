@@ -15,6 +15,8 @@
  */
 package android.view.contentcapture;
 
+import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemService;
@@ -22,14 +24,18 @@ import android.annotation.UiThread;
 import android.content.ComponentName;
 import android.content.Context;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.RemoteException;
 import android.util.Log;
+import android.view.contentcapture.ContentCaptureSession.FlushReason;
 
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.SyncResultReceiver;
 
 import java.io.PrintWriter;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /*
  * NOTE: all methods in this class should return right away, or do the real work in a handler
@@ -46,14 +52,19 @@ public final class ContentCaptureManager {
 
     private static final String TAG = ContentCaptureManager.class.getSimpleName();
 
-    private static final String BG_THREAD_NAME = "intel_svc_streamer_thread";
+    /**
+     * Timeout for calls to system_server.
+     */
+    private static final int SYNC_CALLS_TIMEOUT_MS = 5000;
 
     // TODO(b/121044306): define a way to dynamically set them(for example, using settings?)
     static final boolean VERBOSE = false;
     static final boolean DEBUG = true; // STOPSHIP if not set to false
 
-    @NonNull
-    private final AtomicBoolean mDisabled = new AtomicBoolean();
+    private final Object mLock = new Object();
+
+    @GuardedBy("mLock")
+    private boolean mDisabled;
 
     @NonNull
     private final Context mContext;
@@ -61,35 +72,29 @@ public final class ContentCaptureManager {
     @Nullable
     private final IContentCaptureManager mService;
 
+    // Flags used for starting session.
+    @GuardedBy("mLock")
+    private int mFlags;
+
     // TODO(b/119220549): use UI Thread directly (as calls are one-way) or a shared thread / handler
     // held at the Application level
     @NonNull
     private final Handler mHandler;
 
+    @GuardedBy("mLock")
     private MainContentCaptureSession mMainSession;
 
     /** @hide */
     public ContentCaptureManager(@NonNull Context context,
             @Nullable IContentCaptureManager service) {
         mContext = Preconditions.checkNotNull(context, "context cannot be null");
-        if (VERBOSE) {
-            Log.v(TAG, "Constructor for " + context.getPackageName());
-        }
-        mService = service;
-        // TODO(b/119220549): use an existing bg thread instead...
-        final HandlerThread bgThread = new HandlerThread(BG_THREAD_NAME);
-        bgThread.start();
-        mHandler = Handler.createAsync(bgThread.getLooper());
-    }
+        if (VERBOSE) Log.v(TAG, "Constructor for " + context.getPackageName());
 
-    @NonNull
-    private static Handler newHandler() {
-        // TODO(b/119220549): use an existing bg thread instead...
-        // TODO(b/119220549): use UI Thread directly (as calls are one-way) or an existing bgThread
-        // or a shared thread / handler held at the Application level
-        final HandlerThread bgThread = new HandlerThread(BG_THREAD_NAME);
-        bgThread.start();
-        return Handler.createAsync(bgThread.getLooper());
+        mService = service;
+        // TODO(b/119220549): we might not even need a handler, as the IPCs are oneway. But if we
+        // do, then we should optimize it to run the tests after the Choreographer finishes the most
+        // important steps of the frame.
+        mHandler = Handler.createAsync(Looper.getMainLooper());
     }
 
     /**
@@ -104,26 +109,29 @@ public final class ContentCaptureManager {
     @NonNull
     @UiThread
     public MainContentCaptureSession getMainContentCaptureSession() {
-        if (mMainSession == null) {
-            mMainSession = new MainContentCaptureSession(mContext, mHandler, mService,
-                    mDisabled);
-            if (VERBOSE) {
-                Log.v(TAG, "getDefaultContentCaptureSession(): created " + mMainSession);
+        synchronized (mLock) {
+            if (mMainSession == null) {
+                mMainSession = new MainContentCaptureSession(mContext, mHandler, mService,
+                        mDisabled);
+                if (VERBOSE) {
+                    Log.v(TAG, "getDefaultContentCaptureSession(): created " + mMainSession);
+                }
             }
+            return mMainSession;
         }
-        return mMainSession;
     }
 
     /** @hide */
     public void onActivityStarted(@NonNull IBinder applicationToken,
-            @NonNull ComponentName activityComponent) {
-        // TODO(b/121033016): must start all sessions
-        getMainContentCaptureSession().start(applicationToken, activityComponent);
+            @NonNull ComponentName activityComponent, int flags) {
+        synchronized (mLock) {
+            mFlags |= flags;
+            getMainContentCaptureSession().start(applicationToken, activityComponent, mFlags);
+        }
     }
 
     /** @hide */
     public void onActivityStopped() {
-        // TODO(b/121033016): must finish all sessions
         getMainContentCaptureSession().destroy();
     }
 
@@ -134,9 +142,8 @@ public final class ContentCaptureManager {
      *
      * @hide
      */
-    public void flush() {
-        // TODO(b/121033016): must flush all sessions
-        getMainContentCaptureSession().flush();
+    public void flush(@FlushReason int reason) {
+        getMainContentCaptureSession().flush(reason);
     }
 
     /**
@@ -145,15 +152,30 @@ public final class ContentCaptureManager {
      */
     @Nullable
     public ComponentName getServiceComponentName() {
-        //TODO(b/121047489): implement
-        return null;
+        if (!isContentCaptureEnabled()) {
+            return null;
+        }
+        // Wait for system server to return the component name.
+        final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
+        mHandler.sendMessage(obtainMessage(
+                ContentCaptureManager::handleReceiverServiceComponentName,
+                this, mContext.getUserId(), resultReceiver));
+
+        try {
+            return resultReceiver.getParcelableResult();
+        } catch (RemoteException e) {
+            // Unable to retrieve component name in a reasonable amount of time.
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
      * Checks whether content capture is enabled for this activity.
      */
     public boolean isContentCaptureEnabled() {
-        return mService != null && !mDisabled.get();
+        synchronized (mLock) {
+            return mService != null && !mDisabled;
+        }
     }
 
     /**
@@ -163,7 +185,9 @@ public final class ContentCaptureManager {
      * it on {@link android.app.Activity#onCreate(android.os.Bundle, android.os.PersistableBundle)}.
      */
     public void setContentCaptureEnabled(boolean enabled) {
-        //TODO(b/111276913): implement (need to finish / disable all sessions)
+        synchronized (mLock) {
+            mFlags |= enabled ? 0 : ContentCaptureContext.FLAG_DISABLED_BY_APP;
+        }
     }
 
     /**
@@ -178,20 +202,32 @@ public final class ContentCaptureManager {
 
     /** @hide */
     public void dump(String prefix, PrintWriter pw) {
-        pw.print(prefix); pw.println("ContentCaptureManager");
-
-        pw.print(prefix); pw.print("Disabled: "); pw.println(mDisabled.get());
-        pw.print(prefix); pw.print("Context: "); pw.println(mContext);
-        pw.print(prefix); pw.print("User: "); pw.println(mContext.getUserId());
-        if (mService != null) {
-            pw.print(prefix); pw.print("Service: "); pw.println(mService);
+        synchronized (mLock) {
+            pw.print(prefix); pw.println("ContentCaptureManager");
+            pw.print(prefix); pw.print("Disabled: "); pw.println(mDisabled);
+            pw.print(prefix); pw.print("Context: "); pw.println(mContext);
+            pw.print(prefix); pw.print("User: "); pw.println(mContext.getUserId());
+            if (mService != null) {
+                pw.print(prefix); pw.print("Service: "); pw.println(mService);
+            }
+            pw.print(prefix); pw.print("Flags: "); pw.println(mFlags);
+            if (mMainSession != null) {
+                final String prefix2 = prefix + "  ";
+                pw.print(prefix); pw.println("Main session:");
+                mMainSession.dump(prefix2, pw);
+            } else {
+                pw.print(prefix); pw.println("No sessions");
+            }
         }
-        if (mMainSession != null) {
-            final String prefix2 = prefix + "  ";
-            pw.print(prefix); pw.println("Main session:");
-            mMainSession.dump(prefix2, pw);
-        } else {
-            pw.print(prefix); pw.println("No sessions");
+    }
+
+
+    /** Retrieves the component name of the target content capture service through system_server. */
+    private void handleReceiverServiceComponentName(int userId, IResultReceiver resultReceiver) {
+        try {
+            mService.getReceiverServiceComponentName(userId, resultReceiver);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Unable to retrieve service component name: " + e);
         }
     }
 }

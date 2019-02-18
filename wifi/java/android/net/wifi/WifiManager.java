@@ -16,6 +16,11 @@
 
 package android.net.wifi;
 
+import static android.Manifest.permission.ACCESS_COARSE_LOCATION;
+import static android.Manifest.permission.ACCESS_WIFI_STATE;
+import static android.Manifest.permission.READ_WIFI_CREDENTIAL;
+
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -44,6 +49,7 @@ import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.WorkSource;
 import android.util.Log;
+import android.util.Pair;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
@@ -63,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 
 /**
  * This class provides the primary API for managing all aspects of Wi-Fi
@@ -184,6 +191,7 @@ public class WifiManager {
      */
     public static final int STATUS_NETWORK_SUGGESTIONS_ERROR_REMOVE_INVALID = 5;
 
+    /** @hide */
     @IntDef(prefix = { "STATUS_NETWORK_SUGGESTIONS_" }, value = {
             STATUS_NETWORK_SUGGESTIONS_SUCCESS,
             STATUS_NETWORK_SUGGESTIONS_ERROR_INTERNAL,
@@ -241,6 +249,14 @@ public class WifiManager {
     /** @hide */
     @SystemApi
     public static final int WIFI_CREDENTIAL_FORGOT = 1;
+
+    /** @hide */
+    @SystemApi
+    public static final int PASSPOINT_HOME_NETWORK = 0;
+
+    /** @hide */
+    @SystemApi
+    public static final int PASSPOINT_ROAMING_NETWORK = 1;
 
     /**
      * Broadcast intent action indicating that a Passpoint provider icon has been received.
@@ -1196,6 +1212,10 @@ public class WifiManager {
     /**
      * Return a list of all the networks configured for the current foreground
      * user.
+     *
+     * Requires the same permissions as {@link #getScanResults}.
+     * If such access is not allowed, this API will always return an empty list.
+     *
      * Not all fields of WifiConfiguration are returned. Only the following
      * fields are filled in:
      * <ul>
@@ -1219,9 +1239,12 @@ public class WifiManager {
      * {@link #removeNetworkSuggestions(List)} for new API to add Wi-Fi networks for consideration
      * when auto-connecting to wifi.
      * <b>Compatibility Note:</b> For applications targeting
-     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will always return an empty list.
+     * {@link android.os.Build.VERSION_CODES#Q} or above, this API will return an empty list,
+     * except to callers with Carrier privilege which will receive a restricted list only
+     * containing configurations which they created.
      */
     @Deprecated
+    @RequiresPermission(allOf = {ACCESS_COARSE_LOCATION, ACCESS_WIFI_STATE})
     public List<WifiConfiguration> getConfiguredNetworks() {
         try {
             ParceledListSlice<WifiConfiguration> parceledList =
@@ -1237,11 +1260,11 @@ public class WifiManager {
 
     /** @hide */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.READ_WIFI_CREDENTIAL)
+    @RequiresPermission(allOf = {ACCESS_COARSE_LOCATION, ACCESS_WIFI_STATE, READ_WIFI_CREDENTIAL})
     public List<WifiConfiguration> getPrivilegedConfiguredNetworks() {
         try {
             ParceledListSlice<WifiConfiguration> parceledList =
-                mService.getPrivilegedConfiguredNetworks();
+                    mService.getPrivilegedConfiguredNetworks(mContext.getOpPackageName());
             if (parceledList == null) {
                 return Collections.emptyList();
             }
@@ -1252,25 +1275,47 @@ public class WifiManager {
     }
 
     /**
-     * Returns all matching WifiConfigurations for a given list of ScanResult.
+     * Returns a list of all matching WifiConfigurations for a given list of ScanResult.
      *
      * An empty list will be returned when no configurations are installed or if no configurations
      * match the ScanResult.
-
+     *
      * @param scanResults a list of scanResult that represents the BSSID
-     * @return A list of {@link WifiConfiguration} that can have duplicate entries.
+     * @return List that consists of {@link WifiConfiguration} and corresponding scanResults per
+     * network type({@link #PASSPOINT_HOME_NETWORK} and {@link #PASSPOINT_ROAMING_NETWORK}).
      * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public List<WifiConfiguration> getAllMatchingWifiConfigs(
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD
+    })
+    public List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> getAllMatchingWifiConfigs(
             @NonNull List<ScanResult> scanResults) {
+        List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> configs = new ArrayList<>();
         try {
-            return mService.getAllMatchingWifiConfigs(scanResults);
+            Map<String, Map<Integer, List<ScanResult>>> results =
+                    mService.getAllMatchingFqdnsForScanResults(
+                            scanResults);
+            if (results.isEmpty()) {
+                return configs;
+            }
+            List<WifiConfiguration> wifiConfigurations =
+                    mService.getWifiConfigsForPasspointProfiles(
+                            new ArrayList<>(results.keySet()));
+            for (WifiConfiguration configuration : wifiConfigurations) {
+                Map<Integer, List<ScanResult>> scanResultsPerNetworkType = results.get(
+                        configuration.FQDN);
+                if (scanResultsPerNetworkType != null) {
+                    configs.add(Pair.create(configuration, scanResultsPerNetworkType));
+                }
+            }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+
+        return configs;
     }
 
     /**
@@ -1280,12 +1325,17 @@ public class WifiManager {
      * An empty list will be returned if no match is found.
      *
      * @param scanResults a list of ScanResult
-     * @return A list of {@link OsuProvider} that does not contain duplicate entries.
+     * @return Map that consists {@link OsuProvider} and a list of matching {@link ScanResult}
      * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public List<OsuProvider> getMatchingOsuProviders(List<ScanResult> scanResults) {
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD
+    })
+    public Map<OsuProvider, List<ScanResult>> getMatchingOsuProviders(
+            List<ScanResult> scanResults) {
         try {
             return mService.getMatchingOsuProviders(scanResults);
         } catch (RemoteException e) {
@@ -1306,7 +1356,11 @@ public class WifiManager {
      * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD
+    })
     public Map<OsuProvider, PasspointConfiguration> getMatchingPasspointConfigsForOsuProviders(
             @NonNull Set<OsuProvider> osuProviders) {
         try {
@@ -1724,7 +1778,7 @@ public class WifiManager {
      * suggestion back using this API.</li>
      *
      * @param networkSuggestions List of network suggestions provided by the app.
-     * @return Status code corresponding to the values in {@link NetworkSuggestionsStatusCode}.
+     * @return Status code for the operation. One of the STATUS_NETWORK_SUGGESTIONS_ values.
      * {@link WifiNetworkSuggestion#equals(Object)} any previously provided suggestions by the app.
      * @throws {@link SecurityException} if the caller is missing required permissions.
      */
@@ -1745,8 +1799,7 @@ public class WifiManager {
      *
      * @param networkSuggestions List of network suggestions to be removed. Pass an empty list
      *                           to remove all the previous suggestions provided by the app.
-     * @return Status code corresponding to the values in
-     * {@link NetworkSuggestionsStatusCode}.
+     * @return Status code for the operation. One of the STATUS_NETWORK_SUGGESTIONS_ values.
      * Any matching suggestions are removed from the device and will not be considered for any
      * further connection attempts.
      */
@@ -1799,7 +1852,13 @@ public class WifiManager {
      * @param fqdn The FQDN of the Passpoint configuration to be removed
      * @throws IllegalArgumentException if no configuration is associated with the given FQDN.
      * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
+     * @deprecated This is no longer supported.
      */
+    @Deprecated
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD
+    })
     public void removePasspointConfiguration(String fqdn) {
         try {
             if (!mService.removePasspointConfiguration(fqdn, mContext.getOpPackageName())) {
@@ -1817,7 +1876,13 @@ public class WifiManager {
      *
      * @return A list of {@link PasspointConfiguration}
      * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
+     * @deprecated This is no longer supported.
      */
+    @Deprecated
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD
+    })
     public List<PasspointConfiguration> getPasspointConfigurations() {
         try {
             return mService.getPasspointConfigurations();
@@ -2127,7 +2192,7 @@ public class WifiManager {
     /** @hide */
     public static final int WIFI_FEATURE_DPP              = 0x80000000; // DPP (Easy-Connect)
 
-    private int getSupportedFeatures() {
+    private long getSupportedFeatures() {
         try {
             return mService.getSupportedFeatures();
         } catch (RemoteException e) {
@@ -2135,7 +2200,7 @@ public class WifiManager {
         }
     }
 
-    private boolean isFeatureSupported(int feature) {
+    private boolean isFeatureSupported(long feature) {
         return (getSupportedFeatures() & feature) == feature;
     }
     /**
@@ -4428,6 +4493,11 @@ public class WifiManager {
      * @param callback {@link ProvisioningCallback} for updates regarding provisioning flow
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD
+    })
     public void startSubscriptionProvisioning(OsuProvider provider, ProvisioningCallback callback,
             @Nullable Handler handler) {
         Looper looper = (handler == null) ? Looper.getMainLooper() : handler.getLooper();
@@ -4789,9 +4859,14 @@ public class WifiManager {
     }
 
     /**
-     * @return true if this device supports Wi-Fi Device Provisioning Protocol (Easy-connect)
+     * Wi-Fi Easy Connect (DPP) introduces standardized mechanisms to simplify the provisioning and
+     * configuration of Wi-Fi devices.
+     * For more details, visit <a href="https://www.wi-fi.org/">https://www.wi-fi.org/</a> and
+     * search for "Easy Connect" or "Device Provisioning Protocol specification".
+     *
+     * @return true if this device supports Wi-Fi Easy-connect (Device Provisioning Protocol)
      */
-    public boolean isDppSupported() {
+    public boolean isEasyConnectSupported() {
         return isFeatureSupported(WIFI_FEATURE_DPP);
     }
 
@@ -4875,93 +4950,101 @@ public class WifiManager {
         }
     }
 
-    /* DPP - Device Provisioning Protocol AKA "Easy Connect" */
+    /* Easy Connect - AKA Device Provisioning Protocol (DPP) */
 
     /**
-     * DPP Network role: Station.
+     * Easy Connect Network role: Station.
+     *
      * @hide
      */
     @SystemApi
-    public static final int DPP_NETWORK_ROLE_STA = 0;
+    public static final int EASY_CONNECT_NETWORK_ROLE_STA = 0;
 
     /**
-     * DPP Network role: Access Point.
+     * Easy Connect Network role: Access Point.
+     *
      * @hide
      */
     @SystemApi
-    public static final int DPP_NETWORK_ROLE_AP = 1;
+    public static final int EASY_CONNECT_NETWORK_ROLE_AP = 1;
 
     /** @hide */
-    @IntDef(prefix = {"DPP_NETWORK_ROLE_"}, value = {
-            DPP_NETWORK_ROLE_STA,
-            DPP_NETWORK_ROLE_AP,
+    @IntDef(prefix = {"EASY_CONNECT_NETWORK_ROLE_"}, value = {
+            EASY_CONNECT_NETWORK_ROLE_STA,
+            EASY_CONNECT_NETWORK_ROLE_AP,
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface DppNetworkRole {}
+    public @interface EasyConnectNetworkRole {
+    }
 
     /**
-     * Start DPP in Configurator-Initiator role. The current device will initiate DPP bootstrapping
-     * with a peer, and configure the peer with the SSID and password of the specified network using
-     * the DPP protocol on an encrypted link.
+     * Start Easy Connect (DPP) in Configurator-Initiator role. The current device will initiate
+     * Easy Connect bootstrapping with a peer, and configure the peer with the SSID and password of
+     * the specified network using the Easy Connect protocol on an encrypted link.
      *
-     * @param enrolleeUri URI of the Enrollee obtained separately (e.g. QR code scanning)
-     * @param selectedNetworkId Selected network ID to be sent to the peer
+     * @param enrolleeUri         URI of the Enrollee obtained separately (e.g. QR code scanning)
+     * @param selectedNetworkId   Selected network ID to be sent to the peer
      * @param enrolleeNetworkRole The network role of the enrollee
-     * @param callback Callback for status updates
-     * @param handler The handler on whose thread to execute the callbacks. Null for main thread.
+     * @param callback            Callback for status updates
+     * @param executor            The Executor on which to run the callback.
      * @hide
      */
     @SystemApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD})
-    public void startDppAsConfiguratorInitiator(@NonNull String enrolleeUri,
-            int selectedNetworkId, @DppNetworkRole int enrolleeNetworkRole,
-            @Nullable Handler handler, @NonNull DppStatusCallback callback) {
-        Looper looper = (handler == null) ? Looper.getMainLooper() : handler.getLooper();
+    public void startEasyConnectAsConfiguratorInitiator(@NonNull String enrolleeUri,
+            int selectedNetworkId, @EasyConnectNetworkRole int enrolleeNetworkRole,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull EasyConnectStatusCallback callback) {
         Binder binder = new Binder();
         try {
             mService.startDppAsConfiguratorInitiator(binder, enrolleeUri, selectedNetworkId,
-                    enrolleeNetworkRole, new DppCallbackProxy(looper, callback));
+                    enrolleeNetworkRole, new EasyConnectCallbackProxy(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Start DPP in Enrollee-Initiator role. The current device will initiate DPP bootstrapping
-     * with a peer, and receive the SSID and password from the peer configurator.
+     * Start Easy Connect (DPP) in Enrollee-Initiator role. The current device will initiate Easy
+     * Connect bootstrapping with a peer, and receive the SSID and password from the peer
+     * configurator.
      *
      * @param configuratorUri URI of the Configurator obtained separately (e.g. QR code scanning)
-     * @param callback Callback for status updates
-     * @param handler The handler on whose thread to execute the callbacks. Null for main thread.
+     * @param callback        Callback for status updates
+     * @param executor        The Executor on which to run the callback.
      * @hide
      */
     @SystemApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD})
-    public void startDppAsEnrolleeInitiator(@NonNull String configuratorUri,
-            @Nullable Handler handler, @NonNull DppStatusCallback callback) {
-        Looper looper = (handler == null) ? Looper.getMainLooper() : handler.getLooper();
+    public void startEasyConnectAsEnrolleeInitiator(@NonNull String configuratorUri,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull EasyConnectStatusCallback callback) {
         Binder binder = new Binder();
         try {
             mService.startDppAsEnrolleeInitiator(binder, configuratorUri,
-                     new DppCallbackProxy(looper, callback));
+                    new EasyConnectCallbackProxy(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Stop or abort a current DPP session.
+     * Stop or abort a current Easy Connect (DPP) session. This call, once processed, will
+     * terminate any ongoing transaction, and clean up all associated resources. Caller should not
+     * expect any callbacks once this call is made. However, due to the asynchronous nature of
+     * this call, a callback may be fired if it was already pending in the queue.
+     *
      * @hide
      */
     @SystemApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD})
-    public void stopDppSession() {
+    public void stopEasyConnectSession() {
         try {
             /* Request lower layers to stop/abort and clear resources */
             mService.stopDppSession();
@@ -4971,48 +5054,50 @@ public class WifiManager {
     }
 
     /**
-     * Helper class to support DPP callbacks
+     * Helper class to support Easy Connect (DPP) callbacks
+     *
      * @hide
      */
     @SystemApi
-    private static class DppCallbackProxy extends IDppCallback.Stub {
-        private final Handler mHandler;
-        private final DppStatusCallback mDppStatusCallback;
+    private static class EasyConnectCallbackProxy extends IDppCallback.Stub {
+        private final Executor mExecutor;
+        private final EasyConnectStatusCallback mEasyConnectStatusCallback;
 
-        DppCallbackProxy(Looper looper, DppStatusCallback dppStatusCallback) {
-            mHandler = new Handler(looper);
-            mDppStatusCallback = dppStatusCallback;
+        EasyConnectCallbackProxy(Executor executor,
+                EasyConnectStatusCallback easyConnectStatusCallback) {
+            mExecutor = executor;
+            mEasyConnectStatusCallback = easyConnectStatusCallback;
         }
 
         @Override
         public void onSuccessConfigReceived(int newNetworkId) {
-            Log.d(TAG, "DPP onSuccessConfigReceived callback");
-            mHandler.post(() -> {
-                mDppStatusCallback.onEnrolleeSuccess(newNetworkId);
+            Log.d(TAG, "Easy Connect onSuccessConfigReceived callback");
+            mExecutor.execute(() -> {
+                mEasyConnectStatusCallback.onEnrolleeSuccess(newNetworkId);
             });
         }
 
         @Override
         public void onSuccess(int status) {
-            Log.d(TAG, "DPP onSuccess callback");
-            mHandler.post(() -> {
-                mDppStatusCallback.onConfiguratorSuccess(status);
+            Log.d(TAG, "Easy Connect onSuccess callback");
+            mExecutor.execute(() -> {
+                mEasyConnectStatusCallback.onConfiguratorSuccess(status);
             });
         }
 
         @Override
         public void onFailure(int status) {
-            Log.d(TAG, "DPP onFailure callback");
-            mHandler.post(() -> {
-                mDppStatusCallback.onFailure(status);
+            Log.d(TAG, "Easy Connect onFailure callback");
+            mExecutor.execute(() -> {
+                mEasyConnectStatusCallback.onFailure(status);
             });
         }
 
         @Override
         public void onProgress(int status) {
-            Log.d(TAG, "DPP onProgress callback");
-            mHandler.post(() -> {
-                mDppStatusCallback.onProgress(status);
+            Log.d(TAG, "Easy Connect onProgress callback");
+            mExecutor.execute(() -> {
+                mEasyConnectStatusCallback.onProgress(status);
             });
         }
     }

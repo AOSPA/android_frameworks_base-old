@@ -25,13 +25,14 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.platform.test.annotations.Presubmit;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
-import android.support.test.filters.Suppress;
-import android.support.test.runner.AndroidJUnit4;
 import android.text.Layout.TabStops;
 import android.text.style.ReplacementSpan;
 import android.text.style.TabStopSpan;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.SmallTest;
+import androidx.test.filters.Suppress;
+import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -251,6 +252,18 @@ public class TextLineTest {
                 new float[]{0.0f, -20.0f, -20.0f, -100.0f, -120.0f, -120.0f});
         assertMeasurements(tl, 5, true,
                 new float[]{0.0f, -10.0f, -10.0f, -100.0f, -110.0f, -110.0f});
+    }
+
+    @Test
+    public void testMeasure_wordSpacing() {
+        final TextPaint paint = new TextPaint();
+        paint.setTypeface(TYPEFACE);
+        paint.setTextSize(10.0f);  // make 1em = 10px
+        paint.setWordSpacing(10.0f);
+
+        TextLine tl = getTextLine("I I", paint);
+        assertMeasurements(tl, 3, false,
+                new float[]{0.0f, 10.0f, 120.0f, 130.0f});
     }
 
     @Test

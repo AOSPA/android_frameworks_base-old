@@ -76,8 +76,8 @@ import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telecom.ITelecomService;
 import com.android.internal.telephony.CellNetworkScanResult;
-import com.android.internal.telephony.IAns;
 import com.android.internal.telephony.INumberVerificationCallback;
+import com.android.internal.telephony.IOns;
 import com.android.internal.telephony.IPhoneSubInfo;
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.ITelephonyRegistry;
@@ -4591,9 +4591,18 @@ public class TelephonyManager {
       }
     }
 
-    /** Data connection state: Unknown.  Used before we know the state.
-     * @hide
-     */
+    /** @hide */
+    @IntDef(prefix = {"DATA_"}, value = {
+            DATA_UNKNOWN,
+            DATA_DISCONNECTED,
+            DATA_CONNECTING,
+            DATA_CONNECTED,
+            DATA_SUSPENDED,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DataState{}
+
+    /** Data connection state: Unknown.  Used before we know the state. */
     public static final int DATA_UNKNOWN        = -1;
     /** Data connection state: Disconnected. IP traffic not available. */
     public static final int DATA_DISCONNECTED   = 0;
@@ -4648,8 +4657,8 @@ public class TelephonyManager {
         return ITelephonyRegistry.Stub.asInterface(ServiceManager.getService("telephony.registry"));
     }
 
-    private IAns getIAns() {
-        return IAns.Stub.asInterface(ServiceManager.getService("ians"));
+    private IOns getIOns() {
+        return IOns.Stub.asInterface(ServiceManager.getService("ions"));
     }
 
     //
@@ -4895,19 +4904,53 @@ public class TelephonyManager {
     /** Callback for providing asynchronous {@link CellInfo} on request */
     public abstract static class CellInfoCallback {
         /**
-         * Response to
+         * Success response to
          * {@link android.telephony.TelephonyManager#requestCellInfoUpdate requestCellInfoUpdate()}.
          *
-         * <p>Invoked when there is a response to
+         * Invoked when there is a response to
          * {@link android.telephony.TelephonyManager#requestCellInfoUpdate requestCellInfoUpdate()}
          * to provide a list of {@link CellInfo}. If no {@link CellInfo} is available then an empty
-         * list will be provided. If an error occurs, null will be provided.
+         * list will be provided. If an error occurs, null will be provided unless the onError
+         * callback is overridden.
          *
          * @param cellInfo a list of {@link CellInfo}, an empty list, or null.
          *
          * {@see android.telephony.TelephonyManager#getAllCellInfo getAllCellInfo()}
          */
-        public abstract void onCellInfo(List<CellInfo> cellInfo);
+        public abstract void onCellInfo(@NonNull List<CellInfo> cellInfo);
+
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef(prefix = {"ERROR_"}, value = {ERROR_TIMEOUT, ERROR_MODEM_ERROR})
+        public @interface CellInfoCallbackError {}
+
+        /**
+         * The system timed out waiting for a response from the Radio.
+         */
+        public static final int ERROR_TIMEOUT = 1;
+
+        /**
+         * The modem returned a failure.
+         */
+        public static final int ERROR_MODEM_ERROR = 2;
+
+        /**
+         * Error response to
+         * {@link android.telephony.TelephonyManager#requestCellInfoUpdate requestCellInfoUpdate()}.
+         *
+         * Invoked when an error condition prevents updated {@link CellInfo} from being fetched
+         * and returned from the modem. Callers of requestCellInfoUpdate() should override this
+         * function to receive detailed status information in the event of an error. By default,
+         * this function will invoke onCellInfo() with null.
+         *
+         * @param errorCode an error code indicating the type of failure.
+         * @param detail a Throwable object with additional detail regarding the failure if
+         *     available, otherwise null.
+         */
+        public void onError(@CellInfoCallbackError int errorCode, @Nullable Throwable detail) {
+            // By default, simply invoke the success callback with an empty list.
+            onCellInfo(new ArrayList<CellInfo>());
+        }
     };
 
     /**
@@ -4933,6 +4976,12 @@ public class TelephonyManager {
                         public void onCellInfo(List<CellInfo> cellInfo) {
                             Binder.withCleanCallingIdentity(() ->
                                     executor.execute(() -> callback.onCellInfo(cellInfo)));
+                        }
+
+                        public void onError(int errorCode, android.os.ParcelableException detail) {
+                            Binder.withCleanCallingIdentity(() ->
+                                    executor.execute(() -> callback.onError(
+                                            errorCode, detail.getCause())));
                         }
                     }, getOpPackageName());
 
@@ -4967,6 +5016,12 @@ public class TelephonyManager {
                         public void onCellInfo(List<CellInfo> cellInfo) {
                             Binder.withCleanCallingIdentity(() ->
                                     executor.execute(() -> callback.onCellInfo(cellInfo)));
+                        }
+
+                        public void onError(int errorCode, android.os.ParcelableException detail) {
+                            Binder.withCleanCallingIdentity(() ->
+                                    executor.execute(() -> callback.onError(
+                                            errorCode, detail.getCause())));
                         }
                     }, getOpPackageName(), workSource);
         } catch (RemoteException ex) {
@@ -5855,9 +5910,14 @@ public class TelephonyManager {
 
     /**
      * Returns the IMS Service Table (IST) that was loaded from the ISIM.
+     *
+     * See 3GPP TS 31.103 (Section 4.2.7) for the definition and more information on this table.
+     *
      * @return IMS Service Table or null if not present or not loaded
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public String getIsimIst() {
         try {
             IPhoneSubInfo info = getSubscriberInfo();
@@ -9001,6 +9061,8 @@ public class TelephonyManager {
      * <p>This method works only on devices with {@link
      * android.content.pm.PackageManager#FEATURE_TELEPHONY_CARRIERLOCK} enabled.
      *
+     * @deprecated use setCarrierRestrictionRules instead
+     *
      * @return The number of carriers set successfully. Should be length of
      * carrierList on success; -1 if carrierList null or on error.
      * @hide
@@ -9008,44 +9070,144 @@ public class TelephonyManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public int setAllowedCarriers(int slotIndex, List<CarrierIdentifier> carriers) {
+        // Execute the method setCarrierRestrictionRules with an empty excluded list and
+        // indicating priority for the allowed list.
+        CarrierRestrictionRules carrierRestrictionRules = CarrierRestrictionRules.newBuilder()
+                .setAllowedCarriers(carriers)
+                .setDefaultCarrierRestriction(
+                    CarrierRestrictionRules.CARRIER_RESTRICTION_DEFAULT_NOT_ALLOWED)
+                .build();
+
+        int result = setCarrierRestrictionRules(carrierRestrictionRules);
+
+        // Convert boolean result into int, as required by this method.
+        if (result == SET_CARRIER_RESTRICTION_SUCCESS) {
+            return carriers.size();
+        } else {
+            return -1;
+        }
+    }
+
+    /**
+     * The carrier restrictions were successfully set.
+     * @hide
+     */
+    @SystemApi
+    public static final int SET_CARRIER_RESTRICTION_SUCCESS = 0;
+
+    /**
+     * The carrier restrictions were not set due to lack of support in the modem. This can happen
+     * if the modem does not support setting the carrier restrictions or if the configuration
+     * passed in the {@code setCarrierRestrictionRules} is not supported by the modem.
+     * @hide
+     */
+    @SystemApi
+    public static final int SET_CARRIER_RESTRICTION_NOT_SUPPORTED = 1;
+
+    /**
+     * The setting of carrier restrictions failed.
+     * @hide
+     */
+    @SystemApi
+    public static final int SET_CARRIER_RESTRICTION_ERROR = 2;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"SET_CARRIER_RESTRICTION_"},
+            value = {
+                    SET_CARRIER_RESTRICTION_SUCCESS,
+                    SET_CARRIER_RESTRICTION_NOT_SUPPORTED,
+                    SET_CARRIER_RESTRICTION_ERROR
+            })
+    public @interface SetCarrierRestrictionResult {}
+
+    /**
+     * Set the allowed carrier list and the excluded carrier list indicating the priority between
+     * the two lists.
+     * Requires system privileges.
+     *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE}
+     *
+     * <p>This method works only on devices with {@link
+     * android.content.pm.PackageManager#FEATURE_TELEPHONY_CARRIERLOCK} enabled.
+     *
+     * @return {@link #SET_CARRIER_RESTRICTION_SUCCESS} in case of success.
+     * {@link #SET_CARRIER_RESTRICTION_NOT_SUPPORTED} if the modem does not support the
+     * configuration. {@link #SET_CARRIER_RESTRICTION_ERROR} in all other error cases.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @SetCarrierRestrictionResult
+    public int setCarrierRestrictionRules(@NonNull CarrierRestrictionRules rules) {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                return service.setAllowedCarriers(slotIndex, carriers);
+                return service.setAllowedCarriers(rules);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#setAllowedCarriers", e);
         } catch (NullPointerException e) {
             Log.e(TAG, "Error calling ITelephony#setAllowedCarriers", e);
         }
-        return -1;
+        return SET_CARRIER_RESTRICTION_ERROR;
     }
 
     /**
      * Get the allowed carrier list for slotIndex.
-     * Require system privileges. In the future we may add this to carrier APIs.
+     * Requires system privileges.
      *
      * <p>This method returns valid data on devices with {@link
      * android.content.pm.PackageManager#FEATURE_TELEPHONY_CARRIERLOCK} enabled.
+     *
+     * @deprecated Apps should use {@link getCarriersRestrictionRules} to retrieve the list of
+     * allowed and excliuded carriers, as the result of this API is valid only when the excluded
+     * list is empty. This API could return an empty list, even if some restrictions are present.
      *
      * @return List of {@link android.telephony.CarrierIdentifier}; empty list
      * means all carriers are allowed.
      * @hide
      */
+    @Deprecated
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public List<CarrierIdentifier> getAllowedCarriers(int slotIndex) {
+        CarrierRestrictionRules carrierRestrictionRule = getCarrierRestrictionRules();
+        if (carrierRestrictionRule != null) {
+            return carrierRestrictionRule.getAllowedCarriers();
+        }
+        return new ArrayList<CarrierIdentifier>(0);
+    }
+
+    /**
+     * Get the allowed carrier list and the excluded carrier list indicating the priority between
+     * the two lists.
+     * Require system privileges. In the future we may add this to carrier APIs.
+     *
+     * <p>This method returns valid data on devices with {@link
+     * android.content.pm.PackageManager#FEATURE_TELEPHONY_CARRIERLOCK} enabled.
+     *
+     * @return {@link CarrierRestrictionRules} which contains the allowed carrier list and the
+     * excluded carrier list with the priority between the two lists. Returns {@code null}
+     * in case of error.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @Nullable
+    public CarrierRestrictionRules getCarrierRestrictionRules() {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                return service.getAllowedCarriers(slotIndex);
+                return service.getAllowedCarriers();
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#getAllowedCarriers", e);
         } catch (NullPointerException e) {
             Log.e(TAG, "Error calling ITelephony#getAllowedCarriers", e);
         }
-        return new ArrayList<CarrierIdentifier>(0);
+        return null;
     }
 
     /**
@@ -9448,10 +9610,10 @@ public class TelephonyManager {
     }
 
     /**
-     * Enable or disable AlternativeNetworkService.
+     * Enable or disable OpportunisticNetworkService.
      *
      * This method should be called to enable or disable
-     * AlternativeNetwork service on the device.
+     * OpportunisticNetwork service on the device.
      *
      * <p>
      * Requires Permission:
@@ -9462,25 +9624,25 @@ public class TelephonyManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean setAlternativeNetworkState(boolean enable) {
+    public boolean setOpportunisticNetworkState(boolean enable) {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         boolean ret = false;
         try {
-            IAns iAlternativeNetworkService = getIAns();
-            if (iAlternativeNetworkService != null) {
-                ret = iAlternativeNetworkService.setEnable(enable, pkgForDebug);
+            IOns iOpportunisticNetworkService = getIOns();
+            if (iOpportunisticNetworkService != null) {
+                ret = iOpportunisticNetworkService.setEnable(enable, pkgForDebug);
             }
         } catch (RemoteException ex) {
-            Rlog.e(TAG, "enableAlternativeNetwork RemoteException", ex);
+            Rlog.e(TAG, "enableOpportunisticNetwork RemoteException", ex);
         }
 
         return ret;
     }
 
     /**
-     * is AlternativeNetworkService enabled
+     * is OpportunisticNetworkService enabled
      *
-     * This method should be called to determine if the AlternativeNetworkService is
+     * This method should be called to determine if the OpportunisticNetworkService is
      * enabled
      *
      * <p>
@@ -9489,17 +9651,17 @@ public class TelephonyManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
-    public boolean isAlternativeNetworkEnabled() {
+    public boolean isOpportunisticNetworkEnabled() {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         boolean isEnabled = false;
 
         try {
-            IAns iAlternativeNetworkService = getIAns();
-            if (iAlternativeNetworkService != null) {
-                isEnabled = iAlternativeNetworkService.isEnabled(pkgForDebug);
+            IOns iOpportunisticNetworkService = getIOns();
+            if (iOpportunisticNetworkService != null) {
+                isEnabled = iOpportunisticNetworkService.isEnabled(pkgForDebug);
             }
         } catch (RemoteException ex) {
-            Rlog.e(TAG, "enableAlternativeNetwork RemoteException", ex);
+            Rlog.e(TAG, "enableOpportunisticNetwork RemoteException", ex);
         }
 
         return isEnabled;
@@ -9854,12 +10016,13 @@ public class TelephonyManager {
     public boolean setPreferredOpportunisticDataSubscription(int subId) {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         try {
-            IAns iAlternativeNetworkService = getIAns();
-            if (iAlternativeNetworkService != null) {
-                return iAlternativeNetworkService.setPreferredData(subId, pkgForDebug);
+            IOns iOpportunisticNetworkService = getIOns();
+            if (iOpportunisticNetworkService != null) {
+                return iOpportunisticNetworkService
+                        .setPreferredDataSubscriptionId(subId, pkgForDebug);
             }
         } catch (RemoteException ex) {
-            Rlog.e(TAG, "setPreferredData RemoteException", ex);
+            Rlog.e(TAG, "setPreferredDataSubscriptionId RemoteException", ex);
         }
         return false;
     }
@@ -9878,12 +10041,12 @@ public class TelephonyManager {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         try {
-            IAns iAlternativeNetworkService = getIAns();
-            if (iAlternativeNetworkService != null) {
-                subId = iAlternativeNetworkService.getPreferredData(pkgForDebug);
+            IOns iOpportunisticNetworkService = getIOns();
+            if (iOpportunisticNetworkService != null) {
+                subId = iOpportunisticNetworkService.getPreferredDataSubscriptionId(pkgForDebug);
             }
         } catch (RemoteException ex) {
-            Rlog.e(TAG, "getPreferredData RemoteException", ex);
+            Rlog.e(TAG, "getPreferredDataSubscriptionId RemoteException", ex);
         }
         return subId;
     }
@@ -9891,8 +10054,8 @@ public class TelephonyManager {
     /**
      * Update availability of a list of networks in the current location.
      *
-     * This api should be called to inform AlternativeNetwork Service about the availability
-     * of a network at the current location. This information will be used by AlternativeNetwork
+     * This api should be called to inform OpportunisticNetwork Service about the availability
+     * of a network at the current location. This information will be used by OpportunisticNetwork
      * service to decide to attach to the network opportunistically. If an empty list is passed,
      * it is assumed that no network is available.
      * Requires that the calling app has carrier privileges on both primary and
@@ -9907,13 +10070,42 @@ public class TelephonyManager {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         boolean ret = false;
         try {
-            IAns iAlternativeNetworkService = getIAns();
-            if (iAlternativeNetworkService != null) {
-                ret = iAlternativeNetworkService.updateAvailableNetworks(availableNetworks,
+            IOns iOpportunisticNetworkService = getIOns();
+            if (iOpportunisticNetworkService != null && availableNetworks != null) {
+                ret = iOpportunisticNetworkService.updateAvailableNetworks(availableNetworks,
                         pkgForDebug);
             }
         } catch (RemoteException ex) {
             Rlog.e(TAG, "updateAvailableNetworks RemoteException", ex);
+        }
+        return ret;
+    }
+
+    /**
+     * Enable or disable a logical modem stack. When a logical modem is disabled, the corresponding
+     * SIM will still be visible to the user but its mapping modem will not have any radio activity.
+     * For example, we will disable a modem when user or system believes the corresponding SIM
+     * is temporarily not needed (e.g. out of coverage), and will enable it back on when needed.
+     *
+     * Requires that the calling app has permission
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}.
+     * @param slotIndex which corresponding modem will operate on.
+     * @param enable whether to enable or disable the modem stack.
+     * @return whether the operation is successful.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public boolean enableModemForSlot(int slotIndex, boolean enable) {
+        boolean ret = false;
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                ret = telephony.enableModemForSlot(slotIndex, enable);
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "enableModem RemoteException", ex);
         }
         return ret;
     }

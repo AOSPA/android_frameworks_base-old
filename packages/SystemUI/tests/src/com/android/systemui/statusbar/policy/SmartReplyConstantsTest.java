@@ -20,6 +20,7 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
 
+import android.app.RemoteInput;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -51,6 +52,9 @@ public class SmartReplyConstantsTest extends SysuiTestCase {
         resources.addOverride(R.bool.config_smart_replies_in_notifications_enabled, true);
         resources.addOverride(
                 R.integer.config_smart_replies_in_notifications_max_squeeze_remeasure_attempts, 7);
+        resources.addOverride(
+                R.bool.config_smart_replies_in_notifications_edit_choices_before_sending, false);
+        resources.addOverride(R.bool.config_smart_replies_in_notifications_show_in_heads_up, true);
         mConstants = new SmartReplyConstants(Handler.createAsync(Looper.myLooper()), mContext);
     }
 
@@ -102,6 +106,71 @@ public class SmartReplyConstantsTest extends SysuiTestCase {
         overrideSetting("enabled=false,max_squeeze_remeasure_attempts=5");
         triggerConstantsOnChange();
         assertEquals(5, mConstants.getMaxSqueezeRemeasureAttempts());
+    }
+
+    @Test
+    public void testGetEffectiveEditChoicesBeforeSendingWithNoConfig() {
+        overrideSetting("enabled=true");
+        triggerConstantsOnChange();
+        assertFalse(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_AUTO));
+        assertTrue(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_ENABLED));
+        assertFalse(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_DISABLED));
+    }
+
+    @Test
+    public void testGetEffectiveEditChoicesBeforeSendingWithEnabledConfig() {
+        overrideSetting("enabled=true,edit_choices_before_sending=true");
+        triggerConstantsOnChange();
+        assertTrue(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_AUTO));
+        assertTrue(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_ENABLED));
+        assertFalse(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_DISABLED));
+    }
+
+    @Test
+    public void testGetEffectiveEditChoicesBeforeSendingWithDisabledConfig() {
+        overrideSetting("enabled=true,edit_choices_before_sending=false");
+        triggerConstantsOnChange();
+        assertFalse(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_AUTO));
+        assertTrue(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_ENABLED));
+        assertFalse(
+                mConstants.getEffectiveEditChoicesBeforeSending(
+                        RemoteInput.EDIT_CHOICES_BEFORE_SENDING_DISABLED));
+    }
+
+    @Test
+    public void testShowInHeadsUpWithNoConfig() {
+        assertTrue(mConstants.isEnabled());
+        assertTrue(mConstants.getShowInHeadsUp());
+    }
+
+    @Test
+    public void testShowInHeadsUpEnabled() {
+        overrideSetting("enabled=true,show_in_heads_up=true");
+        triggerConstantsOnChange();
+        assertTrue(mConstants.getShowInHeadsUp());
+    }
+
+    @Test
+    public void testShowInHeadsUpDisabled() {
+        overrideSetting("enabled=true,show_in_heads_up=false");
+        triggerConstantsOnChange();
+        assertFalse(mConstants.getShowInHeadsUp());
     }
 
     private void overrideSetting(String flags) {

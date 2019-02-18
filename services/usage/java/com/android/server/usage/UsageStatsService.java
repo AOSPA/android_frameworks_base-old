@@ -18,6 +18,7 @@ package com.android.server.usage;
 
 import static android.app.usage.UsageEvents.Event.CHOOSER_ACTION;
 import static android.app.usage.UsageEvents.Event.CONFIGURATION_CHANGE;
+import static android.app.usage.UsageEvents.Event.DEVICE_SHUTDOWN;
 import static android.app.usage.UsageEvents.Event.FLUSH_TO_DISK;
 import static android.app.usage.UsageEvents.Event.NOTIFICATION_INTERRUPTION;
 import static android.app.usage.UsageEvents.Event.SHORTCUT_INVOCATION;
@@ -53,6 +54,7 @@ import android.os.Binder;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.IDeviceIdleController;
 import android.os.Looper;
 import android.os.Message;
@@ -105,6 +107,8 @@ public class UsageStatsService extends SystemService implements
     private static final boolean ENABLE_KERNEL_UPDATES = true;
     private static final File KERNEL_COUNTER_FILE = new File("/proc/uid_procstat/set");
 
+    private static final char TOKEN_DELIMITER = '/';
+
     // Handler message types.
     static final int MSG_REPORT_EVENT = 0;
     static final int MSG_FLUSH_TO_DISK = 1;
@@ -134,6 +138,10 @@ public class UsageStatsService extends SystemService implements
 
     /** Manages app time limit observers */
     AppTimeLimitController mAppTimeLimit;
+
+    final SparseArray<ArraySet<String>> mUsageReporters = new SparseArray();
+    final SparseArray<String> mVisibleActivities = new SparseArray();
+
 
     private UsageStatsManagerInternal.AppIdleStateChangeListener mStandbyChangeListener =
             new UsageStatsManagerInternal.AppIdleStateChangeListener() {
@@ -270,7 +278,7 @@ public class UsageStatsService extends SystemService implements
                     mHandler.obtainMessage(MSG_REMOVE_USER, userId, 0).sendToTarget();
                 }
             } else if (Intent.ACTION_USER_STARTED.equals(action)) {
-                if (userId >=0) {
+                if (userId >= 0) {
                     mAppStandby.postCheckIdleStates(userId);
                 }
             }
@@ -409,8 +417,27 @@ public class UsageStatsService extends SystemService implements
      */
     void shutdown() {
         synchronized (mLock) {
+            mHandler.removeMessages(MSG_REPORT_EVENT);
+            Event event = new Event(DEVICE_SHUTDOWN, SystemClock.elapsedRealtime());
+            // orderly shutdown, the last event is DEVICE_SHUTDOWN.
+            reportEventToAllUserId(event);
             flushToDiskLocked();
         }
+    }
+
+    /**
+     * After power button is pressed for 3.5 seconds
+     * (as defined in {@link com.android.internal.R.integer#config_veryLongPressTimeout}),
+     * report DEVICE_SHUTDOWN event and persist the database. If the power button is pressed for 10
+     * seconds and the device is shutdown, the database is already persisted and we are not losing
+     * data.
+     * This method is called from PhoneWindowManager, do not synchronize on mLock otherwise
+     * PhoneWindowManager may be blocked.
+     */
+    void prepareForPossibleShutdown() {
+        Event event = new Event(DEVICE_SHUTDOWN, SystemClock.elapsedRealtime());
+        mHandler.obtainMessage(MSG_REPORT_EVENT_TO_ALL_USERID, event).sendToTarget();
+        mHandler.sendEmptyMessage(MSG_FLUSH_TO_DISK);
     }
 
     /**
@@ -434,17 +461,46 @@ public class UsageStatsService extends SystemService implements
             mAppStandby.reportEvent(event, elapsedRealtime, userId);
             switch (event.mEventType) {
                 case Event.ACTIVITY_RESUMED:
-                    try {
-                        mAppTimeLimit.noteUsageStart(event.getPackageName(), userId);
-                    } catch (IllegalArgumentException iae) {
-                        Slog.e(TAG, "Failed to note usage start", iae);
+                    synchronized (mVisibleActivities) {
+                        mVisibleActivities.put(event.mInstanceId, event.getClassName());
+                        try {
+                            mAppTimeLimit.noteUsageStart(event.getPackageName(), userId);
+                        } catch (IllegalArgumentException iae) {
+                            Slog.e(TAG, "Failed to note usage start", iae);
+                        }
                     }
                     break;
-                case Event.ACTIVITY_PAUSED:
-                    try {
-                        mAppTimeLimit.noteUsageStop(event.getPackageName(), userId);
-                    } catch (IllegalArgumentException iae) {
-                        Slog.e(TAG, "Failed to note usage stop", iae);
+                case Event.ACTIVITY_STOPPED:
+                case Event.ACTIVITY_DESTROYED:
+                    ArraySet<String> tokens;
+                    synchronized (mUsageReporters) {
+                        tokens = mUsageReporters.removeReturnOld(event.mInstanceId);
+                    }
+                    if (tokens != null) {
+                        synchronized (tokens) {
+                            final int size = tokens.size();
+                            // Stop usage on behalf of a UsageReporter that stopped
+                            for (int i = 0; i < size; i++) {
+                                final String token = tokens.valueAt(i);
+                                try {
+                                    mAppTimeLimit.noteUsageStop(
+                                            buildFullToken(event.getPackageName(), token), userId);
+                                } catch (IllegalArgumentException iae) {
+                                    Slog.w(TAG, "Failed to stop usage for during reporter death: "
+                                            + iae);
+                                }
+                            }
+                        }
+                    }
+
+                    synchronized (mVisibleActivities) {
+                        if (mVisibleActivities.removeReturnOld(event.mInstanceId) != null) {
+                            try {
+                                mAppTimeLimit.noteUsageStop(event.getPackageName(), userId);
+                            } catch (IllegalArgumentException iae) {
+                                Slog.w(TAG, "Failed to note usage stop", iae);
+                            }
+                        }
                     }
                     break;
             }
@@ -599,6 +655,14 @@ public class UsageStatsService extends SystemService implements
         return beginTime <= currentTime && beginTime < endTime;
     }
 
+    private String buildFullToken(String packageName, String token) {
+        final StringBuilder sb = new StringBuilder(packageName.length() + token.length() + 1);
+        sb.append(packageName);
+        sb.append(TOKEN_DELIMITER);
+        sb.append(token);
+        return sb.toString();
+    }
+
     private void flushToDiskLocked() {
         final int userCount = mUserState.size();
         for (int i = 0; i < userCount; i++) {
@@ -627,8 +691,7 @@ public class UsageStatsService extends SystemService implements
                     String arg = args[i];
                     if ("--checkin".equals(arg)) {
                         checkin = true;
-                    } else
-                    if ("-c".equals(arg)) {
+                    } else if ("-c".equals(arg)) {
                         compact = true;
                     } else if ("flush".equals(arg)) {
                         flushToDiskLocked();
@@ -636,6 +699,15 @@ public class UsageStatsService extends SystemService implements
                         return;
                     } else if ("is-app-standby-enabled".equals(arg)) {
                         pw.println(mAppStandby.mAppIdleEnabled);
+                        return;
+                    } else if ("apptimelimit".equals(arg)) {
+                        if (i + 1 >= args.length) {
+                            mAppTimeLimit.dump(null, pw);
+                        } else {
+                            final String[] remainingArgs =
+                                    Arrays.copyOfRange(args, i + 1, args.length);
+                            mAppTimeLimit.dump(remainingArgs, pw);
+                        }
                         return;
                     } else if (arg != null && !arg.startsWith("-")) {
                         // Anything else that doesn't start with '-' is a pkg to filter
@@ -666,7 +738,7 @@ public class UsageStatsService extends SystemService implements
                 mAppStandby.dumpState(args, pw);
             }
 
-            mAppTimeLimit.dump(pw);
+            mAppTimeLimit.dump(null, pw);
         }
     }
 
@@ -1231,16 +1303,82 @@ public class UsageStatsService extends SystemService implements
             final int userId = UserHandle.getUserId(callingUid);
             final long token = Binder.clearCallingIdentity();
             try {
-                UsageStatsService.this.unregisterUsageSessionObserver(callingUid, sessionObserverId, userId);
+                UsageStatsService.this.unregisterUsageSessionObserver(callingUid, sessionObserverId,
+                        userId);
             } finally {
                 Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void reportUsageStart(IBinder activity, String token, String callingPackage) {
+            reportPastUsageStart(activity, token, 0, callingPackage);
+        }
+
+        @Override
+        public void reportPastUsageStart(IBinder activity, String token, long timeAgoMs,
+                String callingPackage) {
+
+            final int callingUid = Binder.getCallingUid();
+            final int userId = UserHandle.getUserId(callingUid);
+            final long binderToken = Binder.clearCallingIdentity();
+            try {
+                ArraySet<String> tokens;
+                synchronized (mUsageReporters) {
+                    tokens = mUsageReporters.get(activity.hashCode());
+                    if (tokens == null) {
+                        tokens = new ArraySet();
+                        mUsageReporters.put(activity.hashCode(), tokens);
+                    }
+                }
+
+                synchronized (tokens) {
+                    if (!tokens.add(token)) {
+                        throw new IllegalArgumentException(token + " for " + callingPackage
+                                + " is already reported as started for this activity");
+                    }
+                }
+
+                mAppTimeLimit.noteUsageStart(buildFullToken(callingPackage, token),
+                        userId, timeAgoMs);
+            } finally {
+                Binder.restoreCallingIdentity(binderToken);
+            }
+        }
+
+        @Override
+        public void reportUsageStop(IBinder activity, String token, String callingPackage) {
+            final int callingUid = Binder.getCallingUid();
+            final int userId = UserHandle.getUserId(callingUid);
+            final long binderToken = Binder.clearCallingIdentity();
+            try {
+                ArraySet<String> tokens;
+                synchronized (mUsageReporters) {
+                    tokens = mUsageReporters.get(activity.hashCode());
+                    if (tokens == null) {
+                        throw new IllegalArgumentException(
+                                "Unknown reporter trying to stop token " + token + " for "
+                                        + callingPackage);
+                    }
+                }
+
+                synchronized (tokens) {
+                    if (!tokens.remove(token)) {
+                        throw new IllegalArgumentException(token + " for " + callingPackage
+                                + " is already reported as stopped for this activity");
+                    }
+                }
+                mAppTimeLimit.noteUsageStop(buildFullToken(callingPackage, token), userId);
+            } finally {
+                Binder.restoreCallingIdentity(binderToken);
             }
         }
     }
 
     void registerAppUsageObserver(int callingUid, int observerId, String[] packages,
             long timeLimitMs, PendingIntent callbackIntent, int userId) {
-        mAppTimeLimit.addAppUsageObserver(callingUid, observerId, packages, timeLimitMs, callbackIntent,
+        mAppTimeLimit.addAppUsageObserver(callingUid, observerId, packages, timeLimitMs,
+                callbackIntent,
                 userId);
     }
 
@@ -1366,6 +1504,11 @@ public class UsageStatsService extends SystemService implements
             // we might not shutdown cleanly. This is ok to do with the 'am' lock held, because
             // we are shutting down.
             UsageStatsService.this.shutdown();
+        }
+
+        @Override
+        public void prepareForPossibleShutdown() {
+            UsageStatsService.this.prepareForPossibleShutdown();
         }
 
         @Override

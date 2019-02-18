@@ -18,8 +18,12 @@ package com.android.server.hdmi;
 import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
 import android.os.MessageQueue;
+
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.hdmi.HdmiCecController.NativeWrapper;
+
+import com.google.common.collect.Iterables;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,8 +49,8 @@ final class FakeNativeWrapper implements NativeWrapper {
             };
 
     private final List<HdmiCecMessage> mResultMessages = new ArrayList<>();
-    private HdmiCecMessage mResultMessage;
     private int mMyPhysicalAddress = 0;
+    private HdmiPortInfo[] mHdmiPortInfo = null;
 
     @Override
     public long nativeInit(HdmiCecController handler, MessageQueue messageQueue) {
@@ -89,9 +93,11 @@ final class FakeNativeWrapper implements NativeWrapper {
 
     @Override
     public HdmiPortInfo[] nativeGetPortInfos(long controllerPtr) {
-        HdmiPortInfo[] hdmiPortInfo = new HdmiPortInfo[1];
-        hdmiPortInfo[0] = new HdmiPortInfo(1, 1, 0x1000, true, true, true);
-        return hdmiPortInfo;
+        if (mHdmiPortInfo == null) {
+            mHdmiPortInfo = new HdmiPortInfo[1];
+            mHdmiPortInfo[0] = new HdmiPortInfo(1, 1, 0x1000, true, true, true);
+        }
+        return mHdmiPortInfo;
     }
 
     @Override
@@ -112,11 +118,12 @@ final class FakeNativeWrapper implements NativeWrapper {
         return new ArrayList<>(mResultMessages);
     }
 
-    public HdmiCecMessage getOnlyResultMessage() throws Exception {
-        if (mResultMessages.size() != 1) {
-            throw new Exception("There is not exactly one message");
-        }
-        return mResultMessages.get(0);
+    public HdmiCecMessage getOnlyResultMessage() throws IllegalArgumentException {
+        return Iterables.getOnlyElement(mResultMessages);
+    }
+
+    public void clearResultMessages() {
+        mResultMessages.clear();
     }
 
     public void setPollAddressResponse(int logicalAddress, int response) {
@@ -126,5 +133,11 @@ final class FakeNativeWrapper implements NativeWrapper {
     @VisibleForTesting
     protected void setPhysicalAddress(int physicalAddress) {
         mMyPhysicalAddress = physicalAddress;
+    }
+
+    @VisibleForTesting
+    protected void setPortInfo(HdmiPortInfo[] hdmiPortInfo) {
+        mHdmiPortInfo = new HdmiPortInfo[hdmiPortInfo.length];
+        System.arraycopy(hdmiPortInfo, 0, mHdmiPortInfo, 0, hdmiPortInfo.length);
     }
 }

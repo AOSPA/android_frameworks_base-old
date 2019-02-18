@@ -42,11 +42,13 @@ import android.view.contentcapture.ContentCaptureSession;
 import android.view.contentcapture.ContentCaptureSessionId;
 import android.view.contentcapture.IContentCaptureDirectManager;
 import android.view.contentcapture.MainContentCaptureSession;
+import android.view.contentcapture.UserDataRemovalRequest;
 
 import com.android.internal.os.IResultReceiver;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -76,6 +78,7 @@ public abstract class ContentCaptureService extends Service {
             "android.service.contentcapture.ContentCaptureService";
 
     private Handler mHandler;
+    private IContentCaptureServiceCallback mCallback;
 
     /**
      * Binder that receives calls from the system server.
@@ -83,9 +86,15 @@ public abstract class ContentCaptureService extends Service {
     private final IContentCaptureService mServerInterface = new IContentCaptureService.Stub() {
 
         @Override
-        public void onConnectedStateChanged(boolean state) {
-            mHandler.sendMessage(obtainMessage(ContentCaptureService::handleOnConnectedStateChanged,
-                    ContentCaptureService.this, state));
+        public void onConnected(IBinder callback) {
+            mHandler.sendMessage(obtainMessage(ContentCaptureService::handleOnConnected,
+                    ContentCaptureService.this, callback));
+        }
+
+        @Override
+        public void onDisconnected() {
+            mHandler.sendMessage(obtainMessage(ContentCaptureService::handleOnDisconnected,
+                    ContentCaptureService.this));
         }
 
         @Override
@@ -123,12 +132,12 @@ public abstract class ContentCaptureService extends Service {
     };
 
     /**
-     * List of sessions per UID.
+     * UIDs associated with each session.
      *
      * <p>This map is populated when an session is started, which is called by the system server
      * and can be trusted. Then subsequent calls made by the app are verified against this map.
      */
-    private final ArrayMap<String, Integer> mSessionsByUid = new ArrayMap<>();
+    private final ArrayMap<String, Integer> mSessionUids = new ArrayMap<>();
 
     @CallSuper
     @Override
@@ -165,7 +174,16 @@ public abstract class ContentCaptureService extends Service {
      */
     public final void setContentCaptureWhitelist(@Nullable List<String> packages,
             @Nullable List<ComponentName> activities) {
-        //TODO(b/111276913): implement
+        final IContentCaptureServiceCallback callback = mCallback;
+        if (callback == null) {
+            Log.w(TAG, "setContentCaptureWhitelist(): no server callback");
+            return;
+        }
+        try {
+            callback.setContentCaptureWhitelist(packages, activities);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -176,7 +194,16 @@ public abstract class ContentCaptureService extends Service {
      */
     public final void setActivityContentCaptureEnabled(@NonNull ComponentName activity,
             boolean enabled) {
-        //TODO(b/111276913): implement
+        final IContentCaptureServiceCallback callback = mCallback;
+        if (callback == null) {
+            Log.w(TAG, "setActivityContentCaptureEnabled(): no server callback");
+            return;
+        }
+        try {
+            callback.setActivityContentCaptureEnabled(activity, enabled);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -187,7 +214,16 @@ public abstract class ContentCaptureService extends Service {
      */
     public final void setPackageContentCaptureEnabled(@NonNull String packageName,
             boolean enabled) {
-        //TODO(b/111276913): implement
+        final IContentCaptureServiceCallback callback = mCallback;
+        if (callback == null) {
+            Log.w(TAG, "setPackageContentCaptureEnabled(): no server callback");
+            return;
+        }
+        try {
+            callback.setPackageContentCaptureEnabled(packageName, enabled);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -196,7 +232,12 @@ public abstract class ContentCaptureService extends Service {
      */
     @NonNull
     public final Set<ComponentName> getContentCaptureDisabledActivities() {
-        //TODO(b/111276913): implement
+        final IContentCaptureServiceCallback callback = mCallback;
+        if (callback == null) {
+            Log.w(TAG, "getContentCaptureDisabledActivities(): no server callback");
+            return Collections.emptySet();
+        }
+        //TODO(b/122595322): implement (using SyncResultReceiver)
         return null;
     }
 
@@ -206,7 +247,12 @@ public abstract class ContentCaptureService extends Service {
      */
     @NonNull
     public final Set<String> getContentCaptureDisabledPackages() {
-        //TODO(b/111276913): implement
+        final IContentCaptureServiceCallback callback = mCallback;
+        if (callback == null) {
+            Log.w(TAG, "getContentCaptureDisabledPackages(): no server callback");
+            return Collections.emptySet();
+        }
+        //TODO(b/122595322): implement (using SyncResultReceiver)
         return null;
     }
 
@@ -255,6 +301,16 @@ public abstract class ContentCaptureService extends Service {
         if (VERBOSE) Log.v(TAG, "onContentCaptureEventsRequest(id=" + sessionId + ")");
         onContentCaptureEventsRequest(sessionId, new ContentCaptureEventsRequest(event));
     }
+
+    /**
+     * Notifies the service that the app requested to remove data associated with the user.
+     *
+     * @param request the user data requested to be removed
+     */
+    public void onUserDataRemovalRequest(@NonNull UserDataRemovalRequest request) {
+        if (VERBOSE) Log.v(TAG, "onUserDataRemovalRequest()");
+    }
+
     /**
      * Notifies the service of {@link SnapshotData snapshot data} associated with a session.
      *
@@ -285,23 +341,25 @@ public abstract class ContentCaptureService extends Service {
     @Override
     @CallSuper
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        final int size = mSessionsByUid.size();
+        final int size = mSessionUids.size();
         pw.print("Number sessions: "); pw.println(size);
         if (size > 0) {
             final String prefix = "  ";
             for (int i = 0; i < size; i++) {
-                pw.print(prefix); pw.print(mSessionsByUid.keyAt(i));
-                pw.print(": uid="); pw.println(mSessionsByUid.valueAt(i));
+                pw.print(prefix); pw.print(mSessionUids.keyAt(i));
+                pw.print(": uid="); pw.println(mSessionUids.valueAt(i));
             }
         }
     }
 
-    private void handleOnConnectedStateChanged(boolean state) {
-        if (state) {
-            onConnected();
-        } else {
-            onDisconnected();
-        }
+    private void handleOnConnected(@NonNull IBinder callback) {
+        mCallback = IContentCaptureServiceCallback.Stub.asInterface(callback);
+        onConnected();
+    }
+
+    private void handleOnDisconnected() {
+        onDisconnected();
+        mCallback = null;
     }
 
     //TODO(b/111276913): consider caching the InteractionSessionId for the lifetime of the session,
@@ -309,10 +367,24 @@ public abstract class ContentCaptureService extends Service {
 
     private void handleOnCreateSession(@NonNull ContentCaptureContext context,
             @NonNull String sessionId, int uid, IResultReceiver clientReceiver) {
-        mSessionsByUid.put(sessionId, uid);
+        mSessionUids.put(sessionId, uid);
         onCreateContentCaptureSession(context, new ContentCaptureSessionId(sessionId));
-        setClientState(clientReceiver, ContentCaptureSession.STATE_ACTIVE,
-                mClientInterface.asBinder());
+
+        final int clientFlags = context.getFlags();
+        int stateFlags = 0;
+        if ((clientFlags & ContentCaptureContext.FLAG_DISABLED_BY_FLAG_SECURE) != 0) {
+            stateFlags |= ContentCaptureSession.STATE_FLAG_SECURE;
+        }
+        if ((clientFlags & ContentCaptureContext.FLAG_DISABLED_BY_APP) != 0) {
+            stateFlags |= ContentCaptureSession.STATE_BY_APP;
+        }
+        if (stateFlags == 0) {
+            stateFlags = ContentCaptureSession.STATE_ACTIVE;
+        } else {
+            stateFlags |= ContentCaptureSession.STATE_DISABLED;
+
+        }
+        setClientState(clientReceiver, stateFlags, mClientInterface.asBinder());
     }
 
     private void handleSendEvents(int uid,
@@ -336,11 +408,11 @@ public abstract class ContentCaptureService extends Service {
                 case ContentCaptureEvent.TYPE_SESSION_STARTED:
                     final ContentCaptureContext clientContext = event.getClientContext();
                     clientContext.setParentSessionId(event.getParentSessionId());
-                    mSessionsByUid.put(sessionIdString, uid);
+                    mSessionUids.put(sessionIdString, uid);
                     onCreateContentCaptureSession(clientContext, sessionId);
                     break;
                 case ContentCaptureEvent.TYPE_SESSION_FINISHED:
-                    mSessionsByUid.remove(sessionIdString);
+                    mSessionUids.remove(sessionIdString);
                     onDestroyContentCaptureSession(sessionId);
                     break;
                 default:
@@ -355,7 +427,7 @@ public abstract class ContentCaptureService extends Service {
     }
 
     private void handleFinishSession(@NonNull String sessionId) {
-        mSessionsByUid.remove(sessionId);
+        mSessionUids.remove(sessionId);
         onDestroyContentCaptureSession(new ContentCaptureSessionId(sessionId));
     }
 
@@ -372,10 +444,13 @@ public abstract class ContentCaptureService extends Service {
             default:
                 sessionId = event.getSessionId();
         }
-        final Integer rightUid = mSessionsByUid.get(sessionId);
+        final Integer rightUid = mSessionUids.get(sessionId);
         if (rightUid == null) {
-            if (VERBOSE) Log.v(TAG, "No session for " + sessionId);
-            // Just ignore, as the session could have finished
+            if (DEBUG) {
+                Log.d(TAG, "handleIsRightCallerFor(" + event + "): no session for " + sessionId
+                        + ": " + mSessionUids);
+            }
+            // Just ignore, as the session could have been finished already
             return false;
         }
         if (rightUid != uid) {
@@ -389,15 +464,16 @@ public abstract class ContentCaptureService extends Service {
     }
 
     /**
-     * Sends the state of the {@link ContentCaptureManager} in the cleint app.
+     * Sends the state of the {@link ContentCaptureManager} in the client app.
      *
      * @param clientReceiver receiver in the client app.
+     * @param sessionState state of the session
      * @param binder handle to the {@code IContentCaptureDirectManager} object that resides in the
      * service.
      * @hide
      */
     public static void setClientState(@NonNull IResultReceiver clientReceiver,
-            int sessionStatus, @Nullable IBinder binder) {
+            int sessionState, @Nullable IBinder binder) {
         try {
             final Bundle extras;
             if (binder != null) {
@@ -406,7 +482,7 @@ public abstract class ContentCaptureService extends Service {
             } else {
                 extras = null;
             }
-            clientReceiver.send(sessionStatus, extras);
+            clientReceiver.send(sessionState, extras);
         } catch (RemoteException e) {
             Slog.w(TAG, "Error async reporting result to client: " + e);
         }

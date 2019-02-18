@@ -138,6 +138,9 @@ public class InputManagerService extends IInputManager.Stub
     private final Context mContext;
     private final InputManagerHandler mHandler;
 
+    // Context cache used for loading pointer resources.
+    private Context mDisplayContext;
+
     private final File mDoubleTouchGestureEnableFile;
 
     private WindowManagerCallbacks mWindowManagerCallbacks;
@@ -213,8 +216,6 @@ public class InputManagerService extends IInputManager.Stub
     private static native void nativeSetFocusedApplication(long ptr,
             int displayId, InputApplicationHandle application);
     private static native void nativeSetFocusedDisplay(long ptr, int displayId);
-    private static native boolean nativeTransferTouchFocus(long ptr,
-            InputChannel fromChannel, InputChannel toChannel);
     private static native void nativeSetPointerSpeed(long ptr, int speed);
     private static native void nativeSetShowTouches(long ptr, boolean enabled);
     private static native void nativeSetInteractive(long ptr, boolean interactive);
@@ -1485,29 +1486,6 @@ public class InputManagerService extends IInputManager.Stub
         nativeSetSystemUiVisibility(mPtr, visibility);
     }
 
-    /**
-     * Atomically transfers touch focus from one window to another as identified by
-     * their input channels.  It is possible for multiple windows to have
-     * touch focus if they support split touch dispatch
-     * {@link android.view.WindowManager.LayoutParams#FLAG_SPLIT_TOUCH} but this
-     * method only transfers touch focus of the specified window without affecting
-     * other windows that may also have touch focus at the same time.
-     * @param fromChannel The channel of a window that currently has touch focus.
-     * @param toChannel The channel of the window that should receive touch focus in
-     * place of the first.
-     * @return True if the transfer was successful.  False if the window with the
-     * specified channel did not actually have touch focus at the time of the request.
-     */
-    public boolean transferTouchFocus(InputChannel fromChannel, InputChannel toChannel) {
-        if (fromChannel == null) {
-            throw new IllegalArgumentException("fromChannel must not be null.");
-        }
-        if (toChannel == null) {
-            throw new IllegalArgumentException("toChannel must not be null.");
-        }
-        return nativeTransferTouchFocus(mPtr, fromChannel, toChannel);
-    }
-
     @Override // Binder call
     public void tryPointerSpeed(int speed) {
         if (!checkCallingPermission(android.Manifest.permission.SET_POINTER_SPEED,
@@ -1785,15 +1763,17 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     // Native callback
-    private void notifyFocusChanged(IBinder token) {
-        if (mFocusedWindow != token) {
-            if (mFocusedWindowHasCapture) {
-                setPointerCapture(false);
+    private void notifyFocusChanged(IBinder oldToken, IBinder newToken) {
+        if (mFocusedWindow != null) {
+            if (mFocusedWindow.asBinder() == newToken) {
+                Slog.w(TAG, "notifyFocusChanged called with unchanged mFocusedWindow="
+                        + mFocusedWindow);
+                return;
             }
-            if (token instanceof IWindow) {
-                mFocusedWindow = (IWindow) token;
-            }
+            setPointerCapture(false);
         }
+
+        mFocusedWindow = IWindow.Stub.asInterface(newToken);
     }
 
     // Native callback.
@@ -1946,8 +1926,30 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     // Native callback.
-    private PointerIcon getPointerIcon() {
-        return PointerIcon.getDefaultIcon(mContext);
+    private PointerIcon getPointerIcon(int displayId) {
+        return PointerIcon.getDefaultIcon(getContextForDisplay(displayId));
+    }
+
+    private Context getContextForDisplay(int displayId) {
+        if (mDisplayContext != null && mDisplayContext.getDisplay().getDisplayId() == displayId) {
+            return mDisplayContext;
+        }
+
+        if (mContext.getDisplay().getDisplayId() == displayId) {
+            mDisplayContext = mContext;
+            return mDisplayContext;
+        }
+
+        // Create and cache context for non-default display.
+        final DisplayManager displayManager = mContext.getSystemService(DisplayManager.class);
+        final Display display = displayManager.getDisplay(displayId);
+        mDisplayContext = mContext.createDisplayContext(display);
+        return mDisplayContext;
+    }
+
+    // Native callback.
+    private int getPointerDisplayId() {
+        return mWindowManagerCallbacks.getPointerDisplayId();
     }
 
     // Native callback.
@@ -2017,6 +2019,8 @@ public class InputManagerService extends IInputManager.Stub
                 KeyEvent event, int policyFlags);
 
         public int getPointerLayer();
+
+        public int getPointerDisplayId();
     }
 
     /**

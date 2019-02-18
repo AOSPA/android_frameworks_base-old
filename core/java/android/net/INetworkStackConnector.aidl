@@ -15,7 +15,13 @@
  */
 package android.net;
 
+import android.net.INetworkMonitorCallbacks;
+import android.net.dhcp.DhcpServingParamsParcel;
+import android.net.dhcp.IDhcpServerCallbacks;
+
 /** @hide */
 oneway interface INetworkStackConnector {
-    // TODO: requestDhcpServer(), etc. will go here
+    void makeDhcpServer(in String ifName, in DhcpServingParamsParcel params,
+        in IDhcpServerCallbacks cb);
+    void makeNetworkMonitor(int netId, String name, in INetworkMonitorCallbacks cb);
 }

@@ -24,10 +24,11 @@ import static org.junit.Assert.assertTrue;
 import android.content.Context;
 import android.content.Intent;
 import android.os.LocaleList;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
 import android.text.Spannable;
 import android.text.SpannableString;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.SmallTest;
 
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
@@ -368,6 +369,7 @@ public class TextClassifierTest {
         assertThat(textLanguage, isTextLanguage("ja"));
     }
 
+    /* DISABLED: b/122467291
     @Test
     public void testSuggestConversationActions_textReplyOnly_maxThree() {
         if (isTextClassifierDisabled()) return;
@@ -376,10 +378,10 @@ public class TextClassifierTest {
                         ConversationActions.Message.PERSON_USER_REMOTE)
                         .setText("Where are you?")
                         .build();
-        ConversationActions.TypeConfig typeConfig =
-                new ConversationActions.TypeConfig.Builder().includeTypesFromTextClassifier(false)
+        TextClassifier.EntityConfig typeConfig =
+                new TextClassifier.EntityConfig.Builder().includeTypesFromTextClassifier(false)
                         .setIncludedTypes(
-                                Collections.singletonList(ConversationActions.TYPE_TEXT_REPLY))
+                                Collections.singletonList(ConversationAction.TYPE_TEXT_REPLY))
                         .build();
         ConversationActions.Request request =
                 new ConversationActions.Request.Builder(Collections.singletonList(message))
@@ -390,12 +392,12 @@ public class TextClassifierTest {
         ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
         assertTrue(conversationActions.getConversationActions().size() > 0);
         assertTrue(conversationActions.getConversationActions().size() == 1);
-        for (ConversationActions.ConversationAction conversationAction :
+        for (ConversationAction conversationAction :
                 conversationActions.getConversationActions()) {
             assertThat(conversationAction,
-                    isConversationAction(ConversationActions.TYPE_TEXT_REPLY));
+                    isConversationAction(ConversationAction.TYPE_TEXT_REPLY));
         }
-    }
+    }*/
 
     @Test
     public void testSuggestConversationActions_textReplyOnly_noMax() {
@@ -405,10 +407,10 @@ public class TextClassifierTest {
                         ConversationActions.Message.PERSON_USER_REMOTE)
                         .setText("Where are you?")
                         .build();
-        ConversationActions.TypeConfig typeConfig =
-                new ConversationActions.TypeConfig.Builder().includeTypesFromTextClassifier(false)
+        TextClassifier.EntityConfig typeConfig =
+                new TextClassifier.EntityConfig.Builder().includeTypesFromTextClassifier(false)
                         .setIncludedTypes(
-                                Collections.singletonList(ConversationActions.TYPE_TEXT_REPLY))
+                                Collections.singletonList(ConversationAction.TYPE_TEXT_REPLY))
                         .build();
         ConversationActions.Request request =
                 new ConversationActions.Request.Builder(Collections.singletonList(message))
@@ -417,10 +419,10 @@ public class TextClassifierTest {
 
         ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
         assertTrue(conversationActions.getConversationActions().size() > 1);
-        for (ConversationActions.ConversationAction conversationAction :
+        for (ConversationAction conversationAction :
                 conversationActions.getConversationActions()) {
             assertThat(conversationAction,
-                    isConversationAction(ConversationActions.TYPE_TEXT_REPLY));
+                    isConversationAction(ConversationAction.TYPE_TEXT_REPLY));
         }
     }
 
@@ -523,20 +525,19 @@ public class TextClassifierTest {
         };
     }
 
-    private static Matcher<ConversationActions.ConversationAction> isConversationAction(
-            String actionType) {
-        return new BaseMatcher<ConversationActions.ConversationAction>() {
+    private static Matcher<ConversationAction> isConversationAction(String actionType) {
+        return new BaseMatcher<ConversationAction>() {
             @Override
             public boolean matches(Object o) {
-                if (!(o instanceof ConversationActions.ConversationAction)) {
+                if (!(o instanceof ConversationAction)) {
                     return false;
                 }
-                ConversationActions.ConversationAction conversationAction =
-                        (ConversationActions.ConversationAction) o;
+                ConversationAction conversationAction =
+                        (ConversationAction) o;
                 if (!actionType.equals(conversationAction.getType())) {
                     return false;
                 }
-                if (ConversationActions.TYPE_TEXT_REPLY.equals(actionType)) {
+                if (ConversationAction.TYPE_TEXT_REPLY.equals(actionType)) {
                     if (conversationAction.getTextReply() == null) {
                         return false;
                     }

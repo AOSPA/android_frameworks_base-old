@@ -36,8 +36,8 @@ import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.SmartReplyController;
-import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 
 import java.text.BreakIterator;
@@ -194,7 +194,7 @@ public class SmartReplyView extends ViewGroup {
      */
     public void addRepliesFromRemoteInput(
             SmartReplies smartReplies,
-            SmartReplyController smartReplyController, NotificationData.Entry entry) {
+            SmartReplyController smartReplyController, NotificationEntry entry) {
         if (smartReplies.remoteInput != null && smartReplies.pendingIntent != null) {
             if (smartReplies.choices != null) {
                 for (int i = 0; i < smartReplies.choices.length; ++i) {
@@ -212,7 +212,7 @@ public class SmartReplyView extends ViewGroup {
      * notification are shown.
      */
     public void addSmartActions(SmartActions smartActions,
-            SmartReplyController smartReplyController, NotificationData.Entry entry,
+            SmartReplyController smartReplyController, NotificationEntry entry,
             HeadsUpManager headsUpManager) {
         int numSmartActions = smartActions.actions.size();
         for (int n = 0; n < numSmartActions; n++) {
@@ -235,16 +235,15 @@ public class SmartReplyView extends ViewGroup {
     @VisibleForTesting
     Button inflateReplyButton(Context context, ViewGroup root, int replyIndex,
             SmartReplies smartReplies, SmartReplyController smartReplyController,
-            NotificationData.Entry entry) {
+            NotificationEntry entry) {
         Button b = (Button) LayoutInflater.from(context).inflate(
                 R.layout.smart_reply_button, root, false);
         CharSequence choice = smartReplies.choices[replyIndex];
         b.setText(choice);
 
         OnDismissAction action = () -> {
-            // TODO(b/111437455): Also for EDIT_CHOICES_BEFORE_SENDING_AUTO, depending on flags.
-            if (smartReplies.remoteInput.getEditChoicesBeforeSending()
-                    == RemoteInput.EDIT_CHOICES_BEFORE_SENDING_ENABLED) {
+            if (mConstants.getEffectiveEditChoicesBeforeSending(
+                    smartReplies.remoteInput.getEditChoicesBeforeSending())) {
                 entry.remoteInputText = choice;
                 mRemoteInputManager.activateRemoteInput(b,
                         new RemoteInput[] { smartReplies.remoteInput }, smartReplies.remoteInput,
@@ -289,7 +288,7 @@ public class SmartReplyView extends ViewGroup {
     @VisibleForTesting
     Button inflateActionButton(Context context, ViewGroup root, int actionIndex,
             SmartActions smartActions, SmartReplyController smartReplyController,
-            NotificationData.Entry entry, HeadsUpManager headsUpManager) {
+            NotificationEntry entry, HeadsUpManager headsUpManager) {
         Notification.Action action = smartActions.actions.get(actionIndex);
         Button button = (Button) LayoutInflater.from(context).inflate(
                 R.layout.smart_action_button, root, false);
@@ -310,8 +309,6 @@ public class SmartReplyView extends ViewGroup {
                                     entry, actionIndex, action, smartActions.fromAssistant);
                             headsUpManager.removeNotification(entry.key, true);
                         }));
-
-        // TODO(b/119010281): handle accessibility
 
         // Mark this as an Action button
         final LayoutParams lp = (LayoutParams) button.getLayoutParams();
@@ -428,9 +425,9 @@ public class SmartReplyView extends ViewGroup {
                     markButtonsWithPendingSqueezeStatusAs(
                             LayoutParams.SQUEEZE_STATUS_FAILED, coveredSuggestions);
 
-                    // The current button doesn't fit, so there's no point in measuring further
-                    // buttons.
-                    break;
+                    // The current button doesn't fit, keep on adding lower-priority buttons in case
+                    // any of those fit.
+                    continue;
                 }
 
                 // The current button fits, so mark all squeezed buttons as "successfully squeezed"

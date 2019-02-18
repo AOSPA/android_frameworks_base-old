@@ -317,7 +317,6 @@ interface IActivityManager {
      */
     void requestWifiBugReport(in String shareTitle, in String shareDescription);
 
-    void clearPendingBackup();
     Intent getIntentForIntentSender(in IIntentSender sender);
     // This is not public because you need to be very careful in how you
     // manage your activity to make sure it is always the uid you expect.
@@ -421,7 +420,6 @@ interface IActivityManager {
     void resizeDockedStack(in Rect dockedBounds, in Rect tempDockedTaskBounds,
             in Rect tempDockedTaskInsetBounds,
             in Rect tempOtherTaskBounds, in Rect tempOtherTaskInsetBounds);
-    boolean isAppForeground(int uid);
     void removeStack(int stackId);
     void makePackageIdle(String packageName, int userId);
     int getMemoryTrimLevel();

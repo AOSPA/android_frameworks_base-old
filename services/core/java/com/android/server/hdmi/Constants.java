@@ -17,6 +17,7 @@
 package com.android.server.hdmi;
 
 import android.annotation.IntDef;
+import android.annotation.StringDef;
 import android.hardware.hdmi.HdmiDeviceInfo;
 
 import java.lang.annotation.Retention;
@@ -222,6 +223,15 @@ final class Constants {
     static final int AUDIO_CODEC_WMAPRO = 0xE; // Support WMA-Pro
     static final int AUDIO_CODEC_MAX = 0xF;
 
+    @StringDef({
+        AUDIO_DEVICE_ARC_IN,
+        AUDIO_DEVICE_SPDIF,
+    })
+    public @interface AudioDevice {}
+
+    static final String AUDIO_DEVICE_ARC_IN = "ARC_IN";
+    static final String AUDIO_DEVICE_SPDIF = "SPDIF";
+
     // Bit mask used to get the routing path of the top level device.
     // When &'d with the path 1.2.2.0 (0x1220), for instance, gives 1.0.0.0.
     static final int ROUTING_PATH_TOP_MASK = 0xF000;
@@ -256,6 +266,41 @@ final class Constants {
     static final int USE_LAST_STATE_SYSTEM_AUDIO_CONTROL_ON_POWER_ON = 1;
     static final int NEVER_SYSTEM_AUDIO_CONTROL_ON_POWER_ON = 2;
 
+    // Port id to record local active port for Routing Control features
+    // They are used to map to corresponding Inputs
+    // Current interface is only implemented for specific device.
+    // Developers can add more port number and map them to corresponding inputs on demand.
+    @IntDef({
+        CEC_SWITCH_HOME,
+        CEC_SWITCH_HDMI1,
+        CEC_SWITCH_HDMI2,
+        CEC_SWITCH_HDMI3,
+        CEC_SWITCH_HDMI4,
+        CEC_SWITCH_HDMI5,
+        CEC_SWITCH_HDMI6,
+        CEC_SWITCH_HDMI7,
+        CEC_SWITCH_HDMI8,
+        CEC_SWITCH_ARC,
+        CEC_SWITCH_BLUETOOTH,
+        CEC_SWITCH_OPTICAL,
+        CEC_SWITCH_AUX
+    })
+    @interface LocalActivePort {}
+    static final int CEC_SWITCH_HOME = 0;
+    static final int CEC_SWITCH_HDMI1 = 1;
+    static final int CEC_SWITCH_HDMI2 = 2;
+    static final int CEC_SWITCH_HDMI3 = 3;
+    static final int CEC_SWITCH_HDMI4 = 4;
+    static final int CEC_SWITCH_HDMI5 = 5;
+    static final int CEC_SWITCH_HDMI6 = 6;
+    static final int CEC_SWITCH_HDMI7 = 7;
+    static final int CEC_SWITCH_HDMI8 = 8;
+    static final int CEC_SWITCH_ARC = 17;
+    static final int CEC_SWITCH_BLUETOOTH = 18;
+    static final int CEC_SWITCH_OPTICAL = 19;
+    static final int CEC_SWITCH_AUX = 20;
+    static final int CEC_SWITCH_PORT_MAX = 21;
+
     static final String PROPERTY_PREFERRED_ADDRESS_AUDIO_SYSTEM =
             "persist.sys.hdmi.addr.audiosystem";
     static final String PROPERTY_PREFERRED_ADDRESS_PLAYBACK = "persist.sys.hdmi.addr.playback";
@@ -272,6 +317,41 @@ final class Constants {
 
     // TODO(OEM): Set this to true to enable 'Set Menu Language' feature. False by default.
     static final String PROPERTY_SET_MENU_LANGUAGE = "ro.hdmi.set_menu_language";
+
+    /**
+     * Property to save the ARC port id on system audio device.
+     * <p>When ARC is initiated, this port will be used to turn on ARC.
+     */
+    static final String PROPERTY_SYSTEM_AUDIO_DEVICE_ARC_PORT =
+            "ro.hdmi.property_sytem_audio_device_arc_port";
+
+    /**
+     * Property to disable muting logic in System Audio Control handling. Default is true.
+     *
+     * <p>True means enabling muting logic.
+     * <p>False means never mute device.
+     */
+    static final String PROPERTY_SYSTEM_AUDIO_MODE_MUTING_ENABLE =
+            "ro.hdmi.property_system_audio_mode_muting_enable";
+
+    /**
+     * When set to true the HdmiControlService will never request a Logical Address for the
+     * playback device type. Default is false.
+     *
+     * <p> This is useful when HDMI CEC multiple device types is not supported by the cec driver
+     */
+    static final String PROPERTY_HDMI_CEC_NEVER_CLAIM_PLAYBACK_LOGICAL_ADDRESS =
+            "ro.hdmi.property_hdmi_cec_never_claim_playback_logical_address";
+
+    /**
+     * A comma separated list of logical addresses that HdmiControlService
+     * will never assign local CEC devices to.
+     *
+     * <p> This is useful when HDMI CEC hardware module can't assign multiple logical addresses
+     * in the range same range of 0-7 or 8-15.
+     */
+    static final String PROPERTY_HDMI_CEC_NEVER_ASSIGN_LOGICAL_ADDRESSES =
+            "ro.hdmi.property_hdmi_cec_never_assign_logical_addresses";
 
     // Set to false to allow playback device to go to suspend mode even
     // when it's an active source. True by default.
@@ -300,7 +380,7 @@ final class Constants {
      * <p>Default is true.
      */
     static final String PROPERTY_ARC_SUPPORT =
-        "persist.sys.hdmi.property_arc_support";
+            "persist.sys.hdmi.property_arc_support";
 
     /**
      * Property to save the audio port to switch to when system audio control is on.
@@ -310,14 +390,16 @@ final class Constants {
      * <p>Default is ARC port.
      */
     static final String PROPERTY_SYSTEM_AUDIO_MODE_AUDIO_PORT =
-        "persist.sys.hdmi.property_sytem_audio_mode_audio_port";
+            "persist.sys.hdmi.property_sytem_audio_mode_audio_port";
 
     /**
-     * Property to save the ARC port id on system audio device.
-     * <p>When ARC is initiated, this port will be used to turn on ARC.
+     * Property to indicate if a CEC audio device should forward volume keys when system audio mode
+     * is off.
+     *
+     * <p>Default is false.
      */
-    static final String PROPERTY_SYSTEM_AUDIO_DEVICE_ARC_PORT =
-            "persist.sys.hdmi.property_sytem_audio_device_arc_port";
+    static final String PROPERTY_CEC_AUDIO_DEVICE_FORWARD_VOLUME_KEYS_SYSTEM_AUDIO_MODE_OFF =
+            "persist.sys.hdmi.property_cec_audio_device_forward_volume_keys_system_audio_mode_off";
 
     /**
      * Property to strip local audio of amplifier and use local speaker

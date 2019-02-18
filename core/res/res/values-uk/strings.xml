@@ -539,11 +539,9 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Додаток зможе розпізнавати геодані з вашої колекції медіа-вмісту."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"Для додатка <xliff:g id="APP">%s</xliff:g> потрібна автентифікація."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Біометричне апаратне забезпечення недоступне"</string>
-    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
-    <skip />
+    <string name="biometric_error_user_canceled" msgid="2260175018114348727">"Автентифікацію скасовано"</string>
     <string name="biometric_not_recognized" msgid="5770511773560736082">"Не розпізнано"</string>
-    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
-    <skip />
+    <string name="biometric_error_canceled" msgid="349665227864885880">"Автентифікацію скасовано"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Відбиток розпізнано частково. Повторіть спробу."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Не вдалось обробити відбиток. Повторіть спробу."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Датчик відбитків забруднився. Очистьте його та повторіть спробу."</string>
@@ -1168,6 +1166,9 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Відкрити за допомогою"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Відкрити за допомогою %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Відкрити"</string>
+    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Дозвольте відкривати посилання на сайт <xliff:g id="HOST">%1$s</xliff:g> у додатку"</string>
+    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Дозвольте відкривати посилання на сайт <xliff:g id="HOST">%1$s</xliff:g> у додатку <xliff:g id="APPLICATION">%2$s</xliff:g>."</string>
+    <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Дозволити"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Редагувати за допомогою"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Редагувати за допомогою %1$s"</string>
     <string name="whichEditApplicationLabel" msgid="7183524181625290300">"Редагувати"</string>
@@ -1612,6 +1613,7 @@
     <string name="SetupCallDefault" msgid="5834948469253758575">"Прийняти виклик?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Завжди"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Лише цього разу"</string>
+    <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Налаштування"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s не підтримує робочий профіль"</string>
     <string name="default_audio_route_name" product="tablet" msgid="4617053898167127471">"Планшетний ПК"</string>
     <string name="default_audio_route_name" product="tv" msgid="9158088547603019321">"Телевізор"</string>
@@ -1693,7 +1695,7 @@
     <string name="color_correction_feature_name" msgid="6779391426096954933">"Корекція кольорів"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Ярлик спеціальних можливостей увімкнув <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Ярлик спеціальних можливостей вимкнув <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_shortcut_spoken_feedback" msgid="6143872712930414829">"Щоб запустити поточну функцію спеціальних можливостей, знову скористайтеся відповідним ярликом"</string>
+    <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"Щоб скористатися службою <xliff:g id="SERVICE_NAME">%1$s</xliff:g>, утримуйте обидві клавіші гучності впродовж трьох секунд"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Виберіть функцію для кнопки спеціальних можливостей:"</string>
     <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Щоб змінити функцію, натисніть і втримуйте кнопку спеціальних можливостей."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Збільшення"</string>
@@ -2045,5 +2047,8 @@
     <string name="notification_appops_camera_active" msgid="5050283058419699771">"Камера"</string>
     <string name="notification_appops_microphone_active" msgid="4335305527588191730">"Мікрофон"</string>
     <string name="notification_appops_overlay_active" msgid="633813008357934729">"показ поверх інших додатків на екрані"</string>
+    <string name="dynamic_mode_notification_channel_name" msgid="2348803891571320452">"Сповіщення про послідовнсть дій"</string>
+    <string name="dynamic_mode_notification_title" msgid="508815255807182035">"Акумулятор може розрядитися раніше ніж зазвичай"</string>
+    <string name="dynamic_mode_notification_summary" msgid="2541166298550402690">"Режим економії заряду акумулятора активовано для збільшення часу його роботи"</string>
     <string name="car_loading_profile" msgid="3545132581795684027">"Завантаження"</string>
 </resources>

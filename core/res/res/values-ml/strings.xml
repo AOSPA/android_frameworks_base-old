@@ -533,11 +533,9 @@
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"നിങ്ങളുടെ മീഡിയ ശേഖരത്തിൽ നിന്നും ലൊക്കേഷനുകൾ റീഡ് ചെയ്യുന്നതിന് ആപ്പിനെ അനുവദിക്കുന്നു."</string>
     <string name="biometric_dialog_default_title" msgid="4229778503907743328">"<xliff:g id="APP">%s</xliff:g> ആപ്പിന് നിങ്ങളെ പരിശോധിച്ചുറപ്പിക്കണം."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"ബയോമെട്രിക് ഹാർ‌ഡ്‌വെയർ ലഭ്യമല്ല"</string>
-    <!-- no translation found for biometric_error_user_canceled (2260175018114348727) -->
-    <skip />
+    <string name="biometric_error_user_canceled" msgid="2260175018114348727">"പരിശോധിച്ചുറപ്പിക്കൽ റദ്ദാക്കി"</string>
     <string name="biometric_not_recognized" msgid="5770511773560736082">"തിരിച്ചറിഞ്ഞില്ല"</string>
-    <!-- no translation found for biometric_error_canceled (349665227864885880) -->
-    <skip />
+    <string name="biometric_error_canceled" msgid="349665227864885880">"പരിശോധിച്ചുറപ്പിക്കൽ റദ്ദാക്കി"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"വിരലടയാളം ഭാഗികമായി തിരിച്ചറിഞ്ഞു. വീണ്ടും ശ്രമിക്കുക."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"വിരലടയാളം പ്രോസസ്സ് ചെയ്യാനായില്ല. വീണ്ടും ശ്രമിക്കുക."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"വിരലടയാള സെൻസറിന് വൃത്തിയില്ല. അത് ശുചിയാക്കി വീണ്ടും ശ്രമിക്കുക."</string>
@@ -1128,6 +1126,9 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"ഇത് ഉപയോഗിച്ച് തുറക്കുക"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s ഉപയോഗിച്ച് തുറക്കുക"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"തുറക്കുക"</string>
+    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"ഇനിപ്പറയുന്നത് ഉപയോഗിച്ച്, <xliff:g id="HOST">%1$s</xliff:g> ലിങ്കുകൾ തുറക്കാൻ ആക്‌സ‌സ് നൽകുക"</string>
+    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> ഉപയോഗിച്ച്, <xliff:g id="HOST">%1$s</xliff:g> ലിങ്കുകൾ തുറക്കാൻ ആക്‌സ‌സ് നൽകുക"</string>
+    <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"ആക്‌സസ് നൽകുക"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"ഇത് ഉപയോഗിച്ച് എഡിറ്റുചെയ്യുക"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s ഉപയോഗിച്ച് എഡിറ്റുചെയ്യുക"</string>
     <string name="whichEditApplicationLabel" msgid="7183524181625290300">"എഡിറ്റുചെയ്യുക"</string>
@@ -1567,6 +1568,7 @@
     <string name="SetupCallDefault" msgid="5834948469253758575">"കോൾ സ്വീകരിക്കണോ?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"എല്ലായ്പ്പോഴും"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"ഒരിക്കൽ മാത്രം"</string>
+    <string name="activity_resolver_app_settings" msgid="8965806928986509855">"ക്രമീകരണം"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s, ഔദ്യോഗിക പ്രൊഫൈലിനെ പിന്തുണയ്‌ക്കുന്നില്ല"</string>
     <string name="default_audio_route_name" product="tablet" msgid="4617053898167127471">"ടാബ്‌ലെറ്റ്"</string>
     <string name="default_audio_route_name" product="tv" msgid="9158088547603019321">"ടിവി"</string>
@@ -1646,7 +1648,7 @@
     <string name="color_correction_feature_name" msgid="6779391426096954933">"വർണ്ണം ക്രമീകരിക്കൽ"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"ഉപയോഗസഹായിക്കുള്ള കുറുക്കുവഴി <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ഓൺ ചെയ്തിരിക്കുന്നു"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"ഉപയോഗസഹായിക്കുള്ള കുറുക്കുവഴി <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ഓഫ് ചെയ്തിരിക്കുന്നു"</string>
-    <string name="accessibility_shortcut_spoken_feedback" msgid="6143872712930414829">"നിലവിലെ ഉപയോഗസഹായി ഫീച്ചർ ആരംഭിക്കാൻ വീണ്ടും ഉപയോഗസഹായി കുറുക്കുവഴി ഉപയോഗിക്കുക"</string>
+    <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> ഉപയോഗിക്കാൻ, രണ്ട് വോളിയം കീകളും മൂന്ന് സെക്കൻഡ് അമർത്തിപ്പിടിക്കുക"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"നിങ്ങൾ ഉപയോഗസഹായി ബട്ടൺ ടാപ്പുചെയ്യുമ്പോൾ ഉപയോഗിക്കുന്നതിന് ഒരു ഫീച്ചർ തിരഞ്ഞെടുക്കുക:"</string>
     <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"ഫീച്ചറുകൾ മാറ്റുന്നതിന് ഉപയോഗസഹായി ബട്ടൺ സ്‌പർശിച്ചുപിടിക്കുക."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"മാഗ്നിഫിക്കേഷൻ"</string>
@@ -1976,5 +1978,8 @@
     <string name="notification_appops_camera_active" msgid="5050283058419699771">"ക്യാമറ"</string>
     <string name="notification_appops_microphone_active" msgid="4335305527588191730">"മൈക്രോഫോൺ"</string>
     <string name="notification_appops_overlay_active" msgid="633813008357934729">"നിങ്ങളുടെ സ്‌ക്രീനിലെ മറ്റ് ആപ്പുകൾക്ക് മുകളിൽ പ്രദർശിപ്പിക്കുന്നു"</string>
+    <string name="dynamic_mode_notification_channel_name" msgid="2348803891571320452">"ദിനചര്യ മോഡ് വിവരത്തെ കുറിച്ചുള്ള അറിയിപ്പ്"</string>
+    <string name="dynamic_mode_notification_title" msgid="508815255807182035">"സാധാരണയുള്ളതിലും നേരത്തെ ബാറ്ററിയുടെ ചാർജ് തീർന്നേക്കാം"</string>
+    <string name="dynamic_mode_notification_summary" msgid="2541166298550402690">"ബാറ്ററി ലൈഫ് വര്‍ദ്ധിപ്പിക്കാൻ, ബാറ്ററി ലാഭിക്കൽ സജീവമാക്കി"</string>
     <string name="car_loading_profile" msgid="3545132581795684027">"ലോഡ് ചെയ്യുന്നു"</string>
 </resources>

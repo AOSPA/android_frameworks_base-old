@@ -17,10 +17,25 @@
 package com.android.server.pm;
 
 import android.annotation.NonNull;
+import android.apex.ApexInfo;
+import android.apex.ApexInfoList;
+import android.apex.ApexSessionInfo;
+import android.apex.IApexService;
 import android.content.pm.PackageInstaller;
+import android.content.pm.PackageInstaller.SessionInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageParser.PackageParserException;
+import android.content.pm.PackageParser.SigningDetails;
+import android.content.pm.PackageParser.SigningDetails.SignatureSchemeVersion;
 import android.content.pm.ParceledListSlice;
+import android.content.pm.Signature;
 import android.os.Handler;
+import android.os.RemoteException;
+import android.os.ServiceManager;
+import android.text.TextUtils;
+import android.util.Slog;
 import android.util.SparseArray;
+import android.util.apk.ApkSignatureVerifier;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.BackgroundThread;
@@ -39,9 +54,6 @@ public class StagingManager {
     private final PackageManagerService mPm;
     private final Handler mBgHandler;
 
-    // STOPSHIP: This is a temporary mock implementation of staged sessions. This variable
-    //           shouldn't be needed at all.
-    // TODO(b/118865310): Implement staged sessions logic.
     @GuardedBy("mStagedSessions")
     private final SparseArray<PackageInstallerSession> mStagedSessions = new SparseArray<>();
 
@@ -71,15 +83,121 @@ public class StagingManager {
         return new ParceledListSlice<>(result);
     }
 
-    void commitSession(@NonNull PackageInstallerSession sessionInfo) {
-        updateStoredSession(sessionInfo);
+    private static boolean validateApexSignatureLocked(String apexPath, String packageName) {
+        final SigningDetails signingDetails;
+        try {
+            signingDetails = ApkSignatureVerifier.verify(apexPath, SignatureSchemeVersion.JAR);
+        } catch (PackageParserException e) {
+            Slog.e(TAG, "Unable to parse APEX package: " + apexPath, e);
+            return false;
+        }
 
-        mBgHandler.post(() -> {
-            // TODO(b/118865310): Dispatch the session to apexd/PackageManager for verification. For
-            //                    now we directly mark it as ready.
-            sessionInfo.setStagedSessionReady();
-            mPm.sendSessionUpdatedBroadcast(sessionInfo.generateInfo(), sessionInfo.userId);
-        });
+        final IApexService apex = IApexService.Stub.asInterface(
+                ServiceManager.getService("apexservice"));
+        final ApexInfo apexInfo;
+        try {
+            apexInfo = apex.getActivePackage(packageName);
+        } catch (RemoteException re) {
+            Slog.e(TAG, "Unable to contact APEXD", re);
+            return false;
+        }
+
+        if (apexInfo == null || TextUtils.isEmpty(apexInfo.packageName)) {
+            // TODO: What is the right thing to do here ? This implies there's no active package
+            // with the given name. This should never be the case in production (where we only
+            // accept updates to existing APEXes) but may be required for testing.
+            return true;
+        }
+
+        final SigningDetails existingSigningDetails;
+        try {
+            existingSigningDetails = ApkSignatureVerifier.verify(
+                apexInfo.packagePath, SignatureSchemeVersion.JAR);
+        } catch (PackageParserException e) {
+            Slog.e(TAG, "Unable to parse APEX package: " + apexInfo.packagePath, e);
+            return false;
+        }
+
+        // Now that we have both sets of signatures, demand that they're an exact match.
+        if (Signature.areExactMatch(existingSigningDetails.signatures, signingDetails.signatures)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static boolean submitSessionToApexService(int sessionId, ApexInfoList apexInfoList) {
+        final IApexService apex = IApexService.Stub.asInterface(
+                ServiceManager.getService("apexservice"));
+        boolean success;
+        try {
+            success = apex.submitStagedSession(sessionId, new int[0], apexInfoList);
+        } catch (RemoteException re) {
+            Slog.e(TAG, "Unable to contact apexservice", re);
+            return false;
+        }
+        return success;
+    }
+
+    private void preRebootVerification(@NonNull PackageInstallerSession session) {
+        boolean success = true;
+        if ((session.params.installFlags & PackageManager.INSTALL_APEX) != 0) {
+
+            final ApexInfoList apexInfoList = new ApexInfoList();
+
+            if (!submitSessionToApexService(session.sessionId, apexInfoList)) {
+                success = false;
+            } else {
+                // For APEXes, we validate the signature here before we mark the session as ready,
+                // so we fail the session early if there is a signature mismatch. For APKs, the
+                // signature verification will be done by the package manager at the point at which
+                // it applies the staged install.
+                //
+                // TODO: Decide whether we want to fail fast by detecting signature mismatches right
+                // away.
+                for (ApexInfo apexPackage : apexInfoList.apexInfos) {
+                    if (!validateApexSignatureLocked(apexPackage.packagePath,
+                            apexPackage.packageName)) {
+                        success = false;
+                        break;
+                    }
+                }
+            }
+        }
+        if (success) {
+            session.setStagedSessionReady();
+        } else {
+            session.setStagedSessionFailed(SessionInfo.VERIFICATION_FAILED);
+        }
+    }
+
+    private void resumeSession(@NonNull PackageInstallerSession session) {
+        // Check with apexservice whether the apex
+        // packages have been activated.
+        final IApexService apex = IApexService.Stub.asInterface(
+                ServiceManager.getService("apexservice"));
+        ApexSessionInfo apexSessionInfo;
+        try {
+            apexSessionInfo = apex.getStagedSessionInfo(session.sessionId);
+        } catch (RemoteException re) {
+            Slog.e(TAG, "Unable to contact apexservice", re);
+            // TODO should we retry here? Mark the session as failed?
+            return;
+        }
+        if (apexSessionInfo.isActivationFailed || apexSessionInfo.isUnknown) {
+            session.setStagedSessionFailed(SessionInfo.ACTIVATION_FAILED);
+        }
+        if (apexSessionInfo.isActivated) {
+            session.setStagedSessionApplied();
+            // TODO(b/118865310) if multi-package proceed with the installation of APKs.
+        }
+        // TODO(b/118865310) if (apexSessionInfo.isVerified) { /* mark this as staged in apexd */ }
+        // In every other case apexd will retry to apply the session at next boot.
+    }
+
+    void commitSession(@NonNull PackageInstallerSession session) {
+        updateStoredSession(session);
+        mBgHandler.post(() -> preRebootVerification(session));
     }
 
     void createSession(@NonNull PackageInstallerSession sessionInfo) {
@@ -92,6 +210,24 @@ public class StagingManager {
         updateStoredSession(sessionInfo);
         synchronized (mStagedSessions) {
             mStagedSessions.remove(sessionInfo.sessionId);
+        }
+    }
+
+    void restoreSession(@NonNull PackageInstallerSession session) {
+        updateStoredSession(session);
+        // Check the state of the session and decide what to do next.
+        if (session.isStagedSessionFailed() || session.isStagedSessionApplied()) {
+            // Final states, nothing to do.
+            return;
+        }
+        if (!session.isStagedSessionReady()) {
+            // The framework got restarted before the pre-reboot verification could complete,
+            // restart the verification.
+            mBgHandler.post(() -> preRebootVerification(session));
+        } else {
+            // Session had already being marked ready. Start the checks to verify if there is any
+            // follow-up work.
+            mBgHandler.post(() -> resumeSession(session));
         }
     }
 }

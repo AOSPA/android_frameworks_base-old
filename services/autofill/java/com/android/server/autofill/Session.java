@@ -2581,7 +2581,10 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
         final RemoteAugmentedAutofillService remoteService = mService
                 .getRemoteAugmentedAutofillServiceLocked();
-        if (remoteService == null) return null;
+        if (remoteService == null) {
+            if (sVerbose) Slog.v(TAG, "triggerAugmentedAutofillLocked(): no service for user");
+            return null;
+        }
 
         // Define which mode will be used
         final int mode;
@@ -2607,6 +2610,13 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     + " when server returned null for session " + this.id);
         }
 
+        final String historyItem =
+                "aug:id=" + id + " u=" + uid + " m=" + mode
+                + " a=" + ComponentName.flattenToShortString(mComponentName)
+                + " f=" + mCurrentViewId
+                + " s=" + remoteService.getComponentName();
+        mService.getMaster().logRequestLocked(historyItem);
+
         final AutofillValue currentValue = mViewStates.get(mCurrentViewId).getCurrentValue();
 
         // TODO(b/111330312): we might need to add a new state in the AutofillManager to optimize
@@ -2616,7 +2626,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 currentValue);
 
         if (mAugmentedAutofillDestroyer == null) {
-            mAugmentedAutofillDestroyer = () -> remoteService.onDestroyAutofillWindowsRequest(id);
+            mAugmentedAutofillDestroyer = () -> remoteService.onDestroyAutofillWindowsRequest();
         }
         return mAugmentedAutofillDestroyer;
     }

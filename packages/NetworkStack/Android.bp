@@ -21,7 +21,11 @@ java_library {
     installable: true,
     srcs: [
         "src/**/*.java",
+        ":services-networkstack-shared-srcs",
     ],
+    static_libs: [
+        "dhcp-packet-lib",
+    ]
 }
 
 // Updatable network stack packaged as an application

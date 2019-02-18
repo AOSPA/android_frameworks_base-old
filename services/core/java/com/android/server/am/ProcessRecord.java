@@ -52,6 +52,7 @@ import android.util.SparseArray;
 import android.util.StatsLog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
+import android.util.BoostFramework;
 
 import com.android.internal.app.procstats.ProcessState;
 import com.android.internal.app.procstats.ProcessStats;
@@ -76,6 +77,7 @@ final class ProcessRecord implements WindowProcessListener {
     private final ActivityManagerService mService; // where we came from
     final ApplicationInfo info; // all about the first app in the process
     final boolean isolated;     // true if this is a special isolated process
+    final boolean appZygote;    // true if this is forked from the app zygote
     final int uid;              // uid of process; may be different from 'info' if isolated
     final int userId;           // user of process.
     final String processName;   // name of the process
@@ -559,6 +561,8 @@ final class ProcessRecord implements WindowProcessListener {
         mService = _service;
         info = _info;
         isolated = _info.uid != _uid;
+        appZygote = (UserHandle.getAppId(_uid) >= Process.FIRST_APP_ZYGOTE_ISOLATED_UID
+                && UserHandle.getAppId(_uid) <= Process.LAST_APP_ZYGOTE_ISOLATED_UID);
         uid = _uid;
         userId = UserHandle.getUserId(_uid);
         processName = _processName;
@@ -582,6 +586,18 @@ final class ProcessRecord implements WindowProcessListener {
     }
 
     public void makeActive(IApplicationThread _thread, ProcessStatsService tracker) {
+        String seempStr = "app_uid=" + uid
+                            + ",app_pid=" + pid + ",oom_adj=" + curAdj
+                            + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
+                            + ",cached=" + (cached ? 1 : 0)
+                            + ",fA=" + (mHasForegroundActivities ? 1 : 0)
+                            + ",fS=" + (mHasForegroundServices ? 1 : 0)
+                            + ",systemNoUi=" + (systemNoUi ? 1 : 0)
+                            + ",curSchedGroup=" + mCurSchedGroup
+                            + ",curProcState=" + getCurProcState() + ",setProcState=" + setProcState
+                            + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
+                            + ",isDebugging=" + (isDebugging() ? 1 : 0);
+        android.util.SeempLog.record_str(386, seempStr);
         if (thread == null) {
             final ProcessState origBase = baseProcessTracker;
             if (origBase != null) {
@@ -615,6 +631,18 @@ final class ProcessRecord implements WindowProcessListener {
     }
 
     public void makeInactive(ProcessStatsService tracker) {
+        String seempStr = "app_uid=" + uid
+                            + ",app_pid=" + pid + ",oom_adj=" + curAdj
+                            + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
+                            + ",cached=" + (cached ? 1 : 0)
+                            + ",fA=" + (mHasForegroundActivities ? 1 : 0)
+                            + ",fS=" + (mHasForegroundServices ? 1 : 0)
+                            + ",systemNoUi=" + (systemNoUi ? 1 : 0)
+                            + ",curSchedGroup=" + mCurSchedGroup
+                            + ",curProcState=" + getCurProcState() + ",setProcState=" + setProcState
+                            + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
+                            + ",isDebugging=" + (isDebugging() ? 1 : 0);
+        android.util.SeempLog.record_str(387, seempStr);
         thread = null;
         mWindowProcessController.setThread(null);
         final ProcessState origBase = baseProcessTracker;
@@ -747,6 +775,7 @@ final class ProcessRecord implements WindowProcessListener {
     void kill(String reason, boolean noisy) {
         if (!killedByAm) {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "kill");
+            BoostFramework ux_perf = new BoostFramework();
             if (mService != null && (noisy || info.uid == mService.mCurOomAdjUid)) {
                 mService.reportUidInfoMessageLocked(TAG,
                         "Killing " + toShortString() + " (adj " + setAdj + "): " + reason,
@@ -762,6 +791,9 @@ final class ProcessRecord implements WindowProcessListener {
             if (!mPersistent) {
                 killed = true;
                 killedByAm = true;
+            }
+            if (ux_perf != null) {
+                ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
             }
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
@@ -1139,11 +1171,13 @@ final class ProcessRecord implements WindowProcessListener {
     }
 
     void addAllowBackgroundActivityStartsToken(Binder entity) {
+        if (entity == null) return;
         mAllowBackgroundActivityStartsTokens.add(entity);
         mWindowProcessController.setAllowBackgroundActivityStarts(true);
     }
 
     void removeAllowBackgroundActivityStartsToken(Binder entity) {
+        if (entity == null) return;
         mAllowBackgroundActivityStartsTokens.remove(entity);
         mWindowProcessController.setAllowBackgroundActivityStarts(
                 !mAllowBackgroundActivityStartsTokens.isEmpty());

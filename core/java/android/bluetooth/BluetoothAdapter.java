@@ -2074,8 +2074,7 @@ public final class BluetoothAdapter {
      * Get the current connection state of a profile.
      * This function can be used to check whether the local Bluetooth adapter
      * is connected to any remote device for a specific profile.
-     * Profile can be one of {@link BluetoothProfile#HEALTH}, {@link BluetoothProfile#HEADSET},
-     * {@link BluetoothProfile#A2DP}.
+     * Profile can be one of {@link BluetoothProfile#HEADSET}, {@link BluetoothProfile#A2DP}.
      *
      * <p> Return value can be one of
      * {@link BluetoothProfile#STATE_DISCONNECTED},
@@ -2451,16 +2450,15 @@ public final class BluetoothAdapter {
     /**
      * Get the profile proxy object associated with the profile.
      *
-     * <p>Profile can be one of {@link BluetoothProfile#HEALTH}, {@link BluetoothProfile#HEADSET},
-     * {@link BluetoothProfile#A2DP}, {@link BluetoothProfile#GATT}, or
-     * {@link BluetoothProfile#GATT_SERVER}. Clients must implement
-     * {@link BluetoothProfile.ServiceListener} to get notified of
-     * the connection status and to get the proxy object.
+     * <p>Profile can be one of {@link BluetoothProfile#HEADSET}, {@link BluetoothProfile#A2DP},
+     * {@link BluetoothProfile#GATT}, or {@link BluetoothProfile#GATT_SERVER}. Clients must
+     * implement {@link BluetoothProfile.ServiceListener} to get notified of the connection status
+     * and to get the proxy object.
      *
      * @param context Context of the application
      * @param listener The service Listener for connection callbacks.
-     * @param profile The Bluetooth profile; either {@link BluetoothProfile#HEALTH}, {@link
-     * BluetoothProfile#HEADSET}, {@link BluetoothProfile#A2DP}. {@link BluetoothProfile#GATT} or
+     * @param profile The Bluetooth profile; either {@link BluetoothProfile#HEADSET},
+     * {@link BluetoothProfile#A2DP}. {@link BluetoothProfile#GATT} or
      * {@link BluetoothProfile#GATT_SERVER}.
      * @return true on success, false on error
      */
@@ -2492,8 +2490,8 @@ public final class BluetoothAdapter {
             BluetoothDun dun = new BluetoothDun(context, listener);
             return true;
         } else if (profile == BluetoothProfile.HEALTH) {
-            BluetoothHealth health = new BluetoothHealth(context, listener);
-            return true;
+            Log.e(TAG, "getProfileProxy(): BluetoothHealth is deprecated");
+            return false;
         } else if (profile == BluetoothProfile.MAP) {
             BluetoothMap map = new BluetoothMap(context, listener);
             return true;
@@ -2528,8 +2526,7 @@ public final class BluetoothAdapter {
      *
      * <p> Clients should call this when they are no longer using
      * the proxy obtained from {@link #getProfileProxy}.
-     * Profile can be one of  {@link BluetoothProfile#HEALTH}, {@link BluetoothProfile#HEADSET} or
-     * {@link BluetoothProfile#A2DP}
+     * Profile can be one of  {@link BluetoothProfile#HEADSET} or {@link BluetoothProfile#A2DP}
      *
      * @param profile
      * @param proxy Profile proxy object
@@ -2567,10 +2564,6 @@ public final class BluetoothAdapter {
             case BluetoothProfile.DUN:
                 BluetoothDun dun = (BluetoothDun)proxy;
                 dun.close();
-                break;
-            case BluetoothProfile.HEALTH:
-                BluetoothHealth health = (BluetoothHealth) proxy;
-                health.close();
                 break;
             case BluetoothProfile.GATT:
                 BluetoothGatt gatt = (BluetoothGatt) proxy;

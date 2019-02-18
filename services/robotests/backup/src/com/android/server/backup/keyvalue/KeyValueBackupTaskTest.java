@@ -115,6 +115,7 @@ import com.android.server.backup.testing.TransportData;
 import com.android.server.backup.testing.TransportTestUtils;
 import com.android.server.backup.testing.TransportTestUtils.TransportMock;
 import com.android.server.testing.shadows.FrameworkShadowLooper;
+import com.android.server.testing.shadows.ShadowApplicationPackageManager;
 import com.android.server.testing.shadows.ShadowBackupDataInput;
 import com.android.server.testing.shadows.ShadowBackupDataOutput;
 import com.android.server.testing.shadows.ShadowEventLog;
@@ -157,6 +158,7 @@ import java.util.stream.Stream;
 @Config(
         shadows = {
             FrameworkShadowLooper.class,
+            ShadowApplicationPackageManager.class,
             ShadowBackupDataInput.class,
             ShadowBackupDataOutput.class,
             ShadowEventLog.class,
@@ -244,6 +246,7 @@ public class KeyValueBackupTaskTest {
     @After
     public void tearDown() throws Exception {
         ShadowBackupDataInput.reset();
+        ShadowApplicationPackageManager.reset();
     }
 
     @Test
@@ -2432,10 +2435,12 @@ public class KeyValueBackupTaskTest {
 
     private AgentMock setUpAgent(PackageData packageData) {
         try {
+            String packageName = packageData.packageName;
             mPackageManager.setApplicationEnabledSetting(
-                    packageData.packageName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0);
+                    packageName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0);
             PackageInfo packageInfo = getPackageInfo(packageData);
-            mShadowPackageManager.addPackage(packageInfo);
+            mShadowPackageManager.installPackage(packageInfo);
+            ShadowApplicationPackageManager.addInstalledPackage(packageName, packageInfo);
             mContext.sendBroadcast(getPackageAddedIntent(packageData));
             // Run the backup looper because on the receiver we post MSG_SCHEDULE_BACKUP_PACKAGE
             mShadowBackupLooper.runToEndOfTasks();
@@ -2531,7 +2536,7 @@ public class KeyValueBackupTaskTest {
 
     private PackageManagerBackupAgent createPmAgent() {
         PackageManagerBackupAgent pmAgent =
-                new PackageManagerBackupAgent(mApplication.getPackageManager());
+                new PackageManagerBackupAgent(mApplication.getPackageManager(), USER_ID);
         pmAgent.attach(mApplication);
         pmAgent.onCreate();
         return pmAgent;
@@ -2721,7 +2726,7 @@ public class KeyValueBackupTaskTest {
             throws RemoteException, IOException {
         verify(transportMock.transport).requestBackupTime();
         assertBackupPendingFor(packages);
-        assertThat(KeyValueBackupJob.isScheduled()).isTrue();
+        assertThat(KeyValueBackupJob.isScheduled(mBackupManagerService.getUserId())).isTrue();
     }
 
     private void assertBackupPendingFor(PackageData... packages) throws IOException {
@@ -2836,7 +2841,7 @@ public class KeyValueBackupTaskTest {
 
         ThrowingPackageManagerBackupAgent(
                 PackageManager packageManager, RuntimeException exception) {
-            super(packageManager);
+            super(packageManager, USER_ID);
             mException = exception;
         }
 

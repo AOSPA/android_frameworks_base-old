@@ -56,6 +56,7 @@ import android.view.InputEvent;
 import android.view.InputEventReceiver;
 import android.view.InsetsState;
 import android.view.MotionEvent;
+import android.view.SurfaceControl;
 import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.ViewGroup;
@@ -216,6 +217,8 @@ public abstract class WallpaperService extends Service {
         private Display mDisplay;
         private Context mDisplayContext;
         private int mDisplayState;
+
+        SurfaceControl mSurfaceControl = new SurfaceControl();
 
         final BaseSurfaceHolder mSurfaceHolder = new BaseSurfaceHolder() {
             {
@@ -642,7 +645,7 @@ public abstract class WallpaperService extends Service {
             try {
                 final WallpaperColors newColors = onComputeColors();
                 if (mConnection != null) {
-                    mConnection.onWallpaperColorsChanged(newColors);
+                    mConnection.onWallpaperColorsChanged(newColors, mDisplay.getDisplayId());
                 } else {
                     Log.w(TAG, "Can't notify system because wallpaper connection "
                             + "was not established.");
@@ -843,8 +846,12 @@ public abstract class WallpaperService extends Service {
                         mWindow, mWindow.mSeq, mLayout, mWidth, mHeight,
                             View.VISIBLE, 0, -1, mWinFrame, mOverscanInsets, mContentInsets,
                             mVisibleInsets, mStableInsets, mOutsets, mBackdropFrame,
-                            mDisplayCutout, mMergedConfiguration, mSurfaceHolder.mSurface,
+                            mDisplayCutout, mMergedConfiguration, mSurfaceControl,
                             mInsetsState);
+                    if (mSurfaceControl.isValid()) {
+                        mSurfaceHolder.mSurface.copyFrom(mSurfaceControl);
+                        mSurfaceControl.release();
+                    }
 
                     if (DEBUG) Log.v(TAG, "New surface: " + mSurfaceHolder.mSurface
                             + ", frame=" + mWinFrame);
@@ -963,7 +970,7 @@ public abstract class WallpaperService extends Service {
                             mFinalSystemInsets.set(mDispatchedOverscanInsets);
                             mFinalStableInsets.set(mDispatchedStableInsets);
                             WindowInsets insets = new WindowInsets(mFinalSystemInsets,
-                                    null, mFinalStableInsets,
+                                    mFinalStableInsets,
                                     getResources().getConfiguration().isScreenRound(), false,
                                     mDispatchedDisplayCutout);
                             if (DEBUG) {
@@ -1466,7 +1473,7 @@ public abstract class WallpaperService extends Service {
                         break;
                     }
                     try {
-                        mConnection.onWallpaperColorsChanged(mEngine.onComputeColors());
+                        mConnection.onWallpaperColorsChanged(mEngine.onComputeColors(), mDisplayId);
                     } catch (RemoteException e) {
                         // Connection went away, nothing to do in here.
                     }

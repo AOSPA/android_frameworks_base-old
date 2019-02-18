@@ -88,16 +88,12 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     /**
      * Default alpha value for most scrims.
      */
-    public static final float GRADIENT_SCRIM_ALPHA = 0.45f;
+    public static final float GRADIENT_SCRIM_ALPHA = 0.2f;
     /**
      * A scrim varies its opacity based on a busyness factor, for example
      * how many notifications are currently visible.
      */
     public static final float GRADIENT_SCRIM_ALPHA_BUSY = 0.7f;
-    /**
-     * Scrim opacity when a wallpaper doesn't support ambient mode.
-     */
-    public static final float PULSING_WALLPAPER_SCRIM_ALPHA = 0.6f;
 
     /**
      * The most common scrim, the one under the keyguard.
@@ -154,7 +150,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     private Callback mCallback;
     private boolean mWallpaperSupportsAmbientMode;
     private boolean mScreenOn;
-    private float mNotificationDensity;
 
     // Scrim blanking callbacks
     private Runnable mPendingFrameCallback;
@@ -245,7 +240,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         mCurrentInFrontTint = state.getFrontTint();
         mCurrentBehindTint = state.getBehindTint();
         mCurrentInFrontAlpha = state.getFrontAlpha();
-        mCurrentBehindAlpha = state.getBehindAlpha(mNotificationDensity);
+        mCurrentBehindAlpha = state.getBehindAlpha();
         applyExpansionToAlpha();
 
         // Scrim might acquire focus when user is navigating with a D-pad or a keyboard.
@@ -275,9 +270,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             holdWakeLock();
         }
 
-        // AOD wallpapers should fade away after a while
-        if (mWallpaperSupportsAmbientMode && mDozeParameters.getAlwaysOn()
-                && mState == ScrimState.AOD) {
+        // AOD wallpapers should fade away after a while.
+        // Docking pulses may take a long time, wallpapers should also fade away after a while.
+        if (mWallpaperSupportsAmbientMode && (
+                mDozeParameters.getAlwaysOn() && mState == ScrimState.AOD
+                        || mState == ScrimState.PULSING && mCallback != null)) {
             if (!mWallpaperVisibilityTimedOut) {
                 mTimeTicker.schedule(mDozeParameters.getWallpaperAodDuration(),
                         AlarmTimeout.MODE_IGNORE_IF_SCHEDULED);
@@ -329,7 +326,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
 
     @VisibleForTesting
     protected void onHideWallpaperTimeout() {
-        if (mState != ScrimState.AOD) {
+        if (mState != ScrimState.AOD && mState != ScrimState.PULSING) {
             return;
         }
 
@@ -364,7 +361,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             mExpansionFraction = fraction;
 
             final boolean keyguardOrUnlocked = mState == ScrimState.UNLOCKED
-                    || mState == ScrimState.KEYGUARD;
+                    || mState == ScrimState.KEYGUARD || mState == ScrimState.PULSING;
             if (!keyguardOrUnlocked || !mExpansionAffectsAlpha) {
                 return;
             }
@@ -409,11 +406,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             behindFraction = (float) Math.pow(behindFraction, 0.8f);
             mCurrentBehindAlpha = behindFraction * GRADIENT_SCRIM_ALPHA_BUSY;
             mCurrentInFrontAlpha = 0;
-        } else if (mState == ScrimState.KEYGUARD) {
+        } else if (mState == ScrimState.KEYGUARD || mState == ScrimState.PULSING) {
             // Either darken of make the scrim transparent when you
             // pull down the shade
             float interpolatedFract = getInterpolatedFraction();
-            float alphaBehind = mState.getBehindAlpha(mNotificationDensity);
+            float alphaBehind = mState.getBehindAlpha();
             if (mDarkenWhileDragging) {
                 mCurrentBehindAlpha = MathUtils.lerp(GRADIENT_SCRIM_ALPHA_BUSY, alphaBehind,
                         interpolatedFract);
@@ -423,24 +420,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
                         interpolatedFract);
                 mCurrentInFrontAlpha = 0;
             }
-        }
-    }
-
-    /**
-     * Keyguard and shade scrim opacity varies according to how many notifications are visible.
-     * @param notificationCount Number of visible notifications.
-     */
-    public void setNotificationCount(int notificationCount) {
-        final float maxNotificationDensity = 3;
-        float notificationDensity = Math.min(notificationCount / maxNotificationDensity, 1f);
-        if (mNotificationDensity == notificationDensity) {
-            return;
-        }
-        mNotificationDensity = notificationDensity;
-
-        if (mState == ScrimState.KEYGUARD) {
-            applyExpansionToAlpha();
-            scheduleUpdate();
         }
     }
 
@@ -504,7 +483,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
 
         // We want to override the back scrim opacity for the AOD state
         // when it's time to fade the wallpaper away.
-        boolean aodWallpaperTimeout = mState == ScrimState.AOD && mWallpaperVisibilityTimedOut;
+        boolean aodWallpaperTimeout = (mState == ScrimState.AOD || mState == ScrimState.PULSING)
+                && mWallpaperVisibilityTimedOut;
         // We also want to hide FLAG_SHOW_WHEN_LOCKED activities under the scrim.
         boolean occludedKeyguard = (mState == ScrimState.PULSING || mState == ScrimState.AOD)
                 && mKeyguardOccluded;
@@ -562,8 +542,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         if (alpha == 0f) {
             scrim.setClickable(false);
         } else {
-            // Eat touch events (unless dozing or pulsing).
-            scrim.setClickable(mState != ScrimState.AOD && mState != ScrimState.PULSING);
+            // Eat touch events (unless dozing).
+            scrim.setClickable(mState != ScrimState.AOD);
         }
         updateScrim(scrim, alpha);
     }
@@ -608,9 +588,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         anim.setStartDelay(mAnimationDelay);
         anim.setDuration(mAnimationDuration);
         anim.addListener(new AnimatorListenerAdapter() {
+            private Callback lastCallback = mCallback;
+
             @Override
             public void onAnimationEnd(Animator animation) {
-                onFinished();
+                onFinished(lastCallback);
 
                 scrim.setTag(TAG_KEY_ANIM, null);
                 dispatchScrimsVisible();
@@ -668,14 +650,23 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     }
 
     private void onFinished() {
+        onFinished(mCallback);
+    }
+
+    private void onFinished(Callback callback) {
         if (mWakeLockHeld) {
             mWakeLock.release();
             mWakeLockHeld = false;
         }
-        if (mCallback != null) {
-            mCallback.onFinished();
-            mCallback = null;
+
+        if (callback != null) {
+            callback.onFinished();
+
+            if (callback == mCallback) {
+                mCallback = null;
+            }
         }
+
         // When unlocking with fingerprint, we'll fade the scrims from black to transparent.
         // At the end of the animation we need to remove the tint.
         if (mState == ScrimState.UNLOCKED) {
@@ -894,7 +885,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         // Backdrop event may arrive after state was already applied,
         // in this case, back-scrim needs to be re-evaluated
         if (mState == ScrimState.AOD || mState == ScrimState.PULSING) {
-            float newBehindAlpha = mState.getBehindAlpha(mNotificationDensity);
+            float newBehindAlpha = mState.getBehindAlpha();
             if (mCurrentBehindAlpha != newBehindAlpha) {
                 mCurrentBehindAlpha = newBehindAlpha;
                 updateScrims();
@@ -906,6 +897,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
         for (ScrimState state : ScrimState.values()) {
             state.setLaunchingAffordanceWithPreview(launchingAffordanceWithPreview);
         }
+    }
+
+    public void setPulseReason(int pulseReason) {
+        ScrimState.PULSING.setPulseReason(pulseReason);
     }
 
     public interface Callback {

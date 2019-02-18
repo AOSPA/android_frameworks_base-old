@@ -258,8 +258,8 @@ public abstract class ActivityManagerInternal {
             Bundle resultExtras, String requiredPermission, Bundle bOptions, boolean serialized,
             boolean sticky, int userId, boolean allowBackgroundActivityStarts);
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
-            String resolvedType, boolean fgRequired, String callingPackage, int userId)
-            throws TransactionTooLargeException;
+            String resolvedType, boolean fgRequired, String callingPackage, int userId,
+            boolean allowBackgroundActivityStarts) throws TransactionTooLargeException;
 
     public abstract void disconnectActivityFromServices(Object connectionHolder);
     public abstract void cleanUpServices(int userId, ComponentName component, Intent baseIntent);
@@ -314,4 +314,16 @@ public abstract class ActivityManagerInternal {
 
     /** Returns mount mode for process running with given pid */
     public abstract int getStorageMountMode(int pid, int uid);
+
+    /** Returns true if the given uid is the app in the foreground. */
+    public abstract boolean isAppForeground(int uid);
+
+    /** Remove pending backup for the given userId. */
+    public abstract void clearPendingBackup(int userId);
+
+    /**
+     * When power button is very long pressed, call this interface to do some pre-shutdown work
+     * like persisting database etc.
+     */
+    public abstract void prepareForPossibleShutdown();
 }

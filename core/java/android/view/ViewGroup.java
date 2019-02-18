@@ -51,6 +51,7 @@ import android.util.Pools;
 import android.util.Pools.SynchronizedPool;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.view.WindowInsetsAnimationListener.InsetsAnimation;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -7111,6 +7112,14 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     @Override
     public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {
         insets = super.dispatchApplyWindowInsets(insets);
+        if (View.sBrokenInsetsDispatch) {
+            return brokenDispatchApplyWindowInsets(insets);
+        } else {
+            return newDispatchApplyWindowInsets(insets);
+        }
+    }
+
+    private WindowInsets brokenDispatchApplyWindowInsets(WindowInsets insets) {
         if (!insets.isConsumed()) {
             final int count = getChildCount();
             for (int i = 0; i < count; i++) {
@@ -7121,6 +7130,42 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             }
         }
         return insets;
+    }
+
+    private WindowInsets newDispatchApplyWindowInsets(WindowInsets insets) {
+        final int count = getChildCount();
+        for (int i = 0; i < count; i++) {
+            getChildAt(i).dispatchApplyWindowInsets(insets);
+        }
+        return insets;
+    }
+
+    @Override
+    void dispatchWindowInsetsAnimationStarted(InsetsAnimation animation) {
+        super.dispatchWindowInsetsAnimationStarted(animation);
+        final int count = getChildCount();
+        for (int i = 0; i < count; i++) {
+            getChildAt(i).dispatchWindowInsetsAnimationStarted(animation);
+        }
+    }
+
+    @Override
+    WindowInsets dispatchWindowInsetsAnimationProgress(WindowInsets insets) {
+        insets = super.dispatchWindowInsetsAnimationProgress(insets);
+        final int count = getChildCount();
+        for (int i = 0; i < count; i++) {
+            getChildAt(i).dispatchWindowInsetsAnimationProgress(insets);
+        }
+        return insets;
+    }
+
+    @Override
+    void dispatchWindowInsetsAnimationFinished(InsetsAnimation animation) {
+        super.dispatchWindowInsetsAnimationFinished(animation);
+        final int count = getChildCount();
+        for (int i = 0; i < count; i++) {
+            getChildAt(i).dispatchWindowInsetsAnimationFinished(animation);
+        }
     }
 
     /**

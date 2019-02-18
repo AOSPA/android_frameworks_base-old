@@ -17,7 +17,7 @@ package com.android.settingslib;
 
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 
-import static com.android.settingslib.Utils.STORAGE_MANAGER_SHOW_OPT_IN_PROPERTY;
+import static com.android.settingslib.Utils.STORAGE_MANAGER_ENABLED_PROPERTY;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -159,7 +159,7 @@ public class UtilsTest {
 
     @Test
     public void testIsStorageManagerEnabled_UsesSystemProperties() {
-        SystemProperties.set(STORAGE_MANAGER_SHOW_OPT_IN_PROPERTY, "false");
+        SystemProperties.set(STORAGE_MANAGER_ENABLED_PROPERTY, "true");
         assertThat(Utils.isStorageManagerEnabled(mContext)).isTrue();
     }
 
@@ -244,6 +244,15 @@ public class UtilsTest {
         when(mServiceState.getState()).thenReturn(ServiceState.STATE_OUT_OF_SERVICE);
         when(mServiceState.getDataRegState()).thenReturn(ServiceState.STATE_IN_SERVICE);
         assertThat(Utils.isInService(mServiceState)).isTrue();
+    }
+
+    @Test
+    public void isInService_voiceOutOfServiceDataInServiceOnIwLan_returnFalse() {
+        when(mServiceState.getState()).thenReturn(ServiceState.STATE_OUT_OF_SERVICE);
+        when(mServiceState.getDataNetworkType())
+                .thenReturn(ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN);
+        when(mServiceState.getDataRegState()).thenReturn(ServiceState.STATE_IN_SERVICE);
+        assertThat(Utils.isInService(mServiceState)).isFalse();
     }
 
     @Test

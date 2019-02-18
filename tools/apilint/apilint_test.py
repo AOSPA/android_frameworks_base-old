@@ -143,5 +143,189 @@ class BaseFileTests(unittest.TestCase):
                                       out_classes_with_base=classes_with_base)
         self.assertEquals(map(lambda x: x.fullname, classes_with_base), ["android.app.WallpaperColors"])
 
+class V2TokenizerTests(unittest.TestCase):
+    def _test(self, raw, expected):
+        self.assertEquals(apilint.V2Tokenizer(raw).tokenize(), expected)
+
+    def test_simple(self):
+        self._test("  method public some.Type someName(some.Argument arg, int arg);",
+                   ['method', 'public', 'some.Type', 'someName', '(', 'some.Argument',
+                    'arg', ',', 'int', 'arg', ')', ';'])
+        self._test("class Some.Class extends SomeOther {",
+                   ['class', 'Some.Class', 'extends', 'SomeOther', '{'])
+
+    def test_varargs(self):
+        self._test("name(String...)",
+                   ['name', '(', 'String', '...', ')'])
+
+    def test_kotlin(self):
+        self._test("String? name(String!...)",
+                   ['String', '?', 'name', '(', 'String', '!',  '...', ')'])
+
+    def test_annotation(self):
+        self._test("method @Nullable public void name();",
+                   ['method', '@', 'Nullable', 'public', 'void', 'name', '(', ')', ';'])
+
+    def test_annotation_args(self):
+        self._test("@Some(val=1, other=2) class Class {",
+                   ['@', 'Some', '(', 'val', '=', '1', ',', 'other', '=', '2', ')',
+                    'class', 'Class', '{'])
+    def test_comment(self):
+        self._test("some //comment", ['some'])
+
+    def test_strings(self):
+        self._test(r'"" "foo" "\"" "\\"', ['""', '"foo"', r'"\""', r'"\\"'])
+
+    def test_at_interface(self):
+        self._test("public @interface Annotation {",
+                   ['public', '@interface', 'Annotation', '{'])
+
+    def test_array_type(self):
+        self._test("int[][]", ['int', '[]', '[]'])
+
+    def test_generics(self):
+        self._test("<>foobar<A extends Object>",
+                   ['<', '>', 'foobar', '<', 'A', 'extends', 'Object', '>'])
+
+class V2ParserTests(unittest.TestCase):
+    def _cls(self, raw):
+        pkg = apilint.Package(999, "package pkg {", None)
+        return apilint.Class(pkg, 1, raw, '', sig_format=2)
+
+    def _method(self, raw, cls=None):
+        if not cls:
+            cls = self._cls("class Class {")
+        return apilint.Method(cls, 1, raw, '', sig_format=2)
+
+    def _field(self, raw):
+        cls = self._cls("class Class {")
+        return apilint.Field(cls, 1, raw, '', sig_format=2)
+
+    def test_class(self):
+        cls = self._cls("@Deprecated @IntRange(from=1, to=2) public static abstract class Some.Name extends Super<Class> implements Interface<Class> {")
+        self.assertTrue('deprecated' in cls.split)
+        self.assertTrue('static' in cls.split)
+        self.assertTrue('abstract' in cls.split)
+        self.assertTrue('class' in cls.split)
+        self.assertEquals('Super', cls.extends)
+        self.assertEquals('Interface', cls.implements)
+        self.assertEquals('pkg.Some.Name', cls.fullname)
+
+    def test_interface(self):
+        cls = self._cls("@Deprecated @IntRange(from=1, to=2) public interface Some.Name extends Interface<Class> {")
+        self.assertTrue('deprecated' in cls.split)
+        self.assertTrue('interface' in cls.split)
+        self.assertEquals('Interface', cls.extends)
+        self.assertEquals('Interface', cls.implements)
+        self.assertEquals('pkg.Some.Name', cls.fullname)
+
+    def test_at_interface(self):
+        cls = self._cls("@java.lang.annotation.Target({java.lang.annotation.ElementType.TYPE, java.lang.annotation.ElementType.FIELD, java.lang.annotation.ElementType.METHOD, java.lang.annotation.ElementType.PARAMETER, java.lang.annotation.ElementType.CONSTRUCTOR, java.lang.annotation.ElementType.LOCAL_VARIABLE}) @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.CLASS) public @interface SuppressLint {")
+        self.assertTrue('@interface' in cls.split)
+        self.assertEquals('pkg.SuppressLint', cls.fullname)
+
+    def test_parse_method(self):
+        m = self._method("method @Deprecated public static native <T> Class<T>[][] name("
+                         + "Class<T[]>[][], Class<T[][][]>[][]...) throws Exception, T;")
+        self.assertTrue('static' in m.split)
+        self.assertTrue('public' in m.split)
+        self.assertTrue('method' in m.split)
+        self.assertTrue('native' in m.split)
+        self.assertTrue('deprecated' in m.split)
+        self.assertEquals('java.lang.Class[][]', m.typ)
+        self.assertEquals('name', m.name)
+        self.assertEquals(['java.lang.Class[][]', 'java.lang.Class[][]...'], m.args)
+        self.assertEquals(['java.lang.Exception', 'T'], m.throws)
+
+    def test_ctor(self):
+        m = self._method("ctor @Deprecated <T> ClassName();")
+        self.assertTrue('ctor' in m.split)
+        self.assertTrue('deprecated' in m.split)
+        self.assertEquals('ctor', m.typ)
+        self.assertEquals('ClassName', m.name)
+
+    def test_parse_annotation_method(self):
+        cls = self._cls("@interface Annotation {")
+        self._method('method abstract String category() default "";', cls=cls)
+        self._method('method abstract boolean deepExport() default false;', cls=cls)
+        self._method('method abstract ViewDebug.FlagToString[] flagMapping() default {};', cls=cls)
+        self._method('method abstract ViewDebug.FlagToString[] flagMapping() default (double)java.lang.Float.NEGATIVE_INFINITY;', cls=cls)
+
+    def test_parse_string_field(self):
+        f = self._field('field @Deprecated public final String SOME_NAME = "value";')
+        self.assertTrue('field' in f.split)
+        self.assertTrue('deprecated' in f.split)
+        self.assertTrue('final' in f.split)
+        self.assertEquals('java.lang.String', f.typ)
+        self.assertEquals('SOME_NAME', f.name)
+        self.assertEquals('value', f.value)
+
+    def test_parse_field(self):
+        f = self._field('field public Object SOME_NAME;')
+        self.assertTrue('field' in f.split)
+        self.assertEquals('java.lang.Object', f.typ)
+        self.assertEquals('SOME_NAME', f.name)
+        self.assertEquals(None, f.value)
+
+    def test_parse_int_field(self):
+        f = self._field('field public int NAME = 123;')
+        self.assertTrue('field' in f.split)
+        self.assertEquals('int', f.typ)
+        self.assertEquals('NAME', f.name)
+        self.assertEquals('123', f.value)
+
+    def test_parse_quotient_field(self):
+        f = self._field('field public int NAME = (0.0/0.0);')
+        self.assertTrue('field' in f.split)
+        self.assertEquals('int', f.typ)
+        self.assertEquals('NAME', f.name)
+        self.assertEquals('( 0.0 / 0.0 )', f.value)
+
+    def test_kotlin_types(self):
+        self._field('field public List<Integer[]?[]!>?[]![]? NAME;')
+        self._method("method <T?> Class<T!>?[]![][]? name(Type!, Type argname,"
+                         + "Class<T?>[][]?[]!...!) throws Exception, T;")
+        self._method("method <T> T name(T a = 1, T b = A(1), Lambda f = { false }, N? n = null, "
+                         + """double c = (1/0), float d = 1.0f, String s = "heyo", char c = 'a');""")
+
+    def test_kotlin_operator(self):
+        self._method('method public operator void unaryPlus(androidx.navigation.NavDestination);')
+        self._method('method public static operator androidx.navigation.NavDestination get(androidx.navigation.NavGraph, @IdRes int id);')
+        self._method('method public static operator <T> T get(androidx.navigation.NavigatorProvider, kotlin.reflect.KClass<T> clazz);')
+
+    def test_kotlin_property(self):
+        self._field('property public VM value;')
+        self._field('property public final String? action;')
+
+    def test_kotlin_varargs(self):
+        self._method('method public void error(int p = "42", Integer int2 = "null", int p1 = "42", vararg String args);')
+
+    def test_kotlin_default_values(self):
+        self._method('method public void foo(String! = null, String! = "Hello World", int = 42);')
+        self._method('method void method(String, String firstArg = "hello", int secondArg = "42", String thirdArg = "world");')
+        self._method('method void method(String, String firstArg = "hello", int secondArg = "42");')
+        self._method('method void method(String, String firstArg = "hello");')
+        self._method('method void edit(android.Type, boolean commit = false, Function1<? super Editor,kotlin.Unit> action);')
+        self._method('method <K, V> LruCache<K,V> lruCache(int maxSize, Function2<? super K,? super V,java.lang.Integer> sizeOf = { _, _ -> 1 }, Function1<? extends V> create = { (V)null }, Function4<kotlin.Unit> onEntryRemoved = { _, _, _, _ ->  });')
+        self._method('method android.Bitmap? drawToBitmap(android.View, android.Config config = android.graphics.Bitmap.Config.ARGB_8888);')
+        self._method('method void emptyLambda(Function0<kotlin.Unit> sizeOf = {});')
+        self._method('method void method1(int p = 42, Integer? int2 = null, int p1 = 42, String str = "hello world", java.lang.String... args);')
+        self._method('method void method2(int p, int int2 = (2 * int) * some.other.pkg.Constants.Misc.SIZE);')
+        self._method('method void method3(String str, int p, int int2 = double(int) + str.length);')
+        self._method('method void print(test.pkg.Foo foo = test.pkg.Foo());')
+
+    def test_type_use_annotation(self):
+        self._method('method public static int codePointAt(char @NonNull [], int);')
+        self._method('method @NonNull public java.util.Set<java.util.Map.@NonNull Entry<K,V>> entrySet();')
+
+        m = self._method('method @NonNull public java.lang.annotation.@NonNull Annotation @NonNull [] getAnnotations();')
+        self.assertEquals('java.lang.annotation.Annotation[]', m.typ)
+
+        m = self._method('method @NonNull public abstract java.lang.annotation.@NonNull Annotation @NonNull [] @NonNull [] getParameterAnnotations();')
+        self.assertEquals('java.lang.annotation.Annotation[][]', m.typ)
+
+        m = self._method('method @NonNull public @NonNull String @NonNull [] split(@NonNull String, int);')
+        self.assertEquals('java.lang.String[]', m.typ)
+
 if __name__ == "__main__":
     unittest.main()

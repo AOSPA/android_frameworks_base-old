@@ -21,6 +21,8 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_MMS;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 
 import android.content.Context;
+import android.net.INetd;
+import android.net.INetworkMonitor;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -31,7 +33,6 @@ import android.net.NetworkState;
 import android.os.Handler;
 import android.os.INetworkManagementService;
 import android.os.Messenger;
-import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.Log;
 import android.util.SparseArray;
@@ -39,11 +40,8 @@ import android.util.SparseArray;
 import com.android.internal.util.AsyncChannel;
 import com.android.internal.util.WakeupMessage;
 import com.android.server.ConnectivityService;
-import com.android.server.connectivity.NetworkMonitor;
 
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Objects;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -128,7 +126,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
     public LinkProperties linkProperties;
     // This should only be modified via ConnectivityService.updateCapabilities().
     public NetworkCapabilities networkCapabilities;
-    public final NetworkMonitor networkMonitor;
     public final NetworkMisc networkMisc;
     // Indicates if netd has been told to create this Network. From this point on the appropriate
     // routing rules are setup and routes are added so packets can begin flowing over the Network.
@@ -241,15 +238,21 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
     // Used by ConnectivityService to keep track of 464xlat.
     public Nat464Xlat clatd;
 
+    // Set after asynchronous creation of the NetworkMonitor.
+    private volatile INetworkMonitor mNetworkMonitor;
+
     private static final String TAG = ConnectivityService.class.getSimpleName();
     private static final boolean VDBG = false;
     private final ConnectivityService mConnService;
+    private final INetd mNetd;
+    private final INetworkManagementService mNMS;
     private final Context mContext;
     private final Handler mHandler;
 
     public NetworkAgentInfo(Messenger messenger, AsyncChannel ac, Network net, NetworkInfo info,
             LinkProperties lp, NetworkCapabilities nc, int score, Context context, Handler handler,
-            NetworkMisc misc, NetworkRequest defaultRequest, ConnectivityService connService) {
+            NetworkMisc misc, ConnectivityService connService, INetd netd,
+            INetworkManagementService nms) {
         this.messenger = messenger;
         asyncChannel = ac;
         network = net;
@@ -258,10 +261,18 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         networkCapabilities = nc;
         currentScore = score;
         mConnService = connService;
+        mNetd = netd;
+        mNMS = nms;
         mContext = context;
         mHandler = handler;
-        networkMonitor = mConnService.createNetworkMonitor(context, handler, this, defaultRequest);
         networkMisc = misc;
+    }
+
+    /**
+     * Inform NetworkAgentInfo that a new NetworkMonitor was created.
+     */
+    public void onNetworkMonitorCreated(INetworkMonitor networkMonitor) {
+        mNetworkMonitor = networkMonitor;
     }
 
     public ConnectivityService connService() {
@@ -278,6 +289,15 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
 
     public Network network() {
         return network;
+    }
+
+    /**
+     * Get the INetworkMonitor in this NetworkAgentInfo.
+     *
+     * <p>This will be null before {@link #onNetworkMonitorCreated(INetworkMonitor)} is called.
+     */
+    public INetworkMonitor networkMonitor() {
+        return mNetworkMonitor;
     }
 
     // Functions for manipulating the requests satisfied by this network.
@@ -579,18 +599,18 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         if (Nat464Xlat.requiresClat(this) &&
             ( this.networkCapabilities.hasCapability(NET_CAPABILITY_INTERNET) ||
               this.networkCapabilities.hasCapability(NET_CAPABILITY_MMS) )) {
-            maybeStartClat(netd);
+            maybeStartClat();
         } else {
             maybeStopClat();
         }
     }
 
     /** Ensure clat has started for this network. */
-    public void maybeStartClat(INetworkManagementService netd) {
+    public void maybeStartClat() {
         if (clatd != null && clatd.isStarted()) {
             return;
         }
-        clatd = new Nat464Xlat(netd, this);
+        clatd = new Nat464Xlat(this, mNetd, mNMS);
         clatd.start();
     }
 

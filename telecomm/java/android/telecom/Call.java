@@ -239,6 +239,30 @@ public final class Call {
             "android.telecom.event.HANDOVER_FAILED";
 
     public static class Details {
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef(
+                prefix = { "DIRECTION_" },
+                value = {DIRECTION_UNKNOWN, DIRECTION_INCOMING, DIRECTION_OUTGOING})
+        public @interface CallDirection {}
+
+        /**
+         * Indicates that the call is neither and incoming nor an outgoing call.  This can be the
+         * case for calls reported directly by a {@link ConnectionService} in special cases such as
+         * call handovers.
+         */
+        public static final int DIRECTION_UNKNOWN = -1;
+
+        /**
+         * Indicates that the call is an incoming call.
+         */
+        public static final int DIRECTION_INCOMING = 0;
+
+        /**
+         * Indicates that the call is an outgoing call.
+         */
+        public static final int DIRECTION_OUTGOING = 1;
+
 
         /** Call can currently be put on hold or unheld. */
         public static final int CAPABILITY_HOLD = 0x00000001;
@@ -532,6 +556,7 @@ public final class Call {
         private final Bundle mIntentExtras;
         private final long mCreationTimeMillis;
         private final CallIdentification mCallIdentification;
+        private final @CallDirection int mCallDirection;
 
         /**
          * Whether the supplied capabilities  supports the specified capability.
@@ -857,6 +882,14 @@ public final class Call {
             return mCallIdentification;
         }
 
+        /**
+         * Indicates whether the call is an incoming or outgoing call.
+         * @return The call's direction.
+         */
+        public @CallDirection int getCallDirection() {
+            return mCallDirection;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (o instanceof Details) {
@@ -878,7 +911,8 @@ public final class Call {
                         areBundlesEqual(mExtras, d.mExtras) &&
                         areBundlesEqual(mIntentExtras, d.mIntentExtras) &&
                         Objects.equals(mCreationTimeMillis, d.mCreationTimeMillis) &&
-                        Objects.equals(mCallIdentification, d.mCallIdentification);
+                        Objects.equals(mCallIdentification, d.mCallIdentification) &&
+                        Objects.equals(mCallDirection, d.mCallDirection);
             }
             return false;
         }
@@ -900,7 +934,8 @@ public final class Call {
                             mExtras,
                             mIntentExtras,
                             mCreationTimeMillis,
-                            mCallIdentification);
+                            mCallIdentification,
+                            mCallDirection);
         }
 
         /** {@hide} */
@@ -921,7 +956,8 @@ public final class Call {
                 Bundle extras,
                 Bundle intentExtras,
                 long creationTimeMillis,
-                CallIdentification callIdentification) {
+                CallIdentification callIdentification,
+                int callDirection) {
             mTelecomCallId = telecomCallId;
             mHandle = handle;
             mHandlePresentation = handlePresentation;
@@ -939,6 +975,7 @@ public final class Call {
             mIntentExtras = intentExtras;
             mCreationTimeMillis = creationTimeMillis;
             mCallIdentification = callIdentification;
+            mCallDirection = callDirection;
         }
 
         /** {@hide} */
@@ -960,7 +997,8 @@ public final class Call {
                     parcelableCall.getExtras(),
                     parcelableCall.getIntentExtras(),
                     parcelableCall.getCreationTimeMillis(),
-                    parcelableCall.getCallIdentification());
+                    parcelableCall.getCallIdentification(),
+                    parcelableCall.getCallDirection());
         }
 
         @Override

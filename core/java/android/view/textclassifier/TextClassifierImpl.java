@@ -115,9 +115,9 @@ public final class TextClassifierImpl implements TextClassifier {
     @GuardedBy("mLock") // Do not access outside this lock.
     private ActionsSuggestionsModel mActionsImpl;
 
-    private final Object mLoggerLock = new Object();
-    @GuardedBy("mLoggerLock") // Do not access outside this lock.
-    private SelectionSessionLogger mSessionLogger;
+    private final SelectionSessionLogger mSessionLogger = new SelectionSessionLogger();
+    private final TextClassifierEventTronLogger mTextClassifierEventTronLogger =
+            new TextClassifierEventTronLogger();
 
     private final TextClassificationConstants mSettings;
 
@@ -337,12 +337,7 @@ public final class TextClassifierImpl implements TextClassifier {
     @Override
     public void onSelectionEvent(SelectionEvent event) {
         Preconditions.checkNotNull(event);
-        synchronized (mLoggerLock) {
-            if (mSessionLogger == null) {
-                mSessionLogger = new SelectionSessionLogger();
-            }
-            mSessionLogger.writeEvent(event);
-        }
+        mSessionLogger.writeEvent(event);
     }
 
     @Override
@@ -350,6 +345,7 @@ public final class TextClassifierImpl implements TextClassifier {
         if (DEBUG) {
             Log.d(DEFAULT_LOG_TAG, "onTextClassifierEvent() called with: event = [" + event + "]");
         }
+        mTextClassifierEventTronLogger.writeEvent(event);
     }
 
     /** @inheritDoc */
@@ -397,7 +393,7 @@ public final class TextClassifierImpl implements TextClassifier {
                     actionsImpl.suggestActions(nativeConversation, null);
 
             Collection<String> expectedTypes = resolveActionTypesFromRequest(request);
-            List<ConversationActions.ConversationAction> conversationActions = new ArrayList<>();
+            List<ConversationAction> conversationActions = new ArrayList<>();
             int maxSuggestions = nativeSuggestions.length;
             if (request.getMaxSuggestions() > 0) {
                 maxSuggestions = Math.min(request.getMaxSuggestions(), nativeSuggestions.length);
@@ -409,7 +405,7 @@ public final class TextClassifierImpl implements TextClassifier {
                     continue;
                 }
                 conversationActions.add(
-                        new ConversationActions.ConversationAction.Builder(actionType)
+                        new ConversationAction.Builder(actionType)
                                 .setTextReply(nativeSuggestion.getResponseText())
                                 .setConfidenceScore(nativeSuggestion.getScore())
                                 .build());
@@ -449,10 +445,10 @@ public final class TextClassifierImpl implements TextClassifier {
 
     private Collection<String> resolveActionTypesFromRequest(ConversationActions.Request request) {
         List<String> defaultActionTypes =
-                request.getHints().contains(ConversationActions.HINT_FOR_NOTIFICATION)
+                request.getHints().contains(ConversationActions.Request.HINT_FOR_NOTIFICATION)
                         ? mSettings.getNotificationConversationActionTypes()
                         : mSettings.getInAppConversationActionTypes();
-        return request.getTypeConfig().resolveTypes(defaultActionTypes);
+        return request.getTypeConfig().resolveEntityListModifications(defaultActionTypes);
     }
 
     private AnnotatorModel getAnnotatorImpl(LocaleList localeList)

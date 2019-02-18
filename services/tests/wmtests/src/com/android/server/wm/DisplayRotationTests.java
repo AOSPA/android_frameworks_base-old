@@ -33,7 +33,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.content.ContentResolver;
@@ -63,6 +62,7 @@ import com.android.server.statusbar.StatusBarManagerInternal;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -86,7 +86,7 @@ public class DisplayRotationTests {
 
     private StatusBarManagerInternal mPreviousStatusBarManagerInternal;
 
-    private WindowManagerService mMockWm;
+    private static WindowManagerService sMockWm;
     private DisplayContent mMockDisplayContent;
     private DisplayPolicy mMockDisplayPolicy;
     private Context mMockContext;
@@ -108,12 +108,15 @@ public class DisplayRotationTests {
 
     private DisplayRotation mTarget;
 
+    @BeforeClass
+    public static void setUpOnce() {
+        sMockWm = mock(WindowManagerService.class);
+        sMockWm.mPowerManagerInternal = mock(PowerManagerInternal.class);
+    }
+
     @Before
     public void setUp() {
         FakeSettingsProvider.clearSettingsProvider();
-
-        mMockWm = mock(WindowManagerService.class);
-        mMockWm.mPowerManagerInternal = mock(PowerManagerInternal.class);
 
         mPreviousStatusBarManagerInternal = LocalServices.getService(
                 StatusBarManagerInternal.class);
@@ -452,7 +455,7 @@ public class DisplayRotationTests {
         mOrientationSensorListener.onSensorChanged(createSensorEvent(Surface.ROTATION_90));
         assertTrue(waitForUiHandler());
 
-        verify(mMockWm).updateRotation(false, false);
+        verify(sMockWm).updateRotation(false, false);
     }
 
     @Test
@@ -608,23 +611,6 @@ public class DisplayRotationTests {
     // ========================
     // Non-rotation API Tests
     // ========================
-    @Test
-    public void testRespectsAppRequestedOrientationByDefault() throws Exception {
-        mBuilder.build();
-
-        assertTrue("Display rotation should respect app requested orientation by"
-                + " default.", mTarget.respectAppRequestedOrientation());
-    }
-
-    @Test
-    public void testNotRespectAppRequestedOrientation_FixedToUserRotation() throws Exception {
-        mBuilder.build();
-        mTarget.setFixedToUserRotation(true);
-
-        assertFalse("Display rotation shouldn't respect app requested orientation if"
-                + " fixed to user rotation.", mTarget.respectAppRequestedOrientation());
-    }
-
     /**
      * Call {@link DisplayRotation#configure(int, int, int, int)} to configure {@link #mTarget}
      * according to given parameters.
@@ -833,8 +819,9 @@ public class DisplayRotationTests {
                     .thenReturn(mFakeSettingsProvider.getIContentProvider());
 
             mMockDisplayWindowSettings = mock(DisplayWindowSettings.class);
-            mTarget = new DisplayRotation(mMockWm, mMockDisplayContent, mMockDisplayPolicy,
+            mTarget = new DisplayRotation(sMockWm, mMockDisplayContent, mMockDisplayPolicy,
                     mMockDisplayWindowSettings, mMockContext, new Object());
+            reset(sMockWm);
 
             captureObservers();
         }

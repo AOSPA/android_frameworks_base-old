@@ -1,5 +1,7 @@
 package com.android.settingslib;
 
+import static android.telephony.ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN;
+
 import android.annotation.ColorInt;
 import android.content.Context;
 import android.content.Intent;
@@ -36,8 +38,8 @@ public class Utils {
     private static final String CURRENT_MODE_KEY = "CURRENT_MODE";
     private static final String NEW_MODE_KEY = "NEW_MODE";
     @VisibleForTesting
-    static final String STORAGE_MANAGER_SHOW_OPT_IN_PROPERTY =
-            "ro.storage_manager.show_opt_in";
+    static final String STORAGE_MANAGER_ENABLED_PROPERTY =
+            "ro.storage_manager.enabled";
 
     private static Signature[] sSystemSignature;
     private static String sPermissionControllerPackageName;
@@ -371,8 +373,7 @@ public class Utils {
     public static boolean isStorageManagerEnabled(Context context) {
         boolean isDefaultOn;
         try {
-            // Turn off by default if the opt-in was shown.
-            isDefaultOn = !SystemProperties.getBoolean(STORAGE_MANAGER_SHOW_OPT_IN_PROPERTY, true);
+            isDefaultOn = SystemProperties.getBoolean(STORAGE_MANAGER_ENABLED_PROPERTY, false);
         } catch (Resources.NotFoundException e) {
             isDefaultOn = false;
         }
@@ -429,12 +430,14 @@ public class Utils {
         // and do not support voice service, and on these SIM cards, we
         // want to show signal bars for data service as well as the "no
         // service" or "emergency calls only" text that indicates that voice
-        // is not available.
+        // is not available. Note that we ignore the IWLAN service state
+        // because that state indicates the use of VoWIFI and not cell service
         int state = serviceState.getState();
         int dataState = serviceState.getDataRegState();
         if (state == ServiceState.STATE_OUT_OF_SERVICE
                 || state == ServiceState.STATE_EMERGENCY_ONLY) {
-            if (dataState == ServiceState.STATE_IN_SERVICE) {
+            if (dataState == ServiceState.STATE_IN_SERVICE
+                    && serviceState.getDataNetworkType() != RIL_RADIO_TECHNOLOGY_IWLAN) {
                 return ServiceState.STATE_IN_SERVICE;
             }
         }

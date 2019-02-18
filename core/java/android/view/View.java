@@ -76,8 +76,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.os.Trace;
+import android.sysprop.DisplayProperties;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -96,6 +96,7 @@ import android.view.AccessibilityIterators.ParagraphTextSegmentIterator;
 import android.view.AccessibilityIterators.TextSegmentIterator;
 import android.view.AccessibilityIterators.WordTextSegmentIterator;
 import android.view.ContextMenu.ContextMenuInfo;
+import android.view.WindowInsetsAnimationListener.InsetsAnimation;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityEventSource;
 import android.view.accessibility.AccessibilityManager;
@@ -811,14 +812,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private static final String CONTENT_CAPTURE_LOG_TAG = "View.ContentCapture";
 
     /**
-     * When set to true, apps will draw debugging information about their layouts.
-     *
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static final String DEBUG_LAYOUT_PROPERTY = "debug.layout";
-
-    /**
      * When set to true, this view will save its attribute data.
      *
      * @hide
@@ -938,6 +931,26 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * instead.
      */
     private static boolean sAcceptZeroSizeDragShadow;
+
+    /**
+     * Prior to Q, {@link #dispatchApplyWindowInsets} had some issues:
+     * <ul>
+     *     <li>The modified insets changed by {@link #onApplyWindowInsets} were passed to the
+     *     entire view hierarchy in prefix order, including siblings as well as siblings of parents
+     *     further down the hierarchy. This violates the basic concepts of the view hierarchy, and
+     *     thus, the hierarchical dispatching mechanism was hard to use for apps.</li>
+     *
+     *     <li>Dispatch was stopped after the insets were fully consumed. This is somewhat confusing
+     *     for developers, but more importantly, by adding more granular information to
+     *     {@link WindowInsets} it becomes really cumbersome to define what consumed actually means
+     *     </li>
+     * </ul>
+     *
+     * In order to make window inset dispatching work properly, we dispatch window insets
+     * in the view hierarchy in a proper hierarchical manner and don't stop dispatching if the
+     * insets are consumed if this flag is set to {@code false}.
+     */
+    static boolean sBrokenInsetsDispatch;
 
     /** @hide */
     @IntDef({NOT_FOCUSABLE, FOCUSABLE, FOCUSABLE_AUTO})
@@ -4527,6 +4540,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         OnCapturedPointerListener mOnCapturedPointerListener;
 
         private ArrayList<OnUnhandledKeyEventListener> mUnhandledKeyListeners;
+
+        private WindowInsetsAnimationListener mWindowInsetsAnimationListener;
     }
 
     @UnsupportedAppUsage
@@ -5107,6 +5122,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             sAlwaysAssignFocus = targetSdkVersion < Build.VERSION_CODES.P;
 
             sAcceptZeroSizeDragShadow = targetSdkVersion < Build.VERSION_CODES.P;
+
+            sBrokenInsetsDispatch = !ViewRootImpl.USE_NEW_INSETS
+                    || targetSdkVersion < Build.VERSION_CODES.Q;
 
             sCompatibilityDone = true;
         }
@@ -7660,10 +7678,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Convenience method for sending a {@link AccessibilityEvent#TYPE_ANNOUNCEMENT}
-     * {@link AccessibilityEvent} to make an announcement which is related to some
-     * sort of a context change for which none of the events representing UI transitions
-     * is a good fit. For example, announcing a new page in a book. If accessibility
-     * is not enabled this method does nothing.
+     * {@link AccessibilityEvent} to suggest that an accessibility service announce the
+     * specified text to its users.
+     * <p>
+     * Note: The event generated with this API carries no semantic meaning, and is appropriate only
+     * in exceptional situations. Apps can generally achieve correct behavior for accessibility by
+     * accurately supplying the semantics of their UI.
+     * They should not need to specify what exactly is announced to users.
      *
      * @param text The announcement text.
      */
@@ -8173,6 +8194,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>The populated structure is then passed to the service through
      * {@link ContentCaptureSession#notifyViewAppeared(ViewStructure)}.
      *
+     * <p><b>Note: </b>views that manage a virtual structure under this view must populate just
+     * the node representing this view and return right away, then asynchronously report (not
+     * necessarily in the UI thread) when the children nodes appear, disappear or have their text
+     * changed by calling
+     * {@link ContentCaptureSession#notifyViewAppeared(ViewStructure)},
+     * {@link ContentCaptureSession#notifyViewDisappeared(AutofillId)}, and
+     * {@link ContentCaptureSession#notifyViewTextChanged(AutofillId, CharSequence, int)}
+     * respectively. The structure for the a child must be created using
+     * {@link ContentCaptureSession#newVirtualViewStructure(AutofillId, int)}, and the
+     * {@code autofillId} for a child can be obtained either through
+     * {@code childStructure.getAutofillId()} or
+     * {@link ContentCaptureSession#newAutofillId(AutofillId, int)}.
+     *
      * <p><b>Note: </b>the following methods of the {@code structure} will be ignored:
      * <ul>
      *   <li>{@link ViewStructure#setChildCount(int)}
@@ -8185,6 +8219,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *   <li>{@link ViewStructure#newHtmlInfoBuilder(String)}
      *   <li>{@link ViewStructure#setHtmlInfo(android.view.ViewStructure.HtmlInfo)}
      *   <li>{@link ViewStructure#setDataIsSensitive(boolean)}
+     *   <li>{@link ViewStructure#setAlpha(float)}
+     *   <li>{@link ViewStructure#setElevation(float)}
+     *   <li>{@link ViewStructure#setTransformation(Matrix)}
+     *
      * </ul>
      */
     public void onProvideContentCaptureStructure(@NonNull ViewStructure structure, int flags) {
@@ -8208,10 +8246,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             structure.setId(id, pkg, type, entry);
         } else {
             structure.setId(id, null, null, null);
-        }
-        if (viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
-            //TODO(b/111276913): STOPSHIP - don't set it if not needed
-            structure.setDataIsSensitive(false);
         }
 
         if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
@@ -8253,8 +8287,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         structure.setDimens(ignoredParentLeft + mLeft, ignoredParentTop + mTop, mScrollX, mScrollY,
                 mRight - mLeft, mBottom - mTop);
-        if (viewFor == VIEW_STRUCTURE_FOR_ASSIST
-                || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+        if (viewFor == VIEW_STRUCTURE_FOR_ASSIST) {
             if (!hasIdentityMatrix()) {
                 structure.setTransformation(getMatrix());
             }
@@ -8998,11 +9031,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (session == null) return;
 
         if (appeared) {
-            if (!isLaidOut() || !isVisibleToUser()
+            if (!isLaidOut() || getVisibility() != VISIBLE
                     || (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0) {
                 if (Log.isLoggable(CONTENT_CAPTURE_LOG_TAG, Log.VERBOSE)) {
                     Log.v(CONTENT_CAPTURE_LOG_TAG, "Ignoring 'appeared' on " + this + ": laid="
-                            + isLaidOut() + ", visible=" + isVisibleToUser()
+                            + isLaidOut() + ", visibleToUser=" + isVisibleToUser()
+                            + ", visible=" + (getVisibility() == VISIBLE)
                             + ": alreadyNotifiedAppeared="
                             + ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0));
                 }
@@ -10449,6 +10483,37 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
         } finally {
             mPrivateFlags3 &= ~PFLAG3_APPLYING_INSETS;
+        }
+    }
+
+    /**
+     * Sets a {@link WindowInsetsAnimationListener} to be notified about animations of windows that
+     * cause insets.
+     *
+     * @param listener The listener to set.
+     * @hide pending unhide
+     */
+    public void setWindowInsetsAnimationListener(WindowInsetsAnimationListener listener) {
+        getListenerInfo().mWindowInsetsAnimationListener = listener;
+    }
+
+    void dispatchWindowInsetsAnimationStarted(InsetsAnimation animation) {
+        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationListener != null) {
+            mListenerInfo.mWindowInsetsAnimationListener.onStarted(animation);
+        }
+    }
+
+    WindowInsets dispatchWindowInsetsAnimationProgress(WindowInsets insets) {
+        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationListener != null) {
+            return mListenerInfo.mWindowInsetsAnimationListener.onProgress(insets);
+        } else {
+            return insets;
+        }
+    }
+
+    void dispatchWindowInsetsAnimationFinished(InsetsAnimation animation) {
+        if (mListenerInfo != null && mListenerInfo.mOnApplyWindowInsetsListener != null) {
+            mListenerInfo.mWindowInsetsAnimationListener.onFinished(animation);
         }
     }
 
@@ -25057,9 +25122,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         final ViewRootImpl root = mAttachInfo.mViewRootImpl;
-        final SurfaceSession session = new SurfaceSession(root.mSurface);
+        final SurfaceSession session = new SurfaceSession();
         final SurfaceControl surfaceControl = new SurfaceControl.Builder(session)
                 .setName("drag surface")
+                .setParent(root.getSurfaceControl())
                 .setBufferSize(shadowSize.x, shadowSize.y)
                 .setFormat(PixelFormat.TRANSLUCENT)
                 .build();
@@ -27767,7 +27833,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         /**
          * Show where the margins, bounds and layout bounds are for each view.
          */
-        boolean mDebugLayout = SystemProperties.getBoolean(DEBUG_LAYOUT_PROPERTY, false);
+        boolean mDebugLayout = DisplayProperties.debug_layout().orElse(false);
 
         /**
          * Point used to compute visible regions.

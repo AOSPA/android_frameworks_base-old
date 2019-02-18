@@ -52,6 +52,7 @@
     <protected-broadcast android:name="android.intent.action.PACKAGE_VERIFIED" />
     <protected-broadcast android:name="android.intent.action.PACKAGES_SUSPENDED" />
     <protected-broadcast android:name="android.intent.action.PACKAGES_UNSUSPENDED" />
+    <protected-broadcast android:name="android.intent.action.DISTRACTING_PACKAGES_CHANGED" />
     <protected-broadcast android:name="android.intent.action.ACTION_PREFERRED_ACTIVITY_CHANGED" />
     <protected-broadcast android:name="android.intent.action.UID_REMOVED" />
     <protected-broadcast android:name="android.intent.action.QUERY_PACKAGE_RESTART" />
@@ -1216,6 +1217,7 @@
     <!-- Used for permissions that are associated with activity recognition.
          TODO(zezeozue). STOPSHIP: Add icon -->
     <permission-group android:name="android.permission-group.ACTIVITY_RECOGNITION"
+        android:icon="@drawable/perm_group_activity_recognition"
         android:label="@string/permgrouplab_activityRecognition"
         android:description="@string/permgroupdesc_activityRecognition"
         android:request="@string/permgrouprequest_activityRecognition"
@@ -2244,8 +2246,9 @@
     <permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL"
         android:protectionLevel="signature|installer" />
 
-    <!-- @SystemApi Allows an application to start an activity within its managed profile from
-         the personal profile.
+    <!-- @SystemApi Allows an application to start its own activities, but on a different profile
+         associated with the user. For example, an application running on the main profile of a user
+         can start an activity on a managed profile of that user.
          This permission is not available to third party applications.
          @hide -->
     <permission android:name="android.permission.INTERACT_ACROSS_PROFILES"
@@ -2292,7 +2295,7 @@
 
     <!-- @SystemApi @TestApi @hide Allows an application to create/manage/remove stacks -->
     <permission android:name="android.permission.MANAGE_ACTIVITY_STACKS"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature" />
 
     <!-- @SystemApi @TestApi @hide Allows an application to embed other activities -->
     <permission android:name="android.permission.ACTIVITY_EMBEDDING"
@@ -2303,6 +2306,11 @@
          @hide -->
     <permission android:name="android.permission.START_ANY_ACTIVITY"
         android:protectionLevel="signature" />
+
+    <!-- Allows an application to start activities from background
+         @hide -->
+    <permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"
+        android:protectionLevel="signature|privileged|vendorPrivileged|oem" />
 
     <!-- @SystemApi Must be required by activities that handle the intent action
          {@link Intent#ACTION_SEND_SHOW_SUSPENDED_APP_DETAILS}. This is for use by apps that
@@ -2561,6 +2569,16 @@
     <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.WRITE_GSERVICES"
         android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi @hide Allows an application to modify config settings.
+    <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.WRITE_DEVICE_CONFIG"
+        android:protectionLevel="signature|configurator"/>
+
+    <!-- @SystemApi @hide Allows an application to read config settings.
+    <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.READ_DEVICE_CONFIG"
+        android:protectionLevel="signature|preinstalled" />
 
     <!-- @SystemApi @TestApi Allows an application to call
         {@link android.app.ActivityManager#forceStopPackage}.
@@ -3075,6 +3093,15 @@
     <permission android:name="android.permission.BIND_TEXT_SERVICE"
         android:protectionLevel="signature" />
 
+    <!-- @SystemApi Must be required by a AttentionService
+         to ensure that only the system can bind to it.
+         <p>Protection level: signature
+         @hide
+    -->
+    <permission android:name="android.permission.BIND_ATTENTION_SERVICE"
+                android:protectionLevel="signature" />
+    <uses-permission android:name="android.permission.BIND_ATTENTION_SERVICE" />
+
     <!-- Must be required by a {@link android.net.VpnService},
          to ensure that only the system can bind to it.
          <p>Protection level: signature
@@ -3226,9 +3253,10 @@
 
     <!-- @SystemApi Required to add or remove another application as a device admin.
          <p>Not for use by third-party applications.
-         @hide -->
+         @hide
+         @removed -->
     <permission android:name="android.permission.MANAGE_DEVICE_ADMINS"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows an app to reset the device password.
          <p>Not for use by third-party applications.
@@ -3550,19 +3578,25 @@
     <permission android:name="android.permission.MODIFY_DEFAULT_AUDIO_EFFECTS"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi Allows an application to provide remote displays.
+         <p>Not for use by third-party applications.</p>
+         @hide -->
+    <permission android:name="android.permission.REMOTE_DISPLAY_PROVIDER"
+        android:protectionLevel="signature|privileged" />
+
     <!-- Allows an application to capture video output.
          <p>Not for use by third-party applications.</p>
           @hide
           @removed -->
     <permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature" />
 
     <!-- Allows an application to capture secure video output.
          <p>Not for use by third-party applications.</p>
           @hide
           @removed -->
     <permission android:name="android.permission.CAPTURE_SECURE_VIDEO_OUTPUT"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature" />
 
     <!-- Allows an application to know what content is playing and control its playback.
          <p>Not for use by third-party applications due to privacy of media consumption</p>  -->
@@ -3897,7 +3931,7 @@
 
     <!-- @SystemApi @hide Allows managing apk level rollbacks. -->
     <permission android:name="android.permission.MANAGE_ROLLBACKS"
-        android:protectionLevel="signature|installer" />
+        android:protectionLevel="signature|verifier" />
 
     <!-- @SystemApi @hide Allows an application to mark other applications as harmful -->
     <permission android:name="android.permission.SET_HARMFUL_APP_WARNINGS"
@@ -3942,7 +3976,8 @@
     <permission android:name="android.permission.ACCESS_NOTIFICATIONS"
         android:protectionLevel="signature|privileged|appop" />
 
-    <!-- Marker permission for applications that wish to access notification policy.
+    <!-- Marker permission for applications that wish to access notification policy. This permission
+        is not supported on managed profiles.
          <p>Protection level: normal
     -->
     <permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"
@@ -4290,6 +4325,16 @@
     <permission android:name="android.permission.MANAGE_CONTENT_CAPTURE"
         android:protectionLevel="signature" />
 
+    <!-- @SystemApi Allows an application to manage the content suggestions service.
+         @hide  <p>Not for use by third-party applications.</p> -->
+    <permission android:name="android.permission.MANAGE_CONTENT_SUGGESTIONS"
+         android:protectionLevel="signature" />
+
+    <!-- @SystemApi Allows an application to manage the app predictions service.
+         @hide  <p>Not for use by third-party applications.</p> -->
+    <permission android:name="android.permission.MANAGE_APP_PREDICTIONS"
+         android:protectionLevel="signature" />
+
     <!-- Allows an app to set the theme overlay in /vendor/overlay
          being used.
          @hide  <p>Not for use by third-party applications.</p> -->
@@ -4369,6 +4414,11 @@
     <!-- A subclass of {@link android.app.SmsAppService} must be protected with this permission. -->
     <permission android:name="android.permission.BIND_SMS_APP_SERVICE"
         android:protectionLevel="signature" />
+
+    <!-- @hide Permission that allows configuring appops.
+     <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.MANAGE_APPOPS"
+                android:protectionLevel="signature" />
 
     <!-- @hide Permission that allows background clipboard access.
          <p>Not for use by third-party applications. -->
@@ -4748,6 +4798,11 @@
 
         <service android:name="com.android.server.MountServiceIdler"
                  android:exported="true"
+                 android:permission="android.permission.BIND_JOB_SERVICE" >
+        </service>
+
+        <service android:name="com.android.server.ZramWriteback"
+                 android:exported="false"
                  android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 

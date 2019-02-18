@@ -68,6 +68,8 @@ import java.util.List;
 public class FullRestoreEngine extends RestoreEngine {
 
     private final UserBackupManagerService mBackupManagerService;
+    private final int mUserId;
+
     // Task in charge of monitoring timeouts
     private final BackupRestoreTask mMonitorTask;
 
@@ -146,6 +148,7 @@ public class FullRestoreEngine extends RestoreEngine {
                 backupManagerService.getAgentTimeoutParameters(),
                 "Timeout parameters cannot be null");
         mIsAdbRestore = isAdbRestore;
+        mUserId = backupManagerService.getUserId();
     }
 
     public IBackupAgent getAgent() {
@@ -272,7 +275,7 @@ public class FullRestoreEngine extends RestoreEngine {
                                         instream, mBackupManagerService.getContext(),
                                         mDeleteObserver, mManifestSignatures,
                                         mPackagePolicies, info, installerPackageName,
-                                        bytesReadListener);
+                                        bytesReadListener, mUserId);
                                 // good to go; promote to ACCEPT
                                 mPackagePolicies.put(pkg, isSuccessfullyInstalled
                                         ? RestorePolicy.ACCEPT
@@ -329,9 +332,8 @@ public class FullRestoreEngine extends RestoreEngine {
                         }
 
                         try {
-                            mTargetApp =
-                                    mBackupManagerService.getPackageManager().getApplicationInfo(
-                                            pkg, 0);
+                            mTargetApp = mBackupManagerService.getPackageManager()
+                                    .getApplicationInfoAsUser(pkg, 0, mUserId);
 
                             // If we haven't sent any data to this app yet, we probably
                             // need to clear it first. Check that.
@@ -678,12 +680,13 @@ public class FullRestoreEngine extends RestoreEngine {
      * Returns whether the package is in the list of the packages for which clear app data should
      * be called despite the fact that they have backup agent.
      *
-     * <p>The list is read from {@link Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE}.
+     * <p>The list is read from {@link Settings.Secure#PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE}.
      */
     private boolean shouldForceClearAppDataOnFullRestore(String packageName) {
-        String packageListString = Settings.Secure.getString(
+        String packageListString = Settings.Secure.getStringForUser(
                 mBackupManagerService.getContext().getContentResolver(),
-                Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE);
+                Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE,
+                mUserId);
         if (TextUtils.isEmpty(packageListString)) {
             return false;
         }

@@ -18,6 +18,7 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
     mockito-target-minus-junit4 \
     platform-test-annotations \
     services.core \
+    services.ipmemorystore \
     services.net
 
 LOCAL_JAVA_LIBRARIES := \
@@ -53,6 +54,7 @@ LOCAL_JNI_SHARED_LIBRARIES := \
     libnativehelper \
     libpackagelistparser \
     libpcre2 \
+    libprocessgroup \
     libselinux \
     libui \
     libutils \

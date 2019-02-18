@@ -984,11 +984,12 @@ public abstract class ColorSpace {
      *         {@link Named#SRGB sRGB} primaries.
      *     </li>
      *     <li>
-     *         Its white point is withing 1e-3 of the CIE standard
+     *         Its white point is within 1e-3 of the CIE standard
      *         illuminant {@link #ILLUMINANT_D65 D65}.
      *     </li>
      *     <li>Its opto-electronic transfer function is not linear.</li>
      *     <li>Its electro-optical transfer function is not linear.</li>
+     *     <li>Its transfer functions yield values within 1e-3 of {@link Named#SRGB}.</li>
      *     <li>Its range is \([0..1]\).</li>
      * </ul>
      * <p>This method always returns true for {@link Named#SRGB}.</p>
@@ -1354,9 +1355,9 @@ public abstract class ColorSpace {
      */
     @NonNull
     static ColorSpace get(@IntRange(from = MIN_ID, to = MAX_ID) int index) {
-        if (index < 0 || index > Named.values().length) {
+        if (index < 0 || index >= Named.values().length) {
             throw new IllegalArgumentException("Invalid ID, must be in the range [0.." +
-                    Named.values().length + "]");
+                    Named.values().length + ")");
         }
         return sNamedColorSpaces[index];
     }
@@ -1660,10 +1661,12 @@ public abstract class ColorSpace {
      * @param rhs 3x3 matrix, as a non-null array of 9 floats
      * @return A new array of 9 floats containing the result of the multiplication
      *         of rhs by lhs
+     *
+     * @hide
      */
     @NonNull
     @Size(9)
-    private static float[] mul3x3(@NonNull @Size(9) float[] lhs, @NonNull @Size(9) float[] rhs) {
+    public static float[] mul3x3(@NonNull @Size(9) float[] lhs, @NonNull @Size(9) float[] rhs) {
         float[] r = new float[9];
         r[0] = lhs[0] * rhs[0] + lhs[3] * rhs[1] + lhs[6] * rhs[2];
         r[1] = lhs[1] * rhs[0] + lhs[4] * rhs[1] + lhs[7] * rhs[2];
@@ -3145,17 +3148,33 @@ public abstract class ColorSpace {
                 float max,
                 @IntRange(from = MIN_ID, to = MAX_ID) int id) {
             if (id == 0) return true;
-            if (!compare(primaries, SRGB_PRIMARIES)) {
+            if (!ColorSpace.compare(primaries, SRGB_PRIMARIES)) {
                 return false;
             }
-            if (!compare(whitePoint, ILLUMINANT_D65)) {
+            if (!ColorSpace.compare(whitePoint, ILLUMINANT_D65)) {
                 return false;
             }
-            if (OETF.applyAsDouble(0.5) < 0.5001) return false;
-            if (EOTF.applyAsDouble(0.5) > 0.5001) return false;
+
             if (min != 0.0f) return false;
             if (max != 1.0f) return false;
+
+            // We would have already returned true if this was SRGB itself, so
+            // it is safe to reference it here.
+            ColorSpace.Rgb srgb = (ColorSpace.Rgb) get(Named.SRGB);
+
+            for (double x = 0.0; x <= 1.0; x += 1 / 255.0) {
+                if (!compare(x, OETF, srgb.mOetf)) return false;
+                if (!compare(x, EOTF, srgb.mEotf)) return false;
+            }
+
             return true;
+        }
+
+        private static boolean compare(double point, @NonNull DoubleUnaryOperator a,
+                @NonNull DoubleUnaryOperator b) {
+            double rA = a.applyAsDouble(point);
+            double rB = b.applyAsDouble(point);
+            return Math.abs(rA - rB) <= 1e-3;
         }
 
         /**

@@ -438,8 +438,9 @@ static jobject nativeGetDisplayedContentSamplingAttributes(JNIEnv* env, jclass c
 static jboolean nativeSetDisplayedContentSamplingEnabled(JNIEnv* env, jclass clazz,
         jobject tokenObj, jboolean enable, jint componentMask, jint maxFrames) {
     sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
-    return SurfaceComposerClient::setDisplayContentSamplingEnabled(
+    status_t rc = SurfaceComposerClient::setDisplayContentSamplingEnabled(
             token, enable, componentMask, maxFrames);
+    return rc == OK;
 }
 
 static jobject nativeGetDisplayedContentSample(JNIEnv* env, jclass clazz, jobject tokenObj,
@@ -641,6 +642,27 @@ static jint nativeGetActiveColorMode(JNIEnv* env, jclass, jobject tokenObj) {
     return static_cast<jint>(SurfaceComposerClient::getActiveColorMode(token));
 }
 
+static jintArray nativeGetCompositionDataspaces(JNIEnv* env, jclass) {
+    ui::Dataspace defaultDataspace, wcgDataspace;
+    ui::PixelFormat defaultPixelFormat, wcgPixelFormat;
+    if (SurfaceComposerClient::getCompositionPreference(&defaultDataspace,
+                                                        &defaultPixelFormat,
+                                                        &wcgDataspace,
+                                                        &wcgPixelFormat) != NO_ERROR) {
+        return nullptr;
+    }
+    jintArray array = env->NewIntArray(2);
+    if (array == nullptr) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", nullptr);
+        return nullptr;
+    }
+    jint* arrayValues = env->GetIntArrayElements(array, 0);
+    arrayValues[0] = static_cast<jint>(defaultDataspace);
+    arrayValues[1] = static_cast<jint>(wcgDataspace);
+    env->ReleaseIntArrayElements(array, arrayValues, 0);
+    return array;
+}
+
 static jboolean nativeSetActiveColorMode(JNIEnv* env, jclass,
         jobject tokenObj, jint colorMode) {
     sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
@@ -657,6 +679,10 @@ static void nativeSetDisplayPowerMode(JNIEnv* env, jclass clazz, jobject tokenOb
     android::base::Timer t;
     SurfaceComposerClient::setDisplayPowerMode(token, mode);
     if (t.duration() > 100ms) ALOGD("Excessive delay in setPowerMode()");
+}
+
+static jboolean nativeGetProtectedContentSupport(JNIEnv* env, jclass) {
+    return static_cast<jboolean>(SurfaceComposerClient::getProtectedContentSupport());
 }
 
 static jboolean nativeClearContentFrameStats(JNIEnv* env, jclass clazz, jlong nativeObject) {
@@ -869,14 +895,6 @@ static void nativeSetOverrideScalingMode(JNIEnv* env, jclass clazz, jlong transa
     transaction->setOverrideScalingMode(ctrl, scalingMode);
 }
 
-static void nativeDestroyInTransaction(JNIEnv* env, jclass clazz,
-                                       jlong transactionObj,
-                                       jlong nativeObject) {
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    auto ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
-    transaction->destroySurface(ctrl);
-}
-
 static jobject nativeGetHandle(JNIEnv* env, jclass clazz, jlong nativeObject) {
     auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     return javaObjectForIBinder(env, ctrl->getHandle());
@@ -916,6 +934,17 @@ static jlong nativeReadFromParcel(JNIEnv* env, jclass clazz, jobject parcelObj) 
     return reinterpret_cast<jlong>(surface.get());
 }
 
+static jlong nativeCopyFromSurfaceControl(JNIEnv* env, jclass clazz, jlong surfaceControlNativeObj) {
+    sp<SurfaceControl> surface(reinterpret_cast<SurfaceControl *>(surfaceControlNativeObj));
+    if (surface == nullptr) {
+        return 0;
+    }
+
+    sp<SurfaceControl> newSurface = new SurfaceControl(surface);
+    newSurface->incStrong((void *)nativeCreate);
+    return reinterpret_cast<jlong>(newSurface.get());
+}
+
 static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
         jlong nativeObject, jobject parcelObj) {
     Parcel* parcel = parcelForJavaObject(env, parcelObj);
@@ -924,7 +953,9 @@ static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
         return;
     }
     SurfaceControl* const self = reinterpret_cast<SurfaceControl *>(nativeObject);
-    self->writeToParcel(parcel);
+    if (self != nullptr) {
+        self->writeToParcel(parcel);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -934,6 +965,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeCreate },
     {"nativeReadFromParcel", "(Landroid/os/Parcel;)J",
             (void*)nativeReadFromParcel },
+    {"nativeCopyFromSurfaceControl", "(J)J" ,
+            (void*)nativeCopyFromSurfaceControl },
     {"nativeWriteToParcel", "(JLandroid/os/Parcel;)V",
             (void*)nativeWriteToParcel },
     {"nativeRelease", "(J)V",
@@ -1008,6 +1041,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetActiveColorMode},
     {"nativeSetActiveColorMode", "(Landroid/os/IBinder;I)Z",
             (void*)nativeSetActiveColorMode},
+    {"nativeGetCompositionDataspaces", "()[I",
+            (void*)nativeGetCompositionDataspaces},
     {"nativeGetHdrCapabilities", "(Landroid/os/IBinder;)Landroid/view/Display$HdrCapabilities;",
             (void*)nativeGetHdrCapabilities },
     {"nativeClearContentFrameStats", "(J)Z",
@@ -1020,6 +1055,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetAnimationFrameStats },
     {"nativeSetDisplayPowerMode", "(Landroid/os/IBinder;I)V",
             (void*)nativeSetDisplayPowerMode },
+    {"nativeGetProtectedContentSupport", "()Z",
+            (void*)nativeGetProtectedContentSupport },
     {"nativeDeferTransactionUntil", "(JJLandroid/os/IBinder;J)V",
             (void*)nativeDeferTransactionUntil },
     {"nativeDeferTransactionUntilSurface", "(JJJJ)V",
@@ -1032,8 +1069,6 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSeverChildren } ,
     {"nativeSetOverrideScalingMode", "(JJI)V",
             (void*)nativeSetOverrideScalingMode },
-    {"nativeDestroy", "(JJ)V",
-            (void*)nativeDestroyInTransaction },
     {"nativeGetHandle", "(J)Landroid/os/IBinder;",
             (void*)nativeGetHandle },
     {"nativeScreenshot", "(Landroid/os/IBinder;Landroid/graphics/Rect;IIZI)Landroid/graphics/GraphicBuffer;",

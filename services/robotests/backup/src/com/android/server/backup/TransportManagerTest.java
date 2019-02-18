@@ -41,6 +41,7 @@ import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Stream.concat;
 
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.backup.BackupManager;
 import android.app.backup.BackupTransport;
 import android.content.ComponentName;
@@ -48,6 +49,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
+import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
 
 import com.android.server.backup.testing.TransportData;
@@ -56,7 +58,9 @@ import com.android.server.backup.transport.OnTransportRegisteredListener;
 import com.android.server.backup.transport.TransportClient;
 import com.android.server.backup.transport.TransportClientManager;
 import com.android.server.backup.transport.TransportNotRegisteredException;
+import com.android.server.testing.shadows.ShadowApplicationPackageManager;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -64,6 +68,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowPackageManager;
 
 import java.util.ArrayList;
@@ -73,6 +78,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(shadows = {ShadowApplicationPackageManager.class})
 @Presubmit
 public class TransportManagerTest {
     private static final String PACKAGE_A = "some.package.a";
@@ -84,18 +90,26 @@ public class TransportManagerTest {
     private TransportData mTransportA2;
     private TransportData mTransportB1;
     private ShadowPackageManager mShadowPackageManager;
+    private @UserIdInt int mUserId;
     private Context mContext;
 
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
 
+        mUserId = UserHandle.USER_SYSTEM;
         mContext = RuntimeEnvironment.application;
         mShadowPackageManager = shadowOf(mContext.getPackageManager());
 
         mTransportA1 = genericTransport(PACKAGE_A, "TransportFoo");
         mTransportA2 = genericTransport(PACKAGE_A, "TransportBar");
         mTransportB1 = genericTransport(PACKAGE_B, "TransportBaz");
+    }
+
+    /** Reset shadow state. */
+    @After
+    public void tearDown() throws Exception {
+        ShadowApplicationPackageManager.reset();
     }
 
     @Test
@@ -662,7 +676,8 @@ public class TransportManagerTest {
         packageInfo.packageName = packageName;
         packageInfo.applicationInfo = new ApplicationInfo();
         packageInfo.applicationInfo.privateFlags = flags;
-        mShadowPackageManager.addPackage(packageInfo);
+        mShadowPackageManager.installPackage(packageInfo);
+        ShadowApplicationPackageManager.addInstalledPackage(packageName, packageInfo);
     }
 
     private TransportManager createTransportManagerWithRegisteredTransports(
@@ -684,6 +699,7 @@ public class TransportManagerTest {
             @Nullable TransportData selectedTransport, TransportData... transports) {
         TransportManager transportManager =
                 new TransportManager(
+                        mUserId,
                         mContext,
                         merge(selectedTransport, transports)
                                 .stream()

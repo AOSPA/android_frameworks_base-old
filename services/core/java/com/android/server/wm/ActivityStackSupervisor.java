@@ -51,6 +51,7 @@ import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
+import static com.android.server.wm.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_MOVING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
@@ -130,6 +131,7 @@ import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+import android.util.BoostFramework;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -176,6 +178,12 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     static final int RESUME_TOP_ACTIVITY_MSG = FIRST_SUPERVISOR_STACK_MSG + 2;
     static final int SLEEP_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 3;
     static final int LAUNCH_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 4;
+
+    public static boolean mPerfSendTapHint = false;
+    public static boolean mIsPerfBoostAcquired = false;
+    public static int mPerfHandle = -1;
+    public BoostFramework mPerfBoost = null;
+
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
     static final int REPORT_MULTI_WINDOW_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 14;
     static final int REPORT_PIP_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 15;
@@ -239,7 +247,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     private static final int MAX_TASK_IDS_PER_USER = UserHandle.PER_USER_RANGE;
 
     final ActivityTaskManagerService mService;
-    RootActivityContainer mRootActivityContainer;
+    public RootActivityContainer mRootActivityContainer;
 
     /** The historial list of recent tasks including inactive tasks */
     RecentTasks mRecentTasks;
@@ -326,9 +334,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
      * At that point the system is allowed to actually sleep.
      */
     PowerManager.WakeLock mGoingToSleep;
-
-    /** Used to keep resumeTopActivityUncheckedLocked() from being entered recursively */
-    boolean inResumeTopActivity;
 
     /**
      * Temporary rect used during docked stack resize calculation so we don't need to create a new
@@ -691,7 +696,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    ActivityInfo resolveActivity(Intent intent, String resolvedType, int startFlags,
+    public ActivityInfo resolveActivity(Intent intent, String resolvedType, int startFlags,
             ProfilerInfo profilerInfo, int userId, int filterCallingUid) {
         final ResolveInfo rInfo = resolveIntent(intent, resolvedType, userId, 0, filterCallingUid);
         return resolveActivity(intent, rInfo, startFlags, profilerInfo);
@@ -947,6 +952,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         final WindowProcessController wpc =
                 mService.getProcessController(r.processName, r.info.applicationInfo.uid);
 
+        boolean knownToBeDead = false;
         if (wpc != null && wpc.hasThread()) {
             try {
                 if ((r.info.flags & ActivityInfo.FLAG_MULTIPROCESS) == 0
@@ -965,6 +971,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
             // If a dead object exception was thrown -- fall through to
             // restart the application.
+            knownToBeDead = true;
         }
 
         // Suppress transition until the new activity becomes ready, otherwise the keyguard can
@@ -978,7 +985,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         // ATMS lock held.
         final Message msg = PooledLambda.obtainMessage(
                 ActivityManagerInternal::startProcess, mService.mAmInternal, r.processName,
-                r.info.applicationInfo, true, "activity", r.intent.getComponent());
+                r.info.applicationInfo, knownToBeDead, "activity", r.intent.getComponent());
         mService.mH.sendMessage(msg);
     }
 
@@ -1364,6 +1371,16 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     void findTaskToMoveToFront(TaskRecord task, int flags, ActivityOptions options, String reason,
             boolean forceNonResizeable) {
         ActivityStack currentStack = task.getStack();
+
+        ActivityStack focusedStack = mRootActivityContainer.getTopDisplayFocusedStack();
+        ActivityRecord top_activity = focusedStack != null ? focusedStack.getTopActivity() : null;
+
+        //top_activity = task.stack.topRunningActivityLocked();
+        /* App is launching from recent apps and it's a new process */
+        if((top_activity != null) && (top_activity.getState() == DESTROYED)) {
+            acquireAppLaunchPerfLock(top_activity);
+        }
+
         if (currentStack == null) {
             Slog.e(TAG, "findTaskToMoveToFront: can't move task="
                     + task + " to front. Stack is null");
@@ -1672,8 +1689,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void resizePinnedStackLocked(Rect pinnedBounds, Rect tempPinnedTaskBounds) {
-        // TODO(multi-display): Pinned stack display should be passed in.
-        final PinnedActivityStack stack =
+        // TODO(multi-display): The display containing the stack should be passed in.
+        final ActivityStack stack =
                 mRootActivityContainer.getDefaultDisplay().getPinnedStack();
         if (stack == null) {
             Slog.w(TAG, "resizePinnedStackLocked: pinned stack not found");
@@ -1684,7 +1701,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         // another AM call that is holding the AMS lock. In such a case, the pinnedBounds may be
         // incorrect if AMS.resizeStackWithBoundsFromWindowManager() is already called while waiting
         // for the AMS lock to be freed. So check and make sure these bounds are still good.
-        final PinnedStackWindowController stackController = stack.getWindowContainerController();
+        final TaskStack stackController = stack.getTaskStack();
         if (stackController.pinnedStackResizeDisallowed()) {
             return;
         }
@@ -1728,15 +1745,14 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
              * invisible as well and added to the stopping list.  After which we process the
              * stopping list by handling the idle.
              */
-            final PinnedActivityStack pinnedStack = (PinnedActivityStack) stack;
-            pinnedStack.mForceHidden = true;
-            pinnedStack.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
-            pinnedStack.mForceHidden = false;
+            stack.mForceHidden = true;
+            stack.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
+            stack.mForceHidden = false;
             activityIdleInternalLocked(null, false /* fromTimeout */,
                     true /* processPausingActivites */, null /* configuration */);
 
             // Move all the tasks to the bottom of the fullscreen stack
-            moveTasksToFullscreenStackLocked(pinnedStack, !ON_TOP);
+            moveTasksToFullscreenStackLocked(stack, !ON_TOP);
         } else {
             for (int i = tasks.size() - 1; i >= 0; i--) {
                 removeTaskByIdLocked(tasks.get(i).taskId, true /* killProcess */,
@@ -2006,6 +2022,30 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
         return timedout;
     }
+
+    void acquireAppLaunchPerfLock(ActivityRecord r) {
+       /* Acquire perf lock during new app launch */
+       if (mPerfBoost == null) {
+           mPerfBoost = new BoostFramework();
+       }
+       if (mPerfBoost != null) {
+           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
+           mPerfSendTapHint = true;
+           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
+
+           if(mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) == BoostFramework.WorkloadType.GAME)
+           {
+               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+           } else {
+               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+           }
+           if (mPerfHandle > 0)
+               mIsPerfBoostAcquired = true;
+           // Start IOP
+           mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+               r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
+       }
+   }
 
     void comeOutOfSleepIfNeededLocked() {
         removeSleepTimeouts();
@@ -2640,6 +2680,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 try {
                     mService.moveTaskToFrontLocked(task.taskId, 0, options,
                             true /* fromRecents */);
+                    // Apply options to prevent pendingOptions be taken by client to make sure
+                    // the override pending app transition will be applied immediately.
+                    targetActivity.applyOptionsLocked();
                 } finally {
                     mActivityMetricsLogger.notifyActivityLaunched(START_TASK_TO_FRONT,
                             targetActivity);

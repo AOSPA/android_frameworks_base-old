@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
 import static android.app.Activity.RESULT_CANCELED;
 import static android.app.ActivityManager.START_ABORTED;
 import static android.app.ActivityManager.START_CANCELED;
@@ -50,6 +51,7 @@ import static android.content.pm.ActivityInfo.LAUNCH_MULTIPLE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
@@ -108,6 +110,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.service.voice.IVoiceInteractionSession;
 import android.text.TextUtils;
+import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.Pools.SynchronizedPool;
 import android.util.Slog;
@@ -187,6 +190,8 @@ class ActivityStarter {
 
     private IVoiceInteractionSession mVoiceSession;
     private IVoiceInteractor mVoiceInteractor;
+
+    public BoostFramework mPerf = null;
 
     // Last activity record we attempted to start
     private final ActivityRecord[] mLastStartActivityRecord = new ActivityRecord[1];
@@ -292,6 +297,8 @@ class ActivityStarter {
     private static class Request {
         private static final int DEFAULT_CALLING_UID = -1;
         private static final int DEFAULT_CALLING_PID = 0;
+        static final int DEFAULT_REAL_CALLING_UID = -1;
+        static final int DEFAULT_REAL_CALLING_PID = 0;
 
         IApplicationThread caller;
         Intent intent;
@@ -304,11 +311,11 @@ class ActivityStarter {
         IBinder resultTo;
         String resultWho;
         int requestCode;
-        int callingPid = DEFAULT_CALLING_UID;
-        int callingUid = DEFAULT_CALLING_PID;
+        int callingPid = DEFAULT_CALLING_PID;
+        int callingUid = DEFAULT_CALLING_UID;
         String callingPackage;
-        int realCallingPid;
-        int realCallingUid;
+        int realCallingPid = DEFAULT_REAL_CALLING_PID;
+        int realCallingUid = DEFAULT_REAL_CALLING_UID;
         int startFlags;
         SafeActivityOptions activityOptions;
         boolean ignoreTargetSecurity;
@@ -363,8 +370,8 @@ class ActivityStarter {
             callingPid = DEFAULT_CALLING_PID;
             callingUid = DEFAULT_CALLING_UID;
             callingPackage = null;
-            realCallingPid = 0;
-            realCallingUid = 0;
+            realCallingPid = DEFAULT_REAL_CALLING_PID;
+            realCallingUid = DEFAULT_REAL_CALLING_UID;
             startFlags = 0;
             activityOptions = null;
             ignoreTargetSecurity = false;
@@ -433,6 +440,7 @@ class ActivityStarter {
         mSupervisor = supervisor;
         mInterceptor = interceptor;
         reset(true);
+        mPerf = new BoostFramework();
     }
 
     /**
@@ -500,7 +508,8 @@ class ActivityStarter {
             // for transactional diffs and preprocessing.
             if (mRequest.mayWait) {
                 return startActivityMayWait(mRequest.caller, mRequest.callingUid,
-                        mRequest.callingPackage, mRequest.intent, mRequest.resolvedType,
+                        mRequest.callingPackage, mRequest.realCallingPid, mRequest.realCallingUid,
+                        mRequest.intent, mRequest.resolvedType,
                         mRequest.voiceSession, mRequest.voiceInteractor, mRequest.resultTo,
                         mRequest.resultWho, mRequest.requestCode, mRequest.startFlags,
                         mRequest.profilerInfo, mRequest.waitResult, mRequest.globalConfig,
@@ -745,8 +754,9 @@ class ActivityStarter {
         // not sure if we need to create START_ABORTED_BACKGROUND so for now piggybacking
         // on START_ABORTED
         if (!abort) {
-            abort |= shouldAbortBackgroundActivityStart(callingUid, callingPackage, realCallingUid,
-                    callerApp, originatingPendingIntent, allowBackgroundActivityStart);
+            abort |= shouldAbortBackgroundActivityStart(callingUid, callingPid, callingPackage,
+                    realCallingUid, callerApp, originatingPendingIntent,
+                    allowBackgroundActivityStart, intent);
         }
 
         // Merge the two options bundles, while realCallerOptions takes precedence.
@@ -893,9 +903,10 @@ class ActivityStarter {
                 true /* doResume */, checkedOptions, inTask, outActivity);
     }
 
-    private boolean shouldAbortBackgroundActivityStart(int callingUid, final String callingPackage,
-            int realCallingUid, WindowProcessController callerApp,
-            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
+    private boolean shouldAbortBackgroundActivityStart(int callingUid, int callingPid,
+            final String callingPackage, int realCallingUid, WindowProcessController callerApp,
+            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart,
+            Intent intent) {
         if (mService.isBackgroundActivityStartsEnabled()) {
             return false;
         }
@@ -908,19 +919,24 @@ class ActivityStarter {
             return false;
         }
         // don't abort if the callingUid is in the foreground or is a persistent system process
-        if (isUidForeground(callingUid) || isUidPersistentSystemProcess(callingUid)) {
+        final boolean isCallingUidForeground = isUidForeground(callingUid);
+        final boolean isCallingUidPersistentSystemProcess = isUidPersistentSystemProcess(
+                callingUid);
+        if (isCallingUidForeground || isCallingUidPersistentSystemProcess) {
             return false;
         }
         // take realCallingUid into consideration
+        final boolean isRealCallingUidForeground = isUidForeground(realCallingUid);
+        final boolean isRealCallingUidPersistentSystemProcess = isUidPersistentSystemProcess(
+                realCallingUid);
         if (realCallingUid != callingUid) {
             // don't abort if the realCallingUid is in the foreground and callingUid isn't
-            if (isUidForeground(realCallingUid)) {
+            if (isRealCallingUidForeground) {
                 return false;
             }
             // if the realCallingUid is a persistent system process, abort if the IntentSender
             // wasn't whitelisted to start an activity
-            if (isUidPersistentSystemProcess(realCallingUid) && (originatingPendingIntent != null)
-                    && allowBackgroundActivityStart) {
+            if (isRealCallingUidPersistentSystemProcess && allowBackgroundActivityStart) {
                 return false;
             }
         }
@@ -928,11 +944,28 @@ class ActivityStarter {
         if (callerApp != null && callerApp.areBackgroundActivityStartsAllowed()) {
             return false;
         }
+        // don't abort if the callingUid has START_ACTIVITIES_FROM_BACKGROUND permission
+        if (mService.checkPermission(START_ACTIVITIES_FROM_BACKGROUND, callingPid, callingUid)
+                == PERMISSION_GRANTED) {
+            return false;
+        }
         // don't abort if the caller has the same uid as the recents component
         if (mSupervisor.mRecentTasks.isCallerRecents(callingUid)) {
             return false;
         }
         // anything that has fallen through will currently be aborted
+        Slog.w(TAG, "Blocking background activity start [callingPackage: " + callingPackage
+                + "; callingUid: " + callingUid
+                + "; isCallingUidForeground: " + isCallingUidForeground
+                + "; isCallingUidPersistentSystemProcess: " + isCallingUidPersistentSystemProcess
+                + "; realCallingUid: " + realCallingUid
+                + "; isRealCallingUidForeground: " + isRealCallingUidForeground
+                + "; isRealCallingUidPersistentSystemProcess: "
+                        + isRealCallingUidPersistentSystemProcess
+                + "; originatingPendingIntent: " + originatingPendingIntent
+                + "; isBgStartWhitelisted: " + allowBackgroundActivityStart
+                + "; intent: " + intent
+                + "]");
         // TODO: remove this toast after feature development is done
         mService.mUiHandler.post(() -> {
             Toast.makeText(mService.mContext,
@@ -945,7 +978,7 @@ class ActivityStarter {
     /** Returns true if uid has a visible window or its process is in a top state. */
     private boolean isUidForeground(int uid) {
         return (mService.getUidStateLocked(uid) == ActivityManager.PROCESS_STATE_TOP)
-            || mService.mWindowManager.isAnyWindowVisibleForUid(uid);
+            || mService.mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(uid);
     }
 
     /** Returns true if uid is in a persistent state. */
@@ -968,18 +1001,19 @@ class ActivityStarter {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "logActivityStart");
             final int callingUidProcState = mService.getUidStateLocked(callingUid);
             final boolean callingUidHasAnyVisibleWindow =
-                    mService.mWindowManager.isAnyWindowVisibleForUid(callingUid);
+                    mService.mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(callingUid);
             final int realCallingUidProcState = (callingUid == realCallingUid)
                     ? callingUidProcState
                     : mService.getUidStateLocked(realCallingUid);
             final boolean realCallingUidHasAnyVisibleWindow = (callingUid == realCallingUid)
                     ? callingUidHasAnyVisibleWindow
-                    : mService.mWindowManager.isAnyWindowVisibleForUid(realCallingUid);
+                    : mService.mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(
+                            realCallingUid);
             final String targetPackage = (r != null) ? r.packageName : null;
             final int targetUid = (r!= null) ? ((r.appInfo != null) ? r.appInfo.uid : -1) : -1;
             final int targetUidProcState = mService.getUidStateLocked(targetUid);
             final boolean targetUidHasAnyVisibleWindow = (targetUid != -1)
-                    ? mService.mWindowManager.isAnyWindowVisibleForUid(targetUid)
+                    ? mService.mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(targetUid)
                     : false;
             final String targetWhitelistTag = (targetUid != -1)
                     ? mService.getPendingTempWhitelistTagForUidLocked(targetUid)
@@ -1065,10 +1099,10 @@ class ActivityStarter {
     }
 
     private int startActivityMayWait(IApplicationThread caller, int callingUid,
-            String callingPackage, Intent intent, String resolvedType,
-            IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
-            IBinder resultTo, String resultWho, int requestCode, int startFlags,
-            ProfilerInfo profilerInfo, WaitResult outResult,
+            String callingPackage, int requestRealCallingPid, int requestRealCallingUid,
+            Intent intent, String resolvedType, IVoiceInteractionSession voiceSession,
+            IVoiceInteractor voiceInteractor, IBinder resultTo, String resultWho, int requestCode,
+            int startFlags, ProfilerInfo profilerInfo, WaitResult outResult,
             Configuration globalConfig, SafeActivityOptions options, boolean ignoreTargetSecurity,
             int userId, TaskRecord inTask, String reason,
             boolean allowPendingRemoteAnimationRegistryLookup,
@@ -1080,8 +1114,12 @@ class ActivityStarter {
         mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(intent);
         boolean componentSpecified = intent.getComponent() != null;
 
-        final int realCallingPid = Binder.getCallingPid();
-        final int realCallingUid = Binder.getCallingUid();
+        final int realCallingPid = requestRealCallingPid != Request.DEFAULT_REAL_CALLING_PID
+                ? requestRealCallingPid
+                : Binder.getCallingPid();
+        final int realCallingUid = requestRealCallingUid != Request.DEFAULT_REAL_CALLING_UID
+                ? requestRealCallingUid
+                : Binder.getCallingUid();
 
         int callingPid;
         if (callingUid >= 0) {
@@ -1551,6 +1589,12 @@ class ActivityStarter {
         if (mStartActivity.resultTo == null && mInTask == null && !mAddingToTask
                 && (mLaunchFlags & FLAG_ACTIVITY_NEW_TASK) != 0) {
             newTask = true;
+            String packageName= mService.mContext.getPackageName();
+            if (mPerf != null) {
+                mStartActivity.perfActivityBoostHandler =
+                    mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                        packageName, -1, BoostFramework.Launch.BOOST_V1);
+            }
             result = setTaskFromReuseOrCreateNewTask(taskToAffiliate);
         } else if (mSourceRecord != null) {
             result = setTaskFromSourceRecord();
@@ -1595,7 +1639,7 @@ class ActivityStarter {
                 // Also, we don't want to resume activities in a task that currently has an overlay
                 // as the starting activity just needs to be in the visible paused state until the
                 // over is removed.
-                mTargetStack.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
+                mTargetStack.ensureActivitiesVisibleLocked(mStartActivity, 0, !PRESERVE_WINDOWS);
                 // Go ahead and tell window manager to execute app transition for this activity
                 // since the app transition will not be triggered through the resume channel.
                 mTargetStack.getDisplay().mDisplayContent.executeAppTransition();
@@ -2225,6 +2269,12 @@ class ActivityStarter {
                 mSourceRecord.getTaskRecord())) {
             Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
             return START_RETURN_LOCK_TASK_MODE_VIOLATION;
+        }
+        String packageName= mService.mContext.getPackageName();
+        if (mPerf != null) {
+            mStartActivity.perfActivityBoostHandler =
+                mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                    packageName, -1, BoostFramework.Launch.BOOST_V1);
         }
 
         final TaskRecord sourceTask = mSourceRecord.getTaskRecord();

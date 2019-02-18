@@ -306,9 +306,18 @@ public class GraphicsEnvironment {
                                                 String packageName,
                                                 String paths,
                                                 String devOptIn) {
-        // Check for temporary rules if debuggable or root
-        if (!isDebuggable(context) && !(getCanLoadSystemLibraries() == 1)) {
-            Log.v(TAG, "Skipping loading temporary rules file");
+        /**
+         * We only want to load a temp rules file for:
+         *  - apps that are marked 'debuggable' in their manifest
+         *  - devices that are running a userdebug build (ro.debuggable) or can inject libraries for
+         *    debugging (PR_SET_DUMPABLE).
+         */
+        boolean appIsDebuggable = isDebuggable(context);
+        boolean deviceIsDebuggable = getCanLoadSystemLibraries() == 1;
+        if (!(appIsDebuggable || deviceIsDebuggable)) {
+            Log.v(TAG, "Skipping loading temporary rules file: "
+                    + "appIsDebuggable = " + appIsDebuggable + ", "
+                    + "adbRootEnabled = " + deviceIsDebuggable);
             return false;
         }
 
@@ -480,16 +489,36 @@ public class GraphicsEnvironment {
             return;
         }
 
-        String applicationPackageName = context.getPackageName();
-        String devOptInApplicationName = coreSettings.getString(
-                Settings.Global.GUP_DEV_OPT_IN_APPS);
-        boolean devOptIn = applicationPackageName.equals(devOptInApplicationName);
-        boolean whitelisted = onWhitelist(context, driverPackageName, ai.packageName);
-        if (!devOptIn && !whitelisted) {
+        // GUP_DEV_ALL_APPS
+        // 0: Default (Invalid values fallback to default as well)
+        // 1: All apps use Game Update Package
+        // 2: All apps use system graphics driver
+        int gupDevAllApps = coreSettings.getInt(Settings.Global.GUP_DEV_ALL_APPS, 0);
+        if (gupDevAllApps == 2) {
             if (DEBUG) {
-                Log.w(TAG, applicationPackageName + " is not on the whitelist.");
+                Log.w(TAG, "GUP is turned off on this device");
             }
             return;
+        }
+
+        if (gupDevAllApps != 1) {
+            // GUP_DEV_OPT_OUT_APPS has higher priority than GUP_DEV_OPT_IN_APPS
+            if (getGlobalSettingsString(coreSettings, Settings.Global.GUP_DEV_OPT_OUT_APPS)
+                            .contains(ai.packageName)) {
+                if (DEBUG) {
+                    Log.w(TAG, ai.packageName + " opts out from GUP.");
+                }
+                return;
+            }
+
+            if (!getGlobalSettingsString(coreSettings, Settings.Global.GUP_DEV_OPT_IN_APPS)
+                            .contains(ai.packageName)
+                    && !onWhitelist(context, driverPackageName, ai.packageName)) {
+                if (DEBUG) {
+                    Log.w(TAG, ai.packageName + " is not on the whitelist.");
+                }
+                return;
+            }
         }
 
         ApplicationInfo driverInfo;

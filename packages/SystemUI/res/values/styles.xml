@@ -64,46 +64,14 @@
         <item name="hybridNotificationTextStyle">@style/hybrid_notification_text</item>
     </style>
 
-    <style name="HybridNotification.Ambient">
-        <item name="hybridNotificationStyle">@style/hybrid_notification_ambient</item>
-        <item name="hybridNotificationTitleStyle">@style/hybrid_notification_title_ambient</item>
-        <item name="hybridNotificationTextStyle">@style/hybrid_notification_text_ambient</item>
-    </style>
-
-    <style name="hybrid_notification_ambient">
-        <item name="android:paddingStart">@*android:dimen/notification_extra_margin_ambient</item>
-        <item name="android:paddingEnd">@*android:dimen/notification_extra_margin_ambient</item>
-        <item name="android:orientation">vertical</item>
-    </style>
-
     <style name="hybrid_notification">
         <item name="android:paddingStart">@*android:dimen/notification_content_margin_start</item>
         <item name="android:paddingEnd">12dp</item>
     </style>
 
-    <style name="hybrid_notification_title_ambient">
-        <item name="android:layout_marginTop">@*android:dimen/notification_header_margin_top_ambient</item>
-        <item name="android:paddingStart">@*android:dimen/notification_content_margin_start</item>
-        <item name="android:paddingEnd">@*android:dimen/notification_content_margin_end</item>
-        <item name="android:textAppearance">@*android:style/Notification.Header.Ambient</item>
-        <item name="android:layout_gravity">top|center_horizontal</item>
-        <item name="android:textSize">@*android:dimen/notification_ambient_title_text_size</item>
-        <item name="android:textColor">#ffffffff</item>
-    </style>
-
     <style name="hybrid_notification_title">
         <item name="android:paddingEnd">4dp</item>
         <item name="android:textAppearance">@*android:style/TextAppearance.Material.Notification.Title</item>
-    </style>
-
-    <style name="hybrid_notification_text_ambient">
-        <item name="android:paddingStart">@*android:dimen/notification_content_margin_start</item>
-        <item name="android:paddingEnd">@*android:dimen/notification_content_margin_end</item>
-        <item name="android:textSize">@*android:dimen/notification_ambient_text_size</item>
-        <item name="android:textColor">#eeffffff</item>
-        <item name="android:gravity">top|center_horizontal</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:maxLines">3</item>
     </style>
 
     <style name="hybrid_notification_text"
@@ -125,7 +93,7 @@
 
     <style name="TextAppearance.StatusBar.Clock" parent="@*android:style/TextAppearance.StatusBar.Icon">
         <item name="android:textSize">@dimen/status_bar_clock_size</item>
-        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
         <item name="android:textColor">@color/status_bar_clock_color</item>
     </style>
 
@@ -263,6 +231,10 @@
     <style name="TextAppearance.AppOpsDialog.Item">
         <item name="android:textSize">@dimen/ongoing_appops_dialog_item_size</item>
         <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+    </style>
+
+    <style name="TextAppearance.DeviceManagementDialog.Title" parent="@android:style/TextAppearance.DeviceDefault.DialogWindowTitle">
+        <item name="android:gravity">center</item>
     </style>
 
     <style name="BaseBrightnessDialogContainer" parent="@style/Theme.SystemUI">

@@ -49,6 +49,7 @@ cc_library_shared {
         "sharedmem.cpp",
         "storage_manager.cpp",
         "surface_texture.cpp",
+        "surface_control.cpp",
         "system_fonts.cpp",
         "trace.cpp",
     ],
@@ -83,6 +84,10 @@ cc_library_shared {
     include_dirs: ["bionic/libc/dns/include"],
 
     version_script: "libandroid.map.txt",
+    stubs: {
+        symbol_file: "libandroid.map.txt",
+        versions: ["29"],
+    },
 }
 
 // Network library.

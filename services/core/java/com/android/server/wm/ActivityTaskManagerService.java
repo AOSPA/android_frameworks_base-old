@@ -82,13 +82,10 @@ import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.HEA
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.HOME_PROC;
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.LAUNCHING_ACTIVITY;
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.PREVIOUS_PROC;
-import static com.android.server.am.ActivityManagerServiceDumpProcessesProto
-        .PREVIOUS_PROC_VISIBLE_TIME_MS;
+import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.PREVIOUS_PROC_VISIBLE_TIME_MS;
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.SCREEN_COMPAT_PACKAGES;
-import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.ScreenCompatPackage
-        .MODE;
-import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.ScreenCompatPackage
-        .PACKAGE;
+import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.ScreenCompatPackage.MODE;
+import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.ScreenCompatPackage.PACKAGE;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
 import static com.android.server.wm.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
@@ -210,6 +207,7 @@ import android.os.storage.StorageManager;
 import android.provider.Settings;
 import android.service.voice.IVoiceInteractionSession;
 import android.service.voice.VoiceInteractionManagerInternal;
+import android.sysprop.DisplayProperties;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.text.format.Time;
@@ -245,7 +243,6 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
-import com.android.server.AppOpsService;
 import com.android.server.AttributeCache;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
@@ -261,6 +258,7 @@ import com.android.server.am.EventLogTags;
 import com.android.server.am.PendingIntentController;
 import com.android.server.am.PendingIntentRecord;
 import com.android.server.am.UserState;
+import com.android.server.appop.AppOpsService;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.pm.UserManagerService;
 import com.android.server.uri.UriGrantsManagerInternal;
@@ -351,7 +349,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     /* Global service lock used by the package the owns this service. */
     final WindowManagerGlobalLock mGlobalLock = new WindowManagerGlobalLock();
-    ActivityStackSupervisor mStackSupervisor;
+    public ActivityStackSupervisor mStackSupervisor;
     RootActivityContainer mRootActivityContainer;
     WindowManagerService mWindowManager;
     private UserManagerService mUserManager;
@@ -639,7 +637,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
-    ActivityTaskManagerService(Context context) {
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public ActivityTaskManagerService(Context context) {
         mContext = context;
         mFactoryTest = FactoryTest.getMode();
         mSystemThread = ActivityThread.currentActivityThread();
@@ -693,7 +692,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final boolean isPc = mContext.getPackageManager().hasSystemFeature(FEATURE_PC);
 
         // Transfer any global setting for forcing RTL layout, into a System Property
-        SystemProperties.set(DEVELOPMENT_FORCE_RTL, forceRtl ? "1":"0");
+        DisplayProperties.debug_force_rtl(forceRtl);
 
         final Configuration configuration = new Configuration();
         Settings.System.getConfiguration(resolver, configuration);
@@ -958,9 +957,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         enforceNotIsolatedCaller(reason);
         userId = handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(), userId, reason);
         // TODO: Switch to user app stacks here.
-        return getActivityStartController().startActivities(caller, -1, callingPackage, intents,
-                resolvedTypes, resultTo, SafeActivityOptions.fromBundle(bOptions), userId, reason,
-                null /* originatingPendingIntent */, false /* allowBackgroundActivityStart */);
+        return getActivityStartController().startActivities(caller, -1, 0, -1, callingPackage,
+                intents, resolvedTypes, resultTo, SafeActivityOptions.fromBundle(bOptions), userId,
+                reason, null /* originatingPendingIntent */,
+                false /* allowBackgroundActivityStart */);
     }
 
     @Override
@@ -2406,7 +2406,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         try {
             synchronized (mGlobalLock) {
                 if (animate) {
-                    final PinnedActivityStack stack = mRootActivityContainer.getStack(stackId);
+                    final ActivityStack stack = mRootActivityContainer.getStack(stackId);
                     if (stack == null) {
                         Slog.w(TAG, "resizeStack: stackId " + stackId + " not found.");
                         return;
@@ -3711,7 +3711,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                final PinnedActivityStack stack =
+                final ActivityStack stack =
                         mRootActivityContainer.getDefaultDisplay().getPinnedStack();
                 if (stack == null) {
                     Slog.w(TAG, "dismissPip: pinned stack not found.");
@@ -3833,9 +3833,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         // If we are animating to fullscreen then we have already dispatched the PIP mode
         // changed, so we should reflect that check here as well.
-        final PinnedActivityStack stack = r.getActivityStack();
-        final PinnedStackWindowController windowController = stack.getWindowContainerController();
-        return !windowController.mContainer.isAnimatingBoundsToFullscreen();
+        final TaskStack taskStack = r.getActivityStack().getTaskStack();
+        return !taskStack.isAnimatingBoundsToFullscreen();
     }
 
     @Override
@@ -3869,7 +3868,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                                 r.pictureInPictureArgs.getSourceRectHint());
                         mRootActivityContainer.moveActivityToPinnedStack(
                                 r, sourceBounds, aspectRatio, "enterPictureInPictureMode");
-                        final PinnedActivityStack stack = r.getActivityStack();
+                        final ActivityStack stack = r.getActivityStack();
                         stack.setPictureInPictureAspectRatio(aspectRatio);
                         stack.setPictureInPictureActions(actions);
                         MetricsLoggerWrapper.logPictureInPictureEnter(mContext, r.appInfo.uid,
@@ -3913,7 +3912,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     // If the activity is already in picture-in-picture, update the pinned stack now
                     // if it is not already expanding to fullscreen. Otherwise, the arguments will
                     // be used the next time the activity enters PiP
-                    final PinnedActivityStack stack = r.getActivityStack();
+                    final ActivityStack stack = r.getActivityStack();
                     if (!stack.isAnimatingBoundsToFullscreen()) {
                         stack.setPictureInPictureAspectRatio(
                                 r.pictureInPictureArgs.getAspectRatio());
@@ -4326,6 +4325,22 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             final long origId = Binder.clearCallingIdentity();
             try {
                 r.setShowWhenLocked(showWhenLocked);
+            } finally {
+                Binder.restoreCallingIdentity(origId);
+            }
+        }
+    }
+
+    @Override
+    public void setInheritShowWhenLocked(IBinder token, boolean inheritShowWhenLocked) {
+        synchronized (mGlobalLock) {
+            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            if (r == null) {
+                return;
+            }
+            final long origId = Binder.clearCallingIdentity();
+            try {
+                r.setInheritShowWhenLocked(inheritShowWhenLocked);
             } finally {
                 Binder.restoreCallingIdentity(origId);
             }
@@ -5813,14 +5828,16 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public int startActivitiesInPackage(int uid, String callingPackage, Intent[] intents,
-                String[] resolvedTypes, IBinder resultTo, SafeActivityOptions options, int userId,
-                boolean validateIncomingUser, PendingIntentRecord originatingPendingIntent,
+        public int startActivitiesInPackage(int uid, int realCallingPid, int realCallingUid,
+                String callingPackage, Intent[] intents, String[] resolvedTypes, IBinder resultTo,
+                SafeActivityOptions options, int userId, boolean validateIncomingUser,
+                PendingIntentRecord originatingPendingIntent,
                 boolean allowBackgroundActivityStart) {
             synchronized (mGlobalLock) {
-                return getActivityStartController().startActivitiesInPackage(uid, callingPackage,
-                        intents, resolvedTypes, resultTo, options, userId, validateIncomingUser,
-                        originatingPendingIntent, allowBackgroundActivityStart);
+                return getActivityStartController().startActivitiesInPackage(uid, realCallingPid,
+                        realCallingUid, callingPackage, intents, resolvedTypes, resultTo, options,
+                        userId, validateIncomingUser, originatingPendingIntent,
+                        allowBackgroundActivityStart);
             }
         }
 
@@ -7009,6 +7026,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public ActivityMetricsLaunchObserverRegistry getLaunchObserverRegistry() {
             synchronized (mGlobalLock) {
                 return mStackSupervisor.getActivityMetricsLogger().getLaunchObserverRegistry();
+            }
+        }
+
+        @Override
+        public ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean reducedResolution) {
+            synchronized (mGlobalLock) {
+                return ActivityTaskManagerService.this.getTaskSnapshot(taskId, reducedResolution);
             }
         }
     }

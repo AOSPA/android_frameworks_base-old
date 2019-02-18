@@ -781,6 +781,13 @@ class StorageManagerService extends IStorageManager.Stub
             });
         refreshZramSettings();
 
+        // Schedule zram writeback unless zram is disabled by persist.sys.zram_enabled
+        String zramPropValue = SystemProperties.get(ZRAM_ENABLED_PROPERTY);
+        if (!zramPropValue.equals("0")
+                && mContext.getResources().getBoolean(
+                    com.android.internal.R.bool.config_zramWriteback)) {
+            ZramWriteback.scheduleZramWriteback(mContext);
+        }
         // Toggle isolated-enable system property in response to settings
         mContext.getContentResolver().registerContentObserver(
             Settings.Global.getUriFor(Settings.Global.ISOLATED_STORAGE_REMOTE),
@@ -814,6 +821,12 @@ class StorageManagerService extends IStorageManager.Stub
             // changing the property value. There's no race: we're the
             // sole writer.
             SystemProperties.set(ZRAM_ENABLED_PROPERTY, desiredPropertyValue);
+            // Schedule writeback only if zram is being enabled.
+            if (desiredPropertyValue.equals("1")
+                    && mContext.getResources().getBoolean(
+                        com.android.internal.R.bool.config_zramWriteback)) {
+                ZramWriteback.scheduleZramWriteback(mContext);
+            }
         }
     }
 
@@ -3308,7 +3321,8 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         final int mountMode = mAmInternal.getStorageMountMode(pid, uid);
-        if (mountMode == Zygote.MOUNT_EXTERNAL_FULL) {
+        if (mountMode == Zygote.MOUNT_EXTERNAL_FULL
+                || mountMode == Zygote.MOUNT_EXTERNAL_LEGACY) {
             return path;
         }
 
@@ -3683,12 +3697,13 @@ class StorageManagerService extends IStorageManager.Stub
                 return Zygote.MOUNT_EXTERNAL_FULL;
             } else if (mIAppOpsService.checkOperation(OP_LEGACY_STORAGE, uid,
                     packageName) == MODE_ALLOWED) {
-                // TODO: define a specific "legacy" mount mode
-                return Zygote.MOUNT_EXTERNAL_FULL;
+                return Zygote.MOUNT_EXTERNAL_LEGACY;
             } else if (mIPackageManager.checkUidPermission(INSTALL_PACKAGES, uid)
                     == PERMISSION_GRANTED || mIAppOpsService.checkOperation(
                             OP_REQUEST_INSTALL_PACKAGES, uid, packageName) == MODE_ALLOWED) {
                 return Zygote.MOUNT_EXTERNAL_INSTALLER;
+            } else if (mPmInternal.isInstantApp(packageName, UserHandle.getUserId(uid))) {
+                return Zygote.MOUNT_EXTERNAL_NONE;
             } else {
                 return Zygote.MOUNT_EXTERNAL_WRITE;
             }

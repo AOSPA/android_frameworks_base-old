@@ -31,6 +31,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyInt;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyString;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doCallRealMethod;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
@@ -54,6 +55,7 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerGlobal;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.UserHandle;
 import android.service.voice.IVoiceInteractionSession;
@@ -62,11 +64,11 @@ import android.view.Display;
 import android.view.DisplayInfo;
 
 import com.android.internal.app.IVoiceInteractor;
-import com.android.server.AppOpsService;
 import com.android.server.AttributeCache;
 import com.android.server.ServiceThread;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.PendingIntentController;
+import com.android.server.appop.AppOpsService;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.uri.UriGrantsManagerInternal;
 
@@ -110,22 +112,19 @@ class ActivityTestsBase {
     @Before
     public void setUpBase() {
         mTestInjector.setUp();
+
+        mService = new TestActivityTaskManagerService(mContext);
+        mSupervisor = mService.mStackSupervisor;
+        mRootActivityContainer = mService.mRootActivityContainer;
     }
 
     @After
     public void tearDownBase() {
         mTestInjector.tearDown();
-    }
-
-    ActivityTaskManagerService createActivityTaskManagerService() {
-        mService = new TestActivityTaskManagerService(mContext);
-        mSupervisor = mService.mStackSupervisor;
-        mRootActivityContainer = mService.mRootActivityContainer;
-        return mService;
-    }
-
-    void setupActivityTaskManagerService() {
-        createActivityTaskManagerService();
+        if (mService != null) {
+            mService.setWindowManager(null);
+            mService = null;
+        }
     }
 
     /** Creates a {@link TestActivityDisplay}. */
@@ -144,6 +143,13 @@ class ActivityTestsBase {
         return display;
     }
 
+    /** Creates and adds a {@link TestActivityDisplay} to supervisor at the given position. */
+    TestActivityDisplay addNewActivityDisplayAt(DisplayInfo info, int position) {
+        final TestActivityDisplay display = createNewActivityDisplay(info);
+        mRootActivityContainer.addChild(display, position);
+        return display;
+    }
+
     /**
      * Builder for creating new activities.
      */
@@ -154,6 +160,7 @@ class ActivityTestsBase {
         private final ActivityTaskManagerService mService;
 
         private ComponentName mComponent;
+        private String mTargetActivity;
         private TaskRecord mTaskRecord;
         private int mUid;
         private boolean mCreateTask;
@@ -167,6 +174,11 @@ class ActivityTestsBase {
 
         ActivityBuilder setComponent(ComponentName component) {
             mComponent = component;
+            return this;
+        }
+
+        ActivityBuilder setTargetActivity(String targetActivity) {
+            mTargetActivity = targetActivity;
             return this;
         }
 
@@ -224,6 +236,10 @@ class ActivityTestsBase {
             aInfo.applicationInfo = new ApplicationInfo();
             aInfo.applicationInfo.packageName = mComponent.getPackageName();
             aInfo.applicationInfo.uid = mUid;
+            aInfo.packageName = mComponent.getPackageName();
+            if (mTargetActivity != null) {
+                aInfo.targetActivity = mTargetActivity;
+            }
             aInfo.flags |= mActivityFlags;
             aInfo.launchMode = mLaunchMode;
 
@@ -234,7 +250,13 @@ class ActivityTestsBase {
                     mService.mStackSupervisor, null /* options */, null /* sourceRecord */);
             spyOn(activity);
             activity.mAppWindowToken = mock(AppWindowToken.class);
+            doCallRealMethod().when(activity.mAppWindowToken).getOrientationIgnoreVisibility();
+            doCallRealMethod().when(activity.mAppWindowToken)
+                    .setOrientation(anyInt(), any(), any());
+            doCallRealMethod().when(activity.mAppWindowToken).setOrientation(anyInt());
             doNothing().when(activity).removeWindowContainer();
+            doReturn(mock(Configuration.class)).when(activity.mAppWindowToken)
+                    .getRequestedOverrideConfiguration();
 
             if (mTaskRecord != null) {
                 mTaskRecord.addActivityToTop(activity);
@@ -346,6 +368,7 @@ class ActivityTestsBase {
                 mStack.addTask(task, true, "creating test task");
                 task.setStack(mStack);
                 task.setTask();
+                mStack.getTaskStack().addChild(task.mTask, 0);
             }
 
             task.touchActiveTime();
@@ -365,7 +388,10 @@ class ActivityTestsBase {
                 setTask();
             }
 
-            private void setTask() {
+            void setTask() {
+                Task mockTask = mock(Task.class);
+                mockTask.mTaskRecord = this;
+                doCallRealMethod().when(mockTask).onDescendantOrientationChanged(any(), any());
                 setTask(mock(Task.class));
             }
         }
@@ -400,6 +426,7 @@ class ActivityTestsBase {
             doReturn(mock(IPackageManager.class)).when(this).getPackageManager();
             // allow background activity starts by default
             doReturn(true).when(this).isBackgroundActivityStartsEnabled();
+            doNothing().when(this).updateCpuStats();
         }
 
         void setup(IntentFirewall intentFirewall, PendingIntentController intentController,
@@ -555,6 +582,8 @@ class ActivityTestsBase {
             doNothing().when(this).acquireLaunchWakelock();
             doReturn(mKeyguardController).when(this).getKeyguardController();
 
+            mLaunchingActivity = mock(PowerManager.WakeLock.class);
+
             initialize();
         }
 
@@ -597,7 +626,7 @@ class ActivityTestsBase {
 
         @SuppressWarnings("TypeParameterUnusedInFormals")
         @Override
-        <T extends ActivityStack> T createStackUnchecked(int windowingMode, int activityType,
+        ActivityStack createStackUnchecked(int windowingMode, int activityType,
                 int stackId, boolean onTop) {
             return new StackBuilder(mSupervisor.mRootActivityContainer).setDisplay(this)
                     .setWindowingMode(windowingMode).setActivityType(activityType)
@@ -619,7 +648,13 @@ class ActivityTestsBase {
         }
     }
 
+    private static WindowManagerService sMockWindowManagerService;
+
     private static WindowManagerService prepareMockWindowManager() {
+        if (sMockWindowManagerService != null) {
+            return sMockWindowManagerService;
+        }
+
         final WindowManagerService service = mock(WindowManagerService.class);
         service.mRoot = mock(RootWindowContainer.class);
 
@@ -631,6 +666,7 @@ class ActivityTestsBase {
             return null;
         }).when(service).inSurfaceTransaction(any());
 
+        sMockWindowManagerService = service;
         return service;
     }
 
@@ -639,10 +675,9 @@ class ActivityTestsBase {
      * method is called. Note that its functionality depends on the implementations of the
      * construction arguments.
      */
-    protected static class TestActivityStack<T extends StackWindowController>
-            extends ActivityStack<T> {
+    protected static class TestActivityStack
+            extends ActivityStack {
         private int mOnActivityRemovedFromStackCount = 0;
-        private T mContainerController;
 
         static final int IS_TRANSLUCENT_UNSET = 0;
         static final int IS_TRANSLUCENT_FALSE = 1;
@@ -682,20 +717,20 @@ class ActivityTestsBase {
         }
 
         @Override
-        protected T createStackWindowController(int displayId, boolean onTop, Rect outBounds) {
-            mContainerController = (T) WindowTestUtils.createMockStackWindowContainerController();
+        protected void createTaskStack(int displayId, boolean onTop, Rect outBounds) {
+            mTaskStack = WindowTestUtils.createMockTaskStack();
 
             // Primary pinned stacks require a non-empty out bounds to be set or else all tasks
             // will be moved to the full screen stack.
             if (getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
                 outBounds.set(0, 0, 100, 100);
             }
-            return mContainerController;
+
         }
 
         @Override
-        T getWindowContainerController() {
-            return mContainerController;
+        TaskStack getTaskStack() {
+            return mTaskStack;
         }
 
         void setIsTranslucent(boolean isTranslucent) {
@@ -785,27 +820,23 @@ class ActivityTestsBase {
         }
 
         @SuppressWarnings("TypeParameterUnusedInFormals")
-        <T extends ActivityStack> T build() {
+        ActivityStack build() {
             final int stackId = mStackId >= 0 ? mStackId : mDisplay.getNextStackId();
             if (mWindowingMode == WINDOWING_MODE_PINNED) {
-                return (T) new PinnedActivityStack(mDisplay, stackId,
-                        mRootActivityContainer.mStackSupervisor, mOnTop) {
+                return new ActivityStack(mDisplay, stackId, mRootActivityContainer.mStackSupervisor,
+                        mWindowingMode, ACTIVITY_TYPE_STANDARD, mOnTop) {
                     @Override
                     Rect getDefaultPictureInPictureBounds(float aspectRatio) {
                         return new Rect(50, 50, 100, 100);
                     }
 
                     @Override
-                    PinnedStackWindowController createStackWindowController(int displayId,
-                            boolean onTop, Rect outBounds) {
-                        PinnedStackWindowController controller =
-                                mock(PinnedStackWindowController.class);
-                        controller.mContainer = mock(TaskStack.class);
-                        return controller;
+                    void createTaskStack(int displayId, boolean onTop, Rect outBounds) {
+                        mTaskStack = mock(TaskStack.class);
                     }
                 };
             } else {
-                return (T) new TestActivityStack(mDisplay, stackId,
+                return new TestActivityStack(mDisplay, stackId,
                         mRootActivityContainer.mStackSupervisor, mWindowingMode,
                         mActivityType, mOnTop, mCreateActivity);
             }

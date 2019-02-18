@@ -16,7 +16,7 @@
 
 package android.os;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import androidx.test.filters.SmallTest;
 
 import junit.framework.TestCase;
 
@@ -42,5 +42,14 @@ public class BinderTest extends TestCase {
         long token = Binder.clearCallingWorkSource();
         Binder.restoreCallingWorkSource(token);
         assertEquals(UID, Binder.getCallingWorkSourceUid());
+    }
+
+    @SmallTest
+    public void testGetCallingUidOrThrow() throws Exception {
+        try {
+            Binder.getCallingUidOrThrow();
+            throw new AssertionError("IllegalStateException expected");
+        } catch (IllegalStateException expected) {
+        }
     }
 }

@@ -173,7 +173,8 @@ public abstract class NotificationAssistantService extends NotificationListenerS
     }
 
     /**
-     * Implement this to know when a notification is expanded / collapsed.
+     * Implement this to know when a notification change (expanded / collapsed) is visible to user.
+     *
      * @param key the notification key
      * @param isUserAction whether the expanded change is caused by user action.
      * @param isExpanded whether the notification is expanded.
@@ -185,7 +186,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * Implement this to know when a direct reply is sent from a notification.
      * @param key the notification key
      */
-    public void onNotificationDirectReply(@NonNull String key) {}
+    public void onNotificationDirectReplied(@NonNull String key) {}
 
     /**
      * Implement this to know when a suggested reply is sent.
@@ -203,7 +204,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param action the action that is just clicked
      * @param source the source that provided the action, e.g. SOURCE_FROM_APP
      */
-    public void onActionClicked(@NonNull String key, @NonNull Notification.Action action,
+    public void onActionInvoked(@NonNull String key, @NonNull Notification.Action action,
             @Source int source) {
     }
 
@@ -338,7 +339,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
             args.arg1 = key;
             args.arg2 = action;
             args.argi2 = source;
-            mHandler.obtainMessage(MyHandler.MSG_ON_ACTION_CLICKED, args).sendToTarget();
+            mHandler.obtainMessage(MyHandler.MSG_ON_ACTION_INVOKED, args).sendToTarget();
         }
     }
 
@@ -349,7 +350,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
         public static final int MSG_ON_NOTIFICATION_EXPANSION_CHANGED = 4;
         public static final int MSG_ON_NOTIFICATION_DIRECT_REPLY_SENT = 5;
         public static final int MSG_ON_SUGGESTED_REPLY_SENT = 6;
-        public static final int MSG_ON_ACTION_CLICKED = 7;
+        public static final int MSG_ON_ACTION_INVOKED = 7;
 
         public MyHandler(Looper looper) {
             super(looper, null, false);
@@ -407,7 +408,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                     SomeArgs args = (SomeArgs) msg.obj;
                     String key = (String) args.arg1;
                     args.recycle();
-                    onNotificationDirectReply(key);
+                    onNotificationDirectReplied(key);
                     break;
                 }
                 case MSG_ON_SUGGESTED_REPLY_SENT: {
@@ -419,13 +420,13 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                     onSuggestedReplySent(key, reply, source);
                     break;
                 }
-                case MSG_ON_ACTION_CLICKED: {
+                case MSG_ON_ACTION_INVOKED: {
                     SomeArgs args = (SomeArgs) msg.obj;
                     String key = (String) args.arg1;
                     Notification.Action action = (Notification.Action) args.arg2;
                     int source = args.argi2;
                     args.recycle();
-                    onActionClicked(key, action, source);
+                    onActionInvoked(key, action, source);
                     break;
                 }
             }

@@ -693,7 +693,7 @@ class ResXMLTree;
 class ResXMLParser
 {
 public:
-    ResXMLParser(const ResXMLTree& tree);
+    explicit ResXMLParser(const ResXMLTree& tree);
 
     enum event_code_t {
         BAD_DOCUMENT = -1,
@@ -806,7 +806,7 @@ public:
      * The tree stores a clone of the specified DynamicRefTable, so any changes to the original
      * DynamicRefTable will not affect this tree after instantiation.
      **/
-    ResXMLTree(const DynamicRefTable* dynamicRefTable);
+    explicit ResXMLTree(const DynamicRefTable* dynamicRefTable);
     ResXMLTree();
     ~ResXMLTree();
 
@@ -1611,6 +1611,12 @@ struct ResTable_lib_entry
 struct ResTable_overlayable_header
 {
   struct ResChunk_header header;
+
+  // The name of the overlayable set of resources that overlays target.
+  uint16_t name[256];
+
+ // The component responsible for enabling and disabling overlays targeting this chunk.
+  uint16_t actor[256];
 };
 
 /**
@@ -1637,10 +1643,6 @@ struct ResTable_overlayable_policy_header
     // The overlay must reside of the product partition or must have existed on the product
     // partition before an upgrade to overlay these resources.
     POLICY_PRODUCT_PARTITION = 0x00000008,
-
-    // The overlay must reside of the product services partition or must have existed on the product
-    // services partition before an upgrade to overlay these resources.
-    POLICY_PRODUCT_SERVICES_PARTITION = 0x00000010,
   };
   uint32_t policy_flags;
 
@@ -1844,7 +1846,7 @@ public:
 
     class Theme {
     public:
-        Theme(const ResTable& table);
+        explicit Theme(const ResTable& table);
         ~Theme();
 
         inline const ResTable& getResTable() const { return mTable; }

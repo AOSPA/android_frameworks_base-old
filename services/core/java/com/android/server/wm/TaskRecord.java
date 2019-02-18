@@ -44,6 +44,9 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_AND_PIPABLE_DEPRECATED;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
+import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
+import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.provider.Settings.Secure.USER_SETUP_COMPLETE;
 import static android.view.Display.DEFAULT_DISPLAY;
@@ -452,17 +455,10 @@ class TaskRecord extends ConfigurationContainer {
         }
 
         final Rect bounds = updateOverrideConfigurationFromLaunchBounds();
-        final StackWindowController stackController = getStack().getWindowContainerController();
+        final TaskStack stack = getStack().getTaskStack();
 
-        if (DEBUG_STACK) {
-            Slog.i(TAG_WM, "TaskRecord: taskId=" + taskId
-                    + " stack=" + stackController + " bounds=" + bounds);
-        }
-
-        final TaskStack stack = stackController.mContainer;
         if (stack == null) {
-            throw new IllegalArgumentException("TaskRecord: invalid stack="
-                    + stackController);
+            throw new IllegalArgumentException("TaskRecord: invalid stack=" + mStack);
         }
         EventLog.writeEvent(WM_TASK_CREATED, taskId, stack.mStackId);
         mTask = new Task(taskId, stack, userId, mService.mWindowManager, mResizeMode,
@@ -702,6 +698,14 @@ class TaskRecord extends ConfigurationContainer {
             return false;
         }
 
+        final boolean toTopOfStack = position == MAX_VALUE;
+        if (toTopOfStack && toStack.getResumedActivity() != null
+                && toStack.topRunningActivityLocked() != null) {
+            // Pause the resumed activity on the target stack while re-parenting task on top of it.
+            toStack.startPausingLocked(false /* userLeaving */, false /* uiSleeping */,
+                    null /* resuming */, false /* pauseImmediately */);
+        }
+
         final int toStackWindowingMode = toStack.getWindowingMode();
         final ActivityRecord topActivity = getTopActivity();
 
@@ -739,7 +743,7 @@ class TaskRecord extends ConfigurationContainer {
 
             // Must reparent first in window manager to avoid a situation where AM can delete the
             // we are coming from in WM before we reparent because it became empty.
-            mTask.reparent(toStack.getWindowContainerController(), position,
+            mTask.reparent(toStack.getTaskStack(), position,
                     moveStackMode == REPARENT_MOVE_STACK_TO_FRONT);
 
             final boolean moveStackToFront = moveStackMode == REPARENT_MOVE_STACK_TO_FRONT
@@ -971,10 +975,11 @@ class TaskRecord extends ConfigurationContainer {
      */
     boolean isSameIntentFilter(ActivityRecord r) {
         final Intent intent = new Intent(r.intent);
-        // Correct the activity intent for aliasing. The task record intent will always be based on
-        // the real activity that will be launched not the alias, so we need to use an intent with
-        // the component name pointing to the real activity not the alias in the activity record.
-        intent.setComponent(r.mActivityComponent);
+        // Make sure the component are the same if the input activity has the same real activity
+        // as the one in the task because either one of them could be the alias activity.
+        if (Objects.equals(realActivity, r.mActivityComponent) && this.intent != null) {
+            intent.setComponent(this.intent.getComponent());
+        }
         return intent.filterEquals(this.intent);
     }
 
@@ -1259,10 +1264,6 @@ class TaskRecord extends ConfigurationContainer {
         setFrontOfTask();
     }
 
-    void addActivityAtBottom(ActivityRecord r) {
-        addActivityAtIndex(0, r);
-    }
-
     void addActivityToTop(ActivityRecord r) {
         addActivityAtIndex(mActivities.size(), r);
     }
@@ -1275,6 +1276,34 @@ class TaskRecord extends ConfigurationContainer {
             return applicationType;
         }
         return mActivities.get(0).getActivityType();
+    }
+
+    /**
+     * Checks if the top activity requires a particular orientation (either by override or
+     * activityInfo) and returns that. Otherwise, this returns ORIENTATION_UNDEFINED.
+     */
+    private int getTopActivityRequestedOrientation() {
+        ActivityRecord top = getTopActivity();
+        if (getRequestedOverrideConfiguration().orientation != ORIENTATION_UNDEFINED
+                || top == null) {
+            return getRequestedOverrideConfiguration().orientation;
+        }
+        int screenOrientation = top.getOrientation();
+        if (screenOrientation == ActivityInfo.SCREEN_ORIENTATION_NOSENSOR) {
+            // NOSENSOR means the display's "natural" orientation, so return that.
+            ActivityDisplay display = mStack != null ? mStack.getDisplay() : null;
+            if (display != null && display.mDisplayContent != null) {
+                return mStack.getDisplay().mDisplayContent.getNaturalOrientation();
+            }
+        } else if (screenOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) {
+            // LOCKED means the activity's orientation remains unchanged, so return existing value.
+            return top.getConfiguration().orientation;
+        } else if (ActivityInfo.isFixedOrientationLandscape(screenOrientation)) {
+            return ORIENTATION_LANDSCAPE;
+        } else if (ActivityInfo.isFixedOrientationPortrait(screenOrientation)) {
+            return ORIENTATION_PORTRAIT;
+        }
+        return ORIENTATION_UNDEFINED;
     }
 
     /**
@@ -1741,7 +1770,7 @@ class TaskRecord extends ConfigurationContainer {
         updateTaskDescription();
     }
 
-    private void adjustForMinimalTaskDimensions(Rect bounds, Rect previousBounds) {
+    void adjustForMinimalTaskDimensions(Rect bounds, Rect previousBounds) {
         if (bounds == null) {
             return;
         }
@@ -1853,11 +1882,27 @@ class TaskRecord extends ConfigurationContainer {
 
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
+        // Check if the new configuration supports persistent bounds (eg. is Freeform) and if so
+        // restore the last recorded non-fullscreen bounds.
+        final boolean prevPersistTaskBounds = getWindowConfiguration().persistTaskBounds();
+        final boolean nextPersistTaskBounds =
+                getRequestedOverrideConfiguration().windowConfiguration.persistTaskBounds()
+                || newParentConfig.windowConfiguration.persistTaskBounds();
+        if (!prevPersistTaskBounds && nextPersistTaskBounds
+                && mLastNonFullscreenBounds != null && !mLastNonFullscreenBounds.isEmpty()) {
+            // Bypass onRequestedOverrideConfigurationChanged here to avoid infinite loop.
+            getRequestedOverrideConfiguration().windowConfiguration
+                    .setBounds(mLastNonFullscreenBounds);
+        }
+
         final boolean wasInMultiWindowMode = inMultiWindowMode();
         super.onConfigurationChanged(newParentConfig);
         if (wasInMultiWindowMode != inMultiWindowMode()) {
             mService.mStackSupervisor.scheduleUpdateMultiWindowMode(this);
         }
+
+        // If the configuration supports persistent bounds (eg. Freeform), keep track of the
+        // current (non-fullscreen) bounds for persistence.
         if (getWindowConfiguration().persistTaskBounds()) {
             final Rect currentBounds = getRequestedOverrideBounds();
             if (!currentBounds.isEmpty()) {
@@ -2047,7 +2092,7 @@ class TaskRecord extends ConfigurationContainer {
      * configuring an "inherit-bounds" window which means that all configuration settings would
      * just be inherited from the parent configuration.
      **/
-    void computeConfigResourceOverrides(@NonNull Configuration inOutConfig, @NonNull Rect bounds,
+    void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
             @NonNull Configuration parentConfig) {
         int windowingMode = inOutConfig.windowConfiguration.getWindowingMode();
         if (windowingMode == WINDOWING_MODE_UNDEFINED) {
@@ -2060,6 +2105,7 @@ class TaskRecord extends ConfigurationContainer {
         }
         density *= DisplayMetrics.DENSITY_DEFAULT_SCALE;
 
+        final Rect bounds = inOutConfig.windowConfiguration.getBounds();
         Rect outAppBounds = inOutConfig.windowConfiguration.getAppBounds();
         if (outAppBounds == null || outAppBounds.isEmpty()) {
             inOutConfig.windowConfiguration.setAppBounds(bounds);
@@ -2107,13 +2153,14 @@ class TaskRecord extends ConfigurationContainer {
                     // Iterating across all screen orientations, and return the minimum of the task
                     // width taking into account that the bounds might change because the snap
                     // algorithm snaps to a different value
-                    getSmallestScreenWidthDpForDockedBounds(bounds);
+                    inOutConfig.smallestScreenWidthDp =
+                            getSmallestScreenWidthDpForDockedBounds(bounds);
                 }
                 // otherwise, it will just inherit
             }
         }
 
-        if (inOutConfig.orientation == Configuration.ORIENTATION_UNDEFINED) {
+        if (inOutConfig.orientation == ORIENTATION_UNDEFINED) {
             inOutConfig.orientation = (inOutConfig.screenWidthDp <= inOutConfig.screenHeightDp)
                     ? Configuration.ORIENTATION_PORTRAIT : Configuration.ORIENTATION_LANDSCAPE;
         }
@@ -2134,36 +2181,56 @@ class TaskRecord extends ConfigurationContainer {
         }
     }
 
-    // TODO(b/113900640): remove this once ActivityRecord is changed to not need it anymore.
-    void computeResolvedOverrideConfiguration(Configuration inOutConfig, Configuration parentConfig,
-            Configuration overrideConfig) {
-        // Save previous bounds because adjustForMinimalTaskDimensions uses that to determine if it
-        // changes left bound vs. right bound, or top bound vs. bottom bound.
-        mTmpBounds.set(inOutConfig.windowConfiguration.getBounds());
-
-        inOutConfig.setTo(overrideConfig);
-
-        Rect outOverrideBounds = inOutConfig.windowConfiguration.getBounds();
-        if (outOverrideBounds != null && !outOverrideBounds.isEmpty()) {
-            adjustForMinimalTaskDimensions(outOverrideBounds, mTmpBounds);
-
-            int windowingMode = overrideConfig.windowConfiguration.getWindowingMode();
-            if (windowingMode == WINDOWING_MODE_UNDEFINED) {
-                windowingMode = parentConfig.windowConfiguration.getWindowingMode();
-            }
-            if (windowingMode == WINDOWING_MODE_FREEFORM) {
-                // by policy, make sure the window remains within parent
-                fitWithinBounds(outOverrideBounds, parentConfig.windowConfiguration.getBounds());
-            }
-
-            computeConfigResourceOverrides(inOutConfig, outOverrideBounds, parentConfig);
-        }
-    }
-
     @Override
     void resolveOverrideConfiguration(Configuration newParentConfig) {
-        computeResolvedOverrideConfiguration(getResolvedOverrideConfiguration(), newParentConfig,
-                getRequestedOverrideConfiguration());
+        mTmpBounds.set(getResolvedOverrideConfiguration().windowConfiguration.getBounds());
+        super.resolveOverrideConfiguration(newParentConfig);
+        int windowingMode =
+                getRequestedOverrideConfiguration().windowConfiguration.getWindowingMode();
+        if (windowingMode == WINDOWING_MODE_UNDEFINED) {
+            windowingMode = newParentConfig.windowConfiguration.getWindowingMode();
+        }
+        Rect outOverrideBounds =
+                getResolvedOverrideConfiguration().windowConfiguration.getBounds();
+
+        if (windowingMode == WINDOWING_MODE_FULLSCREEN) {
+            // In FULLSCREEN mode, always start with empty bounds to indicate "fill parent"
+            outOverrideBounds.setEmpty();
+
+            // If the task or its top activity requires a different orientation, make it fit the
+            // available bounds by scaling down its bounds.
+            int forcedOrientation = getTopActivityRequestedOrientation();
+            if (forcedOrientation != ORIENTATION_UNDEFINED
+                    && forcedOrientation != newParentConfig.orientation) {
+                final Rect parentBounds = newParentConfig.windowConfiguration.getBounds();
+                final int parentWidth = parentBounds.width();
+                final int parentHeight = parentBounds.height();
+                final float aspect = ((float) parentHeight) / parentWidth;
+                if (forcedOrientation == ORIENTATION_LANDSCAPE) {
+                    final int height = (int) (parentWidth / aspect);
+                    final int top = parentBounds.centerY() - height / 2;
+                    outOverrideBounds.set(
+                            parentBounds.left, top, parentBounds.right, top + height);
+                } else {
+                    final int width = (int) (parentHeight * aspect);
+                    final int left = parentBounds.centerX() - width / 2;
+                    outOverrideBounds.set(
+                            left, parentBounds.top, left + width, parentBounds.bottom);
+                }
+            }
+        }
+
+        if (outOverrideBounds.isEmpty()) {
+            // If the task fills the parent, just inherit all the other configs from parent.
+            return;
+        }
+
+        adjustForMinimalTaskDimensions(outOverrideBounds, mTmpBounds);
+        if (windowingMode == WINDOWING_MODE_FREEFORM) {
+            // by policy, make sure the window remains within parent somewhere
+            fitWithinBounds(outOverrideBounds, newParentConfig.windowConfiguration.getBounds());
+        }
+        computeConfigResourceOverrides(getResolvedOverrideConfiguration(), newParentConfig);
     }
 
     Rect updateOverrideConfigurationFromLaunchBounds() {

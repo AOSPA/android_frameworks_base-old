@@ -95,6 +95,7 @@ import com.android.server.SystemService;
 import com.android.server.UiThread;
 import com.android.server.wm.SurfaceAnimationThread;
 import com.android.server.wm.WindowManagerInternal;
+import com.android.server.display.ColorDisplayService.ColorDisplayServiceInternal;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -725,27 +726,6 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private void setSaturationLevelInternal(float level) {
-        if (level < 0 || level > 1) {
-            throw new IllegalArgumentException("Saturation level must be between 0 and 1");
-        }
-        float[] matrix = (level == 1.0f ? null : computeSaturationMatrix(level));
-        DisplayTransformManager dtm = LocalServices.getService(DisplayTransformManager.class);
-        dtm.setColorMatrix(DisplayTransformManager.LEVEL_COLOR_MATRIX_SATURATION, matrix);
-    }
-
-    private static float[] computeSaturationMatrix(float saturation) {
-        float desaturation = 1.0f - saturation;
-        float[] luminance = {0.231f * desaturation, 0.715f * desaturation, 0.072f * desaturation};
-        float[] matrix = {
-            luminance[0] + saturation, luminance[0], luminance[0], 0,
-            luminance[1], luminance[1] + saturation, luminance[1], 0,
-            luminance[2], luminance[2], luminance[2] + saturation, 0,
-            0, 0, 0, 1
-        };
-        return matrix;
-    }
-
     private int createVirtualDisplayInternal(IVirtualDisplayCallback callback,
             IMediaProjection projection, int callingUid, String packageName, String name, int width,
             int height, int densityDpi, Surface surface, int flags, String uniqueId) {
@@ -810,6 +790,16 @@ public final class DisplayManagerService extends SystemService {
             if (device != null) {
                 handleDisplayDeviceRemovedLocked(device);
             }
+        }
+    }
+
+    private void setVirtualDisplayStateInternal(IBinder appToken, boolean isOn) {
+        synchronized (mSyncRoot) {
+            if (mVirtualDisplayAdapter == null) {
+                return;
+            }
+
+            mVirtualDisplayAdapter.setVirtualDisplayStateLocked(appToken, isOn);
         }
     }
 
@@ -1490,6 +1480,13 @@ public final class DisplayManagerService extends SystemService {
 
             pw.println();
             mPersistentDataStore.dump(pw);
+
+            final ColorDisplayServiceInternal cds = LocalServices.getService(
+                    ColorDisplayServiceInternal.class);
+            if (cds != null) {
+                pw.println();
+                cds.dump(pw);
+            }
         }
     }
 
@@ -1846,19 +1843,6 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
-        public void setSaturationLevel(float level) {
-            mContext.enforceCallingOrSelfPermission(
-                   Manifest.permission.CONTROL_DISPLAY_SATURATION,
-                   "Permission required to set display saturation level");
-            final long token = Binder.clearCallingIdentity();
-            try {
-                setSaturationLevelInternal(level);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-        }
-
-        @Override // Binder call
         public int createVirtualDisplay(IVirtualDisplayCallback callback,
                 IMediaProjection projection, String packageName, String name,
                 int width, int height, int densityDpi, Surface surface, int flags,
@@ -1960,6 +1944,16 @@ public final class DisplayManagerService extends SystemService {
             final long token = Binder.clearCallingIdentity();
             try {
                 releaseVirtualDisplayInternal(callback.asBinder());
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public void setVirtualDisplayState(IVirtualDisplayCallback callback, boolean isOn) {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                setVirtualDisplayStateInternal(callback.asBinder(), isOn);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -2152,6 +2146,14 @@ public final class DisplayManagerService extends SystemService {
         void resetBrightnessConfiguration() {
             setBrightnessConfigurationForUserInternal(null, mContext.getUserId(),
                     mContext.getPackageName());
+        }
+
+        void setAutoBrightnessLoggingEnabled(boolean enabled) {
+            if (mDisplayPowerController != null) {
+                synchronized (mSyncRoot) {
+                    mDisplayPowerController.setAutoBrightnessLoggingEnabled(enabled);
+                }
+            }
         }
 
         private boolean validatePackageName(int uid, String packageName) {

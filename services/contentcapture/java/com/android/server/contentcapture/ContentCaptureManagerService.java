@@ -32,6 +32,7 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.util.LocalLog;
 import android.util.Slog;
 import android.view.contentcapture.IContentCaptureManager;
 
@@ -39,6 +40,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.SyncResultReceiver;
 import com.android.server.LocalServices;
 import com.android.server.infra.AbstractMasterSystemService;
 import com.android.server.infra.FrameworkResourcesServiceNameResolver;
@@ -50,8 +52,9 @@ import java.util.ArrayList;
 /**
  * A service used to observe the contents of the screen.
  *
- * <p>The data collected by this service can be analyzed and combined with other sources to provide
- * contextual data in other areas of the system such as Autofill.
+ * <p>The data collected by this service can be analyzed on-device and combined
+ * with other sources to provide contextual data in other areas of the system
+ * such as Autofill.
  */
 public final class ContentCaptureManagerService extends
         AbstractMasterSystemService<ContentCaptureManagerService, ContentCapturePerUserService> {
@@ -66,6 +69,8 @@ public final class ContentCaptureManagerService extends
     private ActivityManagerInternal mAm;
 
     private final LocalService mLocalService = new LocalService();
+
+    private final LocalLog mRequestsHistory = new LocalLog(20);
 
     public ContentCaptureManagerService(@NonNull Context context) {
         super(context, new FrameworkResourcesServiceNameResolver(context,
@@ -152,6 +157,13 @@ public final class ContentCaptureManagerService extends
         }
     }
 
+    /**
+     * Logs a request so it's dumped later...
+     */
+    void logRequestLocked(@NonNull String historyItem) {
+        mRequestsHistory.log(historyItem);
+    }
+
     private ActivityManagerInternal getAmInternal() {
         synchronized (mLock) {
             if (mAm == null) {
@@ -196,11 +208,47 @@ public final class ContentCaptureManagerService extends
         }
 
         @Override
+        public void getReceiverServiceComponentName(@UserIdInt int userId,
+                IResultReceiver receiver) {
+            ComponentName connectedServiceComponentName;
+            synchronized (mLock) {
+                final ContentCapturePerUserService service = getServiceForUserLocked(userId);
+                connectedServiceComponentName = service.getServiceComponentName();
+            }
+            try {
+                receiver.send(0, SyncResultReceiver.bundleFor(connectedServiceComponentName));
+            } catch (RemoteException e) {
+                // Ignore exception as we need to be resilient against app behavior.
+                Slog.w(TAG, "Unable to send service component name: " + e);
+            }
+        }
+
+        @Override
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
             if (!DumpUtils.checkDumpPermission(getContext(), TAG, pw)) return;
 
+            boolean showHistory = true;
+            if (args != null) {
+                for (String arg : args) {
+                    switch(arg) {
+                        case "--no-history":
+                            showHistory = false;
+                            break;
+                        case "--help":
+                            pw.println("Usage: dumpsys content_capture [--no-history]");
+                            return;
+                        default:
+                            Slog.w(TAG, "Ignoring invalid dump arg: " + arg);
+                    }
+                }
+            }
+
             synchronized (mLock) {
                 dumpLocked("", pw);
+            }
+            if (showHistory) {
+                pw.println(); pw.println("Requests history:"); pw.println();
+                mRequestsHistory.reverseDump(fd, pw, args);
             }
         }
 

@@ -273,6 +273,9 @@ interface IPackageManager {
 
     void clearCrossProfileIntentFilters(int sourceUserId, String ownerPackage);
 
+    String[] setDistractingPackageRestrictionsAsUser(in String[] packageNames, int restrictionFlags,
+            int userId);
+
     String[] setPackagesSuspendedAsUser(in String[] packageNames, boolean suspended,
             in PersistableBundle appExtras, in PersistableBundle launcherExtras,
             in SuspendDialogInfo dialogInfo, String callingPackage, int userId);
@@ -535,6 +538,11 @@ interface IPackageManager {
      */
     boolean performDexOptSecondary(String packageName,
             String targetCompilerFilter, boolean force);
+
+    /**
+    * Ask the package manager to compile layouts in the given package.
+    */
+    boolean compileLayouts(String packageName);
 
     /**
      * Ask the package manager to dump profiles associated with a package.

@@ -27,13 +27,10 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
-import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import android.view.ViewGroup;
 
-import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.NotificationMessagingUtil;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
@@ -42,6 +39,8 @@ import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationUiAdjustment;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.NotificationInflater;
@@ -70,7 +69,6 @@ public class NotificationRowBinder {
             Dependency.get(NotificationInterruptionStateProvider.class);
 
     private final Context mContext;
-    private final IStatusBarService mBarService;
     private final NotificationMessagingUtil mMessagingUtil;
     private final ExpandableNotificationRow.ExpansionLogger mExpansionLogger =
             this::logNotificationExpansion;
@@ -84,6 +82,7 @@ public class NotificationRowBinder {
     private ExpandableNotificationRow.OnAppOpsClickListener mOnAppOpsClickListener;
     private BindRowCallback mBindRowCallback;
     private NotificationClicker mNotificationClicker;
+    private final NotificationLogger mNotificationLogger = Dependency.get(NotificationLogger.class);
 
     @Inject
     public NotificationRowBinder(Context context,
@@ -91,8 +90,6 @@ public class NotificationRowBinder {
         mContext = context;
         mMessagingUtil = new NotificationMessagingUtil(context);
         mAllowLongPress = allowLongPress;
-        mBarService = IStatusBarService.Stub.asInterface(
-                ServiceManager.getService(Context.STATUS_BAR_SERVICE));
     }
 
     private NotificationRemoteInputManager getRemoteInputManager() {
@@ -126,7 +123,7 @@ public class NotificationRowBinder {
      * Inflates the views for the given entry (possibly asynchronously).
      */
     public void inflateViews(
-            NotificationData.Entry entry,
+            NotificationEntry entry,
             Runnable onDismissRunnable,
             boolean isUpdate)
             throws InflationException {
@@ -149,7 +146,7 @@ public class NotificationRowBinder {
         }
     }
 
-    private void bindRow(NotificationData.Entry entry, PackageManager pmUser,
+    private void bindRow(NotificationEntry entry, PackageManager pmUser,
             StatusBarNotification sbn, ExpandableNotificationRow row,
             Runnable onDismissRunnable) {
         row.setExpansionLogger(mExpansionLogger, entry.notification.getKey());
@@ -197,7 +194,7 @@ public class NotificationRowBinder {
      * reinflating them.
      */
     public void onNotificationRankingUpdated(
-            NotificationData.Entry entry,
+            NotificationEntry entry,
             @Nullable Integer oldImportance,
             NotificationUiAdjustment oldAdjustment,
             NotificationUiAdjustment newAdjustment,
@@ -224,7 +221,7 @@ public class NotificationRowBinder {
 
     //TODO: This method associates a row with an entry, but eventually needs to not do that
     private void updateNotification(
-            NotificationData.Entry entry,
+            NotificationEntry entry,
             PackageManager pmUser,
             StatusBarNotification sbn,
             ExpandableNotificationRow row,
@@ -273,13 +270,7 @@ public class NotificationRowBinder {
     }
 
     private void logNotificationExpansion(String key, boolean userAction, boolean expanded) {
-        mUiOffloadThread.submit(() -> {
-            try {
-                mBarService.onNotificationExpansionChanged(key, userAction, expanded);
-            } catch (RemoteException e) {
-                // Ignore.
-            }
-        });
+         mNotificationLogger.onExpansionChanged(key, userAction, expanded);
     }
 
     /** Callback for when a row is bound to an entry. */
@@ -292,7 +283,7 @@ public class NotificationRowBinder {
          * @param sbn    notification
          * @param row    row for the notification
          */
-        void onBindRow(NotificationData.Entry entry, PackageManager pmUser,
+        void onBindRow(NotificationEntry entry, PackageManager pmUser,
                 StatusBarNotification sbn, ExpandableNotificationRow row);
     }
 }

@@ -22,18 +22,15 @@ import static junit.framework.Assert.assertTrue;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
-import android.app.AppOpsManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -48,7 +45,6 @@ import android.service.notification.StatusBarNotification;
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
-import android.util.ArraySet;
 import android.widget.FrameLayout;
 
 import com.android.internal.logging.MetricsLogger;
@@ -65,7 +61,9 @@ import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.StatusBarIconView;
-import com.android.systemui.statusbar.notification.NotificationData.KeyguardEnvironment;
+import com.android.systemui.statusbar.notification.collection.NotificationData;
+import com.android.systemui.statusbar.notification.collection.NotificationData.KeyguardEnvironment;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.NotificationInflater;
@@ -76,12 +74,11 @@ import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 
-import junit.framework.Assert;
-
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -121,8 +118,9 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Mock private MetricsLogger mMetricsLogger;
     @Mock private SmartReplyController mSmartReplyController;
     @Mock private RowInflaterTask mAsyncInflationTask;
+    @Mock private NotificationRowBinder mMockedRowBinder;
 
-    private NotificationData.Entry mEntry;
+    private NotificationEntry mEntry;
     private StatusBarNotification mSbn;
     private TestableNotificationEntryManager mEntryManager;
     private CountDownLatch mCountDownLatch;
@@ -135,8 +133,12 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
             mCountDownLatch = new CountDownLatch(1);
         }
 
+        public void setNotificationData(NotificationData data) {
+            mNotificationData = data;
+        }
+
         @Override
-        public void onAsyncInflationFinished(NotificationData.Entry entry,
+        public void onAsyncInflationFinished(NotificationEntry entry,
                 @NotificationInflater.InflationFlag int inflatedFlags) {
             super.onAsyncInflationFinished(entry, inflatedFlags);
 
@@ -221,7 +223,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                 .setContentText("Text");
         mSbn = new StatusBarNotification(TEST_PACKAGE_NAME, TEST_PACKAGE_NAME, 0, null, TEST_UID,
                 0, n.build(), new UserHandle(ActivityManager.getCurrentUser()), null, 0);
-        mEntry = new NotificationData.Entry(mSbn);
+        mEntry = new NotificationEntry(mSbn);
         mEntry.expandedIcon = mock(StatusBarIconView.class);
 
         mEntryManager = new TestableNotificationEntryManager(mContext);
@@ -258,10 +260,10 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         verify(mEntryListener, never()).onInflationError(any(), any());
 
         // Row inflation:
-        ArgumentCaptor<NotificationData.Entry> entryCaptor = ArgumentCaptor.forClass(
-                NotificationData.Entry.class);
+        ArgumentCaptor<NotificationEntry> entryCaptor = ArgumentCaptor.forClass(
+                NotificationEntry.class);
         verify(mBindCallback).onBindRow(entryCaptor.capture(), any(), eq(mSbn), any());
-        NotificationData.Entry entry = entryCaptor.getValue();
+        NotificationEntry entry = entryCaptor.getValue();
         verify(mRemoteInputManager).bindRow(entry.getRow());
 
         // Row content inflation:
@@ -290,11 +292,40 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         verify(mEntryListener, never()).onInflationError(any(), any());
 
+        verify(mEntryListener).onPreEntryUpdated(mEntry);
         verify(mPresenter).updateNotificationViews();
-        verify(mEntryListener).onEntryUpdated(mEntry);
+        verify(mEntryListener).onPostEntryUpdated(mEntry);
+
         assertNotNull(mEntry.getRow());
         assertEquals(mEntry.userSentiment,
                 NotificationListenerService.Ranking.USER_SENTIMENT_NEGATIVE);
+    }
+
+    @Test
+    public void testUpdateNotification_prePostEntryOrder() throws Exception {
+        com.android.systemui.util.Assert.isNotMainThread();
+        TestableLooper.get(this).processAllMessages();
+
+        NotificationData notifData = mock(NotificationData.class);
+        when(notifData.get(mEntry.key)).thenReturn(mEntry);
+
+        mEntryManager.setNotificationData(notifData);
+
+        mEntryManager.updateNotification(mSbn, mRankingMap);
+        TestableLooper.get(this).processMessages(1);
+        // Wait for content update.
+        assertTrue(mEntryManager.getCountDownLatch().await(10, TimeUnit.SECONDS));
+
+        verify(mEntryListener, never()).onInflationError(any(), any());
+
+        // Ensure that update callbacks happen in correct order
+        InOrder order = inOrder(mEntryListener, notifData, mPresenter, mEntryListener);
+        order.verify(mEntryListener).onPreEntryUpdated(mEntry);
+        order.verify(notifData).filterAndSort();
+        order.verify(mPresenter).updateNotificationViews();
+        order.verify(mEntryListener).onPostEntryUpdated(mEntry);
+
+        assertNotNull(mEntry.getRow());
     }
 
     @Test
@@ -308,10 +339,9 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         verify(mEntryListener, never()).onInflationError(any(), any());
 
-        verify(mListContainer).cleanUpViewStateForEntry(mEntry);
         verify(mPresenter).updateNotificationViews();
-        verify(mEntryListener).onEntryRemoved(mEntry, mSbn.getKey(), mSbn,
-                null, false /* lifetimeExtended */, false /* removedByUser */);
+        verify(mEntryListener).onEntryRemoved(
+                mEntry, null, false /* removedByUser */);
         verify(mRow).setRemoved();
 
         assertNull(mEntryManager.getNotificationData().get(mSbn.getKey()));
@@ -335,92 +365,31 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         assertNotNull(mEntryManager.getNotificationData().get(mSbn.getKey()));
         verify(extender).setShouldManageLifetime(mEntry, true /* shouldManage */);
-        verify(mEntryListener).onEntryRemoved(mEntry, mSbn.getKey(), null,
-                null, true /* lifetimeExtended */, false /* removedByUser */);
+        verify(mEntryListener, never()).onEntryRemoved(
+                mEntry, null, false /* removedByUser */);
     }
 
     @Test
-    public void testUpdateAppOps_foregroundNoti() {
+    public void testRemoveNotification_onEntryRemoveNotFiredIfEntryDoesntExist() {
         com.android.systemui.util.Assert.isNotMainThread();
 
-        when(mForegroundServiceController.getStandardLayoutKey(anyInt(), anyString()))
-                .thenReturn(mEntry.key);
-        mEntry.setRow(mRow);
-        mEntryManager.getNotificationData().add(mEntry);
+        mEntryManager.removeNotification("not_a_real_key", mRankingMap);
 
-        mEntryManager.updateNotificationsForAppOp(
-                AppOpsManager.OP_CAMERA, mEntry.notification.getUid(),
-                mEntry.notification.getPackageName(), true);
-
-        verify(mPresenter, times(1)).updateNotificationViews();
-        assertTrue(mEntryManager.getNotificationData().get(mEntry.key).mActiveAppOps.contains(
-                AppOpsManager.OP_CAMERA));
+        verify(mEntryListener, never()).onEntryRemoved(
+                mEntry, null, false /* removedByUser */);
     }
 
     @Test
-    public void testUpdateAppOps_otherNoti() {
+    public void testRemoveNotification_whilePending() throws InterruptedException {
         com.android.systemui.util.Assert.isNotMainThread();
 
-        when(mForegroundServiceController.getStandardLayoutKey(anyInt(), anyString()))
-                .thenReturn(null);
-        mEntryManager.updateNotificationsForAppOp(AppOpsManager.OP_CAMERA, 1000, "pkg", true);
+        mEntryManager.setRowBinder(mMockedRowBinder);
 
-        verify(mPresenter, never()).updateNotificationViews();
-    }
+        mEntryManager.addNotification(mSbn, mRankingMap);
+        mEntryManager.removeNotification(mSbn.getKey(), mRankingMap);
 
-    @Test
-    public void testAddNotificationExistingAppOps() {
-        mEntry.setRow(mRow);
-        mEntryManager.getNotificationData().add(mEntry);
-        ArraySet<Integer> expected = new ArraySet<>();
-        expected.add(3);
-        expected.add(235);
-        expected.add(1);
-
-        when(mForegroundServiceController.getAppOps(mEntry.notification.getUserId(),
-                mEntry.notification.getPackageName())).thenReturn(expected);
-        when(mForegroundServiceController.getStandardLayoutKey(
-                mEntry.notification.getUserId(),
-                mEntry.notification.getPackageName())).thenReturn(mEntry.key);
-
-        mEntryManager.tagForeground(mEntry.notification);
-
-        Assert.assertEquals(expected.size(), mEntry.mActiveAppOps.size());
-        for (int op : expected) {
-            assertTrue("Entry missing op " + op, mEntry.mActiveAppOps.contains(op));
-        }
-    }
-
-    @Test
-    public void testAdd_noExistingAppOps() {
-        mEntry.setRow(mRow);
-        mEntryManager.getNotificationData().add(mEntry);
-        when(mForegroundServiceController.getStandardLayoutKey(
-                mEntry.notification.getUserId(),
-                mEntry.notification.getPackageName())).thenReturn(mEntry.key);
-        when(mForegroundServiceController.getAppOps(mEntry.notification.getUserId(),
-                mEntry.notification.getPackageName())).thenReturn(null);
-
-        mEntryManager.tagForeground(mEntry.notification);
-        Assert.assertEquals(0, mEntry.mActiveAppOps.size());
-    }
-
-    @Test
-    public void testAdd_existingAppOpsNotForegroundNoti() {
-        mEntry.setRow(mRow);
-        mEntryManager.getNotificationData().add(mEntry);
-        ArraySet<Integer> ops = new ArraySet<>();
-        ops.add(3);
-        ops.add(235);
-        ops.add(1);
-        when(mForegroundServiceController.getAppOps(mEntry.notification.getUserId(),
-                mEntry.notification.getPackageName())).thenReturn(ops);
-        when(mForegroundServiceController.getStandardLayoutKey(
-                mEntry.notification.getUserId(),
-                mEntry.notification.getPackageName())).thenReturn("something else");
-
-        mEntryManager.tagForeground(mEntry.notification);
-        Assert.assertEquals(0, mEntry.mActiveAppOps.size());
+        verify(mEntryListener, never()).onEntryRemoved(
+                mEntry, null, false /* removedByUser */);
     }
 
     @Test
