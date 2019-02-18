@@ -394,8 +394,6 @@
     <!-- Content description of the data connection type HSPA and its variants. [CHAR LIMIT=NONE] -->
     <string name="data_connection_hspa">HSPA</string>
 
-    <string name="data_connection_2g">2G</string>
-
     <!-- Content description of the data connection type 3G. [CHAR LIMIT=NONE] -->
     <string name="data_connection_3g">3G</string>
 
@@ -425,15 +423,6 @@
 
     <!-- Content description of the data connection type CDMA. [CHAR LIMIT=NONE] -->
     <string name="data_connection_cdma">1X</string>
-
-    <!-- Content description of the data connection type 5G Basic. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g_basic">5GBasic</string>
-
-    <!-- Content description of the data connection type 5G UWB. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g_uwb">5GUWB</string>
-
-    <!-- Content description of the data connection type 5G stand alone. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g_sa">5GSA</string>
 
     <!-- Content description of the roaming data connection type. [CHAR LIMIT=NONE] -->
     <string name="data_connection_roaming">Roaming</string>
@@ -2267,12 +2256,6 @@
 
     <!-- Option to grant the slice permission request on the screen [CHAR LIMIT=15] -->
     <string name="slice_permission_deny">Deny</string>
-
-    <!-- Carrier Name -->
-    <string name="China_Mobile">China Mobile</string>
-    <string name="China_Unicom">China Unicom</string>
-    <string name="China_Telecom">China Telecom</string>
-    <string name="China_Mobile_HD">China Mobile (HD)</string>
 
     <!-- List of packages for which we don't want to show recents onboarding, add into overlay as needed. -->
     <string-array name="recents_onboarding_blacklisted_packages" translatable="false">
