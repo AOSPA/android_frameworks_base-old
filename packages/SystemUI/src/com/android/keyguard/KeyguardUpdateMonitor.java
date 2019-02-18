@@ -156,7 +156,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED = 337;
     private static final int MSG_TELEPHONY_CAPABLE = 338;
     private static final int MSG_TIMEZONE_UPDATE = 339;
-    private static final int MSG_LOCALE_CHANGED = 500;
 
     /** Biometric authentication state: Not listening. */
     private static final int BIOMETRIC_STATE_STOPPED = 0;
@@ -354,9 +353,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 case MSG_BIOMETRIC_AUTHENTICATION_CONTINUE:
                     updateBiometricListeningState();
                     break;
-                case MSG_LOCALE_CHANGED:
-                    handleLocaleChanged();
-                   break;
                 case MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED:
                     updateLogoutEnabled();
                     break;
@@ -1066,8 +1062,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 }
                 mHandler.sendMessage(
                         mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, 0, serviceState));
-            } else if (Intent.ACTION_LOCALE_CHANGED.equals(action)) {
-                mHandler.sendEmptyMessage(MSG_LOCALE_CHANGED);
             } else if (DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED.equals(
                     action)) {
                 mHandler.sendEmptyMessage(MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED);
@@ -1475,7 +1469,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-        filter.addAction(Intent.ACTION_LOCALE_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_SERVICE_STATE_CHANGED);
         filter.addAction(TelephonyManager.ACTION_PHONE_STATE_CHANGED);
@@ -1677,18 +1670,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             setFaceRunningState(BIOMETRIC_STATE_RUNNING);
         }
     }
-
-    /**
-    * Handle {@link #MSG_LOCALE_CHANGED}
-    */
-   private void handleLocaleChanged() {
-       for (int j = 0; j < mCallbacks.size(); j++) {
-           KeyguardUpdateMonitorCallback cb = mCallbacks.get(j).get();
-           if (cb != null) {
-               cb.onRefreshCarrierInfo();
-           }
-       }
-   }
 
     public boolean isUnlockWithFingerprintPossible(int userId) {
         return mFpm != null && mFpm.isHardwareDetected() && !isFingerprintDisabled(userId)
