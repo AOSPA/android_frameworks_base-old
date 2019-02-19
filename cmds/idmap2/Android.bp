@@ -16,11 +16,11 @@ cc_defaults {
     name: "idmap2_defaults",
     tidy: true,
     tidy_checks: [
+        "modernize-*",
+        "-modernize-avoid-c-arrays",
         "android-*",
         "misc-*",
-        "modernize-*",
         "readability-*",
-        "-modernize-avoid-c-arrays",
     ],
     tidy_flags: [
         "-system-headers",
@@ -43,6 +43,7 @@ cc_library {
         "libidmap2/PrettyPrintVisitor.cpp",
         "libidmap2/RawPrintVisitor.cpp",
         "libidmap2/ResourceUtils.cpp",
+        "libidmap2/Result.cpp",
         "libidmap2/Xml.cpp",
         "libidmap2/ZipFile.cpp",
     ],
@@ -55,6 +56,7 @@ cc_library {
             shared_libs: [
                 "libandroidfw",
                 "libbase",
+                "libcutils",
                 "libutils",
                 "libziparchive",
             ],
@@ -93,6 +95,7 @@ cc_test {
         "tests/PrettyPrintVisitorTests.cpp",
         "tests/RawPrintVisitorTests.cpp",
         "tests/ResourceUtilsTests.cpp",
+        "tests/ResultTests.cpp",
         "tests/XmlTests.cpp",
         "tests/ZipFileTests.cpp",
     ],
@@ -148,6 +151,7 @@ cc_binary {
             shared_libs: [
                 "libandroidfw",
                 "libbase",
+                "libcutils",
                 "libidmap2",
                 "libutils",
                 "libziparchive",

@@ -5708,7 +5708,6 @@ public final class Settings {
          * Defines whether Content Capture is enabled  for the user.
          * @hide
          */
-        @SystemApi
         @TestApi
         public static final String CONTENT_CAPTURE_ENABLED = "content_capture_enabled";
 
@@ -8304,9 +8303,20 @@ public final class Settings {
          * The value is boolean (1 or 0).
          * @hide
          */
+        @TestApi
         public static final String NOTIFICATION_BADGING = "notification_badging";
 
         private static final Validator NOTIFICATION_BADGING_VALIDATOR = BOOLEAN_VALIDATOR;
+
+        /**
+         * Whether the notification bubbles are globally enabled
+         * The value is boolean (1 or 0).
+         * @hide
+         */
+        @TestApi
+        public static final String NOTIFICATION_BUBBLES = "notification_bubbles";
+
+        private static final Validator NOTIFICATION_BUBBLES_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
          * Whether notifications are dismissed by a right-to-left swipe (instead of a left-to-right
@@ -8619,6 +8629,7 @@ public final class Settings {
             ASSIST_GESTURE_WAKE_ENABLED,
             VR_DISPLAY_MODE,
             NOTIFICATION_BADGING,
+            NOTIFICATION_BUBBLES,
             NOTIFICATION_DISMISS_RTL,
             QS_AUTO_ADDED_TILES,
             SCREENSAVER_ENABLED,
@@ -8782,6 +8793,7 @@ public final class Settings {
             VALIDATORS.put(ASSIST_GESTURE_WAKE_ENABLED, ASSIST_GESTURE_WAKE_ENABLED_VALIDATOR);
             VALIDATORS.put(VR_DISPLAY_MODE, VR_DISPLAY_MODE_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_BADGING, NOTIFICATION_BADGING_VALIDATOR);
+            VALIDATORS.put(NOTIFICATION_BUBBLES, NOTIFICATION_BUBBLES_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_DISMISS_RTL, NOTIFICATION_DISMISS_RTL_VALIDATOR);
             VALIDATORS.put(QS_AUTO_ADDED_TILES, QS_AUTO_ADDED_TILES_VALIDATOR);
             VALIDATORS.put(SCREENSAVER_ENABLED, SCREENSAVER_ENABLED_VALIDATOR);
@@ -9303,6 +9315,13 @@ public final class Settings {
          * @hide
          */
         public static final String DEBUG_VIEW_ATTRIBUTES = "debug_view_attributes";
+
+        /**
+         * Which application package is allowed to save View attribute data.
+         * @hide
+         */
+        public static final String DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE =
+                "debug_view_attributes_application_package";
 
         /**
          * Whether assisted GPS should be enabled or not.
@@ -11469,6 +11488,7 @@ public final class Settings {
          * <pre>
          * advertise_is_enabled              (boolean)
          * datasaver_disabled                (boolean)
+         * enable_night_mode                 (boolean)
          * launch_boost_disabled             (boolean)
          * vibration_disabled                (boolean)
          * animation_disabled                (boolean)
@@ -13291,17 +13311,6 @@ public final class Settings {
         public static final String AUTOFILL_MAX_VISIBLE_DATASETS = "autofill_max_visible_datasets";
 
         /**
-         * Used to emulate Smart Suggestion for Augmented Autofill during development
-         *
-         * <p>Valid values: {@code 0x1} for IME and/or {@code 0x2} for popup window.
-         *
-         * @hide
-         */
-        @TestApi
-        public static final String AUTOFILL_SMART_SUGGESTION_EMULATION_FLAGS =
-                "autofill_smart_suggestion_emulation_flags";
-
-        /**
          * Exemptions to the hidden API blacklist.
          *
          * @hide
@@ -14036,6 +14045,7 @@ public final class Settings {
             INSTANT_APP_SETTINGS.add(TRANSITION_ANIMATION_SCALE);
             INSTANT_APP_SETTINGS.add(ANIMATOR_DURATION_SCALE);
             INSTANT_APP_SETTINGS.add(DEBUG_VIEW_ATTRIBUTES);
+            INSTANT_APP_SETTINGS.add(DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE);
             INSTANT_APP_SETTINGS.add(WTF_IS_FATAL);
             INSTANT_APP_SETTINGS.add(SEND_ACTION_APP_ERROR);
             INSTANT_APP_SETTINGS.add(ZEN_MODE);

@@ -195,7 +195,6 @@ import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
 import android.content.pm.SuspendDialogInfo;
 import android.content.pm.UserInfo;
-import android.content.pm.UsesPermissionInfo;
 import android.content.pm.VerifierDeviceIdentity;
 import android.content.pm.VerifierInfo;
 import android.content.pm.VersionedPackage;
@@ -11344,26 +11343,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                 }
             }
-
-            // Check permission usage info requirements.
-            if (pkg.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q) {
-                for (UsesPermissionInfo upi : pkg.usesPermissionInfos) {
-                    if (!mPermissionManager.isPermissionUsageInfoRequired(upi.getPermission())) {
-                        continue;
-                    }
-                    if (upi.getDataSentOffDevice() == UsesPermissionInfo.USAGE_UNDEFINED
-                            || upi.getDataSharedWithThirdParty()
-                                == UsesPermissionInfo.USAGE_UNDEFINED
-                            || upi.getDataUsedForMonetization()
-                                == UsesPermissionInfo.USAGE_UNDEFINED
-                            || upi.getDataRetention() == UsesPermissionInfo.RETENTION_UNDEFINED) {
-                        // STOPSHIP: Make this throw
-                        Slog.e(TAG, "Package " + pkg.packageName + " does not provide usage "
-                                + "information for permission " + upi.getPermission()
-                                + ". This will be a fatal error in Q.");
-                    }
-                }
-            }
         }
     }
 
@@ -13457,6 +13436,10 @@ public class PackageManagerService extends IPackageManager.Stub
             return false;
         }
 
+        if ((installFlags & PackageManager.INSTALL_DISABLE_VERIFICATION) != 0) {
+            return false;
+        }
+
         boolean ensureVerifyAppsEnabled = isUserRestricted(userId, UserManager.ENSURE_VERIFY_APPS);
 
         // Check if installing from ADB
@@ -14673,6 +14656,13 @@ public class PackageManagerService extends IPackageManager.Stub
                     enableRollbackIntent.setDataAndType(Uri.fromFile(new File(origin.resolvedPath)),
                             PACKAGE_MIME_TYPE);
                     enableRollbackIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                    // Allow the broadcast to be sent before boot complete.
+                    // This is needed when committing the apk part of a staged
+                    // session in early boot. The rollback manager registers
+                    // its receiver early enough during the boot process that
+                    // it will not miss the broadcast.
+                    enableRollbackIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
 
                     mContext.sendOrderedBroadcastAsUser(enableRollbackIntent, getUser(),
                             android.Manifest.permission.PACKAGE_ROLLBACK_AGENT,
@@ -16398,7 +16388,6 @@ public class PackageManagerService extends IPackageManager.Stub
         final boolean onExternal = args.volumeUuid != null;
         final boolean instantApp = ((installFlags & PackageManager.INSTALL_INSTANT_APP) != 0);
         final boolean fullApp = ((installFlags & PackageManager.INSTALL_FULL_APP) != 0);
-        final boolean forceSdk = ((installFlags & PackageManager.INSTALL_FORCE_SDK) != 0);
         final boolean virtualPreload =
                 ((installFlags & PackageManager.INSTALL_VIRTUAL_PRELOAD) != 0);
         @ScanFlags int scanFlags = SCAN_NEW_INSTALL | SCAN_UPDATE_SIGNATURE;
@@ -16430,8 +16419,7 @@ public class PackageManagerService extends IPackageManager.Stub
         // Retrieve PackageSettings and parse package
         @ParseFlags final int parseFlags = mDefParseFlags | PackageParser.PARSE_CHATTY
                 | PackageParser.PARSE_ENFORCE_CODE
-                | (onExternal ? PackageParser.PARSE_EXTERNAL_STORAGE : 0)
-                | (forceSdk ? PackageParser.PARSE_FORCE_SDK : 0);
+                | (onExternal ? PackageParser.PARSE_EXTERNAL_STORAGE : 0);
 
         PackageParser pp = new PackageParser();
         pp.setSeparateProcesses(mSeparateProcesses);
@@ -16851,19 +16839,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     if (DEBUG_INSTALL) {
                         Slog.d(TAG,
                                 "replacePackageLI: new=" + pkg + ", old=" + oldPackage);
-                    }
-
-                    // don't allow upgrade to target a release SDK from a pre-release SDK
-                    final boolean oldTargetsPreRelease = oldPackage.applicationInfo.targetSdkVersion
-                            == Build.VERSION_CODES.CUR_DEVELOPMENT;
-                    final boolean newTargetsPreRelease = pkg.applicationInfo.targetSdkVersion
-                            == Build.VERSION_CODES.CUR_DEVELOPMENT;
-                    if (oldTargetsPreRelease
-                            && !newTargetsPreRelease
-                            && ((parseFlags & PackageParser.PARSE_FORCE_SDK) == 0)) {
-                        Slog.w(TAG, "Can't install package targeting released sdk");
-                        throw new PrepareFailure(
-                                PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE);
                     }
 
                     ps = mSettings.mPackages.get(pkgName11);

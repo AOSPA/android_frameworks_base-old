@@ -29,14 +29,20 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.telephony.Rlog;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.util.StatsLog;
 
 import com.android.internal.annotations.VisibleForTesting;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /** Utility class for Telephony permission enforcement. */
@@ -47,6 +53,14 @@ public final class TelephonyPermissions {
 
     private static final Supplier<ITelephony> TELEPHONY_SUPPLIER = () ->
             ITelephony.Stub.asInterface(ServiceManager.getService(Context.TELEPHONY_SERVICE));
+
+    // Contains a mapping of packages that did not meet the new requirements to access device
+    // identifiers and the methods they were attempting to invoke; used to prevent duplicate
+    // reporting of packages / methods.
+    private static final Map<String, Set<String>> sReportedDeviceIDPackages;
+    static {
+        sReportedDeviceIDPackages = new HashMap<>();
+    }
 
     private TelephonyPermissions() {}
 
@@ -284,46 +298,62 @@ public final class TelephonyPermissions {
      */
     private static boolean reportAccessDeniedToReadIdentifiers(Context context, int subId, int pid,
             int uid, String callingPackage, String message) {
-        // Check if the application is a 3P app; if so then a separate setting is required to relax
-        // the check to begin flagging problems with 3P apps early.
+        // Check if the application is not preinstalled; if not then a separate setting is required
+        // to relax the check to begin flagging problems with non-preinstalled apps early.
         boolean relax3PDeviceIdentifierCheck = Settings.Global.getInt(context.getContentResolver(),
                 Settings.Global.PRIVILEGED_DEVICE_IDENTIFIER_3P_CHECK_RELAXED, 0) == 1;
-        boolean is3PApp = true;
+        boolean isPreinstalled = false;
         // Also check if the application is a preloaded non-privileged app; if so there is a
         // separate setting to relax the check for these apps to ensure users can relax the check
-        // for 3P or non-priv apps as needed while continuing to test the other.
+        // for non-preinstalled or non-priv apps as needed while continuing to test the other.
         boolean relaxNonPrivDeviceIdentifierCheck = Settings.Global.getInt(
                 context.getContentResolver(),
                 Settings.Global.PRIVILEGED_DEVICE_IDENTIFIER_NON_PRIV_CHECK_RELAXED, 0) == 1;
-        boolean isNonPrivApp = false;
+        boolean isPrivApp = false;
         // Similar to above support relaxing the check for privileged apps while still enforcing it
-        // for non-privileged and 3P apps.
+        // for non-privileged and non-preinstalled apps.
         boolean relaxPrivDeviceIdentifierCheck = Settings.Global.getInt(
                 context.getContentResolver(),
                 Settings.Global.PRIVILEGED_DEVICE_IDENTIFIER_PRIV_CHECK_RELAXED, 0) == 1;
         ApplicationInfo callingPackageInfo = null;
         try {
             callingPackageInfo = context.getPackageManager().getApplicationInfo(callingPackage, 0);
-            if (callingPackageInfo.isPrivilegedApp()) {
-                is3PApp = false;
-            } else if (callingPackageInfo.isSystemApp()) {
-                is3PApp = false;
-                isNonPrivApp = true;
+            if (callingPackageInfo.isSystemApp()) {
+                isPreinstalled = true;
+                if (callingPackageInfo.isPrivilegedApp()) {
+                    isPrivApp = true;
+                }
             }
         } catch (PackageManager.NameNotFoundException e) {
             // If the application info for the calling package could not be found then assume the
-            // calling app is a 3P app to detect any issues with the check
+            // calling app is a non-preinstalled app to detect any issues with the check
             Log.e(LOG_TAG, "Exception caught obtaining package info for package " + callingPackage,
                     e);
         }
         // The new Q restrictions for device identifier access will be enforced for all apps with
         // settings to individually disable the new restrictions for privileged, preloaded
-        // non-privileged, and 3P apps.
-        if ((!is3PApp && !isNonPrivApp && !relaxPrivDeviceIdentifierCheck)
-                || (is3PApp && !relax3PDeviceIdentifierCheck)
-                || (isNonPrivApp && !relaxNonPrivDeviceIdentifierCheck)) {
-            Log.wtf(LOG_TAG, "reportAccessDeniedToReadIdentifiers:" + callingPackage + ":" + message
-                    + ":is3PApp=" + is3PApp + ":isNonPrivApp=" + isNonPrivApp);
+        // non-privileged, and non-preinstalled apps.
+        if (!isIdentifierCheckDisabled() && (
+                (!isPreinstalled && !relax3PDeviceIdentifierCheck)
+                        || (isPreinstalled && !isPrivApp && !relaxNonPrivDeviceIdentifierCheck))) {
+            // The current package should only be reported in StatsLog if it has not previously been
+            // reported for the currently invoked device identifier method.
+            boolean packageReported = sReportedDeviceIDPackages.containsKey(callingPackage);
+            if (!packageReported || !sReportedDeviceIDPackages.get(callingPackage).contains(
+                    message)) {
+                Set invokedMethods;
+                if (!packageReported) {
+                    invokedMethods = new HashSet<String>();
+                    sReportedDeviceIDPackages.put(callingPackage, invokedMethods);
+                } else {
+                    invokedMethods = sReportedDeviceIDPackages.get(callingPackage);
+                }
+                invokedMethods.add(message);
+                StatsLog.write(StatsLog.DEVICE_IDENTIFIER_ACCESS_DENIED, callingPackage, message,
+                        isPreinstalled, isPrivApp);
+            }
+            Log.w(LOG_TAG, "reportAccessDeniedToReadIdentifiers:" + callingPackage + ":" + message
+                    + ":isPreinstalled=" + isPreinstalled + ":isPrivApp=" + isPrivApp);
             // if the target SDK is pre-Q then check if the calling package would have previously
             // had access to device identifiers.
             if (callingPackageInfo != null && (
@@ -345,6 +375,14 @@ public final class TelephonyPermissions {
         } else {
             return checkReadPhoneState(context, subId, pid, uid, callingPackage, message);
         }
+    }
+
+    /**
+     * Returns true if the new device identifier access restrictions are disabled.
+     */
+    private static boolean isIdentifierCheckDisabled() {
+        return Boolean.parseBoolean(DeviceConfig.getProperty(DeviceConfig.Privacy.NAMESPACE,
+                DeviceConfig.Privacy.PROPERTY_DEVICE_IDENTIFIER_ACCESS_RESTRICTIONS_DISABLED));
     }
 
     /**

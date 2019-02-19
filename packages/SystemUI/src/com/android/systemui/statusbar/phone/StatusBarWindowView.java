@@ -59,14 +59,13 @@ import com.android.systemui.Dependency;
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingManager;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-
 
 public class StatusBarWindowView extends FrameLayout {
     public static final String TAG = "StatusBarWindowView";
@@ -112,7 +111,7 @@ public class StatusBarWindowView extends FrameLayout {
         mTransparentSrcPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC));
         mFalsingManager = FalsingManager.getInstance(context);
         mDoubleTapHelper = new DoubleTapHelper(this, active -> {}, () -> {
-            mService.wakeUpIfDozing(SystemClock.uptimeMillis(), this);
+            mService.wakeUpIfDozing(SystemClock.uptimeMillis(), this, "DOUBLE_TAP");
             return true;
         }, null, null);
     }

@@ -98,7 +98,6 @@ import android.app.servertransaction.LaunchActivityItem;
 import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.ResumeActivityItem;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -475,7 +474,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
      * initialized.  So we initialize our wakelocks afterwards.
      */
     void initPowerManagement() {
-        mPowerManager = (PowerManager)mService.mContext.getSystemService(Context.POWER_SERVICE);
+        mPowerManager = mService.mContext.getSystemService(PowerManager.class);
         mGoingToSleep = mPowerManager
                 .newWakeLock(PARTIAL_WAKE_LOCK, "ActivityManager-Sleep");
         mLaunchingActivity = mPowerManager.newWakeLock(PARTIAL_WAKE_LOCK, "*launch*");
@@ -2498,7 +2497,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void wakeUp(String reason) {
-        mPowerManager.wakeUp(SystemClock.uptimeMillis(), "android.server.am:TURN_ON:" + reason);
+        mPowerManager.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_APPLICATION,
+                "android.server.am:TURN_ON:" + reason);
     }
 
     /**

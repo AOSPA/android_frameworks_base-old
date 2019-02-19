@@ -50,6 +50,25 @@ class RollbackData {
     public Instant timestamp;
 
     /**
+     * The session ID for the staged session if this rollback data represents a staged session,
+     * {@code -1} otherwise.
+     */
+    public int stagedSessionId;
+
+    /**
+     * A flag to indicate whether the rollback should be considered available
+     * for use. This will always be true for rollbacks of non-staged sessions.
+     * For rollbacks of staged sessions, this is not set to true until after
+     * the staged session has been applied.
+     */
+    public boolean isAvailable;
+
+    /**
+     * The id of the post-reboot apk session for a staged install, if any.
+     */
+    public int apkSessionId = -1;
+
+    /**
      * Whether this Rollback is currently in progress. This field is true from the point
      * we commit a {@code PackageInstaller} session containing these packages to the point the
      * {@code PackageInstaller} calls into the {@code onFinished} callback.
@@ -57,8 +76,17 @@ class RollbackData {
     // NOTE: All accesses to this field are from the RollbackManager handler thread.
     public boolean inProgress = false;
 
-    RollbackData(int rollbackId, File backupDir) {
+    RollbackData(int rollbackId, File backupDir, int stagedSessionId, boolean isAvailable) {
         this.rollbackId = rollbackId;
         this.backupDir = backupDir;
+        this.stagedSessionId = stagedSessionId;
+        this.isAvailable = isAvailable;
+    }
+
+    /**
+     * Whether the rollback is for rollback of a staged install.
+     */
+    public boolean isStaged() {
+        return stagedSessionId != -1;
     }
 }

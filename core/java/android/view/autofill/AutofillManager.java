@@ -17,7 +17,6 @@
 package android.view.autofill;
 
 import static android.service.autofill.FillRequest.FLAG_MANUAL_REQUEST;
-import static android.util.DebugUtils.flagsToString;
 import static android.view.autofill.Helper.sDebug;
 import static android.view.autofill.Helper.sVerbose;
 
@@ -79,7 +78,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 //TODO: use java.lang.ref.Cleaner once Android supports Java 9
 import sun.misc.Cleaner;
@@ -339,6 +337,14 @@ public final class AutofillManager {
     public static final int MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS = 1_000 * 60 * 2; // 2 minutes
 
     /**
+     * Disables Augmented Autofill.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final int FLAG_SMART_SUGGESTION_OFF = 0x0;
+
+    /**
      * Displays the Augment Autofill window using the same mechanism (such as a popup-window
      * attached to the focused view) as the standard autofill.
      *
@@ -347,15 +353,20 @@ public final class AutofillManager {
     @TestApi
     public static final int FLAG_SMART_SUGGESTION_SYSTEM = 0x1;
 
-    /** @hide */ // TODO(b/123233342): remove when not used anymore
-    public static final int FLAG_SMART_SUGGESTION_LEGACY = 0x2;
-
     /** @hide */
-    @IntDef(flag = true, prefix = { "FLAG_SMART_SUGGESTION_" }, value = {
-            FLAG_SMART_SUGGESTION_SYSTEM
-    })
+    @IntDef(flag = false, value = { FLAG_SMART_SUGGESTION_OFF, FLAG_SMART_SUGGESTION_SYSTEM })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SmartSuggestionMode {}
+
+    /**
+     * {@code DeviceConfig} property used to set which Smart Suggestion modes for Augmented Autofill
+     * are available.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String DEVICE_CONFIG_AUTOFILL_SMART_SUGGESTION_SUPPORTED_MODES =
+            "smart_suggestion_supported_modes";
 
     /**
      * Makes an authentication id from a request id and a dataset id.
@@ -1769,45 +1780,6 @@ public final class AutofillManager {
     }
 
     /**
-     * Defines whether augmented autofill should be triggered for activities with such
-     * {@link android.content.ComponentName}.
-     *
-     * <p>Useful to blacklist a particular activity.
-     *
-     * <p><b>Note:</b> This method should only be called by the app providing the augmented autofill
-     * service, and it's ignored if the caller isn't it.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    //TODO(b/122654591): @TestApi is needed because CtsAutoFillServiceTestCases hosts the service
-    //in the same package as the test, and that module is compiled with SDK=test_current
-    public void setActivityAugmentedAutofillEnabled(@NonNull ComponentName activity,
-            boolean enabled) {
-        // TODO(b/123100824): implement
-    }
-
-    /**
-     * Defines whether augmented autofill should be triggered for activities of the app with such
-     * {@code packageName}.
-     *
-     * <p>Useful to blacklist any activity from a particular app.
-     *
-     * <p><b>Note:</b> This method should only be called by the app providing the augmented autofill
-     * service, and it's ignored if the caller isn't it.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    //TODO(b/122654591): @TestApi is needed because CtsAutoFillServiceTestCases hosts the service
-    //in the same package as the test, and that module is compiled with SDK=test_current
-    public void setPackageAugmentedAutofillEnabled(@NonNull String packageName, boolean enabled) {
-        // TODO(b/123100824): implement
-    }
-
-    /**
      * Explicitly limits augmented autofill to the given packages and activities.
      *
      * <p>When the whitelist is set, it overrides the values passed to
@@ -1836,38 +1808,6 @@ public final class AutofillManager {
     public void setAugmentedAutofillWhitelist(@Nullable List<String> packages,
             @Nullable List<ComponentName> activities) {
         // TODO(b/123100824): implement
-    }
-
-    /**
-     * Gets the activities where augmented autofill was disabled by
-     * {@link #setActivityAugmentedAutofillEnabled(ComponentName, boolean)}.
-     *
-     * <p><b>Note:</b> This method should only be called by the app providing the augmented autofill
-     * service, and it's ignored if the caller isn't it.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    @NonNull
-    public Set<ComponentName> getAugmentedAutofillDisabledActivities() {
-        return null; // TODO(b/123100824): implement
-    }
-
-    /**
-     * Gets the apps where content capture was disabled by
-     * {@link #setPackageAugmentedAutofillEnabled(String, boolean)}.
-     *
-     * <p><b>Note:</b> This method should only be called by the app providing the augmented autofill
-     * service, and it's ignored if the caller isn't it.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    @NonNull
-    public Set<String> getAugmentedAutofillDisabledPackages() {
-        return null; // TODO(b/123100824): implement
     }
 
     private void requestShowFillUi(int sessionId, AutofillId id, int width, int height,
@@ -2422,7 +2362,14 @@ public final class AutofillManager {
 
     /** @hide */
     public static String getSmartSuggestionModeToString(@SmartSuggestionMode int flags) {
-        return flagsToString(AutofillManager.class, "FLAG_SMART_SUGGESTION_", flags);
+        switch (flags) {
+            case FLAG_SMART_SUGGESTION_OFF:
+                return "OFF";
+            case FLAG_SMART_SUGGESTION_SYSTEM:
+                return "SYSTEM";
+            default:
+                return "INVALID:" + flags;
+        }
     }
 
     @GuardedBy("mLock")

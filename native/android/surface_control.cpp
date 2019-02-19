@@ -46,7 +46,13 @@ using Transaction = SurfaceComposerClient::Transaction;
 
 static bool getWideColorSupport(const sp<SurfaceControl>& surfaceControl) {
     sp<SurfaceComposerClient> client = surfaceControl->getClient();
-    sp<IBinder> display(client->getBuiltInDisplay(ISurfaceComposer::eDisplayIdMain));
+
+    const sp<IBinder> display = client->getInternalDisplayToken();
+    if (display == nullptr) {
+        ALOGE("unable to get wide color support for disconnected internal display");
+        return false;
+    }
+
     bool isWideColorDisplay = false;
     status_t err = client->isWideColorDisplay(display, &isWideColorDisplay);
     if (err) {
@@ -58,7 +64,12 @@ static bool getWideColorSupport(const sp<SurfaceControl>& surfaceControl) {
 
 static bool getHdrSupport(const sp<SurfaceControl>& surfaceControl) {
     sp<SurfaceComposerClient> client = surfaceControl->getClient();
-    sp<IBinder> display(client->getBuiltInDisplay(ISurfaceComposer::eDisplayIdMain));
+
+    const sp<IBinder> display = client->getInternalDisplayToken();
+    if (display == nullptr) {
+        ALOGE("unable to get hdr capabilities for disconnected internal display");
+        return false;
+    }
 
     HdrCapabilities hdrCapabilities;
     status_t err = client->getHdrCapabilities(display, &hdrCapabilities);
@@ -427,6 +438,20 @@ void ASurfaceTransaction_setBufferAlpha(ASurfaceTransaction* aSurfaceTransaction
     Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
 
     transaction->setAlpha(surfaceControl, alpha);
+}
+
+void ASurfaceTransaction_setBufferDataSpace(ASurfaceTransaction* aSurfaceTransaction,
+                                         ASurfaceControl* aSurfaceControl,
+                                         ADataSpace aDataSpace) {
+    CHECK_NOT_NULL(aSurfaceTransaction);
+    CHECK_NOT_NULL(aSurfaceControl);
+
+    sp<SurfaceControl> surfaceControl = ASurfaceControl_to_SurfaceControl(aSurfaceControl);
+    LOG_ALWAYS_FATAL_IF(!isDataSpaceValid(surfaceControl, aDataSpace), "invalid dataspace");
+
+    Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
+
+    transaction->setDataspace(surfaceControl, static_cast<ui::Dataspace>(aDataSpace));
 }
 
 void ASurfaceTransaction_setHdrMetadata_smpte2086(ASurfaceTransaction* aSurfaceTransaction,

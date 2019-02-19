@@ -44,6 +44,7 @@ import android.graphics.Region;
 import android.hardware.HardwareBuffer;
 import android.hardware.display.DisplayedContentSample;
 import android.hardware.display.DisplayedContentSamplingAttributes;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -61,6 +62,7 @@ import libcore.util.NativeAllocationRegistry;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * Handle to an on-screen Surface managed by the system compositor. The SurfaceControl is
@@ -131,7 +133,8 @@ public final class SurfaceControl implements Parcelable {
     private static native boolean nativeClearAnimationFrameStats();
     private static native boolean nativeGetAnimationFrameStats(WindowAnimationFrameStats outStats);
 
-    private static native IBinder nativeGetBuiltInDisplay(int physicalDisplayId);
+    private static native long[] nativeGetPhysicalDisplayIds();
+    private static native IBinder nativeGetPhysicalDisplayToken(long physicalDisplayId);
     private static native IBinder nativeCreateDisplay(String name, boolean secure);
     private static native void nativeDestroyDisplay(IBinder displayToken);
     private static native void nativeSetDisplaySurface(long transactionObj,
@@ -328,7 +331,6 @@ public final class SurfaceControl implements Parcelable {
      * Updates the value set during Surface creation (see {@link #OPAQUE}).
      */
     private static final int SURFACE_OPAQUE = 0x02;
-
 
     /* built-in physical display ids (keep in sync with ISurfaceComposer.h)
      * these are different from the logical display ids used elsewhere in the framework */
@@ -741,8 +743,10 @@ public final class SurfaceControl implements Parcelable {
                 for (int i = 0; i < metadata.size(); ++i) {
                     metaParcel.writeInt(metadata.keyAt(i));
                     metaParcel.writeByteArray(
-                            ByteBuffer.allocate(4).putInt(metadata.valueAt(i)).array());
+                            ByteBuffer.allocate(4).order(ByteOrder.nativeOrder())
+                                    .putInt(metadata.valueAt(i)).array());
                 }
+                metaParcel.setDataPosition(0);
             }
             mNativeObject = nativeCreate(session, name, w, h, format, flags,
                     parent != null ? parent.mNativeObject : 0, metaParcel);
@@ -882,12 +886,11 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * Free all server-side state associated with this surface and
-     * release this object's reference.  This method can only be
-     * called from the process that created the service.
+     * Release the local resources like {@link #release} but also
+     * remove the Surface from the screen.
      * @hide
      */
-    public void destroy() {
+    public void remove() {
         if (mNativeObject != 0) {
             nativeDestroy(mNativeObject);
             mNativeObject = 0;
@@ -965,8 +968,8 @@ public final class SurfaceControl implements Parcelable {
         }
     }
 
-    /** end a transaction 
-     * @hide 
+    /** end a transaction
+     * @hide
      */
     @UnsupportedAppUsage
     public static void closeTransaction() {
@@ -1743,9 +1746,28 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
-    public static IBinder getBuiltInDisplay(int builtInDisplayId) {
-        return nativeGetBuiltInDisplay(builtInDisplayId);
+    public static long[] getPhysicalDisplayIds() {
+        return nativeGetPhysicalDisplayIds();
+    }
+
+    /**
+     * @hide
+     */
+    public static IBinder getPhysicalDisplayToken(long physicalDisplayId) {
+        return nativeGetPhysicalDisplayToken(physicalDisplayId);
+    }
+
+    /**
+     * TODO(116025192): Remove this stopgap once framework is display-agnostic.
+     *
+     * @hide
+     */
+    public static IBinder getInternalDisplayToken() {
+        final long[] physicalDisplayIds = getPhysicalDisplayIds();
+        if (physicalDisplayIds.length == 0) {
+            return null;
+        }
+        return getPhysicalDisplayToken(physicalDisplayIds[0]);
     }
 
     /**
@@ -1804,8 +1826,12 @@ public final class SurfaceControl implements Parcelable {
     public static Bitmap screenshot(Rect sourceCrop, int width, int height,
             boolean useIdentityTransform, int rotation) {
         // TODO: should take the display as a parameter
-        IBinder displayToken = SurfaceControl.getBuiltInDisplay(
-                SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN);
+        final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
+        if (displayToken == null) {
+            Log.w(TAG, "Failed to take screenshot because internal display is disconnected");
+            return null;
+        }
+
         if (rotation == ROTATION_90 || rotation == ROTATION_270) {
             rotation = (rotation == ROTATION_90) ? ROTATION_270 : ROTATION_90;
         }
@@ -2208,7 +2234,7 @@ public final class SurfaceControl implements Parcelable {
         /**
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.O)
         public Transaction setLayerStack(SurfaceControl sc, int layerStack) {
             sc.checkNotReleased();
             nativeSetLayerStack(mNativeObject, sc.mNativeObject, layerStack);
@@ -2414,7 +2440,7 @@ public final class SurfaceControl implements Parcelable {
             return this;
         }
 
-        /** flag the transaction as an animation 
+        /** flag the transaction as an animation
          * @hide
          */
         public Transaction setAnimationTransaction() {
@@ -2472,6 +2498,24 @@ public final class SurfaceControl implements Parcelable {
             mResizedSurfaces.putAll(other.mResizedSurfaces);
             other.mResizedSurfaces.clear();
             nativeMergeTransaction(mNativeObject, other.mNativeObject);
+            return this;
+        }
+
+        /**
+         * Equivalent to reparent with a null parent, in that it removes
+         * the SurfaceControl from the scene, but it also releases
+         * the local resources (by calling {@link SurfaceControl#release})
+         * after this method returns, {@link SurfaceControl#isValid} will return
+         * false for the argument.
+         *
+         * @param sc The surface to remove and release.
+         * @return This transaction
+         * @hide
+         */
+        @NonNull
+        public Transaction remove(@NonNull SurfaceControl sc) {
+            reparent(sc, null);
+            sc.release();
             return this;
         }
     }

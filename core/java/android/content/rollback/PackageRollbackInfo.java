@@ -22,6 +22,7 @@ import android.content.pm.VersionedPackage;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.IntArray;
+import android.util.SparseLongArray;
 
 import java.util.ArrayList;
 
@@ -67,6 +68,23 @@ public final class PackageRollbackInfo implements Parcelable {
      */
     // NOTE: Not a part of the Parcelable representation of this object.
     private final ArrayList<RestoreInfo> mPendingRestores;
+
+    /**
+     * Whether this instance represents the PackageRollbackInfo for an APEX module.
+     */
+    private final boolean mIsApex;
+
+    /*
+     * The list of users the package is installed for.
+     */
+    // NOTE: Not a part of the Parcelable representation of this object.
+    private final IntArray mInstalledUsers;
+
+    /**
+     * A mapping between user and an inode of theirs CE data snapshot.
+     */
+    // NOTE: Not a part of the Parcelable representation of this object.
+    private final SparseLongArray mCeSnapshotInodes;
 
     /**
      * Returns the name of the package to roll back from.
@@ -116,20 +134,48 @@ public final class PackageRollbackInfo implements Parcelable {
     }
 
     /** @hide */
+    public boolean isApex() {
+        return mIsApex;
+    }
+
+    /** @hide */
+    public IntArray getInstalledUsers() {
+        return mInstalledUsers;
+    }
+
+    /** @hide */
+    public SparseLongArray getCeSnapshotInodes() {
+        return mCeSnapshotInodes;
+    }
+
+    /** @hide */
+    public void putCeSnapshotInode(int userId, long ceSnapshotInode) {
+        mCeSnapshotInodes.put(userId, ceSnapshotInode);
+    }
+
+    /** @hide */
     public PackageRollbackInfo(VersionedPackage packageRolledBackFrom,
             VersionedPackage packageRolledBackTo,
-            @NonNull IntArray pendingBackups, @NonNull ArrayList<RestoreInfo> pendingRestores) {
+            @NonNull IntArray pendingBackups, @NonNull ArrayList<RestoreInfo> pendingRestores,
+            boolean isApex, @NonNull IntArray installedUsers,
+            @NonNull SparseLongArray ceSnapshotInodes) {
         this.mVersionRolledBackFrom = packageRolledBackFrom;
         this.mVersionRolledBackTo = packageRolledBackTo;
         this.mPendingBackups = pendingBackups;
         this.mPendingRestores = pendingRestores;
+        this.mIsApex = isApex;
+        this.mInstalledUsers = installedUsers;
+        this.mCeSnapshotInodes = ceSnapshotInodes;
     }
 
     private PackageRollbackInfo(Parcel in) {
         this.mVersionRolledBackFrom = VersionedPackage.CREATOR.createFromParcel(in);
         this.mVersionRolledBackTo = VersionedPackage.CREATOR.createFromParcel(in);
+        this.mIsApex = in.readBoolean();
         this.mPendingRestores = null;
         this.mPendingBackups = null;
+        this.mInstalledUsers = null;
+        this.mCeSnapshotInodes = null;
     }
 
     @Override
@@ -141,6 +187,7 @@ public final class PackageRollbackInfo implements Parcelable {
     public void writeToParcel(Parcel out, int flags) {
         mVersionRolledBackFrom.writeToParcel(out, flags);
         mVersionRolledBackTo.writeToParcel(out, flags);
+        out.writeBoolean(mIsApex);
     }
 
     public static final Parcelable.Creator<PackageRollbackInfo> CREATOR =

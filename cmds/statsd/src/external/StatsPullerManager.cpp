@@ -174,9 +174,12 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // Size of specific categories of files. Eg. Music.
         {android::util::CATEGORY_SIZE,
          {.puller = new StatsCompanionServicePuller(android::util::CATEGORY_SIZE)}},
-        // Number of fingerprints registered to each user.
+        // Number of fingerprints enrolled for each user.
         {android::util::NUM_FINGERPRINTS_ENROLLED,
          {.puller = new StatsCompanionServicePuller(android::util::NUM_FINGERPRINTS_ENROLLED)}},
+        // Number of faces enrolled for each user.
+        {android::util::NUM_FACES_ENROLLED,
+         {.puller = new StatsCompanionServicePuller(android::util::NUM_FACES_ENROLLED)}},
         // ProcStats.
         {android::util::PROC_STATS,
          {.puller = new StatsCompanionServicePuller(android::util::PROC_STATS)}},
@@ -358,12 +361,13 @@ void StatsPullerManager::OnAlarmFired(int64_t elapsedTimeNs) {
 
     for (const auto& pullInfo : needToPull) {
         vector<shared_ptr<LogEvent>> data;
-        if (!Pull(pullInfo.first, &data)) {
+        bool pullSuccess = Pull(pullInfo.first, &data);
+        if (pullSuccess) {
+            StatsdStats::getInstance().notePullDelay(
+                    pullInfo.first, getElapsedRealtimeNs() - elapsedTimeNs);
+        } else {
             VLOG("pull failed at %lld, will try again later", (long long)elapsedTimeNs);
-            continue;
         }
-        StatsdStats::getInstance().notePullDelay(pullInfo.first,
-                                                 getElapsedRealtimeNs() - elapsedTimeNs);
 
         // Convention is to mark pull atom timestamp at request time.
         // If we pull at t0, puller starts at t1, finishes at t2, and send back
@@ -380,8 +384,8 @@ void StatsPullerManager::OnAlarmFired(int64_t elapsedTimeNs) {
         for (const auto& receiverInfo : pullInfo.second) {
             sp<PullDataReceiver> receiverPtr = receiverInfo->receiver.promote();
             if (receiverPtr != nullptr) {
-                receiverPtr->onDataPulled(data);
-                // we may have just come out of a coma, compute next pull time
+                receiverPtr->onDataPulled(data, pullSuccess, elapsedTimeNs);
+                // We may have just come out of a coma, compute next pull time.
                 int numBucketsAhead =
                         (elapsedTimeNs - receiverInfo->nextPullTimeNs) / receiverInfo->intervalNs;
                 receiverInfo->nextPullTimeNs += (numBucketsAhead + 1) * receiverInfo->intervalNs;

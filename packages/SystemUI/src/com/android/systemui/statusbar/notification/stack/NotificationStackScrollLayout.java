@@ -86,6 +86,8 @@ import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEventListener;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper.DragDownCallback;
 import com.android.systemui.statusbar.EmptyShadeView;
@@ -94,8 +96,7 @@ import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.StatusBarStateController.StateListener;
+import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -599,6 +600,16 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         updateFooter();
     }
 
+    @Override
+    public void onOverlayChanged() {
+        int newRadius = mContext.getResources().getDimensionPixelSize(
+                Utils.getThemeAttr(mContext, android.R.attr.dialogCornerRadius));
+        if (mCornerRadius != newRadius) {
+            mCornerRadius = newRadius;
+            invalidate();
+        }
+    }
+
     @VisibleForTesting
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void updateFooter() {
@@ -654,8 +665,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        Dependency.get(StatusBarStateController.class)
-                .addCallback(mStateListener, StatusBarStateController.RANK_STACK_SCROLLER);
+        ((SysuiStatusBarStateController) Dependency.get(StatusBarStateController.class))
+                .addCallback(mStateListener, SysuiStatusBarStateController.RANK_STACK_SCROLLER);
         Dependency.get(ConfigurationController.class).addCallback(this);
     }
 
@@ -5420,7 +5431,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             mHeadsUpAppearanceController.setPublicMode(publicMode);
         }
 
-        StatusBarStateController state = Dependency.get(StatusBarStateController.class);
+        SysuiStatusBarStateController state = (SysuiStatusBarStateController)
+                Dependency.get(StatusBarStateController.class);
         setHideSensitive(publicMode, state.goingToFullShade() /* animate */);
         setDimmed(onKeyguard, state.fromShadeLocked() /* animate */);
         setExpandingEnabled(!onKeyguard);

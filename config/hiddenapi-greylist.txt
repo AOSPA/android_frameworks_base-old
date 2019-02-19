@@ -328,17 +328,12 @@ Landroid/content/om/IOverlayManager;->getAllOverlays(I)Ljava/util/Map;
 Landroid/content/om/IOverlayManager;->getOverlayInfo(Ljava/lang/String;I)Landroid/content/om/OverlayInfo;
 Landroid/content/pm/IPackageDataObserver$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Landroid/content/pm/IPackageDataObserver$Stub$Proxy;->mRemote:Landroid/os/IBinder;
-Landroid/content/pm/IPackageDataObserver$Stub$Proxy;->onRemoveCompleted(Ljava/lang/String;Z)V
 Landroid/content/pm/IPackageDataObserver$Stub;-><init>()V
 Landroid/content/pm/IPackageDataObserver$Stub;->asInterface(Landroid/os/IBinder;)Landroid/content/pm/IPackageDataObserver;
-Landroid/content/pm/IPackageDataObserver$Stub;->DESCRIPTOR:Ljava/lang/String;
-Landroid/content/pm/IPackageDataObserver$Stub;->TRANSACTION_onRemoveCompleted:I
 Landroid/content/pm/IPackageDataObserver;->onRemoveCompleted(Ljava/lang/String;Z)V
 Landroid/content/pm/IPackageDeleteObserver$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Landroid/content/pm/IPackageDeleteObserver$Stub;-><init>()V
 Landroid/content/pm/IPackageDeleteObserver$Stub;->asInterface(Landroid/os/IBinder;)Landroid/content/pm/IPackageDeleteObserver;
-Landroid/content/pm/IPackageDeleteObserver$Stub;->DESCRIPTOR:Ljava/lang/String;
-Landroid/content/pm/IPackageDeleteObserver$Stub;->TRANSACTION_packageDeleted:I
 Landroid/content/pm/IPackageDeleteObserver2$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Landroid/content/pm/IPackageDeleteObserver2$Stub$Proxy;->mRemote:Landroid/os/IBinder;
 Landroid/content/pm/IPackageDeleteObserver2$Stub;-><init>()V
@@ -437,8 +432,6 @@ Landroid/content/pm/IPackageStatsObserver$Stub$Proxy;-><init>(Landroid/os/IBinde
 Landroid/content/pm/IPackageStatsObserver$Stub$Proxy;->mRemote:Landroid/os/IBinder;
 Landroid/content/pm/IPackageStatsObserver$Stub;-><init>()V
 Landroid/content/pm/IPackageStatsObserver$Stub;->asInterface(Landroid/os/IBinder;)Landroid/content/pm/IPackageStatsObserver;
-Landroid/content/pm/IPackageStatsObserver$Stub;->DESCRIPTOR:Ljava/lang/String;
-Landroid/content/pm/IPackageStatsObserver$Stub;->TRANSACTION_onGetStatsCompleted:I
 Landroid/content/pm/IPackageStatsObserver;->onGetStatsCompleted(Landroid/content/pm/PackageStats;Z)V
 Landroid/content/pm/IShortcutService$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Landroid/content/pm/IShortcutService$Stub;->asInterface(Landroid/os/IBinder;)Landroid/content/pm/IShortcutService;
@@ -489,7 +482,6 @@ Landroid/location/ILocationManager$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Landroid/location/ILocationManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/location/ILocationManager;
 Landroid/location/ILocationManager$Stub;->TRANSACTION_getAllProviders:I
 Landroid/location/ILocationManager;->getAllProviders()Ljava/util/List;
-Landroid/location/ILocationManager;->getNetworkProviderPackage()Ljava/lang/String;
 Landroid/location/INetInitiatedListener$Stub;-><init>()V
 Landroid/location/INetInitiatedListener;->sendNiResponse(II)Z
 Landroid/location/LocationManager$ListenerTransport;-><init>(Landroid/location/LocationManager;Landroid/location/LocationListener;Landroid/os/Looper;)V
@@ -836,7 +828,6 @@ Landroid/os/IPowerManager;->isInteractive()Z
 Landroid/os/IPowerManager;->reboot(ZLjava/lang/String;Z)V
 Landroid/os/IPowerManager;->releaseWakeLock(Landroid/os/IBinder;I)V
 Landroid/os/IPowerManager;->userActivity(JII)V
-Landroid/os/IPowerManager;->wakeUp(JLjava/lang/String;Ljava/lang/String;)V
 Landroid/os/IRecoverySystem$Stub;->asInterface(Landroid/os/IBinder;)Landroid/os/IRecoverySystem;
 Landroid/os/IRemoteCallback$Stub;-><init>()V
 Landroid/os/IRemoteCallback;->sendResult(Landroid/os/Bundle;)V
@@ -1483,8 +1474,6 @@ Landroid/view/autofill/IAutoFillManager$Stub$Proxy;-><init>(Landroid/os/IBinder;
 Landroid/view/autofill/IAutoFillManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/view/autofill/IAutoFillManager;
 Landroid/view/IAppTransitionAnimationSpecsFuture$Stub;-><init>()V
 Landroid/view/IDockedStackListener$Stub;-><init>()V
-Landroid/view/IGraphicsStats$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
-Landroid/view/IGraphicsStats$Stub;->asInterface(Landroid/os/IBinder;)Landroid/view/IGraphicsStats;
 Landroid/view/IRecentsAnimationController;->finish(Z)V
 Landroid/view/IRecentsAnimationController;->screenshotTask(I)Landroid/app/ActivityManager$TaskSnapshot;
 Landroid/view/IRecentsAnimationController;->setAnimationTargetsBehindSystemBars(Z)V

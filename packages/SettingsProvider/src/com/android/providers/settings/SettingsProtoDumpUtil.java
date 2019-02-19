@@ -457,6 +457,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.DEBUG_VIEW_ATTRIBUTES,
                 GlobalSettingsProto.Debug.VIEW_ATTRIBUTES);
+        dumpSetting(s, p,
+                Settings.Global.DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE,
+                GlobalSettingsProto.Debug.VIEW_ATTRIBUTES_APPLICATION_PACKAGE);
         p.end(debugToken);
 
         final long defaultToken = p.start(GlobalSettingsProto.DEFAULT);
@@ -2081,6 +2084,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.NOTIFICATION_BADGING,
                 SecureSettingsProto.Notification.BADGING);
+        dumpSetting(s, p,
+                Settings.Secure.NOTIFICATION_BUBBLES,
+                SecureSettingsProto.Notification.BUBBLES);
         dumpSetting(s, p,
                 Settings.Secure.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING,
                 SecureSettingsProto.Notification.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING);

@@ -203,6 +203,27 @@ const DynamicRefTable* AssetManager2::GetDynamicRefTableForCookie(ApkAssetsCooki
   return nullptr;
 }
 
+const std::unordered_map<std::string, std::string>*
+  AssetManager2::GetOverlayableMapForPackage(uint32_t package_id) const {
+
+  if (package_id >= package_ids_.size()) {
+    return nullptr;
+  }
+
+  const size_t idx = package_ids_[package_id];
+  if (idx == 0xff) {
+    return nullptr;
+  }
+
+  const PackageGroup& package_group = package_groups_[idx];
+  if (package_group.packages_.size() == 0) {
+    return nullptr;
+  }
+
+  const auto loaded_package = package_group.packages_[0].loaded_package_;
+  return &loaded_package->GetOverlayableMap();
+}
+
 void AssetManager2::SetConfiguration(const ResTable_config& configuration) {
   const int diff = configuration_.diff(configuration);
   configuration_ = configuration;
@@ -704,9 +725,29 @@ ApkAssetsCookie AssetManager2::ResolveReference(ApkAssetsCookie cookie, Res_valu
   return cookie;
 }
 
+const std::vector<uint32_t> AssetManager2::GetBagResIdStack(uint32_t resid) {
+  auto cached_iter = cached_bag_resid_stacks_.find(resid);
+  if (cached_iter != cached_bag_resid_stacks_.end()) {
+    return cached_iter->second;
+  } else {
+    auto found_resids = std::vector<uint32_t>();
+    GetBag(resid, found_resids);
+    // Cache style stacks if they are not already cached.
+    cached_bag_resid_stacks_[resid] = found_resids;
+    return found_resids;
+  }
+}
+
 const ResolvedBag* AssetManager2::GetBag(uint32_t resid) {
   auto found_resids = std::vector<uint32_t>();
-  return GetBag(resid, found_resids);
+  auto bag = GetBag(resid, found_resids);
+
+  // Cache style stacks if they are not already cached.
+  auto cached_iter = cached_bag_resid_stacks_.find(resid);
+  if (cached_iter == cached_bag_resid_stacks_.end()) {
+    cached_bag_resid_stacks_[resid] = found_resids;
+  }
+  return bag;
 }
 
 const ResolvedBag* AssetManager2::GetBag(uint32_t resid, std::vector<uint32_t>& child_resids) {
