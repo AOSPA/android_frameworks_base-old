@@ -50,6 +50,10 @@ public class NetPluginDelegate {
     private static Object tcpBufferManagerObj = null;
     private static boolean extJarAvail = true;
 
+    private static Class vendorPropRelay = null;
+    private static Object vendorPropManagerObj = null;
+    private static boolean vendorPropJarAvail = true;
+
     /*
      * Returns applicable TCP buffer size based on the network specifier.
      */
@@ -153,5 +157,84 @@ public class NetPluginDelegate {
             }
         }
         return true;
+    }
+
+    /*
+     * Dynamically loads the lib.
+     * Checks whether the required lib is available if not disables further attempts
+     * to load it.
+     */
+    private static synchronized boolean loadVendorPropJar() {
+        final String realProvider = "com.qualcomm.qti.net.vendorpropextension.vendorPropManager";
+        final String realProviderPath = Environment.getRootDirectory().getAbsolutePath()
+                + "/framework/VendorPropExt.jar";
+        if (vendorPropRelay != null && vendorPropManagerObj != null) {
+            return true;
+        }
+
+        vendorPropJarAvail = new File(realProviderPath).exists();
+        if (!vendorPropJarAvail) {
+            Slog.w(TAG, "VendorPropExt jar file not present");
+            return false;
+        }
+
+        if (vendorPropRelay == null && vendorPropManagerObj == null) {
+            if (LOGV) Slog.v(TAG, "loading VendorPropExt jar");
+            try {
+                PathClassLoader classLoader = new PathClassLoader(realProviderPath,
+                        ClassLoader.getSystemClassLoader());
+
+                vendorPropRelay = classLoader.loadClass(realProvider);
+                vendorPropManagerObj = vendorPropRelay.newInstance();
+                if (LOGV) Slog.v(TAG, "VendorPropExt jar loaded");
+            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+                if (LOGV) {
+                    Slog.e(TAG, "Failed to find, instantiate or access VendorPropExt jar ");
+                    e.printStackTrace();
+                }
+                vendorPropJarAvail = false;
+                return false;
+            } catch (Exception e) {
+                if (LOGV) {
+                    Slog.e(TAG, "unable to load vendorPropExt jar");
+                    e.printStackTrace();
+                }
+                vendorPropJarAvail = false;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /*
+     * Returns the Vendor Property Value.
+     */
+    public static String getConfig(String key, String currentConfigValue) {
+        String configValue = currentConfigValue;
+        if (!vendorPropJarAvail || !loadVendorPropJar()) {
+            return configValue;
+        }
+        try {
+            Object ret = vendorPropRelay.getMethod("getConfig",
+                             String.class, String.class).invoke(
+                   vendorPropManagerObj, key, currentConfigValue);
+
+            if(ret !=null && (ret instanceof String)){
+                configValue = (String) ret;
+            }
+        } catch (InvocationTargetException | SecurityException | NoSuchMethodException e) {
+            if (LOGV) {
+                Slog.e(TAG, "Failed to invoke getConfig()");
+                e.printStackTrace();
+            }
+            vendorPropJarAvail = false;
+        } catch (Exception e) {
+            if (LOGV) {
+                Slog.e(TAG, "Error calling getConfig Method on vendorpropextension jar");
+                e.printStackTrace();
+            }
+            vendorPropJarAvail = false;
+        }
+        return configValue;
     }
 }
