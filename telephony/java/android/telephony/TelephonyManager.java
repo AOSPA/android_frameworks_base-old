@@ -1326,13 +1326,15 @@ public class TelephonyManager {
             "android.intent.action.DATA_STALL_DETECTED";
 
     /**
-     * A service action that identifies a {@link android.app.SmsAppService} subclass in the
+     * A service action that identifies
+     * a {@link android.service.carrier.CarrierMessagingClientService} subclass in the
      * AndroidManifest.xml.
      *
-     * <p>See {@link android.app.SmsAppService} for the details.
+     * <p>See {@link android.service.carrier.CarrierMessagingClientService} for the details.
      */
     @SdkConstant(SdkConstantType.SERVICE_ACTION)
-    public static final String ACTION_SMS_APP_SERVICE = "android.telephony.action.SMS_APP_SERVICE";
+    public static final String ACTION_CARRIER_MESSAGING_CLIENT_SERVICE =
+            "android.telephony.action.CARRIER_MESSAGING_CLIENT_SERVICE";
 
     /**
      * An int extra used with {@link #ACTION_DATA_STALL_DETECTED} to indicate the
@@ -1350,6 +1352,38 @@ public class TelephonyManager {
      */
     @SystemApi
     public static final long MAX_NUMBER_VERIFICATION_TIMEOUT_MILLIS = 60000;
+
+    /**
+     * Intent sent when an error occurs that debug tools should log and possibly take further
+     * action such as capturing vendor-specific logs.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public static final String ACTION_DEBUG_EVENT = "android.telephony.action.DEBUG_EVENT";
+
+    /**
+     * An arbitrary ParcelUuid which should be consistent for each occurrence of the same event.
+     *
+     * This field must be included in all events.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_DEBUG_EVENT_ID = "android.telephony.extra.DEBUG_EVENT_ID";
+
+    /**
+     * A freeform string description of the event.
+     *
+     * This field is optional for all events and as a guideline should not exceed 80 characters
+     * and should be as short as possible to convey the essence of the event.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_DEBUG_EVENT_DESCRIPTION =
+            "android.telephony.extra.DEBUG_EVENT_DESCRIPTION";
 
     //
     //
@@ -4892,12 +4926,13 @@ public class TelephonyManager {
      *
      * <p>Apps targeting {@link android.os.Build.VERSION_CODES#Q Android Q} or higher will no
      * longer trigger a refresh of the cached CellInfo by invoking this API. Instead, those apps
-     * will receive the latest cached results. Apps targeting
+     * will receive the latest cached results, which may not be current. Apps targeting
      * {@link android.os.Build.VERSION_CODES#Q Android Q} or higher that wish to request updated
      * CellInfo should call
-     * {android.telephony.TelephonyManager#requestCellInfoUpdate requestCellInfoUpdate()} and
-     * listen for responses via {@link android.telephony.PhoneStateListener#onCellInfoChanged
-     * onCellInfoChanged()}.
+     * {@link android.telephony.TelephonyManager#requestCellInfoUpdate requestCellInfoUpdate()};
+     * however, in all cases, updates will be rate-limited and are not guaranteed. To determine the
+     * recency of CellInfo data, callers should check
+     * {@link android.telephony.CellInfo#getTimeStamp CellInfo#getTimeStamp()}.
      *
      * <p>This method returns valid data for devices with
      * {@link android.content.pm.PackageManager#FEATURE_TELEPHONY FEATURE_TELEPHONY}. In cases
@@ -7980,9 +8015,7 @@ public class TelephonyManager {
      * support for the feature and device firmware support.
      *
      * @return {@code true} if the device and carrier both support RTT, {@code false} otherwise.
-     * @hide
      */
-    @TestApi
     public boolean isRttSupported() {
         try {
             ITelephony telephony = getITelephony();
@@ -9708,10 +9741,10 @@ public class TelephonyManager {
      *
      * <p>
      * Requires Permission:
-     *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     *   {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public boolean isOpportunisticNetworkEnabled() {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         boolean isEnabled = false;
@@ -10099,12 +10132,17 @@ public class TelephonyManager {
      * Get preferred opportunistic data subscription Id
      *
      * <p>Requires that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}),
-     * or has permission {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}.
+     * or has either READ_PRIVILEGED_PHONE_STATE
+     * or {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} permission.
      * @return subId preferred opportunistic subscription id or
      * {@link SubscriptionManager#DEFAULT_SUBSCRIPTION_ID} if there are no preferred
      * subscription id
      *
      */
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
+            android.Manifest.permission.READ_PHONE_STATE
+    })
     public int getPreferredOpportunisticDataSubscription() {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -10277,11 +10315,14 @@ public class TelephonyManager {
 
     /**
      * Get whether reboot is required or not after making changes to modem configurations.
-     * @Return {@code True} if reboot is required after making changes to modem configurations,
-     * otherwise return {@code False}.
+     * The modem configuration change refers to switching from single SIM configuration to DSDS
+     * or the other way around.
+     * @Return {@code true} if reboot is required after making changes to modem configurations,
+     * otherwise return {@code false}.
      *
      * @hide
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public boolean isRebootRequiredForModemConfigChange() {
         try {

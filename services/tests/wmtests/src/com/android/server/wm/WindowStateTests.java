@@ -21,6 +21,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.hardware.camera2.params.OutputConfiguration.ROTATION_90;
 import static android.view.InsetsState.TYPE_TOP_BAR;
 import static android.view.Surface.ROTATION_0;
+import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
@@ -38,6 +39,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import static org.hamcrest.Matchers.is;
@@ -48,9 +50,11 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 
 import android.graphics.Insets;
 import android.graphics.Matrix;
@@ -60,6 +64,7 @@ import android.util.Size;
 import android.view.DisplayCutout;
 import android.view.InsetsSource;
 import android.view.SurfaceControl;
+import android.view.ViewRootImpl;
 import android.view.WindowManager;
 
 import androidx.test.filters.FlakyTest;
@@ -67,6 +72,9 @@ import androidx.test.filters.SmallTest;
 
 import com.android.server.wm.utils.WmDisplayCutout;
 
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.LinkedList;
@@ -77,10 +85,33 @@ import java.util.LinkedList;
  * Build/Install/Run:
  *  atest FrameworksServicesTests:WindowStateTests
  */
-@FlakyTest(bugId = 74078662)
 @SmallTest
 @Presubmit
 public class WindowStateTests extends WindowTestsBase {
+    private static int sPreviousNewInsetsMode;
+
+    @BeforeClass
+    public static void setUpOnce() {
+        // TODO: Make use of SettingsSession when it becomes feasible for this.
+        sPreviousNewInsetsMode = ViewRootImpl.sNewInsetsMode;
+        // To let the insets provider control the insets visibility, the insets mode has to be
+        // NEW_INSETS_MODE_FULL.
+        ViewRootImpl.sNewInsetsMode = NEW_INSETS_MODE_FULL;
+    }
+
+    @AfterClass
+    public static void tearDownOnce() {
+        ViewRootImpl.sNewInsetsMode = sPreviousNewInsetsMode;
+    }
+
+    @Before
+    public void setUp() {
+        // TODO: Let the insets source with new mode keep the visibility control, and remove this
+        // setup code. Now mTopFullscreenOpaqueWindowState will take back the control of insets
+        // visibility.
+        spyOn(mDisplayContent);
+        doNothing().when(mDisplayContent).layoutAndAssignWindowLayersIfNeeded();
+    }
 
     @Test
     public void testIsParentWindowHidden() {
@@ -263,12 +294,12 @@ public class WindowStateTests extends WindowTestsBase {
 
         reset(sPowerManagerWrapper);
         first.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper, never()).wakeUp(anyLong(), anyString());
+        verify(sPowerManagerWrapper, never()).wakeUp(anyLong(), anyInt(), anyString());
         assertTrue(appWindowToken.canTurnScreenOn());
 
         reset(sPowerManagerWrapper);
         second.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyString());
+        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
         assertFalse(appWindowToken.canTurnScreenOn());
 
         // Call prepareWindowToDisplayDuringRelayout for two window that have FLAG_TURN_SCREEN_ON
@@ -279,12 +310,12 @@ public class WindowStateTests extends WindowTestsBase {
 
         reset(sPowerManagerWrapper);
         first.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyString());
+        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
         assertFalse(appWindowToken.canTurnScreenOn());
 
         reset(sPowerManagerWrapper);
         second.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper, never()).wakeUp(anyLong(), anyString());
+        verify(sPowerManagerWrapper, never()).wakeUp(anyLong(), anyInt(), anyString());
         assertFalse(appWindowToken.canTurnScreenOn());
 
         // Call prepareWindowToDisplayDuringRelayout for a windows that are not children of an
@@ -300,11 +331,11 @@ public class WindowStateTests extends WindowTestsBase {
 
         reset(sPowerManagerWrapper);
         firstWindow.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyString());
+        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
 
         reset(sPowerManagerWrapper);
         secondWindow.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyString());
+        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
     }
 
     @Test
@@ -328,6 +359,7 @@ public class WindowStateTests extends WindowTestsBase {
         assertFalse(app.canAffectSystemUiFlags());
     }
 
+    @FlakyTest(detail = "Promote to presubmit when shown to be stable.")
     @Test
     public void testVisibleWithInsetsProvider() throws Exception {
         final WindowState topBar = createWindow(null, TYPE_STATUS_BAR, "topBar");
@@ -339,6 +371,7 @@ public class WindowStateTests extends WindowTestsBase {
         mDisplayContent.getInsetsStateController().onBarControllingWindowChanged(app);
         mDisplayContent.getInsetsStateController().getSourceProvider(TYPE_TOP_BAR)
                 .onInsetsModified(app, new InsetsSource(TYPE_TOP_BAR));
+        waitUntilHandlersIdle();
         assertFalse(topBar.isVisible());
     }
 
@@ -435,6 +468,6 @@ public class WindowStateTests extends WindowTestsBase {
         root.mAttrs.flags |= WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
 
         root.prepareWindowToDisplayDuringRelayout(wasVisible /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyString());
+        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
     }
 }

@@ -1573,11 +1573,17 @@
     <string name="inline_blocking_helper">You usually dismiss these notifications.
     \nKeep showing them?</string>
 
+    <!-- Notification Inline controls: button to dismiss the blocking helper [CHAR_LIMIT=25] -->
+    <string name="inline_done_button">Done</string>
+
     <!-- Notification Inline controls: continue receiving notifications prompt, channel level -->
     <string name="inline_keep_showing">Keep showing these notifications?</string>
 
     <!-- Notification inline controls: block notifications button -->
     <string name="inline_stop_button">Stop notifications</string>
+
+    <!-- Notification inline controls: button to deliver notifications silently from this channel [CHAR_LIMIT=35] -->
+    <string name="inline_deliver_silently_button">Deliver Silently</string>
 
     <!-- Notification inline controls: button to block notifications from this channel [CHAR_LIMIT=35] -->
     <string name="inline_block_button">Block</string>
@@ -2302,6 +2308,9 @@
     <!-- Content description for ongoing privacy chip. Use with multiple apps [CHAR LIMIT=NONE]-->
     <string name="ongoing_privacy_chip_content_multiple_apps">Applications are using your <xliff:g id="types_list" example="camera, location">%s</xliff:g>.</string>
 
+    <!-- Ongoing Privacy "Chip" in use text [CHAR LIMIT=10]-->
+    <string name="ongoing_privacy_chip_in_use">In use:</string>
+
     <!-- Content description for ongoing privacy chip. Use with multiple apps using same app op[CHAR LIMIT=NONE]-->
     <plurals name="ongoing_privacy_chip_content_multiple_apps_single_op">
         <item quantity="one"><xliff:g id="num_apps" example="1">%1$d</xliff:g> application is using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</item>
@@ -2357,5 +2366,12 @@
     <!-- Text used for content description of settings button in the header of expanded bubble
          view. [CHAR_LIMIT=NONE] -->
     <string name="bubbles_settings_button_description">Open notification settings for <xliff:g id="app_name" example="YouTube">%1$s</xliff:g></string>
+    <!-- Text for asking the user whether bubbles (floating app content) should be enabled for an
+         app. [CHAR LIMIT=NONE] -->
+    <string name="bubbles_prompt">Allow bubbles from this app?</string>
+    <!-- Text used for button allowing user to opt out of bubbles [CHAR LIMIT=20] -->
+    <string name="no_bubbles">Block</string>
+    <!-- Text used for button allowing user to approve / enable bubbles [CHAR LIMIT=20] -->
+    <string name="yes_bubbles">Allow</string>
 
 </resources>

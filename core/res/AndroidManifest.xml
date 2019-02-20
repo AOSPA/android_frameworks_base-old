@@ -693,8 +693,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readContacts"
         android:description="@string/permdesc_readContacts"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to write the user's contacts data.
          <p>Protection level: dangerous
@@ -725,8 +724,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readCalendar"
         android:description="@string/permdesc_readCalendar"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to write the user's calendar data.
          <p>Protection level: dangerous
@@ -767,8 +765,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_receiveSms"
         android:description="@string/permdesc_receiveSms"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to read SMS messages.
          <p>Protection level: dangerous
@@ -777,8 +774,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readSms"
         android:description="@string/permdesc_readSms"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to receive WAP push messages.
          <p>Protection level: dangerous
@@ -787,8 +783,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_receiveWapPush"
         android:description="@string/permdesc_receiveWapPush"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to monitor incoming MMS messages.
         <p>Protection level: dangerous
@@ -797,8 +792,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_receiveMms"
         android:description="@string/permdesc_receiveMms"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- @SystemApi @TestApi Allows an application to read previously received cell broadcast
          messages and to register a content observer to get notifications when
@@ -816,8 +810,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readCellBroadcasts"
         android:description="@string/permdesc_readCellBroadcasts"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing external storage                             -->
@@ -898,8 +891,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_audioRead"
         android:description="@string/permdesc_audioRead"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Runtime permission controlling access to the user's shared visual media
          collection, including images and videos. -->
@@ -915,16 +907,14 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_imagesRead"
         android:description="@string/permdesc_imagesRead"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to read the user's shared video collection. -->
     <permission android:name="android.permission.READ_MEDIA_VIDEO"
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_videoRead"
         android:description="@string/permdesc_videoRead"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to access any geographic locations persisted in the
          user's shared collection. -->
@@ -932,8 +922,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_mediaLocation"
         android:description="@string/permdesc_mediaLocation"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- @hide @SystemApi @TestApi
          Allows an application to modify OBB files visible to other apps. -->
@@ -965,8 +954,7 @@
         android:label="@string/permlab_accessFineLocation"
         android:description="@string/permdesc_accessFineLocation"
         android:backgroundPermission="android.permission.ACCESS_BACKGROUND_LOCATION"
-        android:protectionLevel="dangerous|instant"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous|instant" />
 
     <!-- Allows an app to access approximate location.
          Alternatively, you might want {@link #ACCESS_FINE_LOCATION}.
@@ -977,8 +965,7 @@
         android:label="@string/permlab_accessCoarseLocation"
         android:description="@string/permdesc_accessCoarseLocation"
         android:backgroundPermission="android.permission.ACCESS_BACKGROUND_LOCATION"
-        android:protectionLevel="dangerous|instant"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous|instant" />
 
     <!-- Allows an app to access location in the background.  If you
          are requesting this, you should also request {@link #ACCESS_FINE_LOCATION}.
@@ -990,8 +977,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_accessBackgroundLocation"
         android:description="@string/permdesc_accessBackgroundLocation"
-        android:protectionLevel="dangerous|instant"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous|instant" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the call log                                 -->
@@ -1032,8 +1018,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readCallLog"
         android:description="@string/permdesc_readCallLog"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to write (but not read) the user's
          call log data.
@@ -1063,8 +1048,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_processOutgoingCalls"
         android:description="@string/permdesc_processOutgoingCalls"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the device telephony                         -->
@@ -1096,8 +1080,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readPhoneState"
         android:description="@string/permdesc_readPhoneState"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows read access to the device's phone number(s). This is a subset of the capabilities
          granted by {@link #READ_PHONE_STATE} but is exposed to instant applications.
@@ -1106,8 +1089,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readPhoneNumbers"
         android:description="@string/permdesc_readPhoneNumbers"
-        android:protectionLevel="dangerous|instant"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous|instant" />
 
     <!-- Allows an application to initiate a phone call without going through
         the Dialer user interface for the user to confirm the call.
@@ -1209,8 +1191,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_recordAudio"
         android:description="@string/permdesc_recordAudio"
-        android:protectionLevel="dangerous|instant"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous|instant" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for activity recognition                        -->
@@ -1233,8 +1214,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_activityRecognition"
         android:description="@string/permdesc_activityRecognition"
-        android:protectionLevel="dangerous|instant"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous|instant" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the UCE Service                              -->
@@ -1283,8 +1263,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_camera"
         android:description="@string/permdesc_camera"
-        android:protectionLevel="dangerous|instant"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous|instant" />
 
 
     <!-- ====================================================================== -->
@@ -1308,8 +1287,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_bodySensors"
         android:description="@string/permdesc_bodySensors"
-        android:protectionLevel="dangerous"
-        android:usageInfoRequired="true" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an app to use fingerprint hardware.
          <p>Protection level: normal
@@ -1816,8 +1794,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:protectionLevel="dangerous"
         android:description="@string/permdesc_getAccounts"
-        android:label="@string/permlab_getAccounts"
-        android:usageInfoRequired="true" />
+        android:label="@string/permlab_getAccounts" />
     <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
 
     <!-- Allows applications to call into AccountAuthenticators.
@@ -2326,7 +2303,7 @@
     <!-- Allows an application to start activities from background
          @hide -->
     <permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"
-        android:protectionLevel="signature|privileged|vendorPrivileged|oem" />
+        android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier" />
 
     <!-- @SystemApi Must be required by activities that handle the intent action
          {@link Intent#ACTION_SEND_SHOW_SUSPENDED_APP_DETAILS}. This is for use by apps that
@@ -4447,8 +4424,8 @@
     <permission android:name="android.permission.MONITOR_DEFAULT_SMS_PACKAGE"
         android:protectionLevel="signature|privileged" />
 
-    <!-- A subclass of {@link android.app.SmsAppService} must be protected with this permission. -->
-    <permission android:name="android.permission.BIND_SMS_APP_SERVICE"
+    <!-- A subclass of {@link android.service.carrier.CarrierMessagingClientService} must be protected with this permission. -->
+    <permission android:name="android.permission.BIND_CARRIER_MESSAGING_CLIENT_SERVICE"
         android:protectionLevel="signature" />
 
     <!-- @hide Permission that allows configuring appops.

@@ -163,6 +163,7 @@ import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.PluginDependencyProvider;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSFragment;
 import com.android.systemui.qs.QSPanel;
 import com.android.systemui.recents.Recents;
@@ -188,7 +189,8 @@ import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.StatusBarStateControllerImpl;
+import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
@@ -482,7 +484,8 @@ public class StatusBar extends SystemUI implements DemoMode,
             updateAodMaskVisibility(deviceSupportsAodWallpaper && aodImageWallpaperEnabled);
             // If WallpaperInfo is null, it must be ImageWallpaper.
             final boolean supportsAmbientMode = deviceSupportsAodWallpaper
-                    && (info == null || info.supportsAmbientMode());
+                    && (info == null && aodImageWallpaperEnabled
+                        || info != null && info.supportsAmbientMode());
 
             mStatusBarWindowController.setWallpaperSupportsAmbientMode(supportsAmbientMode);
             mScrimController.setWallpaperSupportsAmbientMode(supportsAmbientMode);
@@ -551,14 +554,14 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     private final View.OnClickListener mGoToLockedShadeListener = v -> {
         if (mState == StatusBarState.KEYGUARD) {
-            wakeUpIfDozing(SystemClock.uptimeMillis(), v);
+            wakeUpIfDozing(SystemClock.uptimeMillis(), v, "SHADE_CLICK");
             goToLockedShade(null);
         }
     };
     private boolean mNoAnimationOnNextBarModeChange;
     protected FalsingManager mFalsingManager;
-    private final StatusBarStateController
-            mStatusBarStateController = Dependency.get(StatusBarStateController.class);
+    private final SysuiStatusBarStateController mStatusBarStateController =
+            (SysuiStatusBarStateController) Dependency.get(StatusBarStateController.class);
 
     private final KeyguardUpdateMonitorCallback mUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
@@ -649,7 +652,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
 
         mColorExtractor.addOnColorsChangedListener(this);
-        mStatusBarStateController.addCallback(this, StatusBarStateController.RANK_STATUS_BAR);
+        mStatusBarStateController.addCallback(this,
+                StatusBarStateControllerImpl.RANK_STATUS_BAR);
 
         mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
         mDreamManager = IDreamManager.Stub.asInterface(
@@ -803,15 +807,17 @@ public class StatusBar extends SystemUI implements DemoMode,
         mNotificationLogger.setUpWithContainer(notifListContainer);
 
         mNotificationIconAreaController = SystemUIFactory.getInstance()
-                .createNotificationIconAreaController(
-                        context, this, mStatusBarStateController, mNotificationListener);
+                .createNotificationIconAreaController(context, this,
+                        mStatusBarStateController, mNotificationListener);
         inflateShelf();
         mNotificationIconAreaController.setupShelf(mNotificationShelf);
 
         Dependency.get(DarkIconDispatcher.class).addDarkReceiver(mNotificationIconAreaController);
-        // Allow plugins to reference DarkIconDispatcher
+        // Allow plugins to reference DarkIconDispatcher and StatusBarStateController
         Dependency.get(PluginDependencyProvider.class)
                 .allowPluginDependency(DarkIconDispatcher.class);
+        Dependency.get(PluginDependencyProvider.class)
+                .allowPluginDependency(StatusBarStateController.class);
         FragmentHostManager.get(mStatusBarWindow)
                 .addTagListener(CollapsedStatusBarFragment.TAG, (tag, fragment) -> {
                     CollapsedStatusBarFragment statusBarFragment =
@@ -1090,10 +1096,10 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     @Override
-    public void wakeUpIfDozing(long time, View where) {
+    public void wakeUpIfDozing(long time, View where, String why) {
         if (mDozing) {
-            PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-            pm.wakeUp(time, "com.android.systemui:NODOZE");
+            PowerManager pm = mContext.getSystemService(PowerManager.class);
+            pm.wakeUp(time, PowerManager.WAKE_REASON_GESTURE, "com.android.systemui:" + why);
             mWakeUpComingFromTouch = true;
             where.getLocationInWindow(mTmpInt2);
             mWakeUpTouchLocation = new PointF(mTmpInt2[0] + where.getWidth() / 2,
@@ -3369,7 +3375,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         // ringing.
         // Other transitions are covered in handleVisibleToUserChanged().
         if (mVisible && (newState == StatusBarState.SHADE_LOCKED
-                || (Dependency.get(StatusBarStateController.class).goingToFullShade()))) {
+                || (((SysuiStatusBarStateController) Dependency.get(StatusBarStateController.class))
+                .goingToFullShade()))) {
             clearNotificationEffects();
         }
         if (newState == StatusBarState.KEYGUARD) {
@@ -3729,7 +3736,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
         if (!mDeviceInteractive) {
             PowerManager pm = mContext.getSystemService(PowerManager.class);
-            pm.wakeUp(SystemClock.uptimeMillis(), "com.android.systemui:CAMERA_GESTURE");
+            pm.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_CAMERA_LAUNCH,
+                    "com.android.systemui:CAMERA_GESTURE");
             mStatusBarKeyguardViewManager.notifyDeviceWakeUpRequested();
         }
         vibrateForCameraGesture();
@@ -3890,16 +3898,13 @@ public class StatusBar extends SystemUI implements DemoMode,
         public void pulseWhileDozing(@NonNull PulseCallback callback, int reason) {
             mScrimController.setPulseReason(reason);
             if (reason == DozeLog.PULSE_REASON_SENSOR_LONG_PRESS) {
-                mPowerManager.wakeUp(SystemClock.uptimeMillis(), "com.android.systemui:NODOZE");
+                mPowerManager.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_GESTURE,
+                        "com.android.systemui:LONG_PRESS");
                 startAssist(new Bundle());
                 return;
             }
 
-            if (mKeyguardUpdateMonitor != null
-                    && reason == DozeLog.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN) {
-                mKeyguardUpdateMonitor.onAuthInterruptDetected();
-            }
-
+            boolean passiveAuthInterrupt = reason == DozeLog.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN;
             // Set the state to pulsing, so ScrimController will know what to do once we ask it to
             // execute the transition. The pulse callback will then be invoked when the scrims
             // are black, indicating that StatusBar is ready to present the rest of the UI.
@@ -3925,6 +3930,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                     mNotificationPanel.setPulsing(pulsing);
                     mVisualStabilityManager.setPulsing(pulsing);
                     mIgnoreTouchWhilePulsing = false;
+                    if (mKeyguardUpdateMonitor != null && passiveAuthInterrupt) {
+                        mKeyguardUpdateMonitor.onAuthInterruptDetected(pulsing /* active */);
+                    }
                     updateScrimController();
                 }
             }, reason);

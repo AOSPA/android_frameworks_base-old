@@ -112,6 +112,7 @@ class InsetsStateController {
      * Called when a layout pass has occurred.
      */
     void onPostLayout() {
+        mState.setDisplayFrame(mDisplayContent.getBounds());
         for (int i = mControllers.size() - 1; i>= 0; i--) {
             mControllers.valueAt(i).onPostLayout();
         }
@@ -202,6 +203,11 @@ class InsetsStateController {
                 key -> new ArrayList<>());
         array.add(type);
         mTypeWinControlMap.put(type, win);
+    }
+
+    void notifyControlChanged(WindowState target) {
+        mPendingControlChanged.add(target);
+        notifyPendingInsetsControlChanged();
     }
 
     private void notifyPendingInsetsControlChanged() {

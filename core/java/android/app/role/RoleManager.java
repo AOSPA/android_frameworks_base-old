@@ -18,6 +18,7 @@ package android.app.role;
 
 import android.Manifest;
 import android.annotation.CallbackExecutor;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -68,6 +69,22 @@ public final class RoleManager {
     private static final String LOG_TAG = RoleManager.class.getSimpleName();
 
     /**
+     * The name of the assistant app role.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final String ROLE_ASSISTANT = "android.app.role.ASSISTANT";
+
+    /**
+     * The name of the browser role.
+     *
+     * @see Intent#CATEGORY_APP_BROWSER
+     */
+    public static final String ROLE_BROWSER = "android.app.role.BROWSER";
+
+    /**
      * The name of the dialer role.
      *
      * @see Intent#ACTION_DIAL
@@ -82,25 +99,11 @@ public final class RoleManager {
     public static final String ROLE_SMS = "android.app.role.SMS";
 
     /**
-     * The name of the browser role.
+     * The name of the emergency role
      *
-     * @see Intent#CATEGORY_APP_BROWSER
+     * @see android.telephony.TelephonyManager#ACTION_EMERGENCY_ASSISTANCE
      */
-    public static final String ROLE_BROWSER = "android.app.role.BROWSER";
-
-    /**
-     * The name of the gallery role.
-     *
-     * @see Intent#CATEGORY_APP_GALLERY
-     */
-    public static final String ROLE_GALLERY = "android.app.role.GALLERY";
-
-    /**
-     * The name of the music player role.
-     *
-     * @see Intent#CATEGORY_APP_MUSIC
-     */
-    public static final String ROLE_MUSIC = "android.app.role.MUSIC";
+    public static final String ROLE_EMERGENCY = "android.app.role.EMERGENCY";
 
     /**
      * The name of the home role.
@@ -110,11 +113,18 @@ public final class RoleManager {
     public static final String ROLE_HOME = "android.app.role.HOME";
 
     /**
-     * The name of the emergency role
+     * The name of the music player role.
      *
-     * @see android.telephony.TelephonyManager#ACTION_EMERGENCY_ASSISTANCE
+     * @see Intent#CATEGORY_APP_MUSIC
      */
-    public static final String ROLE_EMERGENCY = "android.app.role.EMERGENCY";
+    public static final String ROLE_MUSIC = "android.app.role.MUSIC";
+
+    /**
+     * The name of the gallery role.
+     *
+     * @see Intent#CATEGORY_APP_GALLERY
+     */
+    public static final String ROLE_GALLERY = "android.app.role.GALLERY";
 
     /**
      * The name of the car mode dialer app role.
@@ -130,20 +140,20 @@ public final class RoleManager {
      * TODO: STOPSHIP: Make name of required roles public API
      * @hide
      */
-    public static final String ROLE_CAR_MODE_DIALER_APP = "android.app.role.CAR_MODE_DIALER_APP";
+    public static final String ROLE_CAR_MODE_DIALER = "android.app.role.CAR_MODE_DIALER";
 
     /**
-     * The name of the proxy calling role.
+     * The name of the call redirection role.
      * <p>
-     * A proxy calling app provides a means to re-write the phone number for an outgoing call to
-     * place the call through a proxy calling service.
+     * A call redirection app provides a means to re-write the phone number for an outgoing call to
+     * place the call through a call redirection service.
      *
      * @see android.telecom.CallRedirectionService
      *
      * TODO: STOPSHIP: Make name of required roles public API
      * @hide
      */
-    public static final String ROLE_PROXY_CALLING_APP = "android.app.role.PROXY_CALLING_APP";
+    public static final String ROLE_CALL_REDIRECTION = "android.app.role.CALL_REDIRECTION";
 
     /**
      * The name of the call screening and caller id role.
@@ -153,7 +163,7 @@ public final class RoleManager {
      * TODO: STOPSHIP: Make name of required roles public API
      * @hide
      */
-    public static final String ROLE_CALL_SCREENING_APP = "android.app.role.CALL_SCREENING_APP";
+    public static final String ROLE_CALL_SCREENING = "android.app.role.CALL_SCREENING";
 
     /**
      * The name of the call companion app role.
@@ -169,16 +179,23 @@ public final class RoleManager {
      * TODO: STOPSHIP: Make name of required roles public API
      * @hide
      */
-    public static final String ROLE_CALL_COMPANION_APP = "android.app.role.CALL_COMPANION_APP";
+    public static final String ROLE_CALL_COMPANION = "android.app.role.CALL_COMPANION";
 
     /**
-     * The name of the assistant app role.
+     * @hide
+     */
+    @IntDef(flag = true, value = { MANAGE_HOLDERS_FLAG_DONT_KILL_APP })
+    public @interface ManageHoldersFlags {}
+
+    /**
+     * Flag parameter for {@link #addRoleHolderAsUser}, {@link #removeRoleHolderAsUser} and
+     * {@link #clearRoleHoldersAsUser} to indicate that apps should not be killed when changing
+     * their role holder status.
      *
      * @hide
      */
     @SystemApi
-    @TestApi
-    public static final String ROLE_ASSISTANT = "android.app.role.ASSISTANT";
+    public static final int MANAGE_HOLDERS_FLAG_DONT_KILL_APP = 1;
 
     /**
      * The action used to request user approval of a role for an application.
@@ -305,9 +322,9 @@ public final class RoleManager {
      *
      * @return a list of package names of the role holders, or an empty list if none.
      *
-     * @see #addRoleHolderAsUser(String, String, UserHandle, Executor, RoleManagerCallback)
-     * @see #removeRoleHolderAsUser(String, String, UserHandle, Executor, RoleManagerCallback)
-     * @see #clearRoleHoldersAsUser(String, UserHandle, Executor, RoleManagerCallback)
+     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, RoleManagerCallback)
      *
      * @hide
      */
@@ -335,13 +352,14 @@ public final class RoleManager {
      *
      * @param roleName the name of the role to add the role holder for
      * @param packageName the package name of the application to add to the role holders
+     * @param flags optional behavior flags
      * @param user the user to add the role holder for
      * @param executor the {@code Executor} to run the callback on.
      * @param callback the callback for whether this call is successful
      *
      * @see #getRoleHoldersAsUser(String, UserHandle)
-     * @see #removeRoleHolderAsUser(String, String, UserHandle, Executor, RoleManagerCallback)
-     * @see #clearRoleHoldersAsUser(String, UserHandle, Executor, RoleManagerCallback)
+     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, RoleManagerCallback)
      *
      * @hide
      */
@@ -349,15 +367,15 @@ public final class RoleManager {
     @SystemApi
     @TestApi
     public void addRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
-            @NonNull UserHandle user, @CallbackExecutor @NonNull Executor executor,
-            @NonNull RoleManagerCallback callback) {
+            @ManageHoldersFlags int flags, @NonNull UserHandle user,
+            @CallbackExecutor @NonNull Executor executor, @NonNull RoleManagerCallback callback) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
         Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
         Preconditions.checkNotNull(user, "user cannot be null");
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
-            mService.addRoleHolderAsUser(roleName, packageName, user.getIdentifier(),
+            mService.addRoleHolderAsUser(roleName, packageName, flags, user.getIdentifier(),
                     new RoleManagerCallbackDelegate(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -373,13 +391,14 @@ public final class RoleManager {
      *
      * @param roleName the name of the role to remove the role holder for
      * @param packageName the package name of the application to remove from the role holders
+     * @param flags optional behavior flags
      * @param user the user to remove the role holder for
      * @param executor the {@code Executor} to run the callback on.
      * @param callback the callback for whether this call is successful
      *
      * @see #getRoleHoldersAsUser(String, UserHandle)
-     * @see #addRoleHolderAsUser(String, String, UserHandle, Executor, RoleManagerCallback)
-     * @see #clearRoleHoldersAsUser(String, UserHandle, Executor, RoleManagerCallback)
+     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, RoleManagerCallback)
      *
      * @hide
      */
@@ -387,15 +406,15 @@ public final class RoleManager {
     @SystemApi
     @TestApi
     public void removeRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
-            @NonNull UserHandle user, @CallbackExecutor @NonNull Executor executor,
-            @NonNull RoleManagerCallback callback) {
+            @ManageHoldersFlags int flags, @NonNull UserHandle user,
+            @CallbackExecutor @NonNull Executor executor, @NonNull RoleManagerCallback callback) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
         Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
         Preconditions.checkNotNull(user, "user cannot be null");
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
-            mService.removeRoleHolderAsUser(roleName, packageName, user.getIdentifier(),
+            mService.removeRoleHolderAsUser(roleName, packageName, flags, user.getIdentifier(),
                     new RoleManagerCallbackDelegate(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -410,27 +429,29 @@ public final class RoleManager {
      * {@code android.permission.INTERACT_ACROSS_USERS_FULL}.
      *
      * @param roleName the name of the role to remove role holders for
+     * @param flags optional behavior flags
      * @param user the user to remove role holders for
      * @param executor the {@code Executor} to run the callback on.
      * @param callback the callback for whether this call is successful
      *
      * @see #getRoleHoldersAsUser(String, UserHandle)
-     * @see #addRoleHolderAsUser(String, String, UserHandle, Executor, RoleManagerCallback)
-     * @see #removeRoleHolderAsUser(String, String, UserHandle, Executor, RoleManagerCallback)
+     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
      *
      * @hide
      */
     @RequiresPermission(Manifest.permission.MANAGE_ROLE_HOLDERS)
     @SystemApi
     @TestApi
-    public void clearRoleHoldersAsUser(@NonNull String roleName, @NonNull UserHandle user,
-            @CallbackExecutor @NonNull Executor executor, @NonNull RoleManagerCallback callback) {
+    public void clearRoleHoldersAsUser(@NonNull String roleName, @ManageHoldersFlags int flags,
+            @NonNull UserHandle user, @CallbackExecutor @NonNull Executor executor,
+            @NonNull RoleManagerCallback callback) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
         Preconditions.checkNotNull(user, "user cannot be null");
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
-            mService.clearRoleHoldersAsUser(roleName, user.getIdentifier(),
+            mService.clearRoleHoldersAsUser(roleName, flags, user.getIdentifier(),
                     new RoleManagerCallbackDelegate(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();

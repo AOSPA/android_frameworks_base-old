@@ -32,7 +32,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import android.annotation.CallSuper;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
-import android.annotation.TestApi;
 import android.app.WindowConfiguration;
 import android.content.res.Configuration;
 import android.graphics.Point;
@@ -46,6 +45,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Builder;
 import android.view.SurfaceSession;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.server.wm.SurfaceAnimator.Animatable;
 
@@ -320,7 +320,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         if (mSurfaceControl != null) {
-            mPendingTransaction.reparent(mSurfaceControl, null);
+            mPendingTransaction.remove(mSurfaceControl);
 
             // Merge to parent transaction to ensure the transactions on this WindowContainer are
             // applied in native even if WindowContainer is removed.
@@ -712,6 +712,21 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
         return parent.onDescendantOrientationChanged(freezeDisplayToken,
                 requestingContainer);
+    }
+
+    /**
+     * Check if this container or its parent will handle orientation changes from descendants. It's
+     * different from the return value of {@link #onDescendantOrientationChanged(IBinder,
+     * ConfigurationContainer)} in the sense that the return value of this method tells if this
+     * container or its parent will handle the request eventually, while the return value of the
+     * other method is if it handled the request synchronously.
+     *
+     * @return {@code true} if it handles or will handle orientation change in the future; {@code
+     *         false} if it won't handle the change at anytime.
+     */
+    boolean handlesOrientationChangeFromDescendant() {
+        final WindowContainer parent = getParent();
+        return parent != null && parent.handlesOrientationChangeFromDescendant();
     }
 
     /**
@@ -1332,7 +1347,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         mLastSurfacePosition.set(mTmpPos.x, mTmpPos.y);
     }
 
-    @TestApi
+    @VisibleForTesting
     Point getLastSurfacePosition() {
         return mLastSurfacePosition;
     }
