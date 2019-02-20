@@ -134,6 +134,7 @@ import android.content.pm.PackageManagerInternal;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
+import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -188,6 +189,7 @@ import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.util.proto.ProtoOutputStream;
+import android.view.Choreographer;
 import android.view.Display;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
@@ -846,7 +848,7 @@ public class WindowManagerService extends IWindowManager.Stub
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "closeSurfaceTransaction");
             synchronized (mGlobalLock) {
                 SurfaceControl.closeTransaction();
-                traceStateLocked(where);
+                mWindowTracing.logState(where);
             }
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
@@ -970,7 +972,8 @@ public class WindowManagerService extends IWindowManager.Stub
         mWindowPlacerLocked = new WindowSurfacePlacer(this);
         mTaskSnapshotController = new TaskSnapshotController(this);
 
-        mWindowTracing = WindowTracing.createDefaultAndStartLooper(context);
+        mWindowTracing = WindowTracing.createDefaultAndStartLooper(this,
+                Choreographer.getInstance());
 
         LocalServices.addService(WindowManagerPolicy.class, mPolicy);
 
@@ -5793,17 +5796,6 @@ public class WindowManagerService extends IWindowManager.Stub
         proto.write(LAST_ORIENTATION, defaultDisplayContent.getLastOrientation());
     }
 
-    void traceStateLocked(String where) {
-        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "traceStateLocked");
-        try {
-            mWindowTracing.traceStateLocked(where, this);
-        } catch (Exception e) {
-            Log.wtf(TAG, "Exception while tracing state", e);
-        } finally {
-            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
-        }
-    }
-
     private void dumpWindowsLocked(PrintWriter pw, boolean dumpAll,
             ArrayList<WindowState> windows) {
         pw.println("WINDOW MANAGER WINDOWS (dumpsys window windows)");
@@ -6464,6 +6456,23 @@ public class WindowManagerService extends IWindowManager.Stub
             final DisplayInfo di = dc.getDisplayInfo();
             dc.getDisplayPolicy().getStableInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight,
                     di.displayCutout, outInsets);
+        }
+    }
+
+    @Override
+    public void setForwardedInsets(int displayId, Insets insets) throws RemoteException {
+        synchronized (mGlobalLock) {
+            final DisplayContent dc = mRoot.getDisplayContent(displayId);
+            if (dc == null) {
+                return;
+            }
+            final int callingUid = Binder.getCallingUid();
+            final int displayOwnerUid = dc.getDisplay().getOwnerUid();
+            if (callingUid != displayOwnerUid) {
+                throw new SecurityException(
+                        "Only owner of the display can set ForwardedInsets to it.");
+            }
+            dc.setForwardedInsets(insets);
         }
     }
 

@@ -23,6 +23,7 @@ import android.content.rollback.PackageRollbackInfo.RestoreInfo;
 import android.content.rollback.RollbackInfo;
 import android.util.IntArray;
 import android.util.Log;
+import android.util.SparseLongArray;
 
 import libcore.io.IoUtils;
 
@@ -160,6 +161,28 @@ class RollbackStore {
         return restoreInfos;
     }
 
+    private static @NonNull JSONArray ceSnapshotInodesToJson(
+            @NonNull SparseLongArray ceSnapshotInodes) throws JSONException {
+        JSONArray array = new JSONArray();
+        for (int i = 0; i < ceSnapshotInodes.size(); i++) {
+            JSONObject entryJson = new JSONObject();
+            entryJson.put("userId", ceSnapshotInodes.keyAt(i));
+            entryJson.put("ceSnapshotInode", ceSnapshotInodes.valueAt(i));
+            array.put(entryJson);
+        }
+        return array;
+    }
+
+    private static @NonNull SparseLongArray ceSnapshotInodesFromJson(JSONArray json)
+            throws JSONException {
+        SparseLongArray ceSnapshotInodes = new SparseLongArray(json.length());
+        for (int i = 0; i < json.length(); i++) {
+            JSONObject entry = json.getJSONObject(i);
+            ceSnapshotInodes.append(entry.getInt("userId"), entry.getLong("ceSnapshotInode"));
+        }
+        return ceSnapshotInodes;
+    }
+
     /**
      * Reads the list of recently executed rollbacks from persistent storage.
      */
@@ -201,7 +224,13 @@ class RollbackStore {
      */
     RollbackData createAvailableRollback(int rollbackId) throws IOException {
         File backupDir = new File(mAvailableRollbacksDir, Integer.toString(rollbackId));
-        return new RollbackData(rollbackId, backupDir);
+        return new RollbackData(rollbackId, backupDir, -1, true);
+    }
+
+    RollbackData createPendingStagedRollback(int rollbackId, int stagedSessionId)
+            throws IOException {
+        File backupDir = new File(mAvailableRollbacksDir, Integer.toString(rollbackId));
+        return new RollbackData(rollbackId, backupDir, stagedSessionId, false);
     }
 
     /**
@@ -240,6 +269,9 @@ class RollbackStore {
             dataJson.put("rollbackId", data.rollbackId);
             dataJson.put("packages", toJson(data.packages));
             dataJson.put("timestamp", data.timestamp.toString());
+            dataJson.put("stagedSessionId", data.stagedSessionId);
+            dataJson.put("isAvailable", data.isAvailable);
+            dataJson.put("apkSessionId", data.apkSessionId);
 
             PrintWriter pw = new PrintWriter(new File(data.backupDir, "rollback.json"));
             pw.println(dataJson.toString());
@@ -254,8 +286,6 @@ class RollbackStore {
      * rollback.
      */
     void deleteAvailableRollback(RollbackData data) {
-        // TODO(narayan): Make sure we delete the userdata snapshot along with the backup of the
-        // actual app.
         removeFile(data.backupDir);
     }
 
@@ -299,9 +329,13 @@ class RollbackStore {
                     IoUtils.readFileAsString(rollbackJsonFile.getAbsolutePath()));
 
             int rollbackId = dataJson.getInt("rollbackId");
-            RollbackData data = new RollbackData(rollbackId, backupDir);
+            int stagedSessionId = dataJson.getInt("stagedSessionId");
+            boolean isAvailable = dataJson.getBoolean("isAvailable");
+            RollbackData data = new RollbackData(rollbackId, backupDir,
+                    stagedSessionId, isAvailable);
             data.packages.addAll(packageRollbackInfosFromJson(dataJson.getJSONArray("packages")));
             data.timestamp = Instant.parse(dataJson.getString("timestamp"));
+            data.apkSessionId = dataJson.getInt("apkSessionId");
             return data;
         } catch (JSONException | DateTimeParseException e) {
             throw new IOException(e);
@@ -328,8 +362,14 @@ class RollbackStore {
 
         IntArray pendingBackups = info.getPendingBackups();
         List<RestoreInfo> pendingRestores = info.getPendingRestores();
+        IntArray installedUsers = info.getInstalledUsers();
         json.put("pendingBackups", convertToJsonArray(pendingBackups));
         json.put("pendingRestores", convertToJsonArray(pendingRestores));
+
+        json.put("isApex", info.isApex());
+
+        json.put("installedUsers", convertToJsonArray(installedUsers));
+        json.put("ceSnapshotInodes", ceSnapshotInodesToJson(info.getCeSnapshotInodes()));
 
         return json;
     }
@@ -345,8 +385,14 @@ class RollbackStore {
         final ArrayList<RestoreInfo> pendingRestores = convertToRestoreInfoArray(
                 json.getJSONArray("pendingRestores"));
 
+        final boolean isApex = json.getBoolean("isApex");
+
+        final IntArray installedUsers = convertToIntArray(json.getJSONArray("installedUsers"));
+        final SparseLongArray ceSnapshotInodes = ceSnapshotInodesFromJson(
+                json.getJSONArray("ceSnapshotInodes"));
+
         return new PackageRollbackInfo(versionRolledBackFrom, versionRolledBackTo,
-                pendingBackups, pendingRestores);
+                pendingBackups, pendingRestores, isApex, installedUsers, ceSnapshotInodes);
     }
 
     private JSONArray versionedPackagesToJson(List<VersionedPackage> packages)

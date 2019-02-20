@@ -22,11 +22,6 @@
         android:sharedUserId="android.uid.systemui"
         coreApp="true">
 
-    <!-- Using OpenGL ES 2.0 -->
-    <uses-feature
-        android:glEsVersion="0x00020000"
-        android:required="true" />
-
     <!-- SysUI must be the one to define this permission; its name is
          referenced by the core OS. -->
     <permission android:name="android.permission.systemui.IDENTITY"
@@ -630,6 +625,14 @@
                   android:authorities="com.android.systemui.keyguard"
                   android:grantUriPermissions="true"
                   android:exported="true">
+        </provider>
+
+        <!-- Provides list and realistic previews of clock faces for the picker app. -->
+        <provider
+            android:name="com.android.keyguard.clock.ClockOptionsProvider"
+            android:authorities="com.android.keyguard.clock"
+            android:exported="true"
+            android:grantUriPermissions="true">
         </provider>
 
         <receiver

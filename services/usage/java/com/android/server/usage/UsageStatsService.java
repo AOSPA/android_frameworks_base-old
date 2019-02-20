@@ -493,6 +493,8 @@ public class UsageStatsService extends SystemService implements
             switch (event.mEventType) {
                 case Event.ACTIVITY_RESUMED:
                     synchronized (mVisibleActivities) {
+                        // check if this activity has already been resumed
+                        if (mVisibleActivities.get(event.mInstanceId) != null) break;
                         mVisibleActivities.put(event.mInstanceId, event.getClassName());
                         try {
                             mAppTimeLimit.noteUsageStart(packageName, userId);
@@ -1375,7 +1377,7 @@ public class UsageStatsService extends SystemService implements
             if (packages == null || packages.length == 0) {
                 throw new IllegalArgumentException("Must specify at least one package");
             }
-            if (callbackIntent == null) {
+            if (callbackIntent == null && timeLimitMs != 0L) {
                 throw new NullPointerException("callbackIntent can't be null");
             }
             final int callingUid = Binder.getCallingUid();

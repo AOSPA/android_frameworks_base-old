@@ -943,6 +943,7 @@ public class LocationManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
     public void requestLocationUpdates(LocationRequest request, LocationListener listener,
             Looper looper) {
@@ -973,6 +974,7 @@ public class LocationManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
     public void requestLocationUpdates(LocationRequest request, PendingIntent intent) {
         android.util.SeempLog.record(47);
@@ -1306,6 +1308,7 @@ public class LocationManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(WRITE_SECURE_SETTINGS)
     public void setLocationEnabledForUser(boolean enabled, UserHandle userHandle) {
         Settings.Secure.putIntForUser(
@@ -2423,21 +2426,6 @@ public class LocationManager {
     private static void checkGeofence(Geofence fence) {
         if (fence == null) {
             throw new IllegalArgumentException("invalid geofence: " + fence);
-        }
-    }
-
-    /**
-     * Return the package that implements the {@link #NETWORK_PROVIDER} functionality.
-     *
-     * @hide
-     */
-    @SystemApi
-    public @Nullable String getNetworkProviderPackage() {
-        try {
-            return mService.getNetworkProviderPackage();
-        } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
-            return null;
         }
     }
 

@@ -183,6 +183,10 @@ public final class ProcessList {
     // is not entirely fatal but is generally a bad idea.
     static final int BACKUP_APP_ADJ = 300;
 
+    // This is a process bound by the system that's more important than services but not so
+    // perceptible that it affects the user immediately if killed.
+    static final int PERCEPTIBLE_LOW_APP_ADJ = 250;
+
     // This is a process only hosting components that are perceptible to the
     // user, and we really want to avoid killing them, but they are not
     // immediately visible. An example is background music playback.
@@ -679,47 +683,68 @@ public final class ProcessList {
         return totalProcessLimit/2;
     }
 
-    private static String buildOomTag(String prefix, String space, int val, int base) {
+    private static String buildOomTag(String prefix, String compactPrefix, String space, int val,
+            int base, boolean compact) {
         final int diff = val - base;
         if (diff == 0) {
+            if (compact) {
+                return compactPrefix;
+            }
             if (space == null) return prefix;
             return prefix + space;
         }
         if (diff < 10) {
-            return prefix + "+ " + Integer.toString(diff);
+            return prefix + (compact ? "+" : "+ ") + Integer.toString(diff);
         }
         return prefix + "+" + Integer.toString(diff);
     }
 
-    public static String makeOomAdjString(int setAdj) {
+    public static String makeOomAdjString(int setAdj, boolean compact) {
         if (setAdj >= ProcessList.CACHED_APP_MIN_ADJ) {
-            return buildOomTag("cch", "   ", setAdj, ProcessList.CACHED_APP_MIN_ADJ);
+            return buildOomTag("cch", "cch", "   ", setAdj,
+                    ProcessList.CACHED_APP_MIN_ADJ, compact);
         } else if (setAdj >= ProcessList.SERVICE_B_ADJ) {
-            return buildOomTag("svcb  ", null, setAdj, ProcessList.SERVICE_B_ADJ);
+            return buildOomTag("svcb  ", "svcb", null, setAdj,
+                    ProcessList.SERVICE_B_ADJ, compact);
         } else if (setAdj >= ProcessList.PREVIOUS_APP_ADJ) {
-            return buildOomTag("prev  ", null, setAdj, ProcessList.PREVIOUS_APP_ADJ);
+            return buildOomTag("prev  ", "prev", null, setAdj,
+                    ProcessList.PREVIOUS_APP_ADJ, compact);
         } else if (setAdj >= ProcessList.HOME_APP_ADJ) {
-            return buildOomTag("home  ", null, setAdj, ProcessList.HOME_APP_ADJ);
+            return buildOomTag("home  ", "home", null, setAdj,
+                    ProcessList.HOME_APP_ADJ, compact);
         } else if (setAdj >= ProcessList.SERVICE_ADJ) {
-            return buildOomTag("svc   ", null, setAdj, ProcessList.SERVICE_ADJ);
+            return buildOomTag("svc   ", "svc", null, setAdj,
+                    ProcessList.SERVICE_ADJ, compact);
         } else if (setAdj >= ProcessList.HEAVY_WEIGHT_APP_ADJ) {
-            return buildOomTag("hvy   ", null, setAdj, ProcessList.HEAVY_WEIGHT_APP_ADJ);
+            return buildOomTag("hvy   ", "hvy", null, setAdj,
+                    ProcessList.HEAVY_WEIGHT_APP_ADJ, compact);
         } else if (setAdj >= ProcessList.BACKUP_APP_ADJ) {
-            return buildOomTag("bkup  ", null, setAdj, ProcessList.BACKUP_APP_ADJ);
+            return buildOomTag("bkup  ", "bkup", null, setAdj,
+                    ProcessList.BACKUP_APP_ADJ, compact);
+        } else if (setAdj >= ProcessList.PERCEPTIBLE_LOW_APP_ADJ) {
+            return buildOomTag("prcl  ", "prcl", null, setAdj,
+                    ProcessList.PERCEPTIBLE_LOW_APP_ADJ, compact);
         } else if (setAdj >= ProcessList.PERCEPTIBLE_APP_ADJ) {
-            return buildOomTag("prcp  ", null, setAdj, ProcessList.PERCEPTIBLE_APP_ADJ);
+            return buildOomTag("prcp  ", "prcp", null, setAdj,
+                    ProcessList.PERCEPTIBLE_APP_ADJ, compact);
         } else if (setAdj >= ProcessList.VISIBLE_APP_ADJ) {
-            return buildOomTag("vis", "   ", setAdj, ProcessList.VISIBLE_APP_ADJ);
+            return buildOomTag("vis", "vis", "   ", setAdj,
+                    ProcessList.VISIBLE_APP_ADJ, compact);
         } else if (setAdj >= ProcessList.FOREGROUND_APP_ADJ) {
-            return buildOomTag("fore  ", null, setAdj, ProcessList.FOREGROUND_APP_ADJ);
+            return buildOomTag("fore  ", "fore", null, setAdj,
+                    ProcessList.FOREGROUND_APP_ADJ, compact);
         } else if (setAdj >= ProcessList.PERSISTENT_SERVICE_ADJ) {
-            return buildOomTag("psvc  ", null, setAdj, ProcessList.PERSISTENT_SERVICE_ADJ);
+            return buildOomTag("psvc  ", "psvc", null, setAdj,
+                    ProcessList.PERSISTENT_SERVICE_ADJ, compact);
         } else if (setAdj >= ProcessList.PERSISTENT_PROC_ADJ) {
-            return buildOomTag("pers  ", null, setAdj, ProcessList.PERSISTENT_PROC_ADJ);
+            return buildOomTag("pers  ", "pers", null, setAdj,
+                    ProcessList.PERSISTENT_PROC_ADJ, compact);
         } else if (setAdj >= ProcessList.SYSTEM_ADJ) {
-            return buildOomTag("sys   ", null, setAdj, ProcessList.SYSTEM_ADJ);
+            return buildOomTag("sys   ", "sys", null, setAdj,
+                    ProcessList.SYSTEM_ADJ, compact);
         } else if (setAdj >= ProcessList.NATIVE_ADJ) {
-            return buildOomTag("ntv  ", null, setAdj, ProcessList.NATIVE_ADJ);
+            return buildOomTag("ntv  ", "ntv", null, setAdj,
+                    ProcessList.NATIVE_ADJ, compact);
         } else {
             return Integer.toString(setAdj);
         }
@@ -1722,8 +1747,11 @@ public final class ProcessList {
         try {
             final String[] packageNames = mService.mContext.getPackageManager()
                     .getPackagesForUid(uid);
-            final String[] visibleVolIds = LocalServices.getService(StorageManagerInternal.class)
+            final StorageManagerInternal storageManagerInternal =
+                    LocalServices.getService(StorageManagerInternal.class);
+            final String[] visibleVolIds = storageManagerInternal
                     .getVisibleVolumesForUser(UserHandle.getUserId(uid));
+            final String sandboxId = storageManagerInternal.getSandboxId(app.info.packageName);
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Start proc: " +
                     app.processName);
             checkSlow(startTime, "startProcess: asking zygote to start proc");
@@ -1733,7 +1761,7 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        packageNames, visibleVolIds,
+                        packageNames, visibleVolIds, sandboxId,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else if (hostingType.equals("app_zygote")) {
                 final AppZygote appZygote = createAppZygoteForProcessIfNeeded(app);
@@ -1742,14 +1770,14 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        packageNames, visibleVolIds, /*useBlastulaPool=*/ false,
+                        packageNames, visibleVolIds, sandboxId, /*useBlastulaPool=*/ false,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, invokeWith, app.info.packageName,
-                        packageNames, visibleVolIds,
+                        packageNames, visibleVolIds, sandboxId,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             }
             checkSlow(startTime, "startProcess: returned from zygote!");

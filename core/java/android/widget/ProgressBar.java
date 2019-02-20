@@ -20,6 +20,7 @@ import android.animation.ObjectAnimator;
 import android.annotation.InterpolatorRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.Px;
 import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -37,6 +38,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.graphics.drawable.shapes.RoundRectShape;
 import android.graphics.drawable.shapes.Shape;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.AttributeSet;
@@ -58,6 +60,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
 import android.view.animation.Transformation;
+import android.view.inspector.InspectableProperty;
 import android.widget.RemoteViews.RemoteView;
 
 import com.android.internal.R;
@@ -168,12 +171,24 @@ public class ProgressBar extends View {
     /** Duration of smooth progress animations. */
     private static final int PROGRESS_ANIM_DURATION = 80;
 
-    @UnsupportedAppUsage
+    /**
+     * Outside the framework, please use {@link ProgressBar#getMinWidth()} and
+     * {@link ProgressBar#setMinWidth(int)} instead of accessing these directly.
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     int mMinWidth;
     int mMaxWidth;
-    @UnsupportedAppUsage
+    /**
+     * Outside the framework, please use {@link ProgressBar#getMinHeight()} and
+     * {@link ProgressBar#setMinHeight(int)} instead of accessing these directly.
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     int mMinHeight;
-    @UnsupportedAppUsage
+    /**
+     * Outside the framework, please use {@link ProgressBar#getMaxHeight()} ()} and
+     * {@link ProgressBar#setMaxHeight(int)} (int)} instead of accessing these directly.
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     int mMaxHeight;
 
     private int mProgress;
@@ -186,9 +201,9 @@ public class ProgressBar extends View {
     private int mBehavior;
     @UnsupportedAppUsage
     private int mDuration;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private boolean mIndeterminate;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 124049927)
     private boolean mOnlyIndeterminate;
     private Transformation mTransformation;
     private AlphaAnimation mAnimation;
@@ -196,7 +211,12 @@ public class ProgressBar extends View {
 
     private Drawable mIndeterminateDrawable;
     private Drawable mProgressDrawable;
-    @UnsupportedAppUsage
+    /**
+     * Outside the framework, instead of accessing this directly, please use
+     * {@link #getCurrentDrawable()}, {@link #setProgressDrawable(Drawable)},
+     * {@link #setIndeterminateDrawable(Drawable)} and their tiled versions.
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private Drawable mCurrentDrawable;
     private ProgressTintInfo mProgressTintInfo;
 
@@ -247,6 +267,8 @@ public class ProgressBar extends View {
 
         final TypedArray a = context.obtainStyledAttributes(
                 attrs, R.styleable.ProgressBar, defStyleAttr, defStyleRes);
+        saveAttributeDataForStyleable(context, R.styleable.ProgressBar,
+                attrs, a, defStyleAttr, defStyleRes);
 
         mNoInvalidate = true;
 
@@ -388,6 +410,74 @@ public class ProgressBar extends View {
         if (getImportantForAccessibility() == View.IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
             setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         }
+    }
+
+    /**
+     * Sets the minimum width the progress bar can have.
+     * @param minWidth the minimum width to be set, in pixels
+     * @attr ref android.R.styleable#ProgressBar_minWidth
+     */
+    public void setMinWidth(@Px int minWidth) {
+        mMinWidth = minWidth;
+        requestLayout();
+    }
+
+    /**
+     * @return the minimum width the progress bar can have, in pixels
+     */
+    @Px public int getMinWidth() {
+        return mMinWidth;
+    }
+
+    /**
+     * Sets the maximum width the progress bar can have.
+     * @param maxWidth the maximum width to be set, in pixels
+     * @attr ref android.R.styleable#ProgressBar_maxWidth
+     */
+    public void setMaxWidth(@Px int maxWidth) {
+        mMaxWidth = maxWidth;
+        requestLayout();
+    }
+
+    /**
+     * @return the maximum width the progress bar can have, in pixels
+     */
+    @Px public int getMaxWidth() {
+        return mMaxWidth;
+    }
+
+    /**
+     * Sets the minimum height the progress bar can have.
+     * @param minHeight the minimum height to be set, in pixels
+     * @attr ref android.R.styleable#ProgressBar_minHeight
+     */
+    public void setMinHeight(@Px int minHeight) {
+        mMinHeight = minHeight;
+        requestLayout();
+    }
+
+    /**
+     * @return the minimum height the progress bar can have, in pixels
+     */
+    @Px public int getMinHeight() {
+        return mMinHeight;
+    }
+
+    /**
+     * Sets the maximum height the progress bar can have.
+     * @param maxHeight the maximum height to be set, in pixels
+     * @attr ref android.R.styleable#ProgressBar_maxHeight
+     */
+    public void setMaxHeight(@Px int maxHeight) {
+        mMaxHeight = maxHeight;
+        requestLayout();
+    }
+
+    /**
+     * @return the maximum height the progress bar can have, in pixels
+     */
+    @Px public int getMaxHeight() {
+        return mMaxHeight;
     }
 
     /**
@@ -556,6 +646,7 @@ public class ProgressBar extends View {
      *
      * @return true if the progress bar is in indeterminate mode
      */
+    @InspectableProperty
     @ViewDebug.ExportedProperty(category = "progress")
     public synchronized boolean isIndeterminate() {
         return mIndeterminate;
@@ -610,6 +701,7 @@ public class ProgressBar extends View {
      * @see #setIndeterminateDrawable(android.graphics.drawable.Drawable)
      * @see #setIndeterminate(boolean)
      */
+    @InspectableProperty
     public Drawable getIndeterminateDrawable() {
         return mIndeterminateDrawable;
     }
@@ -677,6 +769,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_indeterminateTint
      * @see #setIndeterminateTintList(ColorStateList)
      */
+    @InspectableProperty(name = "indeterminateTint")
     @Nullable
     public ColorStateList getIndeterminateTintList() {
         return mProgressTintInfo != null ? mProgressTintInfo.mIndeterminateTintList : null;
@@ -712,6 +805,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_indeterminateTintMode
      * @see #setIndeterminateTintMode(PorterDuff.Mode)
      */
+    @InspectableProperty
     @Nullable
     public PorterDuff.Mode getIndeterminateTintMode() {
         return mProgressTintInfo != null ? mProgressTintInfo.mIndeterminateTintMode : null;
@@ -768,6 +862,7 @@ public class ProgressBar extends View {
      * @see #setProgressDrawable(android.graphics.drawable.Drawable)
      * @see #setIndeterminate(boolean)
      */
+    @InspectableProperty
     public Drawable getProgressDrawable() {
         return mProgressDrawable;
     }
@@ -821,6 +916,7 @@ public class ProgressBar extends View {
     /**
      * @hide
      */
+    @InspectableProperty
     public boolean getMirrorForRtl() {
         return mMirrorForRtl;
     }
@@ -951,6 +1047,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_progressTint
      * @see #setProgressTintList(ColorStateList)
      */
+    @InspectableProperty(name = "progressTint")
     @Nullable
     public ColorStateList getProgressTintList() {
         return mProgressTintInfo != null ? mProgressTintInfo.mProgressTintList : null;
@@ -988,6 +1085,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_progressTintMode
      * @see #setProgressTintMode(PorterDuff.Mode)
      */
+    @InspectableProperty
     @Nullable
     public PorterDuff.Mode getProgressTintMode() {
         return mProgressTintInfo != null ? mProgressTintInfo.mProgressTintMode : null;
@@ -1033,6 +1131,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_progressBackgroundTint
      * @see #setProgressBackgroundTintList(ColorStateList)
      */
+    @InspectableProperty(name = "progressBackgroundTint")
     @Nullable
     public ColorStateList getProgressBackgroundTintList() {
         return mProgressTintInfo != null ? mProgressTintInfo.mProgressBackgroundTintList : null;
@@ -1067,6 +1166,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_progressBackgroundTintMode
      * @see #setProgressBackgroundTintMode(PorterDuff.Mode)
      */
+    @InspectableProperty
     @Nullable
     public PorterDuff.Mode getProgressBackgroundTintMode() {
         return mProgressTintInfo != null ? mProgressTintInfo.mProgressBackgroundTintMode : null;
@@ -1112,6 +1212,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_secondaryProgressTint
      * @see #setSecondaryProgressTintList(ColorStateList)
      */
+    @InspectableProperty(name = "secondaryProgressTint")
     @Nullable
     public ColorStateList getSecondaryProgressTintList() {
         return mProgressTintInfo != null ? mProgressTintInfo.mSecondaryProgressTintList : null;
@@ -1150,6 +1251,7 @@ public class ProgressBar extends View {
      * @attr ref android.R.styleable#ProgressBar_secondaryProgressTintMode
      * @see #setSecondaryProgressTintMode(PorterDuff.Mode)
      */
+    @InspectableProperty
     @Nullable
     public PorterDuff.Mode getSecondaryProgressTintMode() {
         return mProgressTintInfo != null ? mProgressTintInfo.mSecondaryProgressTintMode : null;
@@ -1203,9 +1305,14 @@ public class ProgressBar extends View {
     }
 
     /**
-     * @return The drawable currently used to draw the progress bar
+     * Returns the drawable currently used to draw the progress bar. This will be
+     * either {@link #getProgressDrawable()} or {@link #getIndeterminateDrawable()}
+     * depending on whether the progress bar is in determinate or indeterminate mode.
+     *
+     * @return the drawable currently used to draw the progress bar
      */
-    Drawable getCurrentDrawable() {
+    @Nullable
+    public Drawable getCurrentDrawable() {
         return mCurrentDrawable;
     }
 
@@ -1477,6 +1584,7 @@ public class ProgressBar extends View {
      * @see #getMax()
      */
     @ViewDebug.ExportedProperty(category = "progress")
+    @InspectableProperty
     public synchronized int getProgress() {
         return mIndeterminate ? 0 : mProgress;
     }
@@ -1494,6 +1602,7 @@ public class ProgressBar extends View {
      * @see #getMax()
      */
     @ViewDebug.ExportedProperty(category = "progress")
+    @InspectableProperty
     public synchronized int getSecondaryProgress() {
         return mIndeterminate ? 0 : mSecondaryProgress;
     }
@@ -1508,6 +1617,7 @@ public class ProgressBar extends View {
      * @see #getSecondaryProgress()
      */
     @ViewDebug.ExportedProperty(category = "progress")
+    @InspectableProperty
     public synchronized int getMin() {
         return mMin;
     }
@@ -1522,6 +1632,7 @@ public class ProgressBar extends View {
      * @see #getSecondaryProgress()
      */
     @ViewDebug.ExportedProperty(category = "progress")
+    @InspectableProperty
     public synchronized int getMax() {
         return mMax;
     }
@@ -1687,6 +1798,7 @@ public class ProgressBar extends View {
      *
      * @return the {@link Interpolator} associated to this animation
      */
+    @InspectableProperty
     public Interpolator getInterpolator() {
         return mInterpolator;
     }

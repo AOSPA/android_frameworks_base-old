@@ -124,6 +124,9 @@ class AssetManager2 {
   // This may be nullptr if the APK represented by `cookie` has no resource table.
   const DynamicRefTable* GetDynamicRefTableForCookie(ApkAssetsCookie cookie) const;
 
+  const std::unordered_map<std::string, std::string>*
+    GetOverlayableMapForPackage(uint32_t package_id) const;
+
   // Sets/resets the configuration for this AssetManager. This will cause all
   // caches that are related to the configuration change to be invalidated.
   void SetConfiguration(const ResTable_config& configuration);
@@ -236,6 +239,8 @@ class AssetManager2 {
   // Returns formatted log of last resource resolution path, or empty if no
   // resource has been resolved yet.
   std::string GetLastResourceResolution() const;
+
+  const std::vector<uint32_t> GetBagResIdStack(uint32_t resid);
 
   // Retrieves the best matching bag/map resource with ID `resid`.
   // This method will resolve all parent references for this bag and merge keys with the child.
@@ -354,6 +359,10 @@ class AssetManager2 {
   // Cached set of bags. These are cached because they can inherit keys from parent bags,
   // which involves some calculation.
   std::unordered_map<uint32_t, util::unique_cptr<ResolvedBag>> cached_bags_;
+
+  // Cached set of bag resid stacks for each bag. These are cached because they might be requested
+  // a number of times for each view during View inspection.
+  std::unordered_map<uint32_t, std::vector<uint32_t>> cached_bag_resid_stacks_;
 
   // Whether or not to save resource resolution steps
   bool resource_resolution_logging_enabled_ = false;

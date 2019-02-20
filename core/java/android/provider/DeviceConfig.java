@@ -69,40 +69,8 @@ public final class DeviceConfig {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final String NAMESPACE_AUTOFILL = "autofill";
-
-    /**
-     * ContentCapture-related properties definitions.
-     *
-     * @hide
-     */
-    @SystemApi
-    public interface ContentCapture {
-        String NAMESPACE = "content_capture";
-
-        /**
-         * Property used by {@code com.android.server.SystemServer} on start to decide whether
-         * the Content Capture service should be created or not.
-         *
-         * <p>Possible values are:
-         *
-         * <ul>
-         *   <li>If set to {@code default}, it will only be set if the OEM provides and defines the
-         *   service name by overlaying {@code config_defaultContentCaptureService} (this is the
-         *   "default" mode)
-         *   <li>If set to {@code always}, it will always be enabled, even when the resource is not
-         *   overlaid (this is useful during development and to run the CTS tests on AOSP builds).
-         *   <li>Otherwise, it's explicitly disabled (this could work as a "kill switch" so OEMs
-         *   can disable it remotely in case of emergency by setting to something else (like
-         *   {@code "false"}); notice that it's also disabled if the OEM doesn't explicitly set one
-         *   of the values above).
-         * </ul>
-         *
-         * @hide
-         */
-        // TODO(b/121153631): revert back to SERVICE_EXPLICITLY_ENABLED approach
-        String PROPERTY_CONTENTCAPTURE_ENABLED = "enable_contentcapture";
-    }
 
     /**
      * Namespace for content capture feature used by on-device machine intelligence
@@ -111,6 +79,7 @@ public final class DeviceConfig {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final String NAMESPACE_CONTENT_CAPTURE = "content_capture";
 
     /**
@@ -147,6 +116,10 @@ public final class DeviceConfig {
          * Whether the Notification Assistant should generate contextual actions for notifications.
          */
         String GENERATE_ACTIONS = "generate_actions";
+
+        String MAX_MESSAGES_TO_EXTRACT = "max_messages_to_extract";
+
+        String MAX_SUGGESTIONS = "max_suggestions";
     }
 
     /**
@@ -168,6 +141,16 @@ public final class DeviceConfig {
     @SystemApi
     public interface RuntimeNativeBoot {
         String NAMESPACE = "runtime_native_boot";
+    }
+
+    /**
+     * Namespace for all media native related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface MediaNative {
+        String NAMESPACE = "media_native";
     }
 
     /**
@@ -220,6 +203,14 @@ public final class DeviceConfig {
          * Whether to show location access check notifications.
          */
         String PROPERTY_LOCATION_ACCESS_CHECK_ENABLED = "location_access_check_enabled";
+
+        /**
+         * Whether to disable the new device identifier access restrictions.
+         *
+         * @hide
+         */
+        String PROPERTY_DEVICE_IDENTIFIER_ACCESS_RESTRICTIONS_DISABLED =
+                "device_identifier_access_restrictions_disabled";
     }
 
     /**
@@ -318,6 +309,25 @@ public final class DeviceConfig {
         String ISOLATED_STORAGE_ENABLED = "isolated_storage_enabled";
     }
 
+    /**
+     * Namespace for system scheduler related features. These features will be applied
+     * immediately upon change.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface Scheduler {
+        String NAMESPACE = "scheduler";
+
+        /**
+         * Flag for enabling fast metrics collection in system scheduler.
+         * A flag value of '' or '0' means the fast metrics collection is not
+         * enabled. Otherwise fast metrics collection is enabled and flag value
+         * is the order id.
+         */
+        String ENABLE_FAST_METRICS_COLLECTION = "enable_fast_metrics_collection";
+    }
+
     private static final Object sLock = new Object();
     @GuardedBy("sLock")
     private static Map<OnPropertyChangedListener, Pair<String, Executor>> sListeners =
@@ -338,6 +348,7 @@ public final class DeviceConfig {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(READ_DEVICE_CONFIG)
     public static String getProperty(String namespace, String name) {
         ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
@@ -408,6 +419,7 @@ public final class DeviceConfig {
      * @see #removeOnPropertyChangedListener(OnPropertyChangedListener)
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(READ_DEVICE_CONFIG)
     public static void addOnPropertyChangedListener(
             @NonNull String namespace,
@@ -441,6 +453,7 @@ public final class DeviceConfig {
      * @see #addOnPropertyChangedListener(String, Executor, OnPropertyChangedListener)
      */
     @SystemApi
+    @TestApi
     public static void removeOnPropertyChangedListener(
             OnPropertyChangedListener onPropertyChangedListener) {
         synchronized (sLock) {
@@ -537,6 +550,7 @@ public final class DeviceConfig {
      * @hide
      */
     @SystemApi
+    @TestApi
     public interface OnPropertyChangedListener {
         /**
          * Called when a property has changed.

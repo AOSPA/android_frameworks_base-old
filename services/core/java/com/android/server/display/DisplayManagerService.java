@@ -1021,7 +1021,7 @@ public final class DisplayManagerService extends SystemService {
         return isDefault ? Display.DEFAULT_DISPLAY : mNextNonDefaultDisplayId++;
     }
 
-    private int assignDisplayIdLocked(boolean isDefault, int physicalId) {
+    private int assignDisplayIdLocked(boolean isDefault, long physicalId) {
         if (physicalId >= SurfaceControl.BUILT_IN_DISPLAY_ID_EXT_MIN &&
             physicalId <= SurfaceControl.BUILT_IN_DISPLAY_ID_EXT_MAX) {
             return mNextBuiltInDisplayId++;

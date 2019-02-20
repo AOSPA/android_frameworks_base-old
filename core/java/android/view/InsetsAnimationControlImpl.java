@@ -33,6 +33,7 @@ import android.util.SparseSetArray;
 import android.view.InsetsState.InsetSide;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
 import android.view.WindowInsets.Type.InsetType;
+import android.view.WindowManager.LayoutParams;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -165,7 +166,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
             @Nullable @InsetSide SparseIntArray typeSideMap) {
         return state.calculateInsets(frame, false /* isScreenRound */,
                 false /* alwaysConsumerNavBar */, null /* displayCutout */,
-                null /* legacyContentInsets */, null /* legacyStableInsets */, typeSideMap)
+                null /* legacyContentInsets */, null /* legacyStableInsets */,
+                LayoutParams.SOFT_INPUT_ADJUST_RESIZE /* legacySoftInputMode*/, typeSideMap)
                .getInsets(mTypes);
     }
 
@@ -180,9 +182,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         for (int i = items.size() - 1; i >= 0; i--) {
             final InsetsSourceConsumer consumer = items.valueAt(i);
             final InsetsSource source = mInitialInsetsState.getSource(consumer.getType());
+            final InsetsSourceControl control = consumer.getControl();
             final SurfaceControl leash = consumer.getControl().getLeash();
-            mTmpMatrix.setTranslate(source.getFrame().left, source.getFrame().top);
 
+            mTmpMatrix.setTranslate(control.getSurfacePosition().x, control.getSurfacePosition().y);
             mTmpFrame.set(source.getFrame());
             addTranslationToMatrix(side, offset, mTmpMatrix, mTmpFrame);
 

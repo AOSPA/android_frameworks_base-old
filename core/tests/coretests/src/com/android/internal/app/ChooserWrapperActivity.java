@@ -25,6 +25,8 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.util.Size;
 
+import com.android.internal.logging.MetricsLogger;
+
 import java.util.function.Function;
 
 public class ChooserWrapperActivity extends ChooserActivity {
@@ -85,6 +87,20 @@ public class ChooserWrapperActivity extends ChooserActivity {
         return super.loadThumbnail(uri, size);
     }
 
+    @Override
+    protected boolean isImageType(String mimeType) {
+        if (sOverrides.previewThumbnail != null) {
+            return true;
+        }
+
+        return super.isImageType(mimeType);
+    }
+
+    @Override
+    protected MetricsLogger getMetricsLogger() {
+        return sOverrides.metricsLogger;
+    }
+
     /**
      * We cannot directly mock the activity created since instrumentation creates it.
      * <p>
@@ -97,6 +113,7 @@ public class ChooserWrapperActivity extends ChooserActivity {
         public ResolverListController resolverListController;
         public Boolean isVoiceInteraction;
         public Bitmap previewThumbnail;
+        public MetricsLogger metricsLogger;
 
         public void reset() {
             onSafelyStartCallback = null;
@@ -104,6 +121,7 @@ public class ChooserWrapperActivity extends ChooserActivity {
             createPackageManager = null;
             previewThumbnail = null;
             resolverListController = mock(ResolverListController.class);
+            metricsLogger = mock(MetricsLogger.class);
         }
     }
 }

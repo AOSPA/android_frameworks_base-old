@@ -406,9 +406,10 @@ std::shared_ptr<vector<FieldValue>> GaugeMetricProducer::getGaugeFields(const Lo
     return gaugeFields;
 }
 
-void GaugeMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& allData) {
+void GaugeMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& allData,
+                                       bool pullSuccess, int64_t originalPullTimeNs) {
     std::lock_guard<std::mutex> lock(mMutex);
-    if (allData.size() == 0) {
+    if (!pullSuccess || allData.size() == 0) {
         return;
     }
     for (const auto& data : allData) {
@@ -509,6 +510,7 @@ void GaugeMetricProducer::updateCurrentSlicedBucketForAnomaly() {
 
 void GaugeMetricProducer::dropDataLocked(const int64_t dropTimeNs) {
     flushIfNeededLocked(dropTimeNs);
+    StatsdStats::getInstance().noteBucketDropped(mMetricId);
     mPastBuckets.clear();
 }
 

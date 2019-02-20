@@ -189,9 +189,19 @@ public class AppOpsManager {
 
     /**
      * Special mode that means "allow only when app is in foreground."  This is <b>not</b>
-     * returned from {@link #checkOp}, {@link #noteOp}, {@link #startOp}; rather, when this
-     * mode is set, these functions will return {@link #MODE_ALLOWED} when the app being
-     * checked is currently in the foreground, otherwise {@link #MODE_IGNORED}.
+     * returned from {@link #unsafeCheckOp}, {@link #noteOp}, {@link #startOp}.  Rather,
+     * {@link #unsafeCheckOp} will always return {@link #MODE_ALLOWED} (because it is always
+     * possible for it to be ultimately allowed, depending on the app's background state),
+     * and {@link #noteOp} and {@link #startOp} will return {@link #MODE_ALLOWED} when the app
+     * being checked is currently in the foreground, otherwise {@link #MODE_IGNORED}.
+     *
+     * <p>The only place you will this normally see this value is through
+     * {@link #unsafeCheckOpRaw}, which returns the actual raw mode of the op.  Note that because
+     * you can't know the current state of the app being checked (and it can change at any
+     * point), you can only treat the result here as an indication that it will vary between
+     * {@link #MODE_ALLOWED} and {@link #MODE_IGNORED} depending on changes in the background
+     * state of the app.  You thus must always use {@link #noteOp} or {@link #startOp} to do
+     * the actual check for access to the op.</p>
      */
     public static final int MODE_FOREGROUND = 4;
 
@@ -4485,6 +4495,7 @@ public class AppOpsManager {
      * @hide
      */
     public int noteProxyOpNoThrow(int op, String proxiedPackageName) {
+        logOperationIfNeeded(op, mContext.getOpPackageName(), proxiedPackageName);
         try {
             return mService.noteProxyOperation(op, Process.myUid(), mContext.getOpPackageName(),
                     Binder.getCallingUid(), proxiedPackageName);
@@ -4500,7 +4511,7 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int noteOpNoThrow(int op, int uid, String packageName) {
-        logNoteOpIfNeeded(op, packageName);
+        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.noteOperation(op, uid, packageName);
         } catch (RemoteException e) {
@@ -4608,6 +4619,7 @@ public class AppOpsManager {
      * @hide
      */
     public int startOpNoThrow(int op, int uid, String packageName, boolean startIfModeDefault) {
+        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.startOperation(getToken(mService), op, uid, packageName,
                     startIfModeDefault);
@@ -4624,6 +4636,7 @@ public class AppOpsManager {
      * @hide
      */
     public void finishOp(int op, int uid, String packageName) {
+        logOperationIfNeeded(op, packageName, null);
         try {
             mService.finishOperation(getToken(mService), op, uid, packageName);
         } catch (RemoteException e) {
@@ -4870,7 +4883,7 @@ public class AppOpsManager {
         return AppOpsManager.MODE_DEFAULT;
     }
 
-    private static void logNoteOpIfNeeded(int op, String callingPackage) {
+    private static void logOperationIfNeeded(int op, String callingPackage, String proxiedPackage) {
         // Check if debug logging propety is enabled.
         if (!SystemProperties.getBoolean(DEBUG_LOGGING_ENABLE_PROP, false)) {
             return;
@@ -4908,6 +4921,6 @@ public class AppOpsManager {
         // Log a stack trace
         Exception here = new Exception("HERE!");
         android.util.Log.i(DEBUG_LOGGING_TAG, "Note operation package= " + callingPackage
-                + " op= " + opStr, here);
+                + " proxied= " + proxiedPackage + " op= " + opStr, here);
     }
 }

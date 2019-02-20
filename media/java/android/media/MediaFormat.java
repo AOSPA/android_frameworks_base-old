@@ -470,7 +470,6 @@ public final class MediaFormat {
      * The associated value is a float, representing the max frame rate to
      * feed the encoder at.
      *
-     * @hide
      */
     public static final String KEY_MAX_FPS_TO_ENCODER
         = "max-fps-to-encoder";
@@ -495,7 +494,6 @@ public final class MediaFormat {
      * important to ensure all frames are captured (rather than captured in the
      * correct order).
      *
-     * @hide
      */
     public static final String KEY_MAX_PTS_GAP_TO_ENCODER
         = "max-pts-gap-to-encoder";
@@ -1522,6 +1520,7 @@ public final class MediaFormat {
      * Create a copy of a media format object.
      */
     public MediaFormat(@NonNull MediaFormat other) {
+        this();
         mMap.putAll(other.mMap);
     }
 

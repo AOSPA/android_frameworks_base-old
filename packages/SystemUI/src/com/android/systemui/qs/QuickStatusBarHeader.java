@@ -67,6 +67,7 @@ import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.privacy.OngoingPrivacyChip;
 import com.android.systemui.privacy.OngoingPrivacyDialog;
+import com.android.systemui.privacy.PrivacyDialogBuilder;
 import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.qs.QSDetail.Callback;
@@ -123,6 +124,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private TintedIconManager mIconManager;
     private TouchAnimator mStatusIconsAlphaAnimator;
     private TouchAnimator mHeaderTextContainerAlphaAnimator;
+    private TouchAnimator mPrivacyChipAlphaAnimator;
 
     private View mSystemIconsView;
     private View mQuickQsStatusIcons;
@@ -211,6 +213,8 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mNextAlarmTextView = findViewById(R.id.next_alarm_text);
         mRingerModeIcon = findViewById(R.id.ringer_mode_icon);
         mRingerModeTextView = findViewById(R.id.ringer_mode_text);
+        mPrivacyChip = findViewById(R.id.privacy_chip);
+        mPrivacyChip.setOnClickListener(this);
 
         updateResources();
 
@@ -229,8 +233,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mClockView = findViewById(R.id.clock);
         mClockView.setOnClickListener(this);
         mDateView = findViewById(R.id.date);
-        mPrivacyChip = findViewById(R.id.privacy_chip);
-        mPrivacyChip.setOnClickListener(this);
         mSpace = findViewById(R.id.space);
 
         // Tint for the battery icons are handled in setupHost()
@@ -382,6 +384,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
 
         updateStatusIconAlphaAnimator();
         updateHeaderTextContainerAlphaAnimator();
+        updatePrivacyChipAlphaAnimator();
     }
 
     private void updateStatusIconAlphaAnimator() {
@@ -394,6 +397,12 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mHeaderTextContainerAlphaAnimator = new TouchAnimator.Builder()
                 .addFloat(mHeaderTextContainerView, "alpha", 0, 1)
                 .setStartDelay(.5f)
+                .build();
+    }
+
+    private void updatePrivacyChipAlphaAnimator() {
+        mPrivacyChipAlphaAnimator = new TouchAnimator.Builder()
+                .addFloat(mPrivacyChip, "alpha", 1, 0, 1)
                 .build();
     }
 
@@ -429,6 +438,10 @@ public class QuickStatusBarHeader extends RelativeLayout implements
 
         if (mHeaderTextContainerAlphaAnimator != null) {
             mHeaderTextContainerAlphaAnimator.setPosition(keyguardExpansionFraction);
+        }
+        if (mPrivacyChipAlphaAnimator != null) {
+            mPrivacyChip.setExpanded(expansionFraction > 0.5);
+            mPrivacyChipAlphaAnimator.setPosition(keyguardExpansionFraction);
         }
 
         // Check the original expansion fraction - we don't want to show the tooltip until the
@@ -534,10 +547,12 @@ public class QuickStatusBarHeader extends RelativeLayout implements
             mActivityStarter.postStartActivityDismissingKeyguard(new Intent(
                     AlarmClock.ACTION_SHOW_ALARMS),0);
         } else if (v == mPrivacyChip) {
+            // Makes sure that the builder is grabbed as soon as the chip is pressed
+            PrivacyDialogBuilder builder = mPrivacyChip.getBuilder();
+            if (builder.getAppsAndTypes().size() == 0) return;
             Handler mUiHandler = new Handler(Looper.getMainLooper());
             mUiHandler.post(() -> {
-                Dialog mDialog = new OngoingPrivacyDialog(mContext,
-                        mPrivacyChip.getBuilder()).createDialog();
+                Dialog mDialog = new OngoingPrivacyDialog(mContext, builder).createDialog();
                 mDialog.getWindow().setType(
                         WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
                 SystemUIDialog.setShowForAllUsers(mDialog, true);
