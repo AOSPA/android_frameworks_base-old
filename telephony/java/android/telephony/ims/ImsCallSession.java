@@ -446,16 +446,6 @@ public class ImsCallSession {
         }
 
         /**
-         * While in call, there has been a change in the call session
-         * property.
-         * @param property - an integer containing masks for different properties
-         * {e.g. @see Connection#PROPERTY_RTT_AUDIO_SPEECH}
-         */
-        public void callSessionPropertyChanged(int property) {
-            // no-op
-        }
-
-        /**
          * While in call, there has been a change in RTT audio indicator.
          */
         public void callSessionRttAudioIndicatorChanged(ImsStreamMediaProfile profile) {
@@ -1420,19 +1410,6 @@ public class ImsCallSession {
         public void callSessionRttMessageReceived(String rttMessage) {
             if (mListener != null) {
                 mListener.callSessionRttMessageReceived(rttMessage);
-            }
-        }
-
-        /**
-         * While in call, there has been a change in the call session
-         * property.
-         * @param property - an integer containing masks for different properties
-         * {e.g. @see Connection#PROPERTY_RTT_AUDIO_SPEECH}
-         */
-        @Override
-        public void callSessionPropertyChanged(int property) {
-            if (mListener != null) {
-                mListener.callSessionPropertyChanged(property);
             }
         }
 
