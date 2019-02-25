@@ -21,8 +21,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
+import android.app.RemoteAction;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Bundle;
 import android.os.LocaleList;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -246,22 +248,31 @@ public class TextClassifierTest {
     public void testClassifyText_foreignText() {
         LocaleList originalLocales = LocaleList.getDefault();
         LocaleList.setDefault(LocaleList.forLanguageTags("en"));
-        String foreignText = "これは日本語のテキストです";
+        String japaneseText = "これは日本語のテキストです";
 
         Context context = new FakeContextBuilder()
                 .setIntentComponent(Intent.ACTION_TRANSLATE, FakeContextBuilder.DEFAULT_COMPONENT)
                 .build();
         TextClassifier classifier = new TextClassifierImpl(context, TC_CONSTANTS);
         TextClassification.Request request = new TextClassification.Request.Builder(
-                foreignText, 0, foreignText.length())
+                japaneseText, 0, japaneseText.length())
                 .setDefaultLocales(LOCALES)
                 .build();
 
         TextClassification classification = classifier.classifyText(request);
+        RemoteAction translateAction = classification.getActions().get(0);
         assertEquals(1, classification.getActions().size());
         assertEquals(
                 context.getString(com.android.internal.R.string.translate),
-                classification.getActions().get(0).getTitle());
+                translateAction.getTitle());
+
+        assertEquals(translateAction, ExtrasUtils.findTranslateAction(classification));
+        Intent intent = ExtrasUtils.getActionsIntents(classification).get(0);
+        assertEquals(Intent.ACTION_TRANSLATE, intent.getAction());
+        Bundle foreignLanguageInfo = ExtrasUtils.getForeignLanguageExtra(classification);
+        assertEquals("ja", ExtrasUtils.getEntityType(foreignLanguageInfo));
+        assertTrue(ExtrasUtils.getScore(foreignLanguageInfo) >= 0);
+        assertTrue(ExtrasUtils.getScore(foreignLanguageInfo) <= 1);
 
         LocaleList.setDefault(originalLocales);
     }
@@ -375,7 +386,7 @@ public class TextClassifierTest {
         if (isTextClassifierDisabled()) return;
         ConversationActions.Message message =
                 new ConversationActions.Message.Builder(
-                        ConversationActions.Message.PERSON_USER_REMOTE)
+                        ConversationActions.Message.PERSON_USER_OTHERS)
                         .setText("Where are you?")
                         .build();
         TextClassifier.EntityConfig typeConfig =
@@ -404,7 +415,7 @@ public class TextClassifierTest {
         if (isTextClassifierDisabled()) return;
         ConversationActions.Message message =
                 new ConversationActions.Message.Builder(
-                        ConversationActions.Message.PERSON_USER_REMOTE)
+                        ConversationActions.Message.PERSON_USER_OTHERS)
                         .setText("Where are you?")
                         .build();
         TextClassifier.EntityConfig typeConfig =

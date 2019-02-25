@@ -22,6 +22,8 @@ import static android.view.PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW;
 import static android.view.PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW;
 import static android.view.PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW;
 
+import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
+
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.input.InputManager;
@@ -75,10 +77,32 @@ public class TaskTapPointerEventListener implements PointerEventListener {
                     // method target window will lose the focus.
                     return;
                 }
+                final Region windowTapExcludeRegion = Region.obtain();
+                mDisplayContent.amendWindowTapExcludeRegion(windowTapExcludeRegion);
+                if (windowTapExcludeRegion.contains(x, y)) {
+                    windowTapExcludeRegion.recycle();
+                    // The user is tapping on the window tap exclude region. We don't move this
+                    // display to top. A window tap exclude region, for example, may be set by an
+                    // ActivityView, and the region would match the bounds of both the ActivityView
+                    // and the virtual display in it. In this case, we would take the tap that is on
+                    // the embedded virtual display instead of this display.
+                    return;
+                }
+                windowTapExcludeRegion.recycle();
                 WindowContainer parent = mDisplayContent.getParent();
                 if (parent != null && parent.getTopChild() != mDisplayContent) {
                     parent.positionChildAt(WindowContainer.POSITION_TOP, mDisplayContent,
                             true /* includingParents */);
+                    // For compatibility, only the topmost activity is allowed to be resumed for
+                    // pre-Q app. Ensure the topmost activities are resumed whenever a display is
+                    // moved to top.
+                    // TODO(b/123761773): Investigate whether we can move this into
+                    // RootActivityContainer#updateTopResumedActivityIfNeeded(). Currently, it is
+                    // risky to do so because it seems possible to resume activities as part of a
+                    // larger transaction and it's too early to resume based on current order
+                    // when performing updateTopResumedActivityIfNeeded().
+                    mDisplayContent.mAcitvityDisplay.ensureActivitiesVisible(null /* starting */,
+                            0 /* configChanges */, !PRESERVE_WINDOWS, true /* notifyClients */);
                 }
             }
         };
@@ -89,9 +113,6 @@ public class TaskTapPointerEventListener implements PointerEventListener {
 
     @Override
     public void onPointerEvent(MotionEvent motionEvent) {
-        if (motionEvent.getDisplayId() != getDisplayId()) {
-            return;
-        }
         switch (motionEvent.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 final int x = (int) motionEvent.getX();

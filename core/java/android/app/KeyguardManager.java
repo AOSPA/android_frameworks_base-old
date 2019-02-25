@@ -19,6 +19,7 @@ package android.app;
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
@@ -28,6 +29,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.hardware.biometrics.BiometricPrompt;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -86,6 +88,12 @@ public class KeyguardManager {
             "android.app.action.CONFIRM_FRP_CREDENTIAL";
 
     /**
+     * @hide
+     */
+    public static final String EXTRA_BIOMETRIC_PROMPT_BUNDLE =
+            "android.app.extra.BIOMETRIC_PROMPT_BUNDLE";
+
+    /**
      * A CharSequence dialog title to show to the user when used with a
      * {@link #ACTION_CONFIRM_DEVICE_CREDENTIAL}.
      * @hide
@@ -117,14 +125,19 @@ public class KeyguardManager {
     public static final int RESULT_ALTERNATE = 1;
 
     /**
-     * Get an intent to prompt the user to confirm credentials (pin, pattern or password)
-     * for the current user of the device. The caller is expected to launch this activity using
-     * {@link android.app.Activity#startActivityForResult(Intent, int)} and check for
+     * @deprecated see {@link BiometricPrompt.Builder#setEnableFallback(boolean)}
+     *
+     * Get an intent to prompt the user to confirm credentials (pin, pattern, password or biometrics
+     * if enrolled) for the current user of the device. The caller is expected to launch this
+     * activity using {@link android.app.Activity#startActivityForResult(Intent, int)} and check for
      * {@link android.app.Activity#RESULT_OK} if the user successfully completes the challenge.
      *
      * @return the intent for launching the activity or null if no password is required.
      **/
-    public Intent createConfirmDeviceCredentialIntent(CharSequence title, CharSequence description) {
+    @Deprecated
+    @RequiresFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)
+    public Intent createConfirmDeviceCredentialIntent(CharSequence title,
+            CharSequence description) {
         if (!isDeviceSecure()) return null;
         Intent intent = new Intent(ACTION_CONFIRM_DEVICE_CREDENTIAL);
         intent.putExtra(EXTRA_TITLE, title);
@@ -176,6 +189,7 @@ public class KeyguardManager {
      * @throws IllegalStateException if the device has already been provisioned
      * @hide
      */
+    @RequiresFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)
     @SystemApi
     public Intent createConfirmFactoryResetCredentialIntent(
             CharSequence title, CharSequence description, CharSequence alternateButtonLabel) {
@@ -231,6 +245,7 @@ public class KeyguardManager {
      * secure notifications cannot be shown if {@code false}
      * @hide
      */
+    @RequiresFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)
     @RequiresPermission(Manifest.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS)
     @SystemApi
     public void setPrivateNotificationsAllowed(boolean allow) {
@@ -249,6 +264,7 @@ public class KeyguardManager {
      * By default, private notifications are allowed.
      * @hide
      */
+    @RequiresFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)
     @RequiresPermission(Manifest.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS)
     @SystemApi
     public boolean getPrivateNotificationsAllowed() {

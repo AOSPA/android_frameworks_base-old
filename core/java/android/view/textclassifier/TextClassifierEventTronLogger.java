@@ -15,12 +15,14 @@
  */
 package android.view.textclassifier;
 
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_SELECTION_ENTITY_TYPE;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_SELECTION_SESSION_ID;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_SELECTION_WIDGET_TYPE;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_SELECTION_WIDGET_VERSION;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXTCLASSIFIER_MODEL;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_EVENT_TIME;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_FIRST_ENTITY_TYPE;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_SCORE;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_SECOND_ENTITY_TYPE;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_SESSION_ID;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_THIRD_ENTITY_TYPE;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_WIDGET_TYPE;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TEXT_CLASSIFIER_WIDGET_VERSION;
 
 import android.metrics.LogMaker;
 
@@ -43,7 +45,7 @@ public final class TextClassifierEventTronLogger {
     private final MetricsLogger mMetricsLogger;
 
     public TextClassifierEventTronLogger() {
-        mMetricsLogger = new MetricsLogger();
+        this(new MetricsLogger());
     }
 
     @VisibleForTesting
@@ -54,26 +56,46 @@ public final class TextClassifierEventTronLogger {
     /** Emits a text classifier event to the logs. */
     public void writeEvent(TextClassifierEvent event) {
         Preconditions.checkNotNull(event);
+
         int category = getCategory(event);
         if (category == -1) {
             Log.w(TAG, "Unknown category: " + event.getEventCategory());
             return;
         }
         final LogMaker log = new LogMaker(category)
-                .setType(getLogType(event))
-                .addTaggedData(FIELD_SELECTION_SESSION_ID, event.getResultId())
-                .addTaggedData(FIELD_TEXT_CLASSIFIER_EVENT_TIME, event.getEventTime())
-                .addTaggedData(FIELD_TEXTCLASSIFIER_MODEL,
-                        SelectionSessionLogger.SignatureParser.getModelName(event.getResultId()))
-                .addTaggedData(FIELD_SELECTION_ENTITY_TYPE, event.getEntityType());
+                .setSubtype(getLogType(event))
+                .addTaggedData(FIELD_TEXT_CLASSIFIER_SESSION_ID, event.getResultId())
+                .addTaggedData(FIELD_TEXTCLASSIFIER_MODEL, getModelName(event))
+                .addTaggedData(FIELD_TEXT_CLASSIFIER_SCORE, event.getScore());
+
+        String[] entityTypes = event.getEntityTypes();
+        // The old logger does not support a field of list type, and thus workaround by store them
+        // in three separate fields. This is not an issue with the new logger.
+        if (entityTypes.length >= 1) {
+            log.addTaggedData(FIELD_TEXT_CLASSIFIER_FIRST_ENTITY_TYPE, entityTypes[0]);
+        }
+        if (entityTypes.length >= 2) {
+            log.addTaggedData(FIELD_TEXT_CLASSIFIER_SECOND_ENTITY_TYPE, entityTypes[1]);
+        }
+        if (entityTypes.length >= 3) {
+            log.addTaggedData(FIELD_TEXT_CLASSIFIER_THIRD_ENTITY_TYPE, entityTypes[2]);
+        }
         TextClassificationContext eventContext = event.getEventContext();
         if (eventContext != null) {
-            log.addTaggedData(FIELD_SELECTION_WIDGET_TYPE, eventContext.getWidgetType());
-            log.addTaggedData(FIELD_SELECTION_WIDGET_VERSION, eventContext.getWidgetVersion());
+            log.addTaggedData(FIELD_TEXT_CLASSIFIER_WIDGET_TYPE, eventContext.getWidgetType());
+            log.addTaggedData(FIELD_TEXT_CLASSIFIER_WIDGET_VERSION,
+                    eventContext.getWidgetVersion());
             log.setPackageName(eventContext.getPackageName());
         }
         mMetricsLogger.write(log);
         debugLog(log);
+    }
+
+    private static String getModelName(TextClassifierEvent event) {
+        if (event.getModelName() != null) {
+            return event.getModelName();
+        }
+        return SelectionSessionLogger.SignatureParser.getModelName(event.getResultId());
     }
 
     private static int getCategory(TextClassifierEvent event) {
@@ -94,6 +116,8 @@ public final class TextClassifierEventTronLogger {
                 return MetricsEvent.ACTION_TEXT_CLASSIFIER_ACTIONS_SHOWN;
             case TextClassifierEvent.TYPE_MANUAL_REPLY:
                 return MetricsEvent.ACTION_TEXT_CLASSIFIER_MANUAL_REPLY;
+            case TextClassifierEvent.TYPE_ACTIONS_GENERATED:
+                return MetricsEvent.ACTION_TEXT_CLASSIFIER_ACTIONS_GENERATED;
             default:
                 return MetricsEvent.VIEW_UNKNOWN;
         }
@@ -127,14 +151,22 @@ public final class TextClassifierEventTronLogger {
         if (!Log.ENABLE_FULL_LOGGING) {
             return;
         }
-        final String id = String.valueOf(log.getTaggedData(FIELD_SELECTION_SESSION_ID));
+        final String id = String.valueOf(log.getTaggedData(FIELD_TEXT_CLASSIFIER_SESSION_ID));
         final String categoryName = toCategoryName(log.getCategory());
-        final String eventName = toEventName(log.getType());
-        final String widgetType = String.valueOf(log.getTaggedData(FIELD_SELECTION_WIDGET_TYPE));
+        final String eventName = toEventName(log.getSubtype());
+        final String widgetType =
+                String.valueOf(log.getTaggedData(FIELD_TEXT_CLASSIFIER_WIDGET_TYPE));
         final String widgetVersion =
-                String.valueOf(log.getTaggedData(FIELD_SELECTION_WIDGET_VERSION));
+                String.valueOf(log.getTaggedData(FIELD_TEXT_CLASSIFIER_WIDGET_VERSION));
         final String model = String.valueOf(log.getTaggedData(FIELD_TEXTCLASSIFIER_MODEL));
-        final String entityType = String.valueOf(log.getTaggedData(FIELD_SELECTION_ENTITY_TYPE));
+        final String firstEntityType =
+                String.valueOf(log.getTaggedData(FIELD_TEXT_CLASSIFIER_FIRST_ENTITY_TYPE));
+        final String secondEntityType =
+                String.valueOf(log.getTaggedData(FIELD_TEXT_CLASSIFIER_SECOND_ENTITY_TYPE));
+        final String thirdEntityType =
+                String.valueOf(log.getTaggedData(FIELD_TEXT_CLASSIFIER_THIRD_ENTITY_TYPE));
+        final String score =
+                String.valueOf(log.getTaggedData(FIELD_TEXT_CLASSIFIER_SCORE));
 
         StringBuilder builder = new StringBuilder();
         builder.append("writeEvent: ");
@@ -144,7 +176,10 @@ public final class TextClassifierEventTronLogger {
         builder.append(", widgetType=").append(widgetType);
         builder.append(", widgetVersion=").append(widgetVersion);
         builder.append(", model=").append(model);
-        builder.append(", entityType=").append(entityType);
+        builder.append(", firstEntityType=").append(firstEntityType);
+        builder.append(", secondEntityType=").append(secondEntityType);
+        builder.append(", thirdEntityType=").append(thirdEntityType);
+        builder.append(", score=").append(score);
 
         Log.v(TAG, builder.toString());
     }

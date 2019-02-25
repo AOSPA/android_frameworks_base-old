@@ -623,9 +623,39 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_PROMOTE_WFC_ON_CALL_FAIL_BOOL =
             "carrier_promote_wfc_on_call_fail_bool";
 
-    /** Flag specifying whether provisioning is required for VOLTE. */
+    /**
+     * Flag specifying whether provisioning is required for VoLTE, Video Telephony, and WiFi
+     * Calling.
+     */
     public static final String KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL
             = "carrier_volte_provisioning_required_bool";
+
+    /**
+     * Flag indicating whether or not the IMS MmTel UT capability requires carrier provisioning
+     * before it can be set as enabled.
+     *
+     * If true, the UT capability will be set to false for the newly loaded subscription
+     * and will require the carrier provisioning app to set the persistent provisioning result.
+     * If false, the platform will not wait for provisioning status updates for the UT capability
+     * and enable the UT over IMS capability for the subscription when the subscription is loaded.
+     *
+     * The default value for this key is {@code false}.
+     */
+    public static final String KEY_CARRIER_UT_PROVISIONING_REQUIRED_BOOL =
+            "carrier_ut_provisioning_required_bool";
+
+    /**
+     * Flag indicating whether or not the carrier supports Supplementary Services over the UT
+     * interface for this subscription.
+     *
+     * If true, the device will use Supplementary Services over UT when provisioned (see
+     * {@link #KEY_CARRIER_UT_PROVISIONING_REQUIRED_BOOL}). If false, this device will fallback to
+     * circuit switch for supplementary services and will disable this capability for IMS entirely.
+     *
+     * The default value for this key is {@code true}.
+     */
+    public static final String KEY_CARRIER_SUPPORTS_SS_OVER_UT_BOOL =
+            "carrier_supports_ss_over_ut_bool";
 
     /**
      * Flag specifying if WFC provisioning depends on VoLTE provisioning.
@@ -2422,32 +2452,53 @@ public class CarrierConfigManager {
             "5g_icon_configuration_string";
 
     /**
-     * Controls RSRP threshold at which AlternativeNetworkService will decide whether
+     * Controls RSRP threshold at which OpportunisticNetworkService will decide whether
      * the opportunistic network is good enough for internet data.
      */
     public static final String KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSRP_INT =
             "opportunistic_network_entry_threshold_rsrp_int";
 
     /**
-     * Controls RSSNR threshold at which AlternativeNetworkService will decide whether
+     * Controls RSSNR threshold at which OpportunisticNetworkService will decide whether
      * the opportunistic network is good enough for internet data.
      */
     public static final String KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSSNR_INT =
             "opportunistic_network_entry_threshold_rssnr_int";
 
     /**
-     * Controls RSRP threshold below which AlternativeNetworkService will decide whether
+     * Controls RSRP threshold below which OpportunisticNetworkService will decide whether
      * the opportunistic network available is not good enough for internet data.
      */
     public static final String KEY_OPPORTUNISTIC_NETWORK_EXIT_THRESHOLD_RSRP_INT =
             "opportunistic_network_exit_threshold_rsrp_int";
 
     /**
-     * Controls RSSNR threshold below which AlternativeNetworkService will decide whether
+     * Controls RSSNR threshold below which OpportunisticNetworkService will decide whether
      * the opportunistic network available is not good enough for internet data.
      */
     public static final String KEY_OPPORTUNISTIC_NETWORK_EXIT_THRESHOLD_RSSNR_INT =
             "opportunistic_network_exit_threshold_rssnr_int";
+
+    /**
+     * Controls bandwidth threshold in Kbps at which OpportunisticNetworkService will decide whether
+     * the opportunistic network is good enough for internet data.
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_BANDWIDTH_INT =
+            "opportunistic_network_entry_threshold_bandwidth_int";
+
+    /**
+     * Controls hysteresis time in milli seconds for which OpportunisticNetworkService
+     * will wait before attaching to a network.
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_ENTRY_OR_EXIT_HYSTERESIS_TIME_LONG =
+            "opportunistic_network_entry_or_exit_hysteresis_time_long";
+
+    /**
+     * Controls hysteresis time in milli seconds for which OpportunisticNetworkService
+     * will wait before switching data to a network.
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_DATA_SWITCH_HYSTERESIS_TIME_LONG =
+            "opportunistic_network_data_switch_hysteresis_time_long";
 
     /**
      * GPS configs. See android.hardware.gnss@1.0 IGnssConfiguration.
@@ -2536,9 +2587,17 @@ public class CarrierConfigManager {
         public static final String KEY_GPS_LOCK_STRING = KEY_PREFIX + "gps_lock";
 
         /**
-         * SUPL NI emergency extension time in seconds. Default to "0".
+         * Control Plane / SUPL NI emergency extension time in seconds. Default to "0".
          */
         public static final String KEY_ES_EXTENSION_SEC = KEY_PREFIX + "es_extension_sec";
+
+        /**
+         * Space separated list of Android package names of proxy applications representing
+         * the non-framework entities requesting location directly from GNSS without involving
+         * the framework, as managed by IGnssVisibilityControl.hal. For example,
+         * "com.example.mdt com.example.ims".
+         */
+        public static final String KEY_NFW_PROXY_APPS = KEY_PREFIX + "nfw_proxy_apps";
 
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
@@ -2553,6 +2612,7 @@ public class CarrierConfigManager {
             defaults.putString(KEY_A_GLONASS_POS_PROTOCOL_SELECT_STRING, "0");
             defaults.putString(KEY_GPS_LOCK_STRING, "3");
             defaults.putString(KEY_ES_EXTENSION_SEC, "0");
+            defaults.putString(KEY_NFW_PROXY_APPS, "");
             return defaults;
         }
     }
@@ -2595,6 +2655,8 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_CARRIER_DEFAULT_WFC_IMS_ROAMING_MODE_INT, 2);
         sDefaults.putBoolean(KEY_CARRIER_FORCE_DISABLE_ETWS_CMAS_TEST_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, false);
+        sDefaults.putBoolean(KEY_CARRIER_UT_PROVISIONING_REQUIRED_BOOL, false);
+        sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_SS_OVER_UT_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_OVERRIDE_WFC_PROVISIONING_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_ALLOW_TURNOFF_IMS_BOOL, true);
@@ -2928,6 +2990,12 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSSNR_INT, 45);
         /* Default value is minimum RSSNR level needed for SIGNAL_STRENGTH_MODERATE */
         sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_EXIT_THRESHOLD_RSSNR_INT, 10);
+        /* Default value is 1024 kbps */
+        sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_BANDWIDTH_INT, 1024);
+        /* Default value is 10 seconds */
+        sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_OR_EXIT_HYSTERESIS_TIME_LONG, 10000);
+        /* Default value is 10 seconds. */
+        sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_DATA_SWITCH_HYSTERESIS_TIME_LONG, 10000);
         sDefaults.putAll(Gps.getDefaults());
     }
 

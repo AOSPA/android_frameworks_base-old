@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import android.content.ContentResolver;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.runner.AndroidJUnit4;
@@ -62,9 +63,6 @@ public class AssistantSettingsTest {
         Settings.Global.putFloat(mResolver,
                 Settings.Global.BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT, 0.8f);
         Settings.Global.putInt(mResolver, Settings.Global.BLOCKING_HELPER_STREAK_LIMIT, 2);
-        Settings.Global.putString(mResolver,
-                Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS,
-                "generate_replies=true,generate_actions=true");
         Settings.Secure.putInt(mResolver, Settings.Secure.NOTIFICATION_NEW_INTERRUPTION_MODEL, 1);
 
         mAssistantSettings = AssistantSettings.createForTesting(
@@ -73,56 +71,118 @@ public class AssistantSettingsTest {
 
     @Test
     public void testGenerateRepliesDisabled() {
-        Settings.Global.putString(mResolver,
-                Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS,
-                "generate_replies=false");
-
-        // Notify for the settings values we updated.
-        mAssistantSettings.onChange(false,
-                Settings.Global.getUriFor(
-                        Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS));
-
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "false",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "false");
 
         assertFalse(mAssistantSettings.mGenerateReplies);
     }
 
     @Test
     public void testGenerateRepliesEnabled() {
-        Settings.Global.putString(mResolver,
-                Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS, "generate_replies=true");
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "true",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "true");
 
-        // Notify for the settings values we updated.
-        mAssistantSettings.onChange(false,
-                Settings.Global.getUriFor(
-                        Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS));
+        assertTrue(mAssistantSettings.mGenerateReplies);
+    }
 
+    @Test
+    public void testGenerateRepliesEmptyFlag() {
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "false",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "false");
+
+        assertFalse(mAssistantSettings.mGenerateReplies);
+
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_REPLIES,
+                "");
+
+        // Go back to the default value.
         assertTrue(mAssistantSettings.mGenerateReplies);
     }
 
     @Test
     public void testGenerateActionsDisabled() {
-        Settings.Global.putString(mResolver,
-                Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS, "generate_actions=false");
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "false",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "false");
 
-        // Notify for the settings values we updated.
-        mAssistantSettings.onChange(false,
-                Settings.Global.getUriFor(
-                        Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS));
-
-        assertTrue(mAssistantSettings.mGenerateReplies);
+        assertFalse(mAssistantSettings.mGenerateActions);
     }
 
     @Test
     public void testGenerateActionsEnabled() {
-        Settings.Global.putString(mResolver,
-                Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS, "generate_actions=true");
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "true",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "true");
 
-        // Notify for the settings values we updated.
-        mAssistantSettings.onChange(false,
-                Settings.Global.getUriFor(
-                        Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS));
+        assertTrue(mAssistantSettings.mGenerateActions);
+    }
 
-        assertTrue(mAssistantSettings.mGenerateReplies);
+    @Test
+    public void testGenerateActionsEmptyFlag() {
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "false",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "false");
+
+        assertFalse(mAssistantSettings.mGenerateActions);
+
+        DeviceConfig.setProperty(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "",
+                false /* makeDefault */);
+        mAssistantSettings.onDeviceConfigPropertyChanged(
+                DeviceConfig.NotificationAssistant.NAMESPACE,
+                DeviceConfig.NotificationAssistant.GENERATE_ACTIONS,
+                "");
+
+        // Go back to the default value.
+        assertTrue(mAssistantSettings.mGenerateActions);
     }
 
     @Test

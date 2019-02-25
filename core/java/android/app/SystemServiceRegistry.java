@@ -30,7 +30,6 @@ import android.app.role.RoleManager;
 import android.app.slice.SliceManager;
 import android.app.timedetector.TimeDetector;
 import android.app.timezone.RulesManager;
-import android.app.timezonedetector.TimeZoneDetector;
 import android.app.trust.TrustManager;
 import android.app.usage.IStorageStatsManager;
 import android.app.usage.IUsageStatsManager;
@@ -102,6 +101,7 @@ import android.net.IConnectivityManager;
 import android.net.IEthernetManager;
 import android.net.IIpMemoryStore;
 import android.net.IIpSecService;
+import android.net.INetd;
 import android.net.INetworkPolicyManager;
 import android.net.IpMemoryStore;
 import android.net.IpSecManager;
@@ -131,11 +131,13 @@ import android.os.BugreportManager;
 import android.os.Build;
 import android.os.DeviceIdleManager;
 import android.os.DropBoxManager;
+import android.os.DynamicAndroidManager;
 import android.os.HardwarePropertiesManager;
 import android.os.IBatteryPropertiesRegistrar;
 import android.os.IBinder;
 import android.os.IDeviceIdleController;
 import android.os.IDumpstate;
+import android.os.IDynamicAndroidService;
 import android.os.IHardwarePropertiesManager;
 import android.os.IPowerManager;
 import android.os.IRecoverySystem;
@@ -327,6 +329,14 @@ final class SystemServiceRegistry {
                 IConnectivityManager service = IConnectivityManager.Stub.asInterface(b);
                 return new ConnectivityManager(context, service);
             }});
+
+        registerService(Context.NETD_SERVICE, INetd.class, new StaticServiceFetcher<INetd>() {
+            @Override
+            public INetd createService() throws ServiceNotFoundException {
+                return INetd.Stub.asInterface(
+                        ServiceManager.getServiceOrThrow(Context.NETD_SERVICE));
+            }
+        });
 
         registerService(Context.NETWORK_STACK_SERVICE, NetworkStack.class,
                 new StaticServiceFetcher<NetworkStack>() {
@@ -1212,13 +1222,6 @@ final class SystemServiceRegistry {
                             throws ServiceNotFoundException {
                         return new TimeDetector();
                     }});
-        registerService(Context.TIME_ZONE_DETECTOR_SERVICE, TimeZoneDetector.class,
-                new CachedServiceFetcher<TimeZoneDetector>() {
-                    @Override
-                    public TimeZoneDetector createService(ContextImpl ctx)
-                            throws ServiceNotFoundException {
-                        return new TimeZoneDetector();
-                    }});
 
         registerService(Context.PERMISSION_SERVICE, PermissionManager.class,
                 new CachedServiceFetcher<PermissionManager>() {
@@ -1250,6 +1253,17 @@ final class SystemServiceRegistry {
                         IBinder b = ServiceManager.getServiceOrThrow(Context.ROLLBACK_SERVICE);
                         return new RollbackManager(ctx.getOuterContext(),
                                 IRollbackManager.Stub.asInterface(b));
+                    }});
+
+        registerService(Context.DYNAMIC_ANDROID_SERVICE, DynamicAndroidManager.class,
+                new CachedServiceFetcher<DynamicAndroidManager>() {
+                    @Override
+                    public DynamicAndroidManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.DYNAMIC_ANDROID_SERVICE);
+                        return new DynamicAndroidManager(
+                                IDynamicAndroidService.Stub.asInterface(b));
                     }});
         //CHECKSTYLE:ON IndentationCheck
     }

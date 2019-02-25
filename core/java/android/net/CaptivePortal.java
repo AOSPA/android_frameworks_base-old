@@ -45,6 +45,8 @@ public class CaptivePortal implements Parcelable {
     private final IBinder mBinder;
 
     /** @hide */
+    @SystemApi
+    @TestApi
     public CaptivePortal(IBinder binder) {
         mBinder = binder;
     }
@@ -107,9 +109,24 @@ public class CaptivePortal implements Parcelable {
      * connectivity for apps because the captive portal is still in place.
      * @hide
      */
+    @SystemApi
+    @TestApi
     public void useNetwork() {
         try {
             ICaptivePortal.Stub.asInterface(mBinder).appResponse(APP_RETURN_WANTED_AS_IS);
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * Log a captive portal login event.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public void logEvent(int eventId, String packageName) {
+        try {
+            ICaptivePortal.Stub.asInterface(mBinder).logEvent(eventId, packageName);
         } catch (RemoteException e) {
         }
     }

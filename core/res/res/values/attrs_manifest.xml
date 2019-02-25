@@ -277,6 +277,12 @@
         <!-- Additional flag from base permission type: this permission automatically
             granted to device configurator -->
         <flag name="configurator" value="0x80000" />
+        <!-- Additional flag from base permission type: this permission designates the app
+            that will approve the sharing of incident reports. -->
+        <flag name="incidentReportApprover" value="0x100000" />
+        <!-- Additional flag from base permission type: this permission can be automatically
+            granted to the system app predictor -->
+        <flag name="appPredictor" value="0x200000" />
     </attr>
 
     <!-- Flags indicating more context for a permission group. -->
@@ -950,6 +956,17 @@
          <p>The default value of this attribute is <code>false</code>. -->
     <attr name="allowEmbedded" format="boolean" />
 
+    <!-- @hide @SystemApi Specifies whether this {@link android.app.Activity} should be shown on
+         top of the lock screen whenever the lockscreen is up and this activity has another
+         activity behind it with the {@link android.R.attr#showWhenLocked} attribute set. That
+         is, this activity is only visible on the lock screen if there is another activity with
+         the {@link android.R.attr#showWhenLocked} attribute visible at the same time on the
+         lock screen. A use case for this is permission dialogs, that should only be visible on
+         the lock screen if their requesting activity is also visible.
+
+         <p>The default value of this attribute is <code>false</code>. -->
+    <attr name="inheritShowWhenLocked" format="boolean" />
+
     <!-- Descriptive text for the associated data. -->
     <attr name="description" format="reference" />
 
@@ -1102,6 +1119,15 @@
          -->
     <attr name="classLoader" format="string" />
 
+    <!-- Name of the class that gets invoked for preloading application code, when starting an
+         {@link android.R.attr#isolatedProcess} service that has
+         {@link android.R.attr#useAppZygote} set to <code>true</code>. This is a fully
+         qualified class name (for example, com.mycompany.myapp.MyZygotePreload); as a
+         short-hand if the first character of the class is a period then it is appended
+         to your package name. The class must implement the {@link android.app.ZygotePreload}
+         interface. -->
+    <attr name="zygotePreloadName" format="string"/>
+
     <!-- If set to <code>true</code>, indicates to the platform that this APK is
          a 'feature' split and that it implicitly depends on the base APK. This distinguishes
          this split APK from a 'configuration' split, which provides resource overrides
@@ -1115,10 +1141,12 @@
          resource] to be present in order to function. Default value is false. -->
     <attr name="isSplitRequired" format="boolean" />
 
-    <!-- Flag to specify if this app prioritizes code integrity. The system may choose
-         to run with better integrity guarantee in various components if possible based on the app's
-         <code>targetSdkVersion</code>. -->
-    <attr name="preferCodeIntegrity" format="boolean" />
+    <!-- Flag to specify if this app wants to run the dex within its APK but not extracted or
+         locally compiled variants. This keeps the dex code protected by the APK signature. Such
+         apps will always run in JIT mode (same when they are first installed), and the system will
+         never generate ahead-of-time compiled code for them. Depending on the app's workload,
+         there may be some run time performance change, noteably the cold start time. -->
+    <attr name="useEmbeddedDex" format="boolean" />
 
     <!-- Extra options for an activity's UI. Applies to either the {@code <activity>} or
          {@code <application>} tag. If specified on the {@code <application>}
@@ -1422,26 +1450,20 @@
 
     <attr name="usesNonSdkApi" format="boolean" />
 
-    <!-- Specify the type of foreground service. Apps targeting API
-     {@link android.os.Build.VERSION_CODES#Q} or later must specify foreground service type,
-     otherwise a SecurityException is thrown when
-     {@link android.app.Service#startForeground(int, Notification)} on this service is called.
-    -->
+    <!-- Specify the type of foreground service. Multiple types can be specified by ORing the flags
+         together. -->
     <attr name="foregroundServiceType">
         <!-- Data (photo, file, account) upload/download, backup/restore, import/export, fetch,
         transfer over network between device and cloud.  -->
-        <enum name="sync" value="1" />
+        <flag name="dataSync" value="0x01" />
         <!-- Music, video, news or other media play. -->
-        <enum name="mediaPlay" value="2" />
+        <flag name="mediaPlayback" value="0x02" />
         <!-- Ongoing phone call or video conference. -->
-        <enum name="phoneCall" value="3" />
+        <flag name="phoneCall" value="0x04" />
         <!-- GPS, map, navigation location update. -->
-        <enum name="location" value="4" />
+        <flag name="location" value="0x08" />
         <!-- Auto, bluetooth, TV or other devices connection, monitoring and interaction. -->
-        <enum name="deviceCompanion" value="5" />
-        <!-- Process that should not be interrupted, including installation, setup, photo
-        compression etc. -->
-        <enum name="ongoingProcess" value="6" />
+        <flag name="connectedDevice" value="0x10" />
     </attr>
 
 
@@ -1588,7 +1610,7 @@
              to honor this flag as well. -->
         <attr name="usesCleartextTraffic" />
         <attr name="multiArch" />
-        <attr name="preferCodeIntegrity" />
+        <attr name="useEmbeddedDex" />
         <attr name="extractNativeLibs" />
         <attr name="defaultToDeviceProtectedStorage" format="boolean" />
         <attr name="directBootAware" />
@@ -1630,6 +1652,7 @@
         <!-- If {@code true} the user is prompted to keep the app's data on uninstall -->
         <attr name="hasFragileUserData" />
 
+	<attr name="zygotePreloadName" />
     </declare-styleable>
     <!-- The <code>permission</code> tag declares a security permission that can be
          used to control access from other packages to specific components or
@@ -2286,17 +2309,18 @@
         <!-- If true, and this is an {@link android.R.attr#isolatedProcess} service, the service
              will be spawned from an Application Zygote, instead of the regular Zygote.
              <p>
-             The Application Zygote will pre-initialize the application's class loader,
-             and call a static callback into the application to allow it to perform
+             The Application Zygote will first pre-initialize the application's class loader. Then,
+             if the application has defined the {@link android.R.attr#zygotePreloadName} attribute,
+             the Application Zygote will call into that class to allow it to perform
              application-specific preloads (such as loading a shared library). Therefore,
              spawning from the Application Zygote will typically reduce the service
              launch time and reduce its memory usage. The downside of using this flag
              is that you will have an additional process (the app zygote itself) that
              is taking up memory. Whether actual memory usage is improved therefore strongly
              depends on the number of isolated services that an application starts,
-             and how much memory those services save by preloading. Therefore, it is
-             recommended to measure memory usage under typical workloads to determine
-             whether it makes sense to use this flag. -->
+             and how much memory those services save by preloading and sharing memory with
+             the app zygote. Therefore, it is recommended to measure memory usage under
+             typical workloads to determine whether it makes sense to use this flag. -->
         <attr name="useAppZygote" format="boolean" />
         <!-- If this is a foreground service, specify its category. -->
         <attr name="foregroundServiceType" />
@@ -2415,18 +2439,6 @@
         <attr name="showForAllUsers" />
 
         <attr name="showWhenLocked" />
-        <!-- @hide @SystemApi Specifies whether this {@link android.app.Activity} should be shown on
-             top of the lock screen whenever the lockscreen is up and this activity has another
-             activity behind it with the {@link android.R.attr#showWhenLocked} attribute set. That
-             is, this activity is only visible on the lock screen if there is another activity with
-             the {@link android.R.attr#showWhenLocked} attribute visible at the same time on the
-             lock screen. A use case for this is permission dialogs, that should only be visible on
-             the lock screen if their requesting activity is also visible.
-
-         The default value of this attribute is <code>false</code>. -->
-    <attr name="inheritShowWhenLocked" format="boolean" />
-
-
         <attr name="inheritShowWhenLocked" />
         <attr name="turnScreenOn" />
 

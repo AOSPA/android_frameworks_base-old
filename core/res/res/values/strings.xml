@@ -2645,6 +2645,9 @@
     <!-- Displayed to the user to confirm that they have copied text from a web page to the clipboard. -->
     <string name="text_copied">Text copied to clipboard.</string>
 
+    <!-- Displayed to the user to confirm that they have copied text/images to the clipboard [CHAR LIMIT=NONE] -->
+    <string name="copied">Copied</string>
+
     <!-- Menu item displayed at the end of a menu to allow users to see another page worth of menu items. This is shown on any app's menu as long as the app has too many items in the menu.-->
     <string name="more_item_label">More</string>
     <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the MENU button together with the shortcut to invoke the item. For example, if the shortcut to open a new tab in browser is MENU and B together, then this would be prepended to the letter "B" -->
@@ -3082,7 +3085,7 @@
     <!-- Label for a link to a intent resolver dialog when selecting an editor application -->
     <string name="whichEditApplicationLabel">Edit</string>
     <!-- Title of intent resolver dialog when selecting a sharing application to run. -->
-    <string name="whichSendApplication">Share with</string>
+    <string name="whichSendApplication">Share</string>
     <!-- Title of intent resolver dialog when selecting a sharing application to run
          and a previously used application is known. -->
     <string name="whichSendApplicationNamed">Share with %1$s</string>
@@ -3353,9 +3356,9 @@
     <string name="wifi_available_action_all_networks">All networks</string>
 
     <!-- Notification title for a connection to a app suggested wireless network.-->
-    <string name="wifi_suggestion_title">Connected to Wi\u2011Fi network proposed by <xliff:g id="name" example="App123">%s</xliff:g></string>
+    <string name="wifi_suggestion_title">A Wi\u2011Fi network proposed by <xliff:g id="name" example="App123">%s</xliff:g> is available</string>
     <!-- Notification content for a connection to a app suggested wireless network.-->
-    <string name="wifi_suggestion_content">Do you want to let <xliff:g id="name" example="App123">%s</xliff:g> propose networks for you?</string>
+    <string name="wifi_suggestion_content">Do you want to connect to networks proposed by <xliff:g id="name" example="App123">%s</xliff:g>?</string>
     <!-- Notification action for allowing app specified in the notification body.-->
     <string name="wifi_suggestion_action_allow_app">Yes</string>
     <!-- Notification action for disallowing app specified in the notification body.-->
@@ -3386,6 +3389,9 @@
 
     <!-- A notification is shown when the user connects to a Wi-Fi network and the system detects that that network has no Internet access. This is the notification's message. -->
     <string name="wifi_no_internet_detailed">Tap for options</string>
+
+    <!-- A notification is shown after the user logs in to a captive portal network, to indicate that the network should now have internet connectivity. This is the message of notification. [CHAR LIMIT=50] -->
+    <string name="captive_portal_logged_in_detailed">Connected</string>
 
     <!-- A notification is shown when the user's softap config has been changed due to underlying
          hardware restrictions. This is the notifications's title.
@@ -3573,6 +3579,15 @@
     <string name="adb_active_notification_message">Tap to turn off USB debugging</string>
     <string name="adb_active_notification_message" product="tv">Select to disable USB debugging.</string>
 
+    <!-- Title of notification shown when contaminant is detected on the USB port. [CHAR LIMIT=NONE] -->
+    <string name="usb_contaminant_detected_title">Liquid or debris in USB port</string>
+    <!-- Message of notification shown when contaminant is detected on the USB port. [CHAR LIMIT=NONE] -->
+    <string name="usb_contaminant_detected_message">USB port is automatically disabled. Tap to learn more.</string>
+    <!-- Title of notification shown when contaminant is no longer detected on the USB port. [CHAR LIMIT=NONE] -->
+    <string name="usb_contaminant_not_detected_title">Safe to use USB port</string>
+    <!-- Message of notification shown when contaminant is no longer detected on the USB port. [CHAR LIMIT=NONE] -->
+    <string name="usb_contaminant_not_detected_message">Phone no longer detects liquid or debris.</string>
+
     <!-- Title of notification shown to indicate that bug report is being collected. -->
     <string name="taking_remote_bugreport_notification_title">Taking bug report\u2026</string>
     <!-- Title of notification shown to ask for user consent for sharing a bugreport that was requested remotely by the IT administrator. -->
@@ -3679,6 +3694,9 @@
     <string name="ext_media_unmount_action">Eject</string>
     <!-- Notification action to browse external media [CHAR LIMIT=20] -->
     <string name="ext_media_browse_action">Explore</string>
+
+    <!-- Notification action to transfer media [CHAR LIMIT=40] -->
+    <string name="ext_media_seamless_action">Seamless transfer</string>
 
     <!-- Notification title when external media is missing [CHAR LIMIT=30] -->
     <string name="ext_media_missing_title"><xliff:g id="name" example="SD card">%s</xliff:g> missing</string>

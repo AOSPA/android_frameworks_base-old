@@ -47,7 +47,7 @@ public class TextClassifierPerfTest {
     @Rule
     public PerfStatusReporter mPerfStatusReporter = new PerfStatusReporter();
 
-    @Parameterized.Parameters(name = "size={0}")
+    @Parameterized.Parameters(name = "size{0}")
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][]{{ACTUAL_REQUEST}, {10}, {100}, {1000}});
     }
@@ -91,7 +91,7 @@ public class TextClassifierPerfTest {
     private static ConversationActions.Request createConversationActionsRequest(CharSequence text) {
         ConversationActions.Message message =
                 new ConversationActions.Message.Builder(
-                        ConversationActions.Message.PERSON_USER_REMOTE)
+                        ConversationActions.Message.PERSON_USER_OTHERS)
                         .setText(text)
                         .build();
         return new ConversationActions.Request.Builder(Collections.singletonList(message))

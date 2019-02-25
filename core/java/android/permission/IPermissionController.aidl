@@ -30,9 +30,14 @@ oneway interface IPermissionController {
     void revokeRuntimePermissions(in Bundle request, boolean doDryRun, int reason,
             String callerPackageName, in RemoteCallback callback);
     void getRuntimePermissionBackup(in UserHandle user, in ParcelFileDescriptor pipe);
+    void restoreRuntimePermissionBackup(in UserHandle user, in ParcelFileDescriptor pipe);
+    void restoreDelayedRuntimePermissionBackup(String packageName, in UserHandle user,
+            in RemoteCallback callback);
     void getAppPermissions(String packageName, in RemoteCallback callback);
     void revokeRuntimePermission(String packageName, String permissionName);
-    void countPermissionApps(in List<String> permissionNames, boolean countOnlyGranted,
-            boolean countSystem, in RemoteCallback callback);
+    void countPermissionApps(in List<String> permissionNames, int flags,
+            in RemoteCallback callback);
     void getPermissionUsages(boolean countSystem, long numMillis, in RemoteCallback callback);
+    void isApplicationQualifiedForRole(String roleName, String packageName,
+            in RemoteCallback callback);
 }

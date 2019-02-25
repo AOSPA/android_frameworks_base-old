@@ -66,7 +66,6 @@ import android.os.RemoteException;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Slog;
-import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
@@ -184,33 +183,6 @@ public class TaskStack extends WindowContainer<Task> implements
             return null;
         }
         return mChildren.get(mChildren.size() - 1);
-    }
-
-    /**
-     * Set the bounds of the stack and its containing tasks.
-     * @param stackBounds New stack bounds. Passing in null sets the bounds to fullscreen.
-     * @param taskBounds Bounds for individual tasks, keyed by task id.
-     * @param taskTempInsetBounds Inset bounds for individual tasks, keyed by task id.
-     * @return True if the stack bounds was changed.
-     * */
-    boolean setBounds(
-            Rect stackBounds, SparseArray<Rect> taskBounds, SparseArray<Rect> taskTempInsetBounds) {
-        setBounds(stackBounds);
-
-        // Update bounds of containing tasks.
-        for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; --taskNdx) {
-            final Task task = mChildren.get(taskNdx);
-            final Rect insetBounds =
-                    taskTempInsetBounds != null ? taskTempInsetBounds.get(task.mTaskId) : null;
-            if (insetBounds != null) {
-                task.setBounds(insetBounds);
-                task.setOverrideDisplayedBounds(taskBounds.get(task.mTaskId));
-            } else {
-                task.setBounds(taskBounds.get(task.mTaskId));
-                task.setOverrideDisplayedBounds(null);
-            }
-        }
-        return true;
     }
 
     void prepareFreezingTaskBounds() {
@@ -799,23 +771,6 @@ public class TaskStack extends WindowContainer<Task> implements
     }
 
     /**
-     * Re-sizes a stack and its containing tasks.
-     *
-     * @param bounds New stack bounds. Passing in null sets the bounds to fullscreen.
-     * @param taskBounds Bounds for tasks in the resized stack, keyed by task id.
-     * @param taskTempInsetBounds Inset bounds for individual tasks, keyed by task id.
-     */
-    void resize(Rect bounds, SparseArray<Rect> taskBounds,
-            SparseArray<Rect> taskTempInsetBounds) {
-        // We might trigger a configuration change. Save the current task bounds for freezing.
-        prepareFreezingTaskBounds();
-        if (setBounds(bounds, taskBounds, taskTempInsetBounds) && isVisible()) {
-            getDisplayContent().setLayoutNeeded();
-            mWmService.mWindowPlacerLocked.performSurfacePlacement();
-        }
-    }
-
-    /**
      * Calculate an amount by which to expand the stack bounds in each direction.
      * Used to make room for shadows in the pinned windowing mode.
      */
@@ -1041,8 +996,8 @@ public class TaskStack extends WindowContainer<Task> implements
     }
 
     @Override
-    void onParentSet() {
-        super.onParentSet();
+    void onParentChanged() {
+        super.onParentChanged();
 
         if (getParent() != null || mDisplayContent == null) {
             return;
@@ -1385,12 +1340,17 @@ public class TaskStack extends WindowContainer<Task> implements
 
     @CallSuper
     @Override
-    public void writeToProto(ProtoOutputStream proto, long fieldId, boolean trim) {
+    public void writeToProto(ProtoOutputStream proto, long fieldId,
+            @WindowTraceLogLevel int logLevel) {
+        if (logLevel == WindowTraceLogLevel.CRITICAL && !isVisible()) {
+            return;
+        }
+
         final long token = proto.start(fieldId);
-        super.writeToProto(proto, WINDOW_CONTAINER, trim);
+        super.writeToProto(proto, WINDOW_CONTAINER, logLevel);
         proto.write(ID, mStackId);
         for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; taskNdx--) {
-            mChildren.get(taskNdx).writeToProto(proto, TASKS, trim);
+            mChildren.get(taskNdx).writeToProto(proto, TASKS, logLevel);
         }
         proto.write(FILLS_PARENT, matchParentBounds());
         getRawBounds().writeToProto(proto, BOUNDS);

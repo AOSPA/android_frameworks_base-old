@@ -23,8 +23,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.ParceledListSlice;
 import android.media.MediaDescription;
+import android.media.MediaParceledListSlice;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.os.Binder;
@@ -284,8 +284,8 @@ public final class MediaBrowser {
      */
     public @NonNull ComponentName getServiceComponent() {
         if (!isConnected()) {
-            throw new IllegalStateException("getServiceComponent() called while not connected" +
-                    " (state=" + mState + ")");
+            throw new IllegalStateException("getServiceComponent() called while not connected"
+                    + " (state=" + mState + ")");
         }
         return mServiceComponent;
     }
@@ -331,7 +331,7 @@ public final class MediaBrowser {
      *
      * @throws IllegalStateException if not connected.
      */
-     public @NonNull MediaSession.Token getSessionToken() {
+    public @NonNull MediaSession.Token getSessionToken() {
         if (!isConnected()) {
             throw new IllegalStateException("getSessionToken() called while not connected (state="
                     + mState + ")");
@@ -464,7 +464,7 @@ public final class MediaBrowser {
                     cb.onError(mediaId);
                     return;
                 }
-                cb.onItemLoaded((MediaItem)item);
+                cb.onItemLoaded((MediaItem) item);
             }
         };
         try {
@@ -575,7 +575,7 @@ public final class MediaBrowser {
         }
     }
 
-    private final void onServiceConnected(final IMediaBrowserServiceCallbacks callback,
+    private void onServiceConnected(final IMediaBrowserServiceCallbacks callback,
             final String root, final MediaSession.Token session, final Bundle extra) {
         mHandler.post(new Runnable() {
             @Override
@@ -625,7 +625,7 @@ public final class MediaBrowser {
         });
     }
 
-    private final void onConnectionFailed(final IMediaBrowserServiceCallbacks callback) {
+    private void onConnectionFailed(final IMediaBrowserServiceCallbacks callback) {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -652,8 +652,8 @@ public final class MediaBrowser {
         });
     }
 
-    private final void onLoadChildren(final IMediaBrowserServiceCallbacks callback,
-            final String parentId, final ParceledListSlice list, final Bundle options) {
+    private void onLoadChildren(final IMediaBrowserServiceCallbacks callback,
+            final String parentId, final MediaParceledListSlice list, final Bundle options) {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -745,7 +745,7 @@ public final class MediaBrowser {
 
         /** @hide */
         @Retention(RetentionPolicy.SOURCE)
-        @IntDef(flag=true, value = { FLAG_BROWSABLE, FLAG_PLAYABLE })
+        @IntDef(flag = true, value = { FLAG_BROWSABLE, FLAG_PLAYABLE })
         public @interface Flags { }
 
         /**
@@ -886,7 +886,7 @@ public final class MediaBrowser {
     /**
      * Callbacks for subscription related events.
      */
-    public static abstract class SubscriptionCallback {
+    public abstract static class SubscriptionCallback {
         Binder mToken;
 
         public SubscriptionCallback() {
@@ -947,7 +947,7 @@ public final class MediaBrowser {
     /**
      * Callback for receiving the result of {@link #getItem}.
      */
-    public static abstract class ItemCallback {
+    public abstract static class ItemCallback {
         /**
          * Called when the item has been returned by the connected service.
          *
@@ -1078,7 +1078,7 @@ public final class MediaBrowser {
     private static class ServiceCallbacks extends IMediaBrowserServiceCallbacks.Stub {
         private WeakReference<MediaBrowser> mMediaBrowser;
 
-        public ServiceCallbacks(MediaBrowser mediaBrowser) {
+        ServiceCallbacks(MediaBrowser mediaBrowser) {
             mMediaBrowser = new WeakReference<MediaBrowser>(mediaBrowser);
         }
 
@@ -1107,12 +1107,12 @@ public final class MediaBrowser {
         }
 
         @Override
-        public void onLoadChildren(String parentId, ParceledListSlice list) {
+        public void onLoadChildren(String parentId, MediaParceledListSlice list) {
             onLoadChildrenWithOptions(parentId, list, null);
         }
 
         @Override
-        public void onLoadChildrenWithOptions(String parentId, ParceledListSlice list,
+        public void onLoadChildrenWithOptions(String parentId, MediaParceledListSlice list,
                 final Bundle options) {
             MediaBrowser mediaBrowser = mMediaBrowser.get();
             if (mediaBrowser != null) {
@@ -1125,7 +1125,7 @@ public final class MediaBrowser {
         private final List<SubscriptionCallback> mCallbacks;
         private final List<Bundle> mOptionsList;
 
-        public Subscription() {
+        Subscription() {
             mCallbacks = new ArrayList<>();
             mOptionsList = new ArrayList<>();
         }

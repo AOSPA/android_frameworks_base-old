@@ -97,20 +97,20 @@ public class DozeSensors {
                         mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE),
                         Settings.Secure.DOZE_PICK_UP_GESTURE,
                         config.dozePickupSensorAvailable(),
-                        DozeLog.PULSE_REASON_SENSOR_PICKUP, false /* touchCoords */,
+                        DozeLog.REASON_SENSOR_PICKUP, false /* touchCoords */,
                         false /* touchscreen */),
                 new TriggerSensor(
                         findSensorWithType(config.doubleTapSensorType()),
                         Settings.Secure.DOZE_DOUBLE_TAP_GESTURE,
                         true /* configured */,
-                        DozeLog.PULSE_REASON_SENSOR_DOUBLE_TAP,
+                        DozeLog.REASON_SENSOR_DOUBLE_TAP,
                         dozeParameters.doubleTapReportsTouchCoordinates(),
                         true /* touchscreen */),
                 new TriggerSensor(
                         findSensorWithType(config.tapSensorType()),
                         Settings.Secure.DOZE_TAP_SCREEN_GESTURE,
                         true /* configured */,
-                        DozeLog.PULSE_REASON_SENSOR_TAP,
+                        DozeLog.REASON_SENSOR_TAP,
                         false /* reports touch coordinates */,
                         true /* touchscreen */),
                 new TriggerSensor(
@@ -130,7 +130,7 @@ public class DozeSensors {
                         false /* touchscreen */),
                 new PluginSensor(
                         new SensorManagerPlugin.Sensor(TYPE_WAKE_LOCK_SCREEN),
-                        Settings.Secure.DOZE_WAKE_LOCK_SCREEN_GESTURE,
+                        Settings.Secure.DOZE_WAKE_SCREEN_GESTURE,
                         mConfig.wakeScreenGestureAvailable(),
                         DozeLog.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN,
                         false /* reports touch coordinates */,
@@ -212,6 +212,15 @@ public class DozeSensors {
 
     public void setDisableSensorsInterferingWithProximity(boolean disable) {
         mPickupSensor.setDisabled(disable);
+    }
+
+    /** Ignore the setting value of only the sensors that require the touchscreen. */
+    public void ignoreTouchScreenSensorsSettingInterferingWithDocking(boolean ignore) {
+        for (TriggerSensor sensor : mSensors) {
+            if (sensor.mRequiresTouchscreen) {
+                sensor.ignoreSetting(ignore);
+            }
+        }
     }
 
     /** Dump current state */
@@ -323,6 +332,7 @@ public class DozeSensors {
         protected boolean mRequested;
         protected boolean mRegistered;
         protected boolean mDisabled;
+        protected boolean mIgnoresSetting;
 
         public TriggerSensor(Sensor sensor, String setting, boolean configured, int pulseReason,
                 boolean reportsTouchCoordinates, boolean requiresTouchscreen) {
@@ -333,6 +343,13 @@ public class DozeSensors {
         public TriggerSensor(Sensor sensor, String setting, boolean settingDef,
                 boolean configured, int pulseReason, boolean reportsTouchCoordinates,
                 boolean requiresTouchscreen) {
+            this(sensor, setting, settingDef, configured, pulseReason, reportsTouchCoordinates,
+                    requiresTouchscreen, false /* ignoresSetting */);
+        }
+
+        private TriggerSensor(Sensor sensor, String setting, boolean settingDef,
+                boolean configured, int pulseReason, boolean reportsTouchCoordinates,
+                boolean requiresTouchscreen, boolean ignoresSetting) {
             mSensor = sensor;
             mSetting = setting;
             mSettingDefault = settingDef;
@@ -340,6 +357,7 @@ public class DozeSensors {
             mPulseReason = pulseReason;
             mReportsTouchCoordinates = reportsTouchCoordinates;
             mRequiresTouchscreen = requiresTouchscreen;
+            mIgnoresSetting = ignoresSetting;
         }
 
         public void setListening(boolean listen) {
@@ -354,9 +372,16 @@ public class DozeSensors {
             updateListener();
         }
 
+        public void ignoreSetting(boolean ignored) {
+            if (mIgnoresSetting == ignored) return;
+            mIgnoresSetting = ignored;
+            updateListener();
+        }
+
         public void updateListener() {
             if (!mConfigured || mSensor == null) return;
-            if (mRequested && !mDisabled && enabledBySetting() && !mRegistered) {
+            if (mRequested && !mDisabled && (enabledBySetting() || mIgnoresSetting)
+                    && !mRegistered) {
                 mRegistered = mSensorManager.requestTriggerSensor(this, mSensor);
                 if (DEBUG) Log.d(TAG, "requestTriggerSensor " + mRegistered);
             } else if (mRegistered) {
@@ -382,6 +407,7 @@ public class DozeSensors {
                     .append(", mRequested=").append(mRequested)
                     .append(", mDisabled=").append(mDisabled)
                     .append(", mConfigured=").append(mConfigured)
+                    .append(", mIgnoresSetting=").append(mIgnoresSetting)
                     .append(", mSensor=").append(mSensor).append("}").toString();
         }
 
@@ -464,7 +490,8 @@ public class DozeSensors {
         public void updateListener() {
             if (!mConfigured) return;
             AsyncSensorManager asyncSensorManager = (AsyncSensorManager) mSensorManager;
-            if (mRequested && !mDisabled && enabledBySetting() && !mRegistered) {
+            if (mRequested && !mDisabled && (enabledBySetting() || mIgnoresSetting)
+                    && !mRegistered) {
                 asyncSensorManager.registerPluginListener(mPluginSensor, mTriggerEventListener);
                 mRegistered = true;
                 if (DEBUG) Log.d(TAG, "registerPluginListener");
@@ -481,6 +508,7 @@ public class DozeSensors {
                     .append(", mRequested=").append(mRequested)
                     .append(", mDisabled=").append(mDisabled)
                     .append(", mConfigured=").append(mConfigured)
+                    .append(", mIgnoresSetting=").append(mIgnoresSetting)
                     .append(", mSensor=").append(mPluginSensor).append("}").toString();
         }
 
@@ -502,7 +530,7 @@ public class DozeSensors {
 
         /**
          * Called when a sensor requests a pulse
-         * @param pulseReason Requesting sensor, e.g. {@link DozeLog#PULSE_REASON_SENSOR_PICKUP}
+         * @param pulseReason Requesting sensor, e.g. {@link DozeLog#REASON_SENSOR_PICKUP}
          * @param sensorPerformedProxCheck true if the sensor already checked for FAR proximity.
          * @param screenX the location on the screen where the sensor fired or -1
  *                if the sensor doesn't support reporting screen locations.

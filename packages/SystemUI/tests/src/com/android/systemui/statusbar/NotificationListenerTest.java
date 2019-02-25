@@ -17,10 +17,12 @@
 package com.android.systemui.statusbar;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Notification;
+import android.app.NotificationManager;
 import android.os.Handler;
 import android.os.UserHandle;
 import android.service.notification.NotificationListenerService;
@@ -55,6 +57,7 @@ public class NotificationListenerTest extends SysuiTestCase {
     // Dependency mocks:
     @Mock private NotificationEntryManager mEntryManager;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
+    @Mock private NotificationManager mNotificationManager;
 
     private NotificationListener mListener;
     private StatusBarNotification mSbn;
@@ -67,14 +70,13 @@ public class NotificationListenerTest extends SysuiTestCase {
                 mRemoteInputManager);
         mDependency.injectTestDependency(Dependency.MAIN_HANDLER,
                 new Handler(TestableLooper.get(this).getLooper()));
+        mContext.addMockSystemService(NotificationManager.class, mNotificationManager);
 
         when(mEntryManager.getNotificationData()).thenReturn(mNotificationData);
 
         mListener = new NotificationListener(mContext);
         mSbn = new StatusBarNotification(TEST_PACKAGE_NAME, TEST_PACKAGE_NAME, 0, null, TEST_UID, 0,
                 new Notification(), UserHandle.CURRENT, null, 0);
-
-        mListener.setUpWithPresenter(mPresenter);
     }
 
     @Test
@@ -105,5 +107,29 @@ public class NotificationListenerTest extends SysuiTestCase {
         TestableLooper.get(this).processAllMessages();
         // RankingMap may be modified by plugins.
         verify(mEntryManager).updateNotificationRanking(any());
+    }
+
+    @Test
+    public void testOnConnectReadStatusBarSetting() {
+        NotificationListener.NotificationSettingsListener settingsListener =
+                mock(NotificationListener.NotificationSettingsListener.class);
+        mListener.addNotificationSettingsListener(settingsListener);
+
+        when(mNotificationManager.shouldHideSilentStatusBarIcons()).thenReturn(true);
+
+        mListener.onListenerConnected();
+
+        verify(settingsListener).onStatusBarIconsBehaviorChanged(true);
+    }
+
+    @Test
+    public void testOnStatusBarIconsBehaviorChanged() {
+        NotificationListener.NotificationSettingsListener settingsListener =
+                mock(NotificationListener.NotificationSettingsListener.class);
+        mListener.addNotificationSettingsListener(settingsListener);
+
+        mListener.onStatusBarIconsBehaviorChanged(true);
+
+        verify(settingsListener).onStatusBarIconsBehaviorChanged(true);
     }
 }

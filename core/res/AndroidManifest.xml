@@ -43,7 +43,7 @@
     <protected-broadcast android:name="android.intent.action.PACKAGE_FULLY_REMOVED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_CHANGED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_ENABLE_ROLLBACK" />
-    <protected-broadcast android:name="android.intent.action.PACKAGE_ROLLBACK_EXECUTED" />
+    <protected-broadcast android:name="android.intent.action.ROLLBACK_COMMITTED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_RESTARTED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_DATA_CLEARED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_FIRST_LAUNCH" />
@@ -116,6 +116,7 @@
     <protected-broadcast android:name="android.app.action.BUGREPORT_FAILED" />
     <protected-broadcast android:name="android.app.action.BUGREPORT_SHARE" />
     <protected-broadcast android:name="android.app.action.SHOW_DEVICE_MONITORING_DIALOG" />
+    <protected-broadcast android:name="android.intent.action.PENDING_INCIDENT_REPORTS_CHANGED" />
 
     <protected-broadcast android:name="android.appwidget.action.APPWIDGET_UPDATE_OPTIONS" />
     <protected-broadcast android:name="android.appwidget.action.APPWIDGET_DELETED" />
@@ -276,6 +277,7 @@
     <protected-broadcast android:name="android.media.MASTER_VOLUME_CHANGED_ACTION" />
     <protected-broadcast android:name="android.media.MASTER_MUTE_CHANGED_ACTION" />
     <protected-broadcast android:name="android.media.MASTER_MONO_CHANGED_ACTION" />
+    <protected-broadcast android:name="android.media.MASTER_BALANCE_CHANGED_ACTION" />
     <protected-broadcast android:name="android.media.SCO_AUDIO_STATE_CHANGED" />
     <protected-broadcast android:name="android.media.ACTION_SCO_AUDIO_STATE_UPDATED" />
 
@@ -513,6 +515,7 @@
     <protected-broadcast android:name="android.security.action.TRUST_STORE_CHANGED" />
     <protected-broadcast android:name="android.security.action.KEYCHAIN_CHANGED" />
     <protected-broadcast android:name="android.security.action.KEY_ACCESS_CHANGED" />
+    <protected-broadcast android:name="android.telecom.action.NUISANCE_CALL_STATUS_CHANGED" />
     <protected-broadcast android:name="android.telecom.action.PHONE_ACCOUNT_REGISTERED" />
     <protected-broadcast android:name="android.telecom.action.PHONE_ACCOUNT_UNREGISTERED" />
     <protected-broadcast android:name="android.telecom.action.SHOW_MISSED_CALLS_NOTIFICATION" />
@@ -1689,6 +1692,11 @@
     <permission android:name="android.permission.WIFI_SET_DEVICE_MOBILITY_STATE"
         android:protectionLevel="signature|privileged" />
 
+    <!-- #SystemApi @hide Allows privileged system APK to update Wifi usability stats and score.
+         <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.WIFI_UPDATE_USABILITY_STATS_SCORE"
+        android:protectionLevel="signature|privileged" />
+
     <!-- ======================================= -->
     <!-- Permissions for short range, peripheral networks -->
     <!-- ======================================= -->
@@ -1759,7 +1767,7 @@
     <permission android:name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Allows a system application to access hardware packet offload capabilities.
+    <!-- @SystemApi Allows a system application to access hardware packet offload capabilities.
          @hide -->
     <permission android:name="android.permission.PACKET_KEEPALIVE_OFFLOAD"
         android:protectionLevel="signature|privileged" />
@@ -1782,6 +1790,10 @@
     <!-- @hide Allows internal management of Bluetooth state when on wireless consent mode.
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.MANAGE_BLUETOOTH_WHEN_WIRELESS_CONSENT_REQUIRED"
+        android:protectionLevel="signature" />
+
+    <!-- @hide Allows the device to be reset, clearing all data and enables Test Harness Mode. -->
+    <permission android:name="android.permission.ENABLE_TEST_HARNESS_MODE"
         android:protectionLevel="signature" />
 
     <!-- ================================== -->
@@ -1891,6 +1903,10 @@
          @hide
     -->
     <permission android:name="android.permission.HARDWARE_TEST"
+        android:protectionLevel="signature" />
+
+    <!-- @hide Allows an application to manage DynamicAndroid image -->
+    <permission android:name="android.permission.MANAGE_DYNAMIC_ANDROID"
         android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows access to Broadcast Radio
@@ -2145,7 +2161,7 @@
     <!-- ================================== -->
     <eat-comment />
 
-    <!-- @SystemApi Allows an application to write to internal media storage
+    <!-- @SystemApi @TestApi Allows an application to write to internal media storage
          @hide  -->
     <permission android:name="android.permission.WRITE_MEDIA_STORAGE"
         android:protectionLevel="signature|privileged" />
@@ -2824,6 +2840,20 @@
     <permission android:name="android.permission.SIGNAL_PERSISTENT_PROCESSES"
         android:protectionLevel="signature|privileged|development" />
 
+    <!-- @hide @SystemApi @TestApi
+         Allow an application to approve incident and bug reports to be
+         shared off-device.  There can be only one application installed on the
+         device with this permission, and since this is a privileged permission, it
+         must be in priv-app.
+        <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.APPROVE_INCIDENT_REPORTS"
+        android:protectionLevel="signature|incidentReportApprover" />
+
+    <!-- @hide Allow an application to approve an incident or bug report approval from
+        the system. -->
+    <permission android:name="android.permission.REQUEST_INCIDENT_REPORT_APPROVAL"
+        android:protectionLevel="signature|privileged" />
+
     <!-- ==================================== -->
     <!-- Private permissions                  -->
     <!-- ==================================== -->
@@ -3355,7 +3385,7 @@
     <permission android:name="com.android.permission.INSTALL_EXISTING_PACKAGES"
         android:protectionLevel="signature|privileged" />
 
-    <!-- @SystemApi Allows an application to clear user data.
+    <!-- @SystemApi @TestApi Allows an application to clear user data.
          <p>Not for use by third-party applications
          @hide
     -->
@@ -3553,6 +3583,12 @@
     <permission android:name="android.permission.CONTROL_VPN"
         android:protectionLevel="signature|privileged" />
     <uses-permission android:name="android.permission.CONTROL_VPN" />
+
+    <!-- Allows an application to access and modify always-on VPN configuration.
+         <p>Not for use by third-party or privileged applications.
+         @hide -->
+    <permission android:name="android.permission.CONTROL_ALWAYS_ON_VPN"
+        android:protectionLevel="signature" />
 
     <!-- Allows an application to capture audio output.
          <p>Not for use by third-party applications.</p> -->
@@ -4333,7 +4369,7 @@
     <!-- @SystemApi Allows an application to manage the app predictions service.
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MANAGE_APP_PREDICTIONS"
-         android:protectionLevel="signature" />
+         android:protectionLevel="signature|appPredictor" />
 
     <!-- Allows an app to set the theme overlay in /vendor/overlay
          being used.
@@ -4409,7 +4445,7 @@
         {@link android.provider.Telephony.Intents#ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL}
         broadcast -->
     <permission android:name="android.permission.MONITOR_DEFAULT_SMS_PACKAGE"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|privileged" />
 
     <!-- A subclass of {@link android.app.SmsAppService} must be protected with this permission. -->
     <permission android:name="android.permission.BIND_SMS_APP_SERVICE"
@@ -4756,7 +4792,7 @@
         <receiver android:name="com.android.server.updates.ConversationActionsInstallReceiver"
                   android:permission="android.permission.UPDATE_CONFIG">
             <intent-filter>
-                <action android:name="android.intent.action.ACTION_UPDATE_CONVERSATION_ACTIONS" />
+                <action android:name="android.intent.action.UPDATE_CONVERSATION_ACTIONS" />
                 <data android:scheme="content" android:host="*" android:mimeType="*/*" />
             </intent-filter>
         </receiver>

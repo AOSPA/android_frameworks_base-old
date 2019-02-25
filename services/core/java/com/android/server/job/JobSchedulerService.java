@@ -366,14 +366,20 @@ public class JobSchedulerService extends com.android.server.SystemService
             }
         }
 
-        public int getTotalMax() {
+        /** Total number of jobs to run simultaneously. */
+        public int getMaxTotal() {
             return mTotal.getValue();
         }
 
+        /** Max number of BG (== owned by non-TOP apps) jobs to run simultaneously. */
         public int getMaxBg() {
             return mMaxBg.getValue();
         }
 
+        /**
+         * We try to run at least this many BG (== owned by non-TOP apps) jobs, when there are any
+         * pending, rather than always running the TOTAL number of FG jobs.
+         */
         public int getMinBg() {
             return mMinBg.getValue();
         }
@@ -384,10 +390,39 @@ public class JobSchedulerService extends com.android.server.SystemService
             mMinBg.dump(pw, prefix);
         }
 
-        public void dumpProto(ProtoOutputStream proto, long tagTotal, long tagBg) {
-            mTotal.dumpProto(proto, tagTotal);
-            mMaxBg.dumpProto(proto, tagBg);
-            mMinBg.dumpProto(proto, tagBg);
+        public void dumpProto(ProtoOutputStream proto, long fieldId) {
+            final long token = proto.start(fieldId);
+            mTotal.dumpProto(proto, MaxJobCountsProto.TOTAL_JOBS);
+            mMaxBg.dumpProto(proto, MaxJobCountsProto.MAX_BG);
+            mMinBg.dumpProto(proto, MaxJobCountsProto.MIN_BG);
+            proto.end(token);
+        }
+    }
+
+    /** {@link MaxJobCounts} for each memory trim level. */
+    static class MaxJobCountsPerMemoryTrimLevel {
+        public final MaxJobCounts normal;
+        public final MaxJobCounts moderate;
+        public final MaxJobCounts low;
+        public final MaxJobCounts critical;
+
+        MaxJobCountsPerMemoryTrimLevel(
+                MaxJobCounts normal,
+                MaxJobCounts moderate, MaxJobCounts low,
+                MaxJobCounts critical) {
+            this.normal = normal;
+            this.moderate = moderate;
+            this.low = low;
+            this.critical = critical;
+        }
+
+        public void dumpProto(ProtoOutputStream proto, long fieldId) {
+            final long token = proto.start(fieldId);
+            normal.dumpProto(proto, MaxJobCountsPerMemoryTrimLevelProto.NORMAL);
+            moderate.dumpProto(proto, MaxJobCountsPerMemoryTrimLevelProto.MODERATE);
+            low.dumpProto(proto, MaxJobCountsPerMemoryTrimLevelProto.LOW);
+            critical.dumpProto(proto, MaxJobCountsPerMemoryTrimLevelProto.CRITICAL);
+            proto.end(token);
         }
     }
 
@@ -443,6 +478,16 @@ public class JobSchedulerService extends com.android.server.SystemService
                 "qc_window_size_rare_ms";
         private static final String KEY_QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS =
                 "qc_max_execution_time_ms";
+        private static final String KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE =
+                "qc_max_job_count_active";
+        private static final String KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING =
+                "qc_max_job_count_working";
+        private static final String KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT =
+                "qc_max_job_count_frequent";
+        private static final String KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE =
+                "qc_max_job_count_rare";
+        private static final String KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME =
+                "qc_max_count_per_allowed_time";
 
         private static final int DEFAULT_MIN_IDLE_COUNT = 1;
         private static final int DEFAULT_MIN_CHARGING_COUNT = 1;
@@ -463,7 +508,7 @@ public class JobSchedulerService extends com.android.server.SystemService
         private static final int DEFAULT_STANDBY_RARE_BEATS = 130; // ~ 24 hours
         private static final float DEFAULT_CONN_CONGESTION_DELAY_FRAC = 0.5f;
         private static final float DEFAULT_CONN_PREFETCH_RELAX_FRAC = 0.5f;
-        private static final boolean DEFAULT_USE_HEARTBEATS = true;
+        private static final boolean DEFAULT_USE_HEARTBEATS = false;
         private static final boolean DEFAULT_TIME_CONTROLLER_SKIP_NOT_READY_JOBS = false;
         private static final long DEFAULT_QUOTA_CONTROLLER_ALLOWED_TIME_PER_PERIOD_MS =
                 10 * 60 * 1000L; // 10 minutes
@@ -479,6 +524,15 @@ public class JobSchedulerService extends com.android.server.SystemService
                 24 * 60 * 60 * 1000L; // 24 hours
         private static final long DEFAULT_QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS =
                 4 * 60 * 60 * 1000L; // 4 hours
+        private static final int DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE =
+                200; // 1200/hr
+        private static final int DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING =
+                1200; // 600/hr
+        private static final int DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT =
+                1800; // 225/hr
+        private static final int DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE =
+                2400; // 100/hr
+        private static final int DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME = 20;
 
         /**
          * Minimum # of idle jobs that must be ready in order to force the JMS to schedule things
@@ -527,45 +581,44 @@ public class JobSchedulerService extends com.android.server.SystemService
         float MODERATE_USE_FACTOR = DEFAULT_MODERATE_USE_FACTOR;
 
         // Max job counts for screen on / off, for each memory trim level.
-        final MaxJobCounts MAX_JOB_COUNTS_ON_NORMAL = new MaxJobCounts(
-                8, "max_job_total_on_normal",
-                6, "max_job_max_bg_on_normal",
-                2, "max_job_min_bg_on_normal");
+        final MaxJobCountsPerMemoryTrimLevel MAX_JOB_COUNTS_SCREEN_ON =
+                new MaxJobCountsPerMemoryTrimLevel(
+                        new MaxJobCounts(
+                                8, "max_job_total_on_normal",
+                                6, "max_job_max_bg_on_normal",
+                                2, "max_job_min_bg_on_normal"),
+                        new MaxJobCounts(
+                                8, "max_job_total_on_moderate",
+                                4, "max_job_max_bg_on_moderate",
+                                2, "max_job_min_bg_on_moderate"),
+                        new MaxJobCounts(
+                                5, "max_job_total_on_low",
+                                1, "max_job_max_bg_on_low",
+                                1, "max_job_min_bg_on_low"),
+                        new MaxJobCounts(
+                                5, "max_job_total_on_critical",
+                                1, "max_job_max_bg_on_critical",
+                                1, "max_job_min_bg_on_critical"));
 
-        final MaxJobCounts MAX_JOB_COUNTS_ON_MODERATE = new MaxJobCounts(
-                8, "max_job_total_on_moderate",
-                4, "max_job_max_bg_on_moderate",
-                2, "max_job_min_bg_on_moderate");
+        final MaxJobCountsPerMemoryTrimLevel MAX_JOB_COUNTS_SCREEN_OFF =
+                new MaxJobCountsPerMemoryTrimLevel(
+                        new MaxJobCounts(
+                                10, "max_job_total_off_normal",
+                                6, "max_job_max_bg_off_normal",
+                                2, "max_job_min_bg_off_normal"),
+                        new MaxJobCounts(
+                                10, "max_job_total_off_moderate",
+                                4, "max_job_max_bg_off_moderate",
+                                2, "max_job_min_bg_off_moderate"),
+                        new MaxJobCounts(
+                                5, "max_job_total_off_low",
+                                1, "max_job_max_bg_off_low",
+                                1, "max_job_min_bg_off_low"),
+                        new MaxJobCounts(
+                                5, "max_job_total_off_critical",
+                                1, "max_job_max_bg_off_critical",
+                                1, "max_job_min_bg_off_critical"));
 
-        final MaxJobCounts MAX_JOB_COUNTS_ON_LOW = new MaxJobCounts(
-                5, "max_job_total_on_low",
-                1, "max_job_max_bg_on_low",
-                1, "max_job_min_bg_on_low");
-
-        final MaxJobCounts MAX_JOB_COUNTS_ON_CRITICAL = new MaxJobCounts(
-                5, "max_job_total_on_critical",
-                1, "max_job_max_bg_on_critical",
-                1, "max_job_min_bg_on_critical");
-
-        final MaxJobCounts MAX_JOB_COUNTS_OFF_NORMAL = new MaxJobCounts(
-                10, "max_job_total_off_normal",
-                6, "max_job_max_bg_off_normal",
-                2, "max_job_min_bg_off_normal");
-
-        final MaxJobCounts MAX_JOB_COUNTS_OFF_MODERATE = new MaxJobCounts(
-                10, "max_job_total_off_moderate",
-                4, "max_job_max_bg_off_moderate",
-                2, "max_job_min_bg_off_moderate");
-
-        final MaxJobCounts MAX_JOB_COUNTS_OFF_LOW = new MaxJobCounts(
-                5, "max_job_total_off_low",
-                1, "max_job_max_bg_off_low",
-                1, "max_job_min_bg_off_low");
-
-        final MaxJobCounts MAX_JOB_COUNTS_OFF_CRITICAL = new MaxJobCounts(
-                5, "max_job_total_off_critical",
-                1, "max_job_max_bg_off_critical",
-                1, "max_job_min_bg_off_critical");
 
         /** Wait for this long after screen off before increasing the job concurrency. */
         final KeyValueListParser.IntValue SCREEN_OFF_JOB_CONCURRENCY_INCREASE_DELAY_MS =
@@ -682,6 +735,41 @@ public class JobSchedulerService extends com.android.server.SystemService
         public long QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS =
                 DEFAULT_QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS;
 
+        /**
+         * The maximum number of jobs an app can run within this particular standby bucket's
+         * window size.
+         */
+        public int QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE =
+                DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE;
+
+        /**
+         * The maximum number of jobs an app can run within this particular standby bucket's
+         * window size.
+         */
+        public int QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING =
+                DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING;
+
+        /**
+         * The maximum number of jobs an app can run within this particular standby bucket's
+         * window size.
+         */
+        public int QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT =
+                DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT;
+
+        /**
+         * The maximum number of jobs an app can run within this particular standby bucket's
+         * window size.
+         */
+        public int QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE =
+                DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE;
+
+        /**
+         * The maximum number of jobs that can run within the past
+         * {@link #QUOTA_CONTROLLER_ALLOWED_TIME_PER_PERIOD_MS}.
+         */
+        public int QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME =
+                DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME;
+
         private final KeyValueListParser mParser = new KeyValueListParser(',');
 
         void updateConstantsLocked(String value) {
@@ -712,15 +800,17 @@ public class JobSchedulerService extends com.android.server.SystemService
             MODERATE_USE_FACTOR = mParser.getFloat(KEY_MODERATE_USE_FACTOR,
                     DEFAULT_MODERATE_USE_FACTOR);
 
-            MAX_JOB_COUNTS_ON_NORMAL.parse(mParser);
-            MAX_JOB_COUNTS_ON_MODERATE.parse(mParser);
-            MAX_JOB_COUNTS_ON_LOW.parse(mParser);
-            MAX_JOB_COUNTS_ON_CRITICAL.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_ON.normal.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_ON.moderate.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_ON.low.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_ON.critical.parse(mParser);
 
-            MAX_JOB_COUNTS_OFF_NORMAL.parse(mParser);
-            MAX_JOB_COUNTS_OFF_MODERATE.parse(mParser);
-            MAX_JOB_COUNTS_OFF_LOW.parse(mParser);
-            MAX_JOB_COUNTS_OFF_CRITICAL.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_OFF.normal.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_OFF.moderate.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_OFF.low.parse(mParser);
+            MAX_JOB_COUNTS_SCREEN_OFF.critical.parse(mParser);
+
+            SCREEN_OFF_JOB_CONCURRENCY_INCREASE_DELAY_MS.parse(mParser);
 
             MAX_STANDARD_RESCHEDULE_COUNT = mParser.getInt(KEY_MAX_STANDARD_RESCHEDULE_COUNT,
                     DEFAULT_MAX_STANDARD_RESCHEDULE_COUNT);
@@ -767,6 +857,21 @@ public class JobSchedulerService extends com.android.server.SystemService
             QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS = mParser.getDurationMillis(
                     KEY_QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS,
                     DEFAULT_QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS);
+            QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE = mParser.getInt(
+                    KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE,
+                    DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE);
+            QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING = mParser.getInt(
+                    KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING,
+                    DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING);
+            QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT = mParser.getInt(
+                    KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT,
+                    DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT);
+            QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE = mParser.getInt(
+                    KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE,
+                    DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE);
+            QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME = mParser.getInt(
+                    KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME,
+                    DEFAULT_QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME);
         }
 
         void dump(IndentingPrintWriter pw) {
@@ -782,15 +887,17 @@ public class JobSchedulerService extends com.android.server.SystemService
             pw.printPair(KEY_HEAVY_USE_FACTOR, HEAVY_USE_FACTOR).println();
             pw.printPair(KEY_MODERATE_USE_FACTOR, MODERATE_USE_FACTOR).println();
 
-            MAX_JOB_COUNTS_ON_NORMAL.dump(pw, "");
-            MAX_JOB_COUNTS_ON_MODERATE.dump(pw, "");
-            MAX_JOB_COUNTS_ON_LOW.dump(pw, "");
-            MAX_JOB_COUNTS_ON_CRITICAL.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_ON.normal.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_ON.moderate.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_ON.low.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_ON.critical.dump(pw, "");
 
-            MAX_JOB_COUNTS_OFF_NORMAL.dump(pw, "");
-            MAX_JOB_COUNTS_OFF_MODERATE.dump(pw, "");
-            MAX_JOB_COUNTS_OFF_LOW.dump(pw, "");
-            MAX_JOB_COUNTS_OFF_CRITICAL.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_OFF.normal.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_OFF.moderate.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_OFF.low.dump(pw, "");
+            MAX_JOB_COUNTS_SCREEN_OFF.critical.dump(pw, "");
+
+            SCREEN_OFF_JOB_CONCURRENCY_INCREASE_DELAY_MS.dump(pw, "");
 
             pw.printPair(KEY_MAX_STANDARD_RESCHEDULE_COUNT, MAX_STANDARD_RESCHEDULE_COUNT).println();
             pw.printPair(KEY_MAX_WORK_RESCHEDULE_COUNT, MAX_WORK_RESCHEDULE_COUNT).println();
@@ -823,6 +930,16 @@ public class JobSchedulerService extends com.android.server.SystemService
                     QUOTA_CONTROLLER_WINDOW_SIZE_RARE_MS).println();
             pw.printPair(KEY_QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS,
                     QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS).println();
+            pw.printPair(KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE).println();
+            pw.printPair(KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING).println();
+            pw.printPair(KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT).println();
+            pw.printPair(KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE).println();
+            pw.printPair(KEY_QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME).println();
             pw.decreaseIndent();
         }
 
@@ -838,7 +955,11 @@ public class JobSchedulerService extends com.android.server.SystemService
             proto.write(ConstantsProto.HEAVY_USE_FACTOR, HEAVY_USE_FACTOR);
             proto.write(ConstantsProto.MODERATE_USE_FACTOR, MODERATE_USE_FACTOR);
 
-            // TODO Dump max job counts.
+            MAX_JOB_COUNTS_SCREEN_ON.dumpProto(proto, ConstantsProto.MAX_JOB_COUNTS_SCREEN_ON);
+            MAX_JOB_COUNTS_SCREEN_OFF.dumpProto(proto, ConstantsProto.MAX_JOB_COUNTS_SCREEN_OFF);
+
+            SCREEN_OFF_JOB_CONCURRENCY_INCREASE_DELAY_MS.dumpProto(proto,
+                    ConstantsProto.SCREEN_OFF_JOB_CONCURRENCY_INCREASE_DELAY_MS);
 
             proto.write(ConstantsProto.MAX_STANDARD_RESCHEDULE_COUNT, MAX_STANDARD_RESCHEDULE_COUNT);
             proto.write(ConstantsProto.MAX_WORK_RESCHEDULE_COUNT, MAX_WORK_RESCHEDULE_COUNT);
@@ -872,6 +993,16 @@ public class JobSchedulerService extends com.android.server.SystemService
                     QUOTA_CONTROLLER_WINDOW_SIZE_RARE_MS);
             proto.write(ConstantsProto.QuotaController.MAX_EXECUTION_TIME_MS,
                     QUOTA_CONTROLLER_MAX_EXECUTION_TIME_MS);
+            proto.write(ConstantsProto.QuotaController.MAX_JOB_COUNT_ACTIVE,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_ACTIVE);
+            proto.write(ConstantsProto.QuotaController.MAX_JOB_COUNT_WORKING,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_WORKING);
+            proto.write(ConstantsProto.QuotaController.MAX_JOB_COUNT_FREQUENT,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_FREQUENT);
+            proto.write(ConstantsProto.QuotaController.MAX_JOB_COUNT_RARE,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_RARE);
+            proto.write(ConstantsProto.QuotaController.MAX_JOB_COUNT_PER_ALLOWED_TIME,
+                    QUOTA_CONTROLLER_MAX_JOB_COUNT_PER_ALLOWED_TIME);
             proto.end(qcToken);
 
             proto.end(token);
@@ -1911,6 +2042,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                         if (DEBUG) {
                             Slog.d(TAG, "MSG_CHECK_JOB");
                         }
+                        removeMessages(MSG_CHECK_JOB);
                         if (mReportedActive) {
                             // if jobs are currently being run, queue all ready jobs for execution.
                             queueReadyJobsForExecutionLocked();
@@ -1970,7 +2102,6 @@ public class JobSchedulerService extends com.android.server.SystemService
                 }
                 maybeRunPendingJobsLocked();
                 // Don't remove JOB_EXPIRED in case one came along while processing the queue.
-                removeMessages(MSG_CHECK_JOB);
             }
         }
     }
@@ -3282,8 +3413,10 @@ public class JobSchedulerService extends com.android.server.SystemService
 
     void dumpInternal(final IndentingPrintWriter pw, int filterUid) {
         final int filterUidFinal = UserHandle.getAppId(filterUid);
+        final long now = sSystemClock.millis();
         final long nowElapsed = sElapsedRealtimeClock.millis();
         final long nowUptime = sUptimeMillisClock.millis();
+
         final Predicate<JobStatus> predicate = (js) -> {
             return filterUidFinal == -1 || UserHandle.getAppId(js.getUid()) == filterUidFinal
                     || UserHandle.getAppId(js.getSourceUid()) == filterUidFinal;
@@ -3459,7 +3592,7 @@ public class JobSchedulerService extends com.android.server.SystemService
             }
             pw.println();
 
-            mConcurrencyManager.dumpLocked(pw);
+            mConcurrencyManager.dumpLocked(pw, now, nowElapsed);
 
             pw.println();
             pw.print("PersistStats: ");
@@ -3471,6 +3604,7 @@ public class JobSchedulerService extends com.android.server.SystemService
     void dumpInternalProto(final FileDescriptor fd, int filterUid) {
         ProtoOutputStream proto = new ProtoOutputStream(fd);
         final int filterUidFinal = UserHandle.getAppId(filterUid);
+        final long now = sSystemClock.millis();
         final long nowElapsed = sElapsedRealtimeClock.millis();
         final long nowUptime = sUptimeMillisClock.millis();
         final Predicate<JobStatus> predicate = (js) -> {
@@ -3614,7 +3748,8 @@ public class JobSchedulerService extends com.android.server.SystemService
                 proto.write(JobSchedulerServiceDumpProto.IS_READY_TO_ROCK, mReadyToRock);
                 proto.write(JobSchedulerServiceDumpProto.REPORTED_ACTIVE, mReportedActive);
             }
-            mConcurrencyManager.dumpProtoLocked(proto);
+            mConcurrencyManager.dumpProtoLocked(proto,
+                    JobSchedulerServiceDumpProto.CONCURRENCY_MANAGER, now, nowElapsed);
         }
 
         proto.flush();

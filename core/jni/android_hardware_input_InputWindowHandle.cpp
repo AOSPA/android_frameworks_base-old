@@ -17,6 +17,7 @@
 #define LOG_TAG "InputWindowHandle"
 
 #include <nativehelper/JNIHelp.h>
+#include "core_jni_helpers.h"
 #include "jni.h"
 #include <android_runtime/AndroidRuntime.h>
 #include <utils/threads.h>
@@ -55,6 +56,7 @@ static struct {
     jfieldID ownerUid;
     jfieldID inputFeatures;
     jfieldID displayId;
+    jfieldID portalToDisplayId;
 } gInputWindowHandleClassInfo;
 
 static Mutex gHandleMutex;
@@ -85,24 +87,14 @@ bool NativeInputWindowHandle::updateInfo() {
 
     mInfo.touchableRegion.clear();
 
-    jobject tokenObj = env->GetObjectField(obj,
-            gInputWindowHandleClassInfo.token);
+    jobject tokenObj = env->GetObjectField(obj, gInputWindowHandleClassInfo.token);
     if (tokenObj) {
         mInfo.token = ibinderForJavaObject(env, tokenObj);
     } else {
         mInfo.token.clear();
     }
 
-    jstring nameObj = jstring(env->GetObjectField(obj,
-            gInputWindowHandleClassInfo.name));
-    if (nameObj) {
-        const char* nameStr = env->GetStringUTFChars(nameObj, NULL);
-        mInfo.name = nameStr;
-        env->ReleaseStringUTFChars(nameObj, nameStr);
-        env->DeleteLocalRef(nameObj);
-    } else {
-        mInfo.name = "<null>";
-    }
+    mInfo.name = getStringField(env, obj, gInputWindowHandleClassInfo.name, "<null>");
 
     mInfo.layoutParamsFlags = env->GetIntField(obj,
             gInputWindowHandleClassInfo.layoutParamsFlags);
@@ -154,12 +146,14 @@ bool NativeInputWindowHandle::updateInfo() {
             gInputWindowHandleClassInfo.inputFeatures);
     mInfo.displayId = env->GetIntField(obj,
             gInputWindowHandleClassInfo.displayId);
+    mInfo.portalToDisplayId = env->GetIntField(obj,
+            gInputWindowHandleClassInfo.portalToDisplayId);
 
     jobject inputApplicationHandleObj = env->GetObjectField(obj,
             gInputWindowHandleClassInfo.inputApplicationHandle);
     if (inputApplicationHandleObj) {
         sp<InputApplicationHandle> inputApplicationHandle =
-            android_server_InputApplicationHandle_getHandle(env, inputApplicationHandleObj);
+            android_view_InputApplicationHandle_getHandle(env, inputApplicationHandleObj);
         if (inputApplicationHandle != nullptr) {
             inputApplicationHandle->updateInfo();
             mInfo.applicationInfo = *(inputApplicationHandle->getInfo());
@@ -174,7 +168,7 @@ bool NativeInputWindowHandle::updateInfo() {
 
 // --- Global functions ---
 
-sp<NativeInputWindowHandle> android_server_InputWindowHandle_getHandle(
+sp<NativeInputWindowHandle> android_view_InputWindowHandle_getHandle(
         JNIEnv* env, jobject inputWindowHandleObj) {
     if (!inputWindowHandleObj) {
         return NULL;
@@ -189,7 +183,7 @@ sp<NativeInputWindowHandle> android_server_InputWindowHandle_getHandle(
     } else {
         jweak objWeak = env->NewWeakGlobalRef(inputWindowHandleObj);
         handle = new NativeInputWindowHandle(objWeak);
-        handle->incStrong((void*)android_server_InputWindowHandle_getHandle);
+        handle->incStrong((void*)android_view_InputWindowHandle_getHandle);
         env->SetLongField(inputWindowHandleObj, gInputWindowHandleClassInfo.ptr,
                 reinterpret_cast<jlong>(handle));
     }
@@ -199,7 +193,7 @@ sp<NativeInputWindowHandle> android_server_InputWindowHandle_getHandle(
 
 // --- JNI ---
 
-static void android_server_InputWindowHandle_nativeDispose(JNIEnv* env, jobject obj) {
+static void android_view_InputWindowHandle_nativeDispose(JNIEnv* env, jobject obj) {
     AutoMutex _l(gHandleMutex);
 
     jlong ptr = env->GetLongField(obj, gInputWindowHandleClassInfo.ptr);
@@ -207,7 +201,7 @@ static void android_server_InputWindowHandle_nativeDispose(JNIEnv* env, jobject 
         env->SetLongField(obj, gInputWindowHandleClassInfo.ptr, 0);
 
         NativeInputWindowHandle* handle = reinterpret_cast<NativeInputWindowHandle*>(ptr);
-        handle->decStrong((void*)android_server_InputWindowHandle_getHandle);
+        handle->decStrong((void*)android_view_InputWindowHandle_getHandle);
     }
 }
 
@@ -215,7 +209,7 @@ static void android_server_InputWindowHandle_nativeDispose(JNIEnv* env, jobject 
 static const JNINativeMethod gInputWindowHandleMethods[] = {
     /* name, signature, funcPtr */
     { "nativeDispose", "()V",
-            (void*) android_server_InputWindowHandle_nativeDispose },
+            (void*) android_view_InputWindowHandle_nativeDispose },
 };
 
 #define FIND_CLASS(var, className) \
@@ -226,7 +220,7 @@ static const JNINativeMethod gInputWindowHandleMethods[] = {
         var = env->GetFieldID(clazz, fieldName, fieldDescriptor); \
         LOG_FATAL_IF(! (var), "Unable to find field " fieldName);
 
-int register_android_server_InputWindowHandle(JNIEnv* env) {
+int register_android_view_InputWindowHandle(JNIEnv* env) {
     int res = jniRegisterNativeMethods(env, "android/view/InputWindowHandle",
             gInputWindowHandleMethods, NELEM(gInputWindowHandleMethods));
     (void) res;  // Faked use when LOG_NDEBUG.
@@ -238,8 +232,7 @@ int register_android_server_InputWindowHandle(JNIEnv* env) {
     GET_FIELD_ID(gInputWindowHandleClassInfo.ptr, clazz,
             "ptr", "J");
 
-    GET_FIELD_ID(gInputWindowHandleClassInfo.inputApplicationHandle,
-            clazz,
+    GET_FIELD_ID(gInputWindowHandleClassInfo.inputApplicationHandle, clazz,
             "inputApplicationHandle", "Landroid/view/InputApplicationHandle;");
 
     GET_FIELD_ID(gInputWindowHandleClassInfo.token, clazz,
@@ -307,6 +300,9 @@ int register_android_server_InputWindowHandle(JNIEnv* env) {
 
     GET_FIELD_ID(gInputWindowHandleClassInfo.displayId, clazz,
             "displayId", "I");
+
+    GET_FIELD_ID(gInputWindowHandleClassInfo.portalToDisplayId, clazz,
+            "portalToDisplayId", "I");
     return 0;
 }
 

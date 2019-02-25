@@ -29,6 +29,11 @@ import java.util.List;
  */
 class RollbackData {
     /**
+     * A unique identifier for this rollback.
+     */
+    public final int rollbackId;
+
+    /**
      * The per-package rollback information.
      */
     public final List<PackageRollbackInfo> packages = new ArrayList<>();
@@ -44,7 +49,16 @@ class RollbackData {
      */
     public Instant timestamp;
 
-    RollbackData(File backupDir) {
+    /**
+     * Whether this Rollback is currently in progress. This field is true from the point
+     * we commit a {@code PackageInstaller} session containing these packages to the point the
+     * {@code PackageInstaller} calls into the {@code onFinished} callback.
+     */
+    // NOTE: All accesses to this field are from the RollbackManager handler thread.
+    public boolean inProgress = false;
+
+    RollbackData(int rollbackId, File backupDir) {
+        this.rollbackId = rollbackId;
         this.backupDir = backupDir;
     }
 }

@@ -17,8 +17,13 @@
 package android.content.rollback;
 
 import android.annotation.SystemApi;
+import android.content.pm.PackageInstaller;
+import android.content.pm.VersionedPackage;
 import android.os.Parcel;
 import android.os.Parcelable;
+
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Information about a set of packages that can be, or already have been
@@ -30,22 +35,78 @@ import android.os.Parcelable;
 public final class RollbackInfo implements Parcelable {
 
     /**
-     * The package that needs to be rolled back.
+     * A unique identifier for the rollback.
      */
-    public final PackageRollbackInfo targetPackage;
+    private final int mRollbackId;
 
-    // TODO: Add a list of additional packages rolled back due to atomic
-    // install dependencies when rollback of atomic installs is supported.
-    // TODO: Add a flag to indicate if reboot is required, when rollback of
-    // staged installs is supported.
+    private final List<PackageRollbackInfo> mPackages;
+
+    private final List<VersionedPackage> mCausePackages;
+
+    private final boolean mIsStaged;
+    private final int mCommittedSessionId;
 
     /** @hide */
-    public RollbackInfo(PackageRollbackInfo targetPackage) {
-        this.targetPackage = targetPackage;
+    public RollbackInfo(int rollbackId, List<PackageRollbackInfo> packages, boolean isStaged) {
+        this(rollbackId, packages, isStaged, Collections.emptyList(),
+                PackageInstaller.SessionInfo.INVALID_ID);
+    }
+
+    /** @hide */
+    public RollbackInfo(int rollbackId, List<PackageRollbackInfo> packages, boolean isStaged,
+            List<VersionedPackage> causePackages,  int committedSessionId) {
+        this.mRollbackId = rollbackId;
+        this.mPackages = packages;
+        this.mIsStaged = isStaged;
+        this.mCausePackages = causePackages;
+        this.mCommittedSessionId = committedSessionId;
     }
 
     private RollbackInfo(Parcel in) {
-        this.targetPackage = PackageRollbackInfo.CREATOR.createFromParcel(in);
+        mRollbackId = in.readInt();
+        mPackages = in.createTypedArrayList(PackageRollbackInfo.CREATOR);
+        mIsStaged = in.readBoolean();
+        mCausePackages = in.createTypedArrayList(VersionedPackage.CREATOR);
+        mCommittedSessionId = in.readInt();
+    }
+
+    /**
+     * Returns a unique identifier for this rollback.
+     */
+    public int getRollbackId() {
+        return mRollbackId;
+    }
+
+    /**
+     * Returns the list of package that are rolled back.
+     */
+    public List<PackageRollbackInfo> getPackages() {
+        return mPackages;
+    }
+
+    /**
+     * Returns true if this rollback requires reboot to take effect after
+     * being committed.
+     */
+    public boolean isStaged() {
+        return mIsStaged;
+    }
+
+    /**
+     * Returns the session ID for the committed rollback for staged rollbacks.
+     * Only applicable for rollbacks that have been committed.
+     */
+    public int getCommittedSessionId() {
+        return mCommittedSessionId;
+    }
+
+    /**
+     * Gets the list of package versions that motivated this rollback.
+     * As provided to {@link #commitRollback} when the rollback was committed.
+     * This is only applicable for rollbacks that have been committed.
+     */
+    public List<VersionedPackage> getCausePackages() {
+        return mCausePackages;
     }
 
     @Override
@@ -55,7 +116,11 @@ public final class RollbackInfo implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel out, int flags) {
-        targetPackage.writeToParcel(out, flags);
+        out.writeInt(mRollbackId);
+        out.writeTypedList(mPackages);
+        out.writeBoolean(mIsStaged);
+        out.writeTypedList(mCausePackages);
+        out.writeInt(mCommittedSessionId);
     }
 
     public static final Parcelable.Creator<RollbackInfo> CREATOR =

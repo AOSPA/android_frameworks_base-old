@@ -28,7 +28,6 @@
 #include "../statscompanion_util.h"
 #include "PowerStatsPuller.h"
 #include "ResourceHealthManagerPuller.h"
-#include "ResourceThermalManagerPuller.h"
 #include "StatsCompanionServicePuller.h"
 #include "StatsPullerManager.h"
 #include "SubsystemSleepStatePuller.h"
@@ -131,9 +130,12 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // battery_voltage
         {android::util::BATTERY_VOLTAGE,
          {.puller = new ResourceHealthManagerPuller(android::util::BATTERY_VOLTAGE)}},
-        // battery_voltage
+        // battery_level
         {android::util::BATTERY_LEVEL,
          {.puller = new ResourceHealthManagerPuller(android::util::BATTERY_LEVEL)}},
+        // battery_cycle_count
+        {android::util::BATTERY_CYCLE_COUNT,
+         {.puller = new ResourceHealthManagerPuller(android::util::BATTERY_CYCLE_COUNT)}},
         // process_memory_state
         {android::util::PROCESS_MEMORY_STATE,
          {.additiveFields = {4, 5, 6, 7, 8, 9},
@@ -147,7 +149,8 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
           .puller =
                   new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_HIGH_WATER_MARK)}},
         // temperature
-        {android::util::TEMPERATURE, {.puller = new ResourceThermalManagerPuller()}},
+        {android::util::TEMPERATURE,
+          {.puller = new StatsCompanionServicePuller(android::util::TEMPERATURE)}},
         // binder_calls
         {android::util::BINDER_CALLS,
          {.additiveFields = {4, 5, 6, 8, 12},
@@ -172,8 +175,8 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         {android::util::CATEGORY_SIZE,
          {.puller = new StatsCompanionServicePuller(android::util::CATEGORY_SIZE)}},
         // Number of fingerprints registered to each user.
-        {android::util::NUM_FINGERPRINTS,
-         {.puller = new StatsCompanionServicePuller(android::util::NUM_FINGERPRINTS)}},
+        {android::util::NUM_FINGERPRINTS_ENROLLED,
+         {.puller = new StatsCompanionServicePuller(android::util::NUM_FINGERPRINTS_ENROLLED)}},
         // ProcStats.
         {android::util::PROC_STATS,
          {.puller = new StatsCompanionServicePuller(android::util::PROC_STATS)}},
@@ -206,9 +209,23 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         {android::util::DEVICE_CALCULATED_POWER_BLAME_OTHER,
          {.puller = new StatsCompanionServicePuller(
                   android::util::DEVICE_CALCULATED_POWER_BLAME_OTHER)}},
+        // DebugElapsedClock.
+        {android::util::DEBUG_ELAPSED_CLOCK,
+         {.additiveFields = {1, 2, 3, 4},
+          .puller = new StatsCompanionServicePuller(android::util::DEBUG_ELAPSED_CLOCK)}},
+        // DebugFailingElapsedClock.
+        {android::util::DEBUG_FAILING_ELAPSED_CLOCK,
+         {.additiveFields = {1, 2, 3, 4},
+          .puller = new StatsCompanionServicePuller(android::util::DEBUG_FAILING_ELAPSED_CLOCK)}},
         // BuildInformation.
         {android::util::BUILD_INFORMATION,
          {.puller = new StatsCompanionServicePuller(android::util::BUILD_INFORMATION)}},
+        // RoleHolder.
+        {android::util::ROLE_HOLDER,
+         {.puller = new StatsCompanionServicePuller(android::util::ROLE_HOLDER)}},
+        // PermissionState.
+        {android::util::DANGEROUS_PERMISSION_STATE,
+         {.puller = new StatsCompanionServicePuller(android::util::DANGEROUS_PERMISSION_STATE)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {
@@ -220,6 +237,9 @@ bool StatsPullerManager::Pull(int tagId, vector<shared_ptr<LogEvent>>* data) {
     if (kAllPullAtomInfo.find(tagId) != kAllPullAtomInfo.end()) {
         bool ret = kAllPullAtomInfo.find(tagId)->second.puller->Pull(data);
         VLOG("pulled %d items", (int)data->size());
+        if (!ret) {
+            StatsdStats::getInstance().notePullFailed(tagId);
+        }
         return ret;
     } else {
         VLOG("Unknown tagId %d", tagId);

@@ -114,11 +114,12 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
         }
 
         /**
-         * Visible for testing and vendor extensions only.
+         * Construct a new Key with a given name and type.
          *
-         * @hide
+         * <p>Normally, applications should use the existing Key definitions in
+         * {@link CaptureRequest}, and not need to construct their own Key objects. However, they
+         * may be useful for testing purposes and for defining custom capture request fields.</p>
          */
-        @UnsupportedAppUsage
         public Key(String name, Class<T> type) {
             mKey = new CameraMetadataNative.Key<T>(name, type);
         }
@@ -2146,7 +2147,6 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
     /**
      * <p>32 characters describing GPS algorithm to
      * include in EXIF.</p>
-     * <p><b>Units</b>: UTF-8 null-terminated string</p>
      * <p>This key is available on all devices.</p>
      * @hide
      */

@@ -223,6 +223,7 @@ class Package():
 class V2Tokenizer(object):
     __slots__ = ["raw"]
 
+    SIGNATURE_PREFIX = "// Signature format: "
     DELIMITER = re.compile(r'\s+|[()@<>;,={}/"!?]|\[\]|\.\.\.')
     STRING_SPECIAL = re.compile(r'["\\]')
 
@@ -297,6 +298,7 @@ class V2Tokenizer(object):
 class V2LineParser(object):
     __slots__ = ["tokenized", "current", "len"]
 
+    FIELD_KINDS = ("field", "property", "enum_constant")
     MODIFIERS = set("public protected internal private abstract default static final transient volatile synchronized native operator sealed strictfp infix inline suspend vararg".split())
     JAVA_LANG_TYPES = set("AbstractMethodError AbstractStringBuilder Appendable ArithmeticException ArrayIndexOutOfBoundsException ArrayStoreException AssertionError AutoCloseable Boolean BootstrapMethodError Byte Character CharSequence Class ClassCastException ClassCircularityError ClassFormatError ClassLoader ClassNotFoundException Cloneable CloneNotSupportedException Comparable Compiler Deprecated Double Enum EnumConstantNotPresentException Error Exception ExceptionInInitializerError Float FunctionalInterface IllegalAccessError IllegalAccessException IllegalArgumentException IllegalMonitorStateException IllegalStateException IllegalThreadStateException IncompatibleClassChangeError IndexOutOfBoundsException InheritableThreadLocal InstantiationError InstantiationException Integer InternalError InterruptedException Iterable LinkageError Long Math NegativeArraySizeException NoClassDefFoundError NoSuchFieldError NoSuchFieldException NoSuchMethodError NoSuchMethodException NullPointerException Number NumberFormatException Object OutOfMemoryError Override Package package-info.java Process ProcessBuilder ProcessEnvironment ProcessImpl Readable ReflectiveOperationException Runnable Runtime RuntimeException RuntimePermission SafeVarargs SecurityException SecurityManager Short StackOverflowError StackTraceElement StrictMath String StringBuffer StringBuilder StringIndexOutOfBoundsException SuppressWarnings System Thread ThreadDeath ThreadGroup ThreadLocal Throwable TypeNotPresentException UNIXProcess UnknownError UnsatisfiedLinkError UnsupportedClassVersionError UnsupportedOperationException VerifyError VirtualMachineError Void".split())
 
@@ -355,7 +357,7 @@ class V2LineParser(object):
         self.parse_eof()
 
     def parse_into_field(self, field):
-        kind = self.parse_one_of("field", "property")
+        kind = self.parse_one_of(*V2LineParser.FIELD_KINDS)
         field.split = [kind]
         annotations = self.parse_annotations()
         if "@Deprecated" in annotations:
@@ -591,6 +593,14 @@ def _parse_stream_to_generator(f):
     sig_format = 1
 
     re_blame = re.compile("^([a-z0-9]{7,}) \(<([^>]+)>.+?\) (.+?)$")
+
+    field_prefixes = map(lambda kind: "    %s" % (kind,), V2LineParser.FIELD_KINDS)
+    def startsWithFieldPrefix(raw):
+        for prefix in field_prefixes:
+            if raw.startswith(prefix):
+                return True
+        return False
+
     for raw in f:
         line += 1
         raw = raw.rstrip()
@@ -601,8 +611,12 @@ def _parse_stream_to_generator(f):
         else:
             blame = None
 
-        if line == 1 and raw == "// Signature format: 2.0":
-            sig_format = 2
+        if line == 1 and raw.startswith("// Signature format: "):
+            sig_format_string = raw[len(V2Tokenizer.SIGNATURE_PREFIX):]
+            if sig_format_string in ["2.0", "3.0"]:
+                sig_format = 2
+            else:
+                raise ValueError("Unknown format: %s" % (sig_format_string,))
         elif raw.startswith("package"):
             pkg = Package(line, raw, blame)
         elif raw.startswith("  ") and raw.endswith("{"):
@@ -611,7 +625,7 @@ def _parse_stream_to_generator(f):
             clazz.ctors.append(Method(clazz, line, raw, blame, sig_format=sig_format))
         elif raw.startswith("    method"):
             clazz.methods.append(Method(clazz, line, raw, blame, sig_format=sig_format))
-        elif raw.startswith("    field") or raw.startswith("    property"):
+        elif startsWithFieldPrefix(raw):
             clazz.fields.append(Field(clazz, line, raw, blame, sig_format=sig_format))
         elif raw.startswith("  }") and clazz:
             yield clazz

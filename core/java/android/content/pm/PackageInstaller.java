@@ -36,20 +36,21 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.FileBridge;
 import android.os.Handler;
-import android.os.Looper;
-import android.os.Message;
+import android.os.HandlerExecutor;
 import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
 import android.os.ParcelableException;
 import android.os.RemoteException;
 import android.os.SystemProperties;
+import android.os.UserHandle;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.ExceptionUtils;
 
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.function.pooled.PooledLambda;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -61,6 +62,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
  * Offers the ability to install, upgrade, and remove applications on the
@@ -659,8 +661,7 @@ public class PackageInstaller {
     }
 
     /** {@hide} */
-    private static class SessionCallbackDelegate extends IPackageInstallerCallback.Stub implements
-            Handler.Callback {
+    static class SessionCallbackDelegate extends IPackageInstallerCallback.Stub {
         private static final int MSG_SESSION_CREATED = 1;
         private static final int MSG_SESSION_BADGING_CHANGED = 2;
         private static final int MSG_SESSION_ACTIVE_CHANGED = 3;
@@ -668,63 +669,41 @@ public class PackageInstaller {
         private static final int MSG_SESSION_FINISHED = 5;
 
         final SessionCallback mCallback;
-        final Handler mHandler;
+        final Executor mExecutor;
 
-        public SessionCallbackDelegate(SessionCallback callback, Looper looper) {
+        SessionCallbackDelegate(SessionCallback callback, Executor executor) {
             mCallback = callback;
-            mHandler = new Handler(looper, this);
-        }
-
-        @Override
-        public boolean handleMessage(Message msg) {
-            final int sessionId = msg.arg1;
-            switch (msg.what) {
-                case MSG_SESSION_CREATED:
-                    mCallback.onCreated(sessionId);
-                    return true;
-                case MSG_SESSION_BADGING_CHANGED:
-                    mCallback.onBadgingChanged(sessionId);
-                    return true;
-                case MSG_SESSION_ACTIVE_CHANGED:
-                    final boolean active = msg.arg2 != 0;
-                    mCallback.onActiveChanged(sessionId, active);
-                    return true;
-                case MSG_SESSION_PROGRESS_CHANGED:
-                    mCallback.onProgressChanged(sessionId, (float) msg.obj);
-                    return true;
-                case MSG_SESSION_FINISHED:
-                    mCallback.onFinished(sessionId, msg.arg2 != 0);
-                    return true;
-            }
-            return false;
+            mExecutor = executor;
         }
 
         @Override
         public void onSessionCreated(int sessionId) {
-            mHandler.obtainMessage(MSG_SESSION_CREATED, sessionId, 0).sendToTarget();
+            mExecutor.execute(PooledLambda.obtainRunnable(SessionCallback::onCreated, mCallback,
+                    sessionId).recycleOnUse());
         }
 
         @Override
         public void onSessionBadgingChanged(int sessionId) {
-            mHandler.obtainMessage(MSG_SESSION_BADGING_CHANGED, sessionId, 0).sendToTarget();
+            mExecutor.execute(PooledLambda.obtainRunnable(SessionCallback::onBadgingChanged,
+                    mCallback, sessionId).recycleOnUse());
         }
 
         @Override
         public void onSessionActiveChanged(int sessionId, boolean active) {
-            mHandler.obtainMessage(MSG_SESSION_ACTIVE_CHANGED, sessionId, active ? 1 : 0)
-                    .sendToTarget();
+            mExecutor.execute(PooledLambda.obtainRunnable(SessionCallback::onActiveChanged,
+                    mCallback, sessionId, active).recycleOnUse());
         }
 
         @Override
         public void onSessionProgressChanged(int sessionId, float progress) {
-            mHandler.obtainMessage(MSG_SESSION_PROGRESS_CHANGED, sessionId, 0, progress)
-                    .sendToTarget();
+            mExecutor.execute(PooledLambda.obtainRunnable(SessionCallback::onProgressChanged,
+                    mCallback, sessionId, progress).recycleOnUse());
         }
 
         @Override
         public void onSessionFinished(int sessionId, boolean success) {
-            mHandler.obtainMessage(MSG_SESSION_FINISHED, sessionId, success ? 1 : 0)
-                    .sendToTarget();
+            mExecutor.execute(PooledLambda.obtainRunnable(SessionCallback::onFinished,
+                    mCallback, sessionId, success).recycleOnUse());
         }
     }
 
@@ -758,7 +737,7 @@ public class PackageInstaller {
     public void registerSessionCallback(@NonNull SessionCallback callback, @NonNull Handler handler) {
         synchronized (mDelegates) {
             final SessionCallbackDelegate delegate = new SessionCallbackDelegate(callback,
-                    handler.getLooper());
+                    new HandlerExecutor(handler));
             try {
                 mInstaller.registerCallback(delegate, mUserId);
             } catch (RemoteException e) {
@@ -1311,6 +1290,28 @@ public class PackageInstaller {
             isStaged = source.readBoolean();
         }
 
+        /** {@hide} */
+        public SessionParams copy() {
+            SessionParams ret = new SessionParams(mode);
+            ret.installFlags = installFlags;
+            ret.installLocation = installLocation;
+            ret.installReason = installReason;
+            ret.sizeBytes = sizeBytes;
+            ret.appPackageName = appPackageName;
+            ret.appIcon = appIcon;  // not a copy.
+            ret.appLabel = appLabel;
+            ret.originatingUri = originatingUri;  // not a copy, but immutable.
+            ret.originatingUid = originatingUid;
+            ret.referrerUri = referrerUri;  // not a copy, but immutable.
+            ret.abiOverride = abiOverride;
+            ret.volumeUuid = volumeUuid;
+            ret.grantedRuntimePermissions = grantedRuntimePermissions;
+            ret.installerPackageName = installerPackageName;
+            ret.isMultiPackage = isMultiPackage;
+            ret.isStaged = isStaged;
+            return ret;
+        }
+
         /**
          * Check if there are hidden options set.
          *
@@ -1543,6 +1544,13 @@ public class PackageInstaller {
             this.isStaged = true;
         }
 
+        /**
+         * Set this session to be installing an APEX package.
+         */
+        public void setInstallAsApex() {
+            installFlags |= PackageManager.INSTALL_APEX;
+        }
+
         /** {@hide} */
         public void dump(IndentingPrintWriter pw) {
             pw.printPair("mode", mode);
@@ -1617,30 +1625,41 @@ public class PackageInstaller {
         private static final int[] NO_SESSIONS = {};
 
         /** @hide */
-        @IntDef(value = {NO_ERROR, VERIFICATION_FAILED, ACTIVATION_FAILED})
+        @IntDef(prefix = { "STAGED_SESSION_" }, value = {
+                STAGED_SESSION_NO_ERROR,
+                STAGED_SESSION_VERIFICATION_FAILED,
+                STAGED_SESSION_ACTIVATION_FAILED,
+                STAGED_SESSION_UNKNOWN})
         @Retention(RetentionPolicy.SOURCE)
         public @interface StagedSessionErrorCode{}
         /**
          * Constant indicating that no error occurred during the preparation or the activation of
          * this staged session.
          */
-        public static final int NO_ERROR = 0;
+        public static final int STAGED_SESSION_NO_ERROR = 0;
 
         /**
          * Constant indicating that an error occurred during the verification phase (pre-reboot) of
          * this staged session.
          */
-        public static final int VERIFICATION_FAILED = 1;
+        public static final int STAGED_SESSION_VERIFICATION_FAILED = 1;
 
         /**
          * Constant indicating that an error occurred during the activation phase (post-reboot) of
          * this staged session.
          */
-        public static final int ACTIVATION_FAILED = 2;
+        public static final int STAGED_SESSION_ACTIVATION_FAILED = 2;
+
+        /**
+         * Constant indicating that an unknown error occurred while processing this staged session.
+         */
+        public static final int STAGED_SESSION_UNKNOWN = 3;
 
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public int sessionId;
+        /** {@hide} */
+        public int userId;
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public String installerPackageName;
@@ -1703,6 +1722,7 @@ public class PackageInstaller {
         /** {@hide} */
         public boolean isSessionFailed;
         private int mStagedSessionErrorCode;
+        private String mStagedSessionErrorMessage;
 
         /** {@hide} */
         @UnsupportedAppUsage
@@ -1712,6 +1732,7 @@ public class PackageInstaller {
         /** {@hide} */
         public SessionInfo(Parcel source) {
             sessionId = source.readInt();
+            userId = source.readInt();
             installerPackageName = source.readString();
             resolvedBaseCodePath = source.readString();
             progress = source.readFloat();
@@ -1742,6 +1763,7 @@ public class PackageInstaller {
             isSessionReady = source.readBoolean();
             isSessionFailed = source.readBoolean();
             mStagedSessionErrorCode = source.readInt();
+            mStagedSessionErrorMessage = source.readString();
         }
 
         /**
@@ -1749,6 +1771,13 @@ public class PackageInstaller {
          */
         public int getSessionId() {
             return sessionId;
+        }
+
+        /**
+         * Return the user associated with this session.
+         */
+        public UserHandle getUser() {
+            return new UserHandle(userId);
         }
 
         /**
@@ -2059,9 +2088,19 @@ public class PackageInstaller {
             return mStagedSessionErrorCode;
         }
 
+        /**
+         * Text description of the error code returned by {@code getStagedSessionErrorCode}, or
+         * empty string if no error was encountered.
+         */
+        public String getStagedSessionErrorMessage() {
+            return mStagedSessionErrorMessage;
+        }
+
         /** {@hide} */
-        public void setStagedSessionErrorCode(@StagedSessionErrorCode int errorCode) {
+        public void setStagedSessionErrorCode(@StagedSessionErrorCode int errorCode,
+                                              String errorMessage) {
             mStagedSessionErrorCode = errorCode;
+            mStagedSessionErrorMessage = errorMessage;
         }
 
         @Override
@@ -2072,6 +2111,7 @@ public class PackageInstaller {
         @Override
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeInt(sessionId);
+            dest.writeInt(userId);
             dest.writeString(installerPackageName);
             dest.writeString(resolvedBaseCodePath);
             dest.writeFloat(progress);
@@ -2099,6 +2139,7 @@ public class PackageInstaller {
             dest.writeBoolean(isSessionReady);
             dest.writeBoolean(isSessionFailed);
             dest.writeInt(mStagedSessionErrorCode);
+            dest.writeString(mStagedSessionErrorMessage);
         }
 
         public static final Parcelable.Creator<SessionInfo>

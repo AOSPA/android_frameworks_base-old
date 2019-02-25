@@ -20,6 +20,7 @@ import static com.android.server.hdmi.Constants.PROPERTY_SYSTEM_AUDIO_CONTROL_ON
 import static com.android.server.hdmi.Constants.USE_LAST_STATE_SYSTEM_AUDIO_CONTROL_ON_POWER_ON;
 
 import android.annotation.Nullable;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
@@ -66,11 +67,6 @@ import java.util.stream.Collectors;
 public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
 
     private static final String TAG = "HdmiCecLocalDeviceAudioSystem";
-
-    // Whether System audio mode is activated or not.
-    // This becomes true only when all system audio sequences are finished.
-    @GuardedBy("mLock")
-    private boolean mSystemAudioActivated;
 
     // Whether the System Audio Control feature is enabled or not. True by default.
     @GuardedBy("mLock")
@@ -268,9 +264,9 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         mTvSystemAudioModeSupport = false;
         // Record the last state of System Audio Control before going to standby
         synchronized (mLock) {
-            mService.writeStringSetting(
+            mService.writeStringSystemProperty(
                     Constants.PROPERTY_LAST_SYSTEM_AUDIO_CONTROL,
-                    mSystemAudioActivated ? "true" : "false");
+                    isSystemAudioActivated() ? "true" : "false");
         }
         terminateSystemAudioMode();
     }
@@ -330,7 +326,7 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
     @ServiceThreadOnly
     protected void setPreferredAddress(int addr) {
         assertRunOnServiceThread();
-        mService.writeStringSetting(
+        mService.writeStringSystemProperty(
                 Constants.PROPERTY_PREFERRED_ADDRESS_AUDIO_SYSTEM, String.valueOf(addr));
     }
 
@@ -458,9 +454,19 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
     @ServiceThreadOnly
     protected boolean handleGiveSystemAudioModeStatus(HdmiCecMessage message) {
         assertRunOnServiceThread();
+        // If the audio system is initiating the system audio mode on and TV asks the sam status at
+        // the same time, respond with true. Since we know TV supports sam in this situation.
+        // If the query comes from STB, we should respond with the current sam status and the STB
+        // should listen to the <Set System Audio Mode> broadcasting.
+        boolean isSystemAudioModeOnOrTurningOn = isSystemAudioActivated();
+        if (!isSystemAudioModeOnOrTurningOn
+                && message.getSource() == Constants.ADDR_TV
+                && hasAction(SystemAudioInitiationActionFromAvr.class)) {
+            isSystemAudioModeOnOrTurningOn = true;
+        }
         mService.sendCecCommand(
                 HdmiCecMessageBuilder.buildReportSystemAudioMode(
-                        mAddress, message.getSource(), mSystemAudioActivated));
+                        mAddress, message.getSource(), isSystemAudioModeOnOrTurningOn));
         return true;
     }
 
@@ -469,7 +475,7 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
     protected boolean handleRequestArcInitiate(HdmiCecMessage message) {
         assertRunOnServiceThread();
         removeAction(ArcInitiationActionFromAvr.class);
-        if (!mService.readBooleanSetting(Constants.PROPERTY_ARC_SUPPORT, true)) {
+        if (!mService.readBooleanSystemProperty(Constants.PROPERTY_ARC_SUPPORT, true)) {
             mService.maySendFeatureAbortCommand(message, Constants.ABORT_UNRECOGNIZED_OPCODE);
         } else if (!isDirectConnectToTv()) {
             HdmiLogger.debug("AVR device is not directly connected with TV");
@@ -775,7 +781,7 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         int maxVolume = mService.getAudioManager().getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         int minVolume = mService.getAudioManager().getStreamMinVolume(AudioManager.STREAM_MUSIC);
         int scaledVolume = VolumeControlAction.scaleToCecVolume(volume, maxVolume);
-        HdmiLogger.debug("Reporting volume %i (%i-%i) as CEC volume %i", volume,
+        HdmiLogger.debug("Reporting volume %d (%d-%d) as CEC volume %d", volume,
                 minVolume, maxVolume, scaledVolume);
 
         mService.sendCecCommand(
@@ -803,7 +809,7 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         }
         HdmiLogger.debug(
                 "System Audio Mode change[old:%b new:%b]",
-                mSystemAudioActivated, newSystemAudioMode);
+                isSystemAudioActivated(), newSystemAudioMode);
         // Wake up device if System Audio Control is turned on
         if (newSystemAudioMode) {
             mService.wakeUp();
@@ -829,7 +835,7 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         boolean currentMuteStatus =
                 mService.getAudioManager().isStreamMute(AudioManager.STREAM_MUSIC);
         if (currentMuteStatus == newSystemAudioMode) {
-            if (mService.readBooleanSetting(
+            if (mService.readBooleanSystemProperty(
                     Constants.PROPERTY_SYSTEM_AUDIO_MODE_MUTING_ENABLE, true)
                             || newSystemAudioMode) {
                 mService.getAudioManager()
@@ -843,8 +849,8 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         }
         updateAudioManagerForSystemAudio(newSystemAudioMode);
         synchronized (mLock) {
-            if (mSystemAudioActivated != newSystemAudioMode) {
-                mSystemAudioActivated = newSystemAudioMode;
+            if (isSystemAudioActivated() != newSystemAudioMode) {
+                mService.setSystemAudioActivated(newSystemAudioMode);
                 mService.announceSystemAudioModeChange(newSystemAudioMode);
             }
         }
@@ -935,9 +941,7 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
     }
 
     protected boolean isSystemAudioActivated() {
-        synchronized (mLock) {
-            return mSystemAudioActivated;
-        }
+        return mService.isSystemAudioActivated();
     }
 
     protected void terminateSystemAudioMode() {
@@ -1075,20 +1079,28 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
 
     // For device to switch to specific TvInput with corresponding URI.
     private void switchToTvInput(String uri) {
-        mService.getContext().startActivity(new Intent(Intent.ACTION_VIEW,
-                TvContract.buildChannelUriForPassthroughInput(uri))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try {
+            mService.getContext().startActivity(new Intent(Intent.ACTION_VIEW,
+                    TvContract.buildChannelUriForPassthroughInput(uri))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (ActivityNotFoundException e) {
+            Slog.e(TAG, "Can't find activity to switch to " + uri, e);
+        }
     }
 
     // For device using TvInput to switch to Home.
     private void switchToHomeTvInput() {
-        Intent activityIntent = new Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_HOME)
-                .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        | Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        mService.getContext().startActivity(activityIntent);
+        try {
+            Intent activityIntent = new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_HOME)
+                    .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    | Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            mService.getContext().startActivity(activityIntent);
+        } catch (ActivityNotFoundException e) {
+            Slog.e(TAG, "Can't find activity to switch to HOME", e);
+        }
     }
 
     @Override
@@ -1131,7 +1143,8 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         if (routingInformationPath == mService.getPhysicalAddress()) {
             HdmiLogger.debug("Current device can't assign valid physical address"
                     + "to devices under it any more. "
-                    + "It's physical address is " + routingInformationPath);
+                    + "It's physical address is "
+                    + routingInformationPath);
             return;
         }
         // Otherwise will switch to the current active port and broadcast routing information.
@@ -1195,7 +1208,6 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
     protected void dump(IndentingPrintWriter pw) {
         pw.println("HdmiCecLocalDeviceAudioSystem:");
         pw.increaseIndent();
-        pw.println("mSystemAudioActivated: " + mSystemAudioActivated);
         pw.println("isRoutingFeatureEnabled " + isRoutingControlFeatureEnabled());
         pw.println("mSystemAudioControlFeatureEnabled: " + mSystemAudioControlFeatureEnabled);
         pw.println("mTvSystemAudioModeSupport: " + mTvSystemAudioModeSupport);
@@ -1208,5 +1220,4 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         pw.decreaseIndent();
         super.dump(pw);
     }
-
 }

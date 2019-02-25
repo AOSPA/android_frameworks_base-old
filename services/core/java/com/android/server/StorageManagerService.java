@@ -112,6 +112,7 @@ import android.os.storage.StorageManagerInternal;
 import android.os.storage.StorageVolume;
 import android.os.storage.VolumeInfo;
 import android.os.storage.VolumeRecord;
+import android.provider.DeviceConfig;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.sysprop.VoldProperties;
@@ -464,6 +465,7 @@ class StorageManagerService extends IStorageManager.Stub
         = { "password", "default", "pattern", "pin" };
 
     private final Context mContext;
+    private final ContentResolver mResolver;
 
     private volatile IVold mVold;
     private volatile IStoraged mStoraged;
@@ -798,6 +800,11 @@ class StorageManagerService extends IStorageManager.Stub
                     refreshIsolatedStorageSettings();
                 }
             });
+        // For now, simply clone property when it changes
+        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.Storage.NAMESPACE,
+                mContext.getMainExecutor(), (namespace, name, value) -> {
+                    refreshIsolatedStorageSettings();
+                });
         refreshIsolatedStorageSettings();
     }
 
@@ -831,6 +838,12 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     private void refreshIsolatedStorageSettings() {
+        // Always copy value from newer DeviceConfig location
+        Settings.Global.putString(mResolver,
+                Settings.Global.ISOLATED_STORAGE_REMOTE,
+                DeviceConfig.getProperty(DeviceConfig.Storage.NAMESPACE,
+                        DeviceConfig.Storage.ISOLATED_STORAGE_ENABLED));
+
         final int local = Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.ISOLATED_STORAGE_LOCAL, 0);
         final int remote = Settings.Global.getInt(mContext.getContentResolver(),
@@ -1524,12 +1537,10 @@ class StorageManagerService extends IStorageManager.Stub
                 SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)));
 
         mContext = context;
+        mResolver = mContext.getContentResolver();
+
         mCallbacks = new Callbacks(FgThread.get().getLooper());
         mLockPatternUtils = new LockPatternUtils(mContext);
-
-        mPmInternal = LocalServices.getService(PackageManagerInternal.class);
-        mUmInternal = LocalServices.getService(UserManagerInternal.class);
-        mAmInternal = LocalServices.getService(ActivityManagerInternal.class);
 
         HandlerThread hthread = new HandlerThread(TAG);
         hthread.start();
@@ -1648,6 +1659,19 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     private void servicesReady() {
+        mPmInternal = LocalServices.getService(PackageManagerInternal.class);
+        mUmInternal = LocalServices.getService(UserManagerInternal.class);
+        mAmInternal = LocalServices.getService(ActivityManagerInternal.class);
+
+        mIPackageManager = IPackageManager.Stub.asInterface(
+                ServiceManager.getService("package"));
+        mIAppOpsService = IAppOpsService.Stub.asInterface(
+                ServiceManager.getService(Context.APP_OPS_SERVICE));
+        try {
+            mIAppOpsService.startWatchingMode(OP_REQUEST_INSTALL_PACKAGES, null, mAppOpsCallback);
+        } catch (RemoteException e) {
+        }
+
         synchronized (mLock) {
             final boolean thisIsolatedStorage = StorageManager.hasIsolatedStorage();
             if (mLastIsolatedStorage == thisIsolatedStorage) {
@@ -1707,8 +1731,8 @@ class StorageManagerService extends IStorageManager.Stub
             int uid, String packageName, int[] ops) {
         long maxTime = 0;
         final List<AppOpsManager.PackageOps> pkgs = manager.getOpsForPackage(uid, packageName, ops);
-        for (AppOpsManager.PackageOps pkg : CollectionUtils.defeatNullable(pkgs)) {
-            for (AppOpsManager.OpEntry op : CollectionUtils.defeatNullable(pkg.getOps())) {
+        for (AppOpsManager.PackageOps pkg : CollectionUtils.emptyIfNull(pkgs)) {
+            for (AppOpsManager.OpEntry op : CollectionUtils.emptyIfNull(pkg.getOps())) {
                 maxTime = Math.max(maxTime, op.getLastAccessTime());
             }
         }
@@ -1720,14 +1744,6 @@ class StorageManagerService extends IStorageManager.Stub
                 .registerScreenObserver(this);
 
         mSystemReady = true;
-        mIPackageManager = IPackageManager.Stub.asInterface(
-                ServiceManager.getService("package"));
-        mIAppOpsService = IAppOpsService.Stub.asInterface(
-                ServiceManager.getService(Context.APP_OPS_SERVICE));
-        try {
-            mIAppOpsService.startWatchingMode(OP_REQUEST_INSTALL_PACKAGES, null, mAppOpsCallback);
-        } catch (RemoteException e) {
-        }
         mHandler.obtainMessage(H_SYSTEM_READY).sendToTarget();
     }
 

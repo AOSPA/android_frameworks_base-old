@@ -26,7 +26,6 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.Intent;
 import android.database.Cursor;
 import android.database.CursorWrapper;
 import android.net.ConnectivityManager;
@@ -37,7 +36,6 @@ import android.os.Environment;
 import android.os.FileUtils;
 import android.os.ParcelFileDescriptor;
 import android.provider.Downloads;
-import android.provider.MediaStore.Images;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.text.TextUtils;
@@ -399,14 +397,14 @@ public class DownloadManager {
         /** if a file is designated as a MediaScanner scannable file, the following value is
          * stored in the database column {@link Downloads.Impl#COLUMN_MEDIA_SCANNED}.
          */
-        private static final int SCANNABLE_VALUE_YES = 0;
+        private static final int SCANNABLE_VALUE_YES = Downloads.Impl.MEDIA_NOT_SCANNED;
         // value of 1 is stored in the above column by DownloadProvider after it is scanned by
         // MediaScanner
         /** if a file is designated as a file that should not be scanned by MediaScanner,
          * the following value is stored in the database column
          * {@link Downloads.Impl#COLUMN_MEDIA_SCANNED}.
          */
-        private static final int SCANNABLE_VALUE_NO = 2;
+        private static final int SCANNABLE_VALUE_NO = Downloads.Impl.MEDIA_NOT_SCANNABLE;
 
         /**
          * This download is visible but only shows in the notifications
@@ -1067,7 +1065,12 @@ public class DownloadManager {
      * COLUMN_* constants.
      */
     public Cursor query(Query query) {
-        Cursor underlyingCursor = query.runQuery(mResolver, UNDERLYING_COLUMNS, mBaseUri);
+        return query(query, UNDERLYING_COLUMNS);
+    }
+
+    /** @hide */
+    public Cursor query(Query query, String[] projection) {
+        Cursor underlyingCursor = query.runQuery(mResolver, projection, mBaseUri);
         if (underlyingCursor == null) {
             return null;
         }
@@ -1257,19 +1260,6 @@ public class DownloadManager {
         }
         if (!before.renameTo(after)) {
             throw new IllegalStateException("Failed to rename to " + after);
-        }
-
-        // Update MediaProvider if necessary
-        if (mimeType.startsWith("image/")) {
-            context.getContentResolver().delete(Images.Media.EXTERNAL_CONTENT_URI,
-                    Images.Media.DATA + "=?",
-                    new String[] {
-                            before.getAbsolutePath()
-                    });
-
-            Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-            intent.setData(Uri.fromFile(after));
-            context.sendBroadcast(intent);
         }
 
         ContentValues values = new ContentValues();

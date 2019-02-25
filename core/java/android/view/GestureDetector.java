@@ -292,27 +292,27 @@ public class GestureDetector {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-            case SHOW_PRESS:
-                mListener.onShowPress(mCurrentDownEvent);
-                break;
-                
-            case LONG_PRESS:
-                dispatchLongPress();
-                break;
-                
-            case TAP:
-                // If the user's finger is still down, do not count it as a tap
-                if (mDoubleTapListener != null) {
-                    if (!mStillDown) {
-                        mDoubleTapListener.onSingleTapConfirmed(mCurrentDownEvent);
-                    } else {
-                        mDeferConfirmSingleTap = true;
-                    }
-                }
-                break;
+                case SHOW_PRESS:
+                    mListener.onShowPress(mCurrentDownEvent);
+                    break;
 
-            default:
-                throw new RuntimeException("Unknown message " + msg); //never
+                case LONG_PRESS:
+                    dispatchLongPress();
+                    break;
+
+                case TAP:
+                    // If the user's finger is still down, do not count it as a tap
+                    if (mDoubleTapListener != null) {
+                        if (!mStillDown) {
+                            mDoubleTapListener.onSingleTapConfirmed(mCurrentDownEvent);
+                        } else {
+                            mDeferConfirmSingleTap = true;
+                        }
+                    }
+                    break;
+
+                default:
+                    throw new RuntimeException("Unknown message " + msg); //never
             }
         }
     }
@@ -427,7 +427,7 @@ public class GestureDetector {
         if (context == null) {
             //noinspection deprecation
             touchSlop = ViewConfiguration.getTouchSlop();
-            doubleTapTouchSlop = touchSlop; // Hack rather than adding a hiden method for this
+            doubleTapTouchSlop = touchSlop; // Hack rather than adding a hidden method for this
             doubleTapSlop = ViewConfiguration.getDoubleTapSlop();
             //noinspection deprecation
             mMinimumFlingVelocity = ViewConfiguration.getMinimumFlingVelocity();
@@ -605,6 +605,10 @@ public class GestureDetector {
                 if (mInLongPress || mInContextClick) {
                     break;
                 }
+
+                final int motionClassification = ev.getClassification();
+                final boolean hasPendingLongPress = mHandler.hasMessages(LONG_PRESS);
+
                 final float scrollX = mLastFocusX - focusX;
                 final float scrollY = mLastFocusY - focusY;
                 if (mIsDoubleTapping) {
@@ -615,6 +619,32 @@ public class GestureDetector {
                     final int deltaY = (int) (focusY - mDownFocusY);
                     int distance = (deltaX * deltaX) + (deltaY * deltaY);
                     int slopSquare = isGeneratedGesture ? 0 : mTouchSlopSquare;
+
+                    final boolean ambiguousGesture =
+                            motionClassification == MotionEvent.CLASSIFICATION_AMBIGUOUS_GESTURE;
+                    final boolean shouldInhibitDefaultAction =
+                            hasPendingLongPress && ambiguousGesture;
+                    if (shouldInhibitDefaultAction) {
+                        // Inhibit default long press
+                        final float multiplier = ViewConfiguration.getAmbiguousGestureMultiplier();
+                        if (distance > slopSquare) {
+                            // The default action here is to remove long press. But if the touch
+                            // slop below gets increased, and we never exceed the modified touch
+                            // slop while still receiving AMBIGUOUS_GESTURE, we risk that *nothing*
+                            // will happen in response to user input. To prevent this,
+                            // reschedule long press with a modified timeout.
+                            mHandler.removeMessages(LONG_PRESS);
+                            final long longPressTimeout = ViewConfiguration.getLongPressTimeout();
+                            mHandler.sendEmptyMessageAtTime(LONG_PRESS, ev.getDownTime()
+                                    + (long) (longPressTimeout * multiplier));
+                        }
+                        // Inhibit default scroll. If a gesture is ambiguous, we prevent scroll
+                        // until the gesture is resolved.
+                        // However, for safety, simply increase the touch slop in case the
+                        // classification is erroneous. Since the value is squared, multiply twice.
+                        slopSquare *= multiplier * multiplier;
+                    }
+
                     if (distance > slopSquare) {
                         handled = mListener.onScroll(mCurrentDownEvent, ev, scrollX, scrollY);
                         mLastFocusX = focusX;
@@ -632,6 +662,12 @@ public class GestureDetector {
                     handled = mListener.onScroll(mCurrentDownEvent, ev, scrollX, scrollY);
                     mLastFocusX = focusX;
                     mLastFocusY = focusY;
+                }
+                final boolean deepPress =
+                        motionClassification == MotionEvent.CLASSIFICATION_DEEP_PRESS;
+                if (deepPress && hasPendingLongPress) {
+                    mHandler.removeMessages(LONG_PRESS);
+                    mHandler.sendEmptyMessage(LONG_PRESS);
                 }
                 break;
 

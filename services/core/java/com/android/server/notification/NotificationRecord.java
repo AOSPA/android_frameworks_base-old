@@ -667,15 +667,15 @@ public final class NotificationRecord {
                                         getUserSentiment()));
                     }
                 }
-                if (signals.containsKey(Adjustment.KEY_SMART_ACTIONS)) {
+                if (signals.containsKey(Adjustment.KEY_CONTEXTUAL_ACTIONS)) {
                     setSystemGeneratedSmartActions(
-                            signals.getParcelableArrayList(Adjustment.KEY_SMART_ACTIONS));
+                            signals.getParcelableArrayList(Adjustment.KEY_CONTEXTUAL_ACTIONS));
                     MetricsLogger.action(getAdjustmentLogMaker()
                             .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_SMART_ACTIONS,
                                     getSystemGeneratedSmartActions().size()));
                 }
-                if (signals.containsKey(Adjustment.KEY_SMART_REPLIES)) {
-                    setSmartReplies(signals.getCharSequenceArrayList(Adjustment.KEY_SMART_REPLIES));
+                if (signals.containsKey(Adjustment.KEY_TEXT_REPLIES)) {
+                    setSmartReplies(signals.getCharSequenceArrayList(Adjustment.KEY_TEXT_REPLIES));
                     MetricsLogger.action(getAdjustmentLogMaker()
                             .addTaggedData(MetricsEvent.ADJUSTMENT_KEY_SMART_REPLIES,
                                     getSmartReplies().size()));
@@ -690,6 +690,8 @@ public final class NotificationRecord {
                                     importance));
                 }
             }
+            // We have now gotten all the information out of the adjustments and can forget them.
+            mAdjustments.clear();
         }
     }
 
@@ -1263,7 +1265,7 @@ public final class NotificationRecord {
     public LogMaker getAdjustmentLogMaker() {
         return getLogMaker()
                 .setCategory(MetricsEvent.NOTIFICATION_ITEM)
-                .setType(MetricsEvent.NOTIFICATION_ASSISTANT_ADJUSTMENT);
+                .setType(MetricsEvent.TYPE_NOTIFICATION_ASSISTANT_ADJUSTMENT);
     }
 
     @VisibleForTesting

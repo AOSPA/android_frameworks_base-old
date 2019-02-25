@@ -15,10 +15,12 @@
  */
 package android.view.contentcapture;
 
-import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+import static android.view.contentcapture.ContentCaptureHelper.DEBUG;
+import static android.view.contentcapture.ContentCaptureHelper.VERBOSE;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.UiThread;
 import android.content.ComponentName;
@@ -31,7 +33,6 @@ import android.util.Log;
 import android.view.contentcapture.ContentCaptureSession.FlushReason;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.SyncResultReceiver;
 
@@ -52,19 +53,19 @@ public final class ContentCaptureManager {
 
     private static final String TAG = ContentCaptureManager.class.getSimpleName();
 
+    /** @hide */
+    public static final int RESULT_CODE_TRUE = 1;
+    /** @hide */
+    public static final int RESULT_CODE_FALSE = 2;
+    /** @hide */
+    public static final int RESULT_CODE_NOT_SERVICE = -1;
+
     /**
      * Timeout for calls to system_server.
      */
     private static final int SYNC_CALLS_TIMEOUT_MS = 5000;
 
-    // TODO(b/121044306): define a way to dynamically set them(for example, using settings?)
-    static final boolean VERBOSE = false;
-    static final boolean DEBUG = true; // STOPSHIP if not set to false
-
     private final Object mLock = new Object();
-
-    @GuardedBy("mLock")
-    private boolean mDisabled;
 
     @NonNull
     private final Context mContext;
@@ -111,11 +112,8 @@ public final class ContentCaptureManager {
     public MainContentCaptureSession getMainContentCaptureSession() {
         synchronized (mLock) {
             if (mMainSession == null) {
-                mMainSession = new MainContentCaptureSession(mContext, mHandler, mService,
-                        mDisabled);
-                if (VERBOSE) {
-                    Log.v(TAG, "getDefaultContentCaptureSession(): created " + mMainSession);
-                }
+                mMainSession = new MainContentCaptureSession(mContext, this, mHandler, mService);
+                if (VERBOSE) Log.v(TAG, "getMainContentCaptureSession(): created " + mMainSession);
             }
             return mMainSession;
         }
@@ -152,30 +150,43 @@ public final class ContentCaptureManager {
      */
     @Nullable
     public ComponentName getServiceComponentName() {
-        if (!isContentCaptureEnabled()) {
-            return null;
-        }
-        // Wait for system server to return the component name.
-        final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
-        mHandler.sendMessage(obtainMessage(
-                ContentCaptureManager::handleReceiverServiceComponentName,
-                this, mContext.getUserId(), resultReceiver));
+        if (!isContentCaptureEnabled()) return null;
 
+        final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         try {
+            mService.getServiceComponentName(resultReceiver);
             return resultReceiver.getParcelableResult();
         } catch (RemoteException e) {
-            // Unable to retrieve component name in a reasonable amount of time.
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
      * Checks whether content capture is enabled for this activity.
+     *
+     * <p>There are many reasons it could be disabled, such as:
+     * <ul>
+     *   <li>App itself disabled content capture through {@link #setContentCaptureEnabled(boolean)}.
+     *   <li>Service disabled content capture for this specific activity.
+     *   <li>Service disabled content capture for all activities of this package.
+     *   <li>Service disabled content capture globally.
+     *   <li>User disabled content capture globally (through Settings).
+     *   <li>OEM disabled content capture globally.
+     *   <li>Transient errors.
+     * </ul>
      */
     public boolean isContentCaptureEnabled() {
+        if (mService == null) return false;
+
+        final MainContentCaptureSession mainSession;
         synchronized (mLock) {
-            return mService != null && !mDisabled;
+            mainSession = mMainSession;
         }
+        // The main session is only set when the activity starts, so we need to return true until
+        // then.
+        if (mainSession != null && mainSession.isDisabled()) return false;
+
+        return true;
     }
 
     /**
@@ -185,26 +196,103 @@ public final class ContentCaptureManager {
      * it on {@link android.app.Activity#onCreate(android.os.Bundle, android.os.PersistableBundle)}.
      */
     public void setContentCaptureEnabled(boolean enabled) {
+        if (DEBUG) {
+            Log.d(TAG, "setContentCaptureEnabled(): setting to " + enabled + " for " + mContext);
+        }
+
         synchronized (mLock) {
             mFlags |= enabled ? 0 : ContentCaptureContext.FLAG_DISABLED_BY_APP;
         }
     }
 
     /**
-     * Called by the ap to request the Content Capture service to remove user-data associated with
+     * Gets whether Content Capture is enabled for the given user.
+     *
+     * <p>This method is typically used by the Content Capture Service settings page, so it can
+     * provide a toggle to enable / disable it.
+     *
+     * @throws SecurityException if caller is not the app that owns the Content Capture service
+     * associated with the user.
+     *
+     * @hide
+     */
+    @SystemApi
+    public boolean isContentCaptureFeatureEnabled() {
+        if (mService == null) return false;
+
+        final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
+        final int resultCode;
+        try {
+            mService.isContentCaptureFeatureEnabled(resultReceiver);
+            resultCode = resultReceiver.getIntResult();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        switch (resultCode) {
+            case RESULT_CODE_TRUE:
+                return true;
+            case RESULT_CODE_FALSE:
+                return false;
+            case RESULT_CODE_NOT_SERVICE:
+                throw new SecurityException("caller is not user's ContentCapture service");
+            default:
+                throw new IllegalStateException("received invalid result: " + resultCode);
+        }
+    }
+
+    /**
+     * Sets whether Content Capture is enabled for the given user.
+     *
+     * @throws SecurityException if caller is not the app that owns the Content Capture service
+     * associated with the user.
+     *
+     * @hide
+     */
+    @SystemApi
+    public void setContentCaptureFeatureEnabled(boolean enabled) {
+        if (DEBUG) Log.d(TAG, "setContentCaptureFeatureEnabled(): setting to " + enabled);
+
+        final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
+        final int resultCode;
+        try {
+            mService.setContentCaptureFeatureEnabled(enabled, resultReceiver);
+            resultCode = resultReceiver.getIntResult();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        switch (resultCode) {
+            case RESULT_CODE_TRUE:
+                // Our work is done here, in our void existance...
+                return;
+            case RESULT_CODE_NOT_SERVICE:
+                throw new SecurityException("caller is not user's ContentCapture service");
+            default:
+                throw new IllegalStateException("received invalid result: " + resultCode);
+        }
+    }
+
+    /**
+     * Called by the app to request the Content Capture service to remove user-data associated with
      * some context.
      *
      * @param request object specifying what user data should be removed.
      */
     public void removeUserData(@NonNull UserDataRemovalRequest request) {
-        //TODO(b/111276913): implement
+        Preconditions.checkNotNull(request);
+
+        try {
+            mService.removeUserData(request);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
     }
 
     /** @hide */
     public void dump(String prefix, PrintWriter pw) {
         synchronized (mLock) {
             pw.print(prefix); pw.println("ContentCaptureManager");
-            pw.print(prefix); pw.print("Disabled: "); pw.println(mDisabled);
+            pw.print(prefix); pw.print("isContentCaptureEnabled(): ");
+            pw.println(isContentCaptureEnabled());
             pw.print(prefix); pw.print("Context: "); pw.println(mContext);
             pw.print(prefix); pw.print("User: "); pw.println(mContext.getUserId());
             if (mService != null) {
@@ -218,16 +306,6 @@ public final class ContentCaptureManager {
             } else {
                 pw.print(prefix); pw.println("No sessions");
             }
-        }
-    }
-
-
-    /** Retrieves the component name of the target content capture service through system_server. */
-    private void handleReceiverServiceComponentName(int userId, IResultReceiver resultReceiver) {
-        try {
-            mService.getReceiverServiceComponentName(userId, resultReceiver);
-        } catch (RemoteException e) {
-            Log.w(TAG, "Unable to retrieve service component name: " + e);
         }
     }
 }

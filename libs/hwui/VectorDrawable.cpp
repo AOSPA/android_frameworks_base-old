@@ -551,6 +551,19 @@ void Tree::draw(SkCanvas* canvas, const SkRect& bounds, const SkPaint& inPaint) 
     SkPaint paint = inPaint;
     paint.setAlpha(mProperties.getRootAlpha() * 255);
 
+    if (canvas->getGrContext() == nullptr) {
+        // Recording to picture, don't use the SkSurface which won't work off of renderthread.
+        Bitmap& bitmap = getBitmapUpdateIfDirty();
+        SkBitmap skiaBitmap;
+        bitmap.getSkBitmap(&skiaBitmap);
+
+        int scaledWidth = SkScalarCeilToInt(mProperties.getScaledWidth());
+        int scaledHeight = SkScalarCeilToInt(mProperties.getScaledHeight());
+        canvas->drawBitmapRect(skiaBitmap, SkRect::MakeWH(scaledWidth, scaledHeight), bounds,
+                               &paint, SkCanvas::kFast_SrcRectConstraint);
+        return;
+    }
+
     SkRect src;
     sk_sp<SkSurface> vdSurface = mCache.getSurface(&src);
     if (vdSurface) {
@@ -593,12 +606,7 @@ void Tree::updateBitmapCache(Bitmap& bitmap, bool useStagingData) {
 
 bool Tree::allocateBitmapIfNeeded(Cache& cache, int width, int height) {
     if (!canReuseBitmap(cache.bitmap.get(), width, height)) {
-#ifndef ANDROID_ENABLE_LINEAR_BLENDING
-        sk_sp<SkColorSpace> colorSpace = nullptr;
-#else
-        sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeSRGB();
-#endif
-        SkImageInfo info = SkImageInfo::MakeN32(width, height, kPremul_SkAlphaType, colorSpace);
+        SkImageInfo info = SkImageInfo::MakeN32(width, height, kPremul_SkAlphaType);
         cache.bitmap = Bitmap::allocateHeapBitmap(info);
         return true;
     }

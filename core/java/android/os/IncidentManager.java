@@ -16,12 +16,24 @@
 
 package android.os;
 
+import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.content.Context;
+import android.net.Uri;
 import android.util.Slog;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Class to take an incident report.
@@ -34,9 +46,331 @@ import android.util.Slog;
 public class IncidentManager {
     private static final String TAG = "IncidentManager";
 
+    /**
+     * Authority for pending report id urls.
+     *
+     * @hide
+     */
+    public static final String URI_SCHEME = "content";
+
+    /**
+     * Authority for pending report id urls.
+     *
+     * @hide
+     */
+    public static final String URI_AUTHORITY = "android.os.IncidentManager";
+
+    /**
+     * Authority for pending report id urls.
+     *
+     * @hide
+     */
+    public static final String URI_PATH = "/pending";
+
+    /**
+     * Query parameter for the uris for the pending report id.
+     *
+     * @hide
+     */
+    public static final String URI_PARAM_ID = "id";
+
+    /**
+     * Query parameter for the uris for the pending report id.
+     *
+     * @hide
+     */
+    public static final String URI_PARAM_CALLING_PACKAGE = "pkg";
+
+    /**
+     * Query parameter for the uris for the pending report id, in wall clock
+     * ({@link System.currentTimeMillis()}) timebase.
+     *
+     * @hide
+     */
+    public static final String URI_PARAM_TIMESTAMP = "t";
+
+    /**
+     * Query parameter for the uris for the pending report id.
+     *
+     * @hide
+     */
+    public static final String URI_PARAM_FLAGS = "flags";
+
+    /**
+     * Do the confirmation with a dialog instead of the default, which is a notification.
+     * It is possible for the dialog to be downgraded to a notification in some cases.
+     */
+    public static final int FLAG_CONFIRMATION_DIALOG = 0x1;
+
+    /**
+     * Flag marking fields and incident reports than can be taken
+     * off the device only via adb.
+     */
+    public static final int PRIVACY_POLICY_LOCAL = 0;
+
+    /**
+     * Flag marking fields and incident reports than can be taken
+     * off the device with contemporary consent.
+     */
+    public static final int PRIVACY_POLICY_EXPLICIT = 100;
+
+    /**
+     * Flag marking fields and incident reports than can be taken
+     * off the device with prior consent.
+     */
+    public static final int PRIVACY_POLICY_AUTO = 200;
+
+    /** @hide */
+    @IntDef(flag = false, prefix = { "PRIVACY_POLICY_" }, value = {
+            PRIVACY_POLICY_AUTO,
+            PRIVACY_POLICY_EXPLICIT,
+            PRIVACY_POLICY_LOCAL,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface PrivacyPolicy {}
+
     private final Context mContext;
 
-    private IIncidentManager mService;
+    private Object mLock = new Object();
+    private IIncidentManager mIncidentService;
+    private IIncidentCompanion mCompanionService;
+
+    /**
+     * Record for a report that has been taken and is pending user authorization
+     * to share it.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static class PendingReport {
+        /**
+         * Encoded data.
+         */
+        private final Uri mUri;
+
+        /**
+         * URI_PARAM_FLAGS from the uri
+         */
+        private final int mFlags;
+
+        /**
+         * URI_PARAM_CALLING_PACKAGE from the uri
+         */
+        private final String mRequestingPackage;
+
+        /**
+         * URI_PARAM_TIMESTAMP from the uri
+         */
+        private final long mTimestamp;
+
+        /**
+         * Constructor.
+         */
+        public PendingReport(@NonNull Uri uri) {
+            int flags = 0;
+            try {
+                flags = Integer.parseInt(uri.getQueryParameter(URI_PARAM_FLAGS));
+            } catch (NumberFormatException ex) {
+                throw new RuntimeException("Invalid URI: No " + URI_PARAM_FLAGS
+                        + " parameter. " + uri);
+            }
+            mFlags = flags;
+
+            String requestingPackage = uri.getQueryParameter(URI_PARAM_CALLING_PACKAGE);
+            if (requestingPackage == null) {
+                throw new RuntimeException("Invalid URI: No " + URI_PARAM_CALLING_PACKAGE
+                        + " parameter. " + uri);
+            }
+            mRequestingPackage = requestingPackage;
+
+            long timestamp = -1;
+            try {
+                timestamp = Long.parseLong(uri.getQueryParameter(URI_PARAM_TIMESTAMP));
+            } catch (NumberFormatException ex) {
+                throw new RuntimeException("Invalid URI: No " + URI_PARAM_TIMESTAMP
+                        + " parameter. " + uri);
+            }
+            mTimestamp = timestamp;
+
+            mUri = uri;
+        }
+
+        /**
+         * Get the package with which this report will be shared.
+         */
+        public @NonNull String getRequestingPackage() {
+            return mRequestingPackage;
+        }
+
+        /**
+         * Get the flags requested for this pending report.
+         *
+         * @see #FLAG_CONFIRMATION_DIALOG
+         */
+        public int getFlags() {
+            return mFlags;
+        }
+
+        /**
+         * Get the time this pending report was posted.
+         */
+        public long getTimestamp() {
+            return mTimestamp;
+        }
+
+        /**
+         * Get the URI associated with this PendingReport.  It can be used to
+         * re-retrieve it from {@link IncidentManager} or set as the data field of
+         * an Intent.
+         */
+        public @NonNull Uri getUri() {
+            return mUri;
+        }
+
+        /**
+         * String representation of this PendingReport.
+         */
+        @Override
+        public @NonNull String toString() {
+            return "PendingReport(" + getUri().toString() + ")";
+        }
+    }
+
+    /**
+     * Record of an incident report that has previously been taken.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static class IncidentReport implements Parcelable, Closeable {
+        private final long mTimestampMs;
+        private final int mPrivacyPolicy;
+        private ParcelFileDescriptor mFileDescriptor;
+
+        public IncidentReport(Parcel in) {
+            mTimestampMs = in.readLong();
+            mPrivacyPolicy = in.readInt();
+            if (in.readInt() != 0) {
+                mFileDescriptor = ParcelFileDescriptor.CREATOR.createFromParcel(in);
+            } else {
+                mFileDescriptor = null;
+            }
+        }
+
+        /**
+         * Close the input stream associated with this entry.
+         */
+        public void close() {
+            try {
+                if (mFileDescriptor != null) {
+                    mFileDescriptor.close();
+                    mFileDescriptor = null;
+                }
+            } catch (IOException e) {
+            }
+        }
+
+        /**
+         * Get the time at which this incident report was taken, in wall clock time
+         * ({@link System#uptimeMillis System.uptimeMillis()} time base).
+         */
+        public long getTimestamp() {
+            return mTimestampMs;
+        }
+
+        /**
+         * Get the privacy level to which this report has been filtered.
+         *
+         * @see #PRIVACY_POLICY_AUTO
+         * @see #PRIVACY_POLICY_EXPLICIT
+         * @see #PRIVACY_POLICY_LOCAL
+         */
+        public long getPrivacyPolicy() {
+            return mPrivacyPolicy;
+        }
+
+        /**
+         * Get the contents of this incident report.
+         */
+        public InputStream getInputStream() throws IOException {
+            if (mFileDescriptor == null) {
+                return null;
+            }
+            return new ParcelFileDescriptor.AutoCloseInputStream(mFileDescriptor);
+        }
+
+        /**
+         * @inheritDoc
+         */
+        public int describeContents() {
+            return mFileDescriptor != null ? Parcelable.CONTENTS_FILE_DESCRIPTOR : 0;
+        }
+
+        /**
+         * @inheritDoc
+         */
+        public void writeToParcel(Parcel out, int flags) {
+            out.writeLong(mTimestampMs);
+            out.writeInt(mPrivacyPolicy);
+            if (mFileDescriptor != null) {
+                out.writeInt(1);
+                mFileDescriptor.writeToParcel(out, flags);
+            } else {
+                out.writeInt(0);
+            }
+        }
+
+        /**
+         * {@link Parcelable.Creator Creator} for {@link IncidentReport}.
+         */
+        public static final Parcelable.Creator<IncidentReport> CREATOR = new Parcelable.Creator() {
+            /**
+             * @inheritDoc
+             */
+            public IncidentReport[] newArray(int size) {
+                return new IncidentReport[size];
+            }
+
+            /**
+             * @inheritDoc
+             */
+            public IncidentReport createFromParcel(Parcel in) {
+                return new IncidentReport(in);
+            }
+        };
+    }
+
+    /**
+     * Listener for the status of an incident report being authroized or denied.
+     *
+     * @see #requestAuthorization
+     * @see #cancelAuthorization
+     */
+    public static class AuthListener {
+        IIncidentAuthListener.Stub mBinder = new IIncidentAuthListener.Stub() {
+            @Override
+            public void onReportApproved() {
+                AuthListener.this.onReportApproved();
+            }
+
+            @Override
+            public void onReportDenied() {
+                AuthListener.this.onReportDenied();
+            }
+        };
+
+        /**
+         * Called when a report is approved.
+         */
+        public void onReportApproved() {
+        }
+
+        /**
+         * Called when a report is denied.
+         */
+        public void onReportDenied() {
+        }
+    }
 
     /**
      * @hide
@@ -46,7 +380,7 @@ public class IncidentManager {
     }
 
     /**
-     * Take an incident report and put it in dropbox.
+     * Take an incident report.
      */
     @RequiresPermission(allOf = {
             android.Manifest.permission.DUMP,
@@ -56,13 +390,123 @@ public class IncidentManager {
         reportIncidentInternal(args);
     }
 
-    private class IncidentdDeathRecipient implements IBinder.DeathRecipient {
-        @Override
-        public void binderDied() {
-            synchronized (this) {
-                mService = null;
-            }
+    /**
+     * Request authorization of an incident report.
+     */
+    @RequiresPermission(android.Manifest.permission.REQUEST_INCIDENT_REPORT_APPROVAL)
+    public void requestAuthorization(int callingUid, String callingPackage, int flags,
+            AuthListener listener) {
+        try {
+            getCompanionServiceLocked().authorizeReport(callingUid, callingPackage, flags,
+                    listener.mBinder);
+        } catch (RemoteException ex) {
+            // System process going down
+            throw new RuntimeException(ex);
         }
+    }
+
+    /**
+     * Cancel a previous request for incident report authorization.
+     */
+    @RequiresPermission(android.Manifest.permission.REQUEST_INCIDENT_REPORT_APPROVAL)
+    public void cancelAuthorization(AuthListener listener) {
+        try {
+            getCompanionServiceLocked().cancelAuthorization(listener.mBinder);
+        } catch (RemoteException ex) {
+            // System process going down
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
+     * Get incident (and bug) reports that are pending approval to share.
+     */
+    @RequiresPermission(android.Manifest.permission.APPROVE_INCIDENT_REPORTS)
+    public List<PendingReport> getPendingReports() {
+        List<String> strings;
+        try {
+            strings = getCompanionServiceLocked().getPendingReports();
+        } catch (RemoteException ex) {
+            throw new RuntimeException(ex);
+        }
+        final int size = strings.size();
+        ArrayList<PendingReport> result = new ArrayList(size);
+        for (int i = 0; i < size; i++) {
+            result.add(new PendingReport(Uri.parse(strings.get(i))));
+        }
+        return result;
+    }
+
+    /**
+     * Allow this report to be shared with the given app.
+     */
+    @RequiresPermission(android.Manifest.permission.APPROVE_INCIDENT_REPORTS)
+    public void approveReport(Uri uri) {
+        try {
+            getCompanionServiceLocked().approveReport(uri.toString());
+        } catch (RemoteException ex) {
+            // System process going down
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
+     * Do not allow this report to be shared with the given app.
+     */
+    @RequiresPermission(android.Manifest.permission.APPROVE_INCIDENT_REPORTS)
+    public void denyReport(Uri uri) {
+        try {
+            getCompanionServiceLocked().denyReport(uri.toString());
+        } catch (RemoteException ex) {
+            // System process going down
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
+     * Get the incident reports that are available for upload for the supplied
+     * broadcast recevier.
+     *
+     * @param receiverClass Class name of broadcast receiver in this package that
+     *   was registered to retrieve reports.
+     *
+     * @return A list of {@link Uri Uris} that are awaiting upload.
+     */
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.DUMP,
+            android.Manifest.permission.PACKAGE_USAGE_STATS
+    })
+    public @NonNull List<Uri> getIncidentReportList(String receiverClass) {
+        throw new RuntimeException("implement me");
+    }
+
+    /**
+     * Get the incident report with the given URI id.
+     *
+     * @param uri Identifier of the incident report.
+     *
+     * @return an IncidentReport object, or null if the incident report has been
+     *  expired from disk.
+     */
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.DUMP,
+            android.Manifest.permission.PACKAGE_USAGE_STATS
+    })
+    public @Nullable IncidentReport getIncidentReport(Uri uri) {
+        throw new RuntimeException("implement me");
+    }
+
+    /**
+     * Delete the incident report with the given URI id.
+     *
+     * @param uri Identifier of the incident report.
+     */
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.DUMP,
+            android.Manifest.permission.PACKAGE_USAGE_STATS
+    })
+    public void deleteIncidentReports(Uri uri) {
+        throw new RuntimeException("implement me");
     }
 
     private void reportIncidentInternal(IncidentReportArgs args) {
@@ -79,22 +523,47 @@ public class IncidentManager {
     }
 
     private IIncidentManager getIIncidentManagerLocked() throws RemoteException {
-        if (mService != null) {
-            return mService;
+        if (mIncidentService != null) {
+            return mIncidentService;
         }
 
-        synchronized (this) {
-            if (mService != null) {
-                return mService;
+        synchronized (mLock) {
+            if (mIncidentService != null) {
+                return mIncidentService;
             }
-            mService = IIncidentManager.Stub.asInterface(
+            mIncidentService = IIncidentManager.Stub.asInterface(
                 ServiceManager.getService(Context.INCIDENT_SERVICE));
-            if (mService != null) {
-                mService.asBinder().linkToDeath(new IncidentdDeathRecipient(), 0);
+            if (mIncidentService != null) {
+                mIncidentService.asBinder().linkToDeath(() -> {
+                    synchronized (mLock) {
+                        mIncidentService = null;
+                    }
+                }, 0);
             }
-            return mService;
+            return mIncidentService;
         }
     }
 
+    private IIncidentCompanion getCompanionServiceLocked() throws RemoteException {
+        if (mCompanionService != null) {
+            return mCompanionService;
+        }
+
+        synchronized (this) {
+            if (mCompanionService != null) {
+                return mCompanionService;
+            }
+            mCompanionService = IIncidentCompanion.Stub.asInterface(
+                ServiceManager.getService(Context.INCIDENT_COMPANION_SERVICE));
+            if (mCompanionService != null) {
+                mCompanionService.asBinder().linkToDeath(() -> {
+                    synchronized (mLock) {
+                        mCompanionService = null;
+                    }
+                }, 0);
+            }
+            return mCompanionService;
+        }
+    }
 }
 

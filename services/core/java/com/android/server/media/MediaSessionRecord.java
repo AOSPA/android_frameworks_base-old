@@ -27,14 +27,14 @@ import android.media.MediaMetadata;
 import android.media.Rating;
 import android.media.VolumeProvider;
 import android.media.session.ControllerCallbackLink;
-import android.media.session.ISession;
-import android.media.session.ISessionController;
+import android.media.session.ControllerLink;
 import android.media.session.MediaController;
 import android.media.session.MediaController.PlaybackInfo;
 import android.media.session.MediaSession;
 import android.media.session.MediaSession.QueueItem;
 import android.media.session.PlaybackState;
 import android.media.session.SessionCallbackLink;
+import android.media.session.SessionLink;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
@@ -77,8 +77,9 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
     private final int mUserId;
     private final String mPackageName;
     private final String mTag;
-    private final ControllerStub mController;
-    private final SessionStub mSession;
+    private final ControllerLink mController;
+    private final MediaSession.Token mSessionToken;
+    private final SessionLink mSession;
     private final SessionCb mSessionCb;
     private final MediaSessionService.ServiceImpl mService;
     private final Context mContext;
@@ -127,8 +128,9 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         mUserId = userId;
         mPackageName = ownerPackageName;
         mTag = tag;
-        mController = new ControllerStub();
-        mSession = new SessionStub();
+        mController = new ControllerLink(new ControllerStub());
+        mSessionToken = new MediaSession.Token(mController);
+        mSession = new SessionLink(new SessionStub());
         mSessionCb = new SessionCb(cb);
         mService = service;
         mContext = mService.getContext();
@@ -139,21 +141,30 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
     }
 
     /**
-     * Get the binder for the {@link MediaSession}.
+     * Get the session link for the {@link MediaSession}.
      *
-     * @return The session binder apps talk to.
+     * @return The session link apps talk to.
      */
-    public ISession getSessionBinder() {
+    public SessionLink getSessionBinder() {
         return mSession;
     }
 
     /**
-     * Get the binder for the {@link MediaController}.
+     * Get the controller link for the {@link MediaController}.
      *
-     * @return The controller binder apps talk to.
+     * @return The controller link apps talk to.
      */
-    public ISessionController getControllerBinder() {
+    public ControllerLink getControllerLink() {
         return mController;
+    }
+
+    /**
+     * Get the session token for creating {@link MediaController}.
+     *
+     * @return The session token.
+     */
+    public MediaSession.Token getSessionToken() {
+        return mSessionToken;
     }
 
     /**
@@ -271,6 +282,10 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
                     || direction == AudioManager.ADJUST_UNMUTE) {
                 Log.w(TAG, "Muting remote playback is not supported");
                 return;
+            }
+            if (DEBUG) {
+                Log.w(TAG, "adjusting volume, pkg=" + packageName + ", asSystemService="
+                        + asSystemService + ", dir=" + direction);
             }
             mSessionCb.adjustVolume(packageName, pid, uid, caller, asSystemService, direction);
 
@@ -445,9 +460,25 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         return mSessionCb.mCb;
     }
 
-    public void sendMediaButton(String packageName, int pid, int uid, boolean asSystemService,
+    /**
+     * Sends media button.
+     *
+     * @param packageName caller package name
+     * @param pid caller pid
+     * @param uid caller uid
+     * @param asSystemService {@code true} if the event sent to the session as if it was come from
+     *          the system service instead of the app process.
+     * @param ke key events
+     * @param sequenceId (optional) sequence id. Use this only when a wake lock is needed.
+     * @param cb (optional) result receiver to receive callback. Use this only when a wake lock is
+     *           needed.
+     * @return {@code true} if the attempt to send media button was successfuly.
+     *         {@code false} otherwise.
+     */
+    public boolean sendMediaButton(String packageName, int pid, int uid, boolean asSystemService,
             KeyEvent ke, int sequenceId, ResultReceiver cb) {
-        mSessionCb.sendMediaButton(packageName, pid, uid, asSystemService, ke, sequenceId, cb);
+        return mSessionCb.sendMediaButton(packageName, pid, uid, asSystemService, ke, sequenceId,
+                cb);
     }
 
     public void dump(PrintWriter pw, String prefix) {
@@ -481,6 +512,10 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
             final String callingOpPackageName, final int callingPid, final int callingUid,
             final boolean asSystemService, final boolean useSuggested,
             final int previousFlagPlaySound) {
+        if (DEBUG) {
+            Log.w(TAG, "adjusting local volume, stream=" + stream + ", dir=" + direction
+                    + ", asSystemService=" + asSystemService + ", useSuggested=" + useSuggested);
+        }
         // Must use opPackageName for adjusting volumes with UID.
         final String opPackageName;
         final int uid;
@@ -642,7 +677,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
             if (mDestroyed) {
                 return;
             }
-            PlaybackInfo info = mController.getVolumeAttributes();
+            PlaybackInfo info = getVolumeAttributes();
             for (int i = mControllerCallbackHolders.size() - 1; i >= 0; i--) {
                 ControllerCallbackLinkHolder holder = mControllerCallbackHolders.get(i);
                 try {
@@ -750,6 +785,25 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         return -1;
     }
 
+    private PlaybackInfo getVolumeAttributes() {
+        int volumeType;
+        AudioAttributes attributes;
+        synchronized (mLock) {
+            if (mVolumeType == PlaybackInfo.PLAYBACK_TYPE_REMOTE) {
+                int current = mOptimisticVolume != -1 ? mOptimisticVolume : mCurrentVolume;
+                return new PlaybackInfo(mVolumeType, mVolumeControlType, mMaxVolume, current,
+                        mAudioAttrs);
+            }
+            volumeType = mVolumeType;
+            attributes = mAudioAttrs;
+        }
+        int stream = AudioAttributes.toLegacyStreamType(attributes);
+        int max = mAudioManager.getStreamMaxVolume(stream);
+        int current = mAudioManager.getStreamVolume(stream);
+        return new PlaybackInfo(volumeType, VolumeProvider.VOLUME_CONTROL_ABSOLUTE, max,
+                current, attributes);
+    }
+
     private final Runnable mClearOptimisticVolumeRunnable = new Runnable() {
         @Override
         public void run() {
@@ -761,9 +815,9 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         }
     };
 
-    private final class SessionStub extends ISession.Stub {
+    private final class SessionStub extends SessionLink.SessionStub {
         @Override
-        public void destroy() {
+        public void destroySession() {
             final long token = Binder.clearCallingIdentity();
             try {
                 mService.destroySession(MediaSessionRecord.this);
@@ -779,7 +833,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         }
 
         @Override
-        public ISessionController getController() {
+        public ControllerLink getController() {
             return mController;
         }
 
@@ -798,8 +852,8 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         @Override
         public void setFlags(int flags) {
             if ((flags & MediaSession.FLAG_EXCLUSIVE_GLOBAL_PRIORITY) != 0) {
-                int pid = getCallingPid();
-                int uid = getCallingUid();
+                int pid = Binder.getCallingPid();
+                int uid = Binder.getCallingUid();
                 mService.enforcePhoneStatePermission(pid, uid);
             }
             mFlags = flags;
@@ -1183,7 +1237,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         }
     }
 
-    class ControllerStub extends ISessionController.Stub {
+    class ControllerStub extends ControllerLink.ControllerStub {
         @Override
         public void sendCommand(String packageName, ControllerCallbackLink caller,
                 String command, Bundle args, ResultReceiver cb) {
@@ -1193,13 +1247,13 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
 
         @Override
         public boolean sendMediaButton(String packageName, ControllerCallbackLink cb,
-                boolean asSystemService, KeyEvent keyEvent) {
+                KeyEvent keyEvent) {
             return mSessionCb.sendMediaButton(packageName, Binder.getCallingPid(),
-                    Binder.getCallingUid(), cb, asSystemService, keyEvent);
+                    Binder.getCallingUid(), cb, false, keyEvent);
         }
 
         @Override
-        public void registerCallbackListener(String packageName, ControllerCallbackLink cb) {
+        public void registerCallback(String packageName, ControllerCallbackLink cb) {
             synchronized (mLock) {
                 // If this session is already destroyed tell the caller and
                 // don't add them.
@@ -1223,7 +1277,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         }
 
         @Override
-        public void unregisterCallbackListener(ControllerCallbackLink cb) {
+        public void unregisterCallback(ControllerCallbackLink cb) {
             synchronized (mLock) {
                 int index = getControllerHolderIndexForCb(cb);
                 if (index != -1) {
@@ -1257,34 +1311,18 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
 
         @Override
         public PlaybackInfo getVolumeAttributes() {
-            int volumeType;
-            AudioAttributes attributes;
-            synchronized (mLock) {
-                if (mVolumeType == PlaybackInfo.PLAYBACK_TYPE_REMOTE) {
-                    int current = mOptimisticVolume != -1 ? mOptimisticVolume : mCurrentVolume;
-                    return new PlaybackInfo(mVolumeType, mVolumeControlType, mMaxVolume, current,
-                            mAudioAttrs);
-                }
-                volumeType = mVolumeType;
-                attributes = mAudioAttrs;
-            }
-            int stream = AudioAttributes.toLegacyStreamType(attributes);
-            int max = mAudioManager.getStreamMaxVolume(stream);
-            int current = mAudioManager.getStreamVolume(stream);
-            return new PlaybackInfo(volumeType, VolumeProvider.VOLUME_CONTROL_ABSOLUTE, max,
-                    current, attributes);
+            return MediaSessionRecord.this.getVolumeAttributes();
         }
 
         @Override
         public void adjustVolume(String packageName, String opPackageName,
-                ControllerCallbackLink caller, boolean asSystemService, int direction,
-                int flags) {
+                ControllerCallbackLink caller, int direction, int flags) {
             int pid = Binder.getCallingPid();
             int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
             try {
                 MediaSessionRecord.this.adjustVolume(packageName, opPackageName, pid, uid, caller,
-                        asSystemService, direction, flags, false /* useSuggested */);
+                        false, direction, flags, false /* useSuggested */);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1448,11 +1486,6 @@ public class MediaSessionRecord implements IBinder.DeathRecipient {
         @Override
         public int getRatingType() {
             return mRatingType;
-        }
-
-        @Override
-        public boolean isTransportControlEnabled() {
-            return MediaSessionRecord.this.isTransportControlEnabled();
         }
     }
 

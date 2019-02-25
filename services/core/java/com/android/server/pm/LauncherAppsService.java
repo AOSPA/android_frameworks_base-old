@@ -25,6 +25,7 @@ import android.app.AppGlobals;
 import android.app.IApplicationThread;
 import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
+import android.app.usage.UsageStatsManagerInternal;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -33,8 +34,11 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ILauncherApps;
 import android.content.pm.IOnAppsChangedListener;
+import android.content.pm.IPackageInstallerCallback;
+import android.content.pm.LauncherApps;
 import android.content.pm.LauncherApps.ShortcutQuery;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller.SessionInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
@@ -42,6 +46,8 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutServiceInternal;
 import android.content.pm.ShortcutServiceInternal.ShortcutChangeListener;
+import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
 import android.content.pm.UserInfo;
 import android.graphics.Rect;
 import android.net.Uri;
@@ -52,25 +58,36 @@ import android.os.IInterface;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.provider.Settings;
+import android.util.ByteStringUtils;
 import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.BackgroundThread;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.StatLogger;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Service that manages requests and callbacks for launchers that support
@@ -108,25 +125,46 @@ public class LauncherAppsService extends SystemService {
     static class LauncherAppsImpl extends ILauncherApps.Stub {
         private static final boolean DEBUG = false;
         private static final String TAG = "LauncherAppsService";
+
+        // Stats
+        @VisibleForTesting
+        interface Stats {
+            int INIT_VOUCHED_SIGNATURES = 0;
+            int COUNT = INIT_VOUCHED_SIGNATURES + 1;
+        }
+        private final StatLogger mStatLogger = new StatLogger(new String[] {
+                "initVouchedSignatures"
+        });
+
         private final Context mContext;
         private final UserManager mUm;
         private final UserManagerInternal mUserManagerInternal;
+        private final UsageStatsManagerInternal mUsageStatsManagerInternal;
         private final ActivityManagerInternal mActivityManagerInternal;
         private final ActivityTaskManagerInternal mActivityTaskManagerInternal;
         private final ShortcutServiceInternal mShortcutServiceInternal;
         private final PackageCallbackList<IOnAppsChangedListener> mListeners
                 = new PackageCallbackList<IOnAppsChangedListener>();
         private final DevicePolicyManager mDpm;
+        private final ConcurrentHashMap<UserHandle, Set<String>> mVouchedSignaturesByUser;
+        private final Set<String> mVouchProviders;
 
         private final MyPackageMonitor mPackageMonitor = new MyPackageMonitor();
+        private final VouchesChangedMonitor mVouchesChangedMonitor = new VouchesChangedMonitor();
 
         private final Handler mCallbackHandler;
+
+        private final Object mVouchedSignaturesLocked = new Object();
+
+        private PackageInstallerService mPackageInstallerService;
 
         public LauncherAppsImpl(Context context) {
             mContext = context;
             mUm = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
             mUserManagerInternal = Preconditions.checkNotNull(
                     LocalServices.getService(UserManagerInternal.class));
+            mUsageStatsManagerInternal = Preconditions.checkNotNull(
+                    LocalServices.getService(UsageStatsManagerInternal.class));
             mActivityManagerInternal = Preconditions.checkNotNull(
                     LocalServices.getService(ActivityManagerInternal.class));
             mActivityTaskManagerInternal = Preconditions.checkNotNull(
@@ -136,6 +174,9 @@ public class LauncherAppsService extends SystemService {
             mShortcutServiceInternal.addListener(mPackageMonitor);
             mCallbackHandler = BackgroundThread.getHandler();
             mDpm = (DevicePolicyManager) mContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
+            mVouchedSignaturesByUser = new ConcurrentHashMap<>();
+            mVouchProviders = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+            mVouchesChangedMonitor.register(mContext, UserHandle.ALL, true, mCallbackHandler);
         }
 
         @VisibleForTesting
@@ -168,8 +209,7 @@ public class LauncherAppsService extends SystemService {
         }
 
         /*
-         * @see android.content.pm.ILauncherApps#addOnAppsChangedListener(
-         *          android.content.pm.IOnAppsChangedListener)
+         * @see android.content.pm.ILauncherApps#addOnAppsChangedListener
          */
         @Override
         public void addOnAppsChangedListener(String callingPackage, IOnAppsChangedListener listener)
@@ -192,8 +232,7 @@ public class LauncherAppsService extends SystemService {
         }
 
         /*
-         * @see android.content.pm.ILauncherApps#removeOnAppsChangedListener(
-         *          android.content.pm.IOnAppsChangedListener)
+         * @see android.content.pm.ILauncherApps#removeOnAppsChangedListener
          */
         @Override
         public void removeOnAppsChangedListener(IOnAppsChangedListener listener)
@@ -207,6 +246,44 @@ public class LauncherAppsService extends SystemService {
                     stopWatchingPackageBroadcasts();
                 }
             }
+        }
+
+        /**
+         * @see android.content.pm.ILauncherApps#registerPackageInstallerCallback
+         */
+        @Override
+        public void registerPackageInstallerCallback(String callingPackage,
+                IPackageInstallerCallback callback) {
+            verifyCallingPackage(callingPackage);
+            UserHandle callingIdUserHandle = new UserHandle(getCallingUserId());
+            getPackageInstallerService().registerCallback(callback, eventUserId ->
+                            isEnabledProfileOf(callingIdUserHandle,
+                                    new UserHandle(eventUserId), "shouldReceiveEvent"));
+        }
+
+        @Override
+        public ParceledListSlice<SessionInfo> getAllSessions(String callingPackage) {
+            verifyCallingPackage(callingPackage);
+            List<SessionInfo> sessionInfos = new ArrayList<>();
+            int[] userIds = mUm.getEnabledProfileIds(getCallingUserId());
+            long token = Binder.clearCallingIdentity();
+            try {
+                for (int userId : userIds) {
+                    sessionInfos.addAll(getPackageInstallerService().getAllSessions(userId)
+                            .getList());
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+            return new ParceledListSlice<>(sessionInfos);
+        }
+
+        private PackageInstallerService getPackageInstallerService() {
+            if (mPackageInstallerService == null) {
+                mPackageInstallerService = ((PackageInstallerService) ((PackageManagerService)
+                        ServiceManager.getService("package")).getPackageInstaller());
+            }
+            return mPackageInstallerService;
         }
 
         /**
@@ -355,7 +432,7 @@ public class LauncherAppsService extends SystemService {
                     }
                     ApplicationInfo appInfo = pmInt.getApplicationInfo(packageName, /*flags*/ 0,
                             callingUid, user.getIdentifier());
-                    if (shouldShowHiddenApp(appInfo)) {
+                    if (shouldShowHiddenApp(user, appInfo)) {
                         ResolveInfo info = getHiddenAppActivityInfo(packageName, callingUid, user);
                         if (info != null) {
                             result.add(info);
@@ -371,7 +448,7 @@ public class LauncherAppsService extends SystemService {
                         user.getIdentifier(), callingUid);
                 for (ApplicationInfo applicationInfo : installedPackages) {
                     if (!visiblePackages.contains(applicationInfo.packageName)) {
-                        if (!shouldShowHiddenApp(applicationInfo)) {
+                        if (!shouldShowHiddenApp(user, applicationInfo)) {
                             continue;
                         }
                         ResolveInfo info = getHiddenAppActivityInfo(applicationInfo.packageName,
@@ -387,11 +464,149 @@ public class LauncherAppsService extends SystemService {
             }
         }
 
-        private static boolean shouldShowHiddenApp(ApplicationInfo appInfo) {
+        private boolean shouldShowHiddenApp(UserHandle user, ApplicationInfo appInfo) {
             if (appInfo == null || appInfo.isSystemApp() || appInfo.isUpdatedSystemApp()) {
                 return false;
             }
+            if (!mVouchedSignaturesByUser.containsKey(user)) {
+                initVouchedSignatures(user);
+            }
+            if (isManagedProfileAdmin(user, appInfo.packageName)) {
+                return false;
+            }
+            if (mVouchProviders.contains(appInfo.packageName)) {
+                // If it's a vouching packages then we must show hidden app
+                return true;
+            }
+            // If app's signature is in vouch list, do not show hidden app
+            final Set<String> vouches = mVouchedSignaturesByUser.get(user);
+            try {
+                final PackageInfo pkgInfo = mContext.getPackageManager().getPackageInfo(
+                        appInfo.packageName, PackageManager.GET_SIGNING_CERTIFICATES);
+                final Signature[] signatures = getLatestSignatures(pkgInfo.signingInfo);
+                // If any of the signatures appears in vouches, then we don't show hidden app
+                for (Signature signature : signatures) {
+                    final String certDigest = computePackageCertDigest(signature);
+                    if (vouches.contains(certDigest)) {
+                        return false;
+                    }
+                }
+            } catch (PackageManager.NameNotFoundException e) {
+                // Should not happen
+            }
             return true;
+        }
+
+        private boolean isManagedProfileAdmin(UserHandle user, String packageName) {
+            final List<UserInfo> userInfoList = mUm.getProfiles(user.getIdentifier());
+            for (int i = 0; i < userInfoList.size(); i++) {
+                UserInfo userInfo = userInfoList.get(i);
+                if (!userInfo.isManagedProfile()) {
+                    continue;
+                }
+                ComponentName componentName = mDpm.getProfileOwnerAsUser(userInfo.getUserHandle());
+                if (componentName == null) {
+                    continue;
+                }
+                if (componentName.getPackageName().equals(packageName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @VisibleForTesting
+        static String computePackageCertDigest(Signature signature) {
+            MessageDigest messageDigest;
+            try {
+                messageDigest = MessageDigest.getInstance("SHA1");
+            } catch (NoSuchAlgorithmException e) {
+                // Should not happen
+                return null;
+            }
+            messageDigest.update(signature.toByteArray());
+            final byte[] digest = messageDigest.digest();
+            return ByteStringUtils.toHexString(digest);
+        }
+
+        @VisibleForTesting
+        static Signature[] getLatestSignatures(SigningInfo signingInfo) {
+            if (signingInfo.hasMultipleSigners()) {
+                return signingInfo.getApkContentsSigners();
+            } else {
+                final Signature[] signatures = signingInfo.getSigningCertificateHistory();
+                return new Signature[]{signatures[0]};
+            }
+        }
+
+        private void updateVouches(String packageName, UserHandle user) {
+            final PackageManagerInternal pmInt =
+                    LocalServices.getService(PackageManagerInternal.class);
+            ApplicationInfo appInfo = pmInt.getApplicationInfo(packageName,
+                    PackageManager.GET_META_DATA, Binder.getCallingUid(), user.getIdentifier());
+            if (appInfo == null) {
+                Log.w(TAG, "appInfo " + packageName + " is null");
+                return;
+            }
+            updateVouches(appInfo, user);
+        }
+
+        private void updateVouches(ApplicationInfo appInfo, UserHandle user) {
+            if (appInfo == null || appInfo.metaData == null) {
+                // No meta-data
+                return;
+            }
+            int tokenResourceId = appInfo.metaData.getInt(LauncherApps.VOUCHED_CERTS_KEY);
+            if (tokenResourceId == 0) {
+                // No xml file
+                return;
+            }
+            mVouchProviders.add(appInfo.packageName);
+            Set<String> vouches = mVouchedSignaturesByUser.get(user);
+            try {
+                List<String> signatures = Arrays.asList(
+                        mContext.getPackageManager().getResourcesForApplication(
+                                appInfo.packageName).getStringArray(tokenResourceId));
+                for (String signature : signatures) {
+                    vouches.add(signature.toUpperCase());
+                }
+            } catch (PackageManager.NameNotFoundException e) {
+                // Should not happen
+            }
+        }
+
+        private void initVouchedSignatures(UserHandle user) {
+            synchronized (mVouchedSignaturesLocked) {
+                if (mVouchedSignaturesByUser.contains(user)) {
+                    return;
+                }
+                final long startTime = mStatLogger.getTime();
+
+                Set<String> vouches = Collections.newSetFromMap(
+                        new ConcurrentHashMap<String, Boolean>());
+
+                final int callingUid = injectBinderCallingUid();
+                long ident = Binder.clearCallingIdentity();
+                try {
+                    final PackageManagerInternal pmInt =
+                            LocalServices.getService(PackageManagerInternal.class);
+                    List<ApplicationInfo> installedPackages = pmInt.getInstalledApplications(
+                            PackageManager.GET_META_DATA, user.getIdentifier(), callingUid);
+                    for (ApplicationInfo appInfo : installedPackages) {
+                        updateVouches(appInfo, user);
+                    }
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
+                mVouchedSignaturesByUser.putIfAbsent(user, vouches);
+                mStatLogger.logDurationStat(Stats.INIT_VOUCHED_SIGNATURES, startTime);
+            }
+        }
+
+        @Override
+        public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) return;
+            mStatLogger.dump(pw, "  ");
         }
 
         @Override
@@ -520,6 +735,30 @@ public class LauncherAppsService extends SystemService {
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
+        }
+
+        @Override
+        public LauncherApps.AppUsageLimit getAppUsageLimit(String callingPackage,
+                String packageName, UserHandle user) {
+            verifyCallingPackage(callingPackage);
+            if (!canAccessProfile(user.getIdentifier(), "Cannot access usage limit")) {
+                return null;
+            }
+
+            final PackageManagerInternal pmi =
+                    LocalServices.getService(PackageManagerInternal.class);
+            final ComponentName cn = pmi.getDefaultHomeActivity(user.getIdentifier());
+            if (!cn.getPackageName().equals(callingPackage)) {
+                throw new SecurityException("Caller is not the active launcher");
+            }
+
+            final UsageStatsManagerInternal.AppUsageLimitData data =
+                    mUsageStatsManagerInternal.getAppUsageLimit(packageName, user);
+            if (data == null) {
+                return null;
+            }
+            return new LauncherApps.AppUsageLimit(
+                    data.getTotalUsageLimit(), data.getUsageRemaining());
         }
 
         private void ensureShortcutPermission(@NonNull String callingPackage) {
@@ -660,10 +899,37 @@ public class LauncherAppsService extends SystemService {
                         PackageManager.MATCH_DIRECT_BOOT_AWARE
                                 | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
                         callingUid, user.getIdentifier());
-                return info != null;
+                // Note we don't check "exported" because if the caller has the same UID as the
+                // callee's UID, it can still be launched.
+                // (If an app doesn't export a front door activity and causes issues with the
+                // launcher, that's just the app's bug.)
+                return info != null && info.isEnabled();
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
+        }
+
+        @Override
+        public void startSessionDetailsActivityAsUser(IApplicationThread caller,
+                String callingPackage, SessionInfo sessionInfo, Rect sourceBounds,
+                Bundle opts, UserHandle userHandle) throws RemoteException {
+            int userId = userHandle.getIdentifier();
+            if (!canAccessProfile(userId, "Cannot start details activity")) {
+                return;
+            }
+
+            Intent i = new Intent(Intent.ACTION_VIEW)
+                    .setData(new Uri.Builder()
+                            .scheme("market")
+                            .authority("details")
+                            .appendQueryParameter("id", sessionInfo.appPackageName)
+                            .build())
+                    .putExtra(Intent.EXTRA_REFERRER, new Uri.Builder().scheme("android-app")
+                            .authority(callingPackage).build());
+            i.setSourceBounds(sourceBounds);
+
+            mActivityTaskManagerInternal.startActivityAsUser(caller, callingPackage, i, opts,
+                    userId);
         }
 
         @Override
@@ -758,6 +1024,18 @@ public class LauncherAppsService extends SystemService {
         @VisibleForTesting
         void postToPackageMonitorHandler(Runnable r) {
             mCallbackHandler.post(r);
+        }
+
+        private class VouchesChangedMonitor extends PackageMonitor {
+            @Override
+            public void onPackageAdded(String packageName, int uid) {
+                updateVouches(packageName, new UserHandle(getChangingUserId()));
+            }
+
+            @Override
+            public void onPackageModified(String packageName) {
+                updateVouches(packageName, new UserHandle(getChangingUserId()));
+            }
         }
 
         private class MyPackageMonitor extends PackageMonitor implements ShortcutChangeListener {

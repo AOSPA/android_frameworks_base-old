@@ -595,6 +595,21 @@ enum Action {
 
     // ACTION: Tap & Pay -> Default Application Setting -> Use Default
     ACTION_NFC_PAYMENT_ALWAYS_SETTING = 1623;
+
+    // ACTION: Settings > Search Bar > Avatar
+    // CATEGORY: SETTINGS
+    // OS: Q
+    CLICK_ACCOUNT_AVATAR = 1643;
+
+    // ACTION: Set new password (action intent android.app.action.SET_NEW_PASSWORD)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACTION_SET_NEW_PASSWORD = 1645;
+
+    // ACTION: Set new password (action intent android.app.action.SET_NEW_PARENT_PROFILE_PASSWORD)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACTION_SET_NEW_PARENT_PROFILE_PASSWORD = 1646;
 }
 
 /**
@@ -2157,10 +2172,10 @@ enum PageId {
     // OS: Q
     ZEN_CUSTOM_SETTINGS_DIALOG = 1612;
 
-    // OPEN: Settings > Developer Options > Game Update Packages
+    // OPEN: Settings > Developer Options > Game Driver Preferences
     // CATEGORY: SETTINGS
     // OS: Q
-    SETTINGS_GUP_DASHBOARD = 1613;
+    SETTINGS_GAME_DRIVER_DASHBOARD = 1613;
 
     // OPEN: Settings > Accessibility > Vibration > Ring vibration
     // CATEGORY: SETTINGS
@@ -2179,4 +2194,24 @@ enum PageId {
     // OPEN: Settings > Network & internet > Click Mobile network to land on a page with a list of
     // SIM/eSIM subscriptions.
     MOBILE_NETWORK_LIST = 1627;
+
+    // OPEN: Settings > Display > Adaptive sleep
+    // OS: Q
+    SETTINGS_ADAPTIVE_SLEEP = 1628;
+
+    // OPEN: Settings > System > Aware
+    SETTINGS_AWARE = 1632;
+
+    // OPEN: Settings > System > Aware > Disable > Dialog
+    DIALOG_AWARE_DISABLE = 1633;
+
+    // OPEN: Settings > Settings > Network & internet > Click Mobile network to land on page with
+    // details for a SIM/eSIM mobile network > Click edit icon to bring up a rename dialog.
+    // OS: Q
+    MOBILE_NETWORK_RENAME_DIALOG = 1642;
+
+    // OPEN: Set new password (android.app.action.SET_NEW_PASSWORD action intent)
+    // CATEGORY: SETTINGS
+    // OS: Q
+    SET_NEW_PASSWORD_ACTIVITY = 1644;
 }

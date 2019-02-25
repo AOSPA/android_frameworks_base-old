@@ -16,6 +16,8 @@
 
 package android.view;
 
+import static android.content.res.Resources.ID_NULL;
+import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
 
 import static java.lang.Math.max;
@@ -5042,6 +5044,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Nullable
     private WeakReference<ContentCaptureSession> mContentCaptureSession;
 
+    @LayoutRes
+    private int mSourceLayoutId = ID_NULL;
+
     /**
      * Simple constructor to use when creating a view from code.
      *
@@ -5123,7 +5128,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             sAcceptZeroSizeDragShadow = targetSdkVersion < Build.VERSION_CODES.P;
 
-            sBrokenInsetsDispatch = !ViewRootImpl.USE_NEW_INSETS
+            sBrokenInsetsDispatch = ViewRootImpl.sNewInsetsMode != NEW_INSETS_MODE_FULL
                     || targetSdkVersion < Build.VERSION_CODES.Q;
 
             sCompatibilityDone = true;
@@ -5206,6 +5211,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public View(Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         this(context);
+
+        mSourceLayoutId = Resources.getAttributeSetSourceResId(attrs);
 
         final TypedArray a = context.obtainStyledAttributes(
                 attrs, com.android.internal.R.styleable.View, defStyleAttr, defStyleRes);
@@ -8200,12 +8207,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * changed by calling
      * {@link ContentCaptureSession#notifyViewAppeared(ViewStructure)},
      * {@link ContentCaptureSession#notifyViewDisappeared(AutofillId)}, and
-     * {@link ContentCaptureSession#notifyViewTextChanged(AutofillId, CharSequence, int)}
+     * {@link ContentCaptureSession#notifyViewTextChanged(AutofillId, CharSequence)}
      * respectively. The structure for the a child must be created using
-     * {@link ContentCaptureSession#newVirtualViewStructure(AutofillId, int)}, and the
+     * {@link ContentCaptureSession#newVirtualViewStructure(AutofillId, long)}, and the
      * {@code autofillId} for a child can be obtained either through
      * {@code childStructure.getAutofillId()} or
-     * {@link ContentCaptureSession#newAutofillId(AutofillId, int)}.
+     * {@link ContentCaptureSession#newAutofillId(AutofillId, long)}.
      *
      * <p><b>Note: </b>the following methods of the {@code structure} will be ignored:
      * <ul>
@@ -8226,7 +8233,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </ul>
      */
     public void onProvideContentCaptureStructure(@NonNull ViewStructure structure, int flags) {
-        onProvideStructure(structure, VIEW_STRUCTURE_FOR_CONTENT_CAPTURE, flags);
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
+            Trace.traceBegin(Trace.TRACE_TAG_VIEW,
+                    "onProvideContentCaptureStructure() for " + getClass().getSimpleName());
+        }
+        try {
+            onProvideStructure(structure, VIEW_STRUCTURE_FOR_CONTENT_CAPTURE, flags);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+        }
     }
 
     /** @hide */
@@ -8599,7 +8614,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (isAttachedToWindow()) {
             throw new IllegalStateException("Cannot set autofill id when view is attached");
         }
-        if (id != null && id.isVirtual()) {
+        if (id != null && !id.isNonVirtual()) {
             throw new IllegalStateException("Cannot set autofill id assigned to virtual views");
         }
         if (id == null && (mPrivateFlags3 & PFLAG3_AUTOFILLID_EXPLICITLY_SET) == 0) {
@@ -9016,6 +9031,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </ol>
      */
     private void notifyAppearedOrDisappearedForContentCaptureIfNeeded(boolean appeared) {
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
+            Trace.traceBegin(Trace.TRACE_TAG_VIEW,
+                    "notifyContentCapture(" + appeared + ") for " + getClass().getSimpleName());
+        }
+        try {
+            notifyAppearedOrDisappearedForContentCaptureIfNeededNoTrace(appeared);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+        }
+    }
+
+    private void notifyAppearedOrDisappearedForContentCaptureIfNeededNoTrace(boolean appeared) {
         // First check if context has client, so it saves a service lookup when it doesn't
         if (!mContext.isContentCaptureSupported()) return;
 
@@ -9037,35 +9064,43 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     Log.v(CONTENT_CAPTURE_LOG_TAG, "Ignoring 'appeared' on " + this + ": laid="
                             + isLaidOut() + ", visibleToUser=" + isVisibleToUser()
                             + ", visible=" + (getVisibility() == VISIBLE)
-                            + ": alreadyNotifiedAppeared="
-                            + ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0));
-                }
-                return;
-            }
-            // All good: notify it...
-            final ViewStructure structure = session.newViewStructure(this);
-            onProvideContentCaptureStructure(structure, /* flags= */ 0);
-            session.notifyViewAppeared(structure);
-            // ...and set the flags
-            mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
-            mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED;
-        } else {
-            if ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) == 0
-                    || (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED) != 0) {
-                if (Log.isLoggable(CONTENT_CAPTURE_LOG_TAG, Log.VERBOSE)) {
-                    Log.v(CONTENT_CAPTURE_LOG_TAG, "Ignoring 'disappeared' on " + this
-                            + ": notifiedAppeared="
-                            + ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0)
+                            + ": alreadyNotifiedAppeared=" + ((mPrivateFlags4
+                                    & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0)
                             + ", alreadyNotifiedDisappeared=" + ((mPrivateFlags4
                                     & PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED) != 0));
                 }
                 return;
             }
-            // All good: notify it...
-            session.notifyViewDisappeared(getAutofillId());
-            // ...and set the flags
+            mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
+            mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED;
+
+            // The code below doesn't take much for a unique view, but it's called for all views
+            // the first time the view hiearchy is laid off, which could acccumulative delay the
+            // initial layout. Hence, we're postponing it to a later stage - it might still cost a
+            // lost frame (or more), but that jank cost would only happen after the 1st layout.
+            Choreographer.getInstance().postCallback(Choreographer.CALLBACK_COMMIT, () -> {
+                final ViewStructure structure = session.newViewStructure(this);
+                onProvideContentCaptureStructure(structure, /* flags= */ 0);
+                session.notifyViewAppeared(structure);
+            }, /* token= */ null);
+        } else {
+            if ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) == 0
+                    || (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED) != 0) {
+                if (Log.isLoggable(CONTENT_CAPTURE_LOG_TAG, Log.VERBOSE)) {
+                    Log.v(CONTENT_CAPTURE_LOG_TAG, "Ignoring 'disappeared' on " + this + ": laid="
+                            + isLaidOut() + ", visibleToUser=" + isVisibleToUser()
+                            + ", visible=" + (getVisibility() == VISIBLE)
+                            + ": alreadyNotifiedAppeared=" + ((mPrivateFlags4
+                                    & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0)
+                            + ", alreadyNotifiedDisappeared=" + ((mPrivateFlags4
+                                    & PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED) != 0));
+                }
+                return;
+            }
             mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED;
             mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
+            Choreographer.getInstance().postCallback(Choreographer.CALLBACK_COMMIT,
+                    () -> session.notifyViewDisappeared(getAutofillId()), /* token= */ null);
         }
     }
 
@@ -9133,7 +9168,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         ContentCaptureSession session = null;
         if (mParent instanceof View) {
-            session = ((View) mParent).getContentCaptureSession();
+            session = ((View) mParent).getContentCaptureSession(ccm);
         }
 
         return session != null ? session : ccm.getMainContentCaptureSession();
@@ -11358,7 +11393,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setAssistBlocked(boolean)
      * @attr ref android.R.styleable#View_assistBlocked
      */
-    @InspectableProperty
     public boolean isAssistBlocked() {
         return (mPrivateFlags3 & PFLAG3_ASSIST_BLOCKED) != 0;
     }
@@ -13975,7 +14009,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     if (clickable) {
                         setPressed(true, x, y);
                     }
-                    checkForLongClick(0, x, y);
+                    checkForLongClick(ViewConfiguration.getLongPressTimeout(), x, y);
                     return true;
                 }
             }
@@ -14718,7 +14752,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     mHasPerformedLongPress = false;
 
                     if (!clickable) {
-                        checkForLongClick(0, x, y);
+                        checkForLongClick(ViewConfiguration.getLongPressTimeout(), x, y);
                         break;
                     }
 
@@ -14742,7 +14776,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     } else {
                         // Not inside a scrolling container, so show the feedback right away
                         setPressed(true, x, y);
-                        checkForLongClick(0, x, y);
+                        checkForLongClick(ViewConfiguration.getLongPressTimeout(), x, y);
                     }
                     break;
 
@@ -14763,8 +14797,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         drawableHotspotChanged(x, y);
                     }
 
+                    final int motionClassification = event.getClassification();
+                    final boolean ambiguousGesture =
+                            motionClassification == MotionEvent.CLASSIFICATION_AMBIGUOUS_GESTURE;
+                    int touchSlop = mTouchSlop;
+                    if (ambiguousGesture && hasPendingLongPressCallback()) {
+                        final float ambiguousMultiplier =
+                                ViewConfiguration.getAmbiguousGestureMultiplier();
+                        if (!pointInView(x, y, touchSlop)) {
+                            // The default action here is to cancel long press. But instead, we
+                            // just extend the timeout here, in case the classification
+                            // stays ambiguous.
+                            removeLongPressCallback();
+                            long delay = (long) (ViewConfiguration.getLongPressTimeout()
+                                    * ambiguousMultiplier);
+                            // Subtract the time already spent
+                            delay -= event.getEventTime() - event.getDownTime();
+                            checkForLongClick(delay, x, y);
+                        }
+                        touchSlop *= ambiguousMultiplier;
+                    }
+
                     // Be lenient about moving outside of buttons
-                    if (!pointInView(x, y, mTouchSlop)) {
+                    if (!pointInView(x, y, touchSlop)) {
                         // Outside button
                         // Remove any future long press/tap checks
                         removeTapCallback();
@@ -14774,6 +14829,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         }
                         mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
                     }
+
+                    final boolean deepPress =
+                            motionClassification == MotionEvent.CLASSIFICATION_DEEP_PRESS;
+                    if (deepPress && hasPendingLongPressCallback()) {
+                        // process the long click action immediately
+                        removeLongPressCallback();
+                        checkForLongClick(0 /* send immediately */, x, y);
+                    }
+
                     break;
             }
 
@@ -14808,6 +14872,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Return true if the long press callback is scheduled to run sometime in the future.
+     * Return false if there is no scheduled long press callback at the moment.
+     */
+    private boolean hasPendingLongPressCallback() {
+        if (mPendingCheckForLongPress == null) {
+            return false;
+        }
+        final AttachInfo attachInfo = mAttachInfo;
+        if (attachInfo == null) {
+            return false;
+        }
+        return attachInfo.mHandler.hasCallbacks(mPendingCheckForLongPress);
+    }
+
+   /**
      * Remove the pending click action
      */
     @UnsupportedAppUsage
@@ -18195,7 +18274,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_scrollbarDefaultDelayBeforeFade
      */
-    @InspectableProperty
+    @InspectableProperty(name = "scrollbarDefaultDelayBeforeFade")
     public int getScrollBarDefaultDelayBeforeFade() {
         return mScrollCache == null ? ViewConfiguration.getScrollDefaultDelay() :
                 mScrollCache.scrollBarDefaultDelayBeforeFade;
@@ -18220,7 +18299,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_scrollbarFadeDuration
      */
-    @InspectableProperty
+    @InspectableProperty(name = "scrollbarFadeDuration")
     public int getScrollBarFadeDuration() {
         return mScrollCache == null ? ViewConfiguration.getScrollBarFadeDuration() :
                 mScrollCache.scrollBarFadeDuration;
@@ -18245,7 +18324,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_scrollbarSize
      */
-    @InspectableProperty
+    @InspectableProperty(name = "scrollbarSize")
     public int getScrollBarSize() {
         return mScrollCache == null ? ViewConfiguration.get(mContext).getScaledScrollBarSize() :
                 mScrollCache.scrollBarSize;
@@ -18305,7 +18384,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             @ViewDebug.IntToString(from = SCROLLBARS_OUTSIDE_OVERLAY, to = "OUTSIDE_OVERLAY"),
             @ViewDebug.IntToString(from = SCROLLBARS_OUTSIDE_INSET, to = "OUTSIDE_INSET")
     })
-    @InspectableProperty(enumMapping = {
+    @InspectableProperty(name = "scrollbarStyle", enumMapping = {
             @EnumMap(value = SCROLLBARS_INSIDE_OVERLAY, name = "insideOverlay"),
             @EnumMap(value = SCROLLBARS_INSIDE_INSET, name = "insideInset"),
             @EnumMap(value = SCROLLBARS_OUTSIDE_OVERLAY, name = "outsideOverlay"),
@@ -23177,6 +23256,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * A {@link View} can be inflated from an XML layout. For such Views this method returns the
+     * resource ID of the source layout.
+     *
+     * @return The layout resource id if this view was inflated from XML, otherwise
+     * {@link Resources#ID_NULL}.
+     */
+    @LayoutRes
+    public int getSourceLayoutResId() {
+        return mSourceLayoutId;
+    }
+
+    /**
      * Returns the top padding of this view.
      *
      * @return the top padding in pixels
@@ -25417,7 +25508,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
     }
 
-    private void checkForLongClick(int delayOffset, float x, float y) {
+    private void checkForLongClick(long delay, float x, float y) {
         if ((mViewFlags & LONG_CLICKABLE) == LONG_CLICKABLE || (mViewFlags & TOOLTIP) == TOOLTIP) {
             mHasPerformedLongPress = false;
 
@@ -25427,8 +25518,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mPendingCheckForLongPress.setAnchor(x, y);
             mPendingCheckForLongPress.rememberWindowAttachCount();
             mPendingCheckForLongPress.rememberPressedState();
-            postDelayed(mPendingCheckForLongPress,
-                    ViewConfiguration.getLongPressTimeout() - delayOffset);
+            postDelayed(mPendingCheckForLongPress, delay);
         }
     }
 
@@ -27018,7 +27108,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         public void run() {
             mPrivateFlags &= ~PFLAG_PREPRESSED;
             setPressed(true, x, y);
-            checkForLongClick(ViewConfiguration.getTapTimeout(), x, y);
+            final long delay =
+                    ViewConfiguration.getLongPressTimeout() - ViewConfiguration.getTapTimeout();
+            checkForLongClick(delay, x, y);
         }
     }
 

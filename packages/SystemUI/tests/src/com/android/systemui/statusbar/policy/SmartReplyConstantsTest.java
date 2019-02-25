@@ -55,6 +55,9 @@ public class SmartReplyConstantsTest extends SysuiTestCase {
         resources.addOverride(
                 R.bool.config_smart_replies_in_notifications_edit_choices_before_sending, false);
         resources.addOverride(R.bool.config_smart_replies_in_notifications_show_in_heads_up, true);
+        resources.addOverride(
+                R.integer.config_smart_replies_in_notifications_min_num_system_generated_replies,
+                2);
         mConstants = new SmartReplyConstants(Handler.createAsync(Looper.myLooper()), mContext);
     }
 
@@ -173,9 +176,35 @@ public class SmartReplyConstantsTest extends SysuiTestCase {
         assertFalse(mConstants.getShowInHeadsUp());
     }
 
+    @Test
+    public void testMaxNumActionsWithNoConfig() {
+        assertTrue(mConstants.isEnabled());
+        assertEquals(-1, mConstants.getMaxNumActions());
+    }
+
+    @Test
+    public void testMaxNumActionsSet() {
+        overrideSetting("enabled=true,max_num_actions=10");
+        triggerConstantsOnChange();
+        assertEquals(10, mConstants.getMaxNumActions());
+    }
+
     private void overrideSetting(String flags) {
         Settings.Global.putString(mContext.getContentResolver(),
                 Settings.Global.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS, flags);
+    }
+
+    @Test
+    public void testGetMinNumSystemGeneratedRepliesWithNoConfig() {
+        assertTrue(mConstants.isEnabled());
+        assertEquals(2, mConstants.getMinNumSystemGeneratedReplies());
+    }
+
+    @Test
+    public void testGetMinNumSystemGeneratedRepliesWithValidConfig() {
+        overrideSetting("enabled=true,min_num_system_generated_replies=5");
+        triggerConstantsOnChange();
+        assertEquals(5, mConstants.getMinNumSystemGeneratedReplies());
     }
 
     private void triggerConstantsOnChange() {

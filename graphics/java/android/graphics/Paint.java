@@ -24,7 +24,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Px;
 import android.annotation.Size;
-import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.graphics.fonts.FontVariationAxis;
 import android.os.Build;
@@ -974,10 +973,7 @@ public class Paint {
      * @see Color for APIs that help manipulate a color long.
      *
      * @return the paint's color (and alpha).
-     *
-     * @hide pending API approval
      */
-    @TestApi
     @ColorLong
     public long getColorLong() {
         return mColor;
@@ -1006,10 +1002,7 @@ public class Paint {
      *      to set in the paint.
      * @throws IllegalArgumentException if the color space encoded in the long
      *      is invalid or unknown.
-     *
-     * @hide pending API approval
      */
-    @TestApi
     public void setColor(@ColorLong long color) {
         ColorSpace cs = Color.colorSpace(color);
         float r = Color.red(color);
@@ -1017,7 +1010,7 @@ public class Paint {
         float b = Color.blue(color);
         float a = Color.alpha(color);
 
-        nSetColor(mNativePaint, cs, r, g, b, a);
+        nSetColor(mNativePaint, cs.getNativeInstance(), r, g, b, a);
         mColor = color;
     }
 
@@ -1445,17 +1438,14 @@ public class Paint {
      *
      * @throws IllegalArgumentException if the color space encoded in the long
      *      is invalid or unknown.
-     *
-     * @hide pending API approval
      */
-    @TestApi
     public void setShadowLayer(float radius, float dx, float dy, @ColorLong long shadowColor) {
         ColorSpace cs = Color.colorSpace(shadowColor);
         float r = Color.red(shadowColor);
         float g = Color.green(shadowColor);
         float b = Color.blue(shadowColor);
         float a = Color.alpha(shadowColor);
-        nSetShadowLayer(mNativePaint, radius, dx, dy, cs, r, g, b, a);
+        nSetShadowLayer(mNativePaint, radius, dx, dy, cs.getNativeInstance(), r, g, b, a);
 
         mShadowLayerRadius = radius;
         mShadowLayerDx = dx;
@@ -1517,9 +1507,7 @@ public class Paint {
      * Returns the color of the shadow layer.
      * @see #setShadowLayer(float,float,float,int)
      * @see #setShadowLayer(float,float,float,long)
-     * @hide pending API approval
      */
-    @TestApi
     public @ColorLong long getShadowLayerColorLong() {
         return mShadowLayerColor;
     }
@@ -3003,11 +2991,6 @@ public class Paint {
             int contextStart, int contextEnd, boolean isRtl, int offset);
     private static native int nGetOffsetForAdvance(long paintPtr, char[] text, int start, int end,
             int contextStart, int contextEnd, boolean isRtl, float advance);
-    private static native void nSetColor(long paintPtr, ColorSpace cs,
-            float r, float g, float b, float a);
-    private static native void nSetShadowLayer(long paintPtr,
-            float radius, float dx, float dy, ColorSpace cs,
-            float r, float g, float b, float a);
 
 
     // ---------------- @FastNative ------------------------
@@ -3063,7 +3046,8 @@ public class Paint {
             int mMinikinLocaleListId);
     @CriticalNative
     private static native void nSetShadowLayer(long paintPtr,
-            float radius, float dx, float dy, @ColorInt int color);
+            float radius, float dx, float dy, long colorSpaceHandle,
+            float r, float g, float b, float a);
     @CriticalNative
     private static native boolean nHasShadowLayer(long paintPtr);
     @CriticalNative
@@ -3110,6 +3094,9 @@ public class Paint {
     private static native void nSetFakeBoldText(long paintPtr, boolean fakeBoldText);
     @CriticalNative
     private static native void nSetFilterBitmap(long paintPtr, boolean filter);
+    @CriticalNative
+    private static native void nSetColor(long paintPtr, long colorSpaceHandle,
+            float r, float g, float b, float a);
     @CriticalNative
     private static native void nSetStrikeThruText(long paintPtr, boolean strikeThruText);
     @CriticalNative

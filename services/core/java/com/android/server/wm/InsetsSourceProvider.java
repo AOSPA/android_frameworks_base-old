@@ -16,6 +16,14 @@
 
 package com.android.server.wm;
 
+import static android.view.InsetsState.TYPE_IME;
+import static android.view.InsetsState.TYPE_NAVIGATION_BAR;
+import static android.view.InsetsState.TYPE_TOP_BAR;
+import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
+import static android.view.ViewRootImpl.NEW_INSETS_MODE_IME;
+import static android.view.ViewRootImpl.NEW_INSETS_MODE_NONE;
+import static android.view.ViewRootImpl.sNewInsetsMode;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Rect;
@@ -57,17 +65,34 @@ class InsetsSourceProvider {
      */
     private boolean mServerVisible;
 
+    private final boolean mControllable;
 
     InsetsSourceProvider(InsetsSource source, InsetsStateController stateController,
             DisplayContent displayContent) {
-        mClientVisible = InsetsState.getDefaultVisibly(source.getType());
+        mClientVisible = InsetsState.getDefaultVisibility(source.getType());
         mSource = source;
         mDisplayContent = displayContent;
         mStateController = stateController;
+
+        final int type = source.getType();
+        if (type == TYPE_TOP_BAR || type == TYPE_NAVIGATION_BAR) {
+            mControllable = sNewInsetsMode == NEW_INSETS_MODE_FULL;
+        } else if (type == TYPE_IME) {
+            mControllable = sNewInsetsMode >= NEW_INSETS_MODE_IME;
+        } else {
+            mControllable = false;
+        }
     }
 
     InsetsSource getSource() {
         return mSource;
+    }
+
+    /**
+     * @return Whether the current flag configuration allows to control this source.
+     */
+    boolean isControllable() {
+        return mControllable;
     }
 
     /**
@@ -89,6 +114,9 @@ class InsetsSourceProvider {
             mSource.setFrame(new Rect());
         } else {
             mWin.setInsetProvider(this);
+            if (mControllingWin != null) {
+                updateControlForTarget(mControllingWin, true /* force */);
+            }
         }
     }
 
@@ -111,8 +139,12 @@ class InsetsSourceProvider {
                 && !mWin.mGivenInsetsPending);
     }
 
-    void updateControlForTarget(@Nullable WindowState target) {
-        if (target == mControllingWin) {
+    void updateControlForTarget(@Nullable WindowState target, boolean force) {
+        if (mWin == null) {
+            mControllingWin = target;
+            return;
+        }
+        if (target == mControllingWin && !force) {
             return;
         }
         if (target == null) {
@@ -121,6 +153,7 @@ class InsetsSourceProvider {
             return;
         }
         mAdapter = new ControlAdapter();
+        setClientVisible(InsetsState.getDefaultVisibility(mSource.getType()));
         mWin.startAnimation(mDisplayContent.getPendingTransaction(), mAdapter,
                 !mClientVisible /* hidden */);
         mControllingWin = target;
@@ -159,7 +192,7 @@ class InsetsSourceProvider {
     }
 
     boolean isClientVisible() {
-        return !ViewRootImpl.USE_NEW_INSETS || mClientVisible;
+        return sNewInsetsMode == NEW_INSETS_MODE_NONE || mClientVisible;
     }
 
     private class ControlAdapter implements AnimationAdapter {
@@ -187,7 +220,7 @@ class InsetsSourceProvider {
         public void onAnimationCancelled(SurfaceControl animationLeash) {
             if (mAdapter == this) {
                 mStateController.notifyControlRevoked(mControllingWin, InsetsSourceProvider.this);
-                setClientVisible(InsetsState.getDefaultVisibly(mSource.getType()));
+                setClientVisible(InsetsState.getDefaultVisibility(mSource.getType()));
                 mControl = null;
                 mControllingWin = null;
                 mAdapter = null;

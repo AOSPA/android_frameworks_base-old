@@ -185,6 +185,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     private NotificationChannel mTestNotificationChannel = new NotificationChannel(
             TEST_CHANNEL_ID, TEST_CHANNEL_ID, IMPORTANCE_DEFAULT);
+
+    private static final int NOTIFICATION_LOCATION_UNKNOWN = 0;
+
     @Mock
     private NotificationListeners mListeners;
     @Mock private NotificationAssistants mAssistants;
@@ -242,8 +245,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         }
 
         @Override
-        void logSmartSuggestionsVisible(NotificationRecord r) {
-            super.logSmartSuggestionsVisible(r);
+        void logSmartSuggestionsVisible(NotificationRecord r, int notificationLocation) {
+            super.logSmartSuggestionsVisible(r, notificationLocation);
             countLogSmartSuggestionsVisible++;
         }
 
@@ -2026,6 +2029,31 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testGetAssistantAllowedForUser() throws Exception {
+        UserHandle user = UserHandle.of(10);
+        try {
+            mBinderService.getAllowedNotificationAssistantForUser(user.getIdentifier());
+        } catch (IllegalStateException e) {
+            if (!e.getMessage().contains("At most one NotificationAssistant")) {
+                throw e;
+            }
+        }
+        verify(mAssistants, times(1)).getAllowedComponents(user.getIdentifier());
+    }
+
+    @Test
+    public void testGetAssistantAllowed() throws Exception {
+        try {
+            mBinderService.getAllowedNotificationAssistant();
+        } catch (IllegalStateException e) {
+            if (!e.getMessage().contains("At most one NotificationAssistant")) {
+                throw e;
+            }
+        }
+        verify(mAssistants, times(1)).getAllowedComponents(0);
+    }
+
+    @Test
     public void testSetDndAccessForUser() throws Exception {
         UserHandle user = UserHandle.of(10);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
@@ -2081,6 +2109,54 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 c.flattenToString(), 0, true, true);
         verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
                 c.flattenToString(), 0, false, true);
+        verify(mListeners, never()).setPackageOrComponentEnabled(
+                any(), anyInt(), anyBoolean(), anyBoolean());
+    }
+
+    @Test
+    public void testSetAssistantAccess_nullWithAllowedAssistant() throws Exception {
+        ArrayList<ComponentName> componentList = new ArrayList<>();
+        ComponentName c = ComponentName.unflattenFromString("package/Component");
+        componentList.add(c);
+        when(mAssistants.getAllowedComponents(anyInt())).thenReturn(componentList);
+
+        try {
+            mBinderService.setNotificationAssistantAccessGranted(null, true);
+        } catch (SecurityException e) {
+            if (!e.getMessage().contains("Permission Denial: not allowed to send broadcast")) {
+                throw e;
+            }
+        }
+
+        verify(mAssistants, times(1)).setPackageOrComponentEnabled(
+                c.flattenToString(), 0, true, false);
+        verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
+                c.flattenToString(), 0, false,  false);
+        verify(mListeners, never()).setPackageOrComponentEnabled(
+                any(), anyInt(), anyBoolean(), anyBoolean());
+    }
+
+    @Test
+    public void testSetAssistantAccessForUser_nullWithAllowedAssistant() throws Exception {
+        UserHandle user = UserHandle.of(10);
+        ArrayList<ComponentName> componentList = new ArrayList<>();
+        ComponentName c = ComponentName.unflattenFromString("package/Component");
+        componentList.add(c);
+        when(mAssistants.getAllowedComponents(anyInt())).thenReturn(componentList);
+
+        try {
+            mBinderService.setNotificationAssistantAccessGrantedForUser(
+                    null, user.getIdentifier(), true);
+        } catch (SecurityException e) {
+            if (!e.getMessage().contains("Permission Denial: not allowed to send broadcast")) {
+                throw e;
+            }
+        }
+
+        verify(mAssistants, times(1)).setPackageOrComponentEnabled(
+                c.flattenToString(), user.getIdentifier(), true, false);
+        verify(mConditionProviders, times(1)).setPackageOrComponentEnabled(
+                c.flattenToString(), user.getIdentifier(), false,  false);
         verify(mListeners, never()).setPackageOrComponentEnabled(
                 any(), anyInt(), anyBoolean(), anyBoolean());
     }
@@ -2528,11 +2604,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
         mService.addNotification(r);
 
-        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), true, true);
+        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), true, true,
+                NOTIFICATION_LOCATION_UNKNOWN);
         verify(mAssistants).notifyAssistantExpansionChangedLocked(eq(r.sbn), eq(true), eq((true)));
         assertTrue(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
 
-        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), true, false);
+        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), true, false,
+                NOTIFICATION_LOCATION_UNKNOWN);
         verify(mAssistants).notifyAssistantExpansionChangedLocked(eq(r.sbn), eq(true), eq((false)));
         assertTrue(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
     }
@@ -2542,11 +2620,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
         mService.addNotification(r);
 
-        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, true);
+        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, true,
+                NOTIFICATION_LOCATION_UNKNOWN);
         assertFalse(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
         verify(mAssistants).notifyAssistantExpansionChangedLocked(eq(r.sbn), eq(false), eq((true)));
 
-        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, false);
+        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, false,
+                NOTIFICATION_LOCATION_UNKNOWN);
         assertFalse(mService.getNotificationRecord(r.getKey()).getStats().hasExpanded());
         verify(mAssistants).notifyAssistantExpansionChangedLocked(
                 eq(r.sbn), eq(false), eq((false)));
@@ -3403,6 +3483,77 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testHideAndUnhideNotificationsOnDistractingPackageBroadcast() {
+        // Post 2 notifications from 2 packages
+        NotificationRecord pkgA = new NotificationRecord(mContext,
+                generateSbn("a", 1000, 9, 0), mTestNotificationChannel);
+        mService.addNotification(pkgA);
+        NotificationRecord pkgB = new NotificationRecord(mContext,
+                generateSbn("b", 1001, 9, 0), mTestNotificationChannel);
+        mService.addNotification(pkgB);
+
+        // on broadcast, hide one of the packages
+        mService.simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"a"});
+        ArgumentCaptor<List<NotificationRecord>> captorHide = ArgumentCaptor.forClass(List.class);
+        verify(mListeners, times(1)).notifyHiddenLocked(captorHide.capture());
+        assertEquals(1, captorHide.getValue().size());
+        assertEquals("a", captorHide.getValue().get(0).sbn.getPackageName());
+
+        // on broadcast, unhide the package
+        mService.simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS, new String[] {"a"});
+        ArgumentCaptor<List<NotificationRecord>> captorUnhide = ArgumentCaptor.forClass(List.class);
+        verify(mListeners, times(1)).notifyUnhiddenLocked(captorUnhide.capture());
+        assertEquals(1, captorUnhide.getValue().size());
+        assertEquals("a", captorUnhide.getValue().get(0).sbn.getPackageName());
+    }
+
+    @Test
+    public void testHideAndUnhideNotificationsOnDistractingPackageBroadcast_multiPkg() {
+        // Post 2 notifications from 2 packages
+        NotificationRecord pkgA = new NotificationRecord(mContext,
+                generateSbn("a", 1000, 9, 0), mTestNotificationChannel);
+        mService.addNotification(pkgA);
+        NotificationRecord pkgB = new NotificationRecord(mContext,
+                generateSbn("b", 1001, 9, 0), mTestNotificationChannel);
+        mService.addNotification(pkgB);
+
+        // on broadcast, hide one of the packages
+        mService.simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"a", "b"});
+        ArgumentCaptor<List<NotificationRecord>> captorHide = ArgumentCaptor.forClass(List.class);
+        verify(mListeners, times(2)).notifyHiddenLocked(captorHide.capture());
+        assertEquals(2, captorHide.getValue().size());
+        assertEquals("a", captorHide.getValue().get(0).sbn.getPackageName());
+        assertEquals("b", captorHide.getValue().get(1).sbn.getPackageName());
+
+        // on broadcast, unhide the package
+        mService.simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS, new String[] {"a", "b"});
+        ArgumentCaptor<List<NotificationRecord>> captorUnhide = ArgumentCaptor.forClass(List.class);
+        verify(mListeners, times(2)).notifyUnhiddenLocked(captorUnhide.capture());
+        assertEquals(2, captorUnhide.getValue().size());
+        assertEquals("a", captorUnhide.getValue().get(0).sbn.getPackageName());
+        assertEquals("b", captorUnhide.getValue().get(1).sbn.getPackageName());
+    }
+
+    @Test
+    public void testNoNotificationsHiddenOnDistractingPackageBroadcast() {
+        // post notification from this package
+        final NotificationRecord notif1 = generateNotificationRecord(
+                mTestNotificationChannel, 1, null, true);
+        mService.addNotification(notif1);
+
+        // on broadcast, nothing is hidden since no notifications are of package "test_package"
+        mService.simulatePackageDistractionBroadcast(
+                PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"test_package"});
+        ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
+        verify(mListeners, times(1)).notifyHiddenLocked(captor.capture());
+        assertEquals(0, captor.getValue().size());
+    }
+
+    @Test
     public void testCanUseManagedServicesLowRamNoWatchNullPkg() {
         when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
         when(mActivityManager.isLowRamDevice()).thenReturn(true);
@@ -3513,6 +3664,22 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testBubble() throws Exception {
         mBinderService.setBubblesAllowed(PKG, mUid, false);
+        assertFalse(mBinderService.areBubblesAllowedForPackage(PKG, mUid));
+    }
+
+    @Test
+    public void testUserApprovedBubblesForPackage() throws Exception {
+        assertFalse(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
+        mBinderService.setBubblesAllowed(PKG, mUid, true);
+        assertTrue(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
+        assertTrue(mBinderService.areBubblesAllowedForPackage(PKG, mUid));
+    }
+
+    @Test
+    public void testUserRejectsBubblesForPackage() throws Exception {
+        assertFalse(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
+        mBinderService.setBubblesAllowed(PKG, mUid, false);
+        assertTrue(mBinderService.hasUserApprovedBubblesForPackage(PKG, mUid));
         assertFalse(mBinderService.areBubblesAllowedForPackage(PKG, mUid));
     }
 
@@ -3764,7 +3931,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(r);
 
         mService.mNotificationDelegate.onNotificationSmartReplySent(
-                r.getKey(), replyIndex, reply, generatedByAssistant);
+                r.getKey(), replyIndex, reply, generatedByAssistant, NOTIFICATION_LOCATION_UNKNOWN);
         verify(mAssistants).notifyAssistantSuggestedReplySent(
                 eq(r.sbn), eq(reply), eq(generatedByAssistant));
     }
@@ -3793,7 +3960,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
         mService.addNotification(r);
 
-        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, true);
+        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, true,
+                NOTIFICATION_LOCATION_UNKNOWN);
         NotificationVisibility[] notificationVisibility = new NotificationVisibility[] {
                 NotificationVisibility.obtain(r.getKey(), 0, 0, true)
         };
@@ -3808,7 +3976,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
         mService.addNotification(r);
 
-        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, true);
+        mService.mNotificationDelegate.onNotificationExpansionChanged(r.getKey(), false, true,
+                NOTIFICATION_LOCATION_UNKNOWN);
 
         assertEquals(0, mService.countLogSmartSuggestionsVisible);
     }

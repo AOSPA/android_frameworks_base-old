@@ -27,6 +27,7 @@ import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityThread;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -54,6 +55,7 @@ import android.util.PrintWriterPrinter;
 import android.util.Printer;
 import android.util.SparseArray;
 import android.view.Display;
+import android.view.ImeInsetsSourceConsumer;
 import android.view.InputChannel;
 import android.view.InputEvent;
 import android.view.InputEventSender;
@@ -440,6 +442,13 @@ public final class InputMethodManager {
      */
     private int mRequestUpdateCursorAnchorInfoMonitorMode = REQUEST_UPDATE_CURSOR_ANCHOR_INFO_NONE;
 
+    /**
+     * When {@link ViewRootImpl#sNewInsetsMode} is set to
+     * >= {@link ViewRootImpl#NEW_INSETS_MODE_IME}, {@link ImeInsetsSourceConsumer} applies the
+     * IME visibility and listens for other state changes.
+     */
+    private ImeInsetsSourceConsumer mImeInsetsConsumer;
+
     final Pool<PendingEvent> mPendingEventPool = new SimplePool<>(20);
     final SparseArray<PendingEvent> mPendingEvents = new SparseArray<>(20);
 
@@ -453,6 +462,8 @@ public final class InputMethodManager {
     static final int MSG_TIMEOUT_INPUT_EVENT = 6;
     static final int MSG_FLUSH_INPUT_EVENT = 7;
     static final int MSG_REPORT_FULLSCREEN_MODE = 10;
+    static final int MSG_REPORT_PRE_RENDERED = 15;
+    static final int MSG_APPLY_IME_VISIBILITY = 20;
 
     private static boolean isAutofillUIShowing(View servedView) {
         AutofillManager afm = servedView.getContext().getSystemService(AutofillManager.class);
@@ -649,6 +660,23 @@ public final class InputMethodManager {
                     }
                     return;
                 }
+                case MSG_REPORT_PRE_RENDERED: {
+                    synchronized (mH) {
+                        if (mImeInsetsConsumer != null) {
+                            mImeInsetsConsumer.onPreRendered((EditorInfo) msg.obj);
+                        }
+                    }
+                    return;
+
+                }
+                case MSG_APPLY_IME_VISIBILITY: {
+                    synchronized (mH) {
+                        if (mImeInsetsConsumer != null) {
+                            mImeInsetsConsumer.applyImeVisibility(msg.arg1 != 0);
+                        }
+                    }
+                    return;
+                }
             }
         }
     }
@@ -725,6 +753,18 @@ public final class InputMethodManager {
         @Override
         public void reportFullscreenMode(boolean fullscreen) {
             mH.obtainMessage(MSG_REPORT_FULLSCREEN_MODE, fullscreen ? 1 : 0, 0)
+                    .sendToTarget();
+        }
+
+        @Override
+        public void reportPreRendered(EditorInfo info) {
+            mH.obtainMessage(MSG_REPORT_PRE_RENDERED, 0, 0, info)
+                    .sendToTarget();
+        }
+
+        @Override
+        public void applyImeVisibility(boolean setVisible) {
+            mH.obtainMessage(MSG_APPLY_IME_VISIBILITY, setVisible ? 1 : 0, 0)
                     .sendToTarget();
         }
 
@@ -917,19 +957,6 @@ public final class InputMethodManager {
     public List<InputMethodInfo> getInputMethodList() {
         try {
             return mService.getInputMethodList();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Returns a list of VR InputMethod currently installed.
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.RESTRICTED_VR_ACCESS)
-    public List<InputMethodInfo> getVrInputMethodList() {
-        try {
-            return mService.getVrInputMethodList();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1527,6 +1554,7 @@ public final class InputMethodManager {
 
             // Hook 'em up and let 'er rip.
             mCurrentTextBoxAttribute = tba;
+            maybeCallServedViewChangedLocked(tba);
             mServedConnecting = false;
             if (mServedInputConnectionWrapper != null) {
                 mServedInputConnectionWrapper.deactivate();
@@ -1742,6 +1770,10 @@ public final class InputMethodManager {
             mCurrentTextBoxAttribute = null;
             mCompletions = null;
             mServedConnecting = true;
+            // servedView has changed and it's not editable.
+            if (!mServedView.onCheckIsTextEditor()) {
+                maybeCallServedViewChangedLocked(null);
+            }
         }
 
         if (ic != null) {
@@ -1840,6 +1872,21 @@ public final class InputMethodManager {
     }
 
     /**
+     * Register for IME state callbacks and applying visibility in
+     * {@link android.view.ImeInsetsSourceConsumer}.
+     * @hide
+     */
+    public void registerImeConsumer(@NonNull ImeInsetsSourceConsumer imeInsetsConsumer) {
+        if (imeInsetsConsumer == null) {
+            throw new IllegalStateException("ImeInsetsSourceConsumer cannot be null.");
+        }
+
+        synchronized (mH) {
+            mImeInsetsConsumer = imeInsetsConsumer;
+        }
+    }
+
+    /**
      * Report the current selection range.
      *
      * <p><strong>Editor authors</strong>, you need to call this method whenever
@@ -1894,7 +1941,15 @@ public final class InputMethodManager {
 
     /**
      * Notify the event when the user tapped or clicked the text view.
+     *
+     * @param view {@link View} which is being clicked.
+     * @see InputMethodService#onViewClicked(boolean)
+     * @deprecated The semantics of this method can never be defined well for composite {@link View}
+     *             that works as a giant "Canvas", which can host its own UI hierarchy and sub focus
+     *             state. {@link android.webkit.WebView} is a good example. Application / IME
+     *             developers should not rely on this method.
      */
+    @Deprecated
     public void viewClicked(View view) {
         // Re-dispatch if there is a context mismatch.
         final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
@@ -2494,14 +2549,58 @@ public final class InputMethodManager {
      * @param subtype A new input method subtype to switch.
      * @return true if the current subtype was successfully switched. When the specified subtype is
      * null, this method returns false.
+     * @deprecated If the calling process is an IME, use
+     *             {@link InputMethodService#switchInputMethod(String, InputMethodSubtype)}, which
+     *             does not require any permission as long as the caller is the current IME.
+     *             If the calling process is some privileged app that already has
+     *             {@link android.Manifest.permission#WRITE_SECURE_SETTINGS} permission, just
+     *             directly update {@link Settings.Secure#SELECTED_INPUT_METHOD_SUBTYPE}.
      */
+    @Deprecated
     @RequiresPermission(WRITE_SECURE_SETTINGS)
     public boolean setCurrentInputMethodSubtype(InputMethodSubtype subtype) {
-        try {
-            return mService.setCurrentInputMethodSubtype(subtype);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+        if (Process.myUid() == Process.SYSTEM_UID) {
+            Log.w(TAG, "System process should not call setCurrentInputMethodSubtype() because "
+                    + "almost always it is a bug under multi-user / multi-profile environment. "
+                    + "Consider directly interacting with InputMethodManagerService "
+                    + "via LocalServices.");
+            return false;
         }
+        if (subtype == null) {
+            // See the JavaDoc. This is how this method has worked.
+            return false;
+        }
+        final Context fallbackContext = ActivityThread.currentApplication();
+        if (fallbackContext == null) {
+            return false;
+        }
+        if (fallbackContext.checkSelfPermission(WRITE_SECURE_SETTINGS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
+        final ContentResolver contentResolver = fallbackContext.getContentResolver();
+        final String imeId = Settings.Secure.getString(contentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD);
+        if (ComponentName.unflattenFromString(imeId) == null) {
+            // Null or invalid IME ID format.
+            return false;
+        }
+        final List<InputMethodSubtype> enabledSubtypes;
+        try {
+            enabledSubtypes = mService.getEnabledInputMethodSubtypeList(imeId, true);
+        } catch (RemoteException e) {
+            return false;
+        }
+        final int numSubtypes = enabledSubtypes.size();
+        for (int i = 0; i < numSubtypes; ++i) {
+            final InputMethodSubtype enabledSubtype = enabledSubtypes.get(i);
+            if (enabledSubtype.equals(subtype)) {
+                Settings.Secure.putInt(contentResolver,
+                        Settings.Secure.SELECTED_INPUT_METHOD_SUBTYPE, enabledSubtype.hashCode());
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -2642,7 +2741,13 @@ public final class InputMethodManager {
      *
      * @param imiId Id of InputMethodInfo which additional input method subtypes will be added to.
      * @param subtypes subtypes will be added as additional subtypes of the current input method.
+     * @deprecated For IMEs that have already implemented features like customizable/downloadable
+     *             keyboard layouts/languages, please start migration to other approaches. One idea
+     *             would be exposing only one unified {@link InputMethodSubtype} then implement
+     *             IME's own language switching mechanism within that unified subtype. The support
+     *             of "Additional Subtype" may be completely dropped in a future version of Android.
      */
+    @Deprecated
     public void setAdditionalInputMethodSubtypes(String imiId, InputMethodSubtype[] subtypes) {
         try {
             mService.setAdditionalInputMethodSubtypes(imiId, subtypes);
@@ -2656,6 +2761,12 @@ public final class InputMethodManager {
             return mService.getLastInputMethodSubtype();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    private void maybeCallServedViewChangedLocked(EditorInfo tba) {
+        if (mImeInsetsConsumer != null) {
+            mImeInsetsConsumer.onServedEditorChanged(tba);
         }
     }
 

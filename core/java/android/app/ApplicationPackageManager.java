@@ -3017,6 +3017,33 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public String getAppPredictionServicePackageName() {
+        try {
+            return mPM.getAppPredictionServicePackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public String getContentCaptureServicePackageName() {
+        try {
+            return mPM.getContentCaptureServicePackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public String getIncidentReportApproverPackageName() {
+        try {
+            return mPM.getIncidentReportApproverPackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
     public boolean isPackageStateProtected(String packageName, int userId) {
         try {
             return mPM.isPackageStateProtected(packageName, userId);

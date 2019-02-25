@@ -1320,6 +1320,15 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         positionChildAt(stack, Math.max(0, insertIndex));
     }
 
+    void ensureActivitiesVisible(ActivityRecord starting, int configChanges,
+            boolean preserveWindows, boolean notifyClients) {
+        for (int stackNdx = getChildCount() - 1; stackNdx >= 0; --stackNdx) {
+            final ActivityStack stack = getChildAt(stackNdx);
+            stack.ensureActivitiesVisibleLocked(starting, configChanges, preserveWindows,
+                    notifyClients);
+        }
+    }
+
     void moveHomeStackToFront(String reason) {
         if (mHomeStack != null) {
             mHomeStack.moveToFront(reason);
@@ -1480,9 +1489,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         }
     }
 
-    public void writeToProto(ProtoOutputStream proto, long fieldId) {
+    public void writeToProto(ProtoOutputStream proto, long fieldId,
+            @WindowTraceLogLevel int logLevel) {
         final long token = proto.start(fieldId);
-        super.writeToProto(proto, CONFIGURATION_CONTAINER, false /* trim */);
+        super.writeToProto(proto, CONFIGURATION_CONTAINER, logLevel);
         proto.write(ID, mDisplayId);
         proto.write(SINGLE_TASK_INSTANCE, mSingleTaskInstance);
         final ActivityStack focusedStack = getFocusedStack();
@@ -1497,7 +1507,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         }
         for (int stackNdx = mStacks.size() - 1; stackNdx >= 0; --stackNdx) {
             final ActivityStack stack = mStacks.get(stackNdx);
-            stack.writeToProto(proto, STACKS);
+            stack.writeToProto(proto, STACKS, logLevel);
         }
         proto.end(token);
     }

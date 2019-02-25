@@ -151,6 +151,7 @@ import android.app.RemoteAction;
 import android.app.WaitResult;
 import android.app.WindowConfiguration;
 import android.app.admin.DevicePolicyCache;
+import android.app.admin.DevicePolicyManager;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.usage.UsageStatsManagerInternal;
@@ -349,11 +350,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     /* Global service lock used by the package the owns this service. */
     final WindowManagerGlobalLock mGlobalLock = new WindowManagerGlobalLock();
+    /**
+     * It is the same instance as {@link mGlobalLock}, just declared as a type that the
+     * locked-region-code-injection does't recognize it. It is used to skip wrapping priority
+     * booster for places that are already in the scope of another booster (e.g. computing oom-adj).
+     *
+     * @see WindowManagerThreadPriorityBooster
+     */
+    final Object mGlobalLockWithoutBoost = mGlobalLock;
     public ActivityStackSupervisor mStackSupervisor;
     RootActivityContainer mRootActivityContainer;
     WindowManagerService mWindowManager;
     private UserManagerService mUserManager;
     private AppOpsService mAppOpsService;
+    private DevicePolicyManager mDpm;
     /** All active uids in the system. */
     private final SparseArray<Integer> mActiveUids = new SparseArray<>();
     private final SparseArray<String> mPendingTempWhitelist = new SparseArray<>();
@@ -826,6 +836,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mAppOpsService = (AppOpsService) IAppOpsService.Stub.asInterface(b);
         }
         return mAppOpsService;
+    }
+
+    DevicePolicyManager getDevicePolicyManager() {
+        if (mDpm == null) {
+            mDpm = mContext.getSystemService(DevicePolicyManager.class);
+        }
+        return mDpm;
     }
 
     boolean hasUserRestriction(String restriction, int userId) {
@@ -4399,6 +4416,27 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    @Override
+    public void registerRemoteAnimationsForDisplay(int displayId,
+            RemoteAnimationDefinition definition) {
+        mAmInternal.enforceCallingPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS,
+                "registerRemoteAnimations");
+        definition.setCallingPid(Binder.getCallingPid());
+        synchronized (mGlobalLock) {
+            final ActivityDisplay display = mRootActivityContainer.getActivityDisplay(displayId);
+            if (display == null) {
+                Slog.e(TAG, "Couldn't find display with id: " + displayId);
+                return;
+            }
+            final long origId = Binder.clearCallingIdentity();
+            try {
+                display.mDisplayContent.registerRemoteAnimations(definition);
+            } finally {
+                Binder.restoreCallingIdentity(origId);
+            }
+        }
+    }
+
     /** @see android.app.ActivityManager#alwaysShowUnsupportedCompileSdkWarning */
     @Override
     public void alwaysShowUnsupportedCompileSdkWarning(ComponentName activity) {
@@ -5313,9 +5351,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     void updateActivityUsageStats(ActivityRecord activity, int event) {
+        ComponentName taskRoot = null;
+        final TaskRecord task = activity.getTaskRecord();
+        if (task != null) {
+            final ActivityRecord rootActivity = task.getRootActivity();
+            if (rootActivity != null) {
+                taskRoot = rootActivity.mActivityComponent;
+            }
+        }
+
         final Message m = PooledLambda.obtainMessage(
                 ActivityManagerInternal::updateActivityUsageStats, mAmInternal,
-                activity.mActivityComponent, activity.mUserId, event, activity.appToken);
+                activity.mActivityComponent, activity.mUserId, event, activity.appToken, taskRoot);
         mH.sendMessage(m);
     }
 
@@ -5621,6 +5668,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     int getUidStateLocked(int uid) {
         return mActiveUids.get(uid, PROCESS_STATE_NONEXISTENT);
+    }
+
+    boolean isUidForeground(int uid) {
+        return (getUidStateLocked(uid) == ActivityManager.PROCESS_STATE_TOP)
+                || mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(uid);
     }
 
     /**
@@ -6213,30 +6265,27 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
                 return;
             }
-            mH.post(() -> {
-                synchronized (mGlobalLock) {
-                    final ActivityDisplay activityDisplay =
-                            mRootActivityContainer.getActivityDisplay(displayId);
-                    if (activityDisplay == null) {
-                        // Call might come when display is not yet added or has been removed.
-                        if (DEBUG_CONFIGURATION) {
-                            Slog.w(TAG, "Trying to update display configuration for non-existing "
-                                    + "displayId=" + displayId);
-                        }
-                        return;
+            synchronized (mGlobalLock) {
+                final ActivityDisplay activityDisplay =
+                        mRootActivityContainer.getActivityDisplay(displayId);
+                if (activityDisplay == null) {
+                    // Call might come when display is not yet added or has been removed.
+                    if (DEBUG_CONFIGURATION) {
+                        Slog.w(TAG, "Trying to update display configuration for non-existing "
+                                + "displayId=" + displayId);
                     }
-                    final WindowProcessController process = mPidMap.get(pid);
-                    if (process == null) {
-                        if (DEBUG_CONFIGURATION) {
-                            Slog.w(TAG, "Trying to update display configuration for invalid "
-                                    + "process, pid=" + pid);
-                        }
-                        return;
-                    }
-                    process.registerDisplayConfigurationListenerLocked(activityDisplay);
+                    return;
                 }
-            });
-
+                final WindowProcessController process = mPidMap.get(pid);
+                if (process == null) {
+                    if (DEBUG_CONFIGURATION) {
+                        Slog.w(TAG, "Trying to update display configuration for invalid "
+                                + "process, pid=" + pid);
+                    }
+                    return;
+                }
+                process.registerDisplayConfigurationListenerLocked(activityDisplay);
+            }
         }
 
         @Override
@@ -6538,7 +6587,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 // The output proto of "activity --proto activities"
                 // is ActivityManagerServiceDumpActivitiesProto
                 mRootActivityContainer.writeToProto(proto,
-                        ActivityManagerServiceDumpActivitiesProto.ACTIVITY_STACK_SUPERVISOR);
+                        ActivityManagerServiceDumpActivitiesProto.ACTIVITY_STACK_SUPERVISOR,
+                        WindowTraceLogLevel.ALL);
             }
         }
 
@@ -6805,7 +6855,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public WindowProcessController getTopApp() {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 final ActivityRecord top = mRootActivityContainer.getTopResumedActivity();
                 return top != null ? top.app : null;
             }
@@ -6813,7 +6863,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public void rankTaskLayersIfNeeded() {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 if (mRootActivityContainer != null) {
                     mRootActivityContainer.rankTaskLayersIfNeeded();
                 }
@@ -6857,28 +6907,28 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public void onUidActive(int uid, int procState) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mActiveUids.put(uid, procState);
             }
         }
 
         @Override
         public void onUidInactive(int uid) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mActiveUids.remove(uid);
             }
         }
 
         @Override
         public void onActiveUidsCleared() {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mActiveUids.clear();
             }
         }
 
         @Override
         public void onUidProcStateChanged(int uid, int procState) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 if (mActiveUids.get(uid) != null) {
                     mActiveUids.put(uid, procState);
                 }
@@ -6887,14 +6937,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public void onUidAddedToPendingTempWhitelist(int uid, String tag) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mPendingTempWhitelist.put(uid, tag);
             }
         }
 
         @Override
         public void onUidRemovedFromPendingTempWhitelist(int uid) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mPendingTempWhitelist.remove(uid);
             }
         }
@@ -7033,6 +7083,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean reducedResolution) {
             synchronized (mGlobalLock) {
                 return ActivityTaskManagerService.this.getTaskSnapshot(taskId, reducedResolution);
+            }
+        }
+
+        @Override
+        public boolean isUidForeground(int uid) {
+            synchronized (mGlobalLock) {
+                return ActivityTaskManagerService.this.isUidForeground(uid);
             }
         }
     }

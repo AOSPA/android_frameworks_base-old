@@ -18,14 +18,19 @@ package com.android.server.policy.role;
 
 import android.annotation.NonNull;
 import android.app.role.RoleManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManagerInternal;
 import android.os.Debug;
 import android.provider.Settings;
+import android.telecom.TelecomManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.telephony.SmsApplication;
 import com.android.internal.util.CollectionUtils;
+import com.android.server.LocalServices;
 import com.android.server.role.RoleManagerService;
 
 import java.util.Collection;
@@ -89,6 +94,33 @@ public class LegacyRoleResolutionPolicy implements RoleManagerService.RoleHolder
                 }
 
                 return CollectionUtils.singletonOrEmpty(result);
+            }
+            case RoleManager.ROLE_ASSISTANT: {
+                String legacyAssistant = Settings.Secure.getStringForUser(
+                        mContext.getContentResolver(), Settings.Secure.ASSISTANT, userId);
+
+                if (legacyAssistant == null || legacyAssistant.isEmpty()) {
+                    return Collections.emptyList();
+                } else {
+                    return Collections.singletonList(
+                            ComponentName.unflattenFromString(legacyAssistant).getPackageName());
+                }
+            }
+            case RoleManager.ROLE_DIALER: {
+                String setting = Settings.Secure.getStringForUser(
+                        mContext.getContentResolver(),
+                        Settings.Secure.DIALER_DEFAULT_APPLICATION, userId);
+
+                return CollectionUtils.singletonOrEmpty(!TextUtils.isEmpty(setting)
+                        ? setting
+                        : mContext.getSystemService(TelecomManager.class).getSystemDialerPackage());
+            }
+            case RoleManager.ROLE_BROWSER: {
+                PackageManagerInternal packageManagerInternal = LocalServices.getService(
+                        PackageManagerInternal.class);
+                String packageName = packageManagerInternal.removeLegacyDefaultBrowserPackageName(
+                        userId);
+                return CollectionUtils.singletonOrEmpty(packageName);
             }
             default: {
                 Slog.e(LOG_TAG, "Don't know how to find legacy role holders for " + roleName);

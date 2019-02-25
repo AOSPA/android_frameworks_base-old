@@ -56,6 +56,7 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.IStorageManager;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.sysprop.VoldProperties;
 import android.text.TextUtils;
@@ -91,7 +92,9 @@ import com.android.server.display.ColorDisplayService;
 import com.android.server.display.DisplayManagerService;
 import com.android.server.dreams.DreamManagerService;
 import com.android.server.emergency.EmergencyAffordanceService;
+import com.android.server.gpu.GpuService;
 import com.android.server.hdmi.HdmiControlService;
+import com.android.server.incident.IncidentCompanionService;
 import com.android.server.input.InputManagerService;
 import com.android.server.inputmethod.InputMethodManagerService;
 import com.android.server.inputmethod.MultiClientInputMethodManagerService;
@@ -100,7 +103,6 @@ import com.android.server.lights.LightsService;
 import com.android.server.media.MediaResourceMonitorService;
 import com.android.server.media.MediaRouterService;
 import com.android.server.media.MediaSessionService;
-import com.android.server.media.MediaUpdateService;
 import com.android.server.media.projection.MediaProjectionManagerService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
@@ -137,6 +139,7 @@ import com.android.server.stats.StatsCompanionService;
 import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.telecom.TelecomLoaderService;
+import com.android.server.testharness.TestHarnessModeService;
 import com.android.server.textclassifier.TextClassificationManagerService;
 import com.android.server.textservices.TextServicesManagerService;
 import com.android.server.trust.TrustManagerService;
@@ -263,8 +266,6 @@ public final class SystemServer {
             "com.android.internal.car.CarServiceHelperService";
     private static final String TIME_DETECTOR_SERVICE_CLASS =
             "com.android.server.timedetector.TimeDetectorService$Lifecycle";
-    private static final String TIME_ZONE_DETECTOR_SERVICE_CLASS =
-            "com.android.server.timezonedetector.TimeZoneDetectorService$Lifecycle";
     private static final String ACCESSIBILITY_MANAGER_SERVICE_CLASS =
             "com.android.server.accessibility.AccessibilityManagerService$Lifecycle";
     private static final String ADB_SERVICE_CLASS =
@@ -329,6 +330,11 @@ public final class SystemServer {
      * Start all HIDL services that are run inside the system server. This may take some time.
      */
     private static native void startHidlServices();
+
+    /**
+     * Mark this process' heap as profileable. Only for debug builds.
+     */
+    private static native void initZygoteChildHeapProfiling();
 
     /**
      * The main entry point from zygote.
@@ -451,6 +457,11 @@ public final class SystemServer {
 
             // Initialize native services.
             System.loadLibrary("android_servers");
+
+            // Debug builds - allow heap profiling.
+            if (Build.IS_DEBUGGABLE) {
+                initZygoteChildHeapProfiling();
+            }
 
             // Check whether we failed to shut down last time we tried.
             // This call may not return.
@@ -804,6 +815,11 @@ public final class SystemServer {
         traceBeginAndSlog("StartBugreportManagerService");
         mSystemServiceManager.startService(BugreportManagerService.class);
         traceEnd();
+
+        // Serivce for GPU and GPU driver.
+        traceBeginAndSlog("GpuService");
+        mSystemServiceManager.startService(GpuService.class);
+        traceEnd();
     }
 
     /**
@@ -812,6 +828,7 @@ public final class SystemServer {
     private void startOtherServices() {
         final Context context = mSystemContext;
         VibratorService vibrator = null;
+        DynamicAndroidService dynamicAndroid = null;
         IStorageManager storageManager = null;
         NetworkManagementService networkManagement = null;
         IpSecService ipSecService = null;
@@ -869,7 +886,7 @@ public final class SystemServer {
                     TimingsTraceLog traceLog = new TimingsTraceLog(
                             SYSTEM_SERVER_TIMING_ASYNC_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
                     traceLog.traceBegin(SECONDARY_ZYGOTE_PRELOAD);
-                    if (!Process.zygoteProcess.preloadDefault(Build.SUPPORTED_32_BIT_ABIS[0])) {
+                    if (!Process.ZYGOTE_PROCESS.preloadDefault(Build.SUPPORTED_32_BIT_ABIS[0])) {
                         Slog.e(TAG, "Unable to preload default resources");
                     }
                     traceLog.traceEnd();
@@ -931,6 +948,11 @@ public final class SystemServer {
             traceBeginAndSlog("StartVibratorService");
             vibrator = new VibratorService(context);
             ServiceManager.addService("vibrator", vibrator);
+            traceEnd();
+
+            traceBeginAndSlog("StartDynamicAndroidService");
+            dynamicAndroid = new DynamicAndroidService(context);
+            ServiceManager.addService("dynamic_android", dynamicAndroid);
             traceEnd();
 
             if (!isWatch) {
@@ -1153,6 +1175,10 @@ public final class SystemServer {
             if (hasPdb) {
                 traceBeginAndSlog("StartPersistentDataBlock");
                 mSystemServiceManager.startService(PersistentDataBlockService.class);
+                traceEnd();
+
+                traceBeginAndSlog("StartTestHarnessMode");
+                mSystemServiceManager.startService(TestHarnessModeService.class);
                 traceEnd();
             }
 
@@ -1433,14 +1459,6 @@ public final class SystemServer {
                     reportWtf("starting StartTimeDetectorService service", e);
                 }
                 traceEnd();
-
-                traceBeginAndSlog("StartTimeZoneDetectorService");
-                try {
-                    mSystemServiceManager.startService(TIME_ZONE_DETECTOR_SERVICE_CLASS);
-                } catch (Throwable e) {
-                    reportWtf("starting StartTimeZoneDetectorService service", e);
-                }
-                traceEnd();
             }
 
             if (!isWatch) {
@@ -1580,6 +1598,12 @@ public final class SystemServer {
                 traceEnd();
             }
 
+            // Grants default permissions and defines roles
+            traceBeginAndSlog("StartRoleManagerService");
+            mSystemServiceManager.startService(new RoleManagerService(
+                    mSystemContext, new LegacyRoleResolutionPolicy(mSystemContext)));
+            traceEnd();
+
             // We need to always start this service, regardless of whether the
             // FEATURE_VOICE_RECOGNIZERS feature is set, because it needs to take care
             // of initializing various settings.  It will internally modify its behavior
@@ -1695,10 +1719,6 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartMediaSessionService");
             mSystemServiceManager.startService(MediaSessionService.class);
-            traceEnd();
-
-            traceBeginAndSlog("StartMediaUpdateService");
-            mSystemServiceManager.startService(MediaUpdateService.class);
             traceEnd();
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_HDMI_CEC)) {
@@ -1867,6 +1887,11 @@ public final class SystemServer {
         // Statsd helper
         traceBeginAndSlog("StartStatsCompanionService");
         mSystemServiceManager.startService(StatsCompanionService.Lifecycle.class);
+        traceEnd();
+
+        // Incidentd and dumpstated helper
+        traceBeginAndSlog("StartIncidentCompanionService");
+        mSystemServiceManager.startService(IncidentCompanionService.class);
         traceEnd();
 
         if (safeMode) {
@@ -2048,12 +2073,6 @@ public final class SystemServer {
             } catch (Throwable e) {
                 reportWtf("observing native crashes", e);
             }
-            traceEnd();
-
-            // Grants default permissions and defines roles
-            traceBeginAndSlog("StartRoleManagerService");
-            mSystemServiceManager.startService(new RoleManagerService(
-                    mSystemContext, new LegacyRoleResolutionPolicy(mSystemContext)));
             traceEnd();
 
             // No dependency on Webview preparation in system server. But this should
@@ -2251,10 +2270,9 @@ public final class SystemServer {
     }
 
     private void startContentCaptureService(@NonNull Context context) {
-
-        // Check if it was explicitly enabled by Settings
-        final String settings = Settings.Global.getString(context.getContentResolver(),
-                Settings.Global.CONTENT_CAPTURE_SERVICE_EXPLICITLY_ENABLED);
+        // Check if it was explicitly enabled by DeviceConfig
+        final String settings = DeviceConfig.getProperty(DeviceConfig.ContentCapture.NAMESPACE,
+                DeviceConfig.ContentCapture.PROPERTY_CONTENTCAPTURE_ENABLED);
         if (settings == null) {
             // Better be safe than sorry...
             Slog.d(TAG, "ContentCaptureService disabled because its not set by OEM");
@@ -2263,7 +2281,7 @@ public final class SystemServer {
         switch (settings) {
             case "always":
                 // Should be used only during development
-                Slog.d(TAG, "ContentCaptureService explicitly enabled by Settings");
+                Slog.d(TAG, "ContentCaptureService explicitly enabled by DeviceConfig");
                 break;
             case "default":
                 // Default case: check if OEM overlaid the resource that defines the service.

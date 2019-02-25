@@ -989,6 +989,25 @@ Status StatsService::setDataFetchOperation(int64_t key,
     return Status::ok();
 }
 
+Status StatsService::setActiveConfigsChangedOperation(const sp<android::IBinder>& intentSender,
+                                                      const String16& packageName,
+                                                      vector<int64_t>* output) {
+    ENFORCE_DUMP_AND_USAGE_STATS(packageName);
+
+    IPCThreadState* ipc = IPCThreadState::self();
+    mConfigManager->SetActiveConfigsChangedReceiver(ipc->getCallingUid(), intentSender);
+    //TODO: Return the list of configs that are already active
+    return Status::ok();
+}
+
+Status StatsService::removeActiveConfigsChangedOperation(const String16& packageName) {
+    ENFORCE_DUMP_AND_USAGE_STATS(packageName);
+
+    IPCThreadState* ipc = IPCThreadState::self();
+    mConfigManager->RemoveActiveConfigsChangedReceiver(ipc->getCallingUid());
+    return Status::ok();
+}
+
 Status StatsService::removeConfiguration(int64_t key, const String16& packageName) {
     ENFORCE_DUMP_AND_USAGE_STATS(packageName);
 
@@ -1084,6 +1103,38 @@ hardware::Return<void> StatsService::reportSlowIo(const SlowIo& slowIo) {
 hardware::Return<void> StatsService::reportBatteryCausedShutdown(
         const BatteryCausedShutdown& batteryCausedShutdown) {
     LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), batteryCausedShutdown);
+    mProcessor->OnLogEvent(&event);
+
+    return hardware::Void();
+}
+
+hardware::Return<void> StatsService::reportUsbPortOverheatEvent(
+        const UsbPortOverheatEvent& usbPortOverheatEvent) {
+    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), usbPortOverheatEvent);
+    mProcessor->OnLogEvent(&event);
+
+    return hardware::Void();
+}
+
+hardware::Return<void> StatsService::reportSpeechDspStat(
+        const SpeechDspStat& speechDspStat) {
+    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), speechDspStat);
+    mProcessor->OnLogEvent(&event);
+
+    return hardware::Void();
+}
+
+hardware::Return<void> StatsService::reportVendorAtom(const VendorAtom& vendorAtom) {
+    std::string reverseDomainName = (std::string) vendorAtom.reverseDomainName;
+    if (vendorAtom.atomId < 100000 || vendorAtom.atomId >= 200000) {
+        ALOGE("Atom ID %ld is not a valid vendor atom ID", (long) vendorAtom.atomId);
+        return hardware::Void();
+    }
+    if (reverseDomainName.length() > 50) {
+        ALOGE("Vendor atom reverse domain name %s is too long.", reverseDomainName.c_str());
+        return hardware::Void();
+    }
+    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), vendorAtom);
     mProcessor->OnLogEvent(&event);
 
     return hardware::Void();

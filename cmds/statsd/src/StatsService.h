@@ -132,6 +132,17 @@ public:
                                             const String16& packageName) override;
 
     /**
+     * Binder call to let clients register the active configs changed operation.
+     */
+    virtual Status setActiveConfigsChangedOperation(const sp<android::IBinder>& intentSender,
+                                                    const String16& packageName,
+                                                    vector<int64_t>* output) override;
+
+    /**
+     * Binder call to remove the active configs changed operation for the specified package..
+     */
+    virtual Status removeActiveConfigsChangedOperation(const String16& packageName) override;
+    /**
      * Binder call to allow clients to remove the specified configuration.
      */
     virtual Status removeConfiguration(int64_t key,
@@ -198,6 +209,23 @@ public:
      */
     virtual Return<void> reportBatteryCausedShutdown(
             const BatteryCausedShutdown& batteryCausedShutdown) override;
+
+    /**
+     * Binder call to get UsbPortOverheatEvent atom.
+     */
+    virtual Return<void> reportUsbPortOverheatEvent(
+            const UsbPortOverheatEvent& usbPortOverheatEvent) override;
+
+    /**
+     * Binder call to get Speech DSP state atom.
+     */
+    virtual Return<void> reportSpeechDspStat(
+            const SpeechDspStat& speechDspStat) override;
+
+    /**
+     * Binder call to get vendor atom.
+     */
+    virtual Return<void> reportVendorAtom(const VendorAtom& vendorAtom) override;
 
     /** IBinder::DeathRecipient */
     virtual void binderDied(const wp<IBinder>& who) override;

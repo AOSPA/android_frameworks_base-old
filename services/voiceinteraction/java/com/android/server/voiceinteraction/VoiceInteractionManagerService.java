@@ -17,16 +17,18 @@
 package com.android.server.voiceinteraction;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
+import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
-
-import com.android.internal.app.IVoiceActionCheckCallback;
-import com.android.server.wm.ActivityTaskManagerInternal;
 import android.app.AppGlobals;
+import android.app.role.OnRoleHoldersChangedListener;
+import android.app.role.RoleManager;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
@@ -62,8 +64,9 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 
-import com.android.internal.app.IVoiceInteractionSessionListener;
+import com.android.internal.app.IVoiceActionCheckCallback;
 import com.android.internal.app.IVoiceInteractionManagerService;
+import com.android.internal.app.IVoiceInteractionSessionListener;
 import com.android.internal.app.IVoiceInteractionSessionShowCallback;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.content.PackageMonitor;
@@ -75,10 +78,12 @@ import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.UiThread;
 import com.android.server.soundtrigger.SoundTriggerInternal;
+import com.android.server.wm.ActivityTaskManagerInternal;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
  * SystemService that publishes an IVoiceInteractionManagerService.
@@ -201,6 +206,7 @@ public class VoiceInteractionManagerService extends SystemService {
 
         VoiceInteractionManagerServiceStub() {
             mEnableService = shouldEnableService(mContext);
+            new RoleObserver(mContext.getMainExecutor());
         }
 
         // TODO: VI Make sure the caller is the current user or profile
@@ -607,11 +613,8 @@ public class VoiceInteractionManagerService extends SystemService {
         @Override
         public void showSession(IVoiceInteractionService service, Bundle args, int flags) {
             synchronized (this) {
-                if (mImpl == null || mImpl.mService == null
-                        || service.asBinder() != mImpl.mService.asBinder()) {
-                    throw new SecurityException(
-                            "Caller is not the current voice interaction service");
-                }
+                enforceIsCurrentVoiceInteractionService(service);
+
                 final long caller = Binder.clearCallingIdentity();
                 try {
                     mImpl.showSessionLocked(args, flags, null, null);
@@ -890,11 +893,7 @@ public class VoiceInteractionManagerService extends SystemService {
         public boolean isEnrolledForKeyphrase(IVoiceInteractionService service, int keyphraseId,
                 String bcp47Locale) {
             synchronized (this) {
-                if (mImpl == null || mImpl.mService == null
-                        || service.asBinder() != mImpl.mService.asBinder()) {
-                    throw new SecurityException(
-                            "Caller is not the current voice interaction service");
-                }
+                enforceIsCurrentVoiceInteractionService(service);
             }
 
             if (bcp47Locale == null) {
@@ -916,11 +915,7 @@ public class VoiceInteractionManagerService extends SystemService {
         public ModuleProperties getDspModuleProperties(IVoiceInteractionService service) {
             // Allow the call if this is the current voice interaction service.
             synchronized (this) {
-                if (mImpl == null || mImpl.mService == null
-                        || service == null || service.asBinder() != mImpl.mService.asBinder()) {
-                    throw new SecurityException(
-                            "Caller is not the current voice interaction service");
-                }
+                enforceIsCurrentVoiceInteractionService(service);
 
                 final long caller = Binder.clearCallingIdentity();
                 try {
@@ -937,11 +932,7 @@ public class VoiceInteractionManagerService extends SystemService {
                 RecognitionConfig recognitionConfig) {
             // Allow the call if this is the current voice interaction service.
             synchronized (this) {
-                if (mImpl == null || mImpl.mService == null
-                        || service == null || service.asBinder() != mImpl.mService.asBinder()) {
-                    throw new SecurityException(
-                            "Caller is not the current voice interaction service");
-                }
+                enforceIsCurrentVoiceInteractionService(service);
 
                 if (callback == null || recognitionConfig == null || bcp47Locale == null) {
                     throw new IllegalArgumentException("Illegal argument(s) in startRecognition");
@@ -977,11 +968,7 @@ public class VoiceInteractionManagerService extends SystemService {
                 IRecognitionStatusCallback callback) {
             // Allow the call if this is the current voice interaction service.
             synchronized (this) {
-                if (mImpl == null || mImpl.mService == null
-                        || service == null || service.asBinder() != mImpl.mService.asBinder()) {
-                    throw new SecurityException(
-                            "Caller is not the current voice interaction service");
-                }
+                enforceIsCurrentVoiceInteractionService(service);
             }
 
             final long caller = Binder.clearCallingIdentity();
@@ -1205,6 +1192,63 @@ public class VoiceInteractionManagerService extends SystemService {
             mSoundTriggerInternal.dump(fd, pw, args);
         }
 
+        @Override
+        public void setTranscription(IVoiceInteractionService service, String transcription) {
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService(service);
+
+                final int size = mVoiceInteractionSessionListeners.beginBroadcast();
+                for (int i = 0; i < size; ++i) {
+                    final IVoiceInteractionSessionListener listener =
+                            mVoiceInteractionSessionListeners.getBroadcastItem(i);
+                    try {
+                        listener.onTranscriptionUpdate(transcription);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Error delivering voice transcription.", e);
+                    }
+                }
+                mVoiceInteractionSessionListeners.finishBroadcast();
+            }
+        }
+
+        @Override
+        public void clearTranscription(IVoiceInteractionService service, boolean immediate) {
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService(service);
+
+                final int size = mVoiceInteractionSessionListeners.beginBroadcast();
+                for (int i = 0; i < size; ++i) {
+                    final IVoiceInteractionSessionListener listener =
+                            mVoiceInteractionSessionListeners.getBroadcastItem(i);
+                    try {
+                        listener.onTranscriptionComplete(immediate);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Error delivering transcription complete event.", e);
+                    }
+                }
+                mVoiceInteractionSessionListeners.finishBroadcast();
+            }
+        }
+
+        @Override
+        public void setVoiceState(IVoiceInteractionService service, int state) {
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService(service);
+
+                final int size = mVoiceInteractionSessionListeners.beginBroadcast();
+                for (int i = 0; i < size; ++i) {
+                    final IVoiceInteractionSessionListener listener =
+                            mVoiceInteractionSessionListeners.getBroadcastItem(i);
+                    try {
+                        listener.onVoiceStateChange(state);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Error delivering voice state change.", e);
+                    }
+                }
+                mVoiceInteractionSessionListeners.finishBroadcast();
+            }
+        }
+
         private void enforceCallingPermission(String permission) {
             if (mContext.checkCallingOrSelfPermission(permission)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -1212,10 +1256,118 @@ public class VoiceInteractionManagerService extends SystemService {
             }
         }
 
+        private void enforceIsCurrentVoiceInteractionService(IVoiceInteractionService service) {
+            if (mImpl == null || mImpl.mService == null
+                    || service.asBinder() != mImpl.mService.asBinder()) {
+                throw new
+                    SecurityException("Caller is not the current voice interaction service");
+            }
+        }
+
         private void setImplLocked(VoiceInteractionManagerServiceImpl impl) {
             mImpl = impl;
             mAtmInternal.notifyActiveVoiceInteractionServiceChanged(
                     getActiveServiceComponentName());
+        }
+
+        class RoleObserver implements OnRoleHoldersChangedListener {
+            private PackageManager mPm = mContext.getPackageManager();
+            private RoleManager mRm = mContext.getSystemService(RoleManager.class);
+
+            RoleObserver(@NonNull @CallbackExecutor Executor executor) {
+                mRm.addOnRoleHoldersChangedListenerAsUser(executor, this, UserHandle.ALL);
+            }
+
+            private @NonNull String getDefaultRecognizer(@NonNull UserHandle user) {
+                ResolveInfo resolveInfo = mPm.resolveServiceAsUser(
+                        new Intent(RecognitionService.SERVICE_INTERFACE),
+                        PackageManager.GET_META_DATA, user.getIdentifier());
+
+                if (resolveInfo == null || resolveInfo.serviceInfo == null) {
+                    Log.w(TAG, "Unable to resolve default voice recognition service.");
+                    return "";
+                }
+
+                return new ComponentName(resolveInfo.serviceInfo.packageName,
+                        resolveInfo.serviceInfo.name).flattenToShortString();
+            }
+
+            /**
+             * Convert the assistant-role holder into settings. The rest of the system uses the
+             * settings.
+             *
+             * @param roleName the name of the role whose holders are changed
+             * @param user the user for this role holder change
+             */
+            @Override
+            public void onRoleHoldersChanged(@NonNull String roleName, @NonNull UserHandle user) {
+                if (!roleName.equals(RoleManager.ROLE_ASSISTANT)) {
+                    return;
+                }
+
+                List<String> roleHolders = mRm.getRoleHoldersAsUser(roleName, user);
+
+                if (roleHolders.isEmpty()) {
+                    Settings.Secure.putString(getContext().getContentResolver(),
+                            Settings.Secure.ASSISTANT, "");
+                    Settings.Secure.putString(getContext().getContentResolver(),
+                            Settings.Secure.VOICE_INTERACTION_SERVICE, "");
+                    Settings.Secure.putString(getContext().getContentResolver(),
+                            Settings.Secure.VOICE_RECOGNITION_SERVICE, getDefaultRecognizer(user));
+                } else {
+                    // Assistant is singleton role
+                    String pkg = roleHolders.get(0);
+
+                    // Try to set role holder as VoiceInteractionService
+                    List<ResolveInfo> services = mPm.queryIntentServicesAsUser(
+                            new Intent(VoiceInteractionService.SERVICE_INTERFACE).setPackage(pkg),
+                            PackageManager.GET_META_DATA, user.getIdentifier());
+
+                    for (ResolveInfo resolveInfo : services) {
+                        ServiceInfo serviceInfo = resolveInfo.serviceInfo;
+
+                        VoiceInteractionServiceInfo voiceInteractionServiceInfo =
+                                new VoiceInteractionServiceInfo(mPm, serviceInfo);
+                        if (!voiceInteractionServiceInfo.getSupportsAssist()) {
+                            continue;
+                        }
+
+                        String serviceComponentName = serviceInfo.getComponentName()
+                                .flattenToShortString();
+
+                        String serviceRecognizerName = new ComponentName(pkg,
+                                voiceInteractionServiceInfo.getRecognitionService())
+                                .flattenToShortString();
+
+                        Settings.Secure.putString(getContext().getContentResolver(),
+                                Settings.Secure.ASSISTANT, serviceComponentName);
+                        Settings.Secure.putString(getContext().getContentResolver(),
+                                Settings.Secure.VOICE_INTERACTION_SERVICE, serviceComponentName);
+                        Settings.Secure.putString(getContext().getContentResolver(),
+                                Settings.Secure.VOICE_RECOGNITION_SERVICE, serviceRecognizerName);
+
+                        return;
+                    }
+
+                    // If no service could be found try to set assist activity
+                    final List<ResolveInfo> activities = mPm.queryIntentActivitiesAsUser(
+                            new Intent(Intent.ACTION_ASSIST).setPackage(pkg),
+                            PackageManager.MATCH_DEFAULT_ONLY, user.getIdentifier());
+
+                    for (ResolveInfo resolveInfo : activities) {
+                        ActivityInfo activityInfo = resolveInfo.activityInfo;
+
+                        Settings.Secure.putString(getContext().getContentResolver(),
+                                Settings.Secure.ASSISTANT,
+                                activityInfo.getComponentName().flattenToShortString());
+                        Settings.Secure.putString(getContext().getContentResolver(),
+                                Settings.Secure.VOICE_INTERACTION_SERVICE, "");
+                        Settings.Secure.putString(getContext().getContentResolver(),
+                                Settings.Secure.VOICE_RECOGNITION_SERVICE,
+                                getDefaultRecognizer(user));
+                    }
+                }
+            }
         }
 
         class SettingsObserver extends ContentObserver {

@@ -22,6 +22,7 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PORTRA
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PRESERVE_ORIENTATION;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.res.Configuration.EMPTY;
+import static android.view.SurfaceControl.METADATA_TASK_ID;
 
 import static com.android.server.EventLogTags.WM_TASK_REMOVED;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
@@ -251,8 +252,8 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     }
 
     @Override
-    void onParentSet() {
-        super.onParentSet();
+    void onParentChanged() {
+        super.onParentChanged();
 
         // Update task bounds if needed.
         adjustBoundsForDisplayChangeIfNeeded(getDisplayContent());
@@ -315,6 +316,7 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
 
         mRotation = rotation;
 
+        updateSurfacePosition();
         return boundsChange;
     }
 
@@ -357,6 +359,7 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
         } else {
             mOverrideDisplayedBounds.setEmpty();
         }
+        updateSurfacePosition();
     }
 
     /**
@@ -643,6 +646,11 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
         return getAppAnimationLayer(ANIMATION_LAYER_HOME);
     }
 
+    @Override
+    SurfaceControl.Builder makeSurface() {
+        return super.makeSurface().setMetadata(METADATA_TASK_ID, mTaskId);
+    }
+
     boolean isTaskAnimating() {
         final RecentsAnimationController recentsAnim = mWmService.getRecentsAnimationController();
         if (recentsAnim != null) {
@@ -789,13 +797,18 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
 
     @CallSuper
     @Override
-    public void writeToProto(ProtoOutputStream proto, long fieldId, boolean trim) {
+    public void writeToProto(ProtoOutputStream proto, long fieldId,
+            @WindowTraceLogLevel int logLevel) {
+        if (logLevel == WindowTraceLogLevel.CRITICAL && !isVisible()) {
+            return;
+        }
+
         final long token = proto.start(fieldId);
-        super.writeToProto(proto, WINDOW_CONTAINER, trim);
+        super.writeToProto(proto, WINDOW_CONTAINER, logLevel);
         proto.write(ID, mTaskId);
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final AppWindowToken appWindowToken = mChildren.get(i);
-            appWindowToken.writeToProto(proto, APP_WINDOW_TOKENS, trim);
+            appWindowToken.writeToProto(proto, APP_WINDOW_TOKENS, logLevel);
         }
         proto.write(FILLS_PARENT, matchParentBounds());
         getBounds().writeToProto(proto, BOUNDS);

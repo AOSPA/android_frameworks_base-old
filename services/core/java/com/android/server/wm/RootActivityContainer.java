@@ -175,6 +175,12 @@ public class RootActivityContainer extends ConfigurationContainer
     private ActivityDisplay mDefaultDisplay;
     private final SparseArray<IntArray> mDisplayAccessUIDs = new SparseArray<>();
 
+    /**
+     * Cached value of the topmost resumed activity in the system. Updated when new activity is
+     * resumed.
+     */
+    private ActivityRecord mTopResumedActivity;
+
     /** The current user */
     int mCurrentUser;
     /** Stack id of the front stack when user switched, indexed by userId. */
@@ -771,11 +777,8 @@ public class RootActivityContainer extends ConfigurationContainer
             // First the front stacks. In case any are not fullscreen and are in front of home.
             for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
                 final ActivityDisplay display = mActivityDisplays.get(displayNdx);
-                for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
-                    final ActivityStack stack = display.getChildAt(stackNdx);
-                    stack.ensureActivitiesVisibleLocked(starting, configChanges, preserveWindows,
-                            notifyClients);
-                }
+                display.ensureActivitiesVisible(starting, configChanges, preserveWindows,
+                        notifyClients);
             }
         } finally {
             mStackSupervisor.getKeyguardController().endActivityVisibilityUpdate();
@@ -1145,6 +1148,23 @@ public class RootActivityContainer extends ConfigurationContainer
         return result;
     }
 
+    void updateTopResumedActivityIfNeeded() {
+        final ActivityRecord prevTopActivity = mTopResumedActivity;
+        final ActivityStack topStack = getTopDisplayFocusedStack();
+        if (topStack == null || topStack.mResumedActivity == prevTopActivity) {
+            return;
+        }
+        // Clear previous top state
+        if (prevTopActivity != null) {
+            prevTopActivity.scheduleTopResumedActivityChanged(false /* onTop */);
+        }
+        // Update the current top activity
+        mTopResumedActivity = topStack.mResumedActivity;
+        if (mTopResumedActivity != null) {
+            mTopResumedActivity.scheduleTopResumedActivityChanged(true /* onTop */);
+        }
+    }
+
     void applySleepTokens(boolean applyToStacks) {
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
             // Set the sleeping state of the display.
@@ -1296,14 +1316,19 @@ public class RootActivityContainer extends ConfigurationContainer
     public void onDisplayAdded(int displayId) {
         if (DEBUG_STACK) Slog.v(TAG, "Display added displayId=" + displayId);
         synchronized (mService.mGlobalLock) {
-            getActivityDisplayOrCreate(displayId);
+            final ActivityDisplay display = getActivityDisplayOrCreate(displayId);
             // Do not start home before booting, or it may accidentally finish booting before it
             // starts. Instead, we expect home activities to be launched when the system is ready
             // (ActivityManagerService#systemReady).
             if (mService.isBooted() || mService.isBooting()) {
-                startHomeOnDisplay(mCurrentUser, "displayAdded", displayId);
+                startSystemDecorations(display.mDisplayContent);
             }
         }
+    }
+
+    private void startSystemDecorations(final DisplayContent displayContent) {
+        startHomeOnDisplay(mCurrentUser, "displayAdded", displayContent.getDisplayId());
+        displayContent.getDisplayPolicy().notifyDisplayReady();
     }
 
     @Override
@@ -1399,6 +1424,7 @@ public class RootActivityContainer extends ConfigurationContainer
             mActivityDisplays.remove(display);
             mActivityDisplays.add(position, display);
         }
+        updateTopResumedActivityIfNeeded();
     }
 
     @VisibleForTesting
@@ -2343,12 +2369,13 @@ public class RootActivityContainer extends ConfigurationContainer
         return printed;
     }
 
-    void writeToProto(ProtoOutputStream proto, long fieldId) {
+    protected void writeToProto(ProtoOutputStream proto, long fieldId,
+            @WindowTraceLogLevel int logLevel) {
         final long token = proto.start(fieldId);
-        super.writeToProto(proto, CONFIGURATION_CONTAINER, false /* trim */);
+        super.writeToProto(proto, CONFIGURATION_CONTAINER, logLevel);
         for (int displayNdx = 0; displayNdx < mActivityDisplays.size(); ++displayNdx) {
             final ActivityDisplay activityDisplay = mActivityDisplays.get(displayNdx);
-            activityDisplay.writeToProto(proto, DISPLAYS);
+            activityDisplay.writeToProto(proto, DISPLAYS, logLevel);
         }
         mStackSupervisor.getKeyguardController().writeToProto(proto, KEYGUARD_CONTROLLER);
         // TODO(b/111541062): Update tests to look for resumed activities on all displays

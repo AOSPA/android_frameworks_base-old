@@ -70,6 +70,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -87,10 +89,25 @@ public final class MediaStore {
     /** A content:// style uri to the authority for the media provider */
     public static final Uri AUTHORITY_URI = Uri.parse("content://" + AUTHORITY);
 
-    /** {@hide} */
+    /**
+     * Volume name used for content on "internal" storage of device. This
+     * volume contains media distributed with the device, such as built-in
+     * ringtones and wallpapers.
+     */
     public static final String VOLUME_INTERNAL = "internal";
-    /** {@hide} */
+
+    /**
+     * Volume name used for content on "external" storage of device. This only
+     * includes media on the primary shared storage device; the contents of any
+     * secondary storage devices can be obtained using
+     * {@link #getAllVolumeNames(Context)}.
+     */
     public static final String VOLUME_EXTERNAL = "external";
+
+    /** {@hide} */ @TestApi
+    public static final String SCAN_FILE_CALL = "scan_file";
+    /** {@hide} */ @TestApi
+    public static final String SCAN_VOLUME_CALL = "scan_volume";
 
     /**
      * The method name used by the media scanner and mtp to tell the media provider to
@@ -141,6 +158,8 @@ public final class MediaStore {
     public static final String PARAM_PROGRESS = "progress";
     /** {@hide} */
     public static final String PARAM_REQUIRE_ORIGINAL = "requireOriginal";
+    /** {@hide} */
+    public static final String PARAM_LIMIT = "limit";
 
     /**
      * Activity Action: Launch a music player.
@@ -496,7 +515,12 @@ public final class MediaStore {
      * @see MediaStore#createPending(Context, PendingParams)
      */
     public static @NonNull Uri setIncludePending(@NonNull Uri uri) {
-        return uri.buildUpon().appendQueryParameter(PARAM_INCLUDE_PENDING, "1").build();
+        return setIncludePending(uri.buildUpon()).build();
+    }
+
+    /** @hide */
+    public static @NonNull Uri.Builder setIncludePending(@NonNull Uri.Builder uriBuilder) {
+        return uriBuilder.appendQueryParameter(PARAM_INCLUDE_PENDING, "1");
     }
 
     /**
@@ -617,6 +641,8 @@ public final class MediaStore {
          * location. For example, when this value is left undefined, pending
          * {@link MediaStore.Audio.Media} items are stored under
          * {@link Environment#DIRECTORY_MUSIC}.
+         *
+         * @see MediaColumns#PRIMARY_DIRECTORY
          */
         public void setPrimaryDirectory(@Nullable String primaryDirectory) {
             this.primaryDirectory = primaryDirectory;
@@ -628,6 +654,8 @@ public final class MediaStore {
          * <p>
          * You may leave this value undefined to store the media as a direct
          * descendant of the {@link #setPrimaryDirectory(String)} location.
+         *
+         * @see MediaColumns#SECONDARY_DIRECTORY
          */
         public void setSecondaryDirectory(@Nullable String secondaryDirectory) {
             this.secondaryDirectory = secondaryDirectory;
@@ -956,6 +984,26 @@ public final class MediaStore {
          * Type: TEXT
          */
         public static final String OWNER_PACKAGE_NAME = "owner_package_name";
+
+        /**
+         * The primary directory name this media exists under. The value may be
+         * {@code NULL} if the media doesn't have a primary directory name.
+         * <p>
+         * Type: TEXT
+         *
+         * @see PendingParams#setPrimaryDirectory(String)
+         */
+        public static final String PRIMARY_DIRECTORY = "primary_directory";
+
+        /**
+         * The secondary directory name this media exists under. The value may
+         * be {@code NULL} if the media doesn't have a secondary directory name.
+         * <p>
+         * Type: TEXT
+         *
+         * @see PendingParams#setSecondaryDirectory(String)
+         */
+        public static final String SECONDARY_DIRECTORY = "secondary_directory";
     }
 
     /**
@@ -965,6 +1013,11 @@ public final class MediaStore {
      * work with multiple media file types in a single query.
      */
     public static final class Files {
+        /** @hide */
+        public static final String TABLE = "files";
+
+        /** @hide */
+        public static final Uri EXTERNAL_CONTENT_URI = getContentUri(VOLUME_EXTERNAL);
 
         /**
          * Get the content:// style URI for the files table on the
@@ -1224,7 +1277,7 @@ public final class MediaStore {
                 if (sv.isPrimary()) {
                     return VOLUME_EXTERNAL;
                 } else {
-                    return checkArgumentVolumeName(sv.getUuid());
+                    return checkArgumentVolumeName(sv.getNormalizedUuid());
                 }
             }
             throw new IllegalStateException("Unknown volume at " + path);
@@ -1399,13 +1452,20 @@ public final class MediaStore {
             public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
 
             /**
-             * The secondary bucket ID of this media item. This can be useful to
-             * present the user a second-level clustering of related media
-             * items. This is a read-only column that is automatically computed.
+             * The group ID of this media item. This can be useful to present
+             * the user a grouping of related media items, such a burst of
+             * images, or a {@code JPG} and {@code DNG} version of the same
+             * image.
+             * <p>
+             * This is a read-only column that is automatically computed based
+             * on the first portion of the filename. For example,
+             * {@code IMG1024.BURST001.JPG} and {@code IMG1024.BURST002.JPG}
+             * will have the same {@link #GROUP_ID} because the first portion of
+             * their filenames is identical.
              * <p>
              * Type: INTEGER
              */
-            public static final String SECONDARY_BUCKET_ID = "secondary_bucket_id";
+            public static final String GROUP_ID = "group_id";
         }
 
         public static final class Media implements ImageColumns {
@@ -1564,7 +1624,13 @@ public final class MediaStore {
         /**
          * This class provides utility methods to obtain thumbnails for various
          * {@link Images} items.
+         *
+         * @deprecated Callers should migrate to using
+         *             {@link ContentResolver#loadThumbnail}, since it offers
+         *             richer control over requested thumbnail sizes and
+         *             cancellation behavior.
          */
+        @Deprecated
         public static class Thumbnails implements BaseColumns {
             public static final Cursor query(ContentResolver cr, Uri uri, String[] projection) {
                 return cr.query(uri, projection, null, null, DEFAULT_SORT_ORDER);
@@ -2662,13 +2728,20 @@ public final class MediaStore {
             public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
 
             /**
-             * The secondary bucket ID of this media item. This can be useful to
-             * present the user a second-level clustering of related media
-             * items. This is a read-only column that is automatically computed.
+             * The group ID of this media item. This can be useful to present
+             * the user a grouping of related media items, such a burst of
+             * images, or a {@code JPG} and {@code DNG} version of the same
+             * image.
+             * <p>
+             * This is a read-only column that is automatically computed based
+             * on the first portion of the filename. For example,
+             * {@code IMG1024.BURST001.JPG} and {@code IMG1024.BURST002.JPG}
+             * will have the same {@link #GROUP_ID} because the first portion of
+             * their filenames is identical.
              * <p>
              * Type: INTEGER
              */
-            public static final String SECONDARY_BUCKET_ID = "secondary_bucket_id";
+            public static final String GROUP_ID = "group_id";
 
             /**
              * The bookmark for the video. Time in ms. Represents the location in the video that the
@@ -2741,7 +2814,13 @@ public final class MediaStore {
         /**
          * This class provides utility methods to obtain thumbnails for various
          * {@link Video} items.
+         *
+         * @deprecated Callers should migrate to using
+         *             {@link ContentResolver#loadThumbnail}, since it offers
+         *             richer control over requested thumbnail sizes and
+         *             cancellation behavior.
          */
+        @Deprecated
         public static class Thumbnails implements BaseColumns {
             /**
              * Cancel any outstanding {@link #getThumbnail} requests, causing
@@ -2919,7 +2998,7 @@ public final class MediaStore {
                 if (vi.isPrimary()) {
                     volumeNames.add(VOLUME_EXTERNAL);
                 } else {
-                    volumeNames.add(vi.getFsUuid());
+                    volumeNames.add(vi.getNormalizedFsUuid());
                 }
             }
         }
@@ -2953,8 +3032,7 @@ public final class MediaStore {
         // When not one of the well-known values above, it must be a hex UUID
         for (int i = 0; i < volumeName.length(); i++) {
             final char c = volumeName.charAt(i);
-            if (('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
-                    || ('0' <= c && c <= '9') || (c == '-')) {
+            if (('a' <= c && c <= 'f') || ('0' <= c && c <= '9') || (c == '-')) {
                 continue;
             } else {
                 throw new IllegalArgumentException("Invalid volume name: " + volumeName);
@@ -2963,23 +3041,27 @@ public final class MediaStore {
         return volumeName;
     }
 
-    /** {@hide} */
+    /**
+     * Return path where the given volume is mounted. Not valid for
+     * {@link #VOLUME_INTERNAL}.
+     *
+     * @hide
+     */
+    @TestApi
     public static @NonNull File getVolumePath(@NonNull String volumeName)
             throws FileNotFoundException {
         if (TextUtils.isEmpty(volumeName)) {
             throw new IllegalArgumentException();
         }
 
-        if (VOLUME_INTERNAL.equals(volumeName)) {
-            return Environment.getDataDirectory();
-        } else if (VOLUME_EXTERNAL.equals(volumeName)) {
+        if (VOLUME_EXTERNAL.equals(volumeName)) {
             return Environment.getExternalStorageDirectory();
         }
 
         final StorageManager sm = AppGlobals.getInitialApplication()
                 .getSystemService(StorageManager.class);
         for (VolumeInfo vi : sm.getVolumes()) {
-            if (Objects.equals(vi.getFsUuid(), volumeName)) {
+            if (Objects.equals(vi.getNormalizedFsUuid(), volumeName)) {
                 final File path = vi.getPathForUser(UserHandle.myUserId());
                 if (path != null) {
                     return path;
@@ -2989,6 +3071,34 @@ public final class MediaStore {
             }
         }
         throw new FileNotFoundException("Failed to find path for " + volumeName);
+    }
+
+    /**
+     * Return paths that should be scanned for the given volume.
+     *
+     * @hide
+     */
+    @TestApi
+    public static @NonNull Collection<File> getVolumeScanPaths(@NonNull String volumeName)
+            throws FileNotFoundException {
+        if (TextUtils.isEmpty(volumeName)) {
+            throw new IllegalArgumentException();
+        }
+
+        final ArrayList<File> res = new ArrayList<>();
+        if (VOLUME_INTERNAL.equals(volumeName)) {
+            res.add(new File(Environment.getRootDirectory(), "media"));
+            res.add(new File(Environment.getOemDirectory(), "media"));
+            res.add(new File(Environment.getProductDirectory(), "media"));
+        } else {
+            res.add(getVolumePath(volumeName));
+            final UserManager um = AppGlobals.getInitialApplication()
+                    .getSystemService(UserManager.class);
+            if (VOLUME_EXTERNAL.equals(volumeName) && um.isDemoUser()) {
+                res.add(Environment.getDataPreloadsMediaDirectory());
+            }
+        }
+        return res;
     }
 
     /**

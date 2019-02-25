@@ -15,9 +15,10 @@
  */
 package com.android.systemui.statusbar.notification.logging;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.os.RemoteException;
@@ -30,6 +31,7 @@ import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.UiOffloadThread;
+import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -66,52 +68,61 @@ public class ExpansionStateLoggerTest extends SysuiTestCase {
         waitForUiOffloadThread();
 
         verify(mBarService, Mockito.never()).onNotificationExpansionChanged(
-                eq(NOTIFICATION_KEY), anyBoolean(), anyBoolean());
+                eq(NOTIFICATION_KEY), anyBoolean(), anyBoolean(), anyInt());
     }
 
     @Test
     public void testExpanded() throws RemoteException {
-        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true);
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
         waitForUiOffloadThread();
 
         verify(mBarService, Mockito.never()).onNotificationExpansionChanged(
-                eq(NOTIFICATION_KEY), anyBoolean(), anyBoolean());
+                eq(NOTIFICATION_KEY), anyBoolean(), anyBoolean(), anyInt());
     }
 
     @Test
     public void testVisibleAndNotExpanded() throws RemoteException {
-        mLogger.onExpansionChanged(NOTIFICATION_KEY, true, false);
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, true, false,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
         mLogger.onVisibilityChanged(
                 Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true)),
                 Collections.emptyList());
         waitForUiOffloadThread();
 
         verify(mBarService, Mockito.never()).onNotificationExpansionChanged(
-                eq(NOTIFICATION_KEY), anyBoolean(), anyBoolean());
+                eq(NOTIFICATION_KEY), anyBoolean(), anyBoolean(), anyInt());
     }
 
     @Test
     public void testVisibleAndExpanded() throws RemoteException {
-        mLogger.onExpansionChanged(NOTIFICATION_KEY, true, true);
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, true, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
         mLogger.onVisibilityChanged(
                 Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true)),
                 Collections.emptyList());
         waitForUiOffloadThread();
 
         verify(mBarService).onNotificationExpansionChanged(
-                NOTIFICATION_KEY, true, true);
+                NOTIFICATION_KEY, true, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN.toMetricsEventEnum());
     }
 
     @Test
     public void testExpandedAndVisible_expandedBeforeVisible() throws RemoteException {
-        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true);
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
         mLogger.onVisibilityChanged(
-                Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true)),
+                Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true,
+                    NotificationVisibility.NotificationLocation.LOCATION_MAIN_AREA)),
                 Collections.emptyList());
         waitForUiOffloadThread();
 
         verify(mBarService).onNotificationExpansionChanged(
-                NOTIFICATION_KEY, false, true);
+                NOTIFICATION_KEY, false, true,
+                // The last location seen should be logged (the one passed to onVisibilityChanged).
+                NotificationVisibility.NotificationLocation.LOCATION_MAIN_AREA.toMetricsEventEnum()
+        );
     }
 
     @Test
@@ -119,11 +130,14 @@ public class ExpansionStateLoggerTest extends SysuiTestCase {
         mLogger.onVisibilityChanged(
                 Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true)),
                 Collections.emptyList());
-        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true);
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true,
+                NotificationVisibility.NotificationLocation.LOCATION_FIRST_HEADS_UP);
         waitForUiOffloadThread();
 
         verify(mBarService).onNotificationExpansionChanged(
-                NOTIFICATION_KEY, false, true);
+                NOTIFICATION_KEY, false, true,
+                // The last location seen should be logged (the one passed to onExpansionChanged).
+                NotificationVisibility.NotificationLocation.LOCATION_FIRST_HEADS_UP.toMetricsEventEnum());
     }
 
     @Test
@@ -131,15 +145,45 @@ public class ExpansionStateLoggerTest extends SysuiTestCase {
         mLogger.onVisibilityChanged(
                 Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true)),
                 Collections.emptyList());
-        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true);
-        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true);
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, false, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
         waitForUiOffloadThread();
 
         verify(mBarService).onNotificationExpansionChanged(
-                NOTIFICATION_KEY, false, true);
+                NOTIFICATION_KEY, false, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN.toMetricsEventEnum());
+    }
+
+    @Test
+    public void testOnEntryReinflated() throws RemoteException {
+        mLogger.onExpansionChanged(NOTIFICATION_KEY, true, true,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
+        mLogger.onVisibilityChanged(
+                Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true)),
+                Collections.emptyList());
+        waitForUiOffloadThread();
+        verify(mBarService).onNotificationExpansionChanged(
+                NOTIFICATION_KEY, true, true, ExpandableViewState.LOCATION_UNKNOWN);
+
+        mLogger.onEntryReinflated(NOTIFICATION_KEY);
+        mLogger.onVisibilityChanged(
+                Collections.singletonList(createNotificationVisibility(NOTIFICATION_KEY, true)),
+                Collections.emptyList());
+        waitForUiOffloadThread();
+        // onNotificationExpansionChanged is called the second time.
+        verify(mBarService, times(2)).onNotificationExpansionChanged(
+                NOTIFICATION_KEY, true, true, ExpandableViewState.LOCATION_UNKNOWN);
     }
 
     private NotificationVisibility createNotificationVisibility(String key, boolean visibility) {
-        return NotificationVisibility.obtain(key, 0, 0, visibility);
+        return createNotificationVisibility(key, visibility,
+                NotificationVisibility.NotificationLocation.LOCATION_UNKNOWN);
+    }
+
+    private NotificationVisibility createNotificationVisibility(String key, boolean visibility,
+            NotificationVisibility.NotificationLocation location) {
+        return NotificationVisibility.obtain(key, 0, 0, visibility, location);
     }
 }

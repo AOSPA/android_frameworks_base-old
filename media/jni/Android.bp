@@ -48,6 +48,7 @@ cc_library_shared {
         "libmtp",
         "libexif",
         "libpiex",
+        "libprocessgroup",
         "libandroidfw",
         "libhidlallocatorutils",
         "libhidlbase",
@@ -94,26 +95,14 @@ cc_library_shared {
     ],
 
     shared_libs: [
-        // MediaCas
-        "android.hardware.cas@1.0",
-        "android.hardware.cas.native@1.0",
-        "android.hidl.allocator@1.0",
-        "libhidlbase",
-        "libhidlmemory",
-
-        "libmediametrics",  // Used by MediaMetrics. Will be replaced with stable C API.
-        "libbinder",  // Used by JWakeLock and MediaMetrics.
-
-        "libutils",  // Have to use shared lib to make libandroid_runtime behave correctly.
-                     // Otherwise, AndroidRuntime::getJNIEnv() will return NULL.
-
-        // NDK or NDK-compliant
+        // NDK or LLNDK or NDK-compliant
         "libandroid",
         "libbinder_ndk",
         "libmediandk",
+        "libmediametrics",
         "libnativehelper_compat_libc++",
         "liblog",
-        "libz",
+        "libvndksupport",
 
         "libmedia",
         "libmedia_omx",
@@ -127,18 +116,30 @@ cc_library_shared {
     ],
 
     static_libs: [
+        // MediaCas
+        "android.hidl.allocator@1.0",
+        "android.hidl.memory@1.0",
+        "libhidlbase",
+        "libhidlmemory",
+        "libhidltransport",
+        "libhwbinder_noltopgo",
+        "libbinderthreadstate",
+
+        // MediaPlayer2 implementation
         "libbase",
         "libcrypto",
         "libcutils",
+        "libjsoncpp",
         "libmedia_helper",
         "libmedia_player2_util",
         "libmediaplayer2",
         "libmediaplayer2-protos",
         "libmediandk_utils",
         "libmediautils",
+        "libprocessgroup",
         "libprotobuf-cpp-lite",
         "libstagefright_esds",
-        "libstagefright_foundation",
+        "libstagefright_foundation_without_imemory",
         "libstagefright_httplive",
         "libstagefright_id3",
         "libstagefright_mpeg2support",
@@ -146,6 +147,7 @@ cc_library_shared {
         "libstagefright_player2",
         "libstagefright_rtsp_player2",
         "libstagefright_timedtext2",
+        "libutils",
         "libmedia2_jni_core",
     ],
 
@@ -165,6 +167,7 @@ cc_library_shared {
         "-Wno-error=deprecated-declarations",
         "-Wunused",
         "-Wunreachable-code",
+        "-fvisibility=hidden",
     ],
 
     ldflags: ["-Wl,--exclude-libs=ALL,-error-limit=0"],

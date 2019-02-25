@@ -39,6 +39,7 @@ import static android.system.OsConstants.W_OK;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.content.ContentResolver;
 import android.provider.DocumentsContract.Document;
 import android.system.ErrnoException;
@@ -72,6 +73,7 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -831,6 +833,16 @@ public class FileUtils {
         return false;
     }
 
+    /** {@hide} */
+    public static boolean contains(Collection<File> dirs, File file) {
+        for (File dir : dirs) {
+            if (contains(dir, file)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Test if a file lives under the given directory, either as a direct child
      * or a distant grandchild.
@@ -841,6 +853,7 @@ public class FileUtils {
      *
      * @hide
      */
+    @TestApi
     public static boolean contains(File dir, File file) {
         if (dir == null || file == null) return false;
         return contains(dir.getAbsolutePath(), file.getAbsolutePath());

@@ -22,6 +22,8 @@ import static android.app.usage.UsageEvents.Event.DEVICE_SHUTDOWN;
 import static android.app.usage.UsageEvents.Event.FLUSH_TO_DISK;
 import static android.app.usage.UsageEvents.Event.NOTIFICATION_INTERRUPTION;
 import static android.app.usage.UsageEvents.Event.SHORTCUT_INVOCATION;
+import static android.app.usage.UsageStatsManager.USAGE_SOURCE_CURRENT_ACTIVITY;
+import static android.app.usage.UsageStatsManager.USAGE_SOURCE_TASK_ROOT_ACTIVITY;
 
 import android.Manifest;
 import android.app.ActivityManager;
@@ -39,6 +41,7 @@ import android.app.usage.UsageEvents.Event;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageStatsManager.StandbyBuckets;
+import android.app.usage.UsageStatsManager.UsageSource;
 import android.app.usage.UsageStatsManagerInternal;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -65,6 +68,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.util.ArraySet;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -132,6 +136,7 @@ public class UsageStatsService extends SystemService implements
     private File mUsageStatsDir;
     long mRealTimeSnapshot;
     long mSystemTimeSnapshot;
+    int mUsageSource;
 
     /** Manages the standby state of apps. */
     AppStandbyController mAppStandby;
@@ -258,6 +263,7 @@ public class UsageStatsService extends SystemService implements
             } else {
                 Slog.w(TAG, "Missing procfs interface: " + KERNEL_COUNTER_FILE);
             }
+            readUsageSourceSetting();
         }
     }
 
@@ -266,6 +272,13 @@ public class UsageStatsService extends SystemService implements
             mDpmInternal = LocalServices.getService(DevicePolicyManagerInternal.class);
         }
         return mDpmInternal;
+    }
+
+    private void readUsageSourceSetting() {
+        synchronized (mLock) {
+            mUsageSource = Settings.Global.getInt(getContext().getContentResolver(),
+                    Settings.Global.APP_TIME_LIMIT_USAGE_SOURCE, USAGE_SOURCE_TASK_ROOT_ACTIVITY);
+        }
     }
 
     private class UserActionsReceiver extends BroadcastReceiver {
@@ -419,6 +432,7 @@ public class UsageStatsService extends SystemService implements
         synchronized (mLock) {
             mHandler.removeMessages(MSG_REPORT_EVENT);
             Event event = new Event(DEVICE_SHUTDOWN, SystemClock.elapsedRealtime());
+            event.mPackage = Event.DEVICE_EVENT_PACKAGE_NAME;
             // orderly shutdown, the last event is DEVICE_SHUTDOWN.
             reportEventToAllUserId(event);
             flushToDiskLocked();
@@ -436,6 +450,7 @@ public class UsageStatsService extends SystemService implements
      */
     void prepareForPossibleShutdown() {
         Event event = new Event(DEVICE_SHUTDOWN, SystemClock.elapsedRealtime());
+        event.mPackage = Event.DEVICE_EVENT_PACKAGE_NAME;
         mHandler.obtainMessage(MSG_REPORT_EVENT_TO_ALL_USERID, event).sendToTarget();
         mHandler.sendEmptyMessage(MSG_FLUSH_TO_DISK);
     }
@@ -459,12 +474,28 @@ public class UsageStatsService extends SystemService implements
             service.reportEvent(event);
 
             mAppStandby.reportEvent(event, elapsedRealtime, userId);
+
+            String packageName;
+
+            switch(mUsageSource) {
+                case USAGE_SOURCE_CURRENT_ACTIVITY:
+                    packageName = event.getPackageName();
+                    break;
+                case USAGE_SOURCE_TASK_ROOT_ACTIVITY:
+                default:
+                    packageName = event.getTaskRootPackageName();
+                    if (packageName == null) {
+                        packageName = event.getPackageName();
+                    }
+                    break;
+            }
+
             switch (event.mEventType) {
                 case Event.ACTIVITY_RESUMED:
                     synchronized (mVisibleActivities) {
                         mVisibleActivities.put(event.mInstanceId, event.getClassName());
                         try {
-                            mAppTimeLimit.noteUsageStart(event.getPackageName(), userId);
+                            mAppTimeLimit.noteUsageStart(packageName, userId);
                         } catch (IllegalArgumentException iae) {
                             Slog.e(TAG, "Failed to note usage start", iae);
                         }
@@ -496,7 +527,7 @@ public class UsageStatsService extends SystemService implements
                     synchronized (mVisibleActivities) {
                         if (mVisibleActivities.removeReturnOld(event.mInstanceId) != null) {
                             try {
-                                mAppTimeLimit.noteUsageStop(event.getPackageName(), userId);
+                                mAppTimeLimit.noteUsageStop(packageName, userId);
                             } catch (IllegalArgumentException iae) {
                                 Slog.w(TAG, "Failed to note usage stop", iae);
                             }
@@ -638,7 +669,7 @@ public class UsageStatsService extends SystemService implements
      * Called by the Binder stub.
      */
     UsageEvents queryEventsForPackage(int userId, long beginTime, long endTime,
-            String packageName) {
+            String packageName, boolean includeTaskRoot) {
         synchronized (mLock) {
             final long timeNow = checkAndGetTimeLocked();
             if (!validRange(timeNow, beginTime, endTime)) {
@@ -647,7 +678,7 @@ public class UsageStatsService extends SystemService implements
 
             final UserUsageStatsService service =
                     getUserDataAndInitializeIfNeededLocked(userId, timeNow);
-            return service.queryEventsForPackage(beginTime, endTime, packageName);
+            return service.queryEventsForPackage(beginTime, endTime, packageName, includeTaskRoot);
         }
     }
 
@@ -738,6 +769,10 @@ public class UsageStatsService extends SystemService implements
                 mAppStandby.dumpState(args, pw);
             }
 
+            idpw.println();
+            idpw.printPair("Usage Source", UsageStatsManager.usageSourceToString(mUsageSource));
+            idpw.println();
+
             mAppTimeLimit.dump(null, pw);
         }
     }
@@ -808,7 +843,7 @@ public class UsageStatsService extends SystemService implements
             return mode == AppOpsManager.MODE_ALLOWED;
         }
 
-        private boolean hasObserverPermission(String callingPackage) {
+        private boolean hasObserverPermission() {
             final int callingUid = Binder.getCallingUid();
             DevicePolicyManagerInternal dpmInternal = getDpmInternal();
             if (callingUid == Process.SYSTEM_UID
@@ -820,6 +855,22 @@ public class UsageStatsService extends SystemService implements
             }
             return getContext().checkCallingPermission(Manifest.permission.OBSERVE_APP_USAGE)
                     == PackageManager.PERMISSION_GRANTED;
+        }
+
+        private boolean hasPermissions(String callingPackage, String... permissions) {
+            final int callingUid = Binder.getCallingUid();
+            if (callingUid == Process.SYSTEM_UID) {
+                // Caller is the system, so proceed.
+                return true;
+            }
+
+            boolean hasPermissions = true;
+            final Context context = getContext();
+            for (int i = 0; i < permissions.length; i++) {
+                hasPermissions = hasPermissions && (context.checkCallingPermission(permissions[i])
+                        == PackageManager.PERMISSION_GRANTED);
+            }
+            return hasPermissions;
         }
 
         private void checkCallerIsSystemOrSameApp(String pkg) {
@@ -939,10 +990,12 @@ public class UsageStatsService extends SystemService implements
             final int callingUserId = UserHandle.getUserId(callingUid);
 
             checkCallerIsSameApp(callingPackage);
+            final boolean includeTaskRoot = hasPermission(callingPackage);
+
             final long token = Binder.clearCallingIdentity();
             try {
                 return UsageStatsService.this.queryEventsForPackage(callingUserId, beginTime,
-                        endTime, callingPackage);
+                        endTime, callingPackage, includeTaskRoot);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -989,7 +1042,7 @@ public class UsageStatsService extends SystemService implements
             final long token = Binder.clearCallingIdentity();
             try {
                 return UsageStatsService.this.queryEventsForPackage(userId, beginTime,
-                        endTime, pkg);
+                        endTime, pkg, true);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1229,7 +1282,7 @@ public class UsageStatsService extends SystemService implements
         public void registerAppUsageObserver(int observerId,
                 String[] packages, long timeLimitMs, PendingIntent
                 callbackIntent, String callingPackage) {
-            if (!hasObserverPermission(callingPackage)) {
+            if (!hasObserverPermission()) {
                 throw new SecurityException("Caller doesn't have OBSERVE_APP_USAGE permission");
             }
 
@@ -1252,7 +1305,7 @@ public class UsageStatsService extends SystemService implements
 
         @Override
         public void unregisterAppUsageObserver(int observerId, String callingPackage) {
-            if (!hasObserverPermission(callingPackage)) {
+            if (!hasObserverPermission()) {
                 throw new SecurityException("Caller doesn't have OBSERVE_APP_USAGE permission");
             }
 
@@ -1271,7 +1324,7 @@ public class UsageStatsService extends SystemService implements
                 long timeLimitMs, long sessionThresholdTimeMs,
                 PendingIntent limitReachedCallbackIntent, PendingIntent sessionEndCallbackIntent,
                 String callingPackage) {
-            if (!hasObserverPermission(callingPackage)) {
+            if (!hasObserverPermission()) {
                 throw new SecurityException("Caller doesn't have OBSERVE_APP_USAGE permission");
             }
 
@@ -1295,7 +1348,7 @@ public class UsageStatsService extends SystemService implements
 
         @Override
         public void unregisterUsageSessionObserver(int sessionObserverId, String callingPackage) {
-            if (!hasObserverPermission(callingPackage)) {
+            if (!hasObserverPermission()) {
                 throw new SecurityException("Caller doesn't have OBSERVE_APP_USAGE permission");
             }
 
@@ -1305,6 +1358,51 @@ public class UsageStatsService extends SystemService implements
             try {
                 UsageStatsService.this.unregisterUsageSessionObserver(callingUid, sessionObserverId,
                         userId);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void registerAppUsageLimitObserver(int observerId, String[] packages,
+                long timeLimitMs, PendingIntent callbackIntent, String callingPackage) {
+            if (!hasPermissions(callingPackage,
+                    Manifest.permission.SUSPEND_APPS, Manifest.permission.OBSERVE_APP_USAGE)) {
+                throw new SecurityException("Caller doesn't have both SUSPEND_APPS and "
+                        + "OBSERVE_APP_USAGE permissions");
+            }
+
+            if (packages == null || packages.length == 0) {
+                throw new IllegalArgumentException("Must specify at least one package");
+            }
+            if (callbackIntent == null) {
+                throw new NullPointerException("callbackIntent can't be null");
+            }
+            final int callingUid = Binder.getCallingUid();
+            final int userId = UserHandle.getUserId(callingUid);
+            final long token = Binder.clearCallingIdentity();
+            try {
+                UsageStatsService.this.registerAppUsageLimitObserver(callingUid, observerId,
+                        packages, timeLimitMs, callbackIntent, userId);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void unregisterAppUsageLimitObserver(int observerId, String callingPackage) {
+            if (!hasPermissions(callingPackage,
+                    Manifest.permission.SUSPEND_APPS, Manifest.permission.OBSERVE_APP_USAGE)) {
+                throw new SecurityException("Caller doesn't have both SUSPEND_APPS and "
+                        + "OBSERVE_APP_USAGE permissions");
+            }
+
+            final int callingUid = Binder.getCallingUid();
+            final int userId = UserHandle.getUserId(callingUid);
+            final long token = Binder.clearCallingIdentity();
+            try {
+                UsageStatsService.this.unregisterAppUsageLimitObserver(
+                        callingUid, observerId, userId);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1373,6 +1471,21 @@ public class UsageStatsService extends SystemService implements
                 Binder.restoreCallingIdentity(binderToken);
             }
         }
+
+        @Override
+        public @UsageSource int getUsageSource() {
+            if (!hasObserverPermission()) {
+                throw new SecurityException("Caller doesn't have OBSERVE_APP_USAGE permission");
+            }
+            synchronized (mLock) {
+                return mUsageSource;
+            }
+        }
+
+        @Override
+        public void forceUsageSourceSettingRead() {
+            readUsageSourceSetting();
+        }
     }
 
     void registerAppUsageObserver(int callingUid, int observerId, String[] packages,
@@ -1397,6 +1510,16 @@ public class UsageStatsService extends SystemService implements
         mAppTimeLimit.removeUsageSessionObserver(callingUid, sessionObserverId, userId);
     }
 
+    void registerAppUsageLimitObserver(int callingUid, int observerId, String[] packages,
+            long timeLimitMs, PendingIntent callbackIntent, int userId) {
+        mAppTimeLimit.addAppUsageLimitObserver(callingUid, observerId, packages, timeLimitMs,
+                callbackIntent, userId);
+    }
+
+    void unregisterAppUsageLimitObserver(int callingUid, int observerId, int userId) {
+        mAppTimeLimit.removeAppUsageLimitObserver(callingUid, observerId, userId);
+    }
+
     /**
      * This local service implementation is primarily used by ActivityManagerService.
      * ActivityManagerService will call these methods holding the 'am' lock, which means we
@@ -1406,7 +1529,7 @@ public class UsageStatsService extends SystemService implements
 
         @Override
         public void reportEvent(ComponentName component, int userId, int eventType,
-                int instanceId) {
+                int instanceId, ComponentName taskRoot) {
             if (component == null) {
                 Slog.w(TAG, "Event reported without a component name");
                 return;
@@ -1416,6 +1539,13 @@ public class UsageStatsService extends SystemService implements
             event.mPackage = component.getPackageName();
             event.mClass = component.getClassName();
             event.mInstanceId = instanceId;
+            if (taskRoot == null) {
+                event.mTaskRootPackage = null;
+                event.mTaskRootClass = null;
+            } else {
+                event.mTaskRootPackage = taskRoot.getPackageName();
+                event.mTaskRootClass = taskRoot.getClassName();
+            }
             mHandler.obtainMessage(MSG_REPORT_EVENT, userId, 0, event).sendToTarget();
         }
 
@@ -1594,6 +1724,11 @@ public class UsageStatsService extends SystemService implements
         @Override
         public void reportExemptedSyncStart(String packageName, int userId) {
             mAppStandby.postReportExemptedSyncStart(packageName, userId);
+        }
+
+        @Override
+        public AppUsageLimitData getAppUsageLimit(String packageName, UserHandle user) {
+            return mAppTimeLimit.getAppUsageLimit(packageName, user);
         }
     }
 }

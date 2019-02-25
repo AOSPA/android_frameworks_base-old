@@ -16,13 +16,19 @@
 
 package android.permission;
 
+import static android.permission.PermissionControllerManager.COUNT_ONLY_WHEN_GRANTED;
+import static android.permission.PermissionControllerManager.COUNT_WHEN_SYSTEM;
+
 import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.internal.util.Preconditions.checkArgumentNonnegative;
 import static com.android.internal.util.Preconditions.checkCollectionElementsNotNull;
+import static com.android.internal.util.Preconditions.checkFlagsArgument;
 import static com.android.internal.util.Preconditions.checkNotNull;
+import static com.android.internal.util.Preconditions.checkStringNotEmpty;
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
 import android.Manifest;
+import android.annotation.BinderThread;
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.app.Service;
@@ -36,12 +42,14 @@ import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteCallback;
 import android.os.UserHandle;
+import android.permission.PermissionControllerManager.CountPermissionAppsFlag;
 import android.util.ArrayMap;
 import android.util.Log;
 
 import com.android.internal.util.Preconditions;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +58,7 @@ import java.util.Map;
 /**
  * This service is meant to be implemented by the app controlling permissions.
  *
- * @see PermissionController
+ * @see PermissionControllerManager
  *
  * @hide
  */
@@ -92,10 +100,32 @@ public abstract class PermissionControllerService extends Service {
      * Create a backup of the runtime permissions.
      *
      * @param user The user to back up
-     * @param out The stream to write the backup to
+     * @param backup The stream to write the backup to
      */
     public abstract void onGetRuntimePermissionsBackup(@NonNull UserHandle user,
-            @NonNull OutputStream out);
+            @NonNull OutputStream backup);
+
+    /**
+     * Restore a backup of the runtime permissions.
+     *
+     * @param user The user to restore
+     * @param backup The stream to read the backup from
+     */
+    @BinderThread
+    public abstract void onRestoreRuntimePermissionsBackup(@NonNull UserHandle user,
+            @NonNull InputStream backup);
+
+    /**
+     * Restore a delayed backup of the runtime permissions.
+     *
+     * @param packageName The app to restore
+     * @param user The user to restore
+     *
+     * @return {@code true} iff there is still delayed backup left
+     */
+    @BinderThread
+    public abstract boolean onRestoreDelayedRuntimePermissionsBackup(@NonNull String packageName,
+            @NonNull UserHandle user);
 
     /**
      * Gets the runtime permissions for an app.
@@ -120,13 +150,13 @@ public abstract class PermissionControllerService extends Service {
      * Count how many apps have one of a set of permissions.
      *
      * @param permissionNames The permissions the app might have
-     * @param countOnlyGranted Count an app only if the permission is granted to the app
-     * @param countSystem Also count system apps
+     * @param flags Modify which apps to count. By default all non-system apps that request a
+     *              permission are counted
      *
      * @return the number of apps that have one of the permissions
      */
     public abstract int onCountPermissionApps(@NonNull List<String> permissionNames,
-            boolean countOnlyGranted, boolean countSystem);
+            @CountPermissionAppsFlag int flags);
 
     /**
      * Count how many apps have used permissions.
@@ -136,8 +166,19 @@ public abstract class PermissionControllerService extends Service {
      *
      * @return descriptions of the users of permissions
      */
-    public abstract @NonNull List<RuntimePermissionUsageInfo>
-            onPermissionUsageResult(boolean countSystem, long numMillis);
+    public abstract @NonNull List<RuntimePermissionUsageInfo> onGetPermissionUsages(
+            boolean countSystem, long numMillis);
+
+    /**
+     * Check whether an application is qualified for a role.
+     *
+     * @param roleName name of the role to check for
+     * @param packageName package name of the application to check for
+     *
+     * @return whether the application is qualified for the role.
+     */
+    public abstract boolean onIsApplicationQualifiedForRole(@NonNull String roleName,
+            @NonNull String packageName);
 
     @Override
     public final IBinder onBind(Intent intent) {
@@ -190,6 +231,36 @@ public abstract class PermissionControllerService extends Service {
             }
 
             @Override
+            public void restoreRuntimePermissionBackup(UserHandle user, ParcelFileDescriptor pipe) {
+                checkNotNull(user);
+                checkNotNull(pipe);
+
+                enforceCallingPermission(Manifest.permission.GRANT_RUNTIME_PERMISSIONS, null);
+
+                try (InputStream backup = new ParcelFileDescriptor.AutoCloseInputStream(pipe)) {
+                    onRestoreRuntimePermissionsBackup(user, backup);
+                } catch (IOException e) {
+                    Log.e(LOG_TAG, "Could not open pipe to read backup from", e);
+                }
+            }
+
+            @Override
+            public void restoreDelayedRuntimePermissionBackup(String packageName, UserHandle user,
+                    RemoteCallback callback) {
+                checkNotNull(packageName);
+                checkNotNull(user);
+                checkNotNull(callback);
+
+                enforceCallingPermission(Manifest.permission.GRANT_RUNTIME_PERMISSIONS, null);
+
+                boolean hasMoreBackup = onRestoreDelayedRuntimePermissionsBackup(packageName, user);
+
+                Bundle result = new Bundle();
+                result.putBoolean(PermissionControllerManager.KEY_RESULT, hasMoreBackup);
+                callback.sendResult(result);
+            }
+
+            @Override
             public void getAppPermissions(String packageName, RemoteCallback callback) {
                 checkNotNull(packageName, "packageName");
                 checkNotNull(callback, "callback");
@@ -214,17 +285,18 @@ public abstract class PermissionControllerService extends Service {
             }
 
             @Override
-            public void countPermissionApps(List<String> permissionNames, boolean countOnlyGranted,
-                    boolean countSystem, RemoteCallback callback) {
+            public void countPermissionApps(List<String> permissionNames, int flags,
+                    RemoteCallback callback) {
                 checkCollectionElementsNotNull(permissionNames, "permissionNames");
+                checkFlagsArgument(flags, COUNT_WHEN_SYSTEM | COUNT_ONLY_WHEN_GRANTED);
                 checkNotNull(callback, "callback");
 
                 enforceCallingPermission(Manifest.permission.GET_RUNTIME_PERMISSIONS, null);
 
                 mHandler.sendMessage(
                         obtainMessage(PermissionControllerService::countPermissionApps,
-                                PermissionControllerService.this, permissionNames, countOnlyGranted,
-                                countSystem, callback));
+                                PermissionControllerService.this, permissionNames, flags,
+                                callback));
             }
 
             @Override
@@ -239,6 +311,20 @@ public abstract class PermissionControllerService extends Service {
                         obtainMessage(PermissionControllerService::getPermissionUsages,
                                 PermissionControllerService.this, countSystem, numMillis,
                                 callback));
+            }
+
+            @Override
+            public void isApplicationQualifiedForRole(String roleName, String packageName,
+                    RemoteCallback callback) {
+                checkStringNotEmpty(roleName);
+                checkStringNotEmpty(packageName);
+                checkNotNull(callback, "callback");
+
+                enforceCallingPermission(Manifest.permission.MANAGE_ROLE_HOLDERS, null);
+
+                mHandler.sendMessage(obtainMessage(
+                        PermissionControllerService::isApplicationQualifiedForRole,
+                        PermissionControllerService.this, roleName, packageName, callback));
             }
         };
     }
@@ -265,11 +351,11 @@ public abstract class PermissionControllerService extends Service {
     }
 
     private void getRuntimePermissionsBackup(@NonNull UserHandle user,
-            @NonNull ParcelFileDescriptor outFile) {
-        try (OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(outFile)) {
-            onGetRuntimePermissionsBackup(user, out);
+            @NonNull ParcelFileDescriptor backupFile) {
+        try (OutputStream backup = new ParcelFileDescriptor.AutoCloseOutputStream(backupFile)) {
+            onGetRuntimePermissionsBackup(user, backup);
         } catch (IOException e) {
-            Log.e(LOG_TAG, "Could not open pipe to write backup tp", e);
+            Log.e(LOG_TAG, "Could not open pipe to write backup to", e);
         }
     }
 
@@ -285,8 +371,8 @@ public abstract class PermissionControllerService extends Service {
     }
 
     private void countPermissionApps(@NonNull List<String> permissionNames,
-            boolean countOnlyGranted, boolean countSystem, @NonNull RemoteCallback callback) {
-        int numApps = onCountPermissionApps(permissionNames, countOnlyGranted, countSystem);
+            @CountPermissionAppsFlag int flags, @NonNull RemoteCallback callback) {
+        int numApps = onCountPermissionApps(permissionNames, flags);
 
         Bundle result = new Bundle();
         result.putInt(PermissionControllerManager.KEY_RESULT, numApps);
@@ -296,7 +382,7 @@ public abstract class PermissionControllerService extends Service {
     private void getPermissionUsages(boolean countSystem, long numMillis,
             @NonNull RemoteCallback callback) {
         List<RuntimePermissionUsageInfo> users =
-                onPermissionUsageResult(countSystem, numMillis);
+                onGetPermissionUsages(countSystem, numMillis);
         if (users != null && !users.isEmpty()) {
             Bundle result = new Bundle();
             result.putParcelableList(PermissionControllerManager.KEY_RESULT, users);
@@ -304,5 +390,13 @@ public abstract class PermissionControllerService extends Service {
         } else {
             callback.sendResult(null);
         }
+    }
+
+    private void isApplicationQualifiedForRole(@NonNull String roleName,
+            @NonNull String packageName, @NonNull RemoteCallback callback) {
+        boolean qualified = onIsApplicationQualifiedForRole(roleName, packageName);
+        Bundle result = new Bundle();
+        result.putBoolean(PermissionControllerManager.KEY_RESULT, qualified);
+        callback.sendResult(result);
     }
 }

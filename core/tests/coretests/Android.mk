@@ -37,7 +37,9 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
     mockwebserver \
     guava \
     androidx.test.runner \
+    androidx.test.ext.junit \
     androidx.test.rules \
+    androidx.test.espresso.core \
     mockito-target-minus-junit4 \
     espresso-core \
     ub-uiautomator \
@@ -49,10 +51,10 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
 LOCAL_JAVA_LIBRARIES := \
     android.test.runner \
     telephony-common \
+    testables \
     org.apache.http.legacy \
     android.test.base \
     android.test.mock \
-    framework-oahl-backward-compatibility \
     framework-atb-backward-compatibility \
 
 LOCAL_PACKAGE_NAME := FrameworksCoreTests

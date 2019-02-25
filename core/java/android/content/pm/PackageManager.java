@@ -552,8 +552,6 @@ public abstract class PackageManager {
      * currently active, i.e. mounted and available to other processes of the OS.
      * In particular, this flag alone will not match APEX files that are staged
      * for activation at next reboot.
-     * TODO(b/119767311): include uninstalled/inactive APEX if
-     *                    MATCH_UNINSTALLED_PACKAGES is set.
      */
     public static final int MATCH_APEX = 0x40000000;
 
@@ -2060,6 +2058,14 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device has a secure implementation of keyguard, meaning the
+     * device supports PIN, pattern and password as defined in Android CDD
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_SECURE_LOCK_SCREEN = "android.software.secure_lock_screen";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device includes an accelerometer.
      */
     @SdkConstant(SdkConstantType.FEATURE)
@@ -2215,6 +2221,13 @@ public abstract class PackageManager {
     public static final String FEATURE_TELEPHONY_MBMS = "android.hardware.telephony.mbms";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
+     * supports attaching to IMS implementations using the ImsService API in telephony.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_TELEPHONY_IMS = "android.hardware.telephony.ims";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports connecting to USB devices
      * as the USB host.
@@ -2331,14 +2344,7 @@ public abstract class PackageManager {
      * {@link #hasSystemFeature}: The device has biometric hardware to detect a fingerprint.
      */
     @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_FINGERPRINT_PRE_29 = "android.hardware.fingerprint";
-
-    /**
-     * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature}: The device has biometric hardware to detect a fingerprint.
-     */
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_FINGERPRINT = "android.hardware.biometrics.fingerprint";
+    public static final String FEATURE_FINGERPRINT = "android.hardware.fingerprint";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
@@ -5764,7 +5770,7 @@ public abstract class PackageManager {
      */
     @RequiresPermission(value = android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE,
             conditional = true)
-    public abstract void setComponentEnabledSetting(ComponentName componentName,
+    public abstract void setComponentEnabledSetting(@NonNull ComponentName componentName,
             @EnabledState int newState, @EnabledFlags int flags);
 
     /**
@@ -5778,7 +5784,7 @@ public abstract class PackageManager {
      * @return Returns the current enabled state for the component.
      */
     public abstract @EnabledState int getComponentEnabledSetting(
-            ComponentName componentName);
+            @NonNull ComponentName componentName);
 
     /**
      * Set the enabled setting for an application
@@ -5793,7 +5799,7 @@ public abstract class PackageManager {
      */
     @RequiresPermission(value = android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE,
             conditional = true)
-    public abstract void setApplicationEnabledSetting(String packageName,
+    public abstract void setApplicationEnabledSetting(@NonNull String packageName,
             @EnabledState int newState, @EnabledFlags int flags);
 
     /**
@@ -5807,7 +5813,7 @@ public abstract class PackageManager {
      * @return Returns the current enabled state for the application.
      * @throws IllegalArgumentException if the named package does not exist.
      */
-    public abstract @EnabledState int getApplicationEnabledSetting(String packageName);
+    public abstract @EnabledState int getApplicationEnabledSetting(@NonNull String packageName);
 
     /**
      * Flush the package restrictions for a given user to disk. This forces the package restrictions
@@ -6716,6 +6722,39 @@ public abstract class PackageManager {
     public String getWellbeingPackageName() {
         throw new UnsupportedOperationException(
                 "getWellbeingPackageName not implemented in subclass");
+    }
+
+    /**
+     * @return the system defined app predictor package name, or null if there's none.
+     *
+     * @hide
+     */
+    public String getAppPredictionServicePackageName() {
+        throw new UnsupportedOperationException(
+            "getAppPredictionServicePackageName not implemented in subclass");
+    }
+
+    /**
+     * @return the system defined content capture service package name, or null if there's none.
+     *
+     * @hide
+     */
+    public String getContentCaptureServicePackageName() {
+        throw new UnsupportedOperationException(
+                "getContentCaptureServicePackageName not implemented in subclass");
+    }
+
+    /**
+     * @return the incident report approver app package name, or null if it's not defined
+     * by the OEM.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public String getIncidentReportApproverPackageName() {
+        throw new UnsupportedOperationException(
+                "getIncidentReportApproverPackageName not implemented in subclass");
     }
 
     /**

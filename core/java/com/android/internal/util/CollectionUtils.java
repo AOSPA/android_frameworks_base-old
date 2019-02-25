@@ -327,15 +327,18 @@ public class CollectionUtils {
         }
     }
 
-    public static @NonNull <T> List<T> defeatNullable(@Nullable List<T> val) {
-        return (val != null) ? val : Collections.emptyList();
-    }
-
     /**
      * @return the first element if not empty/null, null otherwise
      */
     public static @Nullable <T> T firstOrNull(@Nullable List<T> cur) {
         return isEmpty(cur) ? null : cur.get(0);
+    }
+
+    /**
+     * @return the first element if not empty/null, null otherwise
+     */
+    public static @Nullable <T> T firstOrNull(@Nullable Collection<T> cur) {
+        return isEmpty(cur) ? null : cur.iterator().next();
     }
 
     /**

@@ -686,6 +686,12 @@ interface IPackageManager {
 
     String getWellbeingPackageName();
 
+    String getAppPredictionServicePackageName();
+
+    String getContentCaptureServicePackageName();
+
+    String getIncidentReportApproverPackageName();
+
     boolean isPackageStateProtected(String packageName, int userId);
 
     void sendDeviceCustomizationReadyBroadcast();

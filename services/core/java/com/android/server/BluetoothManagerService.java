@@ -209,6 +209,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     private int mErrorRecoveryRetryCounter;
     private final int mSystemUiUid;
 
+    private boolean mIsHearingAidProfileSupported;
+
     // Save a ProfileServiceConnections object for each of the bound
     // bluetooth profile services
     private final Map<Integer, ProfileServiceConnections> mProfileServices = new HashMap<>();
@@ -392,13 +394,19 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         mCallbacks = new RemoteCallbackList<IBluetoothManagerCallback>();
         mStateChangeCallbacks = new RemoteCallbackList<IBluetoothStateChangeCallback>();
 
+        mIsHearingAidProfileSupported = context.getResources()
+                .getBoolean(com.android.internal.R.bool.config_hearing_aid_profile_supported);
+
         // TODO: We need a more generic way to initialize the persist keys of FeatureFlagUtils
-        boolean isHearingAidEnabled;
         String value = SystemProperties.get(FeatureFlagUtils.PERSIST_PREFIX + FeatureFlagUtils.HEARING_AID_SETTINGS);
         if (!TextUtils.isEmpty(value)) {
-            isHearingAidEnabled = Boolean.parseBoolean(value);
+            boolean isHearingAidEnabled = Boolean.parseBoolean(value);
             Log.v(TAG, "set feature flag HEARING_AID_SETTINGS to " + isHearingAidEnabled);
             FeatureFlagUtils.setEnabled(context, FeatureFlagUtils.HEARING_AID_SETTINGS, isHearingAidEnabled);
+            if (isHearingAidEnabled && !mIsHearingAidProfileSupported) {
+                // Overwrite to enable support by FeatureFlag
+                mIsHearingAidProfileSupported = true;
+            }
         }
 
         IntentFilter filter = new IntentFilter();
@@ -678,6 +686,11 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         } catch (SettingNotFoundException e) {
         }
         return false;
+    }
+
+    @Override
+    public boolean isHearingAidProfileSupported() {
+        return mIsHearingAidProfileSupported;
     }
 
     // Monitor change of BLE scan only mode settings.

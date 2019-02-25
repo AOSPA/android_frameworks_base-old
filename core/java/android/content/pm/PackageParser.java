@@ -475,7 +475,7 @@ public class PackageParser {
         public final boolean extractNativeLibs;
         public final boolean isolatedSplits;
         public final boolean isSplitRequired;
-        public final boolean preferCodeIntegrity;
+        public final boolean useEmbeddedDex;
 
         public ApkLite(String codePath, String packageName, String splitName,
                 boolean isFeatureSplit,
@@ -484,7 +484,7 @@ public class PackageParser {
                 int revisionCode, int installLocation, List<VerifierInfo> verifiers,
                 SigningDetails signingDetails, boolean coreApp,
                 boolean debuggable, boolean multiArch, boolean use32bitAbi,
-                boolean preferCodeIntegrity, boolean extractNativeLibs, boolean isolatedSplits) {
+                boolean useEmbeddedDex, boolean extractNativeLibs, boolean isolatedSplits) {
             this.codePath = codePath;
             this.packageName = packageName;
             this.splitName = splitName;
@@ -501,7 +501,7 @@ public class PackageParser {
             this.debuggable = debuggable;
             this.multiArch = multiArch;
             this.use32bitAbi = use32bitAbi;
-            this.preferCodeIntegrity = preferCodeIntegrity;
+            this.useEmbeddedDex = useEmbeddedDex;
             this.extractNativeLibs = extractNativeLibs;
             this.isolatedSplits = isolatedSplits;
             this.isSplitRequired = isSplitRequired;
@@ -1533,7 +1533,7 @@ public class PackageParser {
         SigningDetails verified;
         if (skipVerify) {
             // systemDir APKs are already trusted, save time by not verifying
-            verified = ApkSignatureVerifier.plsCertsNoVerifyOnlyCerts(
+            verified = ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
                         apkPath, minSignatureScheme);
         } else {
             verified = ApkSignatureVerifier.verify(apkPath, minSignatureScheme);
@@ -1726,7 +1726,7 @@ public class PackageParser {
         boolean isolatedSplits = false;
         boolean isFeatureSplit = false;
         boolean isSplitRequired = false;
-        boolean preferCodeIntegrity = false;
+        boolean useEmbeddedDex = false;
         String configForSplit = null;
         String usesSplitName = null;
 
@@ -1790,8 +1790,8 @@ public class PackageParser {
                         extractNativeLibsProvided = Boolean.valueOf(
                                 attrs.getAttributeBooleanValue(i, true));
                     }
-                    if ("preferCodeIntegrity".equals(attr)) {
-                        preferCodeIntegrity = attrs.getAttributeBooleanValue(i, false);
+                    if ("useEmbeddedDex".equals(attr)) {
+                        useEmbeddedDex = attrs.getAttributeBooleanValue(i, false);
                     }
                 }
             } else if (TAG_USES_SPLIT.equals(parser.getName())) {
@@ -1851,16 +1851,10 @@ public class PackageParser {
         final boolean extractNativeLibs = (extractNativeLibsProvided != null)
                 ? extractNativeLibsProvided : extractNativeLibsDefault;
 
-        if (preferCodeIntegrity && extractNativeLibs) {
-            throw new PackageParserException(
-                    PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
-                    "Can't request both preferCodeIntegrity and extractNativeLibs");
-        }
-
         return new ApkLite(codePath, packageSplit.first, packageSplit.second, isFeatureSplit,
                 configForSplit, usesSplitName, isSplitRequired, versionCode, versionCodeMajor,
                 revisionCode, installLocation, verifiers, signingDetails, coreApp, debuggable,
-                multiArch, use32bitAbi, preferCodeIntegrity, extractNativeLibs, isolatedSplits);
+                multiArch, use32bitAbi, useEmbeddedDex, extractNativeLibs, isolatedSplits);
     }
 
     /**
@@ -3789,9 +3783,9 @@ public class PackageParser {
         }
 
         if (sa.getBoolean(
-                R.styleable.AndroidManifestApplication_preferCodeIntegrity,
+                R.styleable.AndroidManifestApplication_useEmbeddedDex,
                 false)) {
-            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_PREFER_CODE_INTEGRITY;
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_USE_EMBEDDED_DEX;
         }
 
         if (sa.getBoolean(
@@ -3906,6 +3900,9 @@ public class PackageParser {
                 && !ClassLoaderFactory.isValidClassLoaderName(ai.classLoaderName)) {
             outError[0] = "Invalid class loader name: " + ai.classLoaderName;
         }
+
+        ai.zygotePreloadName = sa.getString(
+                com.android.internal.R.styleable.AndroidManifestApplication_zygotePreloadName);
 
         sa.recycle();
 
@@ -4426,7 +4423,7 @@ public class PackageParser {
         a.owner = owner;
         a.setPackageName(owner.packageName);
 
-        a.info.theme = 0;
+        a.info.theme = android.R.style.Theme_NoDisplay;
         a.info.exported = true;
         a.info.name = AppDetailsActivity.class.getName();
         a.info.processName = owner.applicationInfo.processName;
@@ -5573,7 +5570,7 @@ public class PackageParser {
 
         s.info.mForegroundServiceType = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestService_foregroundServiceType,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_UNSPECIFIED);
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE);
 
         s.info.flags = 0;
         if (sa.getBoolean(
@@ -8494,13 +8491,27 @@ public class PackageParser {
     public static PackageInfo generatePackageInfoFromApex(File apexFile, boolean collectCerts)
             throws PackageParserException {
         PackageInfo pi = new PackageInfo();
+
+        // TODO(b/123086053) properly fill in the ApplicationInfo with data from AndroidManifest
+        // Add ApplicationInfo to the PackageInfo.
+        ApplicationInfo ai = new ApplicationInfo();
+        ai.sourceDir = apexFile.getPath();
+        ai.flags = ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_INSTALLED;
+        ai.enabled = true;
+        ai.targetSdkVersion = 28;
+        ai.targetSandboxVersion = 0;
+        pi.applicationInfo = ai;
+
+
         // TODO(b/123052859): We should avoid these repeated calls to parseApkLite each time
         // we want to generate information for APEX modules.
         PackageParser.ApkLite apk = PackageParser.parseApkLite(apexFile,
             collectCerts ? PackageParser.PARSE_COLLECT_CERTIFICATES : 0);
 
         pi.packageName = apk.packageName;
+        ai.packageName = apk.packageName;
         pi.setLongVersionCode(apk.getLongVersionCode());
+        ai.setVersionCode(apk.getLongVersionCode());
 
         if (collectCerts) {
             if (apk.signingDetails.hasPastSigningCertificates()) {

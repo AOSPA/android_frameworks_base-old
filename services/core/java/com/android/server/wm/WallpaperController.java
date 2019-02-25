@@ -34,8 +34,10 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.WALLPAPER_DRAW_PENDING_TIMEOUT;
 
 import android.graphics.Bitmap;
+import android.graphics.ColorSpace;
 import android.graphics.GraphicBuffer;
 import android.graphics.Rect;
+import android.hardware.HardwareBuffer;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.IBinder;
@@ -661,7 +663,8 @@ class WallpaperController {
      * Adjusts the wallpaper windows if the input display has a pending wallpaper layout or one of
      * the opening apps should be a wallpaper target.
      */
-    void adjustWallpaperWindowsForAppTransitionIfNeeded(ArraySet<AppWindowToken> openingApps) {
+    void adjustWallpaperWindowsForAppTransitionIfNeeded(ArraySet<AppWindowToken> openingApps,
+            ArraySet<AppWindowToken> changingApps) {
         boolean adjust = false;
         if ((mDisplayContent.pendingLayoutChanges & FINISH_LAYOUT_REDO_WALLPAPER) != 0) {
             adjust = true;
@@ -671,6 +674,15 @@ class WallpaperController {
                 if (token.windowsCanBeWallpaperTarget()) {
                     adjust = true;
                     break;
+                }
+            }
+            if (!adjust) {
+                for (int i = changingApps.size() - 1; i >= 0; --i) {
+                    final AppWindowToken token = changingApps.valueAt(i);
+                    if (token.windowsCanBeWallpaperTarget()) {
+                        adjust = true;
+                        break;
+                    }
                 }
             }
         }
@@ -719,7 +731,10 @@ class WallpaperController {
             Slog.w(TAG_WM, "Failed to screenshot wallpaper");
             return null;
         }
-        return Bitmap.createHardwareBitmap(wallpaperBuffer);
+        // TODO(b/116112787) Now that hardware bitmap creation can take color space, we
+        // should continue to fix screenshot.
+        return Bitmap.wrapHardwareBuffer(HardwareBuffer.createFromGraphicBuffer(wallpaperBuffer),
+                                         ColorSpace.get(ColorSpace.Named.SRGB));
     }
 
     private WindowState getTopVisibleWallpaper() {

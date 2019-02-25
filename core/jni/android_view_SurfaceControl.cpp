@@ -36,6 +36,7 @@
 #include <memory>
 #include <stdio.h>
 #include <system/graphics.h>
+#include <ui/ConfigStoreTypes.h>
 #include <ui/DisplayInfo.h>
 #include <ui/DisplayedFrameStats.h>
 #include <ui/FrameStats.h>
@@ -108,6 +109,23 @@ static struct {
     jmethodID ctor;
 } gDisplayedContentSamplingAttributesClassInfo;
 
+static struct {
+    jclass clazz;
+    jmethodID ctor;
+    jfieldID X;
+    jfieldID Y;
+    jfieldID Z;
+} gCieXyzClassInfo;
+
+static struct {
+    jclass clazz;
+    jmethodID ctor;
+    jfieldID red;
+    jfieldID green;
+    jfieldID blue;
+    jfieldID white;
+} gDisplayPrimariesClassInfo;
+
 // ----------------------------------------------------------------------------
 
 static jlong nativeCreateTransaction(JNIEnv* env, jclass clazz) {
@@ -124,13 +142,28 @@ static jlong nativeGetNativeTransactionFinalizer(JNIEnv* env, jclass clazz) {
 
 static jlong nativeCreate(JNIEnv* env, jclass clazz, jobject sessionObj,
         jstring nameStr, jint w, jint h, jint format, jint flags, jlong parentObject,
-        jint windowType, jint ownerUid) {
+        jobject metadataParcel) {
     ScopedUtfChars name(env, nameStr);
-    sp<SurfaceComposerClient> client(android_view_SurfaceSession_getClient(env, sessionObj));
+    sp<SurfaceComposerClient> client;
+    if (sessionObj != NULL) {
+        client = android_view_SurfaceSession_getClient(env, sessionObj);
+    } else {
+        client = SurfaceComposerClient::getDefault();
+    }
     SurfaceControl *parent = reinterpret_cast<SurfaceControl*>(parentObject);
     sp<SurfaceControl> surface;
+    LayerMetadata metadata;
+    Parcel* parcel = parcelForJavaObject(env, metadataParcel);
+    if (parcel && !parcel->objectsCount()) {
+        status_t err = metadata.readFromParcel(parcel);
+        if (err != NO_ERROR) {
+          jniThrowException(env, "java/lang/IllegalArgumentException",
+                            "Metadata parcel has wrong format");
+        }
+    }
+
     status_t err = client->createSurfaceChecked(
-            String8(name.c_str()), w, h, format, &surface, flags, parent, windowType, ownerUid);
+            String8(name.c_str()), w, h, format, &surface, flags, parent, std::move(metadata));
     if (err == NAME_NOT_FOUND) {
         jniThrowException(env, "java/lang/IllegalArgumentException", NULL);
         return 0;
@@ -277,6 +310,21 @@ static void nativeSetPosition(JNIEnv* env, jclass clazz, jlong transactionObj,
     transaction->setPosition(ctrl, x, y);
 }
 
+static void nativeSetGeometry(JNIEnv* env, jclass clazz, jlong transactionObj, jlong nativeObject,
+        jobject sourceObj, jobject dstObj, jlong orientation) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
+
+    Rect source, dst;
+    if (sourceObj != NULL) {
+        source = rectFromObj(env, sourceObj);
+    }
+    if (dstObj != NULL) {
+        dst = rectFromObj(env, dstObj);
+    }
+    transaction->setGeometry(ctrl, source, dst, orientation);
+}
+
 static void nativeSetGeometryAppliesWithResize(JNIEnv* env, jclass clazz,
 jlong transactionObj,
         jlong nativeObject) {
@@ -340,7 +388,7 @@ static void nativeSetInputWindowInfo(JNIEnv* env, jclass clazz, jlong transactio
         jlong nativeObject, jobject inputWindow) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
 
-    sp<NativeInputWindowHandle> handle = android_server_InputWindowHandle_getHandle(
+    sp<NativeInputWindowHandle> handle = android_view_InputWindowHandle_getHandle(
             env, inputWindow);
     handle->updateInfo();
 
@@ -355,6 +403,28 @@ static void nativeTransferTouchFocus(JNIEnv* env, jclass clazz, jlong transactio
     sp<IBinder> fromToken(ibinderForJavaObject(env, fromTokenObj));
     sp<IBinder> toToken(ibinderForJavaObject(env, toTokenObj));
     transaction->transferTouchFocus(fromToken, toToken);
+}
+
+static void nativeSetMetadata(JNIEnv* env, jclass clazz, jlong transactionObj,
+        jlong nativeObject, jint id, jobject parcelObj) {
+    Parcel* parcel = parcelForJavaObject(env, parcelObj);
+    if (!parcel) {
+        jniThrowNullPointerException(env, "attribute data");
+        return;
+    }
+    if (parcel->objectsCount()) {
+        jniThrowException(env, "java/lang/RuntimeException",
+                "Tried to marshall a Parcel that contained Binder objects.");
+        return;
+    }
+
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    std::vector<uint8_t> byteData(parcel->dataSize());
+    memcpy(byteData.data(), parcel->data(), parcel->dataSize());
+
+    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
+    transaction->setMetadata(ctrl, id, std::move(byteData));
 }
 
 static void nativeSetColor(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -636,6 +706,66 @@ static jintArray nativeGetDisplayColorModes(JNIEnv* env, jclass, jobject tokenOb
     return colorModesArray;
 }
 
+static jobject nativeGetDisplayNativePrimaries(JNIEnv* env, jclass, jobject tokenObj) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+    if (token == NULL) return NULL;
+
+    ui::DisplayPrimaries primaries;
+    if (SurfaceComposerClient::getDisplayNativePrimaries(token, primaries) != NO_ERROR) {
+        return NULL;
+    }
+
+    jobject jred = env->NewObject(gCieXyzClassInfo.clazz, gCieXyzClassInfo.ctor);
+    if (jred == NULL) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+        return NULL;
+    }
+
+    jobject jgreen = env->NewObject(gCieXyzClassInfo.clazz, gCieXyzClassInfo.ctor);
+    if (jgreen == NULL) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+        return NULL;
+    }
+
+    jobject jblue = env->NewObject(gCieXyzClassInfo.clazz, gCieXyzClassInfo.ctor);
+    if (jblue == NULL) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+        return NULL;
+    }
+
+    jobject jwhite = env->NewObject(gCieXyzClassInfo.clazz, gCieXyzClassInfo.ctor);
+    if (jwhite == NULL) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+        return NULL;
+    }
+
+    jobject jprimaries = env->NewObject(gDisplayPrimariesClassInfo.clazz,
+            gDisplayPrimariesClassInfo.ctor);
+    if (jprimaries == NULL) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+        return NULL;
+    }
+
+    env->SetFloatField(jred, gCieXyzClassInfo.X, primaries.red.X);
+    env->SetFloatField(jred, gCieXyzClassInfo.Y, primaries.red.Y);
+    env->SetFloatField(jred, gCieXyzClassInfo.Z, primaries.red.Z);
+    env->SetFloatField(jgreen, gCieXyzClassInfo.X, primaries.green.X);
+    env->SetFloatField(jgreen, gCieXyzClassInfo.Y, primaries.green.Y);
+    env->SetFloatField(jgreen, gCieXyzClassInfo.Z, primaries.green.Z);
+    env->SetFloatField(jblue, gCieXyzClassInfo.X, primaries.blue.X);
+    env->SetFloatField(jblue, gCieXyzClassInfo.Y, primaries.blue.Y);
+    env->SetFloatField(jblue, gCieXyzClassInfo.Z, primaries.blue.Z);
+    env->SetFloatField(jwhite, gCieXyzClassInfo.X, primaries.white.X);
+    env->SetFloatField(jwhite, gCieXyzClassInfo.Y, primaries.white.Y);
+    env->SetFloatField(jwhite, gCieXyzClassInfo.Z, primaries.white.Z);
+    env->SetObjectField(jprimaries, gDisplayPrimariesClassInfo.red, jred);
+    env->SetObjectField(jprimaries, gDisplayPrimariesClassInfo.green, jgreen);
+    env->SetObjectField(jprimaries, gDisplayPrimariesClassInfo.blue, jblue);
+    env->SetObjectField(jprimaries, gDisplayPrimariesClassInfo.white, jwhite);
+
+    return jprimaries;
+}
+
 static jint nativeGetActiveColorMode(JNIEnv* env, jclass, jobject tokenObj) {
     sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
     if (token == NULL) return -1;
@@ -868,13 +998,13 @@ static void nativeReparentChildren(JNIEnv* env, jclass clazz, jlong transactionO
 
 static void nativeReparent(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject,
-        jobject newParentObject) {
+        jlong newParentObject) {
     auto ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    sp<IBinder> parentHandle = ibinderForJavaObject(env, newParentObject);
+    auto newParent = reinterpret_cast<SurfaceControl *>(newParentObject);
 
     {
         auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-        transaction->reparent(ctrl, parentHandle);
+        transaction->reparent(ctrl, newParent != NULL ? newParent->getHandle() : NULL);
     }
 }
 
@@ -961,7 +1091,7 @@ static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
-    {"nativeCreate", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIIIJII)J",
+    {"nativeCreate", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIIIJLandroid/os/Parcel;)J",
             (void*)nativeCreate },
     {"nativeReadFromParcel", "(Landroid/os/Parcel;)J",
             (void*)nativeReadFromParcel },
@@ -1037,6 +1167,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetActiveConfig },
     {"nativeGetDisplayColorModes", "(Landroid/os/IBinder;)[I",
             (void*)nativeGetDisplayColorModes},
+    {"nativeGetDisplayNativePrimaries", "(Landroid/os/IBinder;)Landroid/view/SurfaceControl$DisplayPrimaries;",
+            (void*)nativeGetDisplayNativePrimaries },
     {"nativeGetActiveColorMode", "(Landroid/os/IBinder;)I",
             (void*)nativeGetActiveColorMode},
     {"nativeSetActiveColorMode", "(Landroid/os/IBinder;I)Z",
@@ -1063,7 +1195,7 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeDeferTransactionUntilSurface },
     {"nativeReparentChildren", "(JJLandroid/os/IBinder;)V",
             (void*)nativeReparentChildren } ,
-    {"nativeReparent", "(JJLandroid/os/IBinder;)V",
+    {"nativeReparent", "(JJJ)V",
             (void*)nativeReparent },
     {"nativeSeverChildren", "(JJ)V",
             (void*)nativeSeverChildren } ,
@@ -1079,6 +1211,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetInputWindowInfo },
     {"nativeTransferTouchFocus", "(JLandroid/os/IBinder;Landroid/os/IBinder;)V",
             (void*)nativeTransferTouchFocus },
+    {"nativeSetMetadata", "(JILandroid/os/Parcel;)V",
+            (void*)nativeSetMetadata },
     {"nativeGetDisplayedContentSamplingAttributes",
             "(Landroid/os/IBinder;)Landroid/hardware/display/DisplayedContentSamplingAttributes;",
             (void*)nativeGetDisplayedContentSamplingAttributes },
@@ -1087,6 +1221,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
     {"nativeGetDisplayedContentSample",
             "(Landroid/os/IBinder;JJ)Landroid/hardware/display/DisplayedContentSample;",
             (void*)nativeGetDisplayedContentSample },
+    {"nativeSetGeometry", "(JJLandroid/graphics/Rect;Landroid/graphics/Rect;J)V",
+            (void*)nativeSetGeometry }
 };
 
 int register_android_view_SurfaceControl(JNIEnv* env)
@@ -1153,6 +1289,28 @@ int register_android_view_SurfaceControl(JNIEnv* env)
             displayedContentSamplingAttributesClazz);
     gDisplayedContentSamplingAttributesClassInfo.ctor = GetMethodIDOrDie(env,
             displayedContentSamplingAttributesClazz, "<init>", "(III)V");
+
+    jclass cieXyzClazz = FindClassOrDie(env, "android/view/SurfaceControl$CieXyz");
+    gCieXyzClassInfo.clazz = MakeGlobalRefOrDie(env, cieXyzClazz);
+    gCieXyzClassInfo.ctor = GetMethodIDOrDie(env, gCieXyzClassInfo.clazz, "<init>", "()V");
+    gCieXyzClassInfo.X = GetFieldIDOrDie(env, cieXyzClazz, "X", "F");
+    gCieXyzClassInfo.Y = GetFieldIDOrDie(env, cieXyzClazz, "Y", "F");
+    gCieXyzClassInfo.Z = GetFieldIDOrDie(env, cieXyzClazz, "Z", "F");
+
+    jclass displayPrimariesClazz = FindClassOrDie(env,
+            "android/view/SurfaceControl$DisplayPrimaries");
+    gDisplayPrimariesClassInfo.clazz = MakeGlobalRefOrDie(env, displayPrimariesClazz);
+    gDisplayPrimariesClassInfo.ctor = GetMethodIDOrDie(env, gDisplayPrimariesClassInfo.clazz,
+            "<init>", "()V");
+    gDisplayPrimariesClassInfo.red = GetFieldIDOrDie(env, displayPrimariesClazz, "red",
+            "Landroid/view/SurfaceControl$CieXyz;");
+    gDisplayPrimariesClassInfo.green = GetFieldIDOrDie(env, displayPrimariesClazz, "green",
+            "Landroid/view/SurfaceControl$CieXyz;");
+    gDisplayPrimariesClassInfo.blue = GetFieldIDOrDie(env, displayPrimariesClazz, "blue",
+            "Landroid/view/SurfaceControl$CieXyz;");
+    gDisplayPrimariesClassInfo.white = GetFieldIDOrDie(env, displayPrimariesClazz, "white",
+            "Landroid/view/SurfaceControl$CieXyz;");
+
     return err;
 }
 

@@ -55,10 +55,11 @@ public class LooperStatsService extends Binder {
             "debug.sys.looper_stats_enabled";
     private static final int DEFAULT_SAMPLING_INTERVAL = 100;
     private static final int DEFAULT_ENTRIES_SIZE_CAP = 2000;
-    private static final boolean DEFAULT_ENABLED = false;
+    private static final boolean DEFAULT_ENABLED = true;
 
     private final Context mContext;
     private final LooperStats mStats;
+    // Default should be false so that the first call to #setEnabled installed the looper observer.
     private boolean mEnabled = false;
 
     private LooperStatsService(Context context, LooperStats stats) {
@@ -122,6 +123,10 @@ public class LooperStatsService extends Binder {
                 "exception_count"));
         pw.println(header);
         for (LooperStats.ExportedEntry entry : entries) {
+            if (entry.messageName.startsWith(LooperStats.DEBUG_ENTRY_PREFIX)) {
+                // Do not dump debug entries.
+                continue;
+            }
             pw.printf("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
                     packageMap.mapUid(entry.workSourceUid),
                     entry.threadName,

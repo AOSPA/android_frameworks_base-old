@@ -404,7 +404,7 @@ public class ApkSignatureVerifier {
      * @throws PackageParserException if the APK's signature failed to verify.
      * or greater is not found, except in the case of no JAR signature.
      */
-    public static PackageParser.SigningDetails plsCertsNoVerifyOnlyCerts(
+    public static PackageParser.SigningDetails unsafeGetCertsWithoutVerification(
             String apkPath, int minSignatureSchemeVersion)
             throws PackageParserException {
 
@@ -419,7 +419,7 @@ public class ApkSignatureVerifier {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "certsOnlyV3");
         try {
             ApkSignatureSchemeV3Verifier.VerifiedSigner vSigner =
-                    ApkSignatureSchemeV3Verifier.plsCertsNoVerifyOnlyCerts(apkPath);
+                    ApkSignatureSchemeV3Verifier.unsafeGetCertsWithoutVerification(apkPath);
             Certificate[][] signerCerts = new Certificate[][] { vSigner.certs };
             Signature[] signerSigs = convertToSignatures(signerCerts);
             Signature[] pastSignerSigs = null;
@@ -461,7 +461,7 @@ public class ApkSignatureVerifier {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "certsOnlyV2");
         try {
             Certificate[][] signerCerts =
-                    ApkSignatureSchemeV2Verifier.plsCertsNoVerifyOnlyCerts(apkPath);
+                    ApkSignatureSchemeV2Verifier.unsafeGetCertsWithoutVerification(apkPath);
             Signature[] signerSigs = convertToSignatures(signerCerts);
             return new PackageParser.SigningDetails(signerSigs,
                     SignatureSchemeVersion.SIGNING_BLOCK_V2);

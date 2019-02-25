@@ -23,6 +23,7 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 
 import java.util.Set;
 
@@ -55,12 +56,13 @@ public class SmartReplyController {
      * Notifies StatusBarService a smart reply is sent.
      */
     public void smartReplySent(NotificationEntry entry, int replyIndex, CharSequence reply,
-            boolean generatedByAssistant) {
+            boolean generatedByAssistant, int notificationLocation) {
         mCallback.onSmartReplySent(entry, reply);
         mSendingKeys.add(entry.key);
         try {
             mBarService.onNotificationSmartReplySent(
-                    entry.notification.getKey(), replyIndex, reply, generatedByAssistant);
+                    entry.notification.getKey(), replyIndex, reply, generatedByAssistant,
+                    notificationLocation);
         } catch (RemoteException e) {
             // Nothing to do, system going down
         }
@@ -74,8 +76,10 @@ public class SmartReplyController {
             boolean generatedByAssistant) {
         final int count = mEntryManager.getNotificationData().getActiveNotifications().size();
         final int rank = mEntryManager.getNotificationData().getRank(entry.key);
-        final NotificationVisibility nv =
-                NotificationVisibility.obtain(entry.key, rank, count, true);
+        NotificationVisibility.NotificationLocation location =
+                NotificationLogger.getNotificationLocation(entry);
+        final NotificationVisibility nv = NotificationVisibility.obtain(
+                entry.key, rank, count, true, location);
         try {
             mBarService.onNotificationActionClick(
                     entry.key, actionIndex, action, nv, generatedByAssistant);

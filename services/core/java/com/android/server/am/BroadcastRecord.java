@@ -36,10 +36,12 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An active intent broadcast.
@@ -64,11 +66,15 @@ final class BroadcastRecord extends Binder {
     final int[] delivery;   // delivery state of each receiver
     final long[] duration;   // duration a receiver took to process broadcast
     IIntentReceiver resultTo; // who receives final result if non-null
+    boolean deferred;
+    int splitCount;         // refcount for result callback, when split
+    int splitToken;         // identifier for cross-BroadcastRecord refcount
     long enqueueClockTime;  // the clock time the broadcast was enqueued
     long dispatchTime;      // when dispatch started on this set of receivers
     long dispatchClockTime; // the clock time the dispatch started
     long receiverTime;      // when current receiver started for timeouts.
     long finishTime;        // when we finished the broadcast.
+    boolean timeoutExempt;  // true if this broadcast is not subject to receiver timeouts
     int resultCode;         // current result code value.
     String resultData;      // current result data value.
     Bundle resultExtras;    // current result extra data values.
@@ -105,6 +111,9 @@ final class BroadcastRecord extends Binder {
     ProcessRecord curApp;       // hosting application of current receiver.
     ComponentName curComponent; // the receiver class that is currently running.
     ActivityInfo curReceiver;   // info about the receiver that is currently running.
+
+    // Private refcount-management bookkeeping; start > 0
+    static AtomicInteger sNextToken = new AtomicInteger(1);
 
     void dump(PrintWriter pw, String prefix, SimpleDateFormat sdf) {
         final long now = SystemClock.uptimeMillis();
@@ -228,7 +237,7 @@ final class BroadcastRecord extends Binder {
             String[] _requiredPermissions, int _appOp, BroadcastOptions _options, List _receivers,
             IIntentReceiver _resultTo, int _resultCode, String _resultData, Bundle _resultExtras,
             boolean _serialized, boolean _sticky, boolean _initialSticky, int _userId,
-            boolean _allowBackgroundActivityStarts) {
+            boolean _allowBackgroundActivityStarts, boolean _timeoutExempt) {
         if (_intent == null) {
             throw new NullPointerException("Can't construct with a null intent");
         }
@@ -258,6 +267,7 @@ final class BroadcastRecord extends Binder {
         nextReceiver = 0;
         state = IDLE;
         allowBackgroundActivityStarts = _allowBackgroundActivityStarts;
+        timeoutExempt = _timeoutExempt;
     }
 
     /**
@@ -302,6 +312,53 @@ final class BroadcastRecord extends Binder {
         manifestSkipCount = from.manifestSkipCount;
         queue = from.queue;
         allowBackgroundActivityStarts = from.allowBackgroundActivityStarts;
+        timeoutExempt = from.timeoutExempt;
+    }
+
+    /**
+     * Split off a new BroadcastRecord that clones this one, but contains only the
+     * recipient records for the current (just-finished) receiver's app, starting
+     * after the just-finished receiver [i.e. at r.nextReceiver].  Returns null
+     * if there are no matching subsequent receivers in this BroadcastRecord.
+     */
+    BroadcastRecord splitRecipientsLocked(int slowAppUid, int startingAt) {
+        // Do we actually have any matching receivers down the line...?
+        ArrayList splitReceivers = null;
+        for (int i = startingAt; i < receivers.size(); ) {
+            Object o = receivers.get(i);
+            if (getReceiverUid(o) == slowAppUid) {
+                if (splitReceivers == null) {
+                    splitReceivers = new ArrayList<>();
+                }
+                splitReceivers.add(o);
+                receivers.remove(i);
+                break;
+            } else {
+                i++;
+            }
+        }
+
+        // No later receivers in the same app, so we have no more to do
+        if (splitReceivers == null) {
+            return null;
+        }
+
+        // build a new BroadcastRecord around that single-target list
+        BroadcastRecord split = new BroadcastRecord(queue, intent, callerApp,
+                callerPackage, callingPid, callingUid, callerInstantApp, resolvedType,
+                requiredPermissions, appOp, options, splitReceivers, resultTo, resultCode,
+                resultData, resultExtras, ordered, sticky, initialSticky, userId,
+                allowBackgroundActivityStarts, timeoutExempt);
+
+        return split;
+    }
+
+    int getReceiverUid(Object receiver) {
+        if (receiver instanceof BroadcastFilter) {
+            return ((BroadcastFilter) receiver).owningUid;
+        } else /* if (receiver instanceof ResolveInfo) */ {
+            return ((ResolveInfo) receiver).activityInfo.applicationInfo.uid;
+        }
     }
 
     public BroadcastRecord maybeStripForHistory() {

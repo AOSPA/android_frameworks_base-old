@@ -27,6 +27,7 @@ import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.database.ContentObserver;
 import android.media.AudioAttributes.AttributeUsage;
@@ -38,12 +39,13 @@ import android.os.Parcelable;
 import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.util.ArrayMap;
+import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
-import android.util.SparseArray;
 import com.android.internal.app.IAppOpsActiveCallback;
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsNotedCallback;
@@ -60,8 +62,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -216,6 +218,7 @@ public class AppOpsManager {
     @IntDef(flag = true, prefix = { "UID_STATE_" }, value = {
             UID_STATE_PERSISTENT,
             UID_STATE_TOP,
+            UID_STATE_FOREGROUND_SERVICE_LOCATION,
             UID_STATE_FOREGROUND_SERVICE,
             UID_STATE_FOREGROUND,
             UID_STATE_BACKGROUND,
@@ -246,18 +249,26 @@ public class AppOpsManager {
     public static final int UID_STATE_TOP = 1;
 
     /**
+     * Metrics about an op when its uid is running a foreground service with location type.
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public static final int UID_STATE_FOREGROUND_SERVICE_LOCATION = 2;
+
+    /**
      * Metrics about an op when its uid is running a foreground service.
      * @hide
      */
     @TestApi
     @SystemApi
-    public static final int UID_STATE_FOREGROUND_SERVICE = 2;
+    public static final int UID_STATE_FOREGROUND_SERVICE = 3;
 
     /**
      * Last UID state in which we don't restrict what an op can do.
      * @hide
      */
-    public static final int UID_STATE_LAST_NON_RESTRICTED = UID_STATE_FOREGROUND_SERVICE;
+    public static final int UID_STATE_LAST_NON_RESTRICTED = UID_STATE_FOREGROUND_SERVICE_LOCATION;
 
     /**
      * Metrics about an op when its uid is in the foreground for any other reasons.
@@ -265,7 +276,7 @@ public class AppOpsManager {
      */
     @TestApi
     @SystemApi
-    public static final int UID_STATE_FOREGROUND = 3;
+    public static final int UID_STATE_FOREGROUND = 4;
 
     /**
      * Metrics about an op when its uid is in the background for any reason.
@@ -273,7 +284,7 @@ public class AppOpsManager {
      */
     @TestApi
     @SystemApi
-    public static final int UID_STATE_BACKGROUND = 4;
+    public static final int UID_STATE_BACKGROUND = 5;
 
     /**
      * Metrics about an op when its uid is cached.
@@ -281,13 +292,13 @@ public class AppOpsManager {
      */
     @TestApi
     @SystemApi
-    public static final int UID_STATE_CACHED = 5;
+    public static final int UID_STATE_CACHED = 6;
 
     /**
      * Number of uid states we track.
      * @hide
      */
-    public static final int _NUM_UID_STATE = 6;
+    public static final int _NUM_UID_STATE = 7;
 
     // when adding one of these:
     //  - increment _NUM_OP
@@ -553,9 +564,11 @@ public class AppOpsManager {
     public static final int OP_WRITE_MEDIA_IMAGES = 86;
     /** @hide Has a legacy (non-isolated) view of storage. */
     public static final int OP_LEGACY_STORAGE = 87;
+    /** @hide Accessing accessibility features */
+    public static final int OP_ACCESS_ACCESSIBILITY = 88;
     /** @hide */
     @UnsupportedAppUsage
-    public static final int _NUM_OP = 88;
+    public static final int _NUM_OP = 89;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -824,6 +837,8 @@ public class AppOpsManager {
     public static final String OPSTR_WRITE_MEDIA_IMAGES = "android:write_media_images";
     /** @hide Has a legacy (non-isolated) view of storage. */
     public static final String OPSTR_LEGACY_STORAGE = "android:legacy_storage";
+    /** @hide Interact with accessibility. */
+    public static final String OPSTR_ACCESS_ACCESSIBILITY = "android:access_accessibility";
 
     // Warning: If an permission is added here it also has to be added to
     // com.android.packageinstaller.permission.utils.EventLogger
@@ -983,6 +998,7 @@ public class AppOpsManager {
             OP_READ_MEDIA_IMAGES,               // READ_MEDIA_IMAGES
             OP_WRITE_MEDIA_IMAGES,              // WRITE_MEDIA_IMAGES
             OP_LEGACY_STORAGE,                  // LEGACY_STORAGE
+            OP_ACCESS_ACCESSIBILITY,            // ACCESS_ACCESSIBILITY
     };
 
     /**
@@ -1077,6 +1093,7 @@ public class AppOpsManager {
             OPSTR_READ_MEDIA_IMAGES,
             OPSTR_WRITE_MEDIA_IMAGES,
             OPSTR_LEGACY_STORAGE,
+            OPSTR_ACCESS_ACCESSIBILITY,
     };
 
     /**
@@ -1172,6 +1189,7 @@ public class AppOpsManager {
             "READ_MEDIA_IMAGES",
             "WRITE_MEDIA_IMAGES",
             "LEGACY_STORAGE",
+            "ACCESS_ACCESSIBILITY",
     };
 
     /**
@@ -1268,6 +1286,7 @@ public class AppOpsManager {
             Manifest.permission.READ_MEDIA_IMAGES,
             null, // no permission for OP_WRITE_MEDIA_IMAGES
             null, // no permission for OP_LEGACY_STORAGE
+            null, // no permission for OP_ACCESS_ACCESSIBILITY
     };
 
     /**
@@ -1364,6 +1383,7 @@ public class AppOpsManager {
             null, // READ_MEDIA_IMAGES
             null, // WRITE_MEDIA_IMAGES
             null, // LEGACY_STORAGE
+            null, // ACCESS_ACCESSIBILITY
     };
 
     /**
@@ -1459,6 +1479,7 @@ public class AppOpsManager {
             false, // READ_MEDIA_IMAGES
             false, // WRITE_MEDIA_IMAGES
             false, // LEGACY_STORAGE
+            false, // ACCESS_ACCESSIBILITY
     };
 
     /**
@@ -1489,7 +1510,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // READ_ICC_SMS
             AppOpsManager.MODE_ALLOWED, // WRITE_ICC_SMS
             AppOpsManager.MODE_DEFAULT, // WRITE_SETTINGS
-            AppOpsManager.MODE_DEFAULT, // SYSTEM_ALERT_WINDOW
+            getSystemAlertWindowDefault(), // SYSTEM_ALERT_WINDOW
             AppOpsManager.MODE_ALLOWED, // ACCESS_NOTIFICATIONS
             AppOpsManager.MODE_ALLOWED, // CAMERA
             AppOpsManager.MODE_ALLOWED, // RECORD_AUDIO
@@ -1553,6 +1574,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // READ_MEDIA_IMAGES
             AppOpsManager.MODE_ERRORED, // WRITE_MEDIA_IMAGES
             AppOpsManager.MODE_DEFAULT, // LEGACY_STORAGE
+            AppOpsManager.MODE_ALLOWED, // ACCESS_ACCESSIBILITY
     };
 
     /**
@@ -1651,6 +1673,7 @@ public class AppOpsManager {
             false, // READ_MEDIA_IMAGES
             false, // WRITE_MEDIA_IMAGES
             false, // LEGACY_STORAGE
+            false, // ACCESS_ACCESSIBILITY
     };
 
     /**
@@ -1711,6 +1734,12 @@ public class AppOpsManager {
     /** @hide */
     public static final String KEY_HISTORICAL_OPS = "historical_ops";
 
+    /** System properties for debug logging of noteOp call sites */
+    private static final String DEBUG_LOGGING_ENABLE_PROP = "appops.logging_enabled";
+    private static final String DEBUG_LOGGING_PACKAGES_PROP = "appops.logging_packages";
+    private static final String DEBUG_LOGGING_OPS_PROP = "appops.logging_ops";
+    private static final String DEBUG_LOGGING_TAG = "AppOpsManager";
+
     /**
      * Retrieve the op switch that controls the given operation.
      * @hide
@@ -1728,6 +1757,15 @@ public class AppOpsManager {
     public static String opToName(int op) {
         if (op == OP_NONE) return "NONE";
         return op < sOpNames.length ? sOpNames[op] : ("Unknown(" + op + ")");
+    }
+
+    /**
+     * Retrieve a non-localized public name for the operation.
+     *
+     * @hide
+     */
+    public static @NonNull String opToPublicName(int op) {
+        return sOpToString[op];
     }
 
     /**
@@ -3241,6 +3279,7 @@ public class AppOpsManager {
          *
          * @param uidState The UID state for which to query. Could be one of
          * {@link #UID_STATE_PERSISTENT}, {@link #UID_STATE_TOP},
+         * {@link #UID_STATE_FOREGROUND_SERVICE_LOCATION},
          * {@link #UID_STATE_FOREGROUND_SERVICE}, {@link #UID_STATE_FOREGROUND},
          * {@link #UID_STATE_BACKGROUND}, {@link #UID_STATE_CACHED}.
          *
@@ -3291,6 +3330,7 @@ public class AppOpsManager {
          *
          * @param uidState The UID state for which to query. Could be one of
          * {@link #UID_STATE_PERSISTENT}, {@link #UID_STATE_TOP},
+         * {@link #UID_STATE_FOREGROUND_SERVICE_LOCATION},
          * {@link #UID_STATE_FOREGROUND_SERVICE}, {@link #UID_STATE_FOREGROUND},
          * {@link #UID_STATE_BACKGROUND}, {@link #UID_STATE_CACHED}.
          *
@@ -3341,6 +3381,7 @@ public class AppOpsManager {
          *
          * @param uidState The UID state for which to query. Could be one of
          * {@link #UID_STATE_PERSISTENT}, {@link #UID_STATE_TOP},
+         * {@link #UID_STATE_FOREGROUND_SERVICE_LOCATION},
          * {@link #UID_STATE_FOREGROUND_SERVICE}, {@link #UID_STATE_FOREGROUND},
          * {@link #UID_STATE_BACKGROUND}, {@link #UID_STATE_CACHED}.
          *
@@ -4459,6 +4500,7 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int noteOpNoThrow(int op, int uid, String packageName) {
+        logNoteOpIfNeeded(op, packageName);
         try {
             return mService.noteOperation(op, uid, packageName);
         } catch (RemoteException e) {
@@ -4757,6 +4799,9 @@ public class AppOpsManager {
             case UID_STATE_TOP: {
                 return "UID_STATE_TOP";
             }
+            case UID_STATE_FOREGROUND_SERVICE_LOCATION: {
+                return "UID_STATE_FOREGROUND_SERVICE_LOCATION";
+            }
             case UID_STATE_FOREGROUND_SERVICE: {
                 return "UID_STATE_FOREGROUND_SERVICE";
             }
@@ -4806,5 +4851,63 @@ public class AppOpsManager {
                 return "UNKNOWN";
             }
         }
+    }
+
+    private static int getSystemAlertWindowDefault() {
+        final Context context = ActivityThread.currentApplication();
+        if (context == null) {
+            return AppOpsManager.MODE_DEFAULT;
+        }
+
+        // system alert window is disable on low ram phones starting from Q
+        final PackageManager pm = context.getPackageManager();
+        // TVs are constantly plugged in and has less concern for memory/power
+        if (ActivityManager.isLowRamDeviceStatic()
+                && !pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK, 0)) {
+            return AppOpsManager.MODE_IGNORED;
+        }
+
+        return AppOpsManager.MODE_DEFAULT;
+    }
+
+    private static void logNoteOpIfNeeded(int op, String callingPackage) {
+        // Check if debug logging propety is enabled.
+        if (!SystemProperties.getBoolean(DEBUG_LOGGING_ENABLE_PROP, false)) {
+            return;
+        }
+        // Check if this package should be logged.
+        String packages = SystemProperties.get(DEBUG_LOGGING_PACKAGES_PROP, "");
+        if (!"".equals(packages) && callingPackage != null) {
+            boolean found = false;
+            for (String pkg : packages.split(",")) {
+                if (callingPackage.equals(pkg)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return;
+            }
+        }
+        String opStr = opToName(op);
+        // Check if this app op should be logged
+        String logOps = SystemProperties.get(DEBUG_LOGGING_OPS_PROP, "");
+        if (!"".equals(logOps)) {
+            boolean found = false;
+            for (String logOp : logOps.split(",")) {
+                if (opStr.equals(logOp)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return;
+            }
+        }
+
+        // Log a stack trace
+        Exception here = new Exception("HERE!");
+        android.util.Log.i(DEBUG_LOGGING_TAG, "Note operation package= " + callingPackage
+                + " op= " + opStr, here);
     }
 }

@@ -971,7 +971,8 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @param target The Intent that the user will be selecting an activity
      * to perform.
-     * @param title Optional title that will be displayed in the chooser.
+     * @param title Optional title that will be displayed in the chooser,
+     * only when the target action is not ACTION_SEND or ACTION_SEND_MULTIPLE.
      * @return Return a new Intent object that you can hand to
      * {@link Context#startActivity(Intent) Context.startActivity()} and
      * related methods.
@@ -998,7 +999,8 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @param target The Intent that the user will be selecting an activity
      * to perform.
-     * @param title Optional title that will be displayed in the chooser.
+     * @param title Optional title that will be displayed in the chooser,
+     * only when the target action is not ACTION_SEND or ACTION_SEND_MULTIPLE.
      * @param sender Optional IntentSender to be called when a choice is made.
      * @return Return a new Intent object that you can hand to
      * {@link Context#startActivity(Intent) Context.startActivity()} and
@@ -1473,6 +1475,36 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_APP_ERROR = "android.intent.action.APP_ERROR";
+
+    /**
+     * An incident or bug report has been taken, and a system app has requested it to be shared,
+     * so trigger the confirmation screen.
+     *
+     * This will be sent directly to the registered receiver with the
+     * android.permission.APPROVE_INCIDENT_REPORTS permission.
+     * @hide
+     */
+    @SystemApi
+    public static final String ACTION_PENDING_INCIDENT_REPORTS_CHANGED =
+            "android.intent.action.PENDING_INCIDENT_REPORTS_CHANGED";
+
+    /**
+     * An incident report has been taken, and the user has approved it for sharing.
+     * <p>
+     * This will be sent directly to the registered receiver, which must have
+     * both the DUMP and USAGE_STATS permissions.
+     * <p>
+     * After receiving this, the application should wait until a suitable time
+     * (e.g. network available), get the list of available reports with
+     * {@link IncidentManager#getIncidentReportList IncidentManager.getIncidentReportList(String)}
+     * and then when the reports have been successfully uploaded, call
+     * {@link IncidentManager#deleteIncidentReport IncidentManager.deleteIncidentReport(Uri)}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String ACTION_INCIDENT_REPORT_READY =
+            "android.intent.action.INCIDENT_REPORT_READY";
 
     /**
      * Activity Action: Show power usage information to the user.
@@ -2008,6 +2040,15 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.extra.PERMISSION_GROUP_NAME";
 
     /**
+     * Intent extra: The number of milliseconds.
+     * <p>
+     * Type: long
+     * </p>
+     */
+    public static final String EXTRA_DURATION_MILLIS =
+            "android.intent.extra.DURATION_MILLIS";
+
+    /**
      * Activity action: Launch UI to review app uses of permissions.
      * <p>
      * Input: {@link #EXTRA_PERMISSION_NAME} specifies the permission name
@@ -2020,11 +2061,16 @@ public class Intent implements Parcelable, Cloneable {
      * {@link #EXTRA_PERMISSION_NAME}.
      * </p>
      * <p>
+     * Input: {@link #EXTRA_DURATION_MILLIS} specifies the minimum number of milliseconds of recent
+     * activity to show (optional).  Must be non-negative.
+     * </p>
+     * <p>
      * Output: Nothing.
      * </p>
      *
      * @see #EXTRA_PERMISSION_NAME
      * @see #EXTRA_PERMISSION_GROUP_NAME
+     * @see #EXTRA_DURATION_MILLIS
      *
      * @hide
      */
@@ -2361,9 +2407,7 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_PACKAGE_ENABLE_ROLLBACK =
             "android.intent.action.PACKAGE_ENABLE_ROLLBACK";
     /**
-     * Broadcast Action: An existing version of an application package has been
-     * rolled back to a previous version.
-     * The data contains the name of the package.
+     * Broadcast Action: A rollback has been committed.
      *
      * <p class="note">This is a protected intent that can only be sent
      * by the system.
@@ -2372,8 +2416,8 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SystemApi
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    public static final String ACTION_PACKAGE_ROLLBACK_EXECUTED =
-            "android.intent.action.PACKAGE_ROLLBACK_EXECUTED";
+    public static final String ACTION_ROLLBACK_COMMITTED =
+            "android.intent.action.ROLLBACK_COMMITTED";
     /**
      * @hide
      * Broadcast Action: Ask system services if there is any reason to
@@ -3046,6 +3090,13 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_MEDIA_SCANNER_SCAN_FILE = "android.intent.action.MEDIA_SCANNER_SCAN_FILE";
 
+    /**
+     * Broadcast Action:  Request the media scanner to scan a storage volume and add it to the media database.
+     * The path to the storage volume is contained in the Intent.mData field.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_MEDIA_SCANNER_SCAN_VOLUME = "android.intent.action.MEDIA_SCANNER_SCAN_VOLUME";
+
    /**
      * Broadcast Action:  The "Media Button" was pressed.  Includes a single
      * extra field, {@link #EXTRA_KEY_EVENT}, containing the key event that
@@ -3204,7 +3255,18 @@ public class Intent implements Parcelable, Cloneable {
      *
      * <p class="note">This is a protected intent that can only be sent
      * by the system.
+     *
+     * <p class="note">If the user has chosen a {@link android.telecom.CallRedirectionService} to
+     * handle redirection of outgoing calls, this intent will NOT be sent as an ordered broadcast.
+     * This means that attempts to re-write the outgoing call by other apps using this intent will
+     * be ignored.
+     * </p>
+     *
+     * @deprecated Apps that redirect outgoing calls should use the
+     * {@link android.telecom.CallRedirectionService} API.  Apps that perform call screening
+     * should use the {@link android.telecom.CallScreeningService} API.
      */
+    @Deprecated
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_NEW_OUTGOING_CALL =
             "android.intent.action.NEW_OUTGOING_CALL";
@@ -9957,9 +10019,21 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     /** @hide */
+    public void writeToProto(ProtoOutputStream proto) {
+        // Same input parameters that toString() gives to toShortString().
+        writeToProtoWithoutFieldId(proto, true, true, true, false);
+    }
+
+    /** @hide */
     public void writeToProto(ProtoOutputStream proto, long fieldId, boolean secure, boolean comp,
             boolean extras, boolean clip) {
         long token = proto.start(fieldId);
+        writeToProtoWithoutFieldId(proto, secure, comp, extras, clip);
+        proto.end(token);
+    }
+
+    private void writeToProtoWithoutFieldId(ProtoOutputStream proto, boolean secure, boolean comp,
+            boolean extras, boolean clip) {
         if (mAction != null) {
             proto.write(IntentProto.ACTION, mAction);
         }
@@ -10004,7 +10078,6 @@ public class Intent implements Parcelable, Cloneable {
         if (mSelector != null) {
             proto.write(IntentProto.SELECTOR, mSelector.toShortString(secure, comp, extras, clip));
         }
-        proto.end(token);
     }
 
     /**

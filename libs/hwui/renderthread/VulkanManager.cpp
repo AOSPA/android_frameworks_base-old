@@ -83,14 +83,13 @@ void VulkanManager::destroy() {
     mDevice = VK_NULL_HANDLE;
     mPhysicalDevice = VK_NULL_HANDLE;
     mInstance = VK_NULL_HANDLE;
-    mInstanceVersion = 0u;
     mInstanceExtensions.clear();
     mDeviceExtensions.clear();
     free_features_extensions_structs(mPhysicalDeviceFeatures2);
     mPhysicalDeviceFeatures2 = {};
 }
 
-bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFeatures2& features) {
+void VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFeatures2& features) {
     VkResult err;
 
     constexpr VkApplicationInfo app_info = {
@@ -100,7 +99,7 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
         0,                                  // applicationVersion
         "android framework",                // pEngineName
         0,                                  // engineVerison
-        VK_MAKE_VERSION(1, 1, 0),           // apiVersion
+        mAPIVersion,                        // apiVersion
     };
 
     {
@@ -108,15 +107,11 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
 
         uint32_t extensionCount = 0;
         err = mEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        if (VK_SUCCESS != err) {
-            return false;
-        }
+        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
         std::unique_ptr<VkExtensionProperties[]> extensions(
                 new VkExtensionProperties[extensionCount]);
         err = mEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.get());
-        if (VK_SUCCESS != err) {
-            return false;
-        }
+        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
         bool hasKHRSurfaceExtension = false;
         bool hasKHRAndroidSurfaceExtension = false;
         for (uint32_t i = 0; i < extensionCount; ++i) {
@@ -128,10 +123,7 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
                 hasKHRAndroidSurfaceExtension = true;
             }
         }
-        if (!hasKHRSurfaceExtension || !hasKHRAndroidSurfaceExtension) {
-            this->destroy();
-            return false;
-        }
+        LOG_ALWAYS_FATAL_IF(!hasKHRSurfaceExtension || !hasKHRAndroidSurfaceExtension);
     }
 
     const VkInstanceCreateInfo instance_create = {
@@ -147,10 +139,7 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
 
     GET_PROC(CreateInstance);
     err = mCreateInstance(&instance_create, nullptr, &mInstance);
-    if (err < 0) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(err < 0);
 
     GET_INST_PROC(DestroyInstance);
     GET_INST_PROC(EnumeratePhysicalDevices);
@@ -167,39 +156,23 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
     GET_INST_PROC(GetPhysicalDeviceSurfacePresentModesKHR);
 
     uint32_t gpuCount;
-    err = mEnumeratePhysicalDevices(mInstance, &gpuCount, nullptr);
-    if (err) {
-        this->destroy();
-        return false;
-    }
-    if (!gpuCount) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(mEnumeratePhysicalDevices(mInstance, &gpuCount, nullptr));
+    LOG_ALWAYS_FATAL_IF(!gpuCount);
     // Just returning the first physical device instead of getting the whole array. Since there
     // should only be one device on android.
     gpuCount = 1;
     err = mEnumeratePhysicalDevices(mInstance, &gpuCount, &mPhysicalDevice);
     // VK_INCOMPLETE is returned when the count we provide is less than the total device count.
-    if (err && VK_INCOMPLETE != err) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(err && VK_INCOMPLETE != err);
 
     VkPhysicalDeviceProperties physDeviceProperties;
     mGetPhysicalDeviceProperties(mPhysicalDevice, &physDeviceProperties);
-    if (physDeviceProperties.apiVersion < VK_MAKE_VERSION(1, 1, 0)) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(physDeviceProperties.apiVersion < VK_MAKE_VERSION(1, 1, 0));
 
     // query to get the initial queue props size
     uint32_t queueCount;
     mGetPhysicalDeviceQueueFamilyProperties(mPhysicalDevice, &queueCount, nullptr);
-    if (!queueCount) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(!queueCount);
 
     // now get the actual queue props
     std::unique_ptr<VkQueueFamilyProperties[]> queueProps(new VkQueueFamilyProperties[queueCount]);
@@ -213,10 +186,7 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
             break;
         }
     }
-    if (mGraphicsQueueIndex == queueCount) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(mGraphicsQueueIndex == queueCount);
 
     // All physical devices and queue families on Android must be capable of
     // presentation with any native window. So just use the first one.
@@ -226,18 +196,12 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
         uint32_t extensionCount = 0;
         err = mEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr, &extensionCount,
                 nullptr);
-        if (VK_SUCCESS != err) {
-            this->destroy();
-            return false;
-        }
+        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
         std::unique_ptr<VkExtensionProperties[]> extensions(
                 new VkExtensionProperties[extensionCount]);
         err = mEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr, &extensionCount,
                 extensions.get());
-        if (VK_SUCCESS != err) {
-            this->destroy();
-            return false;
-        }
+        LOG_ALWAYS_FATAL_IF(VK_SUCCESS != err);
         bool hasKHRSwapchainExtension = false;
         for (uint32_t i = 0; i < extensionCount; ++i) {
             mDeviceExtensions.push_back(extensions[i].extensionName);
@@ -245,10 +209,7 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
                 hasKHRSwapchainExtension = true;
             }
         }
-        if (!hasKHRSwapchainExtension) {
-            this->destroy();
-            return false;
-        }
+        LOG_ALWAYS_FATAL_IF(!hasKHRSwapchainExtension);
     }
 
     auto getProc = [] (const char* proc_name, VkInstance instance, VkDevice device) {
@@ -260,10 +221,7 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
     grExtensions.init(getProc, mInstance, mPhysicalDevice, mInstanceExtensions.size(),
             mInstanceExtensions.data(), mDeviceExtensions.size(), mDeviceExtensions.data());
 
-    if (!grExtensions.hasExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME, 1)) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(!grExtensions.hasExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME, 1));
 
     memset(&features, 0, sizeof(VkPhysicalDeviceFeatures2));
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -333,11 +291,7 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
         nullptr,                                 // ppEnabledFeatures
     };
 
-    err = mCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &mDevice);
-    if (err) {
-        this->destroy();
-        return false;
-    }
+    LOG_ALWAYS_FATAL_IF(mCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &mDevice));
 
     GET_DEV_PROC(GetDeviceQueue);
     GET_DEV_PROC(DeviceWaitIdle);
@@ -367,8 +321,6 @@ bool VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
     GET_DEV_PROC(DestroyFence);
     GET_DEV_PROC(WaitForFences);
     GET_DEV_PROC(ResetFences);
-
-    return true;
 }
 
 void VulkanManager::initialize() {
@@ -377,11 +329,12 @@ void VulkanManager::initialize() {
     }
 
     GET_PROC(EnumerateInstanceVersion);
-    LOG_ALWAYS_FATAL_IF(mEnumerateInstanceVersion(&mInstanceVersion));
-    LOG_ALWAYS_FATAL_IF(mInstanceVersion < VK_MAKE_VERSION(1, 1, 0));
+    uint32_t instanceVersion;
+    LOG_ALWAYS_FATAL_IF(mEnumerateInstanceVersion(&instanceVersion));
+    LOG_ALWAYS_FATAL_IF(instanceVersion < VK_MAKE_VERSION(1, 1, 0));
 
     GrVkExtensions extensions;
-    LOG_ALWAYS_FATAL_IF(!this->setupDevice(extensions, mPhysicalDeviceFeatures2));
+    this->setupDevice(extensions, mPhysicalDeviceFeatures2);
 
     mGetDeviceQueue(mDevice, mGraphicsQueueIndex, 0, &mGraphicsQueue);
 
@@ -398,7 +351,7 @@ void VulkanManager::initialize() {
     backendContext.fDevice = mDevice;
     backendContext.fQueue = mGraphicsQueue;
     backendContext.fGraphicsQueueIndex = mGraphicsQueueIndex;
-    backendContext.fInstanceVersion = mInstanceVersion;
+    backendContext.fMaxAPIVersion = mAPIVersion;
     backendContext.fVkExtensions = &extensions;
     backendContext.fDeviceFeatures2 = &mPhysicalDeviceFeatures2;
     backendContext.fGetProc = std::move(getProc);
@@ -419,7 +372,7 @@ void VulkanManager::initialize() {
 
     if (!setupDummyCommandBuffer()) {
         this->destroy();
-        return;
+        // Pass through will crash on next line.
     }
     LOG_ALWAYS_FATAL_IF(mDummyCB == VK_NULL_HANDLE);
 
@@ -446,7 +399,7 @@ VkFunctorInitParams VulkanManager::getVkFunctorInitParams() const {
             .device = mDevice,
             .queue = mGraphicsQueue,
             .graphics_queue_index = mGraphicsQueueIndex,
-            .instance_version = mInstanceVersion,
+            .api_version = mAPIVersion,
             .enabled_instance_extension_names = mInstanceExtensions.data(),
             .enabled_instance_extension_names_length =
                     static_cast<uint32_t>(mInstanceExtensions.size()),
@@ -516,11 +469,13 @@ SkSurface* VulkanManager::getBackbufferSurface(VulkanSurface** surfaceOut) {
     if (windowWidth != surface->mWindowWidth || windowHeight != surface->mWindowHeight) {
         ColorMode colorMode = surface->mColorMode;
         sk_sp<SkColorSpace> colorSpace = surface->mColorSpace;
-        SkColorSpace::Gamut colorGamut = surface->mColorGamut;
         SkColorType colorType = surface->mColorType;
         destroySurface(surface);
-        *surfaceOut = createSurface(window, colorMode, colorSpace, colorGamut, colorType);
+        *surfaceOut = createSurface(window, colorMode, colorSpace, colorType);
         surface = *surfaceOut;
+        if (!surface) {
+            return nullptr;
+        }
     }
 
     VulkanSurface::BackbufferInfo* backbuffer = getAvailableBackbuffer(surface);
@@ -841,9 +796,12 @@ bool VulkanManager::createSwapchain(VulkanSurface* surface) {
     }
 
     if (surface->mColorMode == ColorMode::WideColorGamut) {
-        if (surface->mColorGamut == SkColorSpace::Gamut::kSRGB_Gamut) {
+        skcms_Matrix3x3 surfaceGamut;
+        LOG_ALWAYS_FATAL_IF(!surface->mColorSpace->toXYZD50(&surfaceGamut),
+                            "Could not get gamut matrix from color space");
+        if (memcmp(&surfaceGamut, &SkNamedGamut::kSRGB, sizeof(surfaceGamut)) == 0) {
             colorSpace = VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT;
-        } else if (surface->mColorGamut == SkColorSpace::Gamut::kDCIP3_D65_Gamut) {
+        } else if (memcmp(&surfaceGamut, &SkNamedGamut::kDCIP3, sizeof(surfaceGamut)) == 0) {
             colorSpace = VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT;
         } else {
             LOG_ALWAYS_FATAL("Unreachable: unsupported wide color space.");
@@ -922,7 +880,6 @@ bool VulkanManager::createSwapchain(VulkanSurface* surface) {
 
 VulkanSurface* VulkanManager::createSurface(ANativeWindow* window, ColorMode colorMode,
                                             sk_sp<SkColorSpace> surfaceColorSpace,
-                                            SkColorSpace::Gamut surfaceColorGamut,
                                             SkColorType surfaceColorType) {
     initialize();
 
@@ -931,7 +888,7 @@ VulkanSurface* VulkanManager::createSurface(ANativeWindow* window, ColorMode col
     }
 
     VulkanSurface* surface = new VulkanSurface(colorMode, window, surfaceColorSpace,
-                                               surfaceColorGamut, surfaceColorType);
+                                               surfaceColorType);
 
     VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo;
     memset(&surfaceCreateInfo, 0, sizeof(VkAndroidSurfaceCreateInfoKHR));

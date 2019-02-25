@@ -251,6 +251,12 @@ public final class BasePermission {
         return (protectionLevel & PermissionInfo.PROTECTION_FLAG_CONFIGURATOR)
             != 0;
     }
+    public boolean isIncidentReportApprover() {
+        return (protectionLevel & PermissionInfo.PROTECTION_FLAG_INCIDENT_REPORT_APPROVER) != 0;
+    }
+    public boolean isAppPredictor() {
+        return (protectionLevel & PermissionInfo.PROTECTION_FLAG_APP_PREDICTOR) != 0;
+    }
 
     public void transfer(@NonNull String origPackageName, @NonNull String newPackageName) {
         if (!origPackageName.equals(sourcePackageName)) {

@@ -147,6 +147,10 @@ public class HdmiControlService extends SystemService {
     @GuardedBy("mLock")
     protected final ActiveSource mActiveSource = new ActiveSource();
 
+    // Whether System Audio Mode is activated or not.
+    @GuardedBy("mLock")
+    private boolean mSystemAudioActivated = false;
+
     private static final boolean isHdmiCecNeverClaimPlaybackLogicAddr =
             SystemProperties.getBoolean(
                     Constants.PROPERTY_HDMI_CEC_NEVER_CLAIM_PLAYBACK_LOGICAL_ADDRESS, false);
@@ -657,9 +661,13 @@ public class HdmiControlService extends SystemService {
         Global.putInt(cr, key, toInt(value));
     }
 
-    void writeStringSetting(String key, String value) {
-        ContentResolver cr = getContext().getContentResolver();
-        Global.putString(cr, key, value);
+    void writeStringSystemProperty(String key, String value) {
+        SystemProperties.set(key, value);
+    }
+
+    @VisibleForTesting
+    boolean readBooleanSystemProperty(String key, boolean defVal) {
+        return SystemProperties.getBoolean(key, defVal);
     }
 
     private void initializeCec(int initiatedBy) {
@@ -1388,11 +1396,15 @@ public class HdmiControlService extends SystemService {
         }
 
         @Override
+        @Nullable
         public HdmiDeviceInfo getActiveSource() {
             enforceAccessPermission();
             HdmiCecLocalDeviceTv tv = tv();
             if (tv == null) {
-                Slog.w(TAG, "Local tv device not available");
+                if (isTvDevice()) {
+                    Slog.e(TAG, "Local tv device not available.");
+                    return null;
+                }
                 if (isPlaybackDevice()) {
                     // if playback device itself is the active source,
                     // return its own device info.
@@ -1453,7 +1465,10 @@ public class HdmiControlService extends SystemService {
                                     HdmiControlService.this, deviceId, callback));
                             return;
                         }
-                        Slog.w(TAG, "Local tv device not available");
+                        if (isTvDevice()) {
+                            Slog.e(TAG, "Local tv device not available");
+                            return;
+                        }
                         invokeCallback(callback, HdmiControlManager.RESULT_SOURCE_NOT_AVAILABLE);
                         return;
                     }
@@ -1522,11 +1537,33 @@ public class HdmiControlService extends SystemService {
                     if (mCecController != null) {
                         HdmiCecLocalDevice localDevice = mCecController.getLocalDevice(deviceType);
                         if (localDevice == null) {
-                            Slog.w(TAG, "Local device not available");
+                            Slog.w(TAG, "Local device not available to send key event.");
                             return;
                         }
                         localDevice.sendKeyEvent(keyCode, isPressed);
                     }
+                }
+            });
+        }
+
+        @Override
+        public void sendVolumeKeyEvent(
+            final int deviceType, final int keyCode, final boolean isPressed) {
+            enforceAccessPermission();
+            runOnServiceThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (mCecController == null) {
+                        Slog.w(TAG, "CEC controller not available to send volume key event.");
+                        return;
+                    }
+                    HdmiCecLocalDevice localDevice = mCecController.getLocalDevice(deviceType);
+                    if (localDevice == null) {
+                        Slog.w(TAG, "Local device " + deviceType
+                              + " not available to send volume key event.");
+                        return;
+                    }
+                    localDevice.sendVolumeKeyEvent(keyCode, isPressed);
                 }
             });
         }
@@ -1999,6 +2036,7 @@ public class HdmiControlService extends SystemService {
             pw.increaseIndent();
             pw.println("mHdmiControlEnabled: " + mHdmiControlEnabled);
             pw.println("mMhlInputChangeEnabled: " + mMhlInputChangeEnabled);
+            pw.println("mSystemAudioActivated: " + isSystemAudioActivated());
             pw.decreaseIndent();
 
             pw.println("mMhlController: ");
@@ -2622,6 +2660,18 @@ public class HdmiControlService extends SystemService {
     void setProhibitMode(boolean enabled) {
         synchronized (mLock) {
             mProhibitMode = enabled;
+        }
+    }
+
+    boolean isSystemAudioActivated() {
+        synchronized (mLock) {
+            return mSystemAudioActivated;
+        }
+    }
+
+    void setSystemAudioActivated(boolean on) {
+        synchronized (mLock) {
+            mSystemAudioActivated = on;
         }
     }
 

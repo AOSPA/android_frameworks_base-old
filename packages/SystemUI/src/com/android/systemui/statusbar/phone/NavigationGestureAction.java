@@ -24,7 +24,6 @@ import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_
 import android.annotation.NonNull;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.provider.Settings;
 import android.view.MotionEvent;
 
 import com.android.systemui.recents.OverviewProxyService;
@@ -33,10 +32,6 @@ import com.android.systemui.recents.OverviewProxyService;
  * A gesture action that would be triggered and reassigned by {@link QuickStepController}
  */
 public abstract class NavigationGestureAction {
-    private static final String ENABLE_TASK_STABILIZER_FLAG = "ENABLE_TASK_STABILIZER";
-
-    static private boolean sLastTaskStabilizationFlag;
-
     protected final NavigationBarView mNavigationBarView;
     protected final OverviewProxyService mProxySender;
 
@@ -49,9 +44,6 @@ public abstract class NavigationGestureAction {
             @NonNull OverviewProxyService service) {
         mNavigationBarView = navigationBarView;
         mProxySender = service;
-        sLastTaskStabilizationFlag = Settings.Global.getInt(
-                mNavigationBarView.getContext().getContentResolver(),
-                ENABLE_TASK_STABILIZER_FLAG, 0) != 0;
     }
 
     /**
@@ -81,15 +73,6 @@ public abstract class NavigationGestureAction {
      */
     public void startGesture(MotionEvent event) {
         mIsActive = true;
-
-        // Tell launcher that this action requires a stable task list or not
-        boolean flag = requiresStableTaskList();
-        if (flag != sLastTaskStabilizationFlag) {
-            Settings.Global.putInt(mNavigationBarView.getContext().getContentResolver(),
-                    ENABLE_TASK_STABILIZER_FLAG, flag ? 1 : 0);
-            sLastTaskStabilizationFlag = flag;
-        }
-
         onGestureStart(event);
     }
 
@@ -161,13 +144,6 @@ public abstract class NavigationGestureAction {
      * @return true if this action is enabled and can run
      */
     public abstract boolean isEnabled();
-
-    /**
-     * @return action requires a stable task list from launcher
-     */
-    protected boolean requiresStableTaskList() {
-        return false;
-    }
 
     protected void onDarkIntensityChange(float intensity) {
     }

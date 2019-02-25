@@ -19,7 +19,6 @@ import android.bluetooth.BluetoothClass;
 import android.content.Context;
 import android.util.Log;
 
-import com.android.settingslib.R;
 import com.android.settingslib.bluetooth.CachedBluetoothDevice;
 
 /**
@@ -45,7 +44,7 @@ public class BluetoothMediaDevice extends MediaDevice {
     @Override
     public int getIcon() {
         //TODO(b/117129183): This is not final icon for bluetooth device, just for demo.
-        return R.drawable.ic_bt_headphones_a2dp;
+        return com.android.internal.R.drawable.ic_bt_headphones_a2dp;
     }
 
     @Override
@@ -54,17 +53,17 @@ public class BluetoothMediaDevice extends MediaDevice {
     }
 
     @Override
-    public void connect() {
+    public boolean connect() {
         //TODO(b/117129183): add callback to notify LocalMediaManager connection state.
-        mIsConnected = mCachedDevice.setActive();
-        super.connect();
-        Log.d(TAG, "connect() device : " + getName() + ", is selected : " + mIsConnected);
+        final boolean isConnected = mCachedDevice.setActive();
+        setConnectedRecord();
+        Log.d(TAG, "connect() device : " + getName() + ", is selected : " + isConnected);
+        return isConnected;
     }
 
     @Override
     public void disconnect() {
         //TODO(b/117129183): disconnected last select device
-        mIsConnected = false;
     }
 
     /**

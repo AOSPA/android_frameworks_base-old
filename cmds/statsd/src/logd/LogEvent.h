@@ -118,6 +118,15 @@ public:
     explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
                       const BatteryCausedShutdown& batteryCausedShutdown);
 
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const UsbPortOverheatEvent& usbPortOverheatEvent);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const SpeechDspStat& speechDspStat);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const VendorAtom& vendorAtom);
+
     ~LogEvent();
 
     /**

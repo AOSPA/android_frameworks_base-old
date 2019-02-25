@@ -19,6 +19,7 @@ package com.android.server.contentcapture;
 import static android.service.contentcapture.ContentCaptureService.setClientState;
 import static android.view.contentcapture.ContentCaptureSession.STATE_DISABLED;
 import static android.view.contentcapture.ContentCaptureSession.STATE_DUPLICATED_ID;
+import static android.view.contentcapture.ContentCaptureSession.STATE_INTERNAL_ERROR;
 import static android.view.contentcapture.ContentCaptureSession.STATE_NO_SERVICE;
 
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_CONTENT;
@@ -28,25 +29,31 @@ import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_STRUC
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.content.ComponentName;
+import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ServiceInfo;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.service.contentcapture.ContentCaptureService;
 import android.service.contentcapture.IContentCaptureServiceCallback;
 import android.service.contentcapture.SnapshotData;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
+import android.view.contentcapture.UserDataRemovalRequest;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.IResultReceiver;
+import com.android.server.LocalServices;
 import com.android.server.contentcapture.RemoteContentCaptureService.ContentCaptureServiceCallbacks;
 import com.android.server.infra.AbstractPerUserSystemService;
 
@@ -166,10 +173,18 @@ final class ContentCapturePerUserService
     // TODO(b/119613670): log metrics
     @GuardedBy("mLock")
     public void startSessionLocked(@NonNull IBinder activityToken,
-            @NonNull ComponentName componentName, int taskId, int displayId,
+            @NonNull ActivityPresentationInfo activityPresentationInfo,
             @NonNull String sessionId, int uid, int flags,
             @NonNull IResultReceiver clientReceiver) {
-
+        if (activityPresentationInfo == null) {
+            Slog.w(TAG, "basic activity info is null");
+            setClientState(clientReceiver, STATE_DISABLED | STATE_INTERNAL_ERROR,
+                    /* binder= */ null);
+            return;
+        }
+        final int taskId = activityPresentationInfo.taskId;
+        final int displayId = activityPresentationInfo.displayId;
+        final ComponentName componentName = activityPresentationInfo.componentName;
         final ComponentName serviceComponentName = getServiceComponentName();
         final boolean enabled = isEnabledLocked();
         final String historyItem =
@@ -246,6 +261,39 @@ final class ContentCapturePerUserService
         }
         if (mMaster.verbose) Slog.v(TAG, "finishSession(): id=" + sessionId);
         session.removeSelfLocked(/* notifyRemoteService= */ true);
+    }
+
+    @GuardedBy("mLock")
+    public void removeUserDataLocked(@NonNull UserDataRemovalRequest request) {
+        if (!isEnabledLocked()) {
+            return;
+        }
+        assertCallerLocked(request.getPackageName());
+        mRemoteService.onUserDataRemovalRequest(request);
+    }
+
+    /**
+     * Asserts the component is owned by the caller.
+     */
+    @GuardedBy("mLock")
+    private void assertCallerLocked(@NonNull String packageName) {
+        final PackageManager pm = getContext().getPackageManager();
+        final int callingUid = Binder.getCallingUid();
+        final int packageUid;
+        try {
+            packageUid = pm.getPackageUidAsUser(packageName, UserHandle.getCallingUserId());
+        } catch (NameNotFoundException e) {
+            throw new SecurityException("Could not verify UID for " + packageName);
+        }
+        if (callingUid != packageUid && !LocalServices.getService(ActivityManagerInternal.class)
+                .hasRunningActivity(callingUid, packageName)) {
+            final String[] packages = pm.getPackagesForUid(callingUid);
+            final String callingPackage = packages != null ? packages[0] : "uid-" + callingUid;
+            Slog.w(TAG, "App (package=" + callingPackage + ", UID=" + callingUid
+                    + ") passed package (" + packageName + ") owned by UID " + packageUid);
+
+            throw new SecurityException("Invalid package: " + packageName);
+        }
     }
 
     @GuardedBy("mLock")
@@ -367,37 +415,6 @@ final class ContentCapturePerUserService
             }
             // TODO(b/122595322): implement
             // TODO(b/119613670): log metrics
-        }
-
-        @Override
-        public void setActivityContentCaptureEnabled(ComponentName activity, boolean enabled) {
-            if (mMaster.verbose) {
-                Log.v(TAG, "setActivityContentCaptureEnabled(activity=" + activity + ", enabled="
-                        + enabled + ")");
-            }
-            // TODO(b/122595322): implement
-            // TODO(b/119613670): log metrics
-        }
-
-        @Override
-        public void setPackageContentCaptureEnabled(String packageName, boolean enabled) {
-            if (mMaster.verbose) {
-                Log.v(TAG,
-                        "setPackageContentCaptureEnabled(packageName=" + packageName + ", enabled="
-                                + enabled + ")");
-            }
-            // TODO(b/122595322): implement
-            // TODO(b/119613670): log metrics
-        }
-
-        @Override
-        public void getContentCaptureDisabledActivities(IResultReceiver receiver) {
-            // TODO(b/122595322): implement
-        }
-
-        @Override
-        public void getContentCaptureDisabledPackages(IResultReceiver receiver) {
-            // TODO(b/122595322): implement
         }
     }
 }

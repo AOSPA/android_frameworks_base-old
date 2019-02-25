@@ -70,6 +70,7 @@ import static android.app.admin.DevicePolicyManager.PROFILE_KEYGUARD_FEATURES_AF
 import static android.app.admin.DevicePolicyManager.WIPE_EUICC;
 import static android.app.admin.DevicePolicyManager.WIPE_EXTERNAL_STORAGE;
 import static android.app.admin.DevicePolicyManager.WIPE_RESET_PROTECTION_DATA;
+import static android.app.admin.DevicePolicyManager.WIPE_SILENTLY;
 import static android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES;
 import static android.provider.Settings.Global.PRIVATE_DNS_MODE;
 import static android.provider.Settings.Global.PRIVATE_DNS_SPECIFIER;
@@ -77,14 +78,10 @@ import static android.provider.Telephony.Carriers.DPC_URI;
 import static android.provider.Telephony.Carriers.ENFORCE_KEY;
 import static android.provider.Telephony.Carriers.ENFORCE_MANAGED_URI;
 
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent
-        .PROVISIONING_ENTRY_POINT_ADB;
-import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker
-        .STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW;
-import static com.android.server.devicepolicy.TransferOwnershipMetadataManager
-        .ADMIN_TYPE_DEVICE_OWNER;
-import static com.android.server.devicepolicy.TransferOwnershipMetadataManager
-        .ADMIN_TYPE_PROFILE_OWNER;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.PROVISIONING_ENTRY_POINT_ADB;
+import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW;
+import static com.android.server.devicepolicy.TransferOwnershipMetadataManager.ADMIN_TYPE_DEVICE_OWNER;
+import static com.android.server.devicepolicy.TransferOwnershipMetadataManager.ADMIN_TYPE_PROFILE_OWNER;
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 
 import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
@@ -949,8 +946,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 "metered_data_disabled_packages";
         private static final String TAG_CROSS_PROFILE_CALENDAR_PACKAGES =
                 "cross-profile-calendar-packages";
-        private static final String TAG_PACKAGE = "package";
-
+        private static final String TAG_CROSS_PROFILE_CALENDAR_PACKAGES_NULL =
+                "cross-profile-calendar-packages-null";
 
         DeviceAdminInfo info;
 
@@ -1072,7 +1069,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         String endUserSessionMessage = null;
 
         // The whitelist of packages that can access cross profile calendar APIs.
-        final Set<String> mCrossProfileCalendarPackages = new ArraySet<>();
+        // This whitelist should be in default an empty list, which indicates that no package
+        // is whitelisted.
+        List<String> mCrossProfileCalendarPackages = Collections.emptyList();
 
         ActiveAdmin(DeviceAdminInfo _info, boolean parent) {
             info = _info;
@@ -1343,11 +1342,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 out.text(endUserSessionMessage);
                 out.endTag(null, TAG_END_USER_SESSION_MESSAGE);
             }
-            if (!mCrossProfileCalendarPackages.isEmpty()) {
-                out.startTag(null, TAG_CROSS_PROFILE_CALENDAR_PACKAGES);
-                writeAttributeValuesToXml(
-                        out, TAG_PACKAGE, mCrossProfileCalendarPackages);
-                out.endTag(null, TAG_CROSS_PROFILE_CALENDAR_PACKAGES);
+            if (mCrossProfileCalendarPackages == null) {
+                out.startTag(null, TAG_CROSS_PROFILE_CALENDAR_PACKAGES_NULL);
+                out.endTag(null, TAG_CROSS_PROFILE_CALENDAR_PACKAGES_NULL);
+            } else {
+                writePackageListToXml(out, TAG_CROSS_PROFILE_CALENDAR_PACKAGES,
+                        mCrossProfileCalendarPackages);
             }
         }
 
@@ -1542,8 +1542,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         Log.w(LOG_TAG, "Missing text when loading end session message");
                     }
                 } else if (TAG_CROSS_PROFILE_CALENDAR_PACKAGES.equals(tag)) {
-                    readAttributeValues(
-                            parser, TAG_PACKAGE, mCrossProfileCalendarPackages);
+                    mCrossProfileCalendarPackages = readPackageList(parser, tag);
+                } else if (TAG_CROSS_PROFILE_CALENDAR_PACKAGES_NULL.equals(tag)) {
+                    mCrossProfileCalendarPackages = null;
                 } else {
                     Slog.w(LOG_TAG, "Unknown admin tag: " + tag);
                     XmlUtils.skipCurrentTag(parser);
@@ -1759,8 +1760,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 pw.print(prefix);  pw.println("parentAdmin:");
                 parentAdmin.dump(prefix + "  ", pw);
             }
-            pw.print(prefix); pw.print("mCrossProfileCalendarPackages=");
-            pw.println(mCrossProfileCalendarPackages);
+            if (mCrossProfileCalendarPackages != null) {
+                pw.print(prefix); pw.print("mCrossProfileCalendarPackages=");
+                pw.println(mCrossProfileCalendarPackages);
+            }
         }
     }
 
@@ -1916,7 +1919,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
 
         AlarmManager getAlarmManager() {
-            return (AlarmManager) mContext.getSystemService(AlarmManager.class);
+            return mContext.getSystemService(AlarmManager.class);
+        }
+
+        ConnectivityManager getConnectivityManager() {
+            return mContext.getSystemService(ConnectivityManager.class);
         }
 
         IWindowManager getIWindowManager() {
@@ -4223,7 +4230,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordHistoryLength(ComponentName who, int length, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         Preconditions.checkNotNull(who, "ComponentName is null");
@@ -4246,13 +4253,16 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public int getPasswordHistoryLength(ComponentName who, int userHandle, boolean parent) {
+        if (!mLockPatternUtils.hasSecureLockScreen()) {
+            return 0;
+        }
         return getStrictestPasswordRequirement(who, userHandle, parent,
                 admin -> admin.passwordHistoryLength, PASSWORD_QUALITY_UNSPECIFIED);
     }
 
     @Override
     public void setPasswordExpirationTimeout(ComponentName who, long timeout, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         Preconditions.checkNotNull(who, "ComponentName is null");
@@ -4288,7 +4298,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      */
     @Override
     public long getPasswordExpirationTimeout(ComponentName who, int userHandle, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return 0L;
         }
         enforceFullCrossUsersPermission(userHandle);
@@ -4423,7 +4433,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public long getPasswordExpiration(ComponentName who, int userHandle, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return 0L;
         }
         enforceFullCrossUsersPermission(userHandle);
@@ -4755,6 +4765,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     @PasswordComplexity
     public int getPasswordComplexity() {
+        DevicePolicyEventLogger
+                .createEvent(DevicePolicyEnums.GET_USER_PASSWORD_COMPLEXITY_LEVEL)
+                .setStrings(mInjector.getPackageManager()
+                        .getPackagesForUid(mInjector.binderGetCallingUid()))
+                .write();
         final int callingUserId = mInjector.userHandleGetCallingUserId();
         enforceUserUnlocked(callingUserId);
         mContext.enforceCallingOrSelfPermission(
@@ -4770,6 +4785,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public int getCurrentFailedPasswordAttempts(int userHandle, boolean parent) {
+        if (!mLockPatternUtils.hasSecureLockScreen()) {
+            return 0;
+        }
         enforceFullCrossUsersPermission(userHandle);
         synchronized (getLockObject()) {
             if (!isCallerWithSystemUid()) {
@@ -4789,7 +4807,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setMaximumFailedPasswordsForWipe(ComponentName who, int num, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         Preconditions.checkNotNull(who, "ComponentName is null");
@@ -4815,7 +4833,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public int getMaximumFailedPasswordsForWipe(ComponentName who, int userHandle, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return 0;
         }
         enforceFullCrossUsersPermission(userHandle);
@@ -4829,7 +4847,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public int getProfileWithMinimumFailedPasswordsForWipe(int userHandle, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return UserHandle.USER_NULL;
         }
         enforceFullCrossUsersPermission(userHandle);
@@ -4910,6 +4928,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
     @Override
     public boolean resetPassword(String passwordOrNull, int flags) throws RemoteException {
+        if (!mLockPatternUtils.hasSecureLockScreen()) {
+            Slog.w(LOG_TAG, "Cannot reset password when the device has no lock screen");
+            return false;
+        }
+
         final int callingUid = mInjector.binderGetCallingUid();
         final int userHandle = mInjector.userHandleGetCallingUserId();
 
@@ -5252,7 +5275,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     public void setRequiredStrongAuthTimeout(ComponentName who, long timeoutMs,
             boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         Preconditions.checkNotNull(who, "ComponentName is null");
@@ -5285,7 +5308,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      */
     @Override
     public long getRequiredStrongAuthTimeout(ComponentName who, int userId, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return DevicePolicyManager.DEFAULT_STRONG_AUTH_TIMEOUT_MS;
         }
         enforceFullCrossUsersPermission(userId);
@@ -6288,7 +6311,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      * @throws UnsupportedOperationException if the package does not support being set as always-on.
      */
     @Override
-    public boolean setAlwaysOnVpnPackage(ComponentName admin, String vpnPackage, boolean lockdown)
+    public boolean setAlwaysOnVpnPackage(ComponentName admin, String vpnPackage, boolean lockdown,
+            List<String> lockdownWhitelist)
             throws SecurityException {
         enforceProfileOrDeviceOwner(admin);
 
@@ -6296,11 +6320,23 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final long token = mInjector.binderClearCallingIdentity();
         try {
             if (vpnPackage != null && !isPackageInstalledForUser(vpnPackage, userId)) {
-                return false;
+                Slog.w(LOG_TAG, "Non-existent VPN package specified: " + vpnPackage);
+                throw new ServiceSpecificException(
+                        DevicePolicyManager.ERROR_VPN_PACKAGE_NOT_FOUND, vpnPackage);
             }
-            ConnectivityManager connectivityManager = (ConnectivityManager)
-                    mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (!connectivityManager.setAlwaysOnVpnPackageForUser(userId, vpnPackage, lockdown)) {
+
+            if (vpnPackage != null && lockdown && lockdownWhitelist != null) {
+                for (String packageName : lockdownWhitelist) {
+                    if (!isPackageInstalledForUser(packageName, userId)) {
+                        Slog.w(LOG_TAG, "Non-existent package in VPN whitelist: " + packageName);
+                        throw new ServiceSpecificException(
+                                DevicePolicyManager.ERROR_VPN_PACKAGE_NOT_FOUND, packageName);
+                    }
+                }
+            }
+            // If some package is uninstalled after the check above, it will be ignored by CM.
+            if (!mInjector.getConnectivityManager().setAlwaysOnVpnPackageForUser(
+                    userId, vpnPackage, lockdown, lockdownWhitelist)) {
                 throw new UnsupportedOperationException();
             }
             DevicePolicyEventLogger
@@ -6317,16 +6353,40 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     @Override
-    public String getAlwaysOnVpnPackage(ComponentName admin)
+    public String getAlwaysOnVpnPackage(ComponentName admin) throws SecurityException {
+        enforceProfileOrDeviceOwner(admin);
+
+        final int userId = mInjector.userHandleGetCallingUserId();
+        final long token = mInjector.binderClearCallingIdentity();
+        try {
+            return mInjector.getConnectivityManager().getAlwaysOnVpnPackageForUser(userId);
+        } finally {
+            mInjector.binderRestoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public boolean isAlwaysOnVpnLockdownEnabled(ComponentName admin) throws SecurityException {
+        enforceProfileOrDeviceOwner(admin);
+
+        final int userId = mInjector.userHandleGetCallingUserId();
+        final long token = mInjector.binderClearCallingIdentity();
+        try {
+            return mInjector.getConnectivityManager().isVpnLockdownEnabled(userId);
+        } finally {
+            mInjector.binderRestoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public List<String> getAlwaysOnVpnLockdownWhitelist(ComponentName admin)
             throws SecurityException {
         enforceProfileOrDeviceOwner(admin);
 
         final int userId = mInjector.userHandleGetCallingUserId();
         final long token = mInjector.binderClearCallingIdentity();
-        try{
-            ConnectivityManager connectivityManager = (ConnectivityManager)
-                    mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-            return connectivityManager.getAlwaysOnVpnPackageForUser(userId);
+        try {
+            return mInjector.getConnectivityManager().getVpnLockdownWhitelist(userId);
         } finally {
             mInjector.binderRestoreCallingIdentity(token);
         }
@@ -6351,7 +6411,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
-    private void forceWipeUser(int userId, String wipeReasonForUser) {
+    private void forceWipeUser(int userId, String wipeReasonForUser, boolean wipeSilently) {
         boolean success = false;
         try {
             IActivityManager am = mInjector.getIActivityManager();
@@ -6362,7 +6422,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             success = mUserManagerInternal.removeUserEvenWhenDisallowed(userId);
             if (!success) {
                 Slog.w(LOG_TAG, "Couldn't remove user " + userId);
-            } else if (isManagedProfile(userId) && !TextUtils.isEmpty(wipeReasonForUser)) {
+            } else if (isManagedProfile(userId) && !wipeSilently) {
                 sendWipeProfileNotification(wipeReasonForUser);
             }
         } catch (RemoteException re) {
@@ -6377,6 +6437,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         if (!mHasFeature) {
             return;
         }
+        Preconditions.checkStringNotEmpty(wipeReasonForUser, "wipeReasonForUser is null or empty");
         enforceFullCrossUsersPermission(mInjector.userHandleGetCallingUserId());
 
         final ActiveAdmin admin;
@@ -6436,7 +6497,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         internalReason,
                         /*wipeEuicc=*/ (flags & WIPE_EUICC) != 0);
             } else {
-                forceWipeUser(userId, wipeReasonForUser);
+                forceWipeUser(userId, wipeReasonForUser, (flags & WIPE_SILENTLY) != 0);
             }
         } finally {
             mInjector.binderRestoreCallingIdentity(ident);
@@ -6494,7 +6555,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      */
     @Override
     public void setActivePasswordState(PasswordMetrics metrics, int userHandle) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         enforceFullCrossUsersPermission(userHandle);
@@ -6514,7 +6575,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void reportPasswordChanged(@UserIdInt int userId) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         enforceFullCrossUsersPermission(userId);
@@ -6798,9 +6859,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         enforceDeviceOwner(who);
         long token = mInjector.binderClearCallingIdentity();
         try {
-            ConnectivityManager connectivityManager = (ConnectivityManager)
-                    mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-            connectivityManager.setGlobalProxy(proxyInfo);
+            mInjector.getConnectivityManager().setGlobalProxy(proxyInfo);
         } finally {
             mInjector.binderRestoreCallingIdentity(token);
         }
@@ -7656,18 +7715,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
 
             // Shutting down backup manager service permanently.
-            long ident = mInjector.binderClearCallingIdentity();
-            try {
-                if (mInjector.getIBackupManager() != null) {
-                    mInjector.getIBackupManager()
-                            .setBackupServiceActive(UserHandle.USER_SYSTEM, false);
-                }
-            } catch (RemoteException e) {
-                throw new IllegalStateException("Failed deactivating backup service.", e);
-            } finally {
-                mInjector.binderRestoreCallingIdentity(ident);
-            }
-
+            toggleBackupServiceActive(UserHandle.USER_SYSTEM, /* makeActive= */ false);
             if (isAdb()) {
                 // Log device owner provisioning was started using adb.
                 MetricsLogger.action(mContext, PROVISIONING_ENTRY_POINT_ADB, LOG_TAG_DEVICE_OWNER);
@@ -7695,7 +7743,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 saveUserRestrictionsLocked(userId);
             }
 
-            ident = mInjector.binderClearCallingIdentity();
+            long ident = mInjector.binderClearCallingIdentity();
             try {
                 // TODO Send to system too?
                 sendOwnerChangedBroadcast(DevicePolicyManager.ACTION_DEVICE_OWNER_CHANGED, userId);
@@ -7952,6 +8000,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         .write();
             }
 
+            // Shutting down backup manager service permanently.
+            toggleBackupServiceActive(userHandle, /* makeActive= */ false);
+
             mOwners.setProfileOwner(who, ownerName, userHandle);
             mOwners.writeProfileOwner(userHandle);
             Slog.i(LOG_TAG, "Profile owner set: " + who + " on user " + userHandle);
@@ -7973,6 +8024,22 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     who.getPackageName(), userHandle, "set-profile-owner");
             return true;
         }
+    }
+
+
+    private void toggleBackupServiceActive(int userId, boolean makeActive) {
+        long ident = mInjector.binderClearCallingIdentity();
+        try {
+            if (mInjector.getIBackupManager() != null) {
+                mInjector.getIBackupManager()
+                        .setBackupServiceActive(userId, makeActive);
+            }
+        } catch (RemoteException e) {
+            throw new IllegalStateException("Failed deactivating backup service.", e);
+        } finally {
+            mInjector.binderRestoreCallingIdentity(ident);
+        }
+
     }
 
     @Override
@@ -8302,16 +8369,22 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 != PackageManager.PERMISSION_GRANTED) {
             return false;
         }
-        // Allow access to the device owner.
+
+        // Allow access to the device owner or delegate cert installer.
         ComponentName deviceOwner = getDeviceOwnerComponent(true);
-        if (deviceOwner != null && deviceOwner.getPackageName().equals(packageName)) {
+        if (deviceOwner != null && (deviceOwner.getPackageName().equals(packageName)
+                    || isCallerDelegate(packageName, uid, DELEGATION_CERT_INSTALL))) {
             return true;
         }
-        // Allow access to the profile owner for the specified user.
+        // Allow access to the profile owner for the specified user, or delegate cert installer
         ComponentName profileOwner = getProfileOwnerAsUser(userHandle);
-        if (profileOwner != null && profileOwner.getPackageName().equals(packageName)) {
+        if (profileOwner != null && (profileOwner.getPackageName().equals(packageName)
+                    || isCallerDelegate(packageName, uid, DELEGATION_CERT_INSTALL))) {
             return true;
         }
+
+        Log.w(LOG_TAG, String.format("Package if %s (uid=%d, pid=%d) cannot access Device IDs",
+                    packageName, uid, pid));
         return false;
     }
 
@@ -8790,7 +8863,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     public void setTrustAgentConfiguration(ComponentName admin, ComponentName agent,
             PersistableBundle args, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         Preconditions.checkNotNull(admin, "admin is null");
@@ -8807,7 +8880,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     public List<PersistableBundle> getTrustAgentConfiguration(ComponentName admin,
             ComponentName agent, int userHandle, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return null;
         }
         Preconditions.checkNotNull(agent, "agent null");
@@ -12727,22 +12800,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             return;
         }
         Preconditions.checkNotNull(admin);
-        synchronized (getLockObject()) {
-            getActiveAdminForCallerLocked(admin, DeviceAdminInfo.USES_POLICY_DEVICE_OWNER);
-        }
-
-        final long ident = mInjector.binderClearCallingIdentity();
-        try {
-            IBackupManager ibm = mInjector.getIBackupManager();
-            if (ibm != null) {
-                ibm.setBackupServiceActive(UserHandle.USER_SYSTEM, enabled);
-            }
-        } catch (RemoteException e) {
-            throw new IllegalStateException(
-                "Failed " + (enabled ? "" : "de") + "activating backup service.", e);
-        } finally {
-            mInjector.binderRestoreCallingIdentity(ident);
-        }
+        enforceProfileOrDeviceOwner(admin);
+        int userId = mInjector.userHandleGetCallingUserId();
+        toggleBackupServiceActive(userId, enabled);
     }
 
     @Override
@@ -12751,11 +12811,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         if (!mHasFeature) {
             return true;
         }
+
+        enforceProfileOrDeviceOwner(admin);
         synchronized (getLockObject()) {
             try {
-                getActiveAdminForCallerLocked(admin, DeviceAdminInfo.USES_POLICY_DEVICE_OWNER);
                 IBackupManager ibm = mInjector.getIBackupManager();
-                return ibm != null && ibm.isBackupServiceActive(UserHandle.USER_SYSTEM);
+                return ibm != null && ibm.isBackupServiceActive(
+                    mInjector.userHandleGetCallingUserId());
             } catch (RemoteException e) {
                 throw new IllegalStateException("Failed requesting backup service state.", e);
             }
@@ -13009,7 +13071,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 throw new IllegalStateException("logging is not available");
             }
             if (mNetworkLogger != null) {
-                return mNetworkLogger.forceBatchFinalization();
+                final long ident = mInjector.binderClearCallingIdentity();
+                try {
+                    return mNetworkLogger.forceBatchFinalization();
+                } finally {
+                    mInjector.binderRestoreCallingIdentity(ident);
+                }
             }
             return 0;
         }
@@ -13211,7 +13278,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public boolean setResetPasswordToken(ComponentName admin, byte[] token) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return false;
         }
         if (token == null || token.length < 32) {
@@ -13239,7 +13306,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public boolean clearResetPasswordToken(ComponentName admin) {
-        if (!mHasFeature) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
             return false;
         }
         synchronized (getLockObject()) {
@@ -13265,6 +13332,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public boolean isResetPasswordTokenActive(ComponentName admin) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
+            return false;
+        }
         synchronized (getLockObject()) {
             final int userHandle = mInjector.userHandleGetCallingUserId();
             getActiveAdminForCallerLocked(admin, DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
@@ -13286,6 +13356,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     public boolean resetPasswordWithToken(ComponentName admin, String passwordOrNull, byte[] token,
             int flags) {
+        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
+            return false;
+        }
         Preconditions.checkNotNull(token);
         synchronized (getLockObject()) {
             final int userHandle = mInjector.userHandleGetCallingUserId();
@@ -13966,52 +14039,24 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     @Override
-    public void addCrossProfileCalendarPackage(ComponentName who, String packageName) {
+    public void setCrossProfileCalendarPackages(ComponentName who, List<String> packageNames) {
         if (!mHasFeature) {
             return;
         }
         Preconditions.checkNotNull(who, "ComponentName is null");
-        Preconditions.checkStringNotEmpty(packageName, "Package name is null or empty");
 
         synchronized (getLockObject()) {
             final ActiveAdmin admin = getActiveAdminForCallerLocked(
                     who, DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
-            if (admin.mCrossProfileCalendarPackages.add(packageName)) {
-                saveSettingsLocked(mInjector.userHandleGetCallingUserId());
-            }
+            admin.mCrossProfileCalendarPackages = packageNames;
+            saveSettingsLocked(mInjector.userHandleGetCallingUserId());
         }
         DevicePolicyEventLogger
-                .createEvent(DevicePolicyEnums.ADD_CROSS_PROFILE_CALENDAR_PACKAGE)
+                .createEvent(DevicePolicyEnums.SET_CROSS_PROFILE_CALENDAR_PACKAGES)
                 .setAdmin(who)
-                .setStrings(packageName)
+                .setStrings(packageNames == null ? null
+                        : packageNames.toArray(new String[packageNames.size()]))
                 .write();
-    }
-
-    @Override
-    public boolean removeCrossProfileCalendarPackage(ComponentName who, String packageName) {
-        if (!mHasFeature) {
-            return false;
-        }
-        Preconditions.checkNotNull(who, "ComponentName is null");
-        Preconditions.checkStringNotEmpty(packageName, "Package name is null or empty");
-
-        boolean isRemoved = false;
-        synchronized (getLockObject()) {
-            final ActiveAdmin admin = getActiveAdminForCallerLocked(
-                    who, DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
-            isRemoved = admin.mCrossProfileCalendarPackages.remove(packageName);
-            if (isRemoved) {
-                saveSettingsLocked(mInjector.userHandleGetCallingUserId());
-            }
-        }
-        if (isRemoved) {
-            DevicePolicyEventLogger
-                    .createEvent(DevicePolicyEnums.REMOVE_CROSS_PROFILE_CALENDAR_PACKAGE)
-                    .setAdmin(who)
-                    .setStrings(packageName)
-                    .write();
-        }
-        return isRemoved;
     }
 
     @Override
@@ -14024,7 +14069,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         synchronized (getLockObject()) {
             final ActiveAdmin admin = getActiveAdminForCallerLocked(
                     who, DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
-            return new ArrayList<String>(admin.mCrossProfileCalendarPackages);
+            return admin.mCrossProfileCalendarPackages;
         }
     }
 
@@ -14038,8 +14083,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         enforceCrossUsersPermission(userHandle);
         synchronized (getLockObject()) {
+            if (mInjector.settingsSecureGetIntForUser(
+                    Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED, 0, userHandle) == 0) {
+                return false;
+            }
             final ActiveAdmin admin = getProfileOwnerAdminLocked(userHandle);
             if (admin != null) {
+                if (admin.mCrossProfileCalendarPackages == null) {
+                    return true;
+                }
                 return admin.mCrossProfileCalendarPackages.contains(packageName);
             }
         }
@@ -14055,7 +14107,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         synchronized (getLockObject()) {
             final ActiveAdmin admin = getProfileOwnerAdminLocked(userHandle);
             if (admin != null) {
-                return new ArrayList<String>(admin.mCrossProfileCalendarPackages);
+                return admin.mCrossProfileCalendarPackages;
             }
         }
         return Collections.emptyList();
@@ -14161,7 +14213,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         + "calendar APIs", packageName));
                 return false;
             }
-            final Intent intent = new Intent(CalendarContract.ACTION_VIEW_WORK_CALENDAR_EVENT);
+            final Intent intent = new Intent(
+                    CalendarContract.ACTION_VIEW_MANAGED_PROFILE_CALENDAR_EVENT);
             intent.setPackage(packageName);
             intent.putExtra(CalendarContract.EXTRA_EVENT_ID, eventId);
             intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start);

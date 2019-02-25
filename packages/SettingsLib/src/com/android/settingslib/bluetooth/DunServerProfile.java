@@ -149,7 +149,7 @@ public final class DunServerProfile implements LocalBluetoothProfile {
     }
 
     public int getDrawableResource(BluetoothClass btClass) {
-        return R.drawable.ic_bt_network_pan;
+        return com.android.internal.R.drawable.ic_bt_network_pan;
     }
 
     protected void finalize() {

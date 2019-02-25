@@ -737,6 +737,14 @@ public final class DefaultPermissionGrantPolicy {
         grantSystemFixedPermissionsToSystemPackage("com.android.sharedstoragebackup", userId,
                 STORAGE_PERMISSIONS);
 
+        // Content Capture Service
+        String contentCaptureServicePackageName =
+                mContext.getPackageManager().getContentCaptureServicePackageName();
+        if (!TextUtils.isEmpty(contentCaptureServicePackageName)) {
+            grantPermissionsToSystemPackage(contentCaptureServicePackageName, userId,
+                    MICROPHONE_PERMISSIONS);
+        }
+
         if (mPermissionGrantedCallback != null) {
             mPermissionGrantedCallback.onDefaultRuntimePermissionsGranted(userId);
         }
@@ -1290,6 +1298,7 @@ public final class DefaultPermissionGrantPolicy {
             return mContext.getPackageManager().getPackageInfo(pkg,
                     DEFAULT_PACKAGE_INFO_QUERY_FLAGS | extraFlags);
         } catch (NameNotFoundException e) {
+            Slog.e(TAG, "PackageNot found: " + pkg, e);
             return null;
         }
     }

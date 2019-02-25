@@ -105,8 +105,6 @@ public class CarStatusBar extends StatusBar implements
         mHvacController.connectToCarService();
 
         CarSystemUIFactory factory = SystemUIFactory.getInstance();
-        mCarFacetButtonController = factory.getCarDependencyComponent()
-                .getCarFacetButtonController();
         mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
         mDeviceIsProvisioned = mDeviceProvisionedController.isDeviceProvisioned();
         if (!mDeviceIsProvisioned) {
@@ -114,9 +112,16 @@ public class CarStatusBar extends StatusBar implements
                     new DeviceProvisionedController.DeviceProvisionedListener() {
                         @Override
                         public void onDeviceProvisionedChanged() {
-                            mDeviceIsProvisioned =
-                                    mDeviceProvisionedController.isDeviceProvisioned();
-                            restartNavBars();
+                            mHandler.post(() -> {
+                                // on initial boot we are getting a call even though the value
+                                // is the same so we are confirming the reset is needed
+                                boolean deviceProvisioned =
+                                        mDeviceProvisionedController.isDeviceProvisioned();
+                                if (mDeviceIsProvisioned != deviceProvisioned) {
+                                    mDeviceIsProvisioned = deviceProvisioned;
+                                    restartNavBars();
+                                }
+                            });
                         }
                     });
         }
@@ -130,7 +135,7 @@ public class CarStatusBar extends StatusBar implements
 
     /**
      * Remove all content from navbars and rebuild them. Used to allow for different nav bars
-     * before and after the device is provisioned
+     * before and after the device is provisioned. . Also for change of density and font size.
      */
     private void restartNavBars() {
         // remove and reattach all hvac components such that we don't keep a reference to unused
@@ -204,6 +209,7 @@ public class CarStatusBar extends StatusBar implements
     @Override
     public void showKeyguard() {
         super.showKeyguard();
+        getComponent(NotificationsUI.class).closeCarNotifications(0);
         if (mNavigationBarView != null) {
             mNavigationBarView.showKeyguardButtons();
         }
@@ -245,6 +251,9 @@ public class CarStatusBar extends StatusBar implements
         super.makeStatusBarView();
         mHvacController = new HvacController(mContext);
 
+        CarSystemUIFactory factory = SystemUIFactory.getInstance();
+        mCarFacetButtonController = factory.getCarDependencyComponent()
+            .getCarFacetButtonController();
         mNotificationPanelBackground = getDefaultWallpaper();
         mScrimController.setScrimBehindDrawable(mNotificationPanelBackground);
 
@@ -257,6 +266,12 @@ public class CarStatusBar extends StatusBar implements
             mBatteryMeterView.setVisibility(View.GONE);
         });
         addTemperatureViewToController(mStatusBarWindow);
+        // The following are the ui elements that the user would call the status bar.
+        // This will set the status bar so it they can make call backs.
+        CarNavigationBarView topBar = mStatusBarWindow.findViewById(R.id.car_top_bar);
+        topBar.setStatusBar(this);
+        CarNavigationBarView qsTopBar = mStatusBarWindow.findViewById(R.id.qs_car_top_bar);
+        qsTopBar.setStatusBar(this);
     }
 
     @Override
@@ -332,6 +347,7 @@ public class CarStatusBar extends StatusBar implements
             lp.setTitle("CarNavigationBar");
             lp.windowAnimations = 0;
             mWindowManager.addView(mNavigationBarWindow, lp);
+            mNavigationBarWindow.setOnTouchListener(getStatusBarWindowTouchListener());
         }
         if (mShowLeft) {
             int width = mContext.getResources().getDimensionPixelSize(
@@ -451,10 +467,8 @@ public class CarStatusBar extends StatusBar implements
 
     @Override
     protected View.OnTouchListener getStatusBarWindowTouchListener() {
-        // Usually, a touch on the background window will dismiss the notification shade. However,
-        // for the car use-case, the shade should remain unless the user switches to a different
-        // facet (e.g. phone).
-        return null;
+        // Gets the car specific notification touch listener
+        return getComponent(NotificationsUI.class).getDragDownListener();
     }
 
     @Override
@@ -576,6 +590,7 @@ public class CarStatusBar extends StatusBar implements
     @Override
     public void onDensityOrFontScaleChanged() {
         super.onDensityOrFontScaleChanged();
+        restartNavBars();
         // Need to update the background on density changed in case the change was due to night
         // mode.
         mNotificationPanelBackground = getDefaultWallpaper();

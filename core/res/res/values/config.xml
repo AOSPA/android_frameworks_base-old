@@ -126,6 +126,9 @@
          be sent during a change to the audio output device. -->
     <bool name="config_sendAudioBecomingNoisy">true</bool>
 
+    <!-- Whether Hearing Aid profile is supported -->
+    <bool name="config_hearing_aid_profile_supported">true</bool>
+
     <!-- Flag to disable all transition animations -->
     <bool name="config_disableTransitionAnimation">false</bool>
 
@@ -381,7 +384,7 @@
 
 
     <!-- Configuration of Ethernet interfaces in the following format:
-         <interface name|mac address>;[Network Capabilities];[IP config]
+         <interface name|mac address>;[Network Capabilities];[IP config];[Override Transport]
          Where
                [Network Capabilities] Optional. A comma seprated list of network capabilities.
                    Values must be from NetworkCapabilities#NET_CAPABILITIES_* constants.
@@ -389,11 +392,16 @@
                    use the following format to specify static IP configuration:
                        ip=<ip-address/mask> gateway=<ip-address> dns=<comma-sep-ip-addresses>
                        domains=<comma-sep-domains>
+               [Override Transport] Optional. An override network transport type to allow
+                    the propagation of an interface type on the other end of a local Ethernet
+                    interface. Value must be from NetworkCapabilities#TRANSPORT_* constants. If
+                    left out, this will default to TRANSPORT_ETHERNET.
          -->
     <string-array translatable="false" name="config_ethernet_interfaces">
         <!--
         <item>eth1;12,13,14,15;ip=192.168.0.10/24 gateway=192.168.0.1 dns=4.4.4.4,8.8.8.8</item>
         <item>eth2;;ip=192.168.0.11/24</item>
+        <item>eth3;12,13,14,15;ip=192.168.0.12/24;1</item>
         -->
     </string-array>
 
@@ -524,6 +532,9 @@
 
     <!-- Boolean indicating whether the wifi chipset has dual frequency band support -->
     <bool translatable="false" name="config_wifi_dual_band_support">false</bool>
+
+    <!-- Maximum number of concurrent WiFi interfaces in AP mode -->
+    <integer translatable="false" name="config_wifi_max_ap_interfaces">1</integer>
 
     <!-- Boolean indicating whether the wifi chipset requires the softap band be -->
     <!-- converted from 5GHz to ANY due to hardware restrictions -->
@@ -701,9 +712,15 @@
     <!-- Indicates that connected MAC randomization is supported on this device -->
     <bool translatable="false" name="config_wifi_connected_mac_randomization_supported">false</bool>
 
+    <!-- Indicates that wifi link probing is supported on this device -->
+    <bool translatable="false" name="config_wifi_link_probing_supported">false</bool>
+
     <!-- Flag indicating whether we should enable the automatic brightness.
          Software implementation will be used if config_hardware_auto_brightness_available is not set -->
     <bool name="config_automatic_brightness_available">false</bool>
+
+    <!-- Flag indicating whether we should enable the adaptive sleep.-->
+    <bool name="config_adaptive_sleep_available">false</bool>
 
     <!-- Flag indicating whether we should enable smart battery. -->
     <bool name="config_smart_battery_available">false</bool>
@@ -847,6 +864,11 @@
          The default is false. -->
     <bool name="config_lidControlsSleep">false</bool>
 
+    <!-- Indicate whether closing the lid causes the device to enter the folded state which means
+         to get a smaller screen and opening the lid causes the device to enter the unfolded state
+         which means to get a larger screen. -->
+    <bool name="config_lidControlsDisplayFold">false</bool>
+
     <!-- Desk dock behavior -->
 
     <!-- The number of degrees to rotate the display when the device is in a desk dock.
@@ -931,6 +953,10 @@
          in hardware. -->
     <bool name="config_setColorTransformAccelerated">false</bool>
 
+    <!-- Boolean indicating whether the HWC setColorTransform function can be performed efficiently
+         in hardware for individual layers. -->
+    <bool name="config_setColorTransformAcceleratedPerLayer">false</bool>
+
     <!-- Control whether Night display is available. This should only be enabled on devices
          that have a HWC implementation that can apply the matrix passed to setColorTransform
          without impacting power, performance, and app compatibility (e.g. protected content). -->
@@ -939,7 +965,7 @@
     <!-- Default mode to control how Night display is automatically activated.
          One of the following values (see ColorDisplayController.java):
              0 - AUTO_MODE_DISABLED
-             1 - AUTO_MODE_CUSTOM
+             1 - AUTO_MODE_CUSTOM_TIME
              2 - AUTO_MODE_TWILIGHT
     -->
     <integer name="config_defaultNightDisplayAutoMode">0</integer>
@@ -999,7 +1025,8 @@
     <integer name="config_displayWhiteBalanceColorTemperatureDefault">6500</integer>
 
     <!-- The display primaries, in CIE1931 XYZ color space, for display
-         white balance to use in its calculations. -->
+         white balance to use in its calculations. The array must include a total of 12 float
+         values: 3 values per color (X, Y, Z) and 4 colors (R, G, B, W) -->
     <string-array name="config_displayWhiteBalanceDisplayPrimaries">
         <!-- Red X -->   <item>0.412315</item>
         <!-- Red Y -->   <item>0.212600</item>
@@ -1017,7 +1044,7 @@
 
     <!-- The nominal white coordinates, in CIE1931 XYZ color space, for Display White Balance to
          use in its calculations. AWB will adapt this white point to the target ambient white
-         point. -->
+         point. The array must include a total of 3 float values (X, Y, Z) -->
     <string-array name="config_displayWhiteBalanceDisplayNominalWhite">
         <!-- Nominal White X --> <item>0.950456</item>
         <!-- Nominal White Y --> <item>1.000000</item>
@@ -1743,6 +1770,19 @@
          config_enableGeofenceOverlay is false. -->
     <string name="config_geofenceProviderPackageName" translatable="false">@null</string>
 
+    <!-- Whether to enable Hardware Activity-Recognition overlay which allows Hardware
+         Activity-Recognition to be replaced by an app at run-time. When disabled, only the
+         config_activityRecognitionHardwarePackageName package will be searched for
+         its implementation, otherwise packages whose signature matches the
+         signatures of config_locationProviderPackageNames will be searched, and
+         the service with the highest version number will be picked. Anyone who
+         wants to disable the overlay mechanism can set it to false.
+         -->
+    <bool name="config_enableActivityRecognitionHardwareOverlay" translatable="false">true</bool>
+    <!-- Package name providing Hardware Activity-Recognition API support. Used only when
+         config_enableActivityRecognitionHardwareOverlay is false. -->
+    <string name="config_activityRecognitionHardwarePackageName" translatable="false">@null</string>
+
     <!-- Package name(s) containing location provider support.
          These packages can contain services implementing location providers,
          such as the Geocode Provider, Network Location Provider, and
@@ -1895,14 +1935,6 @@
          If this string is empty or the specified package does not exist, then
          the platform will search for an SMS app and use that (if there is one)-->
     <string name="default_sms_application" translatable="false">com.android.messaging</string>
-
-    <!-- Default web browser.  This is the package name of the application that will
-         be the default browser when the device first boots.  Afterwards the user
-         can select whatever browser app they wish to use as the default.
-
-         If this string is empty or the specified package does not exist, then
-         the behavior will be as though no app was named as an explicit default. -->
-    <string name="default_browser" translatable="false"></string>
 
     <!-- Default role holders. This will be an array of roles and package names of their default
          holders, with each item in the format of "ROLE_NAME: PACKAGE_NAME_1, PACKAGE_NAME_2". -->
@@ -2183,6 +2215,10 @@
          has expired, then assume the device is receiving insufficient current to charge
          effectively and terminate the dream.  Use -1 to disable this safety feature.  -->
     <integer name="config_dreamsBatteryLevelDrainCutoff">5</integer>
+    <!-- Limit of how long the device can remain unlocked due to attention checking.  -->
+    <integer name="config_attentionMaximumExtension">240000</integer> <!-- 4 minutes -->
+    <!-- How long we should wait until we give up on receiving an attention API callback.  -->
+    <integer name="config_attentionApiTimeout">2000</integer> <!-- 2 seconds -->
 
     <!-- ComponentName of a dream to show whenever the system would otherwise have
          gone to sleep.  When the PowerManager is asked to go to sleep, it will instead
@@ -3459,6 +3495,13 @@
     -->
     <string name="config_defaultAttentionService" translatable="false"></string>
 
+    <!-- The package name for the incident report approver app.
+        This app is usually PermissionController or an app that replaces it.  When
+        a bugreport or incident report with EXPLICT-level sharing flags is going to be
+        shared, this app will be sent the PENDING_INCIDENT_REPORTS_CHANGED broadcast.
+    -->
+    <string name="config_incidentReportApproverPackage" translatable="false">com.android.permissioncontroller</string>
+
     <!-- The package name for the system's content capture service.
          This service must be trusted, as it can be activated without explicit consent of the user.
          If no service with the specified name exists on the device, content capture will be
@@ -3717,9 +3760,6 @@
     <string-array translatable="false" name="config_wifi_dual_sap_interfaces">
     </string-array>
 
-    <!-- Component name for default assistant on this device -->
-    <string name="config_defaultAssistantComponentName">#+UNSET</string>
-
     <!-- Class name for the InputEvent compatibility processor override.
          Empty string means use the default compatibility processor
          (android.view.InputEventCompatProcessor). -->
@@ -3747,4 +3787,111 @@
 
     <!-- Enable Zram writeback feature to allow unused pages in zram be written to flash. -->
     <bool name="config_zramWriteback">false</bool>
+
+    <!-- Whether cbrs is supported on the device or not -->
+    <bool translatable="false" name="config_cbrs_supported">false</bool>
+
+    <!-- Whether or not aware is enabled by default -->
+    <bool name="config_awareSettingAvailable">false</bool>
+
+    <!-- Display White-Balance -->
+
+    <!-- See AmbientSensor.AmbientBrightnessSensor.
+         The ambient brightness sensor rate (in milliseconds). Must be positive. -->
+    <integer name="config_displayWhiteBalanceBrightnessSensorRate">250</integer>
+
+    <!-- See AmbientFilter.
+         How long ambient brightness changes are kept and taken into consideration
+         (in milliseconds). Must be positive. -->
+    <integer name="config_displayWhiteBalanceBrightnessFilterHorizon">10000</integer>
+
+    <!-- See AmbientFilter.WeightedMovingAverageAmbientFilter.
+         Recent changes are prioritised by integrating their duration over y = x + intercept
+         (the higher it is, the less prioritised recent changes are). Must be a non-negative
+         number, or NaN to avoid this implementation. -->
+    <item name="config_displayWhiteBalanceBrightnessFilterIntercept" format="float" type="dimen">10.0</item>
+
+    <!-- See AmbientSensor.AmbientColorTemperatureSensor.
+         The ambient color temperature sensor name. -->
+    <string name="config_displayWhiteBalanceColorTemperatureSensorName">com.google.sensor.color</string>
+
+    <!-- See AmbientSensor.AmbientColorTemperatureSensor.
+         The ambient color temperature sensor rate (in milliseconds). Must be positive. -->
+    <integer name="config_displayWhiteBalanceColorTemperatureSensorRate">250</integer>
+
+    <!-- See AmbientFilter.
+         How long ambient color temperature changes are kept and taken into consideration
+         (in milliseconds). Must be positive. -->
+    <integer name="config_displayWhiteBalanceColorTemperatureFilterHorizon">10000</integer>
+
+    <!-- See AmbientFilter.WeightedMovingAverageAmbientFilter.
+         Recent changes are prioritised by integrating their duration over y = x + intercept
+         (the higher it is, the less prioritised recent changes are). Must be a non-negative
+         number, or NaN to avoid this implementation. -->
+    <item name="config_displayWhiteBalanceColorTemperatureFilterIntercept" format="float"
+            type="dimen">10.0</item>
+
+    <!-- See DisplayWhiteBalanceThrottler.
+         The debounce time (in milliseconds) for increasing the screen color temperature, throttled
+         if time > lastTime + debounce. Must be non-negative. -->
+    <integer name="config_displayWhiteBalanceIncreaseDebounce">5000</integer>
+
+    <!-- See DisplayWhiteBalanceThrottler.
+         The debounce time (in milliseconds) for decreasing the screen color tempearture, throttled
+         if time < lastTime - debounce. Must be non-negative. -->
+    <integer name="config_displayWhiteBalanceDecreaseDebounce">5000</integer>
+
+    <!-- See DisplayWhiteBalanceThrottler.
+         The ambient color temperature values used to determine the threshold as the corresponding
+         value in config_displayWhiteBalance{Increase,Decrease}Threholds. Must be non-empty, the
+         same length as config_displayWhiteBalance{Increase,Decrease}Thresholds, and contain
+         non-negative, strictly increasing numbers.
+
+         For example, if:
+
+         - baseThresolds = [0, 100, 1000];
+         - increaseThresholds = [0.1, 0.15, 0.2];
+         - decreaseThresholds = [0.1, 0.05, 0.0];
+
+         Then, given the ambient color temperature INCREASED from X to Y (so X < Y):
+         - If 0 <= Y < 100, we require Y > (1 + 0.1) * X = 1.1X;
+         - If 100 <= Y < 1000, we require Y > (1 + 0.15) * X = 1.15X;
+         - If 1000 <= Y, we require Y > (1 + 0.2) * X = 1.2X.
+
+         Or, if the ambient color temperature DECREASED from X to Y (so X > Y):
+         - If 0 <= Y < 100, we require Y < (1 - 0.1) * X = 0.9X;
+         - If 100 <= Y < 1000, we require Y < (1 - 0.05) * X = 0.95X;
+         - If 1000 <= Y, we require Y < (1 - 0) * X = X.
+
+         NOTE: the numbers in this example are made up, and don't represent how actual base,
+               increase or decrease thresholds would look like. -->
+    <array name="config_displayWhiteBalanceBaseThresholds">
+        <item>0.0</item>
+    </array>
+
+    <!-- See DisplayWhiteBalanceThrottler.
+         The increase threshold values, throttled if value < value * (1 + threshold). Must be
+         non-empty, the same length as config_displayWhiteBalanceBaseThresholds, and contain
+         non-negative numbers. -->
+    <array name="config_displayWhiteBalanceIncreaseThresholds">
+        <item>0.1</item>
+    </array>
+
+    <!-- See DisplayWhiteBalanceThrottler.
+         The decrease threshold values, throttled if value > value * (1 - threshold). Must be
+         non-empty, the same length as config_displayWhiteBalanceBaseThresholds, and contain
+         non-negative numbers. -->
+    <array name="config_displayWhiteBalanceDecreaseThresholds">
+        <item>0.1</item>
+    </array>
+
+    <!-- See DisplayWhiteBalanceController.
+         The ambient brightness threshold (in lux) beneath which we fall back to a fixed ambient
+         color temperature. -->
+    <item name="config_displayWhiteBalanceLowLightAmbientBrightnessThreshold" format="float" type="dimen">10.0</item>
+
+    <!-- See DisplayWhiteBalanceController.
+         The ambient color temperature (in cct) to which we fall back when the ambient brightness
+         drops beneath a certain threshold. -->
+    <item name="config_displayWhiteBalanceLowLightAmbientColorTemperature" format="float" type="dimen">6500.0</item>
 </resources>
