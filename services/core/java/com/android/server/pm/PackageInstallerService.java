@@ -84,7 +84,7 @@ import com.android.internal.util.ImageUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
-import com.android.server.pm.permission.PermissionManagerInternal;
+import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
 import libcore.io.IoUtils;
 
@@ -131,7 +131,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     private final Context mContext;
     private final PackageManagerService mPm;
     private final StagingManager mStagingManager;
-    private final PermissionManagerInternal mPermissionManager;
+    private final PermissionManagerServiceInternal mPermissionManager;
 
     private AppOpsManager mAppOps;
 
@@ -186,10 +186,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     };
 
-    public PackageInstallerService(Context context, PackageManagerService pm) {
+    public PackageInstallerService(Context context, PackageManagerService pm, ApexManager am) {
         mContext = context;
         mPm = pm;
-        mPermissionManager = LocalServices.getService(PermissionManagerInternal.class);
+        mPermissionManager = LocalServices.getService(PermissionManagerServiceInternal.class);
 
         mInstallThread = new HandlerThread(TAG);
         mInstallThread.start();
@@ -204,7 +204,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mSessionsDir = new File(Environment.getDataSystemDirectory(), "install_sessions");
         mSessionsDir.mkdirs();
 
-        mStagingManager = new StagingManager(pm, this);
+        mStagingManager = new StagingManager(pm, this, am);
     }
 
     private void setBootCompleted()  {
@@ -480,6 +480,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                     && !mPm.isCallerVerifier(callingUid)) {
                 params.installFlags &= ~PackageManager.INSTALL_VIRTUAL_PRELOAD;
             }
+        }
+
+        if (params.isStaged) {
+            mContext.enforceCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES, TAG);
         }
 
         if (!params.isMultiPackage) {

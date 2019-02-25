@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Contains phone state and service related information.
@@ -884,6 +885,24 @@ public class ServiceState implements Parcelable {
                         s.mNetworkRegistrationStates != null &&
                         mNetworkRegistrationStates.containsAll(s.mNetworkRegistrationStates))
                 && mNrFrequencyRange == s.mNrFrequencyRange;
+    }
+
+    /**
+     * Convert roaming type to string
+     *
+     * @param roamingType roaming type
+     * @return The roaming type in string format
+     *
+     * @hide
+     */
+    public static String roamingTypeToString(@RoamingType int roamingType) {
+        switch (roamingType) {
+            case ROAMING_TYPE_NOT_ROAMING: return "NOT_ROAMING";
+            case ROAMING_TYPE_UNKNOWN: return "UNKNOWN";
+            case ROAMING_TYPE_DOMESTIC: return "DOMESTIC";
+            case ROAMING_TYPE_INTERNATIONAL: return "INTERNATIONAL";
+        }
+        return "Unknown roaming type " + roamingType;
     }
 
     /**
@@ -1866,5 +1885,30 @@ public class ServiceState implements Parcelable {
         return FREQUENCY_RANGE_ORDER.indexOf(range1) > FREQUENCY_RANGE_ORDER.indexOf(range2)
                 ? range1
                 : range2;
+    }
+
+    /**
+     * Returns a copy of self with location-identifying information removed.
+     * Always clears the NetworkRegistrationState's CellIdentity fields, but if removeCoarseLocation
+     * is true, clears other info as well.
+     * @hide
+     */
+    public ServiceState sanitizeLocationInfo(boolean removeCoarseLocation) {
+        ServiceState state = new ServiceState(this);
+        if (state.mNetworkRegistrationStates != null) {
+            state.mNetworkRegistrationStates = state.mNetworkRegistrationStates.stream()
+                    .map(NetworkRegistrationState::sanitizeLocationInfo)
+                    .collect(Collectors.toList());
+        }
+        if (!removeCoarseLocation) return state;
+
+        state.mDataOperatorAlphaLong = null;
+        state.mDataOperatorAlphaShort = null;
+        state.mDataOperatorNumeric = null;
+        state.mVoiceOperatorAlphaLong = null;
+        state.mVoiceOperatorAlphaShort = null;
+        state.mVoiceOperatorNumeric = null;
+
+        return state;
     }
 }

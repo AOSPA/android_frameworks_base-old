@@ -609,10 +609,60 @@ public abstract class ContentResolver implements ContentInterface {
     private static final int SLOW_THRESHOLD_MILLIS = 500;
     private final Random mRandom = new Random();  // guarded by itself
 
-    public ContentResolver(Context context) {
+    public ContentResolver(@Nullable Context context) {
+        this(context, null);
+    }
+
+    /** {@hide} */
+    public ContentResolver(@Nullable Context context, @Nullable ContentInterface wrapped) {
         mContext = context != null ? context : ActivityThread.currentApplication();
         mPackageName = mContext.getOpPackageName();
         mTargetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
+        mWrapped = wrapped;
+    }
+
+    /** {@hide} */
+    public static ContentResolver wrap(@NonNull ContentInterface wrapped) {
+        Preconditions.checkNotNull(wrapped);
+
+        return new ContentResolver(null, wrapped) {
+            @Override
+            public void unstableProviderDied(IContentProvider icp) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            public boolean releaseUnstableProvider(IContentProvider icp) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            public boolean releaseProvider(IContentProvider icp) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            protected IContentProvider acquireUnstableProvider(Context c, String name) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            protected IContentProvider acquireProvider(Context c, String name) {
+                throw new UnsupportedOperationException();
+            }
+        };
+    }
+
+    /**
+     * Create a {@link ContentResolver} instance that redirects all its methods
+     * to the given {@link ContentProvider}.
+     */
+    public static ContentResolver wrap(@NonNull ContentProvider wrapped) {
+        return wrap((ContentInterface) wrapped);
+    }
+
+    /**
+     * Create a {@link ContentResolver} instance that redirects all its methods
+     * to the given {@link ContentProviderClient}.
+     */
+    public static ContentResolver wrap(@NonNull ContentProviderClient wrapped) {
+        return wrap((ContentInterface) wrapped);
     }
 
     /** @hide */
@@ -659,6 +709,12 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable String getType(@NonNull Uri url) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.getType(url);
+        } catch (RemoteException e) {
+            return null;
+        }
 
         // XXX would like to have an acquireExistingUnstableProvider for this.
         IContentProvider provider = acquireExistingProvider(url);
@@ -714,6 +770,12 @@ public abstract class ContentResolver implements ContentInterface {
     public @Nullable String[] getStreamTypes(@NonNull Uri url, @NonNull String mimeTypeFilter) {
         Preconditions.checkNotNull(url, "url");
         Preconditions.checkNotNull(mimeTypeFilter, "mimeTypeFilter");
+
+        try {
+            if (mWrapped != null) return mWrapped.getStreamTypes(url, mimeTypeFilter);
+        } catch (RemoteException e) {
+            return null;
+        }
 
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
@@ -845,6 +907,15 @@ public abstract class ContentResolver implements ContentInterface {
             @Nullable CancellationSignal cancellationSignal) {
         android.util.SeempLog.record_uri(13, uri);
         Preconditions.checkNotNull(uri, "uri");
+
+        try {
+            if (mWrapped != null) {
+                return mWrapped.query(uri, projection, queryArgs, cancellationSignal);
+            }
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider unstableProvider = acquireUnstableProvider(uri);
         if (unstableProvider == null) {
             return null;
@@ -944,6 +1015,13 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable Uri canonicalize(@NonNull Uri url) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.canonicalize(url);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             return null;
@@ -981,6 +1059,13 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable Uri uncanonicalize(@NonNull Uri url) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.uncanonicalize(url);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             return null;
@@ -1017,6 +1102,13 @@ public abstract class ContentResolver implements ContentInterface {
     public final boolean refresh(@NonNull Uri url, @Nullable Bundle args,
             @Nullable CancellationSignal cancellationSignal) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.refresh(url, args, cancellationSignal);
+        } catch (RemoteException e) {
+            return false;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             return false;
@@ -1128,6 +1220,12 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable ParcelFileDescriptor openFile(@NonNull Uri uri, @NonNull String mode,
             @Nullable CancellationSignal signal) throws FileNotFoundException {
+        try {
+            if (mWrapped != null) return mWrapped.openFile(uri, mode, signal);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         return openFileDescriptor(uri, mode, signal);
     }
 
@@ -1239,6 +1337,12 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable AssetFileDescriptor openAssetFile(@NonNull Uri uri, @NonNull String mode,
             @Nullable CancellationSignal signal) throws FileNotFoundException {
+        try {
+            if (mWrapped != null) return mWrapped.openAssetFile(uri, mode, signal);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         return openAssetFileDescriptor(uri, mode, signal);
     }
 
@@ -1450,6 +1554,14 @@ public abstract class ContentResolver implements ContentInterface {
     public final @Nullable AssetFileDescriptor openTypedAssetFile(@NonNull Uri uri,
             @NonNull String mimeTypeFilter, @Nullable Bundle opts,
             @Nullable CancellationSignal signal) throws FileNotFoundException {
+        try {
+            if (mWrapped != null) {
+                return mWrapped.openTypedAssetFile(uri, mimeTypeFilter, opts, signal);
+            }
+        } catch (RemoteException e) {
+            return null;
+        }
+
         return openTypedAssetFileDescriptor(uri, mimeTypeFilter, opts, signal);
     }
 
@@ -1667,6 +1779,13 @@ public abstract class ContentResolver implements ContentInterface {
                 @Nullable ContentValues values) {
         android.util.SeempLog.record_uri(37, url);
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.insert(url, values);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URL " + url);
@@ -1708,6 +1827,13 @@ public abstract class ContentResolver implements ContentInterface {
                     throws RemoteException, OperationApplicationException {
         Preconditions.checkNotNull(authority, "authority");
         Preconditions.checkNotNull(operations, "operations");
+
+        try {
+            if (mWrapped != null) return mWrapped.applyBatch(authority, operations);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         ContentProviderClient provider = acquireContentProviderClient(authority);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown authority " + authority);
@@ -1734,6 +1860,13 @@ public abstract class ContentResolver implements ContentInterface {
                 @NonNull ContentValues[] values) {
         Preconditions.checkNotNull(url, "url");
         Preconditions.checkNotNull(values, "values");
+
+        try {
+            if (mWrapped != null) return mWrapped.bulkInsert(url, values);
+        } catch (RemoteException e) {
+            return 0;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URL " + url);
@@ -1767,6 +1900,13 @@ public abstract class ContentResolver implements ContentInterface {
     public final int delete(@RequiresPermission.Write @NonNull Uri url, @Nullable String where,
             @Nullable String[] selectionArgs) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.delete(url, where, selectionArgs);
+        } catch (RemoteException e) {
+            return 0;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URL " + url);
@@ -1804,6 +1944,13 @@ public abstract class ContentResolver implements ContentInterface {
             @Nullable ContentValues values, @Nullable String where,
             @Nullable String[] selectionArgs) {
         Preconditions.checkNotNull(uri, "uri");
+
+        try {
+            if (mWrapped != null) return mWrapped.update(uri, values, where, selectionArgs);
+        } catch (RemoteException e) {
+            return 0;
+        }
+
         IContentProvider provider = acquireProvider(uri);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URI " + uri);
@@ -1847,6 +1994,13 @@ public abstract class ContentResolver implements ContentInterface {
             @Nullable String arg, @Nullable Bundle extras) {
         Preconditions.checkNotNull(authority, "authority");
         Preconditions.checkNotNull(method, "method");
+
+        try {
+            if (mWrapped != null) return mWrapped.call(authority, method, arg, extras);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(authority);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown authority " + authority);
@@ -3001,7 +3155,9 @@ public abstract class ContentResolver implements ContentInterface {
      *
      * @param key the key to add
      * @param value the value to add
+     * {@hide}
      */
+    @SystemApi
     public void putCache(Uri key, Bundle value) {
         try {
             getContentService().putCache(mContext.getPackageName(), key, value,
@@ -3017,7 +3173,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param key the key to get the value
      * @return the matched value. If the key doesn't exist, will return null.
      * @see #putCache(Uri, Bundle)
+     * {@hide}
      */
+    @SystemApi
     public Bundle getCache(Uri key) {
         try {
             final Bundle bundle = getContentService().getCache(mContext.getPackageName(), key,
@@ -3192,6 +3350,7 @@ public abstract class ContentResolver implements ContentInterface {
     @UnsupportedAppUsage
     final String mPackageName;
     final int mTargetSdkVersion;
+    final ContentInterface mWrapped;
 
     private static final String TAG = "ContentResolver";
 

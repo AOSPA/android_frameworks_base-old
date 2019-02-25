@@ -45,7 +45,8 @@ void MetricProducer::onMatchedLogEventLocked(const size_t matcherIndex, const Lo
                            &dimensionKeysInCondition);
         condition = (conditionState == ConditionState::kTrue);
     } else {
-        condition = mCondition;
+        // TODO: The unknown condition state is not handled here, we should fix it.
+        condition = mCondition == ConditionState::kTrue;
     }
 
     if (mDimensionsInCondition.empty() && condition) {
@@ -94,7 +95,7 @@ void MetricProducer::flushIfExpire(int64_t elapsedTimestampNs) {
 void MetricProducer::addActivation(int activationTrackerIndex, int64_t ttl_seconds) {
     std::lock_guard<std::mutex> lock(mMutex);
     // When a metric producer does not depend on any activation, its mIsActive is true.
-    // Therefor, if this is the 1st activation, mIsActive will turn to false. Otherwise it does not
+    // Therefore, if this is the 1st activation, mIsActive will turn to false. Otherwise it does not
     // change.
     if  (mEventActivationMap.empty()) {
         mIsActive = false;
@@ -107,7 +108,8 @@ void MetricProducer::activateLocked(int activationTrackerIndex, int64_t elapsedT
     if (it == mEventActivationMap.end()) {
         return;
     }
-    if (mActivationType == MetricActivation::ACTIVATE_ON_BOOT) {
+    if (mActivationType == MetricActivation::ACTIVATE_ON_BOOT &&
+        it->second.state == ActivationState::kNotActive) {
         it->second.state = ActivationState::kActiveOnBoot;
         return;
     }

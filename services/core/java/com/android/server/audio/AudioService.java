@@ -248,6 +248,7 @@ public class AudioService extends IAudioService.Stub
     private static final int MSG_NOTIFY_VOL_EVENT = 22;
     private static final int MSG_DISPATCH_AUDIO_SERVER_STATE = 23;
     private static final int MSG_ENABLE_SURROUND_FORMATS = 24;
+    private static final int MSG_UPDATE_RINGER_MODE = 25;
     // start of messages handled under wakelock
     //   these messages can only be queued, i.e. sent with queueMsgUnderWakeLock(),
     //   and not with sendMsg(..., ..., SENDMSG_QUEUE, ...)
@@ -753,6 +754,7 @@ public class AudioService extends IAudioService.Stub
         intentFilter.addAction(Intent.ACTION_USER_FOREGROUND);
         intentFilter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         intentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        intentFilter.addAction(Intent.ACTION_PACKAGES_SUSPENDED);
 
         intentFilter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
         mMonitorRotation = SystemProperties.getBoolean("ro.audio.monitorRotation", false);
@@ -2736,7 +2738,11 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
-    /*package*/ void setUpdateRingerModeServiceInt() {
+    /*package*/ void postUpdateRingerModeServiceInt() {
+        sendMsg(mAudioHandler, MSG_UPDATE_RINGER_MODE, SENDMSG_QUEUE, 0, 0, null, 0);
+    }
+
+    private void onUpdateRingerModeServiceInt() {
         setRingerModeInt(getRingerModeInternal(), false);
     }
 
@@ -3237,6 +3243,21 @@ public class AudioService extends IAudioService.Stub
         if (!checkAudioSettingsPermission("setSpeakerphoneOn()")) {
             return;
         }
+
+        if (mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.MODIFY_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            synchronized (mSetModeDeathHandlers) {
+                for (SetModeDeathHandler h : mSetModeDeathHandlers) {
+                    if (h.getMode() == AudioSystem.MODE_IN_CALL) {
+                        Log.w(TAG, "getMode is call, Permission Denial: setSpeakerphoneOn from pid="
+                                + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid());
+                        return;
+                    }
+                }
+            }
+        }
+
         // for logging only
         final String eventSource = new StringBuilder("setSpeakerphoneOn(").append(on)
                 .append(") from u/pid:").append(Binder.getCallingUid()).append("/")
@@ -4970,6 +4991,10 @@ public class AudioService extends IAudioService.Stub
                 case MSG_ENABLE_SURROUND_FORMATS:
                     onEnableSurroundFormats((ArrayList<Integer>) msg.obj);
                     break;
+
+                case MSG_UPDATE_RINGER_MODE:
+                    onUpdateRingerModeServiceInt();
+                    break;
             }
         }
     }
@@ -5185,6 +5210,20 @@ public class AudioService extends IAudioService.Stub
             } else if (action.equals(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION) ||
                     action.equals(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)) {
                 handleAudioEffectBroadcast(context, intent);
+            } else if (action.equals(Intent.ACTION_PACKAGES_SUSPENDED)) {
+                final int[] suspendedUids = intent.getIntArrayExtra(Intent.EXTRA_CHANGED_UID_LIST);
+                final String[] suspendedPackages =
+                        intent.getStringArrayExtra(Intent.EXTRA_CHANGED_PACKAGE_LIST);
+                if (suspendedPackages == null || suspendedUids == null
+                        || suspendedPackages.length != suspendedUids.length) {
+                    return;
+                }
+                for (int i = 0; i < suspendedUids.length; i++) {
+                    if (!TextUtils.isEmpty(suspendedPackages[i])) {
+                        mMediaFocusControl.noFocusForSuspendedApp(
+                                suspendedPackages[i], suspendedUids[i]);
+                    }
+                }
             }
         }
     } // end class AudioServiceBroadcastReceiver
@@ -5347,6 +5386,11 @@ public class AudioService extends IAudioService.Stub
                     }
                 }
             }
+        }
+
+        if (callingPackageName == null || clientId == null || aa == null) {
+            Log.e(TAG, "Invalid null parameter to request audio focus");
+            return AudioManager.AUDIOFOCUS_REQUEST_FAILED;
         }
 
         return mMediaFocusControl.requestAudioFocus(aa, durationHint, cb, fd,

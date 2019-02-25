@@ -5672,6 +5672,19 @@ public class ActivityStack extends ConfigurationContainer {
         }
     }
 
+    /**
+     * Get current bounds of this stack, return empty when it is unavailable.
+     * @see TaskStack#getAnimationOrCurrentBounds(Rect)
+     */
+    void getAnimationOrCurrentBounds(Rect outBounds) {
+        final TaskStack stack = getTaskStack();
+        if (stack == null) {
+            outBounds.setEmpty();
+            return;
+        }
+        stack.getAnimationOrCurrentBounds(outBounds);
+    }
+
     private boolean skipResizeAnimation(boolean toFullscreen) {
         if (!toFullscreen) {
             return false;

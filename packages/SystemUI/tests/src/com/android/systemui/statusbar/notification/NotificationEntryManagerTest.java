@@ -68,8 +68,8 @@ import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationData.KeyguardEnvironment;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
-import com.android.systemui.statusbar.notification.row.NotificationInflater;
 import com.android.systemui.statusbar.notification.row.RowInflaterTask;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
@@ -143,7 +143,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         @Override
         public void onAsyncInflationFinished(NotificationEntry entry,
-                @NotificationInflater.InflationFlag int inflatedFlags) {
+                @InflationFlag int inflatedFlags) {
             super.onAsyncInflationFinished(entry, inflatedFlags);
 
             mCountDownLatch.countDown();
@@ -519,6 +519,16 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         // THEN extender2 stops managing the notif and extender1 starts managing it
         verify(extender1).setShouldManageLifetime(mEntry, true);
         verify(extender2).setShouldManageLifetime(mEntry, false);
+    }
+
+    /**
+     * Ensure that calling NotificationEntryManager.performRemoveNotification() doesn't crash when
+     * given a notification that has already been removed from NotificationData.
+     */
+    @Test
+    public void testPerformRemoveNotification_removedEntry() {
+        mEntryManager.getNotificationData().remove(mSbn.getKey(), null /* ranking */);
+        mEntryManager.performRemoveNotification(mSbn);
     }
 
     private Notification.Action createAction() {

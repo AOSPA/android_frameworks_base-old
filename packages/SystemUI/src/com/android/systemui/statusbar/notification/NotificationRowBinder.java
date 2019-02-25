@@ -19,8 +19,8 @@ package com.android.systemui.statusbar.notification;
 import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
 import static com.android.systemui.statusbar.NotificationRemoteInputManager.ENABLE_REMOTE_INPUT;
-import static com.android.systemui.statusbar.notification.row.NotificationInflater.FLAG_CONTENT_VIEW_AMBIENT;
-import static com.android.systemui.statusbar.notification.row.NotificationInflater.FLAG_CONTENT_VIEW_HEADS_UP;
+import static com.android.systemui.statusbar.notification.row.NotificationContentInflater.FLAG_CONTENT_VIEW_AMBIENT;
+import static com.android.systemui.statusbar.notification.row.NotificationContentInflater.FLAG_CONTENT_VIEW_HEADS_UP;
 
 import android.annotation.Nullable;
 import android.content.Context;
@@ -42,8 +42,8 @@ import com.android.systemui.statusbar.NotificationUiAdjustment;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
-import com.android.systemui.statusbar.notification.row.NotificationInflater;
 import com.android.systemui.statusbar.notification.row.RowInflaterTask;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
@@ -78,7 +78,7 @@ public class NotificationRowBinder {
     private NotificationPresenter mPresenter;
     private NotificationListContainer mListContainer;
     private HeadsUpManager mHeadsUpManager;
-    private NotificationInflater.InflationCallback mInflationCallback;
+    private NotificationContentInflater.InflationCallback mInflationCallback;
     private ExpandableNotificationRow.OnAppOpsClickListener mOnAppOpsClickListener;
     private BindRowCallback mBindRowCallback;
     private NotificationClicker mNotificationClicker;
@@ -105,7 +105,7 @@ public class NotificationRowBinder {
     public void setUpWithPresenter(NotificationPresenter presenter,
             NotificationListContainer listContainer,
             HeadsUpManager headsUpManager,
-            NotificationInflater.InflationCallback inflationCallback,
+            NotificationContentInflater.InflationCallback inflationCallback,
             BindRowCallback bindRowCallback) {
         mPresenter = presenter;
         mListContainer = listContainer;
@@ -124,8 +124,7 @@ public class NotificationRowBinder {
      */
     public void inflateViews(
             NotificationEntry entry,
-            Runnable onDismissRunnable,
-            boolean isUpdate)
+            Runnable onDismissRunnable)
             throws InflationException {
         ViewGroup parent = mListContainer.getViewParentForNotification(entry);
         PackageManager pmUser = StatusBar.getPackageManagerForUser(mContext,
@@ -135,13 +134,13 @@ public class NotificationRowBinder {
         if (entry.rowExists()) {
             entry.updateIcons(mContext, sbn);
             entry.reset();
-            updateNotification(entry, pmUser, sbn, entry.getRow(), isUpdate);
+            updateNotification(entry, pmUser, sbn, entry.getRow());
         } else {
             entry.createIcons(mContext, sbn);
             new RowInflaterTask().inflate(mContext, parent, entry,
                     row -> {
                         bindRow(entry, pmUser, sbn, row, onDismissRunnable);
-                        updateNotification(entry, pmUser, sbn, row, isUpdate);
+                        updateNotification(entry, pmUser, sbn, row);
                     });
         }
     }
@@ -197,15 +196,14 @@ public class NotificationRowBinder {
             NotificationEntry entry,
             @Nullable Integer oldImportance,
             NotificationUiAdjustment oldAdjustment,
-            NotificationUiAdjustment newAdjustment,
-            boolean isUpdate) {
+            NotificationUiAdjustment newAdjustment) {
         if (NotificationUiAdjustment.needReinflate(oldAdjustment, newAdjustment)) {
             if (entry.rowExists()) {
                 entry.reset();
                 PackageManager pmUser = StatusBar.getPackageManagerForUser(
                         mContext,
                         entry.notification.getUser().getIdentifier());
-                updateNotification(entry, pmUser, entry.notification, entry.getRow(), isUpdate);
+                updateNotification(entry, pmUser, entry.notification, entry.getRow());
             } else {
                 // Once the RowInflaterTask is done, it will pick up the updated entry, so
                 // no-op here.
@@ -224,12 +222,8 @@ public class NotificationRowBinder {
             NotificationEntry entry,
             PackageManager pmUser,
             StatusBarNotification sbn,
-            ExpandableNotificationRow row,
-            boolean isUpdate) {
-        boolean isLowPriority = entry.ambient;
-        boolean wasLowPriority = row.isLowPriority();
-        row.setIsLowPriority(isLowPriority);
-        row.setLowPriorityStateUpdated(isUpdate && (wasLowPriority != isLowPriority));
+            ExpandableNotificationRow row) {
+        row.setIsLowPriority(entry.ambient);
         // bind the click event to the content area
         checkNotNull(mNotificationClicker).register(row, sbn);
 

@@ -65,11 +65,13 @@ import android.net.Uri;
 import android.os.BadParcelableException;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.GraphicsEnvironment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.StrictMode;
@@ -2296,7 +2298,7 @@ public class Activity extends ContextThemeWrapper
     public final void requestShowKeyboardShortcuts() {
         Intent intent = new Intent(Intent.ACTION_SHOW_KEYBOARD_SHORTCUTS);
         intent.setPackage(KEYBOARD_SHORTCUTS_RECEIVER_PKG_NAME);
-        sendBroadcastAsUser(intent, UserHandle.SYSTEM);
+        sendBroadcastAsUser(intent, Process.myUserHandle());
     }
 
     /**
@@ -2305,7 +2307,7 @@ public class Activity extends ContextThemeWrapper
     public final void dismissKeyboardShortcutsHelper() {
         Intent intent = new Intent(Intent.ACTION_DISMISS_KEYBOARD_SHORTCUTS);
         intent.setPackage(KEYBOARD_SHORTCUTS_RECEIVER_PKG_NAME);
-        sendBroadcastAsUser(intent, UserHandle.SYSTEM);
+        sendBroadcastAsUser(intent, Process.myUserHandle());
     }
 
     @Override
@@ -7707,6 +7709,8 @@ public class Activity extends ContextThemeWrapper
                 }
             }
         }
+
+        GraphicsEnvironment.getInstance().showAngleInUseDialogBox(this);
 
         mActivityTransitionState.enterReady(this);
         dispatchActivityPostStarted();

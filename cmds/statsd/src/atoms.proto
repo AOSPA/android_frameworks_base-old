@@ -31,6 +31,7 @@ import "frameworks/base/core/proto/android/bluetooth/hfp/enums.proto";
 import "frameworks/base/core/proto/android/bluetooth/smp/enums.proto";
 import "frameworks/base/core/proto/android/debug/enums.proto";
 import "frameworks/base/core/proto/android/hardware/biometrics/enums.proto";
+import "frameworks/base/core/proto/android/hardware/sensor/assist/enums.proto";
 import "frameworks/base/core/proto/android/net/networkcapabilities.proto";
 import "frameworks/base/core/proto/android/os/enums.proto";
 import "frameworks/base/core/proto/android/server/connectivity/data_stall_event.proto";
@@ -241,6 +242,10 @@ message Atom {
         BluetoothSocketConnectionStateChanged bluetooth_socket_connection_state_changed = 171;
         DeviceIdentifierAccessDenied device_identifier_access_denied = 172;
         BubbleDeveloperErrorReported bubble_developer_error_reported = 173;
+        AssistGestureStageReported assist_gesture_stage_reported = 174;
+        AssistGestureFeedbackReported assist_gesture_feedback_reported = 175;
+        AssistGestureProgressReported assist_gesture_progress_reported = 176;
+        TouchGestureClassified touch_gesture_classified = 177;
     }
 
     // Pulled events will start at field 10000.
@@ -298,6 +303,8 @@ message Atom {
         RoleHolder role_holder = 10049;
         DangerousPermissionState dangerous_permission_state = 10050;
         TrainInfo train_info = 10051;
+        TimeZoneDataInfo time_zone_data_info = 10052;
+        SDCardInfo sdcard_info = 10053;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -2403,6 +2410,37 @@ message TouchEventReported {
 }
 
 /**
+ * Logs gesture classification and timing information for touch events.
+ *
+ * Logged from:
+ *   frameworks/base/core/java/android/view/GestureDetector.java
+ *   frameworks/base/core/java/android/view/View.java
+ */
+message TouchGestureClassified {
+    // The source of the classification (e.g. Java class name).
+    optional string source = 1;
+
+    enum Classification {
+        UNKNOWN_CLASSIFICATION = 0;
+        SINGLE_TAP = 1;
+        DOUBLE_TAP = 2;
+        LONG_PRESS = 3;
+        DEEP_PRESS = 4;
+        SCROLL = 5;
+    }
+    // The classification of the gesture.
+    optional Classification classification = 2;
+
+    // The interval from the start of a touch event stream until the
+    // classification was made.
+    optional int32 latency_millis = 3;
+
+    // The distance from the location of the first touch event to the
+    // location of the touch event when the classification was made.
+    optional float displacement_px = 4;
+}
+
+/**
  * Logs that a setting was updated.
  * Logged from:
  *   frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/SettingsState.java
@@ -3152,6 +3190,13 @@ message FlagFlipUpdateOccurred {
     optional int64 order_id = 2;
 }
 
+/**
+ * Potential experiment ids that goes with a train install.
+ */
+message TrainExperimentIds {
+    repeated int64 experiment_id = 1;
+}
+
 /*
  * Logs when a binary push state changes.
  * Logged by the installer via public api.
@@ -3178,8 +3223,14 @@ message BinaryPushStateChanged {
         INSTALL_FAILURE = 6;
         INSTALL_CANCELLED = 7;
         INSTALLER_ROLLBACK_REQUESTED = 8;
+        INSTALLER_ROLLBACK_SUCCESS = 9;
+        INSTALLER_ROLLBACK_FAILURE = 10;
     }
     optional State state = 6;
+    // Possible experiment ids for monitoring this push.
+    optional TrainExperimentIds experiment_ids = 7 [(log_mode) = MODE_BYTES];
+    // user id
+    optional int32 user_id = 8;
 }
 
 /** Represents USB port overheat event. */
@@ -3211,6 +3262,28 @@ message UsbPortOverheatEvent {
 message BatteryCycleCount {
     /* Number of total charge and discharge cycles on the system battery. */
     optional int32 cycle_count = 1;
+}
+
+/**
+ * Logs that an SD card is mounted and information about it, its type (public or private) and the
+ * size in bytes.
+ * Pulled from:
+ *   StatsCompanionService
+ */
+
+message SDCardInfo {
+
+    enum Type {
+        UNKNOWN = 0;
+        TYPE_PUBLIC = 1;
+        TYPE_PRIVATE = 2;
+        OTHERS = 3;
+    }
+
+    // Type of the SD card: TYPE_PUBLIC if portable and TYPE_PRIVATE if internal.
+    optional Type type = 1;
+    // Total size of the sd card in bytes.
+    optional int64 size_bytes = 2;
 }
 
 /*
@@ -4748,6 +4821,12 @@ message AppCompacted {
 
   // The process state at the time of compaction.
   optional android.app.ProcessStateEnum process_state = 16 [default = PROCESS_STATE_UNKNOWN];
+
+  // Free ZRAM in kilobytes before compaction.
+  optional int64 before_zram_free_kilobytes = 17;
+
+  // Free ZRAM in kilobytes after compaction.
+  optional int64 after_zram_free_kilobytes = 18;
 }
 
 /**
@@ -5507,13 +5586,6 @@ message DeviceIdentifierAccessDenied {
 }
 
 /**
- * Potential experiment ids that goes with a train install.
- */
-message TrainExperimentIds {
-    repeated int64 experiment_id = 1;
-}
-
-/**
  * Pulls the ongoing mainline install train version code.
  * Pulled from StatsCompanionService
  */
@@ -5521,4 +5593,44 @@ message TrainInfo {
     optional int64 train_version_code = 1;
 
     optional TrainExperimentIds train_experiment_id = 2;
+}
+
+/**
+ * Logs the gesture stage changed event.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/
+ */
+message AssistGestureStageReported {
+  optional android.hardware.sensor.assist.AssistGestureStageEnum gesture_stage = 1;
+}
+
+/**
+ * Logs the feedback type.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/
+ */
+message AssistGestureFeedbackReported {
+  // Whether or not the gesture was used.
+  optional android.hardware.sensor.assist.AssistGestureFeedbackEnum feedback_type = 1;
+}
+
+/**
+ * Logs the progress.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/
+ */
+message AssistGestureProgressReported {
+  // [0,100] progress for the assist gesture.
+  optional int32 progress = 1;
+}
+
+/*
+ * Information about the time zone data on a device.
+ */
+message TimeZoneDataInfo {
+    // A version identifier for the data set on device. e.g. "2018i"
+    optional string tzdb_version = 1;
 }

@@ -375,6 +375,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private final NtpTimeHelper mNtpTimeHelper;
     private final GnssBatchingProvider mGnssBatchingProvider;
     private final GnssGeofenceProvider mGnssGeofenceProvider;
+    // Available only on GNSS HAL 2.0 implementations and later.
     private GnssVisibilityControl mGnssVisibilityControl;
 
     // Handler for processing events
@@ -465,8 +466,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
     };
 
-    // TODO(b/119326010): replace OnSubscriptionsChangedListener with
-    // ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED broadcast reseiver.
+    // TODO: replace OnSubscriptionsChangedListener with ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED
+    //       broadcast receiver.
     private final OnSubscriptionsChangedListener mOnSubscriptionsChangedListener =
             new OnSubscriptionsChangedListener() {
                 @Override
@@ -678,8 +679,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mNtpTimeHelper.onNetworkAvailable();
         if (mDownloadXtraDataPending == STATE_PENDING_NETWORK) {
             if (mSupportsXtra) {
-                // Download only if supported, (prevents an unneccesary on-boot
-                // download)
+                // Download only if supported, (prevents an unnecessary on-boot download)
                 xtraDownloadRequest();
             }
         }
@@ -766,7 +766,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     /** Returns true if the location request is too frequent. */
     private boolean isRequestLocationRateLimited() {
-        // TODO(b/73198123): implement exponential backoff.
+        // TODO: implement exponential backoff.
         return false;
     }
 
@@ -919,7 +919,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         synchronized (mLock) {
             boolean enabled =
                     ((mProviderRequest != null && mProviderRequest.reportLocation
-                            && mProviderRequest.forceLocation) || (
+                            && mProviderRequest.locationSettingsIgnored) || (
                             mContext.getSystemService(LocationManager.class).isLocationEnabled()
                                     && !mDisableGps)) && !mShutdown;
             if (enabled == mEnabled) {
@@ -978,7 +978,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
 
         if (DEBUG) Log.d(TAG, "setRequest " + mProviderRequest);
-        if (mProviderRequest.reportLocation && !mDisableGps && isEnabled()) {
+        if (mProviderRequest.reportLocation && isEnabled()) {
             // update client uids
             updateClientUids(mWorkSource);
 

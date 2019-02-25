@@ -1376,7 +1376,7 @@ public class DevicePolicyManager {
      * complexity, and use this activity with extra {@link #EXTRA_PASSWORD_COMPLEXITY} to suggest
      * to users how complex the app wants the new screen lock to be. Note that both {@link
      * #getPasswordComplexity()} and the extra {@link #EXTRA_PASSWORD_COMPLEXITY} require the
-     * calling app to have the permission {@link permission#GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY}.
+     * calling app to have the permission {@link permission#REQUEST_SCREEN_LOCK_COMPLEXITY}.
      *
      * <p>If the intent is launched from within a managed profile with a profile
      * owner built against {@link android.os.Build.VERSION_CODES#M} or before,
@@ -1404,7 +1404,7 @@ public class DevicePolicyManager {
      *
      * <p>If an invalid value is used, it will be treated as {@link #PASSWORD_COMPLEXITY_NONE}.
      */
-    @RequiresPermission(android.Manifest.permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY)
+    @RequiresPermission(android.Manifest.permission.REQUEST_SCREEN_LOCK_COMPLEXITY)
     public static final String EXTRA_PASSWORD_COMPLEXITY =
             "android.app.extra.PASSWORD_COMPLEXITY";
 
@@ -2125,7 +2125,7 @@ public class DevicePolicyManager {
      * Callback used in {@link #installSystemUpdate} to indicate that there was an error while
      * trying to install an update.
      */
-    public abstract static class InstallUpdateCallback {
+    public abstract static class InstallSystemUpdateCallback {
         /** Represents an unknown error while trying to install an update. */
         public static final int UPDATE_ERROR_UNKNOWN = 1;
 
@@ -2144,7 +2144,12 @@ public class DevicePolicyManager {
         /** Represents the battery being too low to apply an update. */
         public static final int UPDATE_ERROR_BATTERY_LOW = 5;
 
-        /** Method invoked when there was an error while installing an update. */
+        /**
+         * Method invoked when there was an error while installing an update.
+         *
+         * <p>The given error message is not intended to be user-facing. It is intended to be
+         * reported back to the IT admin to be read.
+         */
         public void onInstallUpdateError(
                 @InstallUpdateCallbackErrorConstants int errorCode, String errorMessage) {
         }
@@ -2154,11 +2159,11 @@ public class DevicePolicyManager {
      * @hide
      */
     @IntDef(prefix = { "UPDATE_ERROR_" }, value = {
-            InstallUpdateCallback.UPDATE_ERROR_UNKNOWN,
-            InstallUpdateCallback.UPDATE_ERROR_INCORRECT_OS_VERSION,
-            InstallUpdateCallback.UPDATE_ERROR_UPDATE_FILE_INVALID,
-            InstallUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND,
-            InstallUpdateCallback.UPDATE_ERROR_BATTERY_LOW
+            InstallSystemUpdateCallback.UPDATE_ERROR_UNKNOWN,
+            InstallSystemUpdateCallback.UPDATE_ERROR_INCORRECT_OS_VERSION,
+            InstallSystemUpdateCallback.UPDATE_ERROR_UPDATE_FILE_INVALID,
+            InstallSystemUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND,
+            InstallSystemUpdateCallback.UPDATE_ERROR_BATTERY_LOW
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallUpdateCallbackErrorConstants {}
@@ -3346,10 +3351,10 @@ public class DevicePolicyManager {
      *
      * @throws IllegalStateException if the user is not unlocked.
      * @throws SecurityException if the calling application does not have the permission
-     *                           {@link permission#GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY}
+     *                           {@link permission#REQUEST_SCREEN_LOCK_COMPLEXITY}
      */
     @PasswordComplexity
-    @RequiresPermission(android.Manifest.permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY)
+    @RequiresPermission(android.Manifest.permission.REQUEST_SCREEN_LOCK_COMPLEXITY)
     public int getPasswordComplexity() {
         throwIfParentInstance("getPasswordComplexity");
         if (mService == null) {
@@ -10431,9 +10436,9 @@ public class DevicePolicyManager {
      * doesn't necessarily mean that the update has been applied successfully. The caller should
      * additionally check the system version with {@link android.os.Build#FINGERPRINT} or {@link
      * android.os.Build.VERSION}. If an error occurs during processing the OTA before the reboot,
-     * the caller will be notified by {@link InstallUpdateCallback}. If device does not have
+     * the caller will be notified by {@link InstallSystemUpdateCallback}. If device does not have
      * sufficient battery level, the installation will fail with error {@link
-     * InstallUpdateCallback#UPDATE_ERROR_BATTERY_LOW}.
+     * InstallSystemUpdateCallback#UPDATE_ERROR_BATTERY_LOW}.
      *
      * @param admin The {@link DeviceAdminReceiver} that this request is associated with.
      * @param updateFilePath An Uri of the file that contains the update. The file should be
@@ -10445,7 +10450,7 @@ public class DevicePolicyManager {
     public void installSystemUpdate(
             @NonNull ComponentName admin, @NonNull Uri updateFilePath,
             @NonNull @CallbackExecutor Executor executor,
-            @NonNull InstallUpdateCallback callback) {
+            @NonNull InstallSystemUpdateCallback callback) {
         throwIfParentInstance("installUpdate");
         if (mService == null) {
             return;
@@ -10465,19 +10470,20 @@ public class DevicePolicyManager {
         } catch (FileNotFoundException e) {
             Log.w(TAG, e);
             executeCallback(
-                    InstallUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND, Log.getStackTraceString(e),
+                    InstallSystemUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND,
+                    Log.getStackTraceString(e),
                     executor, callback);
         } catch (IOException e) {
             Log.w(TAG, e);
             executeCallback(
-                    InstallUpdateCallback.UPDATE_ERROR_UNKNOWN, Log.getStackTraceString(e),
+                    InstallSystemUpdateCallback.UPDATE_ERROR_UNKNOWN, Log.getStackTraceString(e),
                     executor, callback);
         }
     }
 
     private void executeCallback(int errorCode, String errorMessage,
             @NonNull @CallbackExecutor Executor executor,
-            @NonNull InstallUpdateCallback callback) {
+            @NonNull InstallSystemUpdateCallback callback) {
         executor.execute(() -> callback.onInstallUpdateError(errorCode, errorMessage));
     }
 
@@ -10537,6 +10543,8 @@ public class DevicePolicyManager {
      * @hide
      */
     @SystemApi
+    @RequiresPermission(value = android.Manifest.permission.GRANT_PROFILE_OWNER_DEVICE_IDS_ACCESS,
+            conditional = true)
     public void setProfileOwnerCanAccessDeviceIdsForUser(
             @NonNull ComponentName who, @NonNull UserHandle userHandle) {
         if (mService == null) {

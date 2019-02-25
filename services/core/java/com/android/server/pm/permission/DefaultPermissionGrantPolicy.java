@@ -645,7 +645,7 @@ public final class DefaultPermissionGrantPolicy {
                 grantPermissionsToSystemPackage(packageName, userId,
                         CONTACTS_PERMISSIONS, CALENDAR_PERMISSIONS, MICROPHONE_PERMISSIONS,
                         PHONE_PERMISSIONS, SMS_PERMISSIONS, CAMERA_PERMISSIONS,
-                        SENSORS_PERMISSIONS, STORAGE_PERMISSIONS);
+                        SENSORS_PERMISSIONS, STORAGE_PERMISSIONS, MEDIA_AURAL_PERMISSIONS);
                 grantSystemFixedPermissionsToSystemPackage(packageName, userId,
                         LOCATION_PERMISSIONS, ACTIVITY_RECOGNITION_PERMISSIONS);
             }
@@ -721,7 +721,7 @@ public final class DefaultPermissionGrantPolicy {
         grantSystemFixedPermissionsToSystemPackage(
                 getDefaultSystemHandlerActivityPackage(
                         RingtoneManager.ACTION_RINGTONE_PICKER, userId),
-                userId, STORAGE_PERMISSIONS);
+                userId, STORAGE_PERMISSIONS, MEDIA_AURAL_PERMISSIONS);
 
         // TextClassifier Service
         String textClassifierPackageName =
