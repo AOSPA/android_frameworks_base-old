@@ -180,6 +180,9 @@ public class AudioService extends IAudioService.Stub
     /** debug calls to devices APIs */
     protected static final boolean DEBUG_DEVICES = false;
 
+    /** debug SCO modes */
+    protected static final boolean DEBUG_SCO = true;
+
     /** How long to delay before persisting a change in volume/ringer mode. */
     private static final int PERSIST_DELAY = 500;
 
