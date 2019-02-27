@@ -97,6 +97,7 @@ public class TetheringConfiguration {
     public final String provisioningAppNoUi;
 
     public final int subId;
+    private static String fstInterfaceName = "bond0";
 
     public TetheringConfiguration(Context ctx, SharedLog log, int id) {
         final SharedLog configLog = log.forSubComponent("config");
@@ -109,9 +110,6 @@ public class TetheringConfiguration {
         // us an interface name. Careful consideration needs to be given to
         // implications for Settings and for provisioning checks.
         if (SystemProperties.getInt("persist.vendor.fst.softap.en", 0) == 1) {
-            String defaultFstInterfaceName = "bond0";
-            String fstInterfaceName = SystemProperties.get(
-                "persist.vendor.fst.data.interface", defaultFstInterfaceName);
             tetherableWifiRegexs = new String[] { fstInterfaceName };
         } else {
             tetherableWifiRegexs = getResourceStringArray(res, config_tether_wifi_regexs);
@@ -131,6 +129,14 @@ public class TetheringConfiguration {
         provisioningAppNoUi = getProvisioningAppNoUi(res);
 
         configLog.log(toString());
+    }
+
+    public static void setFstInterfaceName(String name) {
+        fstInterfaceName = name;
+    }
+
+    public static String getFstInterfaceName() {
+        return fstInterfaceName;
     }
 
     public boolean isUsb(String iface) {
