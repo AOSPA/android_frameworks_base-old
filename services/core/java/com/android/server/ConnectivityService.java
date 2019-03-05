@@ -5433,7 +5433,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             processListenRequests(newNetwork, false);
         }
 
-        if (satisfiesMobileNetworkDataCheck(newNetwork.networkCapabilities) == false) {
+        if ((satisfiesMobileNetworkDataCheck(newNetwork.networkCapabilities) == false) &&
+             !newNetwork.isVPN()) {
             // Force trigger permission change on non-DDS network to close all live connections
             try {
                 mNetd.setNetworkPermission(newNetwork.network.netId,
