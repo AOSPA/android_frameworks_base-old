@@ -154,7 +154,7 @@ ValueMetricProducer::ValueMetricProducer(
     // Adjust start for partial bucket
     mCurrentBucketStartTimeNs = startTimeNs;
     // Kicks off the puller immediately if condition is true and diff based.
-    if (mIsPulled && mCondition && mUseDiff) {
+    if (mIsPulled && mCondition == ConditionState::kTrue && mUseDiff) {
         pullAndMatchEventsLocked(startTimeNs);
     }
     VLOG("value metric %lld created. bucket size %lld start_time: %lld", (long long)metric.id(),
@@ -341,17 +341,21 @@ void ValueMetricProducer::onConditionChangedLocked(const bool condition,
     flushIfNeededLocked(eventTimeNs);
 
     // Pull on condition changes.
-    if (mIsPulled && (mCondition != condition)) {
+    bool conditionChanged = mCondition != condition;
+    bool unknownToFalse = mCondition == ConditionState::kUnknown
+            && condition == ConditionState::kFalse;
+    // We do not need to pull when we go from unknown to false.
+    if (mIsPulled && conditionChanged && !unknownToFalse) {
         pullAndMatchEventsLocked(eventTimeNs);
     }
 
     // when condition change from true to false, clear diff base but don't
     // reset other counters as we may accumulate more value in the bucket.
-    if (mUseDiff && mCondition && !condition) {
+    if (mUseDiff && mCondition == ConditionState::kTrue && condition == ConditionState::kFalse) {
         resetBase();
     }
 
-    mCondition = condition;
+    mCondition = condition ? ConditionState::kTrue : ConditionState::kFalse;
 }
 
 void ValueMetricProducer::pullAndMatchEventsLocked(const int64_t timestampNs) {
@@ -372,7 +376,7 @@ int64_t ValueMetricProducer::calcPreviousBucketEndTime(const int64_t currentTime
 void ValueMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& allData,
                                        bool pullSuccess, int64_t originalPullTimeNs) {
     std::lock_guard<std::mutex> lock(mMutex);
-    if (mCondition) {
+    if (mCondition == ConditionState::kTrue) {
         if (!pullSuccess) {
             // If the pull failed, we won't be able to compute a diff.
             invalidateCurrentBucket();
@@ -450,6 +454,17 @@ void ValueMetricProducer::accumulateEvents(const std::vector<std::shared_ptr<Log
     }
     mMatchedMetricDimensionKeys.clear();
     mHasGlobalBase = true;
+
+    // If we reach the guardrail, we might have dropped some data which means the bucket is
+    // incomplete.
+    //
+    // The base also needs to be reset. If we do not have the full data, we might
+    // incorrectly compute the diff when mUseZeroDefaultBase is true since an existing key
+    // might be missing from mCurrentSlicedBucket.
+    if (hasReachedGuardRailLimit()) {
+        invalidateCurrentBucket();
+        mCurrentSlicedBucket.clear();
+    }
 }
 
 void ValueMetricProducer::dumpStatesLocked(FILE* out, bool verbose) const {
@@ -471,6 +486,10 @@ void ValueMetricProducer::dumpStatesLocked(FILE* out, bool verbose) const {
     }
 }
 
+bool ValueMetricProducer::hasReachedGuardRailLimit() const {
+    return mCurrentSlicedBucket.size() >= mDimensionHardLimit;
+}
+
 bool ValueMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
     // ===========GuardRail==============
     // 1. Report the tuple count if the tuple count > soft limit
@@ -481,7 +500,7 @@ bool ValueMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
         size_t newTupleCount = mCurrentSlicedBucket.size() + 1;
         StatsdStats::getInstance().noteMetricDimensionSize(mConfigKey, mMetricId, newTupleCount);
         // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
-        if (newTupleCount > mDimensionHardLimit) {
+        if (hasReachedGuardRailLimit()) {
             ALOGE("ValueMetric %lld dropping data for dimension key %s", (long long)mMetricId,
                   newKey.toString().c_str());
             StatsdStats::getInstance().noteHardDimensionLimitReached(mMetricId);
@@ -678,8 +697,8 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
             wholeBucketVal += prev->second;
         }
         for (auto& tracker : mAnomalyTrackers) {
-            tracker->detectAndDeclareAnomaly(
-                eventTimeNs, mCurrentBucketNum, eventKey, wholeBucketVal);
+            tracker->detectAndDeclareAnomaly(eventTimeNs, mCurrentBucketNum, mMetricId, eventKey,
+                                             wholeBucketVal);
         }
     }
 }
@@ -710,6 +729,10 @@ void ValueMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
 }
 
 void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
+    if (mCondition == ConditionState::kUnknown) {
+        StatsdStats::getInstance().noteBucketUnknownCondition(mMetricId);
+    }
+
     VLOG("finalizing bucket for %ld, dumping %d slices", (long)mCurrentBucketStartTimeNs,
          (int)mCurrentSlicedBucket.size());
     int64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();

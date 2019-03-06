@@ -232,6 +232,7 @@ cc_library_shared {
     ],
 
     static_libs: [
+        "libasync_safe",
         "libgif",
         "libseccomp_policy",
         "libgrallocusage",
@@ -289,8 +290,8 @@ cc_library_shared {
         "libsoundtrigger",
         "libminikin",
         "libprocessgroup",
-        "libnativebridge",
-        "libnativeloader",
+        "libnativebridge_lazy",
+        "libnativeloader_lazy",
         "libmemunreachable",
         "libhidlbase",
         "libhidltransport",

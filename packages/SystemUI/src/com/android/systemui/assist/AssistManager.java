@@ -122,23 +122,9 @@ public class AssistManager implements ConfigurationChangedReceiver {
                     }
 
                     @Override
-                    public void onTranscriptionUpdate(String transcription) {
+                    public void onSetUiHints(Bundle hints) {
                         if (VERBOSE) {
-                            Log.v(TAG, "Transcription Updated: \"" + transcription + "\"");
-                        }
-                    }
-
-                    @Override
-                    public void onTranscriptionComplete(boolean immediate) {
-                        if (VERBOSE) {
-                            Log.v(TAG, "Transcription complete (immediate=" + immediate + ")");
-                        }
-                    }
-
-                    @Override
-                    public void onVoiceStateChange(int state) {
-                        if (VERBOSE) {
-                            Log.v(TAG, "Voice state is now " + state);
+                            Log.v(TAG, "UI hints received");
                         }
                     }
                 });
@@ -288,10 +274,6 @@ public class AssistManager implements ConfigurationChangedReceiver {
 
     private boolean isVoiceSessionRunning() {
         return mAssistUtils.isSessionRunning();
-    }
-
-    public void destroy() {
-        mWindowManager.removeViewImmediate(mView);
     }
 
     private void maybeSwapSearchIcon(@NonNull ComponentName assistComponent, boolean isService) {

@@ -39,7 +39,6 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 import static android.net.NetworkCapabilities.TRANSPORT_VPN;
 import static android.net.NetworkPolicyManager.RULE_NONE;
 import static android.net.NetworkPolicyManager.uidRulesToString;
-import static android.net.NetworkStack.NETWORKSTACK_PACKAGE_NAME;
 import static android.net.shared.NetworkMonitorUtils.isValidationRequired;
 import static android.net.shared.NetworkParcelableUtil.toStableParcelable;
 import static android.os.Process.INVALID_UID;
@@ -60,8 +59,10 @@ import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.telephony.SubscriptionInfo;
+import android.net.CaptivePortal;
 import android.net.ConnectionInfo;
 import android.net.ConnectivityManager;
+import android.net.ICaptivePortal;
 import android.net.IConnectivityManager;
 import android.net.IIpConnectivityMetrics;
 import android.net.INetd;
@@ -89,6 +90,7 @@ import android.net.NetworkQuotaInfo;
 import android.net.NetworkRequest;
 import android.net.NetworkSpecifier;
 import android.net.NetworkStack;
+import android.net.NetworkStackClient;
 import android.net.NetworkState;
 import android.net.NetworkUtils;
 import android.net.NetworkWatchlistManager;
@@ -926,7 +928,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         mPermissionMonitor = new PermissionMonitor(mContext, mNMS);
 
-        //set up the listener for user state for creating user VPNs
+        // Set up the listener for user state for creating user VPNs.
+        // Should run on mHandler to avoid any races.
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(Intent.ACTION_USER_STARTED);
         intentFilter.addAction(Intent.ACTION_USER_STOPPED);
@@ -934,7 +937,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
         intentFilter.addAction(Intent.ACTION_USER_REMOVED);
         intentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
         mContext.registerReceiverAsUser(
-                mIntentReceiver, UserHandle.ALL, intentFilter, null, null);
+                mIntentReceiver,
+                UserHandle.ALL,
+                intentFilter,
+                null /* broadcastPermission */,
+                mHandler);
         mContext.registerReceiverAsUser(mUserPresentReceiver, UserHandle.SYSTEM,
                 new IntentFilter(Intent.ACTION_USER_PRESENT), null, null);
 
@@ -945,7 +952,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
         intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
         intentFilter.addDataScheme("package");
         mContext.registerReceiverAsUser(
-                mIntentReceiver, UserHandle.ALL, intentFilter, null, null);
+                mIntentReceiver,
+                UserHandle.ALL,
+                intentFilter,
+                null /* broadcastPermission */,
+                mHandler);
 
         try {
             mNMS.registerObserver(mTethering);
@@ -2688,9 +2699,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         @Override
-        public void showProvisioningNotification(String action) {
+        public void showProvisioningNotification(String action, String packageName) {
             final Intent intent = new Intent(action);
-            intent.setPackage(NETWORKSTACK_PACKAGE_NAME);
+            intent.setPackage(packageName);
 
             final PendingIntent pendingIntent;
             // Only the system server can register notifications with package "android"
@@ -2711,11 +2722,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
             mTrackerHandler.sendMessage(mTrackerHandler.obtainMessage(
                     EVENT_PROVISIONING_NOTIFICATION, PROVISIONING_NOTIFICATION_HIDE,
                     mNai.network.netId));
-        }
-
-        @Override
-        public void logCaptivePortalLoginEvent(int eventId, String packageName) {
-            new MetricsLogger().action(eventId, packageName);
         }
     }
 
@@ -2864,6 +2870,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (DBG) {
             log(nai.name() + " got DISCONNECTED, was satisfying " + nai.numNetworkRequests());
         }
+        // Clear all notifications of this network.
+        mNotifier.clearNotification(nai.network.netId);
         // A network agent has disconnected.
         // TODO - if we move the logic to the network agent (have them disconnect
         // because they lost all their requests or because their score isn't good)
@@ -3281,20 +3289,61 @@ public class ConnectivityService extends IConnectivityManager.Stub
     /**
      * NetworkStack endpoint to start the captive portal app. The NetworkStack needs to use this
      * endpoint as it does not have INTERACT_ACROSS_USERS_FULL itself.
+     * @param network Network on which the captive portal was detected.
      * @param appExtras Bundle to use as intent extras for the captive portal application.
      *                  Must be treated as opaque to avoid preventing the captive portal app to
      *                  update its arguments.
      */
     @Override
-    public void startCaptivePortalAppInternal(Bundle appExtras) {
+    public void startCaptivePortalAppInternal(Network network, Bundle appExtras) {
         mContext.checkCallingOrSelfPermission(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
 
         final Intent appIntent = new Intent(ConnectivityManager.ACTION_CAPTIVE_PORTAL_SIGN_IN);
         appIntent.putExtras(appExtras);
+        appIntent.putExtra(ConnectivityManager.EXTRA_CAPTIVE_PORTAL,
+                new CaptivePortal(new CaptivePortalImpl(network).asBinder()));
         appIntent.setFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK);
 
         Binder.withCleanCallingIdentity(() ->
                 mContext.startActivityAsUser(appIntent, UserHandle.CURRENT));
+    }
+
+    private class CaptivePortalImpl extends ICaptivePortal.Stub {
+        private final Network mNetwork;
+
+        private CaptivePortalImpl(Network network) {
+            mNetwork = network;
+        }
+
+        @Override
+        public void appResponse(final int response) throws RemoteException {
+            if (response == CaptivePortal.APP_RETURN_WANTED_AS_IS) {
+                enforceSettingsPermission();
+            }
+
+            // getNetworkAgentInfoForNetwork is thread-safe
+            final NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(mNetwork);
+            if (nai == null) return;
+
+            // nai.networkMonitor() is thread-safe
+            final INetworkMonitor nm = nai.networkMonitor();
+            if (nm == null) return;
+
+            final long token = Binder.clearCallingIdentity();
+            try {
+                nm.notifyCaptivePortalAppFinished(response);
+            } finally {
+                // Not using Binder.withCleanCallingIdentity() to keep the checked RemoteException
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void logEvent(int eventId, String packageName) {
+            enforceSettingsPermission();
+
+            new MetricsLogger().action(eventId, packageName);
+        }
     }
 
     public boolean avoidBadWifi() {
@@ -4135,15 +4184,25 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * handler thread through their agent, this is asynchronous. When the capabilities objects
      * are computed they will be up-to-date as they are computed synchronously from here and
      * this is running on the ConnectivityService thread.
-     * TODO : Fix this and call updateCapabilities inline to remove out-of-order events.
      */
     private void updateAllVpnsCapabilities() {
+        Network defaultNetwork = getNetwork(getDefaultNetwork());
         synchronized (mVpns) {
             for (int i = 0; i < mVpns.size(); i++) {
                 final Vpn vpn = mVpns.valueAt(i);
-                vpn.updateCapabilities();
+                NetworkCapabilities nc = vpn.updateCapabilities(defaultNetwork);
+                updateVpnCapabilities(vpn, nc);
             }
         }
+    }
+
+    private void updateVpnCapabilities(Vpn vpn, @Nullable NetworkCapabilities nc) {
+        ensureRunningOnConnectivityServiceThread();
+        NetworkAgentInfo vpnNai = getNetworkAgentInfoForNetId(vpn.getNetId());
+        if (vpnNai == null || nc == null) {
+            return;
+        }
+        updateCapabilities(vpnNai.getCurrentScore(), vpnNai, nc);
     }
 
     @Override
@@ -4486,22 +4545,28 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private void onUserAdded(int userId) {
         mPermissionMonitor.onUserAdded(userId);
+        Network defaultNetwork = getNetwork(getDefaultNetwork());
         synchronized (mVpns) {
             final int vpnsSize = mVpns.size();
             for (int i = 0; i < vpnsSize; i++) {
                 Vpn vpn = mVpns.valueAt(i);
                 vpn.onUserAdded(userId);
+                NetworkCapabilities nc = vpn.updateCapabilities(defaultNetwork);
+                updateVpnCapabilities(vpn, nc);
             }
         }
     }
 
     private void onUserRemoved(int userId) {
         mPermissionMonitor.onUserRemoved(userId);
+        Network defaultNetwork = getNetwork(getDefaultNetwork());
         synchronized (mVpns) {
             final int vpnsSize = mVpns.size();
             for (int i = 0; i < vpnsSize; i++) {
                 Vpn vpn = mVpns.valueAt(i);
                 vpn.onUserRemoved(userId);
+                NetworkCapabilities nc = vpn.updateCapabilities(defaultNetwork);
+                updateVpnCapabilities(vpn, nc);
             }
         }
     }
@@ -4570,6 +4635,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            ensureRunningOnConnectivityServiceThread();
             final String action = intent.getAction();
             final int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL);
             final int uid = intent.getIntExtra(Intent.EXTRA_UID, -1);
@@ -5079,6 +5145,19 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return getNetworkForRequest(mDefaultRequest.requestId);
     }
 
+    @Nullable
+    private Network getNetwork(@Nullable NetworkAgentInfo nai) {
+        return nai != null ? nai.network : null;
+    }
+
+    private void ensureRunningOnConnectivityServiceThread() {
+        if (mHandler.getLooper().getThread() != Thread.currentThread()) {
+            throw new IllegalStateException(
+                    "Not running on ConnectivityService thread: "
+                            + Thread.currentThread().getName());
+        }
+    }
+
     private boolean isDefaultNetwork(NetworkAgentInfo nai) {
         return nai == getDefaultNetwork();
     }
@@ -5135,7 +5214,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (DBG) log("registerNetworkAgent " + nai);
         final long token = Binder.clearCallingIdentity();
         try {
-            mContext.getSystemService(NetworkStack.class).makeNetworkMonitor(
+            getNetworkStack().makeNetworkMonitor(
                     toStableParcelable(nai.network), name, new NetworkMonitorCallbacks(nai));
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -5145,6 +5224,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // NetworkAgent until nai.asyncChannel.connect(), which will be called when finalizing the
         // registration.
         return nai.network.netId;
+    }
+
+    @VisibleForTesting
+    protected NetworkStackClient getNetworkStack() {
+        return NetworkStackClient.getInstance();
     }
 
     private void handleRegisterNetworkAgent(NetworkAgentInfo nai, INetworkMonitor networkMonitor) {
@@ -5705,6 +5789,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         updateTcpBufferSizes(newNetwork.linkProperties.getTcpBufferSizes());
         mDnsManager.setDefaultDnsSystemProperties(newNetwork.linkProperties.getDnsServers());
         notifyIfacesChangedForNetworkStats();
+        // Fix up the NetworkCapabilities of any VPNs that don't specify underlying networks.
+        updateAllVpnsCapabilities();
     }
 
     private void processListenRequests(NetworkAgentInfo nai, boolean capabilitiesChanged) {
@@ -6158,6 +6244,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // doing.
             updateSignalStrengthThresholds(networkAgent, "CONNECT", null);
 
+            if (networkAgent.isVPN()) {
+                updateAllVpnsCapabilities();
+            }
+
             // Consider network even though it is not yet validated.
             final long now = SystemClock.elapsedRealtime();
             rematchNetworkAndRequests(networkAgent, ReapUnvalidatedNetworks.REAP, now);
@@ -6419,7 +6509,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
             success = mVpns.get(user).setUnderlyingNetworks(networks);
         }
         if (success) {
-            mHandler.post(() -> notifyIfacesChangedForNetworkStats());
+            mHandler.post(() -> {
+                // Update VPN's capabilities based on updated underlying network set.
+                updateAllVpnsCapabilities();
+                notifyIfacesChangedForNetworkStats();
+            });
         }
         return success;
     }

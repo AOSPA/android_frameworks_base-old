@@ -317,7 +317,9 @@ public class MediaController2 implements AutoCloseable {
                 isCanceled = !mRequestedCommandSeqNumbers.remove(seq);
             }
             if (isCanceled) {
-                resultReceiver.send(RESULT_INFO_SKIPPED, null);
+                if (resultReceiver != null) {
+                    resultReceiver.send(RESULT_INFO_SKIPPED, null);
+                }
                 return;
             }
             Session2Command.Result result = mCallback.onSessionCommand(
@@ -425,7 +427,7 @@ public class MediaController2 implements AutoCloseable {
         public void onDisconnected(@NonNull MediaController2 controller) {}
 
         /**
-         * Called when the playback of the session's playback activeness is changed.
+         * Called when the session's playback activeness is changed.
          *
          * @param controller the controller for this event
          * @param playbackActive {@code true} if the session's playback is active.

@@ -64,6 +64,7 @@ import static android.view.WindowManager.LayoutParams.isSystemAlertWindowType;
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.WindowConfiguration;
 import android.content.Context;
@@ -1003,11 +1004,13 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * affect the power state of the device, for example, waking on motions.
      * Generally, it's best to keep as little as possible in the queue thread
      * because it's the most fragile.
+     * @param displayId The display ID of the motion event.
      * @param policyFlags The policy flags associated with the motion.
      *
      * @return Actions flags: may be {@link #ACTION_PASS_TO_USER}.
      */
-    public int interceptMotionBeforeQueueingNonInteractive(long whenNanos, int policyFlags);
+    int interceptMotionBeforeQueueingNonInteractive(int displayId, long whenNanos,
+            int policyFlags);
 
     /**
      * Called from the input dispatcher thread before a key is dispatched to a window.
@@ -1466,6 +1469,20 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * Unregisters an IDisplayFoldListener.
      */
     default void unregisterDisplayFoldListener(IDisplayFoldListener listener) {}
+
+    /**
+     * Overrides the folded area.
+     *
+     * @param area the overriding folded area or an empty {@code Rect} to clear the override.
+     */
+    default void setOverrideFoldedArea(@NonNull Rect area) {}
+
+    /**
+     * Get the display folded area.
+     */
+    default @NonNull Rect getFoldedArea() {
+        return new Rect();
+    }
 
     /**
      * Updates the flag about whether AOD is showing.

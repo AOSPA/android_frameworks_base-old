@@ -16,6 +16,8 @@
 
 package android.os;
 
+import android.os.IStatsPullerCallback;
+
 /**
   * Binder interface to communicate with the statistics management service.
   * {@hide}
@@ -178,4 +180,41 @@ interface IStatsManager {
      * this label. This allows building custom metrics and predicates.
      */
     void sendAppBreadcrumbAtom(int label, int state);
+
+    /**
+     * Registers a puller callback function that, when invoked, pulls the data
+     * for the specified vendor atom tag.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS
+     */
+    oneway void registerPullerCallback(int atomTag, IStatsPullerCallback pullerCallback,
+                                       String packageName);
+
+   /**
+    * Unregisters a puller callback function for the given vendor atom.
+    *
+    * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS
+    */
+   oneway void unregisterPullerCallback(int atomTag, String packageName);
+
+    /**
+     * The install requires staging.
+     */
+    const int FLAG_REQUIRE_STAGING = 0x01;
+
+    /**
+     * Rollback is enabled with this install.
+     */
+    const int FLAG_ROLLBACK_ENABLED = 0x02;
+
+    /**
+     * Requires low latency monitoring.
+     */
+    const int FLAG_REQUIRE_LOW_LATENCY_MONITOR = 0x04;
+
+    /**
+     * Logs an event for binary push for module updates.
+     */
+     oneway void sendBinaryPushStateChangedAtom(in String trainName, in long trainVersionCode,
+         in int options, in int state, in long[] experimentId);
 }

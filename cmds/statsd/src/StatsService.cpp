@@ -31,6 +31,7 @@
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionController.h>
+#include <cutils/multiuser.h>
 #include <dirent.h>
 #include <frameworks/base/cmds/statsd/src/statsd_config.pb.h>
 #include <private/android_filesystem_config.h>
@@ -47,6 +48,7 @@ using namespace android;
 
 using android::base::StringPrintf;
 using android::util::FIELD_COUNT_REPEATED;
+using android::util::FIELD_TYPE_INT64;
 using android::util::FIELD_TYPE_MESSAGE;
 
 namespace android {
@@ -62,6 +64,8 @@ constexpr const char* kOpUsage = "android:get_usage_stats";
 
 // for StatsDataDumpProto
 const int FIELD_ID_REPORTS_LIST = 1;
+// for TrainInfo experiment id serialization
+const int FIELD_ID_EXPERIMENT_ID = 1;
 
 static binder::Status ok() {
     return binder::Status::ok();
@@ -155,7 +159,7 @@ StatsService::StatsService(const sp<Looper>& handlerLooper)
            }
 
       }))  {
-    mUidMap = new UidMap();
+    mUidMap = UidMap::getInstance();
     mPullerManager = new StatsPullerManager();
     StatsPuller::SetUidMap(mUidMap);
     mConfigManager = new ConfigManager();
@@ -174,6 +178,21 @@ StatsService::StatsService(const sp<Looper>& handlerLooper)
                     return false;
                 } else {
                     sc->sendDataBroadcast(receiver, mProcessor->getLastReportTimeNs(key));
+                    return true;
+                }
+            },
+            [this](const int& uid, const vector<int64_t>& activeConfigs) {
+                auto receiver = mConfigManager->GetActiveConfigsChangedReceiver(uid);
+                sp<IStatsCompanionService> sc = getStatsCompanionService();
+                if (sc == nullptr) {
+                    VLOG("Could not access statsCompanion");
+                    return false;
+                } else if (receiver == nullptr) {
+                    VLOG("Could not find receiver for uid %d", uid);
+                    return false;
+                } else {
+                    sc->sendActiveConfigsChangedBroadcast(receiver, activeConfigs);
+                    VLOG("StatsService::active configs broadcast succeeded for uid %d" , uid);
                     return true;
                 }
             });
@@ -357,6 +376,9 @@ status_t StatsService::command(int in, int out, int err, Vector<String8>& args,
         if (!args[0].compare(String8("print-logs"))) {
             return cmd_print_logs(out, args);
         }
+        if (!args[0].compare(String8("send-active-configs"))) {
+            return cmd_trigger_active_config_broadcast(out, args);
+        }
         if (!args[0].compare(String8("data-subscribe"))) {
             if (mShellSubscriber == nullptr) {
                 mShellSubscriber = new ShellSubscriber(mUidMap, mPullerManager);
@@ -449,6 +471,19 @@ void StatsService::print_cmd_help(int out) {
     dprintf(out, "  NAME          The name of the configuration\n");
     dprintf(out, "\n");
     dprintf(out, "\n");
+    dprintf(out,
+            "usage: adb shell cmd stats send-active-configs [--uid=UID] [--configs] "
+            "[NAME1] [NAME2] [NAME3..]\n");
+    dprintf(out, "  Send a broadcast that informs the subscriber of the current active configs.\n");
+    dprintf(out, "  --uid=UID     The uid of the configurations. It is only possible to pass\n");
+    dprintf(out, "                the UID parameter on eng builds. If UID is omitted the\n");
+    dprintf(out, "                calling uid is used.\n");
+    dprintf(out, "  --configs     Send the list of configs in the name list instead of\n");
+    dprintf(out, "                the currently active configs\n");
+    dprintf(out, "  NAME LIST     List of configuration names to be included in the broadcast.\n");
+
+    dprintf(out, "\n");
+    dprintf(out, "\n");
     dprintf(out, "usage: adb shell cmd stats print-stats\n");
     dprintf(out, "  Prints some basic stats.\n");
     dprintf(out, "  --proto       Print proto binary instead of string format.\n");
@@ -496,6 +531,59 @@ status_t StatsService::cmd_trigger_broadcast(int out, Vector<String8>& args) {
              args[2].c_str());
     }
 
+    return NO_ERROR;
+}
+
+status_t StatsService::cmd_trigger_active_config_broadcast(int out, Vector<String8>& args) {
+    const int argCount = args.size();
+    int uid;
+    vector<int64_t> configIds;
+    if (argCount == 1) {
+        // Automatically pick the uid and send a broadcast that has no active configs.
+        uid = IPCThreadState::self()->getCallingUid();
+        mProcessor->GetActiveConfigs(uid, configIds);
+    } else {
+        int curArg = 1;
+        if(args[curArg].find("--uid=") == 0) {
+            string uidArgStr(args[curArg].c_str());
+            string uidStr = uidArgStr.substr(6);
+            if (!getUidFromString(uidStr.c_str(), uid)) {
+                dprintf(out, "Invalid UID. Note that the config can only be set for "
+                             "other UIDs on eng or userdebug builds.\n");
+                return UNKNOWN_ERROR;
+            }
+            curArg++;
+        } else {
+            uid = IPCThreadState::self()->getCallingUid();
+        }
+        if (curArg == argCount || args[curArg] != "--configs") {
+            VLOG("Reached end of args, or specify configs not set. Sending actual active configs,");
+            mProcessor->GetActiveConfigs(uid, configIds);
+        } else {
+            // Flag specified, use the given list of configs.
+            curArg++;
+            for (int i = curArg; i < argCount; i++) {
+                char* endp;
+                int64_t configID = strtoll(args[i].c_str(), &endp, 10);
+                if (endp == args[i].c_str() || *endp != '\0') {
+                    dprintf(out, "Error parsing config ID.\n");
+                    return UNKNOWN_ERROR;
+                }
+                VLOG("Adding config id %ld", static_cast<long>(configID));
+                configIds.push_back(configID);
+            }
+        }
+    }
+    auto receiver = mConfigManager->GetActiveConfigsChangedReceiver(uid);
+    sp<IStatsCompanionService> sc = getStatsCompanionService();
+    if (sc == nullptr) {
+        VLOG("Could not access statsCompanion");
+    } else if (receiver == nullptr) {
+        VLOG("Could not find receiver for uid %d", uid);
+    } else {
+        sc->sendActiveConfigsChangedBroadcast(receiver, configIds);
+        VLOG("StatsService::trigger active configs changed broadcast succeeded for uid %d" , uid);
+    }
     return NO_ERROR;
 }
 
@@ -762,7 +850,10 @@ status_t StatsService::cmd_print_logs(int out, const Vector<String8>& args) {
 }
 
 bool StatsService::getUidFromArgs(const Vector<String8>& args, size_t uidArgIndex, int32_t& uid) {
-    const char* s = args[uidArgIndex].c_str();
+    return getUidFromString(args[uidArgIndex].c_str(), uid);
+}
+
+bool StatsService::getUidFromString(const char* s, int32_t& uid) {
     if (*s == '\0') {
         return false;
     }
@@ -998,8 +1089,13 @@ Status StatsService::setActiveConfigsChangedOperation(const sp<android::IBinder>
     ENFORCE_DUMP_AND_USAGE_STATS(packageName);
 
     IPCThreadState* ipc = IPCThreadState::self();
-    mConfigManager->SetActiveConfigsChangedReceiver(ipc->getCallingUid(), intentSender);
-    //TODO: Return the list of configs that are already active
+    int uid = ipc->getCallingUid();
+    mConfigManager->SetActiveConfigsChangedReceiver(uid, intentSender);
+    if (output != nullptr) {
+        mProcessor->GetActiveConfigs(uid, *output);
+    } else {
+        ALOGW("StatsService::setActiveConfigsChanged output was nullptr");
+    }
     return Status::ok();
 }
 
@@ -1054,6 +1150,74 @@ Status StatsService::sendAppBreadcrumbAtom(int32_t label, int32_t state) {
     android::util::stats_write(util::APP_BREADCRUMB_REPORTED,
                                IPCThreadState::self()->getCallingUid(), label,
                                state);
+    return Status::ok();
+}
+
+Status StatsService::registerPullerCallback(int32_t atomTag,
+        const sp<android::os::IStatsPullerCallback>& pullerCallback,
+        const String16& packageName) {
+    ENFORCE_DUMP_AND_USAGE_STATS(packageName);
+
+    VLOG("StatsService::registerPullerCallback called.");
+    mPullerManager->RegisterPullerCallback(atomTag, pullerCallback);
+    return Status::ok();
+}
+
+Status StatsService::unregisterPullerCallback(int32_t atomTag, const String16& packageName) {
+    ENFORCE_DUMP_AND_USAGE_STATS(packageName);
+
+    VLOG("StatsService::unregisterPullerCallback called.");
+    mPullerManager->UnregisterPullerCallback(atomTag);
+    return Status::ok();
+}
+
+Status StatsService::sendBinaryPushStateChangedAtom(const android::String16& trainName,
+                                                    int64_t trainVersionCode, int options,
+                                                    int32_t state,
+                                                    const std::vector<int64_t>& experimentIds) {
+    uid_t uid = IPCThreadState::self()->getCallingUid();
+    // For testing
+    if (uid == AID_ROOT || uid == AID_SYSTEM || uid == AID_SHELL) {
+        return ok();
+    }
+
+    // Caller must be granted these permissions
+    if (!checkCallingPermission(String16(kPermissionDump))) {
+        return exception(binder::Status::EX_SECURITY,
+                         StringPrintf("UID %d lacks permission %s", uid, kPermissionDump));
+    }
+    if (!checkCallingPermission(String16(kPermissionUsage))) {
+        return exception(binder::Status::EX_SECURITY,
+                         StringPrintf("UID %d lacks permission %s", uid, kPermissionUsage));
+    }
+    // TODO: add verifier permission
+
+    userid_t userId = multiuser_get_user_id(uid);
+
+    bool requiresStaging = options | IStatsManager::FLAG_REQUIRE_STAGING;
+    bool rollbackEnabled = options | IStatsManager::FLAG_ROLLBACK_ENABLED;
+    bool requiresLowLatencyMonitor = options | IStatsManager::FLAG_REQUIRE_LOW_LATENCY_MONITOR;
+
+    ProtoOutputStream proto;
+    for (const auto& expId : experimentIds) {
+        proto.write(FIELD_TYPE_INT64 | FIELD_COUNT_REPEATED | FIELD_ID_EXPERIMENT_ID,
+                    (long long)expId);
+    }
+
+    vector<uint8_t> buffer;
+    buffer.resize(proto.size());
+    size_t pos = 0;
+    auto iter = proto.data();
+    while (iter.readBuffer() != NULL) {
+        size_t toRead = iter.currentToRead();
+        std::memcpy(&(buffer[pos]), iter.readBuffer(), toRead);
+        pos += toRead;
+        iter.rp()->move(toRead);
+    }
+    LogEvent event(std::string(String8(trainName).string()), trainVersionCode, requiresStaging,
+                   rollbackEnabled, requiresLowLatencyMonitor, state, buffer, userId);
+    mProcessor->OnLogEvent(&event);
+    StorageManager::writeTrainInfo(trainVersionCode, buffer);
     return Status::ok();
 }
 
