@@ -592,11 +592,6 @@ public class ImsCallSessionImplBase extends IImsCallSession.Stub {
         }
 
         @Override
-        public void callSessionPropertyChanged(int property) throws RemoteException {
-            mNewListener.callSessionPropertyChanged(property);
-        }
-
-        @Override
         public void callSessionRttAudioIndicatorChanged(ImsStreamMediaProfile profile)
                 throws RemoteException {
             mNewListener.callSessionRttAudioIndicatorChanged(profile);

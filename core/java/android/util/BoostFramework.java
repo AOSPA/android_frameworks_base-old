@@ -54,6 +54,7 @@ public class BoostFramework {
     private static Method sReleaseFunc = null;
     private static Method sReleaseHandlerFunc = null;
     private static Method sFeedbackFunc = null;
+    private static Method sPerfGetPropFunc = null;
 
     private static int sIopv2 = -1;
     private static Method sIOPStart = null;
@@ -206,6 +207,9 @@ public class BoostFramework {
 
                     argClasses = new Class[] {};
                     sIOPStop =  sPerfClass.getDeclaredMethod("perfIOPrefetchStop", argClasses);
+
+                    argClasses = new Class[] {String.class, String.class};
+                    sPerfGetPropFunc = sPerfClass.getMethod("perfGetProp", argClasses);
 
                     try {
                         argClasses = new Class[] {int.class, int.class, String.class, int.class};
@@ -386,6 +390,22 @@ public class BoostFramework {
             ret = (String) retVal;
         } catch (Exception e) {
             Log.e(TAG, "Exception " + e);
+        }
+        return ret;
+    }
+
+
+    public String perfGetProp(String prop_name, String def_val) {
+        String ret = "";
+        try {
+            if (sPerfGetPropFunc != null) {
+                Object retVal = sPerfGetPropFunc.invoke(mPerf, prop_name, def_val);
+                ret = (String)retVal;
+            }else {
+                ret = def_val;
+            }
+        } catch(Exception e) {
+            Log.e(TAG,"Exception " + e);
         }
         return ret;
     }
