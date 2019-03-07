@@ -531,34 +531,21 @@ public class Watchdog extends Thread {
             final File finalStack = ActivityManagerService.dumpStackTraces(
                     pids, null, null, getInterestingNativePids());
 
+            //Collect Binder State logs to get status of all the transactions
+            if (Build.IS_DEBUGGABLE) {
+                binderStateRead();
+            }
+
             // Give some extra time to make sure the stack traces get written.
             // The system's been hanging for a minute, another second or two won't hurt much.
             SystemClock.sleep(5000);
 
-            final String tracesDirProp = SystemProperties.get("dalvik.vm.stack-trace-dir", "");
             File watchdogTraces;
             String newTracesPath = "traces_SystemServer_WDT"
                     + mTraceDateFormat.format(new Date()) + "_pid"
                     + String.valueOf(Process.myPid());
-            boolean oldTraceMechanism = false;
-
-            if (tracesDirProp.isEmpty()) {
-                // the old trace dumping mechanism
-                // in which case, finalStack has 2 sets of traces contained
-                String tracesPath = SystemProperties.get("dalvik.vm.stack-trace-file", null);
-                int lpos = tracesPath.lastIndexOf ("/"); //essentially, till the parent dir
-                if (-1 != lpos) {
-                    watchdogTraces = new
-                            File(tracesPath.substring(0, lpos + 1) + newTracesPath);
-                } else {
-                    watchdogTraces = new File(newTracesPath);
-                }
-                oldTraceMechanism = true;
-            } else {
-                // the new trace dumping mechanism
-                File tracesDir = new File(tracesDirProp);
-                watchdogTraces = new File(tracesDir, newTracesPath);
-            }
+            File tracesDir = new File(ActivityManagerService.ANR_TRACE_DIR);
+            watchdogTraces = new File(tracesDir, newTracesPath);
             try {
                 if (watchdogTraces.createNewFile()) {
                     FileUtils.setPermissions(watchdogTraces.getAbsolutePath(),
@@ -567,7 +554,7 @@ public class Watchdog extends Thread {
                     // Append both traces from the first and second half
                     // to a new file, making it easier to debug Watchdog timeouts
                     // dumpStackTraces() can return a null instance, so check the same
-                    if ((initialStack != null) && !oldTraceMechanism) {
+                    if (initialStack != null) {
                         // check the last-modified time of this file.
                         // we are interested in this only it was written to in the
                         // last 5 minutes or so
