@@ -34,6 +34,7 @@
 #include "idmap2/Idmap.h"
 #include "idmap2/ResourceUtils.h"
 #include "idmap2/Result.h"
+#include "idmap2/SysTrace.h"
 #include "idmap2/ZipFile.h"
 
 namespace android::idmap2 {
@@ -117,6 +118,12 @@ const LoadedPackage* GetPackageAtIndex0(const LoadedArsc& loaded_arsc) {
   return loaded_arsc.GetPackageById(id);
 }
 
+Result<uint32_t> GetCrc(const ZipFile& zip) {
+  const Result<uint32_t> a = zip.Crc("resources.arsc");
+  const Result<uint32_t> b = zip.Crc("AndroidManifest.xml");
+  return a && b ? Result<uint32_t>(*a ^ *b) : kResultError;
+}
+
 }  // namespace
 
 std::unique_ptr<const IdmapHeader> IdmapHeader::FromBinaryStream(std::istream& stream) {
@@ -153,7 +160,7 @@ bool IdmapHeader::IsUpToDate(std::ostream& out_error) const {
     return false;
   }
 
-  Result<uint32_t> target_crc = target_zip->Crc("resources.arsc");
+  Result<uint32_t> target_crc = GetCrc(*target_zip);
   if (!target_crc) {
     out_error << "error: failed to get target crc" << std::endl;
     return false;
@@ -173,7 +180,7 @@ bool IdmapHeader::IsUpToDate(std::ostream& out_error) const {
     return false;
   }
 
-  Result<uint32_t> overlay_crc = overlay_zip->Crc("resources.arsc");
+  Result<uint32_t> overlay_crc = GetCrc(*overlay_zip);
   if (!overlay_crc) {
     out_error << "error: failed to get overlay crc" << std::endl;
     return false;
@@ -252,6 +259,7 @@ std::string Idmap::CanonicalIdmapPathFor(const std::string& absolute_dir,
 
 std::unique_ptr<const Idmap> Idmap::FromBinaryStream(std::istream& stream,
                                                      std::ostream& out_error) {
+  SYSTRACE << "Idmap::FromBinaryStream";
   std::unique_ptr<Idmap> idmap(new Idmap());
 
   idmap->header_ = IdmapHeader::FromBinaryStream(stream);
@@ -281,10 +289,10 @@ bool CheckOverlayable(const LoadedPackage& target_package,
   if (overlayable_info == nullptr) {
     // If the resource does not have an overlayable definition, allow the resource to be overlaid.
     // Once overlayable enforcement is turned on, this check will return false.
-    return true;
+    return !target_package.DefinesOverlayable();
   }
 
-  if (!overlay_info.target_name.empty() && overlay_info.target_name != overlayable_info->name) {
+  if (overlay_info.target_name != overlayable_info->name) {
     // If the overlay supplies a target overlayable name, the resource must belong to the
     // overlayable defined with the specified name to be overlaid.
     return false;
@@ -298,6 +306,7 @@ std::unique_ptr<const Idmap> Idmap::FromApkAssets(
     const std::string& target_apk_path, const ApkAssets& target_apk_assets,
     const std::string& overlay_apk_path, const ApkAssets& overlay_apk_assets,
     const PolicyBitmask& fulfilled_policies, bool enforce_overlayable, std::ostream& out_error) {
+  SYSTRACE << "Idmap::FromApkAssets";
   AssetManager2 target_asset_manager;
   if (!target_asset_manager.SetApkAssets({&target_apk_assets}, true, false)) {
     out_error << "error: failed to create target asset manager" << std::endl;
@@ -356,14 +365,14 @@ std::unique_ptr<const Idmap> Idmap::FromApkAssets(
   header->magic_ = kIdmapMagic;
   header->version_ = kIdmapCurrentVersion;
 
-  Result<uint32_t> crc = target_zip->Crc("resources.arsc");
+  Result<uint32_t> crc = GetCrc(*target_zip);
   if (!crc) {
     out_error << "error: failed to get zip crc for target" << std::endl;
     return nullptr;
   }
   header->target_crc_ = *crc;
 
-  crc = overlay_zip->Crc("resources.arsc");
+  crc = GetCrc(*overlay_zip);
   if (!crc) {
     out_error << "error: failed to get zip crc for overlay" << std::endl;
     return nullptr;

@@ -37,7 +37,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -629,12 +628,9 @@ public class RollbackTest {
         assertEquals(versionRolledBackTo, info.getVersionRolledBackTo().getLongVersionCode());
     }
 
-    // TODO: Allow installing test app along atomically with module metadata package so that
-    // a failed test app will be flagged as a failed mainline app
     /**
      * Test bad update automatic rollback.
      */
-    @Ignore
     @Test
     public void testBadUpdateRollback() throws Exception {
         BroadcastReceiver crashCountReceiver = null;
@@ -689,7 +685,7 @@ public class RollbackTest {
                             ActivityManager am = context.getSystemService(ActivityManager.class);
                             am.killBackgroundProcesses(TEST_APP_A);
                             // Allow another package launch
-                            crashQueue.offer(intent.getIntExtra("count", 0), 5, TimeUnit.SECONDS);
+                            crashQueue.put(intent.getIntExtra("count", 0));
                         } catch (InterruptedException e) {
                             fail("Failed to communicate with test app");
                         }
@@ -698,14 +694,9 @@ public class RollbackTest {
             context.registerReceiver(crashCountReceiver, crashCountFilter);
 
             // Start apps PackageWatchdog#TRIGGER_FAILURE_COUNT times so TEST_APP_A crashes
-            Integer crashCount = null;
             do {
                 RollbackTestUtils.launchPackage(TEST_APP_A);
-                crashCount = crashQueue.poll(5, TimeUnit.SECONDS);
-                if (crashCount == null) {
-                    fail("Timed out waiting for crash signal from test app");
-                }
-            } while(crashCount < 5);
+            } while(crashQueue.take() < 5);
 
             // TEST_APP_A is automatically rolled back by the RollbackPackageHealthObserver
             assertEquals(1, RollbackTestUtils.getInstalledVersion(TEST_APP_A));

@@ -1061,9 +1061,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean hspaDataDistinguishable;
         boolean inflateSignalStrengths = false;
         boolean alwaysShowDataRatIcon = false;
-        boolean showRsrpSignalLevelforLTE;
-        boolean showVolteIcon;
-
+        boolean showRsrpSignalLevelforLTE = false;
+        boolean hideNoInternetState = false;
+        boolean showVolteIcon = false;
+        boolean alwaysShowNetworkTypeIcon = false;
         /**
          * Mapping from NR 5G status string to an integer. The NR 5G status string should match
          * those in carrier config.
@@ -1088,6 +1089,13 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     res.getBoolean(R.bool.config_hspa_data_distinguishable);
             config.inflateSignalStrengths = res.getBoolean(R.bool.config_inflateSignalStrength);
 
+            config.alwaysShowNetworkTypeIcon =
+                    context.getResources().getBoolean(R.bool.config_alwaysShowTypeIcon);
+            config.showRsrpSignalLevelforLTE =
+                    res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
+            config.hideNoInternetState = res.getBoolean(R.bool.config_hideNoInternetState);
+            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
+
             CarrierConfigManager configMgr = (CarrierConfigManager)
                     context.getSystemService(Context.CARRIER_CONFIG_SERVICE);
             // Handle specific carrier config values for the default data SIM
@@ -1110,9 +1118,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     }
                 }
             }
-            config.showRsrpSignalLevelforLTE =
-                    res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
-            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
             return config;
         }
 

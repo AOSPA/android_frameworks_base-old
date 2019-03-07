@@ -42,6 +42,7 @@ import android.view.accessibility.AccessibilityNodeInfo.CollectionInfo;
 import android.view.accessibility.AccessibilityNodeInfo.CollectionItemInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.animation.GridLayoutAnimationController;
+import android.view.inspector.InspectableProperty;
 import android.widget.RemoteViews.RemoteView;
 
 import com.android.internal.R;
@@ -122,7 +123,7 @@ public class GridView extends AbsListView {
     private int mColumnWidth;
     @UnsupportedAppUsage
     private int mRequestedColumnWidth;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769395)
     private int mRequestedNumColumns;
 
     private View mReferenceView = null;
@@ -149,6 +150,8 @@ public class GridView extends AbsListView {
 
         final TypedArray a = context.obtainStyledAttributes(
                 attrs, R.styleable.GridView, defStyleAttr, defStyleRes);
+        saveAttributeDataForStyleable(context, R.styleable.GridView,
+                attrs, a, defStyleAttr, defStyleRes);
 
         int hSpacing = a.getDimensionPixelOffset(
                 R.styleable.GridView_horizontalSpacing, 0);
@@ -2061,6 +2064,7 @@ public class GridView extends AbsListView {
      *
      * @attr ref android.R.styleable#GridView_gravity
      */
+    @InspectableProperty(valueType = InspectableProperty.ValueType.GRAVITY)
     public int getGravity() {
         return mGravity;
     }
@@ -2096,6 +2100,7 @@ public class GridView extends AbsListView {
      *
      * @attr ref android.R.styleable#GridView_horizontalSpacing
      */
+    @InspectableProperty
     public int getHorizontalSpacing() {
         return mHorizontalSpacing;
     }
@@ -2147,6 +2152,7 @@ public class GridView extends AbsListView {
      *
      * @attr ref android.R.styleable#GridView_verticalSpacing
      */
+    @InspectableProperty
     public int getVerticalSpacing() {
         return mVerticalSpacing;
     }
@@ -2167,6 +2173,13 @@ public class GridView extends AbsListView {
     }
 
     @StretchMode
+    @InspectableProperty(enumMapping = {
+            @InspectableProperty.EnumMap(value = NO_STRETCH, name = "none"),
+            @InspectableProperty.EnumMap(value = STRETCH_SPACING, name = "spacingWidth"),
+            @InspectableProperty.EnumMap(
+                    value = STRETCH_SPACING_UNIFORM, name = "spacingWidthUniform"),
+            @InspectableProperty.EnumMap(value = STRETCH_COLUMN_WIDTH, name = "columnWidth"),
+    })
     public int getStretchMode() {
         return mStretchMode;
     }
@@ -2197,6 +2210,7 @@ public class GridView extends AbsListView {
      *
      * @attr ref android.R.styleable#GridView_columnWidth
      */
+    @InspectableProperty
     public int getColumnWidth() {
         return mColumnWidth;
     }
@@ -2241,6 +2255,7 @@ public class GridView extends AbsListView {
      * @see #setNumColumns(int)
      */
     @ViewDebug.ExportedProperty
+    @InspectableProperty
     public int getNumColumns() {
         return mNumColumns;
     }

@@ -224,9 +224,9 @@
     <string name="bluetooth_profile_a2dp_high_quality_unknown_codec">HD audio</string>
 
     <!-- Bluetooth settings.  The user-visible string that is used whenever referring to the Hearing Aid profile. -->
-    <string name="bluetooth_profile_hearing_aid">Hearing Aid</string>
+    <string name="bluetooth_profile_hearing_aid">Hearing Aids</string>
     <!-- Bluetooth settings.  Connection options screen.  The summary for the Hearing Aid checkbox preference when Hearing Aid is connected. -->
-    <string name="bluetooth_hearing_aid_profile_summary_connected">Connected to Hearing Aid</string>
+    <string name="bluetooth_hearing_aid_profile_summary_connected">Connected to Hearing Aids</string>
 
     <!-- Bluetooth settings.  Connection options screen.  The summary for the A2DP checkbox preference when A2DP is connected. -->
     <string name="bluetooth_a2dp_profile_summary_connected">Connected to media audio</string>
@@ -268,7 +268,7 @@
          will set the HID profile as preferred. -->
     <string name="bluetooth_hid_profile_summary_use_for">Use for input</string>
     <!-- Bluetooth settings.  Connection options screen.  The summary for the Hearing Aid checkbox preference that describes how checking it will set the Hearing Aid profile as preferred. -->
-    <string name="bluetooth_hearing_aid_profile_summary_use_for">Use for Hearing Aid</string>
+    <string name="bluetooth_hearing_aid_profile_summary_use_for">Use for Hearing Aids</string>
     <!-- Bluetooth settings. Connection options screen.  The summary for the dun checkbox preference that describes how checking it will set the dun profile as preferred. -->
     <string name="bluetooth_dun_profile_summary_use_for">Use for Dial-up Network access</string>
 

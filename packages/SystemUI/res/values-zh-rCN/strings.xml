@@ -855,11 +855,6 @@
     <string name="mobile_data_disable_message_default_carrier" msgid="6078110473451946831">"您的运营商"</string>
     <string name="touch_filtered_warning" msgid="8671693809204767551">"由于某个应用遮挡了权限请求界面，因此“设置”应用无法验证您的回应。"</string>
 
-    <!-- Carrier Name -->
-    <string name="China_Mobile">中国移动</string>
-    <string name="China_Unicom">中国联通</string>
-    <string name="China_Telecom">中国电信</string>
-    <string name="China_Mobile_HD">中国移动 (HD)</string>
     <string name="slice_permission_title" msgid="7465009437851044444">"要允许“<xliff:g id="APP_0">%1$s</xliff:g>”显示“<xliff:g id="APP_2">%2$s</xliff:g>”图块吗？"</string>
     <string name="slice_permission_text_1" msgid="3514586565609596523">"- 可以读取“<xliff:g id="APP">%1$s</xliff:g>”中的信息"</string>
     <string name="slice_permission_text_2" msgid="3146758297471143723">"- 可以在“<xliff:g id="APP">%1$s</xliff:g>”内执行操作"</string>
@@ -904,5 +899,11 @@
     <!-- no translation found for bubbles_deep_link_button_description (8895837143057564517) -->
     <skip />
     <!-- no translation found for bubbles_settings_button_description (1940331766151865776) -->
+    <skip />
+    <!-- no translation found for bubbles_prompt (2684301469286150276) -->
+    <skip />
+    <!-- no translation found for no_bubbles (7173621233904687258) -->
+    <skip />
+    <!-- no translation found for yes_bubbles (668809525728633841) -->
     <skip />
 </resources>

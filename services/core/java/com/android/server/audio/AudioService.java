@@ -1718,7 +1718,7 @@ public class AudioService extends IAudioService.Stub
                     Log.d(TAG, "adjustSreamVolume: postSetAvrcpAbsoluteVolumeIndex index="
                             + newIndex + "stream=" + streamType);
                 }
-                mDeviceBroker.postSetAvrcpAbsoluteVolumeIndex(newIndex);
+                mDeviceBroker.postSetAvrcpAbsoluteVolumeIndex(newIndex / 10);
             }
 
             // Check if volume update should be send to Hearing Aid
@@ -5146,7 +5146,7 @@ public class AudioService extends IAudioService.Stub
                 if (mUserSwitchedReceived) {
                     // attempt to stop music playback for background user except on first user
                     // switch (i.e. first boot)
-                    mDeviceBroker.broadcastBecomingNoisy();
+                    mDeviceBroker.postBroadcastBecomingNoisy();
                 }
                 mUserSwitchedReceived = true;
                 // the current audio focus owner is no longer valid

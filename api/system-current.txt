@@ -201,11 +201,11 @@ package android {
   }
 
   public static final class R.array {
-    field public static final int config_defaultRoleHolders = 17235974; // 0x1070006
     field public static final int config_keySystemUuidMapping = 17235973; // 0x1070005
   }
 
   public static final class R.attr {
+    field public static final int allowClearUserDataOnFailedRestore = 16844198; // 0x10105a6
     field public static final int inheritShowWhenLocked = 16844194; // 0x10105a2
     field public static final int isVrOnly = 16844152; // 0x1010578
     field public static final int requiredSystemPropertyName = 16844133; // 0x1010565
@@ -237,6 +237,12 @@ package android {
   }
 
   public static final class R.string {
+    field public static final int config_defaultAssistant = 17039393; // 0x1040021
+    field public static final int config_defaultBrowser = 17039394; // 0x1040022
+    field public static final int config_defaultDialer = 17039395; // 0x1040023
+    field public static final int config_defaultGallery = 17039398; // 0x1040026
+    field public static final int config_defaultMusic = 17039397; // 0x1040025
+    field public static final int config_defaultSms = 17039396; // 0x1040024
     field public static final int config_feedbackIntentExtraKey = 17039391; // 0x104001f
     field public static final int config_feedbackIntentNameKey = 17039392; // 0x1040020
     field public static final int config_helpIntentExtraKey = 17039389; // 0x104001d
@@ -711,6 +717,7 @@ package android.app.backup {
     method @Deprecated public int requestRestore(android.app.backup.RestoreObserver, android.app.backup.BackupManagerMonitor);
     method @Deprecated @RequiresPermission(android.Manifest.permission.BACKUP) public String selectBackupTransport(String);
     method @RequiresPermission(android.Manifest.permission.BACKUP) public void selectBackupTransport(android.content.ComponentName, android.app.backup.SelectBackupTransportCallback);
+    method @RequiresPermission(android.Manifest.permission.BACKUP) public void setAncestralSerialNumber(long);
     method @RequiresPermission(android.Manifest.permission.BACKUP) public void setAutoRestore(boolean);
     method @RequiresPermission(android.Manifest.permission.BACKUP) public void setBackupEnabled(boolean);
     method @RequiresPermission(android.Manifest.permission.BACKUP) public void updateTransportAttributes(android.content.ComponentName, String, @Nullable android.content.Intent, String, @Nullable android.content.Intent, @Nullable String);
@@ -1071,16 +1078,17 @@ package android.app.role {
 
   public final class RoleManager {
     method @RequiresPermission(android.Manifest.permission.OBSERVE_ROLE_HOLDERS) public void addOnRoleHoldersChangedListenerAsUser(@NonNull java.util.concurrent.Executor, @NonNull android.app.role.OnRoleHoldersChangedListener, @NonNull android.os.UserHandle);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public void addRoleHolderAsUser(@NonNull String, @NonNull String, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
+    method @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public void addRoleHolderAsUser(@NonNull String, @NonNull String, int, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
     method @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public boolean addRoleHolderFromController(@NonNull String, @NonNull String);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public void clearRoleHoldersAsUser(@NonNull String, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
+    method @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public void clearRoleHoldersAsUser(@NonNull String, int, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
     method @NonNull @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public java.util.List<java.lang.String> getHeldRolesFromController(@NonNull String);
     method @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public java.util.List<java.lang.String> getRoleHolders(@NonNull String);
     method @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public java.util.List<java.lang.String> getRoleHoldersAsUser(@NonNull String, @NonNull android.os.UserHandle);
     method @RequiresPermission(android.Manifest.permission.OBSERVE_ROLE_HOLDERS) public void removeOnRoleHoldersChangedListenerAsUser(@NonNull android.app.role.OnRoleHoldersChangedListener, @NonNull android.os.UserHandle);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public void removeRoleHolderAsUser(@NonNull String, @NonNull String, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
+    method @RequiresPermission(android.Manifest.permission.MANAGE_ROLE_HOLDERS) public void removeRoleHolderAsUser(@NonNull String, @NonNull String, int, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
     method @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public boolean removeRoleHolderFromController(@NonNull String, @NonNull String);
     method @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public void setRoleNamesFromController(@NonNull java.util.List<java.lang.String>);
+    field public static final int MANAGE_HOLDERS_FLAG_DONT_KILL_APP = 1; // 0x1
     field public static final String ROLE_ASSISTANT = "android.app.role.ASSISTANT";
   }
 
@@ -1143,7 +1151,7 @@ package android.app.usage {
     method @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) public int getAppStandbyBucket(String);
     method @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) public java.util.Map<java.lang.String,java.lang.Integer> getAppStandbyBuckets();
     method public int getUsageSource();
-    method @RequiresPermission(allOf={android.Manifest.permission.SUSPEND_APPS, android.Manifest.permission.OBSERVE_APP_USAGE}) public void registerAppUsageLimitObserver(int, @NonNull String[], long, @NonNull java.util.concurrent.TimeUnit, @NonNull android.app.PendingIntent);
+    method @RequiresPermission(allOf={android.Manifest.permission.SUSPEND_APPS, android.Manifest.permission.OBSERVE_APP_USAGE}) public void registerAppUsageLimitObserver(int, @NonNull String[], long, @NonNull java.util.concurrent.TimeUnit, android.app.PendingIntent);
     method @RequiresPermission(android.Manifest.permission.OBSERVE_APP_USAGE) public void registerAppUsageObserver(int, @NonNull String[], long, @NonNull java.util.concurrent.TimeUnit, @NonNull android.app.PendingIntent);
     method @RequiresPermission(android.Manifest.permission.OBSERVE_APP_USAGE) public void registerUsageSessionObserver(int, @NonNull String[], long, @NonNull java.util.concurrent.TimeUnit, long, @NonNull java.util.concurrent.TimeUnit, @NonNull android.app.PendingIntent, @Nullable android.app.PendingIntent);
     method public void reportUsageStart(@NonNull android.app.Activity, @NonNull String);
@@ -3317,7 +3325,6 @@ package android.location {
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public int getGnssBatchSize();
     method public int getGnssCapabilities();
     method @Nullable public String getLocationControllerExtraPackage();
-    method @Nullable public String getNetworkProviderPackage();
     method @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public void injectGnssMeasurementCorrections(@NonNull android.location.GnssMeasurementCorrections);
     method public boolean isLocationControllerExtraPackageEnabled();
     method public boolean isLocationEnabledForUser(android.os.UserHandle);
@@ -3913,11 +3920,13 @@ package android.net {
 
   public class ConnectivityManager {
     method @RequiresPermission(android.Manifest.permission.PACKET_KEEPALIVE_OFFLOAD) public android.net.SocketKeepalive createNattKeepalive(@NonNull android.net.Network, @NonNull java.io.FileDescriptor, @NonNull java.net.InetAddress, @NonNull java.net.InetAddress, @NonNull java.util.concurrent.Executor, @NonNull android.net.SocketKeepalive.Callback);
+    method @RequiresPermission(android.Manifest.permission.PACKET_KEEPALIVE_OFFLOAD) public android.net.SocketKeepalive createSocketKeepalive(@NonNull android.net.Network, @NonNull java.net.Socket, @NonNull java.util.concurrent.Executor, @NonNull android.net.SocketKeepalive.Callback);
     method public boolean getAvoidBadWifi();
     method @RequiresPermission(android.Manifest.permission.LOCAL_MAC_ADDRESS) public String getCaptivePortalServerUrl();
     method @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED) public void getLatestTetheringEntitlementValue(int, boolean, @NonNull android.net.ConnectivityManager.TetheringEntitlementValueListener, @Nullable android.os.Handler);
     method @RequiresPermission(anyOf={android.Manifest.permission.TETHER_PRIVILEGED, android.Manifest.permission.WRITE_SETTINGS}) public boolean isTetheringSupported();
     method @RequiresPermission(anyOf={"android.permission.NETWORK_SETTINGS", android.Manifest.permission.NETWORK_SETUP_WIZARD, "android.permission.NETWORK_STACK"}) public void setAirplaneMode(boolean);
+    method @RequiresPermission(android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK) public void startCaptivePortalApp(android.os.Bundle);
     method @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED) public void startTethering(int, boolean, android.net.ConnectivityManager.OnStartTetheringCallback);
     method @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED) public void startTethering(int, boolean, android.net.ConnectivityManager.OnStartTetheringCallback, android.os.Handler);
     method @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED) public void stopTethering(int);
@@ -5000,10 +5009,11 @@ package android.os {
     method public boolean getEnableAdjustBrightness();
     method public boolean getEnableDataSaver();
     method public boolean getEnableFirewall();
+    method public boolean getEnableNightMode();
     method public boolean getEnableQuickDoze();
     method public boolean getForceAllAppsStandby();
     method public boolean getForceBackgroundCheck();
-    method public int getGpsMode();
+    method public int getLocationMode();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.os.BatterySaverPolicyConfig> CREATOR;
   }
@@ -5025,10 +5035,11 @@ package android.os {
     method @NonNull public android.os.BatterySaverPolicyConfig.Builder setEnableAdjustBrightness(boolean);
     method @NonNull public android.os.BatterySaverPolicyConfig.Builder setEnableDataSaver(boolean);
     method @NonNull public android.os.BatterySaverPolicyConfig.Builder setEnableFirewall(boolean);
+    method @NonNull public android.os.BatterySaverPolicyConfig.Builder setEnableNightMode(boolean);
     method @NonNull public android.os.BatterySaverPolicyConfig.Builder setEnableQuickDoze(boolean);
     method @NonNull public android.os.BatterySaverPolicyConfig.Builder setForceAllAppsStandby(boolean);
     method @NonNull public android.os.BatterySaverPolicyConfig.Builder setForceBackgroundCheck(boolean);
-    method @NonNull public android.os.BatterySaverPolicyConfig.Builder setGpsMode(int);
+    method @NonNull public android.os.BatterySaverPolicyConfig.Builder setLocationMode(int);
   }
 
   public class Binder implements android.os.IBinder {
@@ -5734,10 +5745,6 @@ package android.provider {
     field public static final String SERVICE_ENABLED = "service_enabled";
   }
 
-  public static interface DeviceConfig.ContentCapture {
-    field public static final String NAMESPACE = "content_capture";
-  }
-
   public static interface DeviceConfig.DexBoot {
     field public static final String NAMESPACE = "dex_boot";
     field public static final String PRIV_APPS_OOB_ENABLED = "priv_apps_oob_enabled";
@@ -5750,9 +5757,15 @@ package android.provider {
     field public static final String NAMESPACE = "intelligence_attention";
   }
 
+  public static interface DeviceConfig.MediaNative {
+    field public static final String NAMESPACE = "media_native";
+  }
+
   public static interface DeviceConfig.NotificationAssistant {
     field public static final String GENERATE_ACTIONS = "generate_actions";
     field public static final String GENERATE_REPLIES = "generate_replies";
+    field public static final String MAX_MESSAGES_TO_EXTRACT = "max_messages_to_extract";
+    field public static final String MAX_SUGGESTIONS = "max_suggestions";
     field public static final String NAMESPACE = "notification_assistant";
   }
 
@@ -5772,6 +5785,11 @@ package android.provider {
 
   public static interface DeviceConfig.RuntimeNativeBoot {
     field public static final String NAMESPACE = "runtime_native_boot";
+  }
+
+  public static interface DeviceConfig.Scheduler {
+    field public static final String ENABLE_FAST_METRICS_COLLECTION = "enable_fast_metrics_collection";
+    field public static final String NAMESPACE = "scheduler";
   }
 
   public static interface DeviceConfig.Storage {
@@ -5967,7 +5985,6 @@ package android.provider {
     field public static final String AUTOFILL_USER_DATA_MAX_VALUE_LENGTH = "autofill_user_data_max_value_length";
     field public static final String AUTOFILL_USER_DATA_MIN_VALUE_LENGTH = "autofill_user_data_min_value_length";
     field public static final String COMPLETED_CATEGORY_PREFIX = "suggested.completed_category.";
-    field public static final String CONTENT_CAPTURE_ENABLED = "content_capture_enabled";
     field public static final String DOZE_ALWAYS_ON = "doze_always_on";
     field public static final String HUSH_GESTURE_USED = "hush_gesture_used";
     field public static final String INSTANT_APPS_ENABLED = "instant_apps_enabled";
@@ -6026,11 +6043,12 @@ package android.rolecontrollerservice {
 
   public abstract class RoleControllerService extends android.app.Service {
     ctor public RoleControllerService();
-    method public abstract void onAddRoleHolder(@NonNull String, @NonNull String, @NonNull android.app.role.RoleManagerCallback);
+    method public abstract void onAddRoleHolder(@NonNull String, @NonNull String, int, @NonNull android.app.role.RoleManagerCallback);
     method @Nullable public final android.os.IBinder onBind(@Nullable android.content.Intent);
-    method public abstract void onClearRoleHolders(@NonNull String, @NonNull android.app.role.RoleManagerCallback);
+    method public abstract void onClearRoleHolders(@NonNull String, int, @NonNull android.app.role.RoleManagerCallback);
     method public abstract void onGrantDefaultRoles(@NonNull android.app.role.RoleManagerCallback);
-    method public abstract void onRemoveRoleHolder(@NonNull String, @NonNull String, @NonNull android.app.role.RoleManagerCallback);
+    method public abstract void onRemoveRoleHolder(@NonNull String, @NonNull String, int, @NonNull android.app.role.RoleManagerCallback);
+    method public abstract void onSmsKillSwitchToggled(boolean);
     field public static final String SERVICE_INTERFACE = "android.rolecontrollerservice.RoleControllerService";
   }
 
@@ -7006,6 +7024,7 @@ package android.telephony {
     method @NonNull public java.util.List<android.service.carrier.CarrierIdentifier> getExcludedCarriers();
     method public int getMultiSimPolicy();
     method public boolean isAllCarriersAllowed();
+    method public java.util.List<java.lang.Boolean> isCarrierIdentifiersAllowed(@NonNull java.util.List<android.service.carrier.CarrierIdentifier>);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final int CARRIER_RESTRICTION_DEFAULT_ALLOWED = 1; // 0x1
     field public static final int CARRIER_RESTRICTION_DEFAULT_NOT_ALLOWED = 0; // 0x0
@@ -7821,6 +7840,7 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isMultisimCarrierRestricted();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isOffhook();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isRadioOn();
+    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isRebootRequiredForModemConfigChange();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isRinging();
     method @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.READ_PHONE_STATE}) public boolean isVideoCallingEnabled();
     method @Deprecated @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE) public boolean isVisualVoicemailEnabled(android.telecom.PhoneAccountHandle);
@@ -7850,6 +7870,7 @@ package android.telephony {
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean switchSlots(int[]);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void toggleRadioOnOff();
     method public void updateServiceLocation();
+    field @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public static final String ACTION_DEBUG_EVENT = "android.telephony.action.DEBUG_EVENT";
     field public static final String ACTION_SIM_APPLICATION_STATE_CHANGED = "android.telephony.action.SIM_APPLICATION_STATE_CHANGED";
     field public static final String ACTION_SIM_CARD_STATE_CHANGED = "android.telephony.action.SIM_CARD_STATE_CHANGED";
     field public static final String ACTION_SIM_SLOT_STATUS_CHANGED = "android.telephony.action.SIM_SLOT_STATUS_CHANGED";
@@ -7857,6 +7878,8 @@ package android.telephony {
     field public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1; // 0x1
     field public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0; // 0x0
     field public static final int CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED = -1; // 0xffffffff
+    field public static final String EXTRA_DEBUG_EVENT_DESCRIPTION = "android.telephony.extra.DEBUG_EVENT_DESCRIPTION";
+    field public static final String EXTRA_DEBUG_EVENT_ID = "android.telephony.extra.DEBUG_EVENT_ID";
     field public static final String EXTRA_SIM_STATE = "android.telephony.extra.SIM_STATE";
     field public static final String EXTRA_VISUAL_VOICEMAIL_ENABLED_BY_USER_BOOL = "android.telephony.extra.VISUAL_VOICEMAIL_ENABLED_BY_USER_BOOL";
     field public static final String EXTRA_VOICEMAIL_SCRAMBLED_PIN_STRING = "android.telephony.extra.VOICEMAIL_SCRAMBLED_PIN_STRING";
@@ -9267,11 +9290,7 @@ package android.view.accessibility {
 package android.view.autofill {
 
   public final class AutofillManager {
-    method @NonNull public java.util.Set<android.content.ComponentName> getAugmentedAutofillDisabledActivities();
-    method @NonNull public java.util.Set<java.lang.String> getAugmentedAutofillDisabledPackages();
-    method public void setActivityAugmentedAutofillEnabled(@NonNull android.content.ComponentName, boolean);
     method public void setAugmentedAutofillWhitelist(@Nullable java.util.List<java.lang.String>, @Nullable java.util.List<android.content.ComponentName>);
-    method public void setPackageAugmentedAutofillEnabled(@NonNull String, boolean);
   }
 
 }
@@ -9301,6 +9320,8 @@ package android.view.contentcapture {
     method @Nullable public android.view.contentcapture.ViewNode getViewNode();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.view.contentcapture.ContentCaptureEvent> CREATOR;
+    field public static final int TYPE_INITIAL_VIEW_TREE_APPEARED = 5; // 0x5
+    field public static final int TYPE_INITIAL_VIEW_TREE_APPEARING = 4; // 0x4
     field public static final int TYPE_VIEW_APPEARED = 1; // 0x1
     field public static final int TYPE_VIEW_DISAPPEARED = 2; // 0x2
     field public static final int TYPE_VIEW_TEXT_CHANGED = 3; // 0x3

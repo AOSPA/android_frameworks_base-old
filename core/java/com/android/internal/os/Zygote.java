@@ -99,6 +99,11 @@ public final class Zygote {
      */
     public static final int PROFILE_FROM_SHELL = 1 << 15;
 
+    /*
+     * Enable using the ART app image startup cache
+     */
+    public static final int USE_APP_IMAGE_STARTUP_CACHE = 1 << 16;
+
     /** No external storage should be mounted. */
     public static final int MOUNT_EXTERNAL_NONE = IVold.REMOUNT_MODE_NONE;
     /** Default external storage should be mounted. */
@@ -249,14 +254,14 @@ public final class Zygote {
     public static int forkAndSpecialize(int uid, int gid, int[] gids, int runtimeFlags,
             int[][] rlimits, int mountExternal, String seInfo, String niceName, int[] fdsToClose,
             int[] fdsToIgnore, boolean startChildZygote, String instructionSet, String appDataDir,
-            String packageName, String[] packagesForUID, String[] visibleVolIDs) {
+            String packageName, String[] packagesForUID, String[] visibleVolIDs, String sandboxId) {
         ZygoteHooks.preFork();
         // Resets nice priority for zygote process.
         resetNicePriority();
         int pid = nativeForkAndSpecialize(
                 uid, gid, gids, runtimeFlags, rlimits, mountExternal, seInfo, niceName, fdsToClose,
                 fdsToIgnore, startChildZygote, instructionSet, appDataDir, packageName,
-                packagesForUID, visibleVolIDs);
+                packagesForUID, visibleVolIDs, sandboxId);
         // Enable tracing as soon as possible for the child process.
         if (pid == 0) {
             Trace.setTracingEnabled(true, runtimeFlags);
@@ -271,7 +276,8 @@ public final class Zygote {
     private static native int nativeForkAndSpecialize(int uid, int gid, int[] gids,
             int runtimeFlags, int[][] rlimits, int mountExternal, String seInfo, String niceName,
             int[] fdsToClose, int[] fdsToIgnore, boolean startChildZygote, String instructionSet,
-            String appDataDir, String packageName, String[] packagesForUID, String[] visibleVolIDs);
+            String appDataDir, String packageName, String[] packagesForUID, String[] visibleVolIDs,
+            String sandboxId);
 
     /**
      * Specialize a Blastula instance.  The current VM must have been started
@@ -297,11 +303,11 @@ public final class Zygote {
     public static void specializeBlastula(int uid, int gid, int[] gids, int runtimeFlags,
             int[][] rlimits, int mountExternal, String seInfo, String niceName,
             boolean startChildZygote, String instructionSet, String appDataDir, String packageName,
-            String[] packagesForUID, String[] visibleVolIDs) {
+            String[] packagesForUID, String[] visibleVolIDs, String sandboxId) {
 
         nativeSpecializeBlastula(uid, gid, gids, runtimeFlags, rlimits, mountExternal, seInfo,
                                  niceName, startChildZygote, instructionSet, appDataDir,
-                                 packageName, packagesForUID, visibleVolIDs);
+                                 packageName, packagesForUID, visibleVolIDs, sandboxId);
 
         // Enable tracing as soon as possible for the child process.
         Trace.setTracingEnabled(true, runtimeFlags);
@@ -321,7 +327,7 @@ public final class Zygote {
     private static native void nativeSpecializeBlastula(int uid, int gid, int[] gids,
             int runtimeFlags, int[][] rlimits, int mountExternal, String seInfo, String niceName,
             boolean startChildZygote, String instructionSet, String appDataDir, String packageName,
-            String[] packagesForUID, String[] visibleVolIDs);
+            String[] packagesForUID, String[] visibleVolIDs, String sandboxId);
 
     /**
      * Called to do any initialization before starting an application.
@@ -633,7 +639,7 @@ public final class Zygote {
                            args.mRuntimeFlags, rlimits, args.mMountExternal,
                            args.mSeInfo, args.mNiceName, args.mStartChildZygote,
                            args.mInstructionSet, args.mAppDataDir, args.mPackageName,
-                           args.mPackagesForUid, args.mVisibleVolIds);
+                           args.mPackagesForUid, args.mVisibleVolIds, args.mSandboxId);
 
         if (args.mNiceName != null) {
             Process.setArgV0(args.mNiceName);

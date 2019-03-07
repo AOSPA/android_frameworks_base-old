@@ -43,10 +43,11 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.RemoteInputController.Callback;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.StatusBarStateController.StateListener;
+import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 
@@ -98,8 +99,9 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
         mDozeParameters = dozeParameters;
         mScreenBrightnessDoze = mDozeParameters.getScreenBrightnessDoze();
         mLpChanged = new WindowManager.LayoutParams();
-        Dependency.get(StatusBarStateController.class).addCallback(
-                mStateListener, StatusBarStateController.RANK_STATUS_BAR_WINDOW_CONTROLLER);
+        ((SysuiStatusBarStateController) Dependency.get(StatusBarStateController.class))
+                .addCallback(mStateListener,
+                        SysuiStatusBarStateController.RANK_STATUS_BAR_WINDOW_CONTROLLER);
         Dependency.get(ConfigurationController.class).addCallback(this);
     }
 
@@ -202,7 +204,8 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
     private void applyFocusableFlag(State state) {
         boolean panelFocusable = state.statusBarFocusable && state.panelExpanded;
         if (state.bouncerShowing && (state.keyguardOccluded || state.keyguardNeedsInput)
-                || ENABLE_REMOTE_INPUT && state.remoteInputActive) {
+                || ENABLE_REMOTE_INPUT && state.remoteInputActive
+                || state.bubbleExpanded) {
             mLpChanged.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
             mLpChanged.flags &= ~WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
         } else if (state.isKeyguardShowingAndNotOccluded() || panelFocusable) {
@@ -486,6 +489,21 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
         return mCurrentState.bubblesShowing;
     }
 
+    /**
+     * Sets if there is a bubble being expanded on the screen.
+     */
+    public void setBubbleExpanded(boolean bubbleExpanded) {
+        mCurrentState.bubbleExpanded = bubbleExpanded;
+        apply(mCurrentState);
+    }
+
+    /**
+     * The bubble is shown in expanded state for the status bar.
+     */
+    public boolean getBubbleExpanded() {
+        return mCurrentState.bubbleExpanded;
+    }
+
     public void setStateListener(OtherwisedCollapsedListener listener) {
         mListener = listener;
     }
@@ -539,6 +557,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
         boolean wallpaperSupportsAmbientMode;
         boolean notTouchable;
         boolean bubblesShowing;
+        boolean bubbleExpanded;
 
         /**
          * The {@link StatusBar} state from the status bar.

@@ -394,8 +394,6 @@
     <!-- Content description of the data connection type HSPA and its variants. [CHAR LIMIT=NONE] -->
     <string name="data_connection_hspa">HSPA</string>
 
-    <string name="data_connection_2g">2G</string>
-
     <!-- Content description of the data connection type 3G. [CHAR LIMIT=NONE] -->
     <string name="data_connection_3g">3G</string>
 
@@ -425,15 +423,6 @@
 
     <!-- Content description of the data connection type CDMA. [CHAR LIMIT=NONE] -->
     <string name="data_connection_cdma">1X</string>
-
-    <!-- Content description of the data connection type 5G Basic. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g_basic">5GBasic</string>
-
-    <!-- Content description of the data connection type 5G UWB. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g_uwb">5GUWB</string>
-
-    <!-- Content description of the data connection type 5G stand alone. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_5g_sa">5GSA</string>
 
     <!-- Content description of the roaming data connection type. [CHAR LIMIT=NONE] -->
     <string name="data_connection_roaming">Roaming</string>
@@ -1584,11 +1573,17 @@
     <string name="inline_blocking_helper">You usually dismiss these notifications.
     \nKeep showing them?</string>
 
+    <!-- Notification Inline controls: button to dismiss the blocking helper [CHAR_LIMIT=25] -->
+    <string name="inline_done_button">Done</string>
+
     <!-- Notification Inline controls: continue receiving notifications prompt, channel level -->
     <string name="inline_keep_showing">Keep showing these notifications?</string>
 
     <!-- Notification inline controls: block notifications button -->
     <string name="inline_stop_button">Stop notifications</string>
+
+    <!-- Notification inline controls: button to deliver notifications silently from this channel [CHAR_LIMIT=35] -->
+    <string name="inline_deliver_silently_button">Deliver Silently</string>
 
     <!-- Notification inline controls: button to block notifications from this channel [CHAR_LIMIT=35] -->
     <string name="inline_block_button">Block</string>
@@ -2268,12 +2263,6 @@
     <!-- Option to grant the slice permission request on the screen [CHAR LIMIT=15] -->
     <string name="slice_permission_deny">Deny</string>
 
-    <!-- Carrier Name -->
-    <string name="China_Mobile">China Mobile</string>
-    <string name="China_Unicom">China Unicom</string>
-    <string name="China_Telecom">China Telecom</string>
-    <string name="China_Mobile_HD">China Mobile (HD)</string>
-
     <!-- List of packages for which we don't want to show recents onboarding, add into overlay as needed. -->
     <string-array name="recents_onboarding_blacklisted_packages" translatable="false">
     </string-array>
@@ -2318,6 +2307,9 @@
 
     <!-- Content description for ongoing privacy chip. Use with multiple apps [CHAR LIMIT=NONE]-->
     <string name="ongoing_privacy_chip_content_multiple_apps">Applications are using your <xliff:g id="types_list" example="camera, location">%s</xliff:g>.</string>
+
+    <!-- Ongoing Privacy "Chip" in use text [CHAR LIMIT=10]-->
+    <string name="ongoing_privacy_chip_in_use">In use:</string>
 
     <!-- Content description for ongoing privacy chip. Use with multiple apps using same app op[CHAR LIMIT=NONE]-->
     <plurals name="ongoing_privacy_chip_content_multiple_apps_single_op">
@@ -2374,5 +2366,12 @@
     <!-- Text used for content description of settings button in the header of expanded bubble
          view. [CHAR_LIMIT=NONE] -->
     <string name="bubbles_settings_button_description">Open notification settings for <xliff:g id="app_name" example="YouTube">%1$s</xliff:g></string>
+    <!-- Text for asking the user whether bubbles (floating app content) should be enabled for an
+         app. [CHAR LIMIT=NONE] -->
+    <string name="bubbles_prompt">Allow bubbles from this app?</string>
+    <!-- Text used for button allowing user to opt out of bubbles [CHAR LIMIT=20] -->
+    <string name="no_bubbles">Block</string>
+    <!-- Text used for button allowing user to approve / enable bubbles [CHAR LIMIT=20] -->
+    <string name="yes_bubbles">Allow</string>
 
 </resources>
