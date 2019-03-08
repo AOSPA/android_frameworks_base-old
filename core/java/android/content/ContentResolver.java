@@ -42,6 +42,7 @@ import android.graphics.ImageDecoder.ImageInfo;
 import android.graphics.ImageDecoder.Source;
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
@@ -3151,14 +3152,18 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
-     * Put the cache with the key.
+     * Store the given {@link Bundle} as a long-lived cached object within the
+     * system. This can be useful to avoid expensive re-parsing when apps are
+     * restarted multiple times on low-RAM devices.
+     * <p>
+     * The {@link Bundle} is automatically invalidated when a
+     * {@link #notifyChange(Uri, ContentObserver)} event applies to the key.
      *
-     * @param key the key to add
-     * @param value the value to add
-     * {@hide}
+     * @hide
      */
     @SystemApi
-    public void putCache(Uri key, Bundle value) {
+    @RequiresPermission(android.Manifest.permission.CACHE_CONTENT)
+    public void putCache(@NonNull Uri key, @Nullable Bundle value) {
         try {
             getContentService().putCache(mContext.getPackageName(), key, value,
                     mContext.getUserId());
@@ -3168,15 +3173,17 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
-     * Get the cache with the key.
+     * Retrieve the last {@link Bundle} stored as a long-lived cached object
+     * within the system.
      *
-     * @param key the key to get the value
-     * @return the matched value. If the key doesn't exist, will return null.
-     * @see #putCache(Uri, Bundle)
-     * {@hide}
+     * @return {@code null} if no cached object has been stored, or if the
+     *         stored object has been invalidated due to a
+     *         {@link #notifyChange(Uri, ContentObserver)} event.
+     * @hide
      */
     @SystemApi
-    public Bundle getCache(Uri key) {
+    @RequiresPermission(android.Manifest.permission.CACHE_CONTENT)
+    public @Nullable Bundle getCache(@NonNull Uri key) {
         try {
             final Bundle bundle = getContentService().getCache(mContext.getPackageName(), key,
                     mContext.getUserId());
@@ -3364,16 +3371,68 @@ public abstract class ContentResolver implements ContentInterface {
         return mContext.getUserId();
     }
 
-    /**
-     * Get the system drawable of the mime type.
-     *
-     * @param mimeType the requested mime type
-     * @return the matched drawable
-     * @hide
-     */
-    @SystemApi
+    /** {@hide} */
+    @Deprecated
     public Drawable getTypeDrawable(String mimeType) {
-        return MimeIconUtils.loadMimeIcon(mContext, mimeType);
+        return getTypeInfo(mimeType).getIcon().loadDrawable(mContext);
+    }
+
+    /**
+     * Return a detailed description of the given MIME type, including an icon
+     * and label that describe the type.
+     *
+     * @param mimeType Valid, concrete MIME type.
+     */
+    public final @NonNull TypeInfo getTypeInfo(@NonNull String mimeType) {
+        Objects.requireNonNull(mimeType);
+        return MimeIconUtils.getTypeInfo(mimeType);
+    }
+
+    /**
+     * Detailed description of a specific MIME type, including an icon and label
+     * that describe the type.
+     */
+    public static final class TypeInfo {
+        private final Icon mIcon;
+        private final CharSequence mLabel;
+        private final CharSequence mContentDescription;
+
+        /** {@hide} */
+        public TypeInfo(@NonNull Icon icon, @NonNull CharSequence label,
+                @NonNull CharSequence contentDescription) {
+            mIcon = Objects.requireNonNull(icon);
+            mLabel = Objects.requireNonNull(label);
+            mContentDescription = Objects.requireNonNull(contentDescription);
+        }
+
+        /**
+         * Return a visual representation of this MIME type. This can be styled
+         * using {@link Icon#setTint(int)} to match surrounding UI.
+         *
+         * @see Icon#loadDrawable(Context)
+         * @see android.widget.ImageView#setImageDrawable(Drawable)
+         */
+        public @NonNull Icon getIcon() {
+            return mIcon;
+        }
+
+        /**
+         * Return a textual representation of this MIME type.
+         *
+         * @see android.widget.TextView#setText(CharSequence)
+         */
+        public @NonNull CharSequence getLabel() {
+            return mLabel;
+        }
+
+        /**
+         * Return a content description for this MIME type.
+         *
+         * @see android.view.View#setContentDescription(CharSequence)
+         */
+        public @NonNull CharSequence getContentDescription() {
+            return mContentDescription;
+        }
     }
 
     /**

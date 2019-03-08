@@ -15,6 +15,9 @@
  */
 package com.android.server.contentcapture;
 
+import static android.view.contentcapture.ContentCaptureHelper.sDebug;
+import static android.view.contentcapture.ContentCaptureHelper.sVerbose;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
@@ -23,7 +26,6 @@ import android.os.IBinder;
 import android.service.contentcapture.IContentCaptureService;
 import android.service.contentcapture.IContentCaptureServiceCallback;
 import android.service.contentcapture.SnapshotData;
-import android.text.format.DateUtils;
 import android.util.Slog;
 import android.view.contentcapture.ContentCaptureContext;
 import android.view.contentcapture.UserDataRemovalRequest;
@@ -35,17 +37,17 @@ final class RemoteContentCaptureService
         extends AbstractMultiplePendingRequestsRemoteService<RemoteContentCaptureService,
         IContentCaptureService> {
 
-    private static final long TIMEOUT_REMOTE_REQUEST_MILLIS = 2 * DateUtils.SECOND_IN_MILLIS;
-
     private final IBinder mServerCallback;
+    private final int mIdleUnbindTimeoutMs;
 
     RemoteContentCaptureService(Context context, String serviceInterface,
             ComponentName serviceComponentName, IContentCaptureServiceCallback callback, int userId,
             ContentCaptureServiceCallbacks callbacks, boolean bindInstantServiceAllowed,
-            boolean verbose) {
+            boolean verbose, int idleUnbindTimeoutMs) {
         super(context, serviceInterface, serviceComponentName, userId, callbacks,
                 bindInstantServiceAllowed, verbose, /* initialCapacity= */ 2);
         mServerCallback = callback.asBinder();
+        mIdleUnbindTimeoutMs = idleUnbindTimeoutMs;
 
         // Bind right away, which will trigger a onConnected() on service's
         scheduleBind();
@@ -58,14 +60,7 @@ final class RemoteContentCaptureService
 
     @Override // from AbstractRemoteService
     protected long getTimeoutIdleBindMillis() {
-        // TODO(b/111276913): read from Settings so it can be changed in the field
-        return PERMANENT_BOUND_TIMEOUT_MS;
-    }
-
-    @Override // from AbstractRemoteService
-    protected long getRemoteRequestMillis() {
-        // TODO(b/111276913): read from Settings so it can be changed in the field
-        return TIMEOUT_REMOTE_REQUEST_MILLIS;
+        return mIdleUnbindTimeoutMs;
     }
 
     @Override // from RemoteService
@@ -75,7 +70,7 @@ final class RemoteContentCaptureService
         }
         try {
             if (state) {
-                mService.onConnected(mServerCallback);
+                mService.onConnected(mServerCallback, sVerbose, sDebug);
             } else {
                 mService.onDisconnected();
             }

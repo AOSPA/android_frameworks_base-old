@@ -33,6 +33,7 @@ import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.annotation.XmlRes;
 import android.app.ActivityManager;
+import android.app.AppDetailsActivity;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
 import android.app.admin.DevicePolicyManager;
@@ -2564,6 +2565,14 @@ public abstract class PackageManager {
     public static final String FEATURE_PC = "android.hardware.type.pc";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: This is a foldable device. Properties such as
+     * the display size may change in response to being folded.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_FOLDABLE = "android.hardware.type.foldable";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
      * The device supports printing.
      */
@@ -3028,6 +3037,13 @@ public abstract class PackageManager {
      */
     @SystemApi
     public static final int MASK_PERMISSION_FLAGS = 0xFF;
+
+    /**
+     * Injected activity in app that forwards user to setting activity of that app.
+     *
+     * @hide
+     */
+    public static final String APP_DETAILS_ACTIVITY_CLASS_NAME = AppDetailsActivity.class.getName();
 
     /**
      * This is a library that contains components apps can invoke. For
@@ -5114,7 +5130,10 @@ public abstract class PackageManager {
      * If there is already an application with the given package name installed
      * on the system for other users, also install it for the calling user.
      * @hide
+     *
+     * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @Deprecated
     @SystemApi
     public abstract int installExistingPackage(String packageName) throws NameNotFoundException;
 
@@ -5122,7 +5141,10 @@ public abstract class PackageManager {
      * If there is already an application with the given package name installed
      * on the system for other users, also install it for the calling user.
      * @hide
+     *
+     * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @Deprecated
     @SystemApi
     public abstract int installExistingPackage(String packageName, @InstallReason int installReason)
             throws NameNotFoundException;
@@ -5131,7 +5153,10 @@ public abstract class PackageManager {
      * If there is already an application with the given package name installed
      * on the system for other users, also install it for the specified user.
      * @hide
+     *
+     * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @Deprecated
     @RequiresPermission(anyOf = {
             Manifest.permission.INSTALL_EXISTING_PACKAGES,
             Manifest.permission.INSTALL_PACKAGES,
@@ -5790,6 +5815,37 @@ public abstract class PackageManager {
      */
     public abstract @EnabledState int getComponentEnabledSetting(
             @NonNull ComponentName componentName);
+
+    /**
+     * Set the enabled setting for a package app settings activity.
+     *
+     * @param packageName The package name of the app
+     * @param enabled The new enabled state for app details activity
+     *
+     * @hide
+     */
+    @RequiresPermission(value = android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE,
+            conditional = true)
+    @SystemApi
+    public void setAppDetailsActivityEnabled(@NonNull String packageName, boolean enabled) {
+        throw new UnsupportedOperationException(
+                "setAppDetailsActivityEnabled not implemented");
+    }
+
+
+    /**
+     * Return the enabled setting for a package app settings activity.
+     *
+     * @param packageName The package name of the app
+     * @return Returns the current enabled state for app settings activity.
+     *
+     * @hide
+     */
+    @SystemApi
+    public boolean getAppDetailsActivityEnabled(@NonNull String packageName) {
+        throw new UnsupportedOperationException(
+                "getAppDetailsActivityEnabled not implemented");
+    }
 
     /**
      * Set the enabled setting for an application

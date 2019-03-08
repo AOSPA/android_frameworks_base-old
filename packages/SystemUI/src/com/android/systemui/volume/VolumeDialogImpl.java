@@ -25,6 +25,7 @@ import static android.media.AudioManager.STREAM_ALARM;
 import static android.media.AudioManager.STREAM_MUSIC;
 import static android.media.AudioManager.STREAM_RING;
 import static android.media.AudioManager.STREAM_VOICE_CALL;
+import static android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE;
 import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
 
@@ -431,8 +432,7 @@ public class VolumeDialogImpl implements VolumeDialog {
         if (mSettingsIcon != null) {
             mSettingsIcon.setOnClickListener(v -> {
                 Events.writeEvent(mContext, Events.EVENT_SETTINGS_CLICK);
-                Intent intent = new Intent(Settings.ACTION_SOUND_SETTINGS);
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                Intent intent = new Intent(Settings.Panel.ACTION_VOLUME);
                 dismissH(DISMISS_REASON_SETTINGS_CLICKED);
                 Dependency.get(ActivityStarter.class).startActivity(intent,
                         true /* dismissShade */);
@@ -442,6 +442,7 @@ public class VolumeDialogImpl implements VolumeDialog {
 
     public void initRingerH() {
         if (mRingerIcon != null) {
+            mRingerIcon.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
             mRingerIcon.setOnClickListener(v -> {
                 Prefs.putBoolean(mContext, Prefs.Key.TOUCHED_RINGER_TOGGLE, true);
                 final StreamState ss = mState.states.get(AudioManager.STREAM_RING);
@@ -587,8 +588,11 @@ public class VolumeDialogImpl implements VolumeDialog {
         mHandler.removeMessages(H.DISMISS);
         mHandler.removeMessages(H.SHOW);
         mDialogView.animate().cancel();
-        mShowing = false;
-
+        if (mShowing) {
+            mShowing = false;
+            // Only logs when the volume dialog visibility is changed.
+            Events.writeEvent(mContext, Events.EVENT_DISMISS_DIALOG, reason);
+        }
         mDialogView.setTranslationX(0);
         mDialogView.setAlpha(1);
         ViewPropertyAnimator animator = mDialogView.animate()
@@ -601,8 +605,6 @@ public class VolumeDialogImpl implements VolumeDialog {
                 }, 50));
         if (!isLandscape()) animator.translationX(mDialogView.getWidth() / 2);
         animator.start();
-
-        Events.writeEvent(mContext, Events.EVENT_DISMISS_DIALOG, reason);
         mController.notifyVisible(false);
         synchronized (mSafetyWarningLock) {
             if (mSafetyWarning != null) {

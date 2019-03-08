@@ -35,10 +35,12 @@ import com.android.server.wm.WindowManagerInternal;
 
 /**
  * Controls the behavior of foldable devices whose screen can literally bend and fold.
+ * TODO(b/126160895): Move DisplayFoldController from PhoneWindowManager to DisplayPolicy.
  */
 class DisplayFoldController {
 
     private static final String TAG = "DisplayFoldController";
+
     private final WindowManagerInternal mWindowManagerInternal;
     private final DisplayManagerInternal mDisplayManagerInternal;
     private final int mDisplayId;
@@ -52,6 +54,8 @@ class DisplayFoldController {
     private final DisplayInfo mNonOverrideDisplayInfo = new DisplayInfo();
     private final RemoteCallbackList<IDisplayFoldListener> mListeners = new RemoteCallbackList<>();
     private Boolean mFolded;
+    private String mFocusedApp;
+    private final DisplayFoldDurationLogger mDurationLogger = new DisplayFoldDurationLogger();
 
     DisplayFoldController(WindowManagerInternal windowManagerInternal,
             DisplayManagerInternal displayManagerInternal, int displayId, Rect foldedArea,
@@ -61,6 +65,14 @@ class DisplayFoldController {
         mDisplayId = displayId;
         mFoldedArea = new Rect(foldedArea);
         mHandler = handler;
+    }
+
+    void finishedGoingToSleep() {
+        mDurationLogger.onFinishedGoingToSleep();
+    }
+
+    void finishedWakingUp() {
+        mDurationLogger.onFinishedWakingUp(mFolded);
     }
 
     void requestDeviceFolded(boolean folded) {
@@ -87,13 +99,18 @@ class DisplayFoldController {
             final int dy = (mNonOverrideDisplayInfo.logicalHeight - foldedArea.height()) / 2
                     - foldedArea.top;
 
+            // Bypass scaling otherwise LogicalDisplay will scale contents by default.
+            mDisplayManagerInternal.setDisplayScalingDisabled(mDisplayId, true);
             mWindowManagerInternal.setForcedDisplaySize(mDisplayId,
                     foldedArea.width(), foldedArea.height());
             mDisplayManagerInternal.setDisplayOffsets(mDisplayId, -dx, -dy);
         } else {
+            mDisplayManagerInternal.setDisplayScalingDisabled(mDisplayId, false);
             mWindowManagerInternal.clearForcedDisplaySize(mDisplayId);
             mDisplayManagerInternal.setDisplayOffsets(mDisplayId, 0, 0);
         }
+        mDurationLogger.setDeviceFolded(folded);
+        mDurationLogger.logFocusedAppWithFoldState(folded, mFocusedApp);
         mFolded = folded;
 
         final int n = mListeners.beginBroadcast();
@@ -162,6 +179,10 @@ class DisplayFoldController {
         }, proxSensor, SensorManager.SENSOR_DELAY_NORMAL);
 
         return result;
+    }
+
+    void onDefaultDisplayFocusChanged(String pkg) {
+        mFocusedApp = pkg;
     }
 
     static DisplayFoldController create(Context context, int displayId) {

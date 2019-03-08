@@ -27,6 +27,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -34,7 +35,6 @@ import android.text.format.Formatter;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.hardware.AmbientDisplayConfiguration;
 import com.android.internal.util.Preconditions;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.phone.DozeParameters;
@@ -143,8 +143,12 @@ public class DozeTriggers implements DozeMachine.Part {
 
         if (isWakeDisplay) {
             onWakeScreen(wakeEvent, mMachine.getState());
-        } else if (isLongPress || isWakeLockScreen) {
+        } else if (isLongPress) {
             requestPulse(pulseReason, sensorPerformedProxCheck);
+        } else if (isWakeLockScreen) {
+            if (wakeEvent) {
+                requestPulse(pulseReason, sensorPerformedProxCheck);
+            }
         } else {
             proximityCheckThenCall((result) -> {
                 if (result == ProximityCheck.RESULT_NEAR) {
@@ -228,14 +232,12 @@ public class DozeTriggers implements DozeMachine.Part {
                 if (mDockManager != null) {
                     mDockManager.addListener(mDockEventListener);
                 }
+                mDozeSensors.requestTemporaryDisable();
                 checkTriggersAtInit();
                 break;
             case DOZE:
             case DOZE_AOD:
                 mDozeSensors.setProxListening(newState != DozeMachine.State.DOZE);
-                if (oldState != DozeMachine.State.INITIALIZED) {
-                    mDozeSensors.reregisterAllSensors();
-                }
                 mDozeSensors.setListening(true);
                 if (newState == DozeMachine.State.DOZE_AOD && !sWakeDisplaySensorState) {
                     onWakeScreen(false, newState);
@@ -249,6 +251,9 @@ public class DozeTriggers implements DozeMachine.Part {
             case DOZE_PULSING:
                 mDozeSensors.setTouchscreenSensorsListening(false);
                 mDozeSensors.setProxListening(true);
+                break;
+            case DOZE_PULSE_DONE:
+                mDozeSensors.requestTemporaryDisable();
                 break;
             case FINISH:
                 mBroadcastReceiver.unregister(mContext);
@@ -348,7 +353,7 @@ public class DozeTriggers implements DozeMachine.Part {
             mSensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL, 0,
                     mHandler);
             mHandler.postDelayed(this, TIMEOUT_DELAY_MS);
-            mWakeLock.acquire();
+            mWakeLock.acquire(TAG);
             mRegistered = true;
         }
 
@@ -383,7 +388,7 @@ public class DozeTriggers implements DozeMachine.Part {
             }
             onProximityResult(result);
             if (wasRegistered) {
-                mWakeLock.release();
+                mWakeLock.release(TAG);
             }
             mFinished = true;
         }

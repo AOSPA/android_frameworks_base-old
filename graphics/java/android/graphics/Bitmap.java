@@ -652,7 +652,10 @@ public final class Bitmap implements Parcelable {
      * setting the new bitmap's config to the one specified, and then copying
      * this bitmap's pixels into the new bitmap. If the conversion is not
      * supported, or the allocator fails, then this returns NULL.  The returned
-     * bitmap has the same density and color space as the original.
+     * bitmap has the same density and color space as the original, except in
+     * the following cases. When copying to {@link Config#ALPHA_8}, the color
+     * space is dropped. When copying to or from {@link Config#RGBA_F16},
+     * EXTENDED or non-EXTENDED variants may be adjusted as appropriate.
      *
      * @param config    The desired config for the resulting bitmap
      * @param isMutable True if the resulting bitmap should be mutable (i.e.
@@ -833,7 +836,7 @@ public final class Bitmap implements Parcelable {
      * @return A bitmap that represents the specified subset of source
      * @throws IllegalArgumentException if the x, y, width, height values are
      *         outside of the dimensions of the source bitmap, or width is <= 0,
-     *         or height is <= 0
+     *         or height is <= 0, or if the source bitmap has already been recycled
      */
     public static Bitmap createBitmap(@NonNull Bitmap source, int x, int y, int width, int height,
             @Nullable Matrix m, boolean filter) {
@@ -845,6 +848,9 @@ public final class Bitmap implements Parcelable {
         }
         if (y + height > source.getHeight()) {
             throw new IllegalArgumentException("y + height must be <= bitmap.height()");
+        }
+        if (source.isRecycled()) {
+            throw new IllegalArgumentException("cannot use a recycled source in createBitmap");
         }
 
         // check if we can just return our argument unchanged
@@ -1267,7 +1273,7 @@ public final class Bitmap implements Parcelable {
             node.setLeftTopRightBottom(0, 0, width, height);
             node.setClipToBounds(false);
             node.setForceDarkAllowed(false);
-            final RecordingCanvas canvas = node.startRecording(width, height);
+            final RecordingCanvas canvas = node.beginRecording(width, height);
             if (source.getWidth() != width || source.getHeight() != height) {
                 canvas.scale(width / (float) source.getWidth(),
                         height / (float) source.getHeight());

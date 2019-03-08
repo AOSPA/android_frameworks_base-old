@@ -127,7 +127,6 @@ import android.view.autofill.AutofillPopupWindow;
 import android.view.autofill.IAutofillWindowPresenter;
 import android.view.contentcapture.ContentCaptureContext;
 import android.view.contentcapture.ContentCaptureManager;
-import android.view.contentcapture.ContentCaptureSession;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
@@ -1038,15 +1037,15 @@ public class Activity extends ContextThemeWrapper
     }
 
     /** @hide */ private static final int CONTENT_CAPTURE_START = 1;
-    /** @hide */ private static final int CONTENT_CAPTURE_PAUSE = 2;
-    /** @hide */ private static final int CONTENT_CAPTURE_RESUME = 3;
+    /** @hide */ private static final int CONTENT_CAPTURE_RESUME = 2;
+    /** @hide */ private static final int CONTENT_CAPTURE_PAUSE = 3;
     /** @hide */ private static final int CONTENT_CAPTURE_STOP = 4;
 
     /** @hide */
     @IntDef(prefix = { "CONTENT_CAPTURE_" }, value = {
             CONTENT_CAPTURE_START,
-            CONTENT_CAPTURE_PAUSE,
             CONTENT_CAPTURE_RESUME,
+            CONTENT_CAPTURE_PAUSE,
             CONTENT_CAPTURE_STOP
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -1056,10 +1055,10 @@ public class Activity extends ContextThemeWrapper
         switch (type) {
             case CONTENT_CAPTURE_START:
                 return "START";
-            case CONTENT_CAPTURE_PAUSE:
-                return "PAUSE";
             case CONTENT_CAPTURE_RESUME:
                 return "RESUME";
+            case CONTENT_CAPTURE_PAUSE:
+                return "PAUSE";
             case CONTENT_CAPTURE_STOP:
                 return "STOP";
             default:
@@ -1086,16 +1085,16 @@ public class Activity extends ContextThemeWrapper
                             & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
                         flags |= ContentCaptureContext.FLAG_DISABLED_BY_FLAG_SECURE;
                     }
-                    cm.onActivityStarted(mToken, getComponentName(), flags);
-                    break;
-                case CONTENT_CAPTURE_PAUSE:
-                    cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_PAUSED);
+                    cm.onActivityCreated(mToken, getComponentName(), flags);
                     break;
                 case CONTENT_CAPTURE_RESUME:
-                    cm.flush(ContentCaptureSession.FLUSH_REASON_ACTIVITY_RESUMED);
+                    cm.onActivityResumed();
+                    break;
+                case CONTENT_CAPTURE_PAUSE:
+                    cm.onActivityPaused();
                     break;
                 case CONTENT_CAPTURE_STOP:
-                    cm.onActivityStopped();
+                    cm.onActivityDestroyed();
                     break;
                 default:
                     Log.wtf(TAG, "Invalid @ContentCaptureNotificationType: " + type);
@@ -1110,7 +1109,7 @@ public class Activity extends ContextThemeWrapper
         super.attachBaseContext(newBase);
         if (newBase != null) {
             newBase.setAutofillClient(this);
-            newBase.setContentCaptureSupported(true);
+            newBase.setContentCaptureOptions(getContentCaptureOptions());
         }
     }
 
@@ -1118,12 +1117,6 @@ public class Activity extends ContextThemeWrapper
     @Override
     public final AutofillClient getAutofillClient() {
         return this;
-    }
-
-    /** @hide */
-    @Override
-    public boolean isContentCaptureSupported() {
-        return true;
     }
 
     /**
@@ -1660,6 +1653,8 @@ public class Activity extends ContextThemeWrapper
         }
 
         mCalled = true;
+
+        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_START);
     }
 
     /**
@@ -1703,7 +1698,6 @@ public class Activity extends ContextThemeWrapper
         if (mAutoFillResetNeeded) {
             getAutofillManager().onVisibleForAutofill();
         }
-        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_START);
     }
 
     /**
@@ -1786,8 +1780,10 @@ public class Activity extends ContextThemeWrapper
                 }
             }
         }
-        mCalled = true;
+
         notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_RESUME);
+
+        mCalled = true;
     }
 
     /**
@@ -2203,8 +2199,9 @@ public class Activity extends ContextThemeWrapper
                 mAutoFillIgnoreFirstResumePause = false;
             }
         }
-        mCalled = true;
+
         notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_PAUSE);
+        mCalled = true;
     }
 
     /**
@@ -2393,7 +2390,6 @@ public class Activity extends ContextThemeWrapper
                 getAutofillManager().onPendingSaveUi(AutofillManager.PENDING_UI_OPERATION_CANCEL,
                         mIntent.getIBinderExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN));
             }
-            notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_STOP);
         }
         mEnterAnimationComplete = false;
     }
@@ -2465,6 +2461,8 @@ public class Activity extends ContextThemeWrapper
         }
 
         dispatchActivityDestroyed();
+
+        notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_STOP);
     }
 
     /**
@@ -3523,6 +3521,12 @@ public class Activity extends ContextThemeWrapper
      * Default implementation of {@link KeyEvent.Callback#onKeyLongPress(int, KeyEvent)
      * KeyEvent.Callback.onKeyLongPress()}: always returns false (doesn't handle
      * the event).
+     *
+     * To receive this callback, you must return true from onKeyDown for the current
+     * event stream.
+     *
+     * @see KeyEvent.Callback#onKeyLongPress()
+     * @see KeyEvent.Callback#onKeyLongPress(int, KeyEvent)
      */
     public boolean onKeyLongPress(int keyCode, KeyEvent event) {
         return false;
@@ -3783,14 +3787,14 @@ public class Activity extends ContextThemeWrapper
 
 
     /**
-     * Moves the activity from {@link WindowConfiguration#WINDOWING_MODE_FREEFORM} windowing mode to
-     * {@link WindowConfiguration#WINDOWING_MODE_FULLSCREEN}.
+     * Moves the activity between {@link WindowConfiguration#WINDOWING_MODE_FREEFORM} windowing mode
+     * and {@link WindowConfiguration#WINDOWING_MODE_FULLSCREEN}.
      *
      * @hide
      */
     @Override
-    public void exitFreeformMode() throws RemoteException {
-        ActivityTaskManager.getService().exitFreeformMode(mToken);
+    public void toggleFreeformWindowingMode() throws RemoteException {
+        ActivityTaskManager.getService().toggleFreeformWindowingMode(mToken);
     }
 
     /**
@@ -7614,7 +7618,8 @@ public class Activity extends ContextThemeWrapper
 
         mWindow.setColorMode(info.colorMode);
 
-        setAutofillCompatibilityEnabled(application.isAutofillCompatibilityEnabled());
+        setAutofillOptions(application.getAutofillOptions());
+        setContentCaptureOptions(application.getContentCaptureOptions());
     }
 
     private void enableAutofillCompatibilityIfNeeded() {

@@ -27,8 +27,6 @@
 #include <utils/misc.h>
 #include <assert.h>
 
-static int initialized = 0;
-
 static jclass nioAccessClass;
 static jclass bufferClass;
 static jmethodID getBasePointerID;
@@ -708,6 +706,7 @@ exit:
 
     if (_exception) {
         jniThrowException(_env, _exceptionType, _exceptionMessage);
+        return (jint)0;
     }
     return (jint)_returnValue;
 }
@@ -919,6 +918,7 @@ exit:
 
     if (_exception) {
         jniThrowException(_env, _exceptionType, _exceptionMessage);
+        return (jint)0;
     }
     return (jint)_returnValue;
 }

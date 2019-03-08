@@ -88,7 +88,8 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeDisconnect(long nativeObject);
 
     private static native GraphicBuffer nativeScreenshot(IBinder displayToken,
-            Rect sourceCrop, int width, int height, boolean useIdentityTransform, int rotation);
+            Rect sourceCrop, int width, int height, boolean useIdentityTransform, int rotation,
+            boolean captureSecureLayers);
     private static native GraphicBuffer nativeCaptureLayers(IBinder layerHandleToken,
             Rect sourceCrop, float frameScale);
 
@@ -157,6 +158,8 @@ public final class SurfaceControl implements Parcelable {
             IBinder displayToken, long numFrames, long timestamp);
     private static native int nativeGetActiveConfig(IBinder displayToken);
     private static native boolean nativeSetActiveConfig(IBinder displayToken, int id);
+    private static native boolean nativeSetAllowedDisplayConfigs(IBinder displayToken,
+                                                                 int[] allowedConfigs);
     private static native int[] nativeGetDisplayColorModes(IBinder displayToken);
     private static native SurfaceControl.DisplayPrimaries nativeGetDisplayNativePrimaries(
             IBinder displayToken);
@@ -189,6 +192,7 @@ public final class SurfaceControl implements Parcelable {
             IBinder toToken);
     private static native boolean nativeGetProtectedContentSupport();
     private static native void nativeSetMetadata(long transactionObj, int key, Parcel data);
+    private static native void nativeSyncInputWindows(long transactionObj);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private String mName;
@@ -520,7 +524,16 @@ public final class SurfaceControl implements Parcelable {
             }
             mWidth = width;
             mHeight = height;
-            return this;
+            // set this as a buffer layer since we are specifying a buffer size.
+            return setFlags(FX_SURFACE_NORMAL, FX_SURFACE_MASK);
+        }
+
+        /**
+         * Set the initial size of the controlled surface's buffers in pixels.
+         */
+        private void unsetBufferSize() {
+            mWidth = 0;
+            mHeight = 0;
         }
 
         /**
@@ -638,16 +651,11 @@ public final class SurfaceControl implements Parcelable {
          * Color layers will not have an associated BufferQueue and will instead always render a
          * solid color (that is, solid before plane alpha). Currently that color is black.
          *
-         * @param isColorLayer Whether to create a color layer.
          * @hide
          */
-        public Builder setColorLayer(boolean isColorLayer) {
-            if (isColorLayer) {
-                mFlags |= FX_SURFACE_DIM;
-            } else {
-                mFlags &= ~FX_SURFACE_DIM;
-            }
-            return this;
+        public Builder setColorLayer() {
+            unsetBufferSize();
+            return setFlags(FX_SURFACE_DIM, FX_SURFACE_MASK);
         }
 
         private boolean isColorLayerSet() {
@@ -660,16 +668,11 @@ public final class SurfaceControl implements Parcelable {
          * Container layers will not be rendered in any fashion and instead are used
          * as a parent of renderable layers.
          *
-         * @param isContainerLayer Whether to create a container layer.
          * @hide
          */
-        public Builder setContainerLayer(boolean isContainerLayer) {
-            if (isContainerLayer) {
-                mFlags |= FX_SURFACE_CONTAINER;
-            } else {
-                mFlags &= ~FX_SURFACE_CONTAINER;
-            }
-            return this;
+        public Builder setContainerLayer() {
+            unsetBufferSize();
+            return setFlags(FX_SURFACE_CONTAINER, FX_SURFACE_MASK);
         }
 
         private boolean isContainerLayerSet() {
@@ -677,7 +680,7 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * Set 'Surface creation flags' such as {@link HIDDEN}, {@link SECURE}.
+         * Set 'Surface creation flags' such as {@link #HIDDEN}, {@link #SECURE}.
          *
          * TODO: Finish conversion to individual builder methods?
          * @param flags The combined flags
@@ -685,6 +688,11 @@ public final class SurfaceControl implements Parcelable {
          */
         public Builder setFlags(int flags) {
             mFlags = flags;
+            return this;
+        }
+
+        private Builder setFlags(int flags, int mask) {
+            mFlags = (mFlags & ~mask) | flags;
             return this;
         }
     }
@@ -1547,6 +1555,20 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
+    public static boolean setAllowedDisplayConfigs(IBinder displayToken, int[] allowedConfigs) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        if (allowedConfigs == null) {
+            throw new IllegalArgumentException("allowedConfigs must not be null");
+        }
+
+        return nativeSetAllowedDisplayConfigs(displayToken, allowedConfigs);
+    }
+
+    /**
+     * @hide
+     */
     public static int[] getDisplayColorModes(IBinder displayToken) {
         if (displayToken == null) {
             throw new IllegalArgumentException("displayToken must not be null");
@@ -1879,7 +1901,29 @@ public final class SurfaceControl implements Parcelable {
             throw new IllegalArgumentException("displayToken must not be null");
         }
 
-        return nativeScreenshot(display, sourceCrop, width, height, useIdentityTransform, rotation);
+        return nativeScreenshot(display, sourceCrop, width, height, useIdentityTransform, rotation,
+                false /* captureSecureLayers */);
+    }
+
+    /**
+     * Like screenshotToBuffer, but if the caller is AID_SYSTEM, allows
+     * for the capture of secure layers. This is used for the screen rotation
+     * animation where the system server takes screenshots but does
+     * not persist them or allow them to leave the server. However in other
+     * cases in the system server, we mostly want to omit secure layers
+     * like when we take a screenshot on behalf of the assistant.
+     *
+     * @hide
+     */
+    public static GraphicBuffer screenshotToBufferWithSecureLayersUnsafe(IBinder display,
+            Rect sourceCrop, int width, int height, boolean useIdentityTransform,
+            int rotation) {
+        if (display == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+
+        return nativeScreenshot(display, sourceCrop, width, height, useIdentityTransform, rotation,
+                true /* captureSecureLayers */);
     }
 
     private static void rotateCropForSF(Rect crop, int rot) {
@@ -2132,6 +2176,17 @@ public final class SurfaceControl implements Parcelable {
          */
         public Transaction transferTouchFocus(IBinder fromToken, IBinder toToken) {
             nativeTransferTouchFocus(mNativeObject, fromToken, toToken);
+            return this;
+        }
+
+        /**
+         * Waits until any changes to input windows have been sent from SurfaceFlinger to
+         * InputFlinger before returning.
+         *
+         * @hide
+         */
+        public Transaction syncInputWindows() {
+            nativeSyncInputWindows(mNativeObject);
             return this;
         }
 

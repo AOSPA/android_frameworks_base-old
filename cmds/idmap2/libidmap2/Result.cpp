@@ -22,14 +22,16 @@
 
 namespace android::idmap2 {
 
-v2::Error::Error(const char* fmt, ...) {
+// NOLINTNEXTLINE(cert-dcl50-cpp)
+Error::Error(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   base::StringAppendV(&msg_, fmt, ap);
   va_end(ap);
 }
 
-v2::Error::Error(const Error& parent, const char* fmt, ...) : msg_(parent.msg_) {
+// NOLINTNEXTLINE(cert-dcl50-cpp)
+Error::Error(const Error& parent, const char* fmt, ...) : msg_(parent.msg_) {
   msg_.append(" -> ");
 
   va_list ap;

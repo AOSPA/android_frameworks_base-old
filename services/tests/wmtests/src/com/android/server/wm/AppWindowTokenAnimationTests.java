@@ -18,7 +18,6 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.view.SurfaceControl.Transaction;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
@@ -27,6 +26,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 
+import android.platform.test.annotations.Presubmit;
 import android.view.SurfaceControl;
 
 import androidx.test.filters.SmallTest;
@@ -39,19 +39,19 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+
 /**
  * Animation related tests for the {@link AppWindowToken} class.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:AppWindowTokenAnimationTests
+ *  atest AppWindowTokenAnimationTests
  */
 @SmallTest
+@Presubmit
 public class AppWindowTokenAnimationTests extends WindowTestsBase {
 
     private TestAppWindowToken mToken;
 
-    @Mock
-    private Transaction mTransaction;
     @Mock
     private AnimationAdapter mSpec;
 
@@ -60,8 +60,7 @@ public class AppWindowTokenAnimationTests extends WindowTestsBase {
         MockitoAnnotations.initMocks(this);
 
         mToken = createTestAppWindowToken(mDisplayContent, WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD);
-        mToken.setPendingTransaction(mTransaction);
+                ACTIVITY_TYPE_STANDARD, false /* skipOnParentChanged */);
     }
 
     @Test

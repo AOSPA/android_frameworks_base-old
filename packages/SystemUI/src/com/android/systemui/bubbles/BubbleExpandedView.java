@@ -39,6 +39,7 @@ import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -48,7 +49,6 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.util.StatsLog;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -70,12 +70,16 @@ import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 public class BubbleExpandedView extends LinearLayout implements View.OnClickListener {
     private static final String TAG = "BubbleExpandedView";
 
+    // Configurable via bubble settings; just for testing
+    private boolean mUseFooter;
+    private boolean mShowOnTop;
+
     // The triangle pointing to the expanded view
     private View mPointerView;
+    private int mPointerMargin;
 
     // Header
     private View mHeaderView;
-    private TextView mHeaderTextView;
     private ImageButton mDeepLinkIcon;
     private ImageButton mSettingsIcon;
 
@@ -89,8 +93,10 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     private boolean mActivityViewReady = false;
     private PendingIntent mBubbleIntent;
 
+    private int mMinHeight;
+    private int mHeaderHeight;
     private int mBubbleHeight;
-    private int mDefaultHeight;
+    private int mPermissionHeight;
 
     private NotificationEntry mEntry;
     private PackageManager mPm;
@@ -149,8 +155,9 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
             int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         mPm = context.getPackageManager();
-        mDefaultHeight = getResources().getDimensionPixelSize(
+        mMinHeight = getResources().getDimensionPixelSize(
                 R.dimen.bubble_expanded_default_height);
+        mPointerMargin = getResources().getDimensionPixelSize(R.dimen.bubble_pointer_margin);
         try {
             mNotificationManagerService = INotificationManager.Stub.asInterface(
                     ServiceManager.getServiceOrThrow(Context.NOTIFICATION_SERVICE));
@@ -173,12 +180,17 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         int bgColor = ta.getColor(0, Color.WHITE);
         ta.recycle();
 
+        mShowOnTop = BubbleController.showBubblesAtTop(getContext());
+        mUseFooter = BubbleController.useFooter(getContext());
+
         ShapeDrawable triangleDrawable = new ShapeDrawable(
-                TriangleShape.create(width, height, true /* pointUp */));
+                TriangleShape.create(width, height, mShowOnTop /* pointUp */));
         triangleDrawable.setTint(bgColor);
         mPointerView.setBackground(triangleDrawable);
 
         FrameLayout viewWrapper = findViewById(R.id.header_permission_wrapper);
+        viewWrapper.setBackground(createHeaderPermissionBackground(bgColor));
+
         LayoutTransition transition = new LayoutTransition();
         transition.setDuration(200);
 
@@ -194,8 +206,12 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         viewWrapper.setLayoutTransition(transition);
         viewWrapper.getLayoutTransition().enableTransitionType(LayoutTransition.CHANGING);
 
+
+        mHeaderHeight = getContext().getResources().getDimensionPixelSize(
+                R.dimen.bubble_expanded_header_height);
+        mPermissionHeight = getContext().getResources().getDimensionPixelSize(
+                R.dimen.bubble_permission_height);
         mHeaderView = findViewById(R.id.header_layout);
-        mHeaderTextView = findViewById(R.id.header_text);
         mDeepLinkIcon = findViewById(R.id.deep_link_button);
         mSettingsIcon = findViewById(R.id.settings_button);
         mDeepLinkIcon.setOnClickListener(this);
@@ -226,6 +242,37 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
             activityView.setForwardedInsets(Insets.of(0, 0, 0, insetsBottom));
             return view.onApplyWindowInsets(insets);
         });
+
+        if (!mShowOnTop) {
+            removeView(mPointerView);
+            if (mUseFooter) {
+                View divider = findViewById(R.id.divider);
+                viewWrapper.removeView(divider);
+                removeView(viewWrapper);
+                addView(divider);
+                addView(viewWrapper);
+            }
+            addView(mPointerView);
+        }
+    }
+
+    /**
+     * Creates a background with corners rounded based on how the view is configured to display
+     */
+    private Drawable createHeaderPermissionBackground(int bgColor) {
+        TypedArray ta2 = getContext().obtainStyledAttributes(
+                new int[] {android.R.attr.dialogCornerRadius});
+        final float cr = ta2.getDimension(0, 0f);
+        ta2.recycle();
+
+        float[] radii = mUseFooter
+                ? new float[] {0, 0, 0, 0, cr, cr, cr, cr}
+                : new float[] {cr, cr, cr, cr, 0, 0, 0, 0};
+        GradientDrawable chromeBackground = new GradientDrawable();
+        chromeBackground.setShape(GradientDrawable.RECTANGLE);
+        chromeBackground.setCornerRadii(radii);
+        chromeBackground.setColor(bgColor);
+        return chromeBackground;
     }
 
     /**
@@ -273,18 +320,26 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         mActivityView.setCallback(mStateCallback);
     }
 
+    /**
+     * Updates the entry backing this view. This will not re-populate ActivityView, it will
+     * only update the deep-links in the header, the title, and the height of the view.
+     */
+    public void update(NotificationEntry entry) {
+        if (entry.key.equals(mEntry.key)) {
+            mEntry = entry;
+            updateHeaderView();
+            updateHeight();
+        } else {
+            Log.w(TAG, "Trying to update entry with different key, new entry: "
+                    + entry.key + " old entry: " + mEntry.key);
+        }
+    }
+
     private void updateHeaderView() {
         mSettingsIcon.setContentDescription(getResources().getString(
                 R.string.bubbles_settings_button_description, mAppName));
         mDeepLinkIcon.setContentDescription(getResources().getString(
                 R.string.bubbles_deep_link_button_description, mAppName));
-        if (mEntry != null && mEntry.getBubbleMetadata() != null) {
-            mHeaderTextView.setText(mEntry.getBubbleMetadata().getTitle());
-        } else {
-            // This should only happen if we're auto-bubbling notification content that isn't
-            // explicitly a bubble
-            mHeaderTextView.setText(mAppName);
-        }
     }
 
     private void updatePermissionView() {
@@ -304,6 +359,8 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
             mPermissionView.setVisibility(VISIBLE);
             ((ImageView) mPermissionView.findViewById(R.id.pkgicon)).setImageDrawable(mAppIcon);
             ((TextView) mPermissionView.findViewById(R.id.pkgname)).setText(mAppName);
+            logBubbleClickEvent(mEntry.notification,
+                    StatsLog.BUBBLE_UICHANGED__ACTION__PERMISSION_DIALOG_SHOWN);
         }
     }
 
@@ -315,14 +372,6 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                 removeView(mNotifRow);
                 mNotifRow = null;
             }
-            Notification.BubbleMetadata data = mEntry.getBubbleMetadata();
-            mBubbleHeight = data != null && data.getDesiredHeight() > 0
-                    ? data.getDesiredHeight()
-                    : mDefaultHeight;
-            // XXX: enforce max / min height
-            LayoutParams lp = (LayoutParams) mActivityView.getLayoutParams();
-            lp.height = mBubbleHeight;
-            mActivityView.setLayoutParams(lp);
             mActivityView.setVisibility(VISIBLE);
         } else {
             // Hide activity view if we had it previously
@@ -330,9 +379,61 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
 
             // Use notification view
             mNotifRow = mEntry.getRow();
-            addView(mNotifRow);
+            if (mShowOnTop) {
+                addView(mNotifRow);
+            } else {
+                addView(mNotifRow, mUseFooter ? 0 : 1);
+            }
         }
         updateView();
+    }
+
+    boolean performBackPressIfNeeded() {
+        if (mActivityView == null || !usingActivityView()) {
+            return false;
+        }
+        mActivityView.performBackPress();
+        return true;
+    }
+
+    /**
+     * @return total height that the expanded view occupies.
+     */
+    int getExpandedSize() {
+        int chromeHeight = mPermissionView.getVisibility() != View.VISIBLE
+                ? mHeaderHeight
+                : mPermissionHeight;
+        return mBubbleHeight + mPointerView.getHeight() + mPointerMargin
+                + chromeHeight;
+    }
+
+    void updateHeight() {
+        if (usingActivityView()) {
+            Notification.BubbleMetadata data = mEntry.getBubbleMetadata();
+            int desiredHeight;
+            if (data == null) {
+                // This is a contentIntent based bubble, lets allow it to be the max height
+                // as it was forced into this mode and not prepared to be small
+                desiredHeight = mStackView.getMaxExpandedHeight();
+            } else {
+                desiredHeight = data.getDesiredHeight() > 0
+                        ? data.getDesiredHeight()
+                        : mMinHeight;
+            }
+            int chromeHeight = mPermissionView.getVisibility() != View.VISIBLE
+                    ? mHeaderHeight
+                    : mPermissionHeight;
+            int max = mStackView.getMaxExpandedHeight() - chromeHeight - mPointerView.getHeight()
+                    - mPointerMargin;
+            int height = Math.min(desiredHeight, max);
+            height = Math.max(height, mMinHeight);
+            LayoutParams lp = (LayoutParams) mActivityView.getLayoutParams();
+            lp.height = height;
+            mBubbleHeight = height;
+            mActivityView.setLayoutParams(lp);
+        } else {
+            mBubbleHeight = mNotifRow != null ? mNotifRow.getIntrinsicHeight() : mMinHeight;
+        }
     }
 
     @Override
@@ -380,6 +481,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
             } else if (mOnBubbleBlockedListener != null) {
                 mOnBubbleBlockedListener.onBubbleBlocked(mEntry);
             }
+            mStackView.onExpandedHeightChanged();
             logBubbleClickEvent(mEntry.notification,
                     allowed ? StatsLog.BUBBLE_UICHANGED__ACTION__PERMISSION_OPT_IN :
                             StatsLog.BUBBLE_UICHANGED__ACTION__PERMISSION_OPT_OUT);
@@ -399,6 +501,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         } else if (mNotifRow != null) {
             applyRowState(mNotifRow);
         }
+        updateHeight();
     }
 
     /**
@@ -413,23 +516,14 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     /**
      * Removes and releases an ActivityView if one was previously created for this bubble.
      */
-    public void destroyActivityView(ViewGroup tmpParent) {
+    public void destroyActivityView() {
         if (mActivityView == null) {
             return;
         }
-        if (!mActivityViewReady) {
-            // release not needed, never initialized?
-            mActivityView = null;
-            return;
+        if (mActivityViewReady) {
+            mActivityView.release();
         }
-        // HACK: release() will crash if the view is not attached.
-        if (!isAttachedToWindow()) {
-            mActivityView.setVisibility(View.GONE);
-            tmpParent.addView(this);
-        }
-
-        mActivityView.release();
-        ((ViewGroup) getParent()).removeView(this);
+        removeView(mActivityView);
         mActivityView = null;
         mActivityViewReady = false;
     }

@@ -25,6 +25,7 @@ import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
 import android.content.ComponentName;
+import android.content.ContentCaptureOptions;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ActivityPresentationInfo;
@@ -51,6 +52,7 @@ import android.view.contentcapture.IContentCaptureManager;
 import android.view.contentcapture.UserDataRemovalRequest;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.infra.AbstractRemoteService;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
@@ -101,6 +103,14 @@ public final class ContentCaptureManagerService extends
     @Nullable
     private boolean mDisabledByDeviceConfig;
 
+    // Device-config settings that are cached and passed back to apps
+    @GuardedBy("mLock") int mDevCfgLoggingLevel;
+    @GuardedBy("mLock") int mDevCfgMaxBufferSize;
+    @GuardedBy("mLock") int mDevCfgIdleFlushingFrequencyMs;
+    @GuardedBy("mLock") int mDevCfgTextChangeFlushingFrequencyMs;
+    @GuardedBy("mLock") int mDevCfgLogHistorySize;
+    @GuardedBy("mLock") int mDevCfgIdleUnbindTimeoutMs;
+
     public ContentCaptureManagerService(@NonNull Context context) {
         super(context, new FrameworkResourcesServiceNameResolver(context,
                 com.android.internal.R.string.config_defaultContentCaptureService),
@@ -108,16 +118,15 @@ public final class ContentCaptureManagerService extends
         DeviceConfig.addOnPropertyChangedListener(DeviceConfig.NAMESPACE_CONTENT_CAPTURE,
                 ActivityThread.currentApplication().getMainExecutor(),
                 (namespace, key, value) -> onDeviceConfigChange(key, value));
-        setLoggingLevelFromDeviceConfig();
-        setDisabledFromDeviceConfig();
+        setDeviceConfigProperties();
 
-        final int loggingSize = ContentCaptureHelper.getIntDeviceConfigProperty(
-                ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOG_HISTORY_SIZE, 20);
-        if (loggingSize > 0) {
-            if (debug) Slog.d(mTag, "log history size: " + loggingSize);
-            mRequestsHistory = new LocalLog(loggingSize);
+        if (mDevCfgLogHistorySize > 0) {
+            if (debug) Slog.d(mTag, "log history size: " + mDevCfgLogHistorySize);
+            mRequestsHistory = new LocalLog(mDevCfgLogHistorySize);
         } else {
-            if (debug) Slog.d(mTag, "disabled log history because size is " + loggingSize);
+            if (debug) {
+                Slog.d(mTag, "disabled log history because size is " + mDevCfgLogHistorySize);
+            }
             mRequestsHistory = null;
         }
 
@@ -231,34 +240,72 @@ public final class ContentCaptureManagerService extends
             case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_FLUSH_FREQUENCY:
             case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOG_HISTORY_SIZE:
             case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_TEXT_CHANGE_FLUSH_FREQUENCY:
-                // TODO(b/123096662): implement it
-                Slog.d(mTag, "changes on " + key + " not supported yet");
+            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_UNBIND_TIMEOUT:
+                setFineTuneParamsFromDeviceConfig();
                 return;
             default:
                 Slog.i(mTag, "Ignoring change on " + key);
         }
     }
 
+    private void setFineTuneParamsFromDeviceConfig() {
+        synchronized (mLock) {
+            mDevCfgMaxBufferSize = ContentCaptureHelper.getIntDeviceConfigProperty(
+                    ContentCaptureManager.DEVICE_CONFIG_PROPERTY_MAX_BUFFER_SIZE,
+                    ContentCaptureManager.DEFAULT_MAX_BUFFER_SIZE);
+            mDevCfgIdleFlushingFrequencyMs = ContentCaptureHelper.getIntDeviceConfigProperty(
+                    ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_FLUSH_FREQUENCY,
+                    ContentCaptureManager.DEFAULT_IDLE_FLUSHING_FREQUENCY_MS);
+            mDevCfgTextChangeFlushingFrequencyMs = ContentCaptureHelper.getIntDeviceConfigProperty(
+                    ContentCaptureManager.DEVICE_CONFIG_PROPERTY_TEXT_CHANGE_FLUSH_FREQUENCY,
+                    ContentCaptureManager.DEFAULT_TEXT_CHANGE_FLUSHING_FREQUENCY_MS);
+            mDevCfgLogHistorySize = ContentCaptureHelper.getIntDeviceConfigProperty(
+                    ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOG_HISTORY_SIZE, 20);
+            mDevCfgIdleUnbindTimeoutMs = ContentCaptureHelper.getIntDeviceConfigProperty(
+                    ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_UNBIND_TIMEOUT,
+                    (int) AbstractRemoteService.PERMANENT_BOUND_TIMEOUT_MS);
+            if (verbose) {
+                Slog.v(mTag, "setFineTuneParamsFromDeviceConfig(): "
+                        + "bufferSize=" + mDevCfgMaxBufferSize
+                        + ", idleFlush=" + mDevCfgIdleFlushingFrequencyMs
+                        + ", textFluxh=" + mDevCfgTextChangeFlushingFrequencyMs
+                        + ", logHistory=" + mDevCfgLogHistorySize
+                        + ", idleUnbindTimeoutMs=" + mDevCfgIdleUnbindTimeoutMs);
+            }
+        }
+    }
+
     private void setLoggingLevelFromDeviceConfig() {
-        ContentCaptureHelper.setLoggingLevel();
+        mDevCfgLoggingLevel = ContentCaptureHelper.getIntDeviceConfigProperty(
+                ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOGGING_LEVEL,
+                ContentCaptureHelper.getDefaultLoggingLevel());
+        ContentCaptureHelper.setLoggingLevel(mDevCfgLoggingLevel);
         verbose = ContentCaptureHelper.sVerbose;
         debug = ContentCaptureHelper.sDebug;
+        if (verbose) {
+            Slog.v(mTag, "setLoggingLevelFromDeviceConfig(): level=" + mDevCfgLoggingLevel
+                    + ", debug=" + debug + ", verbose=" + verbose);
+        }
     }
 
-    private void setDisabledFromDeviceConfig() {
-        final String value = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_CONTENT_CAPTURE,
+    private void setDeviceConfigProperties() {
+        setLoggingLevelFromDeviceConfig();
+        setFineTuneParamsFromDeviceConfig();
+        final String enabled = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_CONTENT_CAPTURE,
                 ContentCaptureManager.DEVICE_CONFIG_PROPERTY_SERVICE_EXPLICITLY_ENABLED);
-        setDisabledByDeviceConfig(value);
+        setDisabledByDeviceConfig(enabled);
     }
 
-    private void setDisabledByDeviceConfig(@Nullable String value) {
-        if (verbose) Slog.v(mTag, "setDisabledByDeviceConfig(): value=" + value);
+    private void setDisabledByDeviceConfig(@Nullable String explicitlyEnabled) {
+        if (verbose) {
+            Slog.v(mTag, "setDisabledByDeviceConfig(): explicitlyEnabled=" + explicitlyEnabled);
+        }
         final UserManager um = getContext().getSystemService(UserManager.class);
         final List<UserInfo> users = um.getUsers();
 
         final boolean newDisabledValue;
 
-        if (value != null && value.equalsIgnoreCase("false")) {
+        if (explicitlyEnabled != null && explicitlyEnabled.equalsIgnoreCase("false")) {
             newDisabledValue = true;
         } else {
             newDisabledValue = false;
@@ -423,9 +470,20 @@ public final class ContentCaptureManagerService extends
     protected void dumpLocked(String prefix, PrintWriter pw) {
         super.dumpLocked(prefix, pw);
 
+        final String prefix2 = prefix + "  ";
+
         pw.print(prefix); pw.print("Disabled users: "); pw.println(mDisabledUsers);
-        pw.print(prefix); pw.print("Disabled by DeviceConfig: ");
-        pw.println(mDisabledByDeviceConfig);
+        pw.print(prefix); pw.println("DeviceConfig Settings: ");
+        pw.print(prefix2); pw.print("disabled: "); pw.println(mDisabledByDeviceConfig);
+        pw.print(prefix2); pw.print("loggingLevel: "); pw.println(mDevCfgLoggingLevel);
+        pw.print(prefix2); pw.print("maxBufferSize: "); pw.println(mDevCfgMaxBufferSize);
+        pw.print(prefix2); pw.print("idleFlushingFrequencyMs: ");
+        pw.println(mDevCfgIdleFlushingFrequencyMs);
+        pw.print(prefix2); pw.print("textChangeFlushingFrequencyMs: ");
+        pw.println(mDevCfgTextChangeFlushingFrequencyMs);
+        pw.print(prefix2); pw.print("logHistorySize: "); pw.println(mDevCfgLogHistorySize);
+        pw.print(prefix2); pw.print("idleUnbindTimeoutMs: ");
+        pw.println(mDevCfgIdleUnbindTimeoutMs);
     }
 
     final class ContentCaptureManagerServiceStub extends IContentCaptureManager.Stub {
@@ -505,31 +563,6 @@ public final class ContentCaptureManagerService extends
         }
 
         @Override
-        public void setContentCaptureFeatureEnabled(boolean enabled,
-                @NonNull IResultReceiver result) {
-            final int userId = UserHandle.getCallingUserId();
-            final boolean isService;
-            synchronized (mLock) {
-                isService = assertCalledByServiceLocked("setContentCaptureFeatureEnabled()", userId,
-                        Binder.getCallingUid(), result);
-            }
-            if (!isService) return;
-
-            final long token = Binder.clearCallingIdentity();
-            try {
-                Settings.Secure.putStringForUser(getContext().getContentResolver(),
-                        Settings.Secure.CONTENT_CAPTURE_ENABLED, Boolean.toString(enabled), userId);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-            try {
-                result.send(ContentCaptureManager.RESULT_CODE_TRUE, /* resultData= */null);
-            } catch (RemoteException e) {
-                Slog.w(mTag, "Unable to send setContentCaptureFeatureEnabled(): " + e);
-            }
-        }
-
-        @Override
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
             if (!DumpUtils.checkDumpPermission(getContext(), mTag, pw)) return;
 
@@ -558,6 +591,8 @@ public final class ContentCaptureManagerService extends
             } else if (showHistory) {
                 pw.println();
                 mRequestsHistory.reverseDump(fd, pw, args);
+                pw.println();
+            } else {
                 pw.println();
             }
         }
@@ -594,6 +629,17 @@ public final class ContentCaptureManagerService extends
                 }
             }
             return false;
+        }
+
+        @Override
+        public ContentCaptureOptions getOptionsForPackage(int userId, String packageName) {
+            synchronized (mLock) {
+                final ContentCapturePerUserService service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    return service.getOptionsForPackageLocked(packageName);
+                }
+            }
+            return null;
         }
     }
 }

@@ -16,6 +16,7 @@
 
 package android.net.wifi;
 
+import android.annotation.IntRange;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
@@ -101,6 +102,11 @@ public class WifiInfo implements Parcelable {
     private int mLinkSpeed;
 
     /**
+     * Constant for unknown link speed.
+     */
+    public static final int LINK_SPEED_UNKNOWN = -1;
+
+    /**
      * Tx(transmit) Link speed in Mbps
      */
     private int mTxLinkSpeed;
@@ -135,6 +141,16 @@ public class WifiInfo implements Parcelable {
      * OSU (Online Sign Up) AP for Passpoint R2.
      */
     private boolean mOsuAp;
+
+    /**
+     * Fully qualified domain name of a Passpoint configuration
+     */
+    private String mFqdn;
+
+    /**
+     * Name of Passpoint credential provider
+     */
+    private String mProviderFriendlyName;
 
     /**
      * If connected to a network suggestion or specifier, store the package name of the app,
@@ -204,7 +220,7 @@ public class WifiInfo implements Parcelable {
         mNetworkId = -1;
         mSupplicantState = SupplicantState.UNINITIALIZED;
         mRssi = INVALID_RSSI;
-        mLinkSpeed = -1;
+        mLinkSpeed = LINK_SPEED_UNKNOWN;
         mFrequency = -1;
     }
 
@@ -215,14 +231,16 @@ public class WifiInfo implements Parcelable {
         setSSID(null);
         setNetworkId(-1);
         setRssi(INVALID_RSSI);
-        setLinkSpeed(-1);
-        setTxLinkSpeedMbps(-1);
-        setRxLinkSpeedMbps(-1);
+        setLinkSpeed(LINK_SPEED_UNKNOWN);
+        setTxLinkSpeedMbps(LINK_SPEED_UNKNOWN);
+        setRxLinkSpeedMbps(LINK_SPEED_UNKNOWN);
         setFrequency(-1);
         setMeteredHint(false);
         setEphemeral(false);
         setOsuAp(false);
         setNetworkSuggestionOrSpecifierPackageName(null);
+        setFQDN(null);
+        setProviderFriendlyName(null);
         txBad = 0;
         txSuccess = 0;
         rxSuccess = 0;
@@ -257,6 +275,8 @@ public class WifiInfo implements Parcelable {
             mNetworkSuggestionOrSpecifierPackageName =
                     source.mNetworkSuggestionOrSpecifierPackageName;
             mOsuAp = source.mOsuAp;
+            mFqdn = source.mFqdn;
+            mProviderFriendlyName = source.mProviderFriendlyName;
             txBad = source.txBad;
             txRetries = source.txRetries;
             txSuccess = source.txSuccess;
@@ -355,8 +375,9 @@ public class WifiInfo implements Parcelable {
 
     /**
      * Returns the current link speed in {@link #LINK_SPEED_UNITS}.
-     * @return the link speed or -1 if there is no valid value.
+     * @return the link speed or {@link #LINK_SPEED_UNKNOWN} if link speed is unknown.
      * @see #LINK_SPEED_UNITS
+     * @see #LINK_SPEED_UNKNOWN
      */
     public int getLinkSpeed() {
         return mLinkSpeed;
@@ -370,8 +391,10 @@ public class WifiInfo implements Parcelable {
 
     /**
      * Returns the current transmit link speed in Mbps.
-     * @return the Tx link speed or -1 if there is no valid value.
+     * @return the Tx link speed or {@link #LINK_SPEED_UNKNOWN} if link speed is unknown.
+     * @see #LINK_SPEED_UNKNOWN
      */
+    @IntRange(from = -1)
     public int getTxLinkSpeedMbps() {
         return mTxLinkSpeed;
     }
@@ -386,8 +409,10 @@ public class WifiInfo implements Parcelable {
 
     /**
      * Returns the current receive link speed in Mbps.
-     * @return the Rx link speed or -1 if there is no valid value.
+     * @return the Rx link speed or {@link #LINK_SPEED_UNKNOWN} if link speed is unknown.
+     * @see #LINK_SPEED_UNKNOWN
      */
+    @IntRange(from = -1)
     public int getRxLinkSpeedMbps() {
         return mRxLinkSpeed;
     }
@@ -501,6 +526,34 @@ public class WifiInfo implements Parcelable {
     @SystemApi
     public boolean isOsuAp() {
         return mOsuAp;
+    }
+
+    /** {@hide} */
+    @SystemApi
+    public boolean isPasspointAp() {
+        return mFqdn != null && mProviderFriendlyName != null;
+    }
+
+    /** {@hide} */
+    public void setFQDN(@Nullable String fqdn) {
+        mFqdn = fqdn;
+    }
+
+    /** {@hide} */
+    @SystemApi
+    public @Nullable String getFqdn() {
+        return mFqdn;
+    }
+
+    /** {@hide} */
+    public void setProviderFriendlyName(@Nullable String providerFriendlyName) {
+        mProviderFriendlyName = providerFriendlyName;
+    }
+
+    /** {@hide} */
+    @SystemApi
+    public @Nullable String getProviderFriendlyName() {
+        return mProviderFriendlyName;
     }
 
     /** {@hide} */
@@ -677,6 +730,8 @@ public class WifiInfo implements Parcelable {
         mSupplicantState.writeToParcel(dest, flags);
         dest.writeInt(mOsuAp ? 1 : 0);
         dest.writeString(mNetworkSuggestionOrSpecifierPackageName);
+        dest.writeString(mFqdn);
+        dest.writeString(mProviderFriendlyName);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -716,6 +771,8 @@ public class WifiInfo implements Parcelable {
                 info.mSupplicantState = SupplicantState.CREATOR.createFromParcel(in);
                 info.mOsuAp = in.readInt() != 0;
                 info.mNetworkSuggestionOrSpecifierPackageName = in.readString();
+                info.mFqdn = in.readString();
+                info.mProviderFriendlyName = in.readString();
                 return info;
             }
 

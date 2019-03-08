@@ -436,7 +436,7 @@ final class ActivityManagerConstants extends ContentObserver {
 
     private void updateActivityStartsLoggingEnabled() {
         mFlagActivityStartsLoggingEnabled = Settings.Global.getInt(mResolver,
-                Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED, 0) == 1;
+                Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED, 1) == 1;
     }
 
     private void updateBackgroundActivityStartsEnabled() {

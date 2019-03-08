@@ -35,6 +35,7 @@ import android.app.AppGlobals;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.content.ComponentName;
+import android.content.ContentCaptureOptions;
 import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -44,6 +45,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.service.contentcapture.ContentCaptureService;
 import android.service.contentcapture.IContentCaptureServiceCallback;
 import android.service.contentcapture.SnapshotData;
@@ -124,7 +126,7 @@ final class ContentCapturePerUserService
             mRemoteService = new RemoteContentCaptureService(mMaster.getContext(),
                     ContentCaptureService.SERVICE_INTERFACE, serviceComponentName,
                     mRemoteServiceCallback, mUserId, this, mMaster.isBindInstantServiceAllowed(),
-                    mMaster.verbose);
+                    mMaster.verbose, mMaster.mDevCfgIdleUnbindTimeoutMs);
         }
     }
 
@@ -407,6 +409,27 @@ final class ContentCapturePerUserService
         }
     }
 
+    @GuardedBy("mLock")
+    ContentCaptureOptions getOptionsForPackageLocked(@NonNull String packageName) {
+        if (!mWhitelistedPackages.contains(packageName)) {
+            if (mMaster.verbose) {
+                Slog.v(mTag, "getOptionsForPackage(" + packageName + "): not whitelisted");
+            }
+            return null;
+        }
+
+        // TODO(b/122595322): need to check whitelisted activities as well.
+        final ArraySet<ComponentName> whitelistedComponents = null;
+        ContentCaptureOptions options = new ContentCaptureOptions(mMaster.mDevCfgLoggingLevel,
+                mMaster.mDevCfgMaxBufferSize, mMaster.mDevCfgIdleFlushingFrequencyMs,
+                mMaster.mDevCfgTextChangeFlushingFrequencyMs, mMaster.mDevCfgLogHistorySize,
+                whitelistedComponents);
+        if (mMaster.verbose) {
+            Slog.v(mTag, "getOptionsForPackage(" + packageName + "): " + options);
+        }
+        return options;
+    }
+
     @Override
     protected void dumpLocked(String prefix, PrintWriter pw) {
         super.dumpLocked(prefix, pw);
@@ -466,6 +489,19 @@ final class ContentCapturePerUserService
 
             // TODO(b/122595322): whitelist activities as well
             // TODO(b/119613670): log metrics
+        }
+
+        @Override
+        public void disableSelf() {
+            if (mMaster.verbose) Slog.v(TAG, "disableSelf()");
+
+            final long token = Binder.clearCallingIdentity();
+            try {
+                Settings.Secure.putStringForUser(getContext().getContentResolver(),
+                        Settings.Secure.CONTENT_CAPTURE_ENABLED, "false", mUserId);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
     }
 }
