@@ -1404,6 +1404,21 @@
   <java-symbol type="drawable" name="ic_wifi_signal_2" />
   <java-symbol type="drawable" name="ic_wifi_signal_3" />
   <java-symbol type="drawable" name="ic_wifi_signal_4" />
+  <java-symbol type="drawable" name="ic_wifi_4_signal_0" />
+  <java-symbol type="drawable" name="ic_wifi_4_signal_1" />
+  <java-symbol type="drawable" name="ic_wifi_4_signal_2" />
+  <java-symbol type="drawable" name="ic_wifi_4_signal_3" />
+  <java-symbol type="drawable" name="ic_wifi_4_signal_4" />
+  <java-symbol type="drawable" name="ic_wifi_5_signal_0" />
+  <java-symbol type="drawable" name="ic_wifi_5_signal_1" />
+  <java-symbol type="drawable" name="ic_wifi_5_signal_2" />
+  <java-symbol type="drawable" name="ic_wifi_5_signal_3" />
+  <java-symbol type="drawable" name="ic_wifi_5_signal_4" />
+  <java-symbol type="drawable" name="ic_wifi_6_signal_0" />
+  <java-symbol type="drawable" name="ic_wifi_6_signal_1" />
+  <java-symbol type="drawable" name="ic_wifi_6_signal_2" />
+  <java-symbol type="drawable" name="ic_wifi_6_signal_3" />
+  <java-symbol type="drawable" name="ic_wifi_6_signal_4" />
   <java-symbol type="drawable" name="stat_notify_rssi_in_range" />
   <java-symbol type="drawable" name="stat_sys_gps_on" />
   <java-symbol type="drawable" name="stat_sys_tether_wifi" />
