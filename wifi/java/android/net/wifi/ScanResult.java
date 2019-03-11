@@ -455,6 +455,8 @@ public class ScanResult implements Parcelable {
         public static final int EID_VHT_OPERATION = 192;
         @UnsupportedAppUsage
         public static final int EID_VSA = 221;
+        public static final int EID_EXTENSION = 255;
+        public static final int EID_EXT_HE_CAPABILITIES = 35;
 
         @UnsupportedAppUsage
         public int id;
