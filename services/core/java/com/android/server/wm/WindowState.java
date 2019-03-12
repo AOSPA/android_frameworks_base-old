@@ -114,6 +114,7 @@ import static com.android.server.wm.WindowManagerService.localLOGV;
 import static com.android.server.wm.WindowStateAnimator.COMMIT_DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
+import static com.android.server.wm.WindowStateAnimator.PRESERVED_SURFACE_LAYER;
 import static com.android.server.wm.WindowStateAnimator.READY_TO_SHOW;
 import static com.android.server.wm.WindowStateProto.ANIMATING_EXIT;
 import static com.android.server.wm.WindowStateProto.ANIMATOR;
@@ -2164,9 +2165,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 // A modal window uses the whole compatibility bounds.
                 flags |= FLAG_NOT_TOUCH_MODAL;
                 mTmpRect.set(mAppToken.getResolvedOverrideBounds());
-                // TODO(b/112288258): Remove the forced offset when the override bounds always
-                // starts from zero (See {@link ActivityRecord#resolveOverrideConfiguration}).
-                mTmpRect.offsetTo(0, 0);
             } else {
                 // Non-modal uses the application based frame.
                 mTmpRect.set(mWindowFrames.mCompatFrame);
@@ -4375,7 +4373,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             Slog.d(TAG, "relayoutVisibleWindow: " + this + " mAnimatingExit=true, mRemoveOnExit="
                     + mRemoveOnExit + ", mDestroying=" + mDestroying);
 
-            mWinAnimator.cancelExitAnimationForNextAnimationLocked();
+            // Cancel the existing exit animation for the next enter animation.
+            if (isSelfAnimating()) {
+                cancelAnimation();
+                destroySurfaceUnchecked();
+            }
             mAnimatingExit = false;
         }
         if (mDestroying) {
@@ -4487,6 +4489,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     protected void onAnimationFinished() {
+        super.onAnimationFinished();
         mWinAnimator.onAnimationFinished();
     }
 
@@ -4780,7 +4783,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     // then we can drop all negative layering on the windowing side and simply inherit
     // the default implementation here.
     public void assignChildLayers(Transaction t) {
-        int layer = 1;
+        // The surface of the main window might be preserved. So the child window on top of the main
+        // window should be also on top of the preserved surface.
+        int layer = PRESERVED_SURFACE_LAYER + 1;
         for (int i = 0; i < mChildren.size(); i++) {
             final WindowState w = mChildren.get(i);
 

@@ -70,7 +70,6 @@ import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.am.ActivityManagerService;
-import com.android.server.wm.TaskRecord.TaskActivitiesReport;
 
 import com.google.android.collect.Sets;
 
@@ -180,7 +179,6 @@ class RecentTasks {
     private final HashMap<ComponentName, ActivityInfo> mTmpAvailActCache = new HashMap<>();
     private final HashMap<String, ApplicationInfo> mTmpAvailAppCache = new HashMap<>();
     private final SparseBooleanArray mTmpQuietProfileUserIds = new SparseBooleanArray();
-    private final TaskActivitiesReport mTmpReport = new TaskActivitiesReport();
 
     @VisibleForTesting
     RecentTasks(ActivityTaskManagerService service, TaskPersister taskPersister) {
@@ -1161,7 +1159,8 @@ class RecentTasks {
     /**
      * @return whether the given active task should be presented to the user through SystemUI.
      */
-    private boolean isVisibleRecentTask(TaskRecord task) {
+    @VisibleForTesting
+    boolean isVisibleRecentTask(TaskRecord task) {
         if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "isVisibleRecentTask: task=" + task
                 + " minVis=" + mMinNumVisibleTasks + " maxVis=" + mMaxNumVisibleTasks
                 + " sessionDuration=" + mActiveTasksSessionDurationMs
@@ -1195,6 +1194,17 @@ class RecentTasks {
                     // Only the non-top task of the primary split screen mode is visible
                     return false;
                 }
+        }
+
+        // Tasks managed by/associated with an ActivityView should be excluded from recents.
+        // singleTaskInstance is set on the VirtualDisplay managed by ActivityView
+        // TODO(b/126185105): Find a different signal to use besides isSingleTaskInstance
+        final ActivityStack stack = task.getStack();
+        if (stack != null) {
+            ActivityDisplay display = stack.getDisplay();
+            if (display != null && display.isSingleTaskInstance()) {
+                return false;
+            }
         }
 
         // If we're in lock task mode, ignore the root task
@@ -1587,7 +1597,7 @@ class RecentTasks {
      */
     ActivityManager.RecentTaskInfo createRecentTaskInfo(TaskRecord tr) {
         ActivityManager.RecentTaskInfo rti = new ActivityManager.RecentTaskInfo();
-        tr.fillTaskInfo(rti, mTmpReport);
+        tr.fillTaskInfo(rti);
         // Fill in some deprecated values
         rti.id = rti.isRunning ? rti.taskId : INVALID_TASK_ID;
         rti.persistentId = rti.taskId;

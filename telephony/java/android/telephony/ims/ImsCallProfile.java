@@ -553,7 +553,8 @@ public final class ImsCallProfile implements Parcelable {
                 + ", emergencyServiceCategories=" + mEmergencyServiceCategories
                 + ", emergencyUrns=" + mEmergencyUrns
                 + ", emergencyCallRouting=" + mEmergencyCallRouting
-                + ", emergencyCallTesting=" + mEmergencyCallTesting + " }";
+                + ", emergencyCallTesting=" + mEmergencyCallTesting
+                + ", hasKnownUserIntentEmergency=" + mHasKnownUserIntentEmergency + " }";
     }
 
     @Override
@@ -572,6 +573,7 @@ public final class ImsCallProfile implements Parcelable {
         out.writeStringList(mEmergencyUrns);
         out.writeInt(mEmergencyCallRouting);
         out.writeBoolean(mEmergencyCallTesting);
+        out.writeBoolean(mHasKnownUserIntentEmergency);
     }
 
     private void readFromParcel(Parcel in) {
@@ -583,6 +585,7 @@ public final class ImsCallProfile implements Parcelable {
         mEmergencyUrns = in.createStringArrayList();
         mEmergencyCallRouting = in.readInt();
         mEmergencyCallTesting = in.readBoolean();
+        mHasKnownUserIntentEmergency = in.readBoolean();
     }
 
     public static final Creator<ImsCallProfile> CREATOR = new Creator<ImsCallProfile>() {

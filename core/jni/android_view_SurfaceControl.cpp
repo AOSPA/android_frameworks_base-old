@@ -205,7 +205,7 @@ static Rect rectFromObj(JNIEnv* env, jobject rectObj) {
 
 static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
         jobject displayTokenObj, jobject sourceCropObj, jint width, jint height,
-        bool useIdentityTransform, int rotation) {
+        bool useIdentityTransform, int rotation, bool captureSecureLayers) {
     sp<IBinder> displayToken = ibinderForJavaObject(env, displayTokenObj);
     if (displayToken == NULL) {
         return NULL;
@@ -213,9 +213,9 @@ static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
     Rect sourceCrop = rectFromObj(env, sourceCropObj);
     sp<GraphicBuffer> buffer;
     status_t res = ScreenshotClient::capture(displayToken, ui::Dataspace::V0_SRGB,
-                                             ui::PixelFormat::RGBA_8888,
-                                             sourceCrop, width, height,
-                                             useIdentityTransform, rotation, &buffer);
+            ui::PixelFormat::RGBA_8888,
+            sourceCrop, width, height,
+            useIdentityTransform, rotation, captureSecureLayers, &buffer);
     if (res != NO_ERROR) {
         return NULL;
     }
@@ -404,6 +404,11 @@ static void nativeTransferTouchFocus(JNIEnv* env, jclass clazz, jlong transactio
     sp<IBinder> fromToken(ibinderForJavaObject(env, fromTokenObj));
     sp<IBinder> toToken(ibinderForJavaObject(env, toTokenObj));
     transaction->transferTouchFocus(fromToken, toToken);
+}
+
+static void nativeSyncInputWindows(JNIEnv* env, jclass clazz, jlong transactionObj) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    transaction->syncInputWindows();
 }
 
 static void nativeSetMetadata(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -691,6 +696,25 @@ static jobjectArray nativeGetDisplayConfigs(JNIEnv* env, jclass clazz,
     }
 
     return configArray;
+}
+
+static jboolean nativeSetAllowedDisplayConfigs(JNIEnv* env, jclass clazz,
+        jobject tokenObj, jintArray configArray) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+    if (token == nullptr) return JNI_FALSE;
+
+    std::vector<int32_t> allowedConfigs;
+    jsize configArraySize = env->GetArrayLength(configArray);
+    allowedConfigs.reserve(configArraySize);
+
+    jint* configArrayElements = env->GetIntArrayElements(configArray, 0);
+    for (int i = 0; i < configArraySize; i++) {
+        allowedConfigs.push_back(configArrayElements[i]);
+    }
+    env->ReleaseIntArrayElements(configArray, configArrayElements, 0);
+
+    size_t result = SurfaceComposerClient::setAllowedDisplayConfigs(token, allowedConfigs);
+    return result == NO_ERROR ? JNI_TRUE : JNI_FALSE;
 }
 
 static jint nativeGetActiveConfig(JNIEnv* env, jclass clazz, jobject tokenObj) {
@@ -1189,6 +1213,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetActiveConfig },
     {"nativeSetActiveConfig", "(Landroid/os/IBinder;I)Z",
             (void*)nativeSetActiveConfig },
+    {"nativeSetAllowedDisplayConfigs", "(Landroid/os/IBinder;[I)Z",
+            (void*)nativeSetAllowedDisplayConfigs },
     {"nativeGetDisplayColorModes", "(Landroid/os/IBinder;)[I",
             (void*)nativeGetDisplayColorModes},
     {"nativeGetDisplayNativePrimaries", "(Landroid/os/IBinder;)Landroid/view/SurfaceControl$DisplayPrimaries;",
@@ -1227,7 +1253,7 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetOverrideScalingMode },
     {"nativeGetHandle", "(J)Landroid/os/IBinder;",
             (void*)nativeGetHandle },
-    {"nativeScreenshot", "(Landroid/os/IBinder;Landroid/graphics/Rect;IIZI)Landroid/graphics/GraphicBuffer;",
+    {"nativeScreenshot", "(Landroid/os/IBinder;Landroid/graphics/Rect;IIZIZ)Landroid/graphics/GraphicBuffer;",
             (void*)nativeScreenshot },
     {"nativeCaptureLayers", "(Landroid/os/IBinder;Landroid/graphics/Rect;F)Landroid/graphics/GraphicBuffer;",
             (void*)nativeCaptureLayers },
@@ -1246,7 +1272,9 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             "(Landroid/os/IBinder;JJ)Landroid/hardware/display/DisplayedContentSample;",
             (void*)nativeGetDisplayedContentSample },
     {"nativeSetGeometry", "(JJLandroid/graphics/Rect;Landroid/graphics/Rect;J)V",
-            (void*)nativeSetGeometry }
+            (void*)nativeSetGeometry },
+    {"nativeSyncInputWindows", "(J)V",
+            (void*)nativeSyncInputWindows }
 };
 
 int register_android_view_SurfaceControl(JNIEnv* env)

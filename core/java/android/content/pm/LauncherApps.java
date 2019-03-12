@@ -514,7 +514,8 @@ public class LauncherApps {
 
     /**
      * Retrieves a list of launchable activities that match {@link Intent#ACTION_MAIN} and
-     * {@link Intent#CATEGORY_LAUNCHER}, for a specified user.
+     * {@link Intent#CATEGORY_LAUNCHER}, for a specified user. Result may include
+     * synthesized activities like app details Activity injected by system.
      *
      * @param packageName The specific package to query. If null, it checks all installed packages
      *            in the profile.
@@ -794,7 +795,8 @@ public class LauncherApps {
      * @throws SecurityException when the caller is not the active launcher.
      */
     @Nullable
-    public LauncherApps.AppUsageLimit getAppUsageLimit(String packageName, UserHandle user) {
+    public LauncherApps.AppUsageLimit getAppUsageLimit(@NonNull String packageName,
+            @NonNull UserHandle user) {
         try {
             return mService.getAppUsageLimit(mContext.getPackageName(), packageName, user);
         } catch (RemoteException re) {

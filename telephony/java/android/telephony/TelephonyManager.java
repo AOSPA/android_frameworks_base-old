@@ -1366,6 +1366,26 @@ public class TelephonyManager {
      * Intent sent when an error occurs that debug tools should log and possibly take further
      * action such as capturing vendor-specific logs.
      *
+     * A privileged application that reads these events should take appropriate vendor-specific
+     * action to record the event and collect further information to assist in analysis, debugging,
+     * and resolution of any associated issue.
+     *
+     * <p>This event should not be used for generic logging or diagnostic monitoring purposes and
+     * should generally be sent at a low rate. Instead, this mechanism should be used for the
+     * framework to notify a debugging application that an event (such as a bug) has occured
+     * within the framework if that event should trigger the collection and preservation of other
+     * more detailed device state for debugging.
+     *
+     * <p>At most one application can receive these events and should register a receiver in
+     * in the application manifest. For performance reasons, if no application to receive these
+     * events is detected at boot, then these events will not be sent.
+     *
+     * <p>Each event will include an {@link EXTRA_DEBUG_EVENT_ID} that will uniquely identify the
+     * event that has occurred. Each event will be sent to the diagnostic monitor only once per
+     * boot cycle (as another optimization).
+     *
+     * @see #EXTRA_DEBUG_EVENT_ID
+     * @see #EXTRA_DEBUG_EVENT_DESCRIPTION
      * @hide
      */
     @SystemApi
@@ -1373,21 +1393,23 @@ public class TelephonyManager {
     public static final String ACTION_DEBUG_EVENT = "android.telephony.action.DEBUG_EVENT";
 
     /**
-     * An arbitrary ParcelUuid which should be consistent for each occurrence of the same event.
+     * An arbitrary ParcelUuid which should be consistent for each occurrence of a DebugEvent.
      *
-     * This field must be included in all events.
+     * This field must be included in all {@link ACTION_DEBUG_EVENT} events.
      *
+     * @see #ACTION_DEBUG_EVENT
      * @hide
      */
     @SystemApi
     public static final String EXTRA_DEBUG_EVENT_ID = "android.telephony.extra.DEBUG_EVENT_ID";
 
     /**
-     * A freeform string description of the event.
+     * A freeform string description of the DebugEvent.
      *
-     * This field is optional for all events and as a guideline should not exceed 80 characters
-     * and should be as short as possible to convey the essence of the event.
+     * This field is optional for all {@link ACTION_DEBUG_EVENT}s, as a guideline should not
+     * exceed 80 characters, and should be as short as possible to convey the essence of the event.
      *
+     * @see #ACTION_DEBUG_EVENT
      * @hide
      */
     @SystemApi
@@ -8671,24 +8693,26 @@ public class TelephonyManager {
 
 
     /**
-     * Returns a well-formed IETF BCP 47 language tag representing the locale from the SIM, e.g,
-     * en-US. Returns {@code null} if no locale could be derived from subscriptions.
+     * Returns a locale based on the country and language from the SIM. Returns {@code null} if
+     * no locale could be derived from subscriptions.
      *
      * <p>Requires Permission:
      * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
      *
      * @see Locale#toLanguageTag()
-     * @see Locale#forLanguageTag(String)
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    @Nullable public String getSimLocale() {
+    @Nullable public Locale getSimLocale() {
         try {
             final ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.getSimLocaleForSubscriber(getSubId());
+                String languageTag = telephony.getSimLocaleForSubscriber(getSubId());
+                if (!TextUtils.isEmpty(languageTag)) {
+                    return Locale.forLanguageTag(languageTag);
+                }
             }
         } catch (RemoteException ex) {
         }
@@ -10312,24 +10336,25 @@ public class TelephonyManager {
 
     /**
      * Returns if the usage of multiple SIM cards at the same time to register on the network
-     * (e.g. Dual Standby or Dual Active) is restricted.
+     * (e.g. Dual Standby or Dual Active) is supported by the device and by the carrier.
      *
-     * @return true if usage of multiple SIMs is restricted, false otherwise.
+     * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
-     * @hide
+     * @return true if usage of multiple SIMs is supported, false otherwise.
      */
-    @SystemApi
-    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public boolean isMultisimCarrierRestricted() {
+    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    public boolean isMultisimSupported() {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                return service.isMultisimCarrierRestricted();
+                return service.isMultisimSupported(getOpPackageName());
             }
         } catch (RemoteException e) {
-            Log.e(TAG, "isMultisimCarrierRestricted RemoteException", e);
+            Log.e(TAG, "isMultisimSupported RemoteException", e);
         }
-        return true;
+        return false;
     }
 
     /**
@@ -10344,8 +10369,8 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void switchMultiSimConfig(int numOfSims) {
         //only proceed if multi-sim is not restricted
-        if (isMultisimCarrierRestricted()) {
-            Rlog.e(TAG, "switchMultiSimConfig not possible. It is restricted.");
+        if (!isMultisimSupported()) {
+            Rlog.e(TAG, "switchMultiSimConfig not possible. It is restricted or not supported.");
             return;
         }
 
@@ -10380,5 +10405,29 @@ public class TelephonyManager {
             Log.e(TAG, "isRebootRequiredForModemConfigChange RemoteException", e);
         }
         return false;
+    }
+
+    /**
+     * Retrieve the Radio HAL Version for this device.
+     *
+     * Get the HAL version for the IRadio interface for test purposes.
+     *
+     * @return a Pair of (major version, minor version) or (-1,-1) if unknown.
+     *
+     * @hide
+     */
+    @TestApi
+    public Pair<Integer, Integer> getRadioHalVersion() {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                int version = service.getRadioHalVersion();
+                if (version == -1) return new Pair<Integer, Integer>(-1, -1);
+                return new Pair<Integer, Integer>(version / 100, version % 100);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "getRadioHalVersion() RemoteException", e);
+        }
+        return new Pair<Integer, Integer>(-1, -1);
     }
 }

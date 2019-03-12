@@ -65,7 +65,8 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             new LongSparseArray<LocalDisplayDevice>();
 
     @SuppressWarnings("unused")  // Becomes active at instantiation time.
-    private HotplugDisplayEventReceiver mHotplugReceiver;
+    private PhysicalDisplayEventReceiver mPhysicalDisplayEventReceiver;
+
 
     // Called with SyncRoot lock held.
     public LocalDisplayAdapter(DisplayManagerService.SyncRoot syncRoot,
@@ -77,7 +78,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
     public void registerLocked() {
         super.registerLocked();
 
-        mHotplugReceiver = new HotplugDisplayEventReceiver(getHandler().getLooper());
+        mPhysicalDisplayEventReceiver = new PhysicalDisplayEventReceiver(getHandler().getLooper());
 
         for (long physicalDisplayId : SurfaceControl.getPhysicalDisplayIds()) {
             tryConnectDisplayLocked(physicalDisplayId);
@@ -749,8 +750,8 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         }
     }
 
-    private final class HotplugDisplayEventReceiver extends DisplayEventReceiver {
-        public HotplugDisplayEventReceiver(Looper looper) {
+    private final class PhysicalDisplayEventReceiver extends DisplayEventReceiver {
+        PhysicalDisplayEventReceiver(Looper looper) {
             super(looper, VSYNC_SOURCE_APP);
         }
 
@@ -762,6 +763,16 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 } else {
                     tryDisconnectDisplayLocked(physicalDisplayId);
                 }
+            }
+        }
+
+        @Override
+        public void onConfigChanged(long timestampNanos, long physicalDisplayId, int configId) {
+            if (DEBUG) {
+                Slog.d(TAG, "onConfigChanged("
+                        + "timestampNanos=" + timestampNanos
+                        + ", builtInDisplayId=" + physicalDisplayId
+                        + ", configId=" + configId + ")");
             }
         }
     }

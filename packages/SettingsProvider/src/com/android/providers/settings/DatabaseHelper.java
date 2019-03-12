@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -2339,9 +2340,6 @@ class DatabaseHelper extends SQLiteOpenHelper {
             stmt = db.compileStatement("INSERT OR IGNORE INTO secure(name,value)"
                     + " VALUES(?,?);");
 
-            loadStringSetting(stmt, Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
-                    R.string.def_location_providers_allowed);
-
             // Don't do this.  The SystemServer will initialize ADB_ENABLED from a
             // persistent system property instead.
             //loadSetting(stmt, Settings.Secure.ADB_ENABLED, 0);
@@ -2440,6 +2438,7 @@ class DatabaseHelper extends SQLiteOpenHelper {
 
     private void loadGlobalSettings(SQLiteDatabase db) {
         SQLiteStatement stmt = null;
+        final Resources res = mContext.getResources();
         try {
             stmt = db.compileStatement("INSERT OR IGNORE INTO global(name,value)"
                     + " VALUES(?,?);");
@@ -2468,7 +2467,7 @@ class DatabaseHelper extends SQLiteOpenHelper {
 
             loadSetting(stmt, Settings.Global.STAY_ON_WHILE_PLUGGED_IN,
                     ("1".equals(SystemProperties.get("ro.kernel.qemu")) ||
-                        mContext.getResources().getBoolean(R.bool.def_stay_on_while_plugged_in))
+                        res.getBoolean(R.bool.def_stay_on_while_plugged_in))
                      ? 1 : 0);
 
             loadIntegerSetting(stmt, Settings.Global.WIFI_SLEEP_POLICY,
@@ -2505,14 +2504,14 @@ class DatabaseHelper extends SQLiteOpenHelper {
             loadBooleanSetting(stmt, Settings.Global.DEVICE_PROVISIONED,
                     R.bool.def_device_provisioned);
 
-            final int maxBytes = mContext.getResources().getInteger(
+            final int maxBytes = res.getInteger(
                     R.integer.def_download_manager_max_bytes_over_mobile);
             if (maxBytes > 0) {
                 loadSetting(stmt, Settings.Global.DOWNLOAD_MAX_BYTES_OVER_MOBILE,
                         Integer.toString(maxBytes));
             }
 
-            final int recommendedMaxBytes = mContext.getResources().getInteger(
+            final int recommendedMaxBytes = res.getInteger(
                     R.integer.def_download_manager_recommended_max_bytes_over_mobile);
             if (recommendedMaxBytes > 0) {
                 loadSetting(stmt, Settings.Global.DOWNLOAD_RECOMMENDED_MAX_BYTES_OVER_MOBILE,
@@ -2609,6 +2608,19 @@ class DatabaseHelper extends SQLiteOpenHelper {
 
             loadSetting(stmt, Settings.Global.DEVICE_NAME, getDefaultDeviceName());
 
+            // Set default lid/cover behaviour according to legacy device config
+            final int defaultLidBehavior;
+            if (res.getBoolean(com.android.internal.R.bool.config_lidControlsSleep)) {
+                // WindowManagerFuncs.LID_BEHAVIOR_SLEEP
+                defaultLidBehavior = 1;
+            } else if (res.getBoolean(com.android.internal.R.bool.config_lidControlsScreenLock)) {
+                // WindowManagerFuncs.LID_BEHAVIOR_LOCK
+                defaultLidBehavior = 2;
+            } else {
+                // WindowManagerFuncs.LID_BEHAVIOR_NONE
+                defaultLidBehavior = 0;
+            }
+            loadSetting(stmt, Settings.Global.LID_BEHAVIOR, defaultLidBehavior);
 	    loadStringSetting(stmt, Settings.Global.NTP_SERVER_2,
                     R.string.def_ntp_server_2);
 

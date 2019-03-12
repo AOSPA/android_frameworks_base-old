@@ -1204,6 +1204,21 @@ public final class Settings {
     public static final String ACTION_DREAM_SETTINGS = "android.settings.DREAM_SETTINGS";
 
     /**
+     * Activity Action: Show Notification assistant settings.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @see android.service.notification.NotificationAssistantService
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_NOTIFICATION_ASSISTANT_SETTINGS =
+            "android.settings.NOTIFICATION_ASSISTANT_SETTINGS";
+
+    /**
      * Activity Action: Show Notification listener settings.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -7482,6 +7497,7 @@ public final class Settings {
          * @hide
          */
         @SystemApi
+        @TestApi
         public static final String DOZE_ALWAYS_ON = "doze_always_on";
 
         private static final Validator DOZE_ALWAYS_ON_VALIDATOR = BOOLEAN_VALIDATOR;
@@ -8145,6 +8161,7 @@ public final class Settings {
          *
          * @hide
          */
+        @TestApi
         public static final String ENABLED_VR_LISTENERS = "enabled_vr_listeners";
 
         private static final Validator ENABLED_VR_LISTENERS_VALIDATOR =
@@ -9044,7 +9061,6 @@ public final class Settings {
          * Whether applying ramping ringer on incoming phone call ringtone.
          * <p>1 = apply ramping ringer
          * <p>0 = do not apply ramping ringer
-         * @hide
          */
         public static final String APPLY_RAMPING_RINGER = "apply_ramping_ringer";
 
@@ -10806,6 +10822,7 @@ public final class Settings {
         *
         * @hide
         */
+       @TestApi
        public static final String OVERLAY_DISPLAY_DEVICES = "overlay_display_devices";
 
         /**
@@ -11426,7 +11443,7 @@ public final class Settings {
         /**
          * Feature flag to enable or disable the activity starts logging feature.
          * Type: int (0 for false, 1 for true)
-         * Default: 0
+         * Default: 1
          * @hide
          */
         public static final String ACTIVITY_STARTS_LOGGING_ENABLED
@@ -11532,6 +11549,7 @@ public final class Settings {
          * @hide
          * @see com.android.server.power.batterysaver.BatterySaverPolicy
          */
+        @TestApi
         public static final String BATTERY_SAVER_CONSTANTS = "battery_saver_constants";
 
         /**
@@ -11757,6 +11775,14 @@ public final class Settings {
         public static final String APP_IDLE_CONSTANTS = "app_idle_constants";
 
         /**
+         * Enable ART bytecode verification verifications for debuggable apps.
+         * 0 = disable, 1 = enable.
+         * @hide
+         */
+        public static final String ART_VERIFIER_VERIFY_DEBUGGABLE =
+                "art_verifier_verify_debuggable";
+
+        /**
          * Power manager specific settings.
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -11947,6 +11973,7 @@ public final class Settings {
          * bcast_deferral               (long)
          * bcast_deferral_decay_factor  (float)
          * bcast_deferral_floor         (long)
+         * bcast_allow_bg_activity_start_timeout    (long)
          * </pre>
          *
          * @hide
@@ -12417,6 +12444,14 @@ public final class Settings {
          * @hide
          */
         public static final String GAME_DRIVER_WHITELIST = "game_driver_whitelist";
+
+        /**
+         * List of libraries in sphal accessible by Game Driver
+         * The string is a list of library names, separated by colon.
+         * i.e. <lib1>:<lib2>:...:<libN>
+         * @hide
+         */
+        public static final String GAME_DRIVER_SPHAL_LIBRARIES = "game_driver_sphal_libraries";
 
         /**
          * Ordered GPU debug layer list for Vulkan
@@ -13054,6 +13089,15 @@ public final class Settings {
          * @hide
          */
         public static final String LTE_SERVICE_FORCED = "lte_service_forced";
+
+
+        /**
+         * Specifies the behaviour the lid triggers when closed
+         * <p>
+         * See WindowManagerPolicy.WindowManagerFuncs
+         * @hide
+         */
+        public static final String LID_BEHAVIOR = "lid_behavior";
 
         /**
          * Ephemeral app cookie max size in bytes.
@@ -14106,17 +14150,16 @@ public final class Settings {
         public static final String SHOW_TEMPERATURE_WARNING = "show_temperature_warning";
 
         /**
+         * Whether to show the usb high temperature alarm notification.
+         * @hide
+         */
+        public static final String SHOW_USB_TEMPERATURE_ALARM = "show_usb_temperature_alarm";
+
+        /**
          * Temperature at which the high temperature warning notification should be shown.
          * @hide
          */
         public static final String WARNING_TEMPERATURE = "warning_temperature";
-
-
-        /**
-         * USB Temperature at which the high temperature alarm notification should be shown.
-         * @hide
-         */
-        public static final String USB_ALARM_TEMPERATURE = "usb_alarm_temperature";
 
         /**
          * Whether the diskstats logging task is enabled/disabled.
@@ -14184,10 +14227,24 @@ public final class Settings {
          * Configuration flags for SQLite Compatibility WAL. Encoded as a key-value list, separated
          * by commas. E.g.: compatibility_wal_supported=true, wal_syncmode=OFF
          *
-         * Supported keys:
-         * compatibility_wal_supported      (boolean)
-         * wal_syncmode       (String)
-         * truncate_size      (int)
+         * Supported keys:<br/>
+         * <li>
+         * <ul> {@code legacy_compatibility_wal_enabled} : A {code boolean} flag that determines
+         * whether or not "compatibility WAL" mode is enabled by default. This is a legacy flag
+         * and is honoured on Android Q and higher. This flag will be removed in a future release.
+         * </ul>
+         * <ul> {@code wal_syncmode} : A {@code String} representing the synchronization mode to use
+         * when WAL is enabled, either via {@code legacy_compatibility_wal_enabled} or using the
+         * obsolete {@code compatibility_wal_supported} flag.
+         * </ul>
+         * <ul> {@code truncate_size} : A {@code int} flag that specifies the truncate size of the
+         * WAL journal.
+         * </ul>
+         * <ul> {@code compatibility_wal_supported} : A {code boolean} flag that specifies whether
+         * the legacy "compatibility WAL" mode is enabled by default. This flag is obsolete and is
+         * only supported on Android Pie.
+         * </ul>
+         * </li>
          *
          * @hide
          */

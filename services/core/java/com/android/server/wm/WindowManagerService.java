@@ -210,6 +210,7 @@ import android.view.IWindowSession;
 import android.view.IWindowSessionCallback;
 import android.view.InputChannel;
 import android.view.InputDevice;
+import android.view.InputEvent;
 import android.view.InputEventReceiver;
 import android.view.InsetsState;
 import android.view.KeyEvent;
@@ -372,6 +373,8 @@ public class WindowManagerService extends IWindowManager.Stub
     private static final int WINDOW_ANIMATION_SCALE = 0;
     private static final int TRANSITION_ANIMATION_SCALE = 1;
     private static final int ANIMATION_DURATION_SCALE = 2;
+
+    private static final int ANIMATION_COMPLETED_TIMEOUT_MS = 5000;
 
     final WindowTracing mWindowTracing;
 
@@ -818,8 +821,9 @@ public class WindowManagerService extends IWindowManager.Stub
 
     SurfaceBuilderFactory mSurfaceBuilderFactory = SurfaceControl.Builder::new;
     TransactionFactory mTransactionFactory = SurfaceControl.Transaction::new;
+    SurfaceFactory mSurfaceFactory = Surface::new;
 
-    private final SurfaceControl.Transaction mTransaction = mTransactionFactory.make();
+    private final SurfaceControl.Transaction mTransaction;
 
     static void boostPriorityForLockedSection() {
         sThreadPriorityBooster.boost();
@@ -913,9 +917,21 @@ public class WindowManagerService extends IWindowManager.Stub
     public static WindowManagerService main(final Context context, final InputManagerService im,
             final boolean showBootMsgs, final boolean onlyCore, WindowManagerPolicy policy,
             ActivityTaskManagerService atm) {
+        return main(context, im, showBootMsgs, onlyCore, policy, atm,
+                SurfaceControl.Transaction::new);
+    }
+
+    /**
+     * Creates and returns an instance of the WindowManagerService. This call allows the caller
+     * to override the {@link TransactionFactory} to stub functionality under test.
+     */
+    @VisibleForTesting
+    public static WindowManagerService main(final Context context, final InputManagerService im,
+            final boolean showBootMsgs, final boolean onlyCore, WindowManagerPolicy policy,
+            ActivityTaskManagerService atm, TransactionFactory transactionFactory) {
         DisplayThread.getHandler().runWithScissors(() ->
                 sInstance = new WindowManagerService(context, im, showBootMsgs, onlyCore, policy,
-                        atm), 0);
+                        atm, transactionFactory), 0);
         return sInstance;
     }
 
@@ -937,7 +953,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private WindowManagerService(Context context, InputManagerService inputManager,
             boolean showBootMsgs, boolean onlyCore, WindowManagerPolicy policy,
-            ActivityTaskManagerService atm) {
+            ActivityTaskManagerService atm, TransactionFactory transactionFactory) {
         installLock(this, INDEX_WINDOW);
         mGlobalLock = atm.getGlobalLock();
         mAtmService = atm;
@@ -966,6 +982,9 @@ public class WindowManagerService extends IWindowManager.Stub
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
         mDisplayWindowSettings = new DisplayWindowSettings(this);
 
+
+        mTransactionFactory = transactionFactory;
+        mTransaction = mTransactionFactory.make();
         mPolicy = policy;
         mAnimator = new WindowAnimator(this);
         mRoot = new RootWindowContainer(this);
@@ -3523,14 +3542,15 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    void setRotateForApp(int displayId, boolean enabled) {
+    void setRotateForApp(int displayId,
+            @DisplayRotation.FixedToUserRotation int fixedToUserRotation) {
         synchronized (mGlobalLock) {
             final DisplayContent display = mRoot.getDisplayContent(displayId);
             if (display == null) {
                 Slog.w(TAG, "Trying to set rotate for app for a missing display.");
                 return;
             }
-            display.getDisplayRotation().setFixedToUserRotation(enabled);
+            display.getDisplayRotation().setFixedToUserRotation(fixedToUserRotation);
         }
     }
 
@@ -5789,6 +5809,11 @@ public class WindowManagerService extends IWindowManager.Stub
         mRoot.dumpTokens(pw, dumpAll);
     }
 
+    private void dumpTraceStatus(PrintWriter pw) {
+        pw.println("WINDOW MANAGER TRACE (dumpsys window trace)");
+        pw.print(mWindowTracing.getStatus() + "\n");
+    }
+
     private void dumpSessionsLocked(PrintWriter pw, boolean dumpAll) {
         pw.println("WINDOW MANAGER SESSIONS (dumpsys window sessions)");
         for (int i=0; i<mSessions.size(); i++) {
@@ -6106,7 +6131,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 pw.println("    d[isplays]: active display contents");
                 pw.println("    t[okens]: token list");
                 pw.println("    w[indows]: window list");
-                pw.println("    trace: write Winscope trace to file");
+                pw.println("    trace: print trace status and write Winscope trace to file");
                 pw.println("  cmd may also be a NAME to dump windows.  NAME may");
                 pw.println("    be a partial substring in a window name, a");
                 pw.println("    Window hex object identifier, or");
@@ -6181,6 +6206,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 return;
             } else if ("trace".equals(cmd)) {
+                dumpTraceStatus(pw);
                 synchronized (mGlobalLock) {
                     mWindowTracing.writeTraceToFile();
                 }
@@ -6197,43 +6223,49 @@ public class WindowManagerService extends IWindowManager.Stub
 
         synchronized (mGlobalLock) {
             pw.println();
+            final String separator = "---------------------------------------------------------"
+                    + "----------------------";
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             dumpLastANRLocked(pw);
             pw.println();
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             dumpPolicyLocked(pw, args, dumpAll);
             pw.println();
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             dumpAnimatorLocked(pw, args, dumpAll);
             pw.println();
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             dumpSessionsLocked(pw, dumpAll);
             pw.println();
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             mRoot.dumpDisplayContents(pw);
             pw.println();
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             dumpTokensLocked(pw, dumpAll);
             pw.println();
             if (dumpAll) {
-                pw.println("-------------------------------------------------------------------------------");
+                pw.println(separator);
             }
             dumpWindowsLocked(pw, dumpAll, null);
+            if (dumpAll) {
+                pw.println(separator);
+            }
+            dumpTraceStatus(pw);
         }
     }
 
@@ -7418,6 +7450,43 @@ public class WindowManagerService extends IWindowManager.Stub
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
+        }
+    }
+
+    @Override
+    public boolean injectInputAfterTransactionsApplied(InputEvent ev, int mode) {
+        waitForAnimationsToComplete();
+
+        synchronized (mGlobalLock) {
+            mWindowPlacerLocked.performSurfacePlacementIfScheduled();
+        }
+
+        new SurfaceControl.Transaction().syncInputWindows().apply(true);
+
+        return mInputManager.injectInputEvent(ev, mode);
+    }
+
+    private void waitForAnimationsToComplete() {
+        synchronized (mGlobalLock) {
+            long timeoutRemaining = ANIMATION_COMPLETED_TIMEOUT_MS;
+            while (mRoot.isSelfOrChildAnimating() && timeoutRemaining > 0) {
+                long startTime = System.currentTimeMillis();
+                try {
+                    mGlobalLock.wait(timeoutRemaining);
+                } catch (InterruptedException e) {
+                }
+                timeoutRemaining -= (System.currentTimeMillis() - startTime);
+            }
+
+            if (mRoot.isSelfOrChildAnimating()) {
+                Log.w(TAG, "Timed out waiting for animations to complete.");
+            }
+        }
+    }
+
+    void onAnimationFinished() {
+        synchronized (mGlobalLock) {
+            mGlobalLock.notifyAll();
         }
     }
 }

@@ -17,6 +17,7 @@
 package com.android.server.autofill;
 
 import static android.service.autofill.AutofillFieldClassificationService.EXTRA_SCORES;
+import static android.service.autofill.FillRequest.FLAG_AUGMENTED_AUTOFILL_REQUEST;
 import static android.service.autofill.FillRequest.FLAG_MANUAL_REQUEST;
 import static android.service.autofill.FillRequest.INVALID_REQUEST_ID;
 import static android.view.autofill.AutofillManager.ACTION_START_SESSION;
@@ -527,6 +528,16 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
      */
     @GuardedBy("mLock")
     private void requestNewFillResponseLocked(int flags) {
+
+        if ((flags & FLAG_AUGMENTED_AUTOFILL_REQUEST) != 0) {
+            // TODO(b/122858578): log metrics
+            if (sVerbose) {
+                Slog.v(TAG, "requestNewFillResponse(): triggering augmented autofill instead");
+            }
+            triggerAugmentedAutofillLocked();
+            return;
+        }
+
         int requestId;
 
         do {
@@ -2613,12 +2624,24 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     + " when server returned null for session " + this.id);
         }
 
+        final boolean isWhitelisted = mService
+                .isWhitelistedForAugmentedAutofillLocked(mComponentName);
+
         final String historyItem =
                 "aug:id=" + id + " u=" + uid + " m=" + mode
                 + " a=" + ComponentName.flattenToShortString(mComponentName)
                 + " f=" + mCurrentViewId
-                + " s=" + remoteService.getComponentName();
+                + " s=" + remoteService.getComponentName()
+                + " w=" + isWhitelisted;
         mService.getMaster().logRequestLocked(historyItem);
+
+        if (!isWhitelisted) {
+            if (sVerbose) {
+                Slog.v(TAG, mComponentName.toShortString() + " is not whitelisted for "
+                        + "augmented autofill");
+            }
+            return null;
+        }
 
         final AutofillValue currentValue = mViewStates.get(mCurrentViewId).getCurrentValue();
 

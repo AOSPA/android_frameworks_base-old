@@ -20,11 +20,16 @@ import static android.system.OsConstants.POLLIN;
 
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
+import android.os.SystemClock;
+import android.os.Trace;
+import android.provider.DeviceConfig;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.StructPollfd;
 import android.util.Log;
 import android.util.Slog;
+
+import dalvik.system.ZygoteHooks;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -38,7 +43,7 @@ import java.util.ArrayList;
  * Provides functions to wait for commands on a UNIX domain socket, and fork
  * off child processes that inherit the initial state of the VM.%
  *
- * Please see {@link ZygoteConnection.Arguments} for documentation on the
+ * Please see {@link ZygoteArguments} for documentation on the
  * client protocol.
  */
 class ZygoteServer {
@@ -46,9 +51,55 @@ class ZygoteServer {
     public static final String TAG = "ZygoteServer";
 
     /**
+     * The maximim value that will be accepted from the BLASTULA_POOL_SIZE_MAX device property.
+     * is a mirror of BLASTULA_POOL_MAX_LIMIT found in com_android_internal_os_Zygote.cpp.
+     */
+    private static final int BLASTULA_POOL_SIZE_MAX_LIMIT = 100;
+
+    /**
+     * The minimum value that will be accepted from the BLASTULA_POOL_SIZE_MIN device property.
+     */
+    private static final int BLASTULA_POOL_SIZE_MIN_LIMIT = 1;
+
+    /** The default value used for the BLASTULA_POOL_SIZE_MAX device property */
+    private static final String BLASTULA_POOL_SIZE_MAX_DEFAULT = "10";
+
+    /** The default value used for the BLASTULA_POOL_SIZE_MIN device property */
+    private static final String BLASTULA_POOL_SIZE_MIN_DEFAULT = "1";
+
+    /**
+     * Indicates if this Zygote server can support a blastula pool.  Currently this should only be
+     * true for the primary and secondary Zygotes, and not the App Zygotes or the WebView Zygote.
+     *
+     * TODO (chriswailes): Make this an explicit argument to the constructor
+     */
+
+    private final boolean mBlastulaPoolSupported;
+
+    /**
+     * If the blastula pool should be created and used to start applications.
+     *
+     * Setting this value to false will disable the creation, maintenance, and use of the blastula
+     * pool.  When the blastula pool is disabled the application lifecycle will be identical to
+     * previous versions of Android.
+     */
+    private boolean mBlastulaPoolEnabled = false;
+
+    /**
      * Listening socket that accepts new server connections.
      */
     private LocalServerSocket mZygoteSocket;
+
+    /**
+     * The name of the blastula socket to use if the blastula pool is enabled.
+     */
+    private LocalServerSocket mBlastulaPoolSocket;
+
+    /**
+     * File descriptor used for communication between the signal handler and the ZygoteServer poll
+     * loop.
+     * */
+    private FileDescriptor mBlastulaPoolEventFD;
 
     /**
      * Whether or not mZygoteSocket's underlying FD should be closed directly.
@@ -64,25 +115,63 @@ class ZygoteServer {
      */
     private boolean mIsForkChild;
 
-    ZygoteServer() { }
+    /**
+     * The runtime-adjustable maximum Blastula pool size.
+     */
+    private int mBlastulaPoolSizeMax = 0;
+
+    /**
+     * The runtime-adjustable minimum Blastula pool size.
+     */
+    private int mBlastulaPoolSizeMin = 0;
+
+    /**
+     * The runtime-adjustable value used to determine when to re-fill the
+     * blastula pool.  The pool will be re-filled when
+     * (sBlastulaPoolMax - gBlastulaPoolCount) >= sBlastulaPoolRefillThreshold.
+     */
+    private int mBlastulaPoolRefillThreshold = 0;
+
+    ZygoteServer() {
+        mBlastulaPoolEventFD = null;
+        mZygoteSocket = null;
+        mBlastulaPoolSocket = null;
+
+        mBlastulaPoolSupported = false;
+    }
+
+    /**
+     * Initialize the Zygote server with the Zygote server socket, blastula pool server socket,
+     * and blastula pool event FD.
+     *
+     * @param isPrimaryZygote  If this is the primary Zygote or not.
+     */
+    ZygoteServer(boolean isPrimaryZygote) {
+        mBlastulaPoolEventFD = Zygote.getBlastulaPoolEventFD();
+
+        if (isPrimaryZygote) {
+            mZygoteSocket = Zygote.createManagedSocketFromInitSocket(Zygote.PRIMARY_SOCKET_NAME);
+            mBlastulaPoolSocket =
+                    Zygote.createManagedSocketFromInitSocket(
+                            Zygote.BLASTULA_POOL_PRIMARY_SOCKET_NAME);
+        } else {
+            mZygoteSocket = Zygote.createManagedSocketFromInitSocket(Zygote.SECONDARY_SOCKET_NAME);
+            mBlastulaPoolSocket =
+                    Zygote.createManagedSocketFromInitSocket(
+                            Zygote.BLASTULA_POOL_SECONDARY_SOCKET_NAME);
+        }
+
+        fetchBlastulaPoolPolicyProps();
+
+        mBlastulaPoolSupported = true;
+    }
 
     void setForkChild() {
         mIsForkChild = true;
     }
 
-    /**
-     * Creates a managed object representing the Zygote socket that has already
-     * been initialized and bound by init.
-     *
-     * TODO (chriswailes): Move the name selection logic into this function.
-     *
-     * @throws RuntimeException when open fails
-     */
-    void createZygoteSocket(String socketName) {
-        if (mZygoteSocket == null) {
-            mZygoteSocket = Zygote.createManagedSocketFromInitSocket(socketName);
-            mCloseSocketFd = true;
-        }
+    public boolean isBlastulaPoolEnabled() {
+        return mBlastulaPoolEnabled;
     }
 
     /**
@@ -151,6 +240,124 @@ class ZygoteServer {
         return mZygoteSocket.getFileDescriptor();
     }
 
+    private void fetchBlastulaPoolPolicyProps() {
+        if (mBlastulaPoolSupported) {
+            final String blastulaPoolSizeMaxPropString =
+                    Zygote.getSystemProperty(
+                            DeviceConfig.RuntimeNative.BLASTULA_POOL_SIZE_MAX,
+                            BLASTULA_POOL_SIZE_MAX_DEFAULT);
+
+            if (!blastulaPoolSizeMaxPropString.isEmpty()) {
+                mBlastulaPoolSizeMax =
+                        Integer.min(
+                                Integer.parseInt(blastulaPoolSizeMaxPropString),
+                                BLASTULA_POOL_SIZE_MAX_LIMIT);
+            }
+
+            final String blastulaPoolSizeMinPropString =
+                    Zygote.getSystemProperty(
+                            DeviceConfig.RuntimeNative.BLASTULA_POOL_SIZE_MIN,
+                            BLASTULA_POOL_SIZE_MIN_DEFAULT);
+
+            if (!blastulaPoolSizeMinPropString.isEmpty()) {
+                mBlastulaPoolSizeMin =
+                        Integer.max(
+                                Integer.parseInt(blastulaPoolSizeMinPropString),
+                                BLASTULA_POOL_SIZE_MIN_LIMIT);
+            }
+
+            final String blastulaPoolRefillThresholdPropString =
+                    Zygote.getSystemProperty(
+                            DeviceConfig.RuntimeNative.BLASTULA_POOL_REFILL_THRESHOLD,
+                            Integer.toString(mBlastulaPoolSizeMax / 2));
+
+            if (!blastulaPoolRefillThresholdPropString.isEmpty()) {
+                mBlastulaPoolRefillThreshold =
+                        Integer.min(
+                                Integer.parseInt(blastulaPoolRefillThresholdPropString),
+                                mBlastulaPoolSizeMax);
+            }
+        }
+    }
+
+    private long mLastPropCheckTimestamp = 0;
+
+    private void fetchBlastulaPoolPolicyPropsWithMinInterval() {
+        final long currentTimestamp = SystemClock.elapsedRealtime();
+
+        if (currentTimestamp - mLastPropCheckTimestamp >= Zygote.PROPERTY_CHECK_INTERVAL) {
+            fetchBlastulaPoolPolicyProps();
+            mLastPropCheckTimestamp = currentTimestamp;
+        }
+    }
+
+    /**
+     * Checks to see if the current policy says that pool should be refilled, and spawns new
+     * blastulas if necessary.
+     *
+     * @param sessionSocketRawFDs  Anonymous session sockets that are currently open
+     * @return In the Zygote process this function will always return null; in blastula processes
+     *         this function will return a Runnable object representing the new application that is
+     *         passed up from blastulaMain.
+     */
+
+    Runnable fillBlastulaPool(int[] sessionSocketRawFDs) {
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Zygote:FillBlastulaPool");
+
+        int blastulaPoolCount = Zygote.getBlastulaPoolCount();
+        int numBlastulasToSpawn = mBlastulaPoolSizeMax - blastulaPoolCount;
+
+        if (blastulaPoolCount < mBlastulaPoolSizeMin
+                || numBlastulasToSpawn >= mBlastulaPoolRefillThreshold) {
+
+            // Disable some VM functionality and reset some system values
+            // before forking.
+            ZygoteHooks.preFork();
+            Zygote.resetNicePriority();
+
+            while (blastulaPoolCount++ < mBlastulaPoolSizeMax) {
+                Runnable caller = Zygote.forkBlastula(mBlastulaPoolSocket, sessionSocketRawFDs);
+
+                if (caller != null) {
+                    return caller;
+                }
+            }
+
+            // Re-enable runtime services for the Zygote.  Blastula services
+            // are re-enabled in specializeBlastula.
+            ZygoteHooks.postForkCommon();
+
+            Log.i("zygote",
+                    "Filled the blastula pool. New blastulas: " + numBlastulasToSpawn);
+        }
+
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+
+        return null;
+    }
+
+    /**
+     * Empty or fill the blastula pool as dictated by the current and new blastula pool statuses.
+     */
+    Runnable setBlastulaPoolStatus(boolean newStatus, LocalSocket sessionSocket) {
+        if (!mBlastulaPoolSupported) {
+            Log.w(TAG,
+                    "Attempting to enable a blastula pool for a Zygote that doesn't support it.");
+            return null;
+        } else if (mBlastulaPoolEnabled == newStatus) {
+            return null;
+        }
+
+        mBlastulaPoolEnabled = newStatus;
+
+        if (newStatus) {
+            return fillBlastulaPool(new int[]{ sessionSocket.getFileDescriptor().getInt$() });
+        } else {
+            Zygote.emptyBlastulaPool();
+            return null;
+        }
+    }
+
     /**
      * Runs the zygote process's select loop. Accepts new connections as
      * they happen, and reads commands from connections one spawn-request's
@@ -164,12 +371,28 @@ class ZygoteServer {
         peers.add(null);
 
         while (true) {
-            int[] blastulaPipeFDs = Zygote.getBlastulaPipeFDs();
+            fetchBlastulaPoolPolicyPropsWithMinInterval();
 
-            // Space for all of the socket FDs, the Blastula Pool Event FD, and
-            // all of the open blastula read pipe FDs.
-            StructPollfd[] pollFDs =
-                new StructPollfd[socketFDs.size() + 1 + blastulaPipeFDs.length];
+            int[] blastulaPipeFDs = null;
+            StructPollfd[] pollFDs = null;
+
+            // Allocate enough space for the poll structs, taking into account
+            // the state of the blastula pool for this Zygote (could be a
+            // regular Zygote, a WebView Zygote, or an AppZygote).
+            if (mBlastulaPoolEnabled) {
+                blastulaPipeFDs = Zygote.getBlastulaPipeFDs();
+                pollFDs = new StructPollfd[socketFDs.size() + 1 + blastulaPipeFDs.length];
+            } else {
+                pollFDs = new StructPollfd[socketFDs.size()];
+            }
+
+            /*
+             * For reasons of correctness the blastula pool pipe and event FDs
+             * must be processed before the session and server sockets.  This
+             * is to ensure that the blastula pool accounting information is
+             * accurate when handling other requests like API blacklist
+             * exemptions.
+             */
 
             int pollIndex = 0;
             for (FileDescriptor socketFD : socketFDs) {
@@ -180,19 +403,22 @@ class ZygoteServer {
             }
 
             final int blastulaPoolEventFDIndex = pollIndex;
-            pollFDs[pollIndex] = new StructPollfd();
-            pollFDs[pollIndex].fd = Zygote.sBlastulaPoolEventFD;
-            pollFDs[pollIndex].events = (short) POLLIN;
-            ++pollIndex;
 
-            for (int blastulaPipeFD : blastulaPipeFDs) {
-                FileDescriptor managedFd = new FileDescriptor();
-                managedFd.setInt$(blastulaPipeFD);
-
+            if (mBlastulaPoolEnabled) {
                 pollFDs[pollIndex] = new StructPollfd();
-                pollFDs[pollIndex].fd = managedFd;
+                pollFDs[pollIndex].fd = mBlastulaPoolEventFD;
                 pollFDs[pollIndex].events = (short) POLLIN;
                 ++pollIndex;
+
+                for (int blastulaPipeFD : blastulaPipeFDs) {
+                    FileDescriptor managedFd = new FileDescriptor();
+                    managedFd.setInt$(blastulaPipeFD);
+
+                    pollFDs[pollIndex] = new StructPollfd();
+                    pollFDs[pollIndex].fd = managedFd;
+                    pollFDs[pollIndex].events = (short) POLLIN;
+                    ++pollIndex;
+                }
             }
 
             try {
@@ -200,6 +426,8 @@ class ZygoteServer {
             } catch (ErrnoException ex) {
                 throw new RuntimeException("poll failed", ex);
             }
+
+            boolean blastulaPoolFDRead = false;
 
             while (--pollIndex >= 0) {
                 if ((pollFDs[pollIndex].revents & POLLIN) == 0) {
@@ -220,6 +448,7 @@ class ZygoteServer {
                         ZygoteConnection connection = peers.get(pollIndex);
                         final Runnable command = connection.processOneCommand(this);
 
+                        // TODO (chriswailes): Is this extra check necessary?
                         if (mIsForkChild) {
                             // We're in the child. We should always have a command to run at this
                             // stage if processOneCommand hasn't called "exec".
@@ -310,17 +539,22 @@ class ZygoteServer {
                         Zygote.removeBlastulaTableEntry((int) messagePayload);
                     }
 
-                    int[] sessionSocketRawFDs =
-                            socketFDs.subList(1, socketFDs.size())
+                    blastulaPoolFDRead = true;
+                }
+            }
+
+            // Check to see if the blastula pool needs to be refilled.
+            if (blastulaPoolFDRead) {
+                int[] sessionSocketRawFDs =
+                        socketFDs.subList(1, socketFDs.size())
                                 .stream()
                                 .mapToInt(fd -> fd.getInt$())
                                 .toArray();
 
-                    final Runnable command = Zygote.fillBlastulaPool(sessionSocketRawFDs);
+                final Runnable command = fillBlastulaPool(sessionSocketRawFDs);
 
-                    if (command != null) {
-                        return command;
-                    }
+                if (command != null) {
+                    return command;
                 }
             }
         }

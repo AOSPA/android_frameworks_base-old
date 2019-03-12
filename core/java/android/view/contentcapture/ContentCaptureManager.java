@@ -26,6 +26,7 @@ import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UiThread;
 import android.content.ComponentName;
+import android.content.ContentCaptureOptions;
 import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
@@ -128,6 +129,14 @@ public final class ContentCaptureManager {
     @TestApi
     public static final String DEVICE_CONFIG_PROPERTY_LOGGING_LEVEL = "logging_level";
 
+    /**
+     * Sets how long (in ms) the service is bound while idle.
+     *
+     * <p>Use {@code 0} to keep it permanently bound.
+     *
+     * @hide
+     */
+    public static final String DEVICE_CONFIG_PROPERTY_IDLE_UNBIND_TIMEOUT = "idle_unbind_timeout";
 
     /** @hide */
     @TestApi
@@ -150,6 +159,16 @@ public final class ContentCaptureManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface LoggingLevel {}
 
+
+    /** @hide */
+    public static final int DEFAULT_MAX_BUFFER_SIZE = 100;
+    /** @hide */
+    public static final int DEFAULT_IDLE_FLUSHING_FREQUENCY_MS = 5_000;
+    /** @hide */
+    public static final int DEFAULT_TEXT_CHANGE_FLUSHING_FREQUENCY_MS = 1_000;
+    /** @hide */
+    public static final int DEFAULT_LOG_HISTORY_SIZE = 10;
+
     private final Object mLock = new Object();
 
     @NonNull
@@ -157,6 +176,9 @@ public final class ContentCaptureManager {
 
     @NonNull
     private final IContentCaptureManager mService;
+
+    @NonNull
+    final ContentCaptureOptions mOptions;
 
     // Flags used for starting session.
     @GuardedBy("mLock")
@@ -172,14 +194,12 @@ public final class ContentCaptureManager {
 
     /** @hide */
     public ContentCaptureManager(@NonNull Context context,
-            @NonNull IContentCaptureManager service) {
+            @NonNull IContentCaptureManager service, @NonNull ContentCaptureOptions options) {
         mContext = Preconditions.checkNotNull(context, "context cannot be null");
         mService = Preconditions.checkNotNull(service, "service cannot be null");
+        mOptions = Preconditions.checkNotNull(options, "options cannot be null");
 
-        // TODO(b/123096662): right now we're reading the device config values here, but ideally
-        // it should be read on ContentCaptureManagerService and passed back when the activity
-        // started.
-        ContentCaptureHelper.setLoggingLevel();
+        ContentCaptureHelper.setLoggingLevel(mOptions.loggingLevel);
 
         if (sVerbose) Log.v(TAG, "Constructor for " + context.getPackageName());
 
@@ -212,7 +232,7 @@ public final class ContentCaptureManager {
 
     /** @hide */
     @UiThread
-    public void onActivityStarted(@NonNull IBinder applicationToken,
+    public void onActivityCreated(@NonNull IBinder applicationToken,
             @NonNull ComponentName activityComponent, int flags) {
         synchronized (mLock) {
             mFlags |= flags;
@@ -222,7 +242,19 @@ public final class ContentCaptureManager {
 
     /** @hide */
     @UiThread
-    public void onActivityStopped() {
+    public void onActivityResumed() {
+        getMainContentCaptureSession().notifySessionLifecycle(/* started= */ true);
+    }
+
+    /** @hide */
+    @UiThread
+    public void onActivityPaused() {
+        getMainContentCaptureSession().notifySessionLifecycle(/* started= */ false);
+    }
+
+    /** @hide */
+    @UiThread
+    public void onActivityDestroyed() {
         getMainContentCaptureSession().destroy();
     }
 
@@ -327,39 +359,8 @@ public final class ContentCaptureManager {
             case RESULT_CODE_NOT_SERVICE:
                 throw new SecurityException("caller is not user's ContentCapture service");
             default:
-                throw new IllegalStateException("received invalid result: " + resultCode);
-        }
-    }
-
-    /**
-     * Sets whether Content Capture is enabled for the given user.
-     *
-     * @throws SecurityException if caller is not the app that owns the Content Capture service
-     * associated with the user.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    public void setContentCaptureFeatureEnabled(boolean enabled) {
-        if (sDebug) Log.d(TAG, "setContentCaptureFeatureEnabled(): setting to " + enabled);
-
-        final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
-        final int resultCode;
-        try {
-            mService.setContentCaptureFeatureEnabled(enabled, resultReceiver);
-            resultCode = resultReceiver.getIntResult();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-        switch (resultCode) {
-            case RESULT_CODE_TRUE:
-                // Our work is done here, in our void existance...
-                return;
-            case RESULT_CODE_NOT_SERVICE:
-                throw new SecurityException("caller is not user's ContentCapture service");
-            default:
-                throw new IllegalStateException("received invalid result: " + resultCode);
+                Log.wtf(TAG, "received invalid result: " + resultCode);
+                return false;
         }
     }
 
@@ -386,12 +387,13 @@ public final class ContentCaptureManager {
         synchronized (mLock) {
             pw.print(prefix2); pw.print("isContentCaptureEnabled(): ");
             pw.println(isContentCaptureEnabled());
-            pw.print(prefix); pw.print("Debug: "); pw.print(sDebug);
+            pw.print(prefix2); pw.print("Debug: "); pw.print(sDebug);
             pw.print(" Verbose: "); pw.println(sVerbose);
-            pw.print(prefix); pw.print("Context: "); pw.println(mContext);
-            pw.print(prefix); pw.print("User: "); pw.println(mContext.getUserId());
-            pw.print(prefix); pw.print("Service: "); pw.println(mService);
-            pw.print(prefix); pw.print("Flags: "); pw.println(mFlags);
+            pw.print(prefix2); pw.print("Context: "); pw.println(mContext);
+            pw.print(prefix2); pw.print("User: "); pw.println(mContext.getUserId());
+            pw.print(prefix2); pw.print("Service: "); pw.println(mService);
+            pw.print(prefix2); pw.print("Flags: "); pw.println(mFlags);
+            pw.print(prefix2); pw.print("Options: "); mOptions.dumpShort(pw); pw.println();
             if (mMainSession != null) {
                 final String prefix3 = prefix2 + "  ";
                 pw.print(prefix2); pw.println("Main session:");

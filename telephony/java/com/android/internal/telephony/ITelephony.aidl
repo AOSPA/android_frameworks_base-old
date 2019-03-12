@@ -1834,10 +1834,12 @@ interface ITelephony {
     void setMultisimCarrierRestriction(boolean isMultisimCarrierRestricted);
 
     /**
-     * Returns if the usage of multiple SIM cards at the same time is restricted.
-     * @hide
+     * Returns if the usage of multiple SIM cards at the same time is supported.
+     *
+     * @param callingPackage The package making the call.
+     * @return true if multisim is supported, false otherwise.
      */
-    boolean isMultisimCarrierRestricted();
+    boolean isMultisimSupported(String callingPackage);
 
     /**
      * Switch configs to enable multi-sim or switch back to single-sim
@@ -1855,4 +1857,9 @@ interface ITelephony {
      * Get the mapping from logical slots to physical slots.
      */
     int[] getSlotsMapping();
+
+    /**
+     * Get the IRadio HAL Version encoded as 100 * MAJOR_VERSION + MINOR_VERSION or -1 if unknown
+     */
+     int getRadioHalVersion();
 }

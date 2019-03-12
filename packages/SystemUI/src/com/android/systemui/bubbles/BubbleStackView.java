@@ -99,6 +99,8 @@ public class BubbleStackView extends FrameLayout {
     private int mExpandedAnimateXDistance;
     private int mExpandedAnimateYDistance;
     private int mStatusBarHeight;
+    private int mPipDismissHeight;
+    private int mImeOffset;
 
     private Bubble mExpandedBubble;
     private boolean mIsExpanded;
@@ -159,6 +161,9 @@ public class BubbleStackView extends FrameLayout {
                 res.getDimensionPixelSize(R.dimen.bubble_expanded_animate_y_distance);
         mStatusBarHeight =
                 res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height);
+        mPipDismissHeight = mContext.getResources().getDimensionPixelSize(
+                R.dimen.pip_dismiss_gradient_height);
+        mImeOffset = res.getDimensionPixelSize(R.dimen.pip_ime_offset);
 
         mDisplaySize = new Point();
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -168,7 +173,7 @@ public class BubbleStackView extends FrameLayout {
         int elevation = res.getDimensionPixelSize(R.dimen.bubble_elevation);
 
         mStackAnimationController = new StackAnimationController();
-        mExpandedAnimationController = new ExpandedAnimationController();
+        mExpandedAnimationController = new ExpandedAnimationController(mDisplaySize);
 
         mBubbleContainer = new PhysicsAnimationLayout(context);
         mBubbleContainer.setMaxRenderedChildren(
@@ -343,7 +348,7 @@ public class BubbleStackView extends FrameLayout {
 
         // Remove it from the views
         int removedIndex = mBubbleContainer.indexOfChild(b.iconView);
-        b.expandedView.destroyActivityView(this /* tmpParent */);
+        b.expandedView.destroyActivityView();
         mBubbleContainer.removeView(b.iconView);
 
         int bubbleCount = mBubbleContainer.getChildCount();
@@ -372,7 +377,7 @@ public class BubbleStackView extends FrameLayout {
     public void stackDismissed() {
         for (Bubble bubble : mBubbleData.getBubbles()) {
             bubble.entry.setBubbleDismissed(true);
-            bubble.expandedView.destroyActivityView(this /* tmpParent */);
+            bubble.expandedView.destroyActivityView();
         }
         mBubbleData.clear();
         collapseStack();
@@ -390,8 +395,7 @@ public class BubbleStackView extends FrameLayout {
      */
     public void updateBubble(NotificationEntry entry, boolean updatePosition) {
         Bubble b = mBubbleData.getBubble(entry.key);
-        b.iconView.update(entry);
-        // TODO: should also update the expanded view here (e.g. height change)
+        mBubbleData.updateBubble(entry.key, entry);
 
         if (updatePosition && !mIsExpanded) {
             // If alerting it gets promoted to top of the stack.
@@ -509,8 +513,7 @@ public class BubbleStackView extends FrameLayout {
             final float yStart = Math.min(
                     mStackAnimationController.getStackPosition().y,
                     mExpandedAnimateYDistance);
-            final float yDest = getStatusBarHeight()
-                    + mExpandedBubble.iconView.getHeight() + mBubblePadding;
+            final float yDest = getYPositionForExpandedView();
 
             if (shouldExpand) {
                 mExpandedViewContainer.setTranslationX(xStart);
@@ -548,8 +551,15 @@ public class BubbleStackView extends FrameLayout {
                 : null;
     }
 
-    public PointF getStackPosition() {
-        return mStackAnimationController.getStackPosition();
+    /** Moves the bubbles out of the way if they're going to be over the keyboard. */
+    public void onImeVisibilityChanged(boolean visible, int height) {
+        if (!mIsExpanded) {
+            if (visible) {
+                mStackAnimationController.updateBoundsForVisibleImeAndAnimate(height + mImeOffset);
+            } else {
+                mStackAnimationController.updateBoundsForInvisibleImeAndAnimate();
+            }
+        }
     }
 
     /** Called when a drag operation on an individual bubble has started. */
@@ -653,6 +663,46 @@ public class BubbleStackView extends FrameLayout {
     }
 
     /**
+     * Calculates how large the expanded view of the bubble can be. This takes into account the
+     * y position when the bubbles are expanded as well as the bounds of the dismiss target.
+     */
+    int getMaxExpandedHeight() {
+        boolean showOnTop = BubbleController.showBubblesAtTop(getContext());
+        int expandedY = (int) mExpandedAnimationController.getExpandedY();
+        if (showOnTop) {
+            // PIP dismiss view uses FLAG_LAYOUT_IN_SCREEN so we need to subtract the bottom inset
+            int pipDismissHeight = mPipDismissHeight - getBottomInset();
+            return mDisplaySize.y - expandedY - mBubbleSize - pipDismissHeight;
+        } else {
+            return expandedY - getStatusBarHeight();
+        }
+    }
+
+    /**
+     * Calculates the y position of the expanded view when it is expanded.
+     */
+    float getYPositionForExpandedView() {
+        boolean showOnTop = BubbleController.showBubblesAtTop(getContext());
+        if (showOnTop) {
+            return getStatusBarHeight() + mBubbleSize + mBubblePadding;
+        } else {
+            return mExpandedAnimationController.getExpandedY()
+                    - mExpandedBubble.expandedView.getExpandedSize() - mBubblePadding;
+        }
+    }
+
+    /**
+     * Called when the height of the currently expanded view has changed (not via an
+     * update to the bubble's desired height but for some other reason, e.g. permission view
+     * goes away).
+     */
+    void onExpandedHeightChanged() {
+        if (mIsExpanded) {
+            requestUpdate();
+        }
+    }
+
+    /**
      * Minimum velocity, in pixels/second, required to get from x to destX while being slowed by a
      * given frictional force.
      *
@@ -688,6 +738,14 @@ public class BubbleStackView extends FrameLayout {
         return 0;
     }
 
+    private int getBottomInset() {
+        if (getRootWindowInsets() != null) {
+            WindowInsets insets = getRootWindowInsets();
+            return insets.getSystemWindowInsetBottom();
+        }
+        return 0;
+    }
+
     private boolean isIntersecting(View view, float x, float y) {
         mTempLoc = view.getLocationOnScreen();
         mTempRect.set(mTempLoc[0], mTempLoc[1], mTempLoc[0] + view.getWidth(),
@@ -718,6 +776,8 @@ public class BubbleStackView extends FrameLayout {
 
         mExpandedViewContainer.setVisibility(mIsExpanded ? VISIBLE : GONE);
         if (mIsExpanded) {
+            final float y = getYPositionForExpandedView();
+            mExpandedViewContainer.setTranslationY(y);
             mExpandedBubble.expandedView.updateView();
         }
 
@@ -762,7 +822,10 @@ public class BubbleStackView extends FrameLayout {
      * @return the index of the bubble view within the bubble stack. The range of the position
      * is between 0 and the bubble count minus 1.
      */
-    int getBubbleIndex(Bubble bubble) {
+    int getBubbleIndex(@Nullable Bubble bubble) {
+        if (bubble == null) {
+            return 0;
+        }
         return mBubbleContainer.indexOfChild(bubble.iconView);
     }
 
@@ -782,6 +845,10 @@ public class BubbleStackView extends FrameLayout {
         return new BigDecimal(getStackPosition().y / mDisplaySize.y)
                 .setScale(4, RoundingMode.CEILING.HALF_UP)
                 .floatValue();
+    }
+
+    public PointF getStackPosition() {
+        return mStackAnimationController.getStackPosition();
     }
 
     /**
@@ -814,5 +881,16 @@ public class BubbleStackView extends FrameLayout {
                     getNormalizedXPosition(),
                     getNormalizedYPosition());
         }
+    }
+
+    /**
+     * Called when a back gesture should be directed to the Bubbles stack. When expanded,
+     * a back key down/up event pair is forwarded to the bubble Activity.
+     */
+    boolean performBackPressIfNeeded() {
+        if (!isExpanded()) {
+            return false;
+        }
+        return mExpandedBubble.expandedView.performBackPressIfNeeded();
     }
 }

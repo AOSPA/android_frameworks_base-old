@@ -40,6 +40,7 @@ import android.annotation.StyleRes;
 import android.annotation.TestApi;
 import android.annotation.UiThread;
 import android.annotation.UnsupportedAppUsage;
+import android.content.AutofillOptions;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -9378,7 +9379,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         AttachInfo ai = mAttachInfo;
 
         // First check if context has client, so it saves a service lookup when it doesn't
-        if (!mContext.isContentCaptureSupported()) return;
+        if (mContext.getContentCaptureOptions() == null) return;
 
         // Then check if it's enabled in the context...
         final ContentCaptureManager ccm = ai != null ? ai.getContentCaptureManager(mContext)
@@ -9408,20 +9409,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
             setNotifiedContentCaptureAppeared();
 
-            // TODO(b/123307965): instead of post, we should queue it on AttachInfo and then
-            // dispatch on RootImpl, as we're doing with the removed ones (in that case, we should
-            // merge the delayNotifyContentCaptureDisappeared() into a more generic method that
-            // takes a session and a command, where the command is either view added or removed
-
-            // The code below doesn't take much for a unique view, but it's called for all views
-            // the first time the view hiearchy is laid off, which could acccumulative delay the
-            // initial layout. Hence, we're postponing it to a later stage - it might still cost a
-            // lost frame (or more), but that jank cost would only happen after the 1st layout.
-            Choreographer.getInstance().postCallback(Choreographer.CALLBACK_COMMIT, () -> {
-                final ViewStructure structure = session.newViewStructure(this);
-                onProvideContentCaptureStructure(structure, /* flags= */ 0);
-                session.notifyViewAppeared(structure);
-            }, /* token= */ null);
+            if (ai != null) {
+                ai.delayNotifyContentCaptureEvent(session, this, appeared);
+            } else {
+                if (DEBUG_CONTENT_CAPTURE) {
+                    Log.w(CONTENT_CAPTURE_LOG_TAG, "no AttachInfo on appeared for " + this);
+                }
+            }
         } else {
             if ((mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) == 0
                     || (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED) != 0) {
@@ -9440,13 +9434,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
 
             if (ai != null) {
-                ai.delayNotifyContentCaptureDisappeared(session, getAutofillId());
+                ai.delayNotifyContentCaptureEvent(session, this, appeared);
             } else {
                 if (DEBUG_CONTENT_CAPTURE) {
-                    Log.v(CONTENT_CAPTURE_LOG_TAG, "no AttachInfo on gone for " + this);
+                    Log.v(CONTENT_CAPTURE_LOG_TAG, "no AttachInfo on disappeared for " + this);
                 }
-                Choreographer.getInstance().postCallback(Choreographer.CALLBACK_COMMIT,
-                        () -> session.notifyViewDisappeared(getAutofillId()), /* token= */ null);
             }
         }
     }
@@ -9463,17 +9455,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * the Content Capture events associated with this view or its view hierarchy (if it's a
      * {@link ViewGroup}).
      *
+     * <p>For example, if your activity is associated with a web domain, first you would need to
+     * set the context for the main DOM:
+     *
+     * <pre>
+     *   ContentCaptureSession mainSession = rootView.getContentCaptureSession();
+     *   mainSession.setContentCaptureContext(ContentCaptureContext.forLocusId(Uri.parse(myUrl));
+     * <pre>
+     *
+     * <p>Then if the page had an {@code IFRAME}, you would create a new session for it:
+     *
      * <p>For example, if your activity is associated with a web domain, you could create a session
      * {@code onCreate()} and associate it with the root view of the activity:
      *
      * <pre>
-     *   ContentCaptureSession oldSession = rootView.getContentCaptureSession();
-     *   if (oldSession != null) {
-     *     ContentCaptureSession newSession = oldSession.createContentCaptureSession(new
-     *        ContentCaptureContext.Builder().setUri(myUrl).build());
-     *     rootView.setContentCaptureSession(newSession);
-     *  }
-     * </pre>
+     *   ContentCaptureSession iframeSession = mainSession.createContentCaptureSession(
+     *       ContentCaptureContext.forLocusId(Uri.parse(iframeUrl)));
+     *   iframeView.setContentCaptureSession(iframeSession);
+     * <pre>
      *
      * @param contentCaptureSession a session created by
      * {@link ContentCaptureSession#createContentCaptureSession(
@@ -9526,8 +9525,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private boolean isAutofillable() {
-        return getAutofillType() != AUTOFILL_TYPE_NONE && isImportantForAutofill()
-                && getAutofillViewId() > LAST_APP_AUTOFILL_ID;
+        if (getAutofillType() == AUTOFILL_TYPE_NONE) return false;
+
+        if (!isImportantForAutofill()) {
+            // View is not important for "regular" autofill, so we must check if Augmented Autofill
+            // is enabled for the activity
+            final AutofillOptions options = mContext.getAutofillOptions();
+            if (options == null || !options.augmentedEnabled) {
+                // TODO(b/123100824): should also check if activity is whitelisted
+                return false;
+            }
+            final AutofillManager afm = getAutofillManager();
+            if (afm == null) return false;
+            afm.notifyViewEnteredForAugmentedAutofill(this);
+        }
+
+        return getAutofillViewId() > LAST_APP_AUTOFILL_ID;
     }
 
     /** @hide */
@@ -9696,11 +9709,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    public void dispatchInitialProvideContentCaptureStructure(@NonNull ContentCaptureManager ccm) {
+    public void dispatchInitialProvideContentCaptureStructure() {
         AttachInfo ai = mAttachInfo;
         if (ai == null) {
             Log.w(CONTENT_CAPTURE_LOG_TAG,
                     "dispatchProvideContentCaptureStructure(): no AttachInfo for " + this);
+            return;
+        }
+        ContentCaptureManager ccm = ai.mContentCaptureManager;
+        if (ccm == null) {
+            Log.w(CONTENT_CAPTURE_LOG_TAG, "dispatchProvideContentCaptureStructure(): "
+                    + "no ContentCaptureManager for " + this);
             return;
         }
 
@@ -9728,11 +9747,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             return;
         }
 
-        session.internalNotifyViewHierarchyEvent(/* started= */ true);
+        session.internalNotifyViewTreeEvent(/* started= */ true);
         try {
             dispatchProvideContentCaptureStructure();
         } finally {
-            session.internalNotifyViewHierarchyEvent(/* started= */ false);
+            session.internalNotifyViewTreeEvent(/* started= */ false);
         }
     }
 
@@ -10949,7 +10968,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     void dispatchWindowInsetsAnimationFinished(InsetsAnimation animation) {
-        if (mListenerInfo != null && mListenerInfo.mOnApplyWindowInsetsListener != null) {
+        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationListener != null) {
             mListenerInfo.mWindowInsetsAnimationListener.onFinished(animation);
         }
     }
@@ -16040,7 +16059,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.ExportedProperty(category = "drawing")
     @InspectableProperty
     public float getRotation() {
-        return mRenderNode.getRotation();
+        return mRenderNode.getRotationZ();
     }
 
     /**
@@ -16061,7 +16080,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (rotation != getRotation()) {
             // Double-invalidation is necessary to capture view's old and new areas
             invalidateViewProperty(true, false);
-            mRenderNode.setRotation(rotation);
+            mRenderNode.setRotationZ(rotation);
             invalidateViewProperty(false, true);
 
             invalidateParentIfNeededAndWasQuickRejected();
@@ -20575,7 +20594,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             int height = mBottom - mTop;
             int layerType = getLayerType();
 
-            final RecordingCanvas canvas = renderNode.startRecording(width, height);
+            final RecordingCanvas canvas = renderNode.beginRecording(width, height);
 
             try {
                 if (layerType == LAYER_TYPE_SOFTWARE) {
@@ -21230,7 +21249,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         } else {
             mClipBounds = null;
         }
-        mRenderNode.setClipBounds(mClipBounds);
+        mRenderNode.setClipRect(mClipBounds);
         invalidateViewProperty(false, false);
     }
 
@@ -21975,7 +21994,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         final Rect bounds = drawable.getBounds();
         final int width = bounds.width();
         final int height = bounds.height();
-        final RecordingCanvas canvas = renderNode.startRecording(width, height);
+        final RecordingCanvas canvas = renderNode.beginRecording(width, height);
 
         // Reverse left/top translation done by drawable canvas, which will
         // instead be applied by rendernode's LTRB bounds below. This way, the
@@ -28355,11 +28374,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         boolean mReadyForContentCaptureUpdates;
 
         /**
-         * Map of ids (per session) that need to be notified after as gone the view hierchy is
-         * traversed.
+         * Map(keyed by session) of content capture events that need to be notified after the view
+         * hierarchy is traversed: value is either the view itself for appearead events, or its
+         * autofill id for disappeared.
          */
         // TODO(b/121197119): use SparseArray once session id becomes integer
-        ArrayMap<String, ArrayList<AutofillId>> mContentCaptureRemovedIds;
+        ArrayMap<String, ArrayList<Object>> mContentCaptureEvents;
 
         /**
          * Cached reference to the {@link ContentCaptureManager}.
@@ -28385,24 +28405,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mTreeObserver = new ViewTreeObserver(context);
         }
 
-        private void delayNotifyContentCaptureDisappeared(@NonNull ContentCaptureSession session,
-                @NonNull AutofillId id) {
-            if (mContentCaptureRemovedIds == null) {
+        private void delayNotifyContentCaptureEvent(@NonNull ContentCaptureSession session,
+                @NonNull View view, boolean appeared) {
+            if (mContentCaptureEvents == null) {
                 // Most of the time there will be just one session, so intial capacity is 1
-                mContentCaptureRemovedIds = new ArrayMap<>(1);
+                mContentCaptureEvents = new ArrayMap<>(1);
             }
             String sessionId = session.getId();
             // TODO: life would be much easier if we provided a MultiMap implementation somwhere...
-            ArrayList<AutofillId> ids = mContentCaptureRemovedIds.get(sessionId);
-            if (ids == null) {
-                ids = new ArrayList<>();
-                mContentCaptureRemovedIds.put(sessionId, ids);
+            ArrayList<Object> events = mContentCaptureEvents.get(sessionId);
+            if (events == null) {
+                events = new ArrayList<>();
+                mContentCaptureEvents.put(sessionId, events);
             }
-            ids.add(id);
+            events.add(appeared ? view : view.getAutofillId());
         }
 
         @Nullable
-        private ContentCaptureManager getContentCaptureManager(@NonNull Context context) {
+        ContentCaptureManager getContentCaptureManager(@NonNull Context context) {
             if (mContentCaptureManager != null) {
                 return mContentCaptureManager;
             }

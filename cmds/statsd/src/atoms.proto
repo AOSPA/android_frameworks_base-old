@@ -45,6 +45,7 @@ import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
+import "frameworks/base/core/proto/android/stats/style/style_enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
@@ -246,6 +247,8 @@ message Atom {
         AssistGestureFeedbackReported assist_gesture_feedback_reported = 175;
         AssistGestureProgressReported assist_gesture_progress_reported = 176;
         TouchGestureClassified touch_gesture_classified = 177;
+        HiddenApiUsed hidden_api_used = 178 [(allow_from_any_uid) = true];
+        StyleUIChanged style_ui_changed = 179;
     }
 
     // Pulled events will start at field 10000.
@@ -282,7 +285,7 @@ message Atom {
         CategorySize category_size = 10028;
         ProcStats proc_stats = 10029;
         BatteryVoltage battery_voltage = 10030;
-        NumBiometricsEnrolled num_fingerprints_enrolled = 10031;
+        NumFingerprintsEnrolled num_fingerprints_enrolled = 10031;
         DiskIo disk_io = 10032;
         PowerProfile power_profile = 10033;
         ProcStatsPkgProc proc_stats_pkg_proc = 10034;
@@ -299,7 +302,7 @@ message Atom {
         BatteryCycleCount battery_cycle_count = 10045;
         DebugElapsedClock debug_elapsed_clock = 10046;
         DebugFailingElapsedClock debug_failing_elapsed_clock = 10047;
-        NumBiometricsEnrolled num_faces_enrolled = 10048;
+        NumFacesEnrolled num_faces_enrolled = 10048;
         RoleHolder role_holder = 10049;
         DangerousPermissionState dangerous_permission_state = 10050;
         TrainInfo train_info = 10051;
@@ -2348,6 +2351,17 @@ message LauncherUIChanged {
     optional bool is_swipe_up_enabled = 5;
 }
 
+message StyleUIChanged {
+    optional android.stats.style.Action action = 1;
+    optional int32 color_package_hash = 2;
+    optional int32 font_package_hash  = 3;
+    optional int32 shape_package_hash = 4;
+    optional int32 clock_package_hash = 5;
+    optional int32 launcher_grid = 6;
+    optional int32 wallpaper_category_hash = 7;
+    optional int32 wallpaper_id_hash = 8;
+}
+
 /**
  * Logs when Settings UI has changed.
  *
@@ -3338,6 +3352,33 @@ message ServiceLaunchReported {
     optional string service_name = 3;
 }
 
+/**
+ * Logs when a hidden API is used.
+ *
+ * Logged from:
+ *     libcore/libart/src/main/java/dalvik/system/VMRuntime.java
+ */
+message HiddenApiUsed {
+    // The uid of the app making the hidden access.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Signature of the method or field accessed.
+    optional string signature = 2;
+
+    enum AccessMethod {
+        NONE = 0;
+        REFLECTION = 1;
+        JNI = 2;
+        LINKING = 3;
+    }
+
+    // Type of access.
+    optional AccessMethod access_method = 3;
+
+    // Whether the access was prevented or not.
+    optional bool access_denied = 4;
+}
+
 //////////////////////////////////////////////////////////////////////
 // Pulled atoms below this line //
 //////////////////////////////////////////////////////////////////////
@@ -4086,14 +4127,26 @@ message DiskIo {
  *
  * Pulled from StatsCompanionService, which queries <Biometric>Manager.
  */
-message NumBiometricsEnrolled {
+message NumFingerprintsEnrolled {
     // The associated user. Eg: 0 for owners, 10+ for others.
     // Defined in android/os/UserHandle.java
     optional int32 user = 1;
     // Number of fingerprints registered to that user.
-    optional int32 num_enrolled = 2;
+    optional int32 num_fingerprints_enrolled = 2;
 }
 
+/**
+ * Pulls the number of faces for each user.
+ *
+ * Pulled from StatsCompanionService, which queries <Biometric>Manager.
+ */
+message NumFacesEnrolled {
+    // The associated user. Eg: 0 for owners, 10+ for others.
+    // Defined in android/os/UserHandle.java
+    optional int32 user = 1;
+    // Number of faces registered to that user.
+    optional int32 num_faces_enrolled = 2;
+}
 /**
  * A mapping of role holder -> role
  */
@@ -5427,7 +5480,7 @@ message BubbleUIChanged {
         HEADER_GO_TO_SETTINGS = 9;
         PERMISSION_OPT_IN = 10;
         PERMISSION_OPT_OUT = 11;
-        PERMISSION_IGNORED = 12;
+        PERMISSION_DIALOG_SHOWN = 12;
         SWIPE_LEFT = 13;
         SWIPE_RIGHT = 14;
         STACK_EXPANDED = 15;
@@ -5602,7 +5655,7 @@ message TrainInfo {
  *   frameworks/base/packages/SystemUI/
  */
 message AssistGestureStageReported {
-  optional android.hardware.sensor.assist.AssistGestureStageEnum gesture_stage = 1;
+    optional android.hardware.sensor.assist.AssistGestureStageEnum gesture_stage = 1;
 }
 
 /**
@@ -5612,8 +5665,8 @@ message AssistGestureStageReported {
  *   frameworks/base/packages/SystemUI/
  */
 message AssistGestureFeedbackReported {
-  // Whether or not the gesture was used.
-  optional android.hardware.sensor.assist.AssistGestureFeedbackEnum feedback_type = 1;
+    // Whether or not the gesture was used.
+    optional android.hardware.sensor.assist.AssistGestureFeedbackEnum feedback_type = 1;
 }
 
 /**
@@ -5623,8 +5676,8 @@ message AssistGestureFeedbackReported {
  *   frameworks/base/packages/SystemUI/
  */
 message AssistGestureProgressReported {
-  // [0,100] progress for the assist gesture.
-  optional int32 progress = 1;
+    // [0,100] progress for the assist gesture.
+    optional int32 progress = 1;
 }
 
 /*

@@ -87,8 +87,6 @@ import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_RIGHT;
 
 import static com.android.server.am.ActivityRecordProto.CONFIGURATION_CONTAINER;
 import static com.android.server.am.ActivityRecordProto.FRONT_OF_TASK;
@@ -2805,7 +2803,9 @@ public final class ActivityRecord extends ConfigurationContainer {
                 final Configuration srcConfig = task.getConfiguration();
                 overrideConfig.colorMode = srcConfig.colorMode;
                 overrideConfig.densityDpi = srcConfig.densityDpi;
-                overrideConfig.screenLayout = srcConfig.screenLayout;
+                overrideConfig.screenLayout = srcConfig.screenLayout
+                        & (Configuration.SCREENLAYOUT_LONG_MASK
+                                | Configuration.SCREENLAYOUT_SIZE_MASK);
                 // The smallest screen width is the short side of screen bounds. Because the bounds
                 // and density won't be changed, smallestScreenWidthDp is also fixed.
                 overrideConfig.smallestScreenWidthDp = srcConfig.smallestScreenWidthDp;
@@ -2878,28 +2878,6 @@ public final class ActivityRecord extends ConfigurationContainer {
         final Rect outAppBounds = inOutConfig.windowConfiguration.getAppBounds();
         if (outAppBounds != null) {
             outAppBounds.setEmpty();
-        }
-
-        // TODO(b/112288258): Remove below calculation because the position information in bounds
-        // will be replaced by the offset of surface.
-        final Rect appBounds = parentConfig.windowConfiguration.getAppBounds();
-        if (appBounds != null) {
-            final Rect outBounds = inOutConfig.windowConfiguration.getBounds();
-            final int activityWidth = outBounds.width();
-            final int navBarPosition = mAtmService.mWindowManager.getNavBarPosition(getDisplayId());
-            if (navBarPosition == NAV_BAR_LEFT) {
-                // Position the activity frame on the opposite side of the nav bar.
-                outBounds.left = appBounds.right - activityWidth;
-                outBounds.right = appBounds.right;
-            } else if (navBarPosition == NAV_BAR_RIGHT) {
-                // Position the activity frame on the opposite side of the nav bar.
-                outBounds.left = 0;
-                outBounds.right = activityWidth + appBounds.left;
-            } else if (appBounds.width() > activityWidth) {
-                // Horizontally center the frame.
-                outBounds.left = appBounds.left + (appBounds.width() - activityWidth) / 2;
-                outBounds.right = outBounds.left + activityWidth;
-            }
         }
 
         task.computeConfigResourceOverrides(inOutConfig, parentConfig, insideParentBounds);

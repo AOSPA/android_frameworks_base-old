@@ -73,6 +73,8 @@ import android.net.INetworkMonitorCallbacks;
 import android.net.INetworkPolicyListener;
 import android.net.INetworkPolicyManager;
 import android.net.INetworkStatsService;
+import android.net.InetAddresses;
+import android.net.IpPrefix;
 import android.net.LinkProperties;
 import android.net.LinkProperties.CompareResult;
 import android.net.MatchAllNetworkSpecifier;
@@ -1070,7 +1072,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             handleRegisterNetworkRequest(new NetworkRequestInfo(
                     null, networkRequest, new Binder()));
         } else {
-            handleReleaseNetworkRequest(networkRequest, Process.SYSTEM_UID);
+            handleReleaseNetworkRequest(networkRequest, Process.SYSTEM_UID,
+                    /* callOnUnavailable */ false);
         }
     }
 
@@ -1751,6 +1754,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
             }
         }
+
+        @Override
+        public void onNat64PrefixEvent(int netId, boolean added,
+                                       String prefixString, int prefixLength) {
+            mHandler.post(() -> handleNat64PrefixEvent(netId, added, prefixString, prefixLength));
+        }
     };
 
     @VisibleForTesting
@@ -2397,6 +2406,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
             pw.decreaseIndent();
         }
+
+        pw.println();
+        pw.println("NetworkStackClient logs:");
+        pw.increaseIndent();
+        NetworkStackClient.getInstance().dump(pw);
     }
 
     private void dumpNetworks(IndentingPrintWriter pw) {
@@ -2664,11 +2678,25 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return true;
         }
 
+        private boolean maybeHandleNetworkFactoryMessage(Message msg) {
+            switch (msg.what) {
+                default:
+                    return false;
+                case NetworkFactory.EVENT_UNFULFILLABLE_REQUEST: {
+                    handleReleaseNetworkRequest((NetworkRequest) msg.obj, msg.sendingUid,
+                            /* callOnUnavailable */ true);
+                    break;
+                }
+            }
+            return true;
+        }
+
         @Override
         public void handleMessage(Message msg) {
-            if (!maybeHandleAsyncChannelMessage(msg) &&
-                    !maybeHandleNetworkMonitorMessage(msg) &&
-                    !maybeHandleNetworkAgentInfoMessage(msg)) {
+            if (!maybeHandleAsyncChannelMessage(msg)
+                    && !maybeHandleNetworkMonitorMessage(msg)
+                    && !maybeHandleNetworkAgentInfoMessage(msg)
+                    && !maybeHandleNetworkFactoryMessage(msg)) {
                 maybeHandleNetworkAgentMessage(msg);
             }
         }
@@ -2786,6 +2814,29 @@ public class ConnectivityService extends IConnectivityManager.Stub
         handleUpdateLinkProperties(nai, new LinkProperties(nai.linkProperties));
     }
 
+    private void handleNat64PrefixEvent(int netId, boolean added, String prefixString,
+            int prefixLength) {
+        NetworkAgentInfo nai = mNetworkForNetId.get(netId);
+        if (nai == null) return;
+
+        log(String.format("NAT64 prefix %s on netId %d: %s/%d",
+                          (added ? "added" : "removed"), netId, prefixString, prefixLength));
+
+        IpPrefix prefix = null;
+        if (added) {
+            try {
+                prefix = new IpPrefix(InetAddresses.parseNumericAddress(prefixString),
+                        prefixLength);
+            } catch (IllegalArgumentException e) {
+                loge("Invalid NAT64 prefix " + prefixString + "/" + prefixLength);
+                return;
+            }
+        }
+
+        nai.clatd.setNat64Prefix(prefix);
+        handleUpdateLinkProperties(nai, new LinkProperties(nai.linkProperties));
+    }
+
     private void updateLingerState(NetworkAgentInfo nai, long now) {
         // 1. Update the linger timer. If it's changed, reschedule or cancel the alarm.
         // 2. If the network was lingering and there are now requests, unlinger it.
@@ -2810,6 +2861,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (mNetworkFactoryInfos.containsKey(msg.replyTo)) {
             if (msg.arg1 == AsyncChannel.STATUS_SUCCESSFUL) {
                 if (VDBG) log("NetworkFactory connected");
+                // Finish setting up the full connection
+                mNetworkFactoryInfos.get(msg.replyTo).asyncChannel.sendMessage(
+                        AsyncChannel.CMD_CHANNEL_FULL_CONNECTION);
                 // A network factory has connected.  Send it all current NetworkRequests.
                 for (NetworkRequestInfo nri : mNetworkRequests.values()) {
                     if (nri.request.isListen()) continue;
@@ -2910,7 +2964,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             e.rethrowFromSystemServer();
         }
         mNetworkAgentInfos.remove(nai.messenger);
-        nai.maybeStopClat();
+        nai.clatd.update();
         synchronized (mNetworkForNetId) {
             // Remove the NetworkAgent, but don't mark the netId as
             // available until we've told netd to delete it below.
@@ -2980,7 +3034,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (existingRequest != null) { // remove the existing request.
             if (DBG) log("Replacing " + existingRequest.request + " with "
                     + nri.request + " because their intents matched.");
-            handleReleaseNetworkRequest(existingRequest.request, getCallingUid());
+            handleReleaseNetworkRequest(existingRequest.request, getCallingUid(),
+                    /* callOnUnavailable */ false);
         }
         handleRegisterNetworkRequest(nri);
     }
@@ -3006,7 +3061,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             int callingUid) {
         NetworkRequestInfo nri = findExistingNetworkRequestInfo(pendingIntent);
         if (nri != null) {
-            handleReleaseNetworkRequest(nri.request, callingUid);
+            handleReleaseNetworkRequest(nri.request, callingUid, /* callOnUnavailable */ false);
         }
     }
 
@@ -3093,7 +3148,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         callCallbackForRequest(nri, null, ConnectivityManager.CALLBACK_UNAVAIL, 0);
     }
 
-    private void handleReleaseNetworkRequest(NetworkRequest request, int callingUid) {
+    private void handleReleaseNetworkRequest(NetworkRequest request, int callingUid,
+            boolean callOnUnavailable) {
         final NetworkRequestInfo nri =
                 getNriForAppRequest(request, callingUid, "release NetworkRequest");
         if (nri == null) {
@@ -3103,6 +3159,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
             log("releasing " + nri.request + " (release request)");
         }
         handleRemoveNetworkRequest(nri);
+        if (callOnUnavailable) {
+            callCallbackForRequest(nri, null, ConnectivityManager.CALLBACK_UNAVAIL, 0);
+        }
     }
 
     private void handleRemoveNetworkRequest(final NetworkRequestInfo nri) {
@@ -3534,7 +3593,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 }
                 case EVENT_RELEASE_NETWORK_REQUEST: {
-                    handleReleaseNetworkRequest((NetworkRequest) msg.obj, msg.arg1);
+                    handleReleaseNetworkRequest((NetworkRequest) msg.obj, msg.arg1,
+                            /* callOnUnavailable */ false);
                     break;
                 }
                 case EVENT_SET_ACCEPT_UNVALIDATED: {
@@ -5258,11 +5318,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
             LinkProperties oldLp) {
         int netId = networkAgent.network.netId;
 
-        // The NetworkAgentInfo does not know whether clatd is running on its network or not. Before
-        // we do anything else, make sure its LinkProperties are accurate.
-        if (networkAgent.clatd != null) {
-            networkAgent.clatd.fixupLinkProperties(oldLp, newLp);
-        }
+        // The NetworkAgentInfo does not know whether clatd is running on its network or not, or
+        // whether there is a NAT64 prefix. Before we do anything else, make sure its LinkProperties
+        // are accurate.
+        networkAgent.clatd.fixupLinkProperties(oldLp, newLp);
 
         updateInterfaces(newLp, oldLp, netId, networkAgent.networkCapabilities);
         updateMtu(newLp, oldLp);
@@ -5292,8 +5351,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             synchronized (networkAgent) {
                 networkAgent.linkProperties = newLp;
             }
-            // Start or stop clat accordingly to network state.
-            networkAgent.updateClat(mNMS);
+            // Start or stop DNS64 detection and 464xlat according to network state.
+            networkAgent.clatd.update();
             notifyIfacesChangedForNetworkStats();
             if (networkAgent.everConnected) {
                 try {

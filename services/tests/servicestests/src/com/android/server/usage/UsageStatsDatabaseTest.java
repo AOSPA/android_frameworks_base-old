@@ -22,13 +22,14 @@ import static junit.framework.TestCase.fail;
 
 import static org.testng.Assert.assertEquals;
 
-import android.app.usage.EventList;
+import android.app.usage.TimeSparseArray;
 import android.app.usage.UsageEvents.Event;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.util.AtomicFile;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
@@ -38,6 +39,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
@@ -126,10 +128,6 @@ public class UsageStatsDatabaseTest {
         mIntervalStats.keyguardShownTracker.duration = 333333;
         mIntervalStats.keyguardHiddenTracker.count = 5;
         mIntervalStats.keyguardHiddenTracker.duration = 4444444;
-
-        if (mIntervalStats.events == null) {
-            mIntervalStats.events = new EventList();
-        }
 
         for (int i = 0; i < numberOfEvents; i++) {
             Event event = new Event();
@@ -317,20 +315,9 @@ public class UsageStatsDatabaseTest {
             }
         }
         assertEquals(stats1.activeConfiguration, stats2.activeConfiguration);
-
-        if (stats1.events == null) {
-            // If stats1 events are null, stats2 should be null or empty
-            if (stats2.events != null) {
-                assertEquals(stats2.events.size(), 0);
-            }
-        } else if (stats2.events == null) {
-            // If stats2 events are null, stats1 should be null or empty
-            assertEquals(stats1.events.size(), 0);
-        } else {
-            assertEquals(stats1.events.size(), stats2.events.size());
-            for (int i = 0; i < stats1.events.size(); i++) {
-                compareUsageEvent(stats1.events.get(i), stats2.events.get(i), i, minVersion);
-            }
+        assertEquals(stats1.events.size(), stats2.events.size());
+        for (int i = 0; i < stats1.events.size(); i++) {
+            compareUsageEvent(stats1.events.get(i), stats2.events.get(i), i, minVersion);
         }
     }
 
@@ -418,7 +405,7 @@ public class UsageStatsDatabaseTest {
         // Clear non backed up data from expected IntervalStats
         mIntervalStats.activeConfiguration = null;
         mIntervalStats.configurations.clear();
-        if (mIntervalStats.events != null) mIntervalStats.events.clear();
+        mIntervalStats.events.clear();
 
         // The written and read IntervalStats should match
         compareIntervalStats(mIntervalStats, stats.get(0), version);
@@ -447,5 +434,46 @@ public class UsageStatsDatabaseTest {
         // test invalid backup versions as well
         runBackupRestoreTest(0);
         runBackupRestoreTest(99999);
+    }
+
+    /**
+     * Test the pruning in indexFilesLocked() that only allow up to 100 daily files, 50 weekly files
+     * , 12 monthly files, 10 yearly files.
+     */
+    @Test
+    public void testMaxFiles() throws IOException {
+        final File[] intervalDirs = new File[]{
+            new File(mTestDir, "daily"),
+            new File(mTestDir, "weekly"),
+            new File(mTestDir, "monthly"),
+            new File(mTestDir, "yearly"),
+        };
+        // Create 10 extra files under each interval dir.
+        final int extra = 10;
+        final int length = intervalDirs.length;
+        for (int i = 0; i < length; i++) {
+            final int numFiles = UsageStatsDatabase.MAX_FILES_PER_INTERVAL_TYPE[i] + extra;
+            for (int f = 0; f < numFiles; f++) {
+                final AtomicFile file = new AtomicFile(new File(intervalDirs[i], Long.toString(f)));
+                FileOutputStream fos = file.startWrite();
+                fos.write(1);
+                file.finishWrite(fos);
+            }
+        }
+        // indexFilesLocked() list files under each interval dir, if number of files are more than
+        // the max allowed files for each interval type, it deletes the lowest numbered files.
+        mUsageStatsDatabase.forceIndexFiles();
+        final int len = mUsageStatsDatabase.mSortedStatFiles.length;
+        for (int i = 0; i < len; i++) {
+            final TimeSparseArray<AtomicFile> files =  mUsageStatsDatabase.mSortedStatFiles[i];
+            // The stats file for each interval type equals to max allowed.
+            assertEquals(UsageStatsDatabase.MAX_FILES_PER_INTERVAL_TYPE[i],
+                    files.size());
+            // The highest numbered file,
+            assertEquals(UsageStatsDatabase.MAX_FILES_PER_INTERVAL_TYPE[i] + extra - 1,
+                    files.keyAt(files.size() - 1));
+            // The lowest numbered file:
+            assertEquals(extra, files.keyAt(0));
+        }
     }
 }
