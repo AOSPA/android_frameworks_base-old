@@ -135,7 +135,7 @@ public class ChooserActivity extends ResolverActivity {
      * {@link AppPredictionManager} will be queried for direct share targets.
      */
     // TODO(b/123089490): Replace with system flag
-    private static final boolean USE_PREDICTION_MANAGER_FOR_DIRECT_TARGETS = false;
+    private static final boolean USE_PREDICTION_MANAGER_FOR_DIRECT_TARGETS = true;
     // TODO(b/123088566) Share these in a better way.
     private static final String APP_PREDICTION_SHARE_UI_SURFACE = "share";
     public static final String LAUNCH_LOCATON_DIRECT_SHARE = "direct_share";
@@ -1889,11 +1889,19 @@ public class ChooserActivity extends ResolverActivity {
          * Set to true to reveal all service targets at once.
          */
         public void setShowServiceTargets(boolean show) {
+            // mShowServiceTargets is only flipped once to show direct share targets. But after the
+            // initial display the list can be re-sorted and the user will see the target list
+            // change. This will log the initial show and the subsequent shuffle to help us get
+            // accurate timing of the UX.
+            if (show) {
+                getMetricsLogger().write(
+                        new LogMaker(MetricsEvent.ACTION_ACTIVITY_CHOOSER_SHOWN_DIRECT_TARGET)
+                                .setSubtype(mShowServiceTargets ? MetricsEvent.PREVIOUSLY_VISIBLE
+                                        : MetricsEvent.PREVIOUSLY_HIDDEN));
+            }
             if (show != mShowServiceTargets) {
                 mShowServiceTargets = show;
                 notifyDataSetChanged();
-                getMetricsLogger().write(
-                        new LogMaker(MetricsEvent.ACTION_ACTIVITY_CHOOSER_SHOWN_DIRECT_TARGET));
             }
         }
 

@@ -17,6 +17,8 @@
 package android.telephony;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
@@ -436,7 +438,11 @@ public class ServiceState implements Parcelable {
 
     /**
      * Construct a ServiceState object from the given parcel.
+     *
+     * @deprecated The constructor takes parcel should not be public at the beginning. Use
+     * {@link #ServiceState()} instead.
      */
+    @Deprecated
     public ServiceState(Parcel in) {
         mVoiceRegState = in.readInt();
         mDataRegState = in.readInt();
@@ -498,7 +504,7 @@ public class ServiceState implements Parcelable {
         return 0;
     }
 
-    public static final Parcelable.Creator<ServiceState> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<ServiceState> CREATOR =
             new Parcelable.Creator<ServiceState>() {
         public ServiceState createFromParcel(Parcel in) {
             return new ServiceState(in);
@@ -1760,6 +1766,7 @@ public class ServiceState implements Parcelable {
      * @return List of {@link NetworkRegistrationState}
      * @hide
      */
+    @NonNull
     @SystemApi
     public List<NetworkRegistrationState> getNetworkRegistrationStates() {
         synchronized (mNetworkRegistrationStates) {
@@ -1776,6 +1783,7 @@ public class ServiceState implements Parcelable {
      *
      * @deprecated Use {@link #getNetworkRegistrationStatesFromTransportType(int)}
      */
+    @NonNull
     @Deprecated
     @SystemApi
     public List<NetworkRegistrationState> getNetworkRegistrationStates(int transportType) {
@@ -1789,6 +1797,7 @@ public class ServiceState implements Parcelable {
      * @return List of {@link NetworkRegistrationState}
      * @hide
      */
+    @NonNull
     @SystemApi
     public List<NetworkRegistrationState> getNetworkRegistrationStatesForTransportType(
             int transportType) {
@@ -1812,6 +1821,7 @@ public class ServiceState implements Parcelable {
      * @return List of {@link NetworkRegistrationState}
      * @hide
      */
+    @NonNull
     @SystemApi
     public List<NetworkRegistrationState> getNetworkRegistrationStatesForDomain(
             @Domain int domain) {
@@ -1838,6 +1848,7 @@ public class ServiceState implements Parcelable {
      *
      * @deprecated Use {@link #getNetworkRegistrationState(int, int)}
      */
+    @Nullable
     @Deprecated
     @SystemApi
     public NetworkRegistrationState getNetworkRegistrationStates(@Domain int domain,
@@ -1854,6 +1865,7 @@ public class ServiceState implements Parcelable {
      * @hide
      *
      */
+    @Nullable
     @SystemApi
     public NetworkRegistrationState getNetworkRegistrationState(@Domain int domain,
                                                                 int transportType) {

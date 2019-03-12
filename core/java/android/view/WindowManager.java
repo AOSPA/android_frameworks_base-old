@@ -481,10 +481,26 @@ public interface WindowManager extends ViewManager {
      *
      * @param displayId The id of the display.
      * @param shouldShow Indicates that the display should show system decors.
+     * @see #shouldShowSystemDecors(int)
      * @hide
      */
     @TestApi
     default void setShouldShowSystemDecors(int displayId, boolean shouldShow) {
+    }
+
+    /**
+     * Checks if the display supports showing system decors.
+     * <p>
+     * System decors include status bar, navigation bar, launcher.
+     * </p>
+     *
+     * @param displayId The id of the display.
+     * @see #setShouldShowSystemDecors(int, boolean)
+     * @hide
+     */
+    @TestApi
+    default boolean shouldShowSystemDecors(int displayId) {
+        return false;
     }
 
     /**
@@ -1777,6 +1793,13 @@ public interface WindowManager extends ViewManager {
         public static final int PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION = 0x00800000;
 
         /**
+         * Flag to indicate that the window is color space agnostic, and the color can be
+         * interpreted to any color space.
+         * @hide
+         */
+        public static final int PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC = 0x01000000;
+
+        /**
          * An internal annotation for flags that can be specified to {@link #softInputMode}.
          *
          * @hide
@@ -1876,7 +1899,11 @@ public interface WindowManager extends ViewManager {
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
                         equals = PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
-                        name = "STATUS_FORCE_SHOW_NAVIGATION")
+                        name = "STATUS_FORCE_SHOW_NAVIGATION"),
+                @ViewDebug.FlagToString(
+                        mask = PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC,
+                        equals = PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC,
+                        name = "COLOR_SPACE_AGNOSTIC")
         })
         @TestApi
         public int privateFlags;
@@ -2724,7 +2751,7 @@ public interface WindowManager extends ViewManager {
             out.writeLong(hideTimeoutMilliseconds);
         }
 
-        public static final Parcelable.Creator<LayoutParams> CREATOR
+        public static final @android.annotation.NonNull Parcelable.Creator<LayoutParams> CREATOR
                     = new Parcelable.Creator<LayoutParams>() {
             public LayoutParams createFromParcel(Parcel in) {
                 return new LayoutParams(in);

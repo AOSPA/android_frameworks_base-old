@@ -1634,6 +1634,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
+    public final void activityTopResumedStateLost() {
+        final long origId = Binder.clearCallingIdentity();
+        synchronized (mGlobalLock) {
+            mStackSupervisor.handleTopResumedStateReleased(false /* timeout */);
+        }
+        Binder.restoreCallingIdentity(origId);
+    }
+
+    @Override
     public final void activityPaused(IBinder token) {
         final long origId = Binder.clearCallingIdentity();
         synchronized (mGlobalLock) {
@@ -5199,6 +5208,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     boolean isBackgroundActivityStartsEnabled() {
         return mAmInternal.isBackgroundActivityStartsEnabled();
+    }
+
+    boolean isPackageNameWhitelistedForBgActivityStarts(String packageName) {
+        return mAmInternal.isPackageNameWhitelistedForBgActivityStarts(packageName);
     }
 
     void enableScreenAfterBoot(boolean booted) {

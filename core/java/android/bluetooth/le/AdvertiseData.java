@@ -176,7 +176,7 @@ public final class AdvertiseData implements Parcelable {
         }
     }
 
-    public static final Parcelable.Creator<AdvertiseData> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<AdvertiseData> CREATOR =
             new Creator<AdvertiseData>() {
                 @Override
                 public AdvertiseData[] newArray(int size) {

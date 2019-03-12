@@ -16,6 +16,7 @@
 
 package android.view.inspector;
 
+import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.SOURCE;
@@ -39,7 +40,7 @@ import java.lang.annotation.Target;
  * @see InspectionCompanion#readProperties(Object, PropertyReader)
  * @hide
  */
-@Target({METHOD})
+@Target({METHOD, FIELD})
 @Retention(SOURCE)
 @TestApi
 public @interface InspectableProperty {
@@ -232,6 +233,17 @@ public @interface InspectableProperty {
          * @hide
          */
         @TestApi
-        GRAVITY
+        GRAVITY,
+
+        /**
+         * Value is a resource ID
+         *
+         * This type is inferred from the presence of a resource ID annotation such as
+         * {@link android.annotation.AnyRes}.
+         *
+         * @hide
+         */
+        @TestApi
+        RESOURCE_ID
     }
 }

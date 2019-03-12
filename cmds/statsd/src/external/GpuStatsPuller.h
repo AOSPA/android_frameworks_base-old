@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,23 @@
  * limitations under the License.
  */
 
-package android.service.textclassifier;
+#pragma once
 
-import android.view.textclassifier.TextLanguage;
+#include "StatsPuller.h"
+
+namespace android {
+namespace os {
+namespace statsd {
 
 /**
- * Callback for a TextLanguage request.
- * @hide
+ * Pull GpuStats from GpuService.
  */
-oneway interface ITextLanguageCallback {
-    void onSuccess(in TextLanguage textLanguage);
-    void onFailure();
-}
+class GpuStatsPuller : public StatsPuller {
+public:
+    explicit GpuStatsPuller(const int tagId);
+    bool PullInternal(std::vector<std::shared_ptr<LogEvent>>* data) override;
+};
+
+}  // namespace statsd
+}  // namespace os
+}  // namespace android

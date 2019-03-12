@@ -1288,6 +1288,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD
     })
+    @NonNull
     public List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> getAllMatchingWifiConfigs(
             @NonNull List<ScanResult> scanResults) {
         List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> configs = new ArrayList<>();
@@ -1330,6 +1331,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD
     })
+    @NonNull
     public Map<OsuProvider, List<ScanResult>> getMatchingOsuProviders(
             List<ScanResult> scanResults) {
         try {
@@ -1356,6 +1358,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD
     })
+    @NonNull
     public Map<OsuProvider, PasspointConfiguration> getMatchingPasspointConfigsForOsuProviders(
             @NonNull Set<OsuProvider> osuProviders) {
         try {
@@ -4848,7 +4851,7 @@ public class WifiManager {
     /**
      * @return true if this device supports Wi-Fi Enhanced Open (OWE)
      */
-    public boolean isOweSupported() {
+    public boolean isEnhancedOpenSupported() {
         return isFeatureSupported(WIFI_FEATURE_OWE);
     }
 
@@ -4899,7 +4902,8 @@ public class WifiManager {
     public static final int DEVICE_MOBILITY_STATE_UNKNOWN = 0;
 
     /**
-     * High movement device mobility state
+     * High movement device mobility state.
+     * e.g. on a bike, in a motor vehicle
      *
      * @see #setDeviceMobilityState(int)
      *
@@ -4909,7 +4913,8 @@ public class WifiManager {
     public static final int DEVICE_MOBILITY_STATE_HIGH_MVMT = 1;
 
     /**
-     * Low movement device mobility state
+     * Low movement device mobility state.
+     * e.g. walking, running
      *
      * @see #setDeviceMobilityState(int)
      *
@@ -4931,6 +4936,8 @@ public class WifiManager {
     /**
      * Updates the device mobility state. Wifi uses this information to adjust the interval between
      * Wifi scans in order to balance power consumption with scan accuracy.
+     * The default mobility state when the device boots is {@link #DEVICE_MOBILITY_STATE_UNKNOWN}.
+     * This API should be called whenever there is a change in the mobility state.
      * @param state the updated device mobility state
      * @hide
      */

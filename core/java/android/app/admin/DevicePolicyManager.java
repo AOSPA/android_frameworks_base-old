@@ -59,7 +59,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
-import android.os.ParcelableException;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteCallback;
@@ -1453,7 +1452,7 @@ public class DevicePolicyManager {
      * Constant for {@link #getPasswordComplexity()}: password satisfies one of the following:
      * <ul>
      * <li>PIN with <b>no</b> repeating (4444) or ordered (1234, 4321, 2468) sequences, length at
-     * least 4
+     * least 8
      * <li>alphabetic, length at least 6
      * <li>alphanumeric, length at least 6
      * </ul>
@@ -3154,7 +3153,7 @@ public class DevicePolicyManager {
      * {@link #PASSWORD_QUALITY_ALPHANUMERIC} with {@link #setPasswordQuality}.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
-     * password is always treated as empty.
+     * password history length is always 0.
      * <p>
      * The calling device admin must have requested
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
@@ -3191,6 +3190,9 @@ public class DevicePolicyManager {
      * 432000000 ms for timeout.
      * <p>
      * To disable password expiration, a value of 0 may be used for timeout.
+     * <p>
+     * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * password expiration is always disabled.
      * <p>
      * The calling device admin must have requested
      * {@link DeviceAdminInfo#USES_POLICY_EXPIRE_PASSWORD} to be able to call this method; if it has
@@ -3231,6 +3233,9 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
      *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * password expiration is always disabled and this method always returns 0.
+     *
      * @param admin The name of the admin component to check, or {@code null} to aggregate all admins.
      * @return The timeout for the given admin or the minimum of all timeouts
      */
@@ -3256,6 +3261,9 @@ public class DevicePolicyManager {
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * the password expiration for the parent profile.
      *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * password expiration is always disabled and this method always returns 0.
+     *
      * @param admin The name of the admin component to check, or {@code null} to aggregate all admins.
      * @return The password expiration time, in milliseconds since epoch.
      */
@@ -3279,6 +3287,9 @@ public class DevicePolicyManager {
      * <p>This method can be called on the {@link DevicePolicyManager} instance
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
+     *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * password history length is always 0.
      *
      * @param admin The name of the admin component to check, or {@code null} to aggregate
      * all admins.
@@ -3307,7 +3318,7 @@ public class DevicePolicyManager {
      * Return the maximum password length that the device supports for a
      * particular password quality.
      * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
-     * password is always empty.
+     * password is always empty and this method always returns 0.
      * @param quality The quality being interrogated.
      * @return Returns the maximum length that the user can enter.
      */
@@ -3363,7 +3374,7 @@ public class DevicePolicyManager {
      * #getParentProfileInstance}.
      *
      * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
-     * password is always treated as empty.
+     * password is always empty and this method returns {@link #PASSWORD_COMPLEXITY_NONE}.
      *
      * @throws IllegalStateException if the user is not unlocked.
      * @throws SecurityException if the calling application does not have the permission
@@ -3438,6 +3449,8 @@ public class DevicePolicyManager {
      * <p>
      * The calling device admin must have requested {@link DeviceAdminInfo#USES_POLICY_WATCH_LOGIN}
      * to be able to call this method; if it has not, a security exception will be thrown.
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * password is always empty and this method always returns 0.
      *
      * @return The number of times user has entered an incorrect password since the last correct
      *         password entry.
@@ -3504,6 +3517,8 @@ public class DevicePolicyManager {
      * This method can be called on the {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set a value on the parent
      * profile.
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * password is always empty and this method has no effect - i.e. the policy is not set.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param num The number of failed password attempts at which point the device or profile will
@@ -3532,6 +3547,10 @@ public class DevicePolicyManager {
      * <p>This method can be called on the {@link DevicePolicyManager} instance
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * the value for the parent profile.
+     *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * password is always empty and this method returns a default value (0) indicating that the
+     * policy is not set.
      *
      * @param admin The name of the admin component to check, or {@code null} to aggregate
      * all admins.
@@ -3620,6 +3639,8 @@ public class DevicePolicyManager {
      * {@link android.os.Build.VERSION_CODES#N} and later for managed profiles, or for device admins
      * that are not device owner or profile owner.  Once set, the password cannot be changed to null
      * or empty except by these admins.</em>
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, this
+     * methods does nothing.
      * <p>
      * The calling device admin must have requested
      * {@link DeviceAdminInfo#USES_POLICY_RESET_PASSWORD} to be able to call this method; if it has
@@ -3670,6 +3691,8 @@ public class DevicePolicyManager {
      * will be stored on your server and who will need access to them. Tokens may be the subject of
      * legal access requests.
      * </em>
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
+     * reset token is not set and this method returns false.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param token a secure token a least 32-byte long, which must be generated by a
@@ -3694,6 +3717,10 @@ public class DevicePolicyManager {
     /**
      * Called by a profile or device owner to revoke the current password reset token.
      *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, this
+     * method has no effect - the reset token should not have been set in the first place - and
+     * false is returned.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @return true if the operation is successful, false otherwise.
      * @throws SecurityException if admin is not a device or profile owner.
@@ -3713,6 +3740,9 @@ public class DevicePolicyManager {
 
     /**
      * Called by a profile or device owner to check if the current reset password token is active.
+     *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature,
+     * false is always returned.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @return true if the token is active, false otherwise.
@@ -3749,6 +3779,8 @@ public class DevicePolicyManager {
      * <p>
      * Calling with a {@code null} or empty password will clear any existing PIN, pattern or
      * password if the current password constraints allow it.
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature,
+     * calling this methods has no effect - the password is always empty - and false is returned.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param password The new password for the user. {@code null} or empty clears the password.
@@ -3856,6 +3888,9 @@ public class DevicePolicyManager {
      * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
      * profile.
      *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature,
+     * calling this methods has no effect - i.e. the timeout is not set.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param timeoutMs The new timeout in milliseconds, after which the user will have to unlock
      *         with strong authentication method. A value of 0 means the admin is not participating
@@ -3887,6 +3922,9 @@ public class DevicePolicyManager {
      * <p>This method can be called on the {@link DevicePolicyManager} instance
      * returned by {@link #getParentProfileInstance(ComponentName)} in order to retrieve
      * restrictions on the parent profile.
+     *
+     * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature,
+     * 0 is returned to indicate that no timeout is configured.
      *
      * @param admin The name of the admin component to check, or {@code null} to aggregate
      *         across all participating admins.
@@ -6618,6 +6656,9 @@ public class DevicePolicyManager {
      * This method can be called on the {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to set the configuration for
      * the parent profile.
+     * <p>
+     * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, calling
+     * this method has no effect - no trust agent configuration will be set.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param target Component name of the agent to be configured.
@@ -6647,6 +6688,9 @@ public class DevicePolicyManager {
      * This method can be called on the {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to retrieve the configuration set
      * on the parent profile.
+     * <p>
+     * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, null is
+     * always returned.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with. If null,
      * this function returns a list of configurations for all admins that declare
@@ -10588,18 +10632,18 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Whitelists a set of packages that are allowed to access cross-profile calendar APIs.
+     * Allows a set of packages to access cross-profile calendar APIs.
      *
      * <p>Called by a profile owner of a managed profile.
      *
-     * <p>Calling with a null value for the set disables the restriction so that all packages
-     * are allowed to access cross-profile calendar APIs. Calling with an empty set disallows
-     * all packages from accessing cross-profile calendar APIs. If this method isn't called,
-     * no package will be allowed to access cross-profile calendar APIs by default.
+     * <p>Calling with a {@code null} value for the set disables the restriction so that all
+     * packages are allowed to access cross-profile calendar APIs. Calling with an empty set
+     * disallows all packages from accessing cross-profile calendar APIs. If this method isn't
+     * called, no package is allowed to access cross-profile calendar APIs by default.
      *
-     * @param admin which {@link DeviceAdminReceiver} this request is associated with.
-     * @param packageNames set of packages to be whitelisted.
-     * @throws SecurityException if {@code admin} is not a profile owner.
+     * @param admin which {@link DeviceAdminReceiver} this request is associated with
+     * @param packageNames set of packages to be whitelisted
+     * @throws SecurityException if {@code admin} is not a profile owner
      *
      * @see #getCrossProfileCalendarPackages(ComponentName)
      */
@@ -10617,15 +10661,15 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Gets a set of package names that are whitelisted to access cross-profile calendar APIs.
+     * Gets a set of package names that are allowed to access cross-profile calendar APIs.
      *
      * <p>Called by a profile owner of a managed profile.
      *
-     * @param admin which {@link DeviceAdminReceiver} this request is associated with.
-     * @return the set of names of packages that were previously whitelisted via
+     * @param admin which {@link DeviceAdminReceiver} this request is associated with
+     * @return the set of names of packages that were previously allowed via
      * {@link #setCrossProfileCalendarPackages(ComponentName, Set)}, or an
-     * empty set if none have been whitelisted.
-     * @throws SecurityException if {@code admin} is not a profile owner.
+     * empty set if none have been allowed
+     * @throws SecurityException if {@code admin} is not a profile owner
      *
      * @see #setCrossProfileCalendarPackages(ComponentName, Set)
      */
@@ -10655,8 +10699,8 @@ public class DevicePolicyManager {
      * that user, and get a {@link DevicePolicyManager} from this context.
      *
      * @param packageName the name of the package
-     * @return {@code true} if the package is allowed to access cross-profile calendar APIs.
-     * {@code false} otherwise.
+     * @return {@code true} if the package is allowed to access cross-profile calendar APIs,
+     * {@code false} otherwise
      *
      * @see #setCrossProfileCalendarPackages(ComponentName, Set)
      * @see #getCrossProfileCalendarPackages(ComponentName)
@@ -10676,15 +10720,15 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Gets a set of package names that are whitelisted to access cross-profile calendar APIs.
+     * Gets a set of package names that are allowed to access cross-profile calendar APIs.
      *
      * <p>To query for a specific user, use
      * {@link Context#createPackageContextAsUser(String, int, UserHandle)} to create a context for
      * that user, and get a {@link DevicePolicyManager} from this context.
      *
-     * @return the set of names of packages that were previously whitelisted via
+     * @return the set of names of packages that were previously allowed via
      * {@link #setCrossProfileCalendarPackages(ComponentName, Set)}, or an
-     * empty set if none have been whitelisted.
+     * empty set if none have been allowed
      *
      * @see #setCrossProfileCalendarPackages(ComponentName, Set)
      * @see #getCrossProfileCalendarPackages(ComponentName)
@@ -10776,12 +10820,12 @@ public class DevicePolicyManager {
     /**
      * Starts an activity to view calendar events in the managed profile.
      *
-     * @param eventId the id of the event to be viewed.
-     * @param start the start time of the event.
-     * @param end the end time of the event.
-     * @param allDay if the event is an all-day event.
+     * @param eventId the id of the event to be viewed
+     * @param start the start time of the event
+     * @param end the end time of the event
+     * @param allDay if the event is an all-day event
      * @param flags flags to be set for the intent
-     * @return {@code true} if the activity is started successfully. {@code false} otherwise.
+     * @return {@code true} if the activity is started successfully, {@code false} otherwise
      *
      * @see CalendarContract#startViewCalendarEventInManagedProfile(Context, String, long, long,
      * long, boolean, int)

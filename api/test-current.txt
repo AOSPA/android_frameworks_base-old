@@ -193,31 +193,38 @@ package android.app {
     field public static final String OPSTR_WRITE_SMS = "android:write_sms";
     field public static final String OPSTR_WRITE_WALLPAPER = "android:write_wallpaper";
     field public static final int OP_COARSE_LOCATION = 0; // 0x0
+    field public static final int OP_FLAGS_ALL = 31; // 0x1f
+    field public static final int OP_FLAG_SELF = 1; // 0x1
+    field public static final int OP_FLAG_TRUSTED_PROXIED = 8; // 0x8
+    field public static final int OP_FLAG_TRUSTED_PROXY = 2; // 0x2
+    field public static final int OP_FLAG_UNTRUSTED_PROXIED = 16; // 0x10
+    field public static final int OP_FLAG_UNTRUSTED_PROXY = 4; // 0x4
     field public static final int OP_RECORD_AUDIO = 27; // 0x1b
+    field public static final int OP_START_FOREGROUND = 76; // 0x4c
     field public static final int OP_SYSTEM_ALERT_WINDOW = 24; // 0x18
-    field public static final int UID_STATE_BACKGROUND = 5; // 0x5
-    field public static final int UID_STATE_CACHED = 6; // 0x6
-    field public static final int UID_STATE_FOREGROUND = 4; // 0x4
-    field public static final int UID_STATE_FOREGROUND_SERVICE = 3; // 0x3
-    field public static final int UID_STATE_FOREGROUND_SERVICE_LOCATION = 2; // 0x2
-    field public static final int UID_STATE_PERSISTENT = 0; // 0x0
-    field public static final int UID_STATE_TOP = 1; // 0x1
+    field public static final int UID_STATE_BACKGROUND = 600; // 0x258
+    field public static final int UID_STATE_CACHED = 700; // 0x2bc
+    field public static final int UID_STATE_FOREGROUND = 500; // 0x1f4
+    field public static final int UID_STATE_FOREGROUND_SERVICE = 400; // 0x190
+    field public static final int UID_STATE_FOREGROUND_SERVICE_LOCATION = 300; // 0x12c
+    field public static final int UID_STATE_PERSISTENT = 100; // 0x64
+    field public static final int UID_STATE_TOP = 200; // 0xc8
   }
 
   public static final class AppOpsManager.HistoricalOp implements android.os.Parcelable {
     method public int describeContents();
-    method public long getAccessCount(int);
-    method public long getAccessDuration(int);
-    method public long getBackgroundAccessCount();
-    method public long getBackgroundAccessDuration();
-    method public long getBackgroundRejectCount();
-    method public long getForegroundAccessCount();
-    method public long getForegroundAccessDuration();
-    method public long getForegroundRejectCount();
+    method public long getAccessCount(int, int, int);
+    method public long getAccessDuration(int, int, int);
+    method public long getBackgroundAccessCount(int);
+    method public long getBackgroundAccessDuration(int);
+    method public long getBackgroundRejectCount(int);
+    method public long getForegroundAccessCount(int);
+    method public long getForegroundAccessDuration(int);
+    method public long getForegroundRejectCount(int);
     method @NonNull public String getOpName();
-    method public long getRejectCount(int);
+    method public long getRejectCount(int, int, int);
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalOp> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalOp> CREATOR;
   }
 
   public static final class AppOpsManager.HistoricalOps implements android.os.Parcelable {
@@ -228,12 +235,12 @@ package android.app {
     method public int getUidCount();
     method @Nullable public android.app.AppOpsManager.HistoricalUidOps getUidOps(int);
     method @NonNull public android.app.AppOpsManager.HistoricalUidOps getUidOpsAt(int);
-    method public void increaseAccessCount(int, int, @NonNull String, int, long);
-    method public void increaseAccessDuration(int, int, @NonNull String, int, long);
-    method public void increaseRejectCount(int, int, @NonNull String, int, long);
+    method public void increaseAccessCount(int, int, @NonNull String, int, int, long);
+    method public void increaseAccessDuration(int, int, @NonNull String, int, int, long);
+    method public void increaseRejectCount(int, int, @NonNull String, int, int, long);
     method public void offsetBeginAndEndTime(long);
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalOps> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalOps> CREATOR;
   }
 
   public static final class AppOpsManager.HistoricalOpsRequest {
@@ -242,6 +249,7 @@ package android.app {
   public static final class AppOpsManager.HistoricalOpsRequest.Builder {
     ctor public AppOpsManager.HistoricalOpsRequest.Builder(long, long);
     method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest build();
+    method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest.Builder setFlags(int);
     method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest.Builder setOpNames(@Nullable java.util.List<java.lang.String>);
     method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest.Builder setPackageName(@Nullable String);
     method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest.Builder setUid(int);
@@ -254,7 +262,7 @@ package android.app {
     method public int getOpCount();
     method @NonNull public String getPackageName();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalPackageOps> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalPackageOps> CREATOR;
   }
 
   public static final class AppOpsManager.HistoricalUidOps implements android.os.Parcelable {
@@ -264,11 +272,40 @@ package android.app {
     method @NonNull public android.app.AppOpsManager.HistoricalPackageOps getPackageOpsAt(int);
     method public int getUid();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalUidOps> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalUidOps> CREATOR;
   }
 
   public static interface AppOpsManager.OnOpActiveChangedListener {
     method public void onOpActiveChanged(int, int, String, boolean);
+  }
+
+  public static final class AppOpsManager.OpEntry implements android.os.Parcelable {
+    method public int describeContents();
+    method public long getDuration();
+    method public long getLastAccessBackgroundTime(int);
+    method public long getLastAccessForegroundTime(int);
+    method public long getLastAccessTime(int);
+    method public long getLastAccessTime(int, int, int);
+    method public long getLastBackgroundDuration(int);
+    method public long getLastDuration(int, int, int);
+    method public long getLastForegroundDuration(int);
+    method public long getLastRejectBackgroundTime(int);
+    method public long getLastRejectForegroundTime(int);
+    method public long getLastRejectTime(int);
+    method public long getLastRejectTime(int, int, int);
+    method public int getMode();
+    method @NonNull public String getOpStr();
+    method @Nullable public String getProxyPackageName();
+    method @Nullable public String getProxyPackageName(int, int);
+    method public int getProxyUid();
+    method public int getProxyUid(int, int);
+    method public boolean isRunning();
+    method public void writeToParcel(android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.AppOpsManager.OpEntry> CREATOR;
+  }
+
+  public class DownloadManager {
+    field public static final String COLUMN_MEDIASTORE_URI = "mediastore_uri";
   }
 
   public final class NotificationChannel implements android.os.Parcelable {
@@ -392,7 +429,7 @@ package android.app.prediction {
     method public int getPredictedTargetCount();
     method public String getUiSurface();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.prediction.AppPredictionContext> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.prediction.AppPredictionContext> CREATOR;
   }
 
   public static final class AppPredictionContext.Builder {
@@ -410,7 +447,7 @@ package android.app.prediction {
   public final class AppPredictionSessionId implements android.os.Parcelable {
     method public int describeContents();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.prediction.AppPredictionSessionId> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.prediction.AppPredictionSessionId> CREATOR;
   }
 
   public final class AppPredictor {
@@ -438,7 +475,7 @@ package android.app.prediction {
     method @Nullable public android.content.pm.ShortcutInfo getShortcutInfo();
     method @NonNull public android.os.UserHandle getUser();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.prediction.AppTarget> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.prediction.AppTarget> CREATOR;
   }
 
   public final class AppTargetEvent implements android.os.Parcelable {
@@ -450,7 +487,7 @@ package android.app.prediction {
     field public static final int ACTION_DISMISS = 2; // 0x2
     field public static final int ACTION_LAUNCH = 1; // 0x1
     field public static final int ACTION_PIN = 3; // 0x3
-    field public static final android.os.Parcelable.Creator<android.app.prediction.AppTargetEvent> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.prediction.AppTargetEvent> CREATOR;
   }
 
   public static final class AppTargetEvent.Builder {
@@ -463,19 +500,30 @@ package android.app.prediction {
     ctor public AppTargetId(@NonNull String);
     method public int describeContents();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.app.prediction.AppTargetId> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.prediction.AppTargetId> CREATOR;
   }
 
 }
 
 package android.app.role {
 
+  public interface OnRoleHoldersChangedListener {
+    method public void onRoleHoldersChanged(@NonNull String, @NonNull android.os.UserHandle);
+  }
+
   public final class RoleManager {
+    method @RequiresPermission("android.permission.OBSERVE_ROLE_HOLDERS") public void addOnRoleHoldersChangedListenerAsUser(@NonNull java.util.concurrent.Executor, @NonNull android.app.role.OnRoleHoldersChangedListener, @NonNull android.os.UserHandle);
     method @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public void addRoleHolderAsUser(@NonNull String, @NonNull String, int, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
+    method @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public boolean addRoleHolderFromController(@NonNull String, @NonNull String);
     method @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public void clearRoleHoldersAsUser(@NonNull String, int, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
+    method @NonNull @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public java.util.List<java.lang.String> getHeldRolesFromController(@NonNull String);
     method @NonNull @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public java.util.List<java.lang.String> getRoleHolders(@NonNull String);
     method @NonNull @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public java.util.List<java.lang.String> getRoleHoldersAsUser(@NonNull String, @NonNull android.os.UserHandle);
+    method @RequiresPermission("android.permission.OBSERVE_ROLE_HOLDERS") public void removeOnRoleHoldersChangedListenerAsUser(@NonNull android.app.role.OnRoleHoldersChangedListener, @NonNull android.os.UserHandle);
     method @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public void removeRoleHolderAsUser(@NonNull String, @NonNull String, int, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
+    method @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public boolean removeRoleHolderFromController(@NonNull String, @NonNull String);
+    method @RequiresPermission("com.android.permissioncontroller.permission.MANAGE_ROLES_FROM_CONTROLLER") public void setRoleNamesFromController(@NonNull java.util.List<java.lang.String>);
+    field public static final int MANAGE_HOLDERS_FLAG_DONT_KILL_APP = 1; // 0x1
   }
 
   public interface RoleManagerCallback {
@@ -517,7 +565,7 @@ package android.content {
     method public int describeContents();
     method public static android.content.AutofillOptions forWhitelistingItself();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.content.AutofillOptions> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.content.AutofillOptions> CREATOR;
     field public boolean augmentedEnabled;
     field public final boolean compatModeEnabled;
     field public final int loggingLevel;
@@ -528,7 +576,7 @@ package android.content {
     method public int describeContents();
     method public static android.content.ContentCaptureOptions forWhitelistingItself();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.content.ContentCaptureOptions> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.content.ContentCaptureOptions> CREATOR;
     field public final int idleFlushingFrequencyMs;
     field public final int logHistorySize;
     field public final int loggingLevel;
@@ -556,6 +604,10 @@ package android.content {
 
   public class ContextWrapper extends android.content.Context {
     method public android.view.Display getDisplay();
+  }
+
+  public class Intent implements java.lang.Cloneable android.os.Parcelable {
+    field public static final String EXTRA_ROLE_NAME = "android.intent.extra.ROLE_NAME";
   }
 
 }
@@ -737,7 +789,7 @@ package android.hardware.display {
     method public java.time.LocalDate getLocalDate();
     method public float[] getStats();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.hardware.display.AmbientBrightnessDayStats> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.hardware.display.AmbientBrightnessDayStats> CREATOR;
   }
 
   public class AmbientDisplayConfiguration {
@@ -750,7 +802,7 @@ package android.hardware.display {
   public final class BrightnessChangeEvent implements android.os.Parcelable {
     method public int describeContents();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessChangeEvent> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessChangeEvent> CREATOR;
     field public final float batteryLevel;
     field public final float brightness;
     field public final long colorSampleDuration;
@@ -773,17 +825,17 @@ package android.hardware.display {
     method @Nullable public android.hardware.display.BrightnessCorrection getCorrectionByPackageName(@NonNull String);
     method public android.util.Pair<float[],float[]> getCurve();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessConfiguration> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessConfiguration> CREATOR;
   }
 
   public static class BrightnessConfiguration.Builder {
     ctor public BrightnessConfiguration.Builder(float[], float[]);
-    method public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByCategory(int, @NonNull android.hardware.display.BrightnessCorrection);
-    method public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByPackageName(@NonNull String, @NonNull android.hardware.display.BrightnessCorrection);
-    method public android.hardware.display.BrightnessConfiguration build();
+    method @NonNull public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByCategory(int, @NonNull android.hardware.display.BrightnessCorrection);
+    method @NonNull public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByPackageName(@NonNull String, @NonNull android.hardware.display.BrightnessCorrection);
+    method @NonNull public android.hardware.display.BrightnessConfiguration build();
     method public int getMaxCorrectionsByCategory();
     method public int getMaxCorrectionsByPackageName();
-    method public android.hardware.display.BrightnessConfiguration.Builder setDescription(@Nullable String);
+    method @NonNull public android.hardware.display.BrightnessConfiguration.Builder setDescription(@Nullable String);
   }
 
   public final class BrightnessCorrection implements android.os.Parcelable {
@@ -791,7 +843,7 @@ package android.hardware.display {
     method @NonNull public static android.hardware.display.BrightnessCorrection createScaleAndTranslateLog(float, float);
     method public int describeContents();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessCorrection> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessCorrection> CREATOR;
   }
 
   public final class DisplayManager {
@@ -887,6 +939,7 @@ package android.location {
   public class LocationManager {
     method public String[] getBackgroundThrottlingWhitelist();
     method public String[] getIgnoreSettingsWhitelist();
+    method @NonNull public java.util.List<android.location.LocationRequest> getTestProviderCurrentRequests(String);
     method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(android.location.LocationRequest, android.location.LocationListener, android.os.Looper);
     method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(android.location.LocationRequest, android.app.PendingIntent);
     method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void setLocationEnabledForUser(boolean, android.os.UserHandle);
@@ -900,17 +953,20 @@ package android.location {
     method public long getInterval();
     method public int getNumUpdates();
     method public int getQuality();
+    method public boolean isLocationSettingsIgnored();
     method public android.location.LocationRequest setExpireAt(long);
     method public android.location.LocationRequest setExpireIn(long);
     method public android.location.LocationRequest setFastestInterval(long);
     method public android.location.LocationRequest setInterval(long);
+    method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public android.location.LocationRequest setLocationSettingsIgnored(boolean);
     method public android.location.LocationRequest setNumUpdates(int);
+    method public android.location.LocationRequest setProvider(String);
     method public android.location.LocationRequest setQuality(int);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final int ACCURACY_BLOCK = 102; // 0x66
     field public static final int ACCURACY_CITY = 104; // 0x68
     field public static final int ACCURACY_FINE = 100; // 0x64
-    field public static final android.os.Parcelable.Creator<android.location.LocationRequest> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.location.LocationRequest> CREATOR;
     field public static final int POWER_HIGH = 203; // 0xcb
     field public static final int POWER_LOW = 201; // 0xc9
     field public static final int POWER_NONE = 200; // 0xc8
@@ -941,7 +997,7 @@ package android.media {
     method public int getInitialMarkMs();
     method public int getResumePlaybackMarkMs();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.media.BufferingParams> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.media.BufferingParams> CREATOR;
   }
 
   public static class BufferingParams.Builder {
@@ -956,7 +1012,7 @@ package android.media {
     method public android.media.MediaPlayer2.DrmInfo getDrmInfo(@NonNull android.media.DataSourceDesc);
     method public android.media.MediaDrm.KeyRequest getDrmKeyRequest(@NonNull android.media.DataSourceDesc, @Nullable byte[], @Nullable byte[], @Nullable String, int, @Nullable java.util.Map<java.lang.String,java.lang.String>) throws android.media.MediaPlayer2.NoDrmSchemeException;
     method public String getDrmPropertyString(@NonNull android.media.DataSourceDesc, @NonNull String) throws android.media.MediaPlayer2.NoDrmSchemeException;
-    method public Object prepareDrm(@NonNull android.media.DataSourceDesc, @NonNull java.util.UUID);
+    method @NonNull public Object prepareDrm(@NonNull android.media.DataSourceDesc, @NonNull java.util.UUID);
     method public byte[] provideDrmKeyResponse(@NonNull android.media.DataSourceDesc, @Nullable byte[], @NonNull byte[]) throws android.media.DeniedByServerException, android.media.MediaPlayer2.NoDrmSchemeException;
     method public void releaseDrm(@NonNull android.media.DataSourceDesc) throws android.media.MediaPlayer2.NoDrmSchemeException;
     method public void restoreDrmKeys(@NonNull android.media.DataSourceDesc, @NonNull byte[]) throws android.media.MediaPlayer2.NoDrmSchemeException;
@@ -1081,8 +1137,8 @@ package android.net {
 
   public class LinkAddress implements android.os.Parcelable {
     ctor public LinkAddress(java.net.InetAddress, int, int, int);
-    ctor public LinkAddress(java.net.InetAddress, int);
-    ctor public LinkAddress(String);
+    ctor public LinkAddress(@NonNull java.net.InetAddress, int);
+    ctor public LinkAddress(@NonNull String);
     ctor public LinkAddress(String, int, int);
     method public boolean isGlobalPreferred();
     method public boolean isIPv4();
@@ -1155,7 +1211,7 @@ package android.net {
     method public void setGateway(java.net.InetAddress);
     method public void setIpAddress(android.net.LinkAddress);
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.net.StaticIpConfiguration> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.net.StaticIpConfiguration> CREATOR;
   }
 
   public class TrafficStats {
@@ -1412,8 +1468,8 @@ package android.os {
 
   public class Environment {
     method public static java.io.File buildPath(java.io.File, java.lang.String...);
-    method public static java.io.File getProductDirectory();
-    method public static java.io.File getStorageDirectory();
+    method @NonNull public static java.io.File getProductDirectory();
+    method @NonNull public static java.io.File getStorageDirectory();
   }
 
   public final class FileUtils {
@@ -1578,7 +1634,7 @@ package android.os {
     method public long getPrivacyPolicy();
     method public long getTimestamp();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.IncidentManager.IncidentReport> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.IncidentManager.IncidentReport> CREATOR;
   }
 
   public static class IncidentManager.PendingReport {
@@ -1602,7 +1658,7 @@ package android.os {
     method public void setAll(boolean);
     method public void setPrivacyPolicy(int);
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.IncidentReportArgs> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.IncidentReportArgs> CREATOR;
   }
 
   public final class MessageQueue {
@@ -1649,7 +1705,7 @@ package android.os {
     method public int describeContents();
     method public void sendResult(@Nullable android.os.Bundle);
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.RemoteCallback> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.RemoteCallback> CREATOR;
   }
 
   public static interface RemoteCallback.OnResultListener {
@@ -1662,7 +1718,7 @@ package android.os {
   }
 
   public static final class StrictMode.ThreadPolicy.Builder {
-    method public android.os.StrictMode.ThreadPolicy.Builder detectExplicitGc();
+    method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectExplicitGc();
   }
 
   public static final class StrictMode.ViolationInfo implements android.os.Parcelable {
@@ -1674,7 +1730,7 @@ package android.os {
     method public Class<? extends android.os.strictmode.Violation> getViolationClass();
     method public String getViolationDetails();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.StrictMode.ViolationInfo> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.StrictMode.ViolationInfo> CREATOR;
     field public String broadcastIntentAction;
     field public int durationMillis;
     field public int numAnimationsRunning;
@@ -1729,7 +1785,7 @@ package android.os {
     method public android.os.VibrationEffect.OneShot scale(float, int);
     method public void validate();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.VibrationEffect.OneShot> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.VibrationEffect.OneShot> CREATOR;
   }
 
   public static class VibrationEffect.Prebaked extends android.os.VibrationEffect implements android.os.Parcelable {
@@ -1742,7 +1798,7 @@ package android.os {
     method public boolean shouldFallback();
     method public void validate();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.VibrationEffect.Prebaked> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.VibrationEffect.Prebaked> CREATOR;
   }
 
   public static class VibrationEffect.Waveform extends android.os.VibrationEffect implements android.os.Parcelable {
@@ -1755,7 +1811,7 @@ package android.os {
     method public android.os.VibrationEffect.Waveform scale(float, int);
     method public void validate();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.VibrationEffect.Waveform> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.VibrationEffect.Waveform> CREATOR;
   }
 
   public class VintfObject {
@@ -1829,7 +1885,7 @@ package android.os.health {
     method public int describeContents();
     method public android.os.health.HealthStats getHealthStats();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.os.health.HealthStatsParceler> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.os.health.HealthStatsParceler> CREATOR;
   }
 
   public class HealthStatsWriter {
@@ -1921,7 +1977,12 @@ package android.provider {
 
   public final class DeviceConfig {
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static void addOnPropertyChangedListener(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.provider.DeviceConfig.OnPropertyChangedListener);
+    method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static boolean getBoolean(String, String, boolean);
+    method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static float getFloat(String, String, float);
+    method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static int getInt(String, String, int);
+    method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static long getLong(String, String, long);
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static String getProperty(String, String);
+    method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static String getString(String, String, String);
     method public static void removeOnPropertyChangedListener(android.provider.DeviceConfig.OnPropertyChangedListener);
     method @RequiresPermission("android.permission.WRITE_DEVICE_CONFIG") public static void resetToDefaults(int, @Nullable String);
     method @RequiresPermission("android.permission.WRITE_DEVICE_CONFIG") public static boolean setProperty(String, String, String, boolean);
@@ -1977,6 +2038,7 @@ package android.provider {
     field public static final String DYNAMIC_POWER_SAVINGS_ENABLED = "dynamic_power_savings_enabled";
     field public static final String HIDDEN_API_BLACKLIST_EXEMPTIONS = "hidden_api_blacklist_exemptions";
     field public static final String LOCATION_GLOBAL_KILL_SWITCH = "location_global_kill_switch";
+    field public static final String LOCATION_IGNORE_SETTINGS_PACKAGE_WHITELIST = "location_ignore_settings_package_whitelist";
     field public static final String LOW_POWER_MODE = "low_power";
     field public static final String LOW_POWER_MODE_STICKY = "low_power_sticky";
     field public static final String OVERLAY_DISPLAY_DEVICES = "overlay_display_devices";
@@ -2100,7 +2162,7 @@ package android.service.autofill {
     method public android.util.ArrayMap<java.lang.String,android.os.Bundle> getFieldClassificationArgs();
     method public String[] getValues();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.service.autofill.CompositeUserData> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.service.autofill.CompositeUserData> CREATOR;
   }
 
   public final class CustomDescription implements android.os.Parcelable {
@@ -2203,9 +2265,8 @@ package android.service.autofill.augmented {
 
   public static final class FillResponse.Builder {
     ctor public FillResponse.Builder();
-    method public android.service.autofill.augmented.FillResponse build();
-    method public android.service.autofill.augmented.FillResponse.Builder setFillWindow(@NonNull android.service.autofill.augmented.FillWindow);
-    method public android.service.autofill.augmented.FillResponse.Builder setIgnoredIds(@NonNull java.util.List<android.view.autofill.AutofillId>);
+    method @NonNull public android.service.autofill.augmented.FillResponse build();
+    method @NonNull public android.service.autofill.augmented.FillResponse.Builder setFillWindow(@NonNull android.service.autofill.augmented.FillWindow);
   }
 
   public final class FillWindow implements java.lang.AutoCloseable {
@@ -2243,11 +2304,11 @@ package android.service.contentcapture {
 
   public final class SnapshotData implements android.os.Parcelable {
     method public int describeContents();
-    method public android.app.assist.AssistContent getAssistContent();
-    method public android.os.Bundle getAssistData();
-    method public android.app.assist.AssistStructure getAssistStructure();
+    method @Nullable public android.app.assist.AssistContent getAssistContent();
+    method @NonNull public android.os.Bundle getAssistData();
+    method @NonNull public android.app.assist.AssistStructure getAssistStructure();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.service.contentcapture.SnapshotData> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.service.contentcapture.SnapshotData> CREATOR;
   }
 
 }
@@ -2270,7 +2331,7 @@ package android.service.notification {
     method public CharSequence getExplanation();
     method public String getId();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.service.notification.SnoozeCriterion> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.service.notification.SnoozeCriterion> CREATOR;
   }
 
 }
@@ -2293,10 +2354,6 @@ package android.telecom {
     method public android.telecom.Connection getPrimaryConnection();
   }
 
-  public final class PhoneAccountSuggestion implements android.os.Parcelable {
-    ctor public PhoneAccountSuggestion(android.telecom.PhoneAccountHandle, int, boolean);
-  }
-
   public class PhoneAccountSuggestionService extends android.app.Service {
     ctor public PhoneAccountSuggestionService();
     method public void onAccountSuggestionRequest(@NonNull String);
@@ -2308,7 +2365,7 @@ package android.telecom {
   public class TelecomManager {
     method @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE") public int getCurrentTtyMode();
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public boolean isInEmergencyCall();
-    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setUserSelectedOutgoingPhoneAccount(android.telecom.PhoneAccountHandle);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setUserSelectedOutgoingPhoneAccount(@Nullable android.telecom.PhoneAccountHandle);
     field public static final int TTY_MODE_FULL = 1; // 0x1
     field public static final int TTY_MODE_HCO = 2; // 0x2
     field public static final int TTY_MODE_OFF = 0; // 0x0
@@ -2381,7 +2438,7 @@ package android.telephony.mbms {
     method public android.net.Uri getContentUri();
     method public android.net.Uri getFilePathUri();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.telephony.mbms.UriPathPair> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.telephony.mbms.UriPathPair> CREATOR;
   }
 
 }
@@ -2413,12 +2470,12 @@ package android.telephony.mbms.vendor {
   public class MbmsGroupCallServiceBase extends android.app.Service {
     ctor public MbmsGroupCallServiceBase();
     method public void dispose(int) throws android.os.RemoteException;
-    method public int initialize(android.telephony.mbms.MbmsGroupCallSessionCallback, int) throws android.os.RemoteException;
+    method public int initialize(@NonNull android.telephony.mbms.MbmsGroupCallSessionCallback, int) throws android.os.RemoteException;
     method public void onAppCallbackDied(int, int);
     method public android.os.IBinder onBind(android.content.Intent);
-    method public int startGroupCall(int, long, java.util.List<java.lang.Integer>, java.util.List<java.lang.Integer>, android.telephony.mbms.GroupCallCallback);
+    method public int startGroupCall(int, long, @NonNull java.util.List<java.lang.Integer>, @NonNull java.util.List<java.lang.Integer>, @NonNull android.telephony.mbms.GroupCallCallback);
     method public void stopGroupCall(int, long);
-    method public void updateGroupCall(int, long, java.util.List<java.lang.Integer>, java.util.List<java.lang.Integer>);
+    method public void updateGroupCall(int, long, @NonNull java.util.List<java.lang.Integer>, @NonNull java.util.List<java.lang.Integer>);
   }
 
   public class MbmsStreamingServiceBase extends android.os.Binder {
@@ -2706,7 +2763,7 @@ package android.view {
   }
 
   public final class Display {
-    method public boolean supportsSystemDecorations();
+    method public boolean hasAccess(int);
   }
 
   public class FocusFinder {
@@ -2778,13 +2835,14 @@ package android.view {
     method public default void setShouldShowIme(int, boolean);
     method public default void setShouldShowSystemDecors(int, boolean);
     method public default void setShouldShowWithInsecureKeyguard(int, boolean);
+    method public default boolean shouldShowSystemDecors(int);
   }
 
   public static class WindowManager.LayoutParams extends android.view.ViewGroup.LayoutParams implements android.os.Parcelable {
     field public static final int ACCESSIBILITY_TITLE_CHANGED = 33554432; // 0x2000000
     field public static final int PRIVATE_FLAG_NO_MOVE_ANIMATION = 64; // 0x40
     field public CharSequence accessibilityTitle;
-    field @android.view.ViewDebug.ExportedProperty(flagMapping={@android.view.ViewDebug.FlagToString(mask=0x1, equals=0x1, name="FAKE_HARDWARE_ACCELERATED"), @android.view.ViewDebug.FlagToString(mask=0x2, equals=0x2, name="FORCE_HARDWARE_ACCELERATED"), @android.view.ViewDebug.FlagToString(mask=0x4, equals=0x4, name="WANTS_OFFSET_NOTIFICATIONS"), @android.view.ViewDebug.FlagToString(mask=0x10, equals=0x10, name="SHOW_FOR_ALL_USERS"), @android.view.ViewDebug.FlagToString(mask=android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION, equals=android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION, name="NO_MOVE_ANIMATION"), @android.view.ViewDebug.FlagToString(mask=0x80, equals=0x80, name="COMPATIBLE_WINDOW"), @android.view.ViewDebug.FlagToString(mask=0x100, equals=0x100, name="SYSTEM_ERROR"), @android.view.ViewDebug.FlagToString(mask=0x200, equals=0x200, name="INHERIT_TRANSLUCENT_DECOR"), @android.view.ViewDebug.FlagToString(mask=0x400, equals=0x400, name="KEYGUARD"), @android.view.ViewDebug.FlagToString(mask=0x800, equals=0x800, name="DISABLE_WALLPAPER_TOUCH_EVENTS"), @android.view.ViewDebug.FlagToString(mask=0x1000, equals=0x1000, name="FORCE_STATUS_BAR_VISIBLE_TRANSPARENT"), @android.view.ViewDebug.FlagToString(mask=0x2000, equals=0x2000, name="PRESERVE_GEOMETRY"), @android.view.ViewDebug.FlagToString(mask=0x4000, equals=0x4000, name="FORCE_DECOR_VIEW_VISIBILITY"), @android.view.ViewDebug.FlagToString(mask=0x8000, equals=0x8000, name="WILL_NOT_REPLACE_ON_RELAUNCH"), @android.view.ViewDebug.FlagToString(mask=0x10000, equals=0x10000, name="LAYOUT_CHILD_WINDOW_IN_PARENT_FRAME"), @android.view.ViewDebug.FlagToString(mask=0x20000, equals=0x20000, name="FORCE_DRAW_STATUS_BAR_BACKGROUND"), @android.view.ViewDebug.FlagToString(mask=0x40000, equals=0x40000, name="SUSTAINED_PERFORMANCE_MODE"), @android.view.ViewDebug.FlagToString(mask=0x80000, equals=0x80000, name="HIDE_NON_SYSTEM_OVERLAY_WINDOWS"), @android.view.ViewDebug.FlagToString(mask=0x100000, equals=0x100000, name="IS_ROUNDED_CORNERS_OVERLAY"), @android.view.ViewDebug.FlagToString(mask=0x400000, equals=0x400000, name="IS_SCREEN_DECOR"), @android.view.ViewDebug.FlagToString(mask=0x800000, equals=0x800000, name="STATUS_FORCE_SHOW_NAVIGATION")}) public int privateFlags;
+    field @android.view.ViewDebug.ExportedProperty(flagMapping={@android.view.ViewDebug.FlagToString(mask=0x1, equals=0x1, name="FAKE_HARDWARE_ACCELERATED"), @android.view.ViewDebug.FlagToString(mask=0x2, equals=0x2, name="FORCE_HARDWARE_ACCELERATED"), @android.view.ViewDebug.FlagToString(mask=0x4, equals=0x4, name="WANTS_OFFSET_NOTIFICATIONS"), @android.view.ViewDebug.FlagToString(mask=0x10, equals=0x10, name="SHOW_FOR_ALL_USERS"), @android.view.ViewDebug.FlagToString(mask=android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION, equals=android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION, name="NO_MOVE_ANIMATION"), @android.view.ViewDebug.FlagToString(mask=0x80, equals=0x80, name="COMPATIBLE_WINDOW"), @android.view.ViewDebug.FlagToString(mask=0x100, equals=0x100, name="SYSTEM_ERROR"), @android.view.ViewDebug.FlagToString(mask=0x200, equals=0x200, name="INHERIT_TRANSLUCENT_DECOR"), @android.view.ViewDebug.FlagToString(mask=0x400, equals=0x400, name="KEYGUARD"), @android.view.ViewDebug.FlagToString(mask=0x800, equals=0x800, name="DISABLE_WALLPAPER_TOUCH_EVENTS"), @android.view.ViewDebug.FlagToString(mask=0x1000, equals=0x1000, name="FORCE_STATUS_BAR_VISIBLE_TRANSPARENT"), @android.view.ViewDebug.FlagToString(mask=0x2000, equals=0x2000, name="PRESERVE_GEOMETRY"), @android.view.ViewDebug.FlagToString(mask=0x4000, equals=0x4000, name="FORCE_DECOR_VIEW_VISIBILITY"), @android.view.ViewDebug.FlagToString(mask=0x8000, equals=0x8000, name="WILL_NOT_REPLACE_ON_RELAUNCH"), @android.view.ViewDebug.FlagToString(mask=0x10000, equals=0x10000, name="LAYOUT_CHILD_WINDOW_IN_PARENT_FRAME"), @android.view.ViewDebug.FlagToString(mask=0x20000, equals=0x20000, name="FORCE_DRAW_STATUS_BAR_BACKGROUND"), @android.view.ViewDebug.FlagToString(mask=0x40000, equals=0x40000, name="SUSTAINED_PERFORMANCE_MODE"), @android.view.ViewDebug.FlagToString(mask=0x80000, equals=0x80000, name="HIDE_NON_SYSTEM_OVERLAY_WINDOWS"), @android.view.ViewDebug.FlagToString(mask=0x100000, equals=0x100000, name="IS_ROUNDED_CORNERS_OVERLAY"), @android.view.ViewDebug.FlagToString(mask=0x400000, equals=0x400000, name="IS_SCREEN_DECOR"), @android.view.ViewDebug.FlagToString(mask=0x800000, equals=0x800000, name="STATUS_FORCE_SHOW_NAVIGATION"), @android.view.ViewDebug.FlagToString(mask=0x1000000, equals=0x1000000, name="COLOR_SPACE_AGNOSTIC")}) public int privateFlags;
   }
 
 }
@@ -2868,7 +2926,7 @@ package android.view.contentcapture {
     method public int getType();
     method @Nullable public android.view.contentcapture.ViewNode getViewNode();
     method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.view.contentcapture.ContentCaptureEvent> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.contentcapture.ContentCaptureEvent> CREATOR;
     field public static final int TYPE_CONTEXT_UPDATED = 6; // 0x6
     field public static final int TYPE_SESSION_PAUSED = 8; // 0x8
     field public static final int TYPE_SESSION_RESUMED = 7; // 0x7
@@ -2972,7 +3030,7 @@ package android.view.inspector {
     method public abstract String value();
   }
 
-  @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE) @java.lang.annotation.Target({java.lang.annotation.ElementType.METHOD}) public @interface InspectableProperty {
+  @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE) @java.lang.annotation.Target({java.lang.annotation.ElementType.METHOD, java.lang.annotation.ElementType.FIELD}) public @interface InspectableProperty {
     method public abstract int attributeId() default android.content.res.Resources.ID_NULL;
     method public abstract android.view.inspector.InspectableProperty.EnumMap[] enumMapping() default {};
     method public abstract android.view.inspector.InspectableProperty.FlagMap[] flagMapping() default {};
@@ -2999,6 +3057,7 @@ package android.view.inspector {
     enum_constant public static final android.view.inspector.InspectableProperty.ValueType INT_ENUM;
     enum_constant public static final android.view.inspector.InspectableProperty.ValueType INT_FLAG;
     enum_constant public static final android.view.inspector.InspectableProperty.ValueType NONE;
+    enum_constant public static final android.view.inspector.InspectableProperty.ValueType RESOURCE_ID;
   }
 
 }

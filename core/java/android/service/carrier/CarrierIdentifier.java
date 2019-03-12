@@ -16,6 +16,7 @@
 
 package android.service.carrier;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -35,7 +36,7 @@ import java.util.Objects;
 public class CarrierIdentifier implements Parcelable {
 
     /** Used to create a {@link CarrierIdentifier} from a {@link Parcel}. */
-    public static final Creator<CarrierIdentifier> CREATOR = new Creator<CarrierIdentifier>() {
+    public static final @android.annotation.NonNull Creator<CarrierIdentifier> CREATOR = new Creator<CarrierIdentifier>() {
             @Override
         public CarrierIdentifier createFromParcel(Parcel parcel) {
             return new CarrierIdentifier(parcel);
@@ -75,7 +76,7 @@ public class CarrierIdentifier implements Parcelable {
      * @param preciseCarrierId precise carrier identifier
      * {@link TelephonyManager#getSimPreciseCarrierId()}
      */
-    public CarrierIdentifier(String mcc, String mnc, @Nullable String spn,
+    public CarrierIdentifier(@NonNull String mcc, @NonNull String mnc, @Nullable String spn,
                              @Nullable String imsi, @Nullable String gid1, @Nullable String gid2,
                              int carrierid, int preciseCarrierId) {
         this(mcc, mnc, spn, imsi, gid1, gid2, null, carrierid, preciseCarrierId);
