@@ -213,7 +213,7 @@ public class BoostFramework {
                     sPerfGetPropFunc = sPerfClass.getMethod("perfGetProp", argClasses);
 
                     try {
-                        argClasses = new Class[] {int.class, int.class, String.class, int.class};
+                        argClasses = new Class[] {int.class, int.class, String.class, int.class, String.class};
                         sUXEngineEvents =  sPerfClass.getDeclaredMethod("perfUXEngine_events",
                                                                           argClasses);
 
@@ -235,7 +235,7 @@ public class BoostFramework {
                     sUxPerfClass = Class.forName(UXPERFORMANCE_CLASS);
 
                     Class[] argUxClasses = new Class[] {int.class, String.class, String.class};
-                    sUxIOPStart =   sUxPerfClass.getDeclaredMethod("perfIOPrefetchStart", argUxClasses);
+                    sUxIOPStart = sUxPerfClass.getDeclaredMethod("perfIOPrefetchStart", argUxClasses);
 
                     sUxIsLoaded = true;
                 }
@@ -336,11 +336,11 @@ public class BoostFramework {
             Log.e(TAG, "Exception " + e);
         }
         try {
-            Object retVal = sUxIOPStart.invoke(mUxPerf, pid, pkgName, codePath);
-            ret = (int) retVal;
-        } catch (Exception e) {
-            Log.e(TAG, "Ux Perf Exception " + e);
-        }
+             Object retVal = sUxIOPStart.invoke(mUxPerf, pid, pkgName, codePath);
+             ret = (int) retVal;
+         } catch (Exception e) {
+             Log.e(TAG, "Ux Perf Exception " + e);
+         }
 
         return ret;
     }
@@ -359,12 +359,18 @@ public class BoostFramework {
 
 /** @hide */
     public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat) {
+        return perfUXEngine_events(opcode, pid, pkgName, lat, null);
+     }
+
+/** @hide */
+    public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat, String codePath) {
         int ret = -1;
         try {
             if (sUXEngineEvents == null) {
                 return ret;
             }
-            Object retVal = sUXEngineEvents.invoke(mPerf, opcode, pid, pkgName, lat);
+
+            Object retVal = sUXEngineEvents.invoke(mPerf, opcode, pid, pkgName, lat,codePath);
             ret = (int) retVal;
         } catch (Exception e) {
             Log.e(TAG, "Exception " + e);

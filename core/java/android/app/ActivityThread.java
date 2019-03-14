@@ -6483,7 +6483,20 @@ public final class ActivityThread extends ClientTransactionHandler {
             pkg_name = appContext.getPackageName();
         }
         if (ux_perf != null && !Process.isIsolated() && pkg_name != null) {
-            ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0, pkg_name, bindApp_dur);
+            String pkgDir = null;
+            try
+            {
+                String codePath = appContext.getPackageCodePath();
+                pkgDir =  codePath.substring(0, codePath.lastIndexOf('/'));
+            }
+            catch(Exception e)
+            {
+                Slog.e(TAG, "HeavyGameThread () : Exception_1 = " + e);
+            }
+            ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0,
+                                           pkg_name,
+                                           bindApp_dur,
+                                           pkgDir);
         }
     }
 
