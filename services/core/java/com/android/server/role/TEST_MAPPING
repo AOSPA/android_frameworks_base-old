@@ -9,7 +9,12 @@
             ]
         },
         {
-            "name": "CtsRoleTestCases"
+            "name": "CtsRoleTestCases",
+            "options": [
+                {
+                    "exclude-annotation": "androidx.test.filters.FlakyTest"
+                }
+            ]
         }
     ]
 }

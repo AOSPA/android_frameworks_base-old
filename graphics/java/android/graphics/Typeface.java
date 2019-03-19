@@ -127,7 +127,11 @@ public class Typeface {
     static Typeface sDefaultTypeface;
 
     // Following two fields are not used but left for hiddenapi private list
-    @UnsupportedAppUsage
+    /**
+     * sSystemFontMap is read only and unmodifiable.
+     * Use public API {@link #create(String, int)} to get the typeface for given familyName.
+     */
+    @UnsupportedAppUsage(trackingBug = 123769347)
     static final Map<String, Typeface> sSystemFontMap;
 
     // We cannot support sSystemFallbackMap since we will migrate to public FontFamily API.

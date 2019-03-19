@@ -284,13 +284,16 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
      * Tells the system UI that volume has changed on an active remote session.
      */
     public void notifyRemoteVolumeChanged(int flags, MediaSessionRecord session) {
-        if (mRvc == null || !session.isActive()) {
-            return;
-        }
-        try {
-            mRvc.remoteVolumeChanged(session.getSessionToken(), flags);
-        } catch (Exception e) {
-            Log.wtf(TAG, "Error sending volume change to system UI.", e);
+        synchronized (mLock) {
+            if (mRvc == null || !session.isActive()) {
+                return;
+            }
+            try {
+                mRvc.remoteVolumeChanged(session.getSessionToken(), flags);
+            } catch (Exception e) {
+                Log.w(TAG, "Error sending volume change to system UI.", e);
+                mRvc = null;
+            }
         }
     }
 
@@ -546,9 +549,11 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
     }
 
     private MediaSessionRecord createSessionInternal(int callerPid, int callerUid, int userId,
-            String callerPackageName, SessionCallbackLink cb, String tag) throws RemoteException {
+            String callerPackageName, SessionCallbackLink cb, String tag, Bundle sessionInfo)
+            throws RemoteException {
         synchronized (mLock) {
-            return createSessionLocked(callerPid, callerUid, userId, callerPackageName, cb, tag);
+            return createSessionLocked(callerPid, callerUid, userId, callerPackageName, cb,
+                    tag, sessionInfo);
         }
     }
 
@@ -560,15 +565,15 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
      * 4. It needs to be added to the relevant user record.
      */
     private MediaSessionRecord createSessionLocked(int callerPid, int callerUid, int userId,
-            String callerPackageName, SessionCallbackLink cb, String tag) {
+            String callerPackageName, SessionCallbackLink cb, String tag, Bundle sessionInfo) {
         FullUserRecord user = getFullUserRecordLocked(userId);
         if (user == null) {
-            Log.wtf(TAG, "Request from invalid user: " +  userId);
+            Log.w(TAG, "Request from invalid user: " +  userId + ", pkg=" + callerPackageName);
             throw new RuntimeException("Session request from invalid user.");
         }
 
         final MediaSessionRecord session = new MediaSessionRecord(callerPid, callerUid, userId,
-                callerPackageName, cb, tag, this, mHandler.getLooper());
+                callerPackageName, cb, tag, sessionInfo, this, mHandler.getLooper());
         try {
             cb.getBinder().linkToDeath(session, 0);
         } catch (RemoteException e) {
@@ -643,7 +648,8 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
                 MediaSessionRecord record = user.mPriorityStack.getDefaultRemoteSession(userId);
                 mRvc.updateRemoteController(record == null ? null : record.getSessionToken());
             } catch (RemoteException e) {
-                Log.wtf(TAG, "Error sending default remote volume to sys ui.", e);
+                Log.w(TAG, "Error sending default remote volume to sys ui.", e);
+                mRvc = null;
             }
         }
     }
@@ -987,7 +993,7 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
 
         @Override
         public SessionLink createSession(String packageName, SessionCallbackLink cb, String tag,
-                int userId) throws RemoteException {
+                Bundle sessionInfo, int userId) throws RemoteException {
             final int pid = Binder.getCallingPid();
             final int uid = Binder.getCallingUid();
             final long token = Binder.clearCallingIdentity();
@@ -998,8 +1004,8 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
                 if (cb == null) {
                     throw new IllegalArgumentException("Controller callback cannot be null");
                 }
-                return createSessionInternal(pid, uid, resolvedUserId, packageName, cb, tag)
-                        .getSessionBinder();
+                return createSessionInternal(pid, uid, resolvedUserId, packageName, cb, tag,
+                        sessionInfo).getSessionBinder();
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1661,7 +1667,9 @@ public class MediaSessionServiceImpl extends MediaSessionService.ServiceImpl {
             final long token = Binder.clearCallingIdentity();
             try {
                 enforceSystemUiPermission("listen for volume changes", pid, uid);
-                mRvc = rvc;
+                synchronized (mLock) {
+                    mRvc = rvc;
+                }
             } finally {
                 Binder.restoreCallingIdentity(token);
             }

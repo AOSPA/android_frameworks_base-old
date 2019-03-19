@@ -121,7 +121,9 @@ const LoadedPackage* GetPackageAtIndex0(const LoadedArsc& loaded_arsc) {
 Result<uint32_t> GetCrc(const ZipFile& zip) {
   const Result<uint32_t> a = zip.Crc("resources.arsc");
   const Result<uint32_t> b = zip.Crc("AndroidManifest.xml");
-  return a && b ? Result<uint32_t>(*a ^ *b) : kResultError;
+  return a && b
+             ? Result<uint32_t>(*a ^ *b)
+             : Error("Couldn't get CRC for \"%s\"", a ? "AndroidManifest.xml" : "resources.arsc");
 }
 
 }  // namespace
@@ -284,7 +286,7 @@ std::unique_ptr<const Idmap> Idmap::FromBinaryStream(std::istream& stream,
 
 bool CheckOverlayable(const LoadedPackage& target_package,
                       const utils::OverlayManifestInfo& overlay_info,
-                      const PolicyBitmask& fulfilled_polices, const ResourceId& resid) {
+                      const PolicyBitmask& fulfilled_policies, const ResourceId& resid) {
   const OverlayableInfo* overlayable_info = target_package.GetOverlayableInfo(resid);
   if (overlayable_info == nullptr) {
     // If the resource does not have an overlayable definition, allow the resource to be overlaid.
@@ -299,7 +301,7 @@ bool CheckOverlayable(const LoadedPackage& target_package,
   }
 
   // Enforce policy restrictions if the resource is declared as overlayable.
-  return (overlayable_info->policy_flags & fulfilled_polices) != 0;
+  return (overlayable_info->policy_flags & fulfilled_policies) != 0;
 }
 
 std::unique_ptr<const Idmap> Idmap::FromApkAssets(
@@ -355,9 +357,9 @@ std::unique_ptr<const Idmap> Idmap::FromApkAssets(
     return nullptr;
   }
 
-  Result<utils::OverlayManifestInfo> overlay_info =
-      utils::ExtractOverlayManifestInfo(overlay_apk_path, out_error);
+  auto overlay_info = utils::ExtractOverlayManifestInfo(overlay_apk_path);
   if (!overlay_info) {
+    out_error << "error: " << overlay_info.GetErrorMessage() << std::endl;
     return nullptr;
   }
 

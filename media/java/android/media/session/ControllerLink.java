@@ -158,6 +158,18 @@ public final class ControllerLink implements Parcelable {
     }
 
     /**
+     * Gets the session info of the connected session.
+     */
+    @Nullable
+    Bundle getSessionInfo() {
+        try {
+            return mISessionController.getSessionInfo();
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * Gets the {@link PendingIntent} for launching UI of the connected session.
      */
     @Nullable
@@ -493,6 +505,22 @@ public final class ControllerLink implements Parcelable {
     }
 
     /**
+     * Tell system that a controller requests changing the playback speed.
+     *
+     * @param packageName the package name of the controller
+     * @param caller the {@link ControllerCallbackLink} of the controller
+     * @param speed the playback speed
+     */
+    void setPlaybackSpeed(@NonNull String packageName, @NonNull ControllerCallbackLink caller,
+            float speed) {
+        try {
+            mISessionController.setPlaybackSpeed(packageName, caller, speed);
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * Tell system that a controller sends a custom action.
      *
      * @param packageName the package name of the controller
@@ -650,6 +678,12 @@ public final class ControllerLink implements Parcelable {
             return null;
         }
 
+        /** Stub method for ISessionController.getSessionInfo */
+        @Nullable
+        public Bundle getSessionInfo() {
+            return null;
+        }
+
         /** Stub method for ISessionController.getLaunchPendingIntent */
         @Nullable
         public PendingIntent getLaunchPendingIntent() {
@@ -759,6 +793,11 @@ public final class ControllerLink implements Parcelable {
                 @NonNull Rating rating) {
         }
 
+        /** Stub method for ISessionController.setPlaybackSpeed */
+        public void setPlaybackSpeed(@NonNull String packageName,
+                @NonNull ControllerCallbackLink caller, float speed) {
+        }
+
         /** Stub method for ISessionController.sendCustomAction */
         public void sendCustomAction(@NonNull String packageName,
                 @NonNull ControllerCallbackLink caller, @NonNull String action,
@@ -832,6 +871,11 @@ public final class ControllerLink implements Parcelable {
         @Override
         public String getTag() {
             return mControllerStub.getTag();
+        }
+
+        @Override
+        public Bundle getSessionInfo() {
+            return mControllerStub.getSessionInfo();
         }
 
         @Override
@@ -950,6 +994,12 @@ public final class ControllerLink implements Parcelable {
         @Override
         public void rate(String packageName, ControllerCallbackLink caller, Rating rating) {
             mControllerStub.rate(packageName, caller, rating);
+        }
+
+        @Override
+        public void setPlaybackSpeed(String packageName, ControllerCallbackLink caller,
+                float speed) {
+            mControllerStub.setPlaybackSpeed(packageName, caller, speed);
         }
 
         @Override

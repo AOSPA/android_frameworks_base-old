@@ -156,7 +156,8 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public int interceptMotionBeforeQueueingNonInteractive(long whenNanos, int policyFlags) {
+    public int interceptMotionBeforeQueueingNonInteractive(int displayId, long whenNanos,
+            int policyFlags) {
         return 0;
     }
 
@@ -312,8 +313,8 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public boolean performHapticFeedbackLw(WindowState win, int effectId, boolean always,
-            String reason) {
+    public boolean performHapticFeedback(int uid, String packageName, int effectId,
+            boolean always, String reason) {
         return false;
     }
 

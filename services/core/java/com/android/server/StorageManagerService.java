@@ -206,6 +206,9 @@ class StorageManagerService extends IStorageManager.Stub
 
     private static final boolean ENABLE_ISOLATED_STORAGE = StorageManager.hasIsolatedStorage();
 
+    private static final boolean ENABLE_LEGACY_GREYLIST = SystemProperties
+            .getBoolean(StorageManager.PROP_LEGACY_GREYLIST, true);
+
     public static class Lifecycle extends SystemService {
         private StorageManagerService mStorageManagerService;
 
@@ -347,12 +350,6 @@ class StorageManagerService extends IStorageManager.Stub
 
     @GuardedBy("mPackagesLock")
     private final SparseArray<ArraySet<String>> mPackages = new SparseArray<>();
-
-    /**
-     * List of volumes visible to any user.
-     * TODO: may be have a map of userId -> volumes?
-     */
-    private final CopyOnWriteArrayList<VolumeInfo> mVisibleVols = new CopyOnWriteArrayList<>();
 
     private volatile int mCurrentUserId = UserHandle.USER_SYSTEM;
 
@@ -861,7 +858,7 @@ class StorageManagerService extends IStorageManager.Stub
         } else if (remote == 1) {
             res = true;
         } else {
-            res = false;
+            res = true;
         }
 
         Slog.d(TAG, "Isolated storage local flag " + local + " and remote flag "
@@ -956,8 +953,6 @@ class StorageManagerService extends IStorageManager.Stub
 
                 addInternalVolumeLocked();
             }
-
-            mVisibleVols.clear();
 
             try {
                 mVold.reset();
@@ -1534,7 +1529,7 @@ class StorageManagerService extends IStorageManager.Stub
 
         // Snapshot feature flag used for this boot
         SystemProperties.set(StorageManager.PROP_ISOLATED_STORAGE_SNAPSHOT, Boolean.toString(
-                SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)));
+                SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, true)));
 
         mContext = context;
         mResolver = mContext.getContentResolver();
@@ -1896,9 +1891,6 @@ class StorageManagerService extends IStorageManager.Stub
     private void mount(VolumeInfo vol) {
         try {
             mVold.mount(vol.id, vol.mountFlags, vol.mountUserId);
-            if ((vol.mountFlags & VolumeInfo.MOUNT_FLAG_VISIBLE) != 0) {
-                mVisibleVols.add(vol);
-            }
         } catch (Exception e) {
             Slog.wtf(TAG, e);
         }
@@ -1915,9 +1907,6 @@ class StorageManagerService extends IStorageManager.Stub
     private void unmount(VolumeInfo vol) {
         try {
             mVold.unmount(vol.id);
-            if ((vol.mountFlags & VolumeInfo.MOUNT_FLAG_VISIBLE) != 0) {
-                mVisibleVols.remove(vol);
-            }
         } catch (Exception e) {
             Slog.wtf(TAG, e);
         }
@@ -2304,7 +2293,26 @@ class StorageManagerService extends IStorageManager.Stub
                 refreshIsolatedStorageSettings();
 
                 // Perform hard reboot to kick policy into place
-                mContext.getSystemService(PowerManager.class).reboot(null);
+                mHandler.post(() -> {
+                    mContext.getSystemService(PowerManager.class).reboot(null);
+                });
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        if ((mask & StorageManager.DEBUG_LEGACY_GREYLIST) != 0) {
+            final boolean enabled = (flags & StorageManager.DEBUG_LEGACY_GREYLIST) != 0;
+
+            final long token = Binder.clearCallingIdentity();
+            try {
+                SystemProperties.set(StorageManager.PROP_LEGACY_GREYLIST,
+                        Boolean.toString(enabled));
+
+                // Perform hard reboot to kick policy into place
+                mHandler.post(() -> {
+                    mContext.getSystemService(PowerManager.class).reboot(null);
+                });
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -2844,6 +2852,7 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public void unlockUserKey(int userId, int serialNumber, byte[] token, byte[] secret) {
+        Slog.d(TAG, "unlockUserKey: " + userId);
         enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         if (StorageManager.isFileEncryptedNativeOrEmulated()) {
@@ -3721,6 +3730,16 @@ class StorageManagerService extends IStorageManager.Stub
             } else if (mPmInternal.isInstantApp(packageName, UserHandle.getUserId(uid))) {
                 return Zygote.MOUNT_EXTERNAL_NONE;
             } else {
+                if (ENABLE_LEGACY_GREYLIST) {
+                    // STOPSHIP: remove this temporary workaround once developers
+                    // fix bugs where they're opening _data paths in native code
+                    switch (packageName) {
+                        case "com.facebook.katana": // b/123996076
+                        case "jp.naver.line.android": // b/124767356
+                        case "com.mxtech.videoplayer.ad": // b/124531483
+                            return Zygote.MOUNT_EXTERNAL_LEGACY;
+                    }
+                }
                 return Zygote.MOUNT_EXTERNAL_WRITE;
             }
         } catch (RemoteException e) {
@@ -3870,14 +3889,6 @@ class StorageManagerService extends IStorageManager.Stub
             for (int i = 0; i < mRecords.size(); i++) {
                 final VolumeRecord note = mRecords.valueAt(i);
                 note.dump(pw);
-            }
-            pw.decreaseIndent();
-
-            pw.println();
-            pw.println("mVisibleVols:");
-            pw.increaseIndent();
-            for (int i = 0; i < mVisibleVols.size(); i++) {
-                mVisibleVols.get(i).dump(pw);
             }
             pw.decreaseIndent();
 
@@ -4079,33 +4090,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         @Override
-        public String[] getVisibleVolumesForUser(int userId) {
-            final ArrayList<String> visibleVolsForUser = new ArrayList<>();
-            for (int i = mVisibleVols.size() - 1; i >= 0; --i) {
-                final VolumeInfo vol = mVisibleVols.get(i);
-                if (vol.isVisibleForUser(userId)) {
-                    visibleVolsForUser.add(getVolumeLabel(vol));
-                }
-            }
-            return visibleVolsForUser.toArray(new String[visibleVolsForUser.size()]);
-        }
-
-        @Override
         public String getSandboxId(String packageName) {
             return StorageManagerService.this.getSandboxId(packageName,
                     mPmInternal.getSharedUserIdForPackage(packageName));
-        }
-
-        private String getVolumeLabel(VolumeInfo vol) {
-            // STOPSHIP: Label needs to part of VolumeInfo and need to be passed on from vold
-            switch (vol.getType()) {
-                case VolumeInfo.TYPE_EMULATED:
-                    return "emulated";
-                case VolumeInfo.TYPE_PUBLIC:
-                    return vol.fsUuid == null ? vol.id : vol.fsUuid;
-                default:
-                    return null;
-            }
         }
     }
 }

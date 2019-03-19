@@ -100,26 +100,26 @@ public final class DeviceConfig {
     public static final String NAMESPACE_NETD_NATIVE = "netd_native";
 
     /**
-     * Namespace for features related to the ExtServices Notification Assistant.
-     * These features are applied immediately.
+     * Namespace for System UI related features.
      *
      * @hide
      */
     @SystemApi
-    public interface NotificationAssistant {
-        String NAMESPACE = "notification_assistant";
-        /**
-         * Whether the Notification Assistant should generate replies for notifications.
-         */
-        String GENERATE_REPLIES = "generate_replies";
-        /**
-         * Whether the Notification Assistant should generate contextual actions for notifications.
-         */
-        String GENERATE_ACTIONS = "generate_actions";
+    public static final String NAMESPACE_SYSTEMUI = "systemui";
 
-        String MAX_MESSAGES_TO_EXTRACT = "max_messages_to_extract";
+    /**
+     * Namespace for all runtime related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface Runtime {
+        String NAMESPACE = "runtime";
 
-        String MAX_SUGGESTIONS = "max_suggestions";
+        /**
+         * Whether or not we use the precompiled layout.
+         */
+        String USE_PRECOMPILED_LAYOUT = "view.precompiled_layout_enabled";
     }
 
     /**
@@ -130,6 +130,38 @@ public final class DeviceConfig {
     @SystemApi
     public interface RuntimeNative {
         String NAMESPACE = "runtime_native";
+
+        /**
+         * Zygote flags. See {@link com.internal.os.Zygote}.
+         */
+
+        /**
+         * If {@code true}, enables the blastula pool feature.
+         *
+         * @hide for internal use only
+         */
+        String BLASTULA_POOL_ENABLED = "blastula_pool_enabled";
+
+        /**
+         * The maximum number of processes to keep in the blastula pool.
+         *
+         * @hide for internal use only
+         */
+        String BLASTULA_POOL_SIZE_MAX = "blastula_pool_size_max";
+
+        /**
+         * The minimum number of processes to keep in the blastula pool.
+         *
+         * @hide for internal use only
+         */
+        String BLASTULA_POOL_SIZE_MIN = "blastula_pool_size_min";
+
+        /**
+         * The threshold used to determine if the pool should be refilled.
+         *
+         * @hide for internal use only
+         */
+        String BLASTULA_POOL_REFILL_THRESHOLD = "blastula_refill_threshold";
     }
 
     /**
@@ -150,6 +182,7 @@ public final class DeviceConfig {
      */
     @SystemApi
     public interface MediaNative {
+        /** The flag namespace for media native features. */
         String NAMESPACE = "media_native";
     }
 
@@ -290,6 +323,28 @@ public final class DeviceConfig {
 
         /** Allows a CTS to inject a fake implementation. */
         String COMPONENT_NAME = "component_name";
+    }
+
+    /**
+     * Namespace for Rollback.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface Rollback {
+        String NAMESPACE = "rollback";
+
+        String BOOT_NAMESPACE = "rollback_boot";
+
+        /**
+         * Timeout in milliseconds for enabling package rollback.
+         */
+        String ENABLE_ROLLBACK_TIMEOUT = "enable_rollback_timeout";
+
+       /**
+        * The lifetime duration of rollback packages in millis
+        */
+        String ROLLBACK_LIFETIME_IN_MILLIS = "rollback_lifetime_in_millis";
     }
 
     /**

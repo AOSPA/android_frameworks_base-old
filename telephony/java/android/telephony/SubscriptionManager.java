@@ -59,6 +59,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 
 import com.android.internal.telephony.IOnSubscriptionsChangedListener;
+import com.android.internal.telephony.ISetOpportunisticDataCallback;
 import com.android.internal.telephony.ISub;
 import com.android.internal.telephony.ITelephonyRegistry;
 import com.android.internal.telephony.PhoneConstants;
@@ -72,6 +73,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -864,7 +866,8 @@ public class SubscriptionManager {
         }
 
         /**
-         * Callback invoked when there is any change to any SubscriptionInfo. Typically
+         * Callback invoked when there is any change to any SubscriptionInfo, as well as once on
+         * registering for changes with {@link #addOnSubscriptionsChangedListener}. Typically
          * this method would invoke {@link #getActiveSubscriptionInfoList}
          */
         public void onSubscriptionsChanged() {
@@ -916,7 +919,9 @@ public class SubscriptionManager {
     /**
      * Register for changes to the list of active {@link SubscriptionInfo} records or to the
      * individual records themselves. When a change occurs the onSubscriptionsChanged method of
-     * the listener will be invoked immediately if there has been a notification.
+     * the listener will be invoked immediately if there has been a notification. The
+     * onSubscriptionChanged method will also be triggered once initially when calling this
+     * function.
      *
      * @param listener an instance of {@link OnSubscriptionsChangedListener} with
      *                 onSubscriptionsChanged overridden.
@@ -1231,7 +1236,7 @@ public class SubscriptionManager {
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public List<SubscriptionInfo> getActiveSubscriptionInfoList() {
-        return getActiveSubscriptionInfoList(false);
+        return getActiveSubscriptionInfoList(/* userVisibleonly */true);
     }
 
     /**
@@ -1859,7 +1864,7 @@ public class SubscriptionManager {
                 iSub.setDefaultSmsSubId(subscriptionId);
             }
         } catch (RemoteException ex) {
-            // ignore it
+            ex.rethrowFromSystemServer();
         }
     }
 
@@ -2076,7 +2081,7 @@ public class SubscriptionManager {
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
             if (iSub != null) {
-                subId = iSub.getActiveSubIdList();
+                subId = iSub.getActiveSubIdList(/*visibleOnly*/true);
             }
         } catch (RemoteException ex) {
             // ignore it
@@ -2573,17 +2578,35 @@ public class SubscriptionManager {
      *              {@link SubscriptionManager#DEFAULT_SUBSCRIPTION_ID}, it means
      *              it's unset and {@link SubscriptionManager#getDefaultDataSubscriptionId()}
      *              is used to determine which modem is preferred.
+     * @param needValidation whether validation is needed before switch happens.
+     * @param executor The executor of where the callback will execute.
+     * @param callback Callback will be triggered once it succeeds or failed.
+     *                 See {@link TelephonyManager.SetOpportunisticSubscriptionResult}
+     *                 for more details. Pass null if don't care about the result.
+     *
      * @hide
      *
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public void setPreferredDataSubscriptionId(int subId) {
+    public void setPreferredDataSubscriptionId(int subId, boolean needValidation,
+            @NonNull @CallbackExecutor Executor executor, Consumer<Integer> callback) {
         if (VDBG) logd("[setPreferredDataSubscriptionId]+ subId:" + subId);
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
-            if (iSub != null) {
-                iSub.setPreferredDataSubscriptionId(subId);
-            }
+            if (iSub == null) return;
+
+            ISetOpportunisticDataCallback callbackStub = new ISetOpportunisticDataCallback.Stub() {
+                @Override
+                public void onComplete(int result) {
+                    Binder.withCleanCallingIdentity(() -> executor.execute(() -> {
+                        if (callback != null) {
+                            callback.accept(result);
+                        }
+                    }));
+                }
+            };
+            iSub.setPreferredDataSubscriptionId(subId, needValidation, callbackStub);
         } catch (RemoteException ex) {
             // ignore it
         }
@@ -2835,15 +2858,30 @@ public class SubscriptionManager {
     /**
      * Whether system UI should hide a subscription. If it's a bundled opportunistic
      * subscription, it shouldn't show up in anywhere in Settings app, dialer app,
-     * or status bar.
+     * or status bar. Exception is if caller is carrier app, in which case they will
+     * want to see their own hidden subscriptions.
      *
      * @param info the subscriptionInfo to check against.
      * @return true if this subscription should be hidden.
      *
      * @hide
      */
-    public static boolean shouldHideSubscription(SubscriptionInfo info) {
-        return (info != null && !TextUtils.isEmpty(info.getGroupUuid()) && info.isOpportunistic());
+    public boolean shouldHideSubscription(SubscriptionInfo info) {
+        if (info == null) return false;
+
+        // If hasCarrierPrivileges or canManageSubscription returns true, it means caller
+        // has carrier privilege.
+        boolean hasCarrierPrivilegePermission = (info.isEmbedded() && canManageSubscription(info))
+                || TelephonyManager.from(mContext).hasCarrierPrivileges(info.getSubscriptionId());
+
+        return isInvisibleSubscription(info) && !hasCarrierPrivilegePermission;
+    }
+
+    /**
+     * @hide
+     */
+    public static boolean isInvisibleSubscription(SubscriptionInfo info) {
+        return info != null && !TextUtils.isEmpty(info.getGroupUuid()) && info.isOpportunistic();
     }
 
     /**

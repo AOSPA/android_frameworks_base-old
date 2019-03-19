@@ -51,6 +51,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     // See mConnectAttempted
     private static final long MAX_UUID_DELAY_FOR_AUTO_CONNECT = 5000;
     private static final long MAX_HOGP_DELAY_FOR_AUTO_CONNECT = 30000;
+    private static final boolean mIsTwsConnectEnabled = false;
 
     private final Context mContext;
     private final BluetoothAdapter mLocalAdapter;
@@ -669,7 +670,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         if (bondState == BluetoothDevice.BOND_BONDED) {
             if (mDevice.isBluetoothDock()) {
                 onBondingDockConnect();
-            } else if (SystemProperties.getBoolean("persist.vendor.btstack.connect.peer_earbud", false)) {
+            } else if (mIsTwsConnectEnabled) {
                 Log.d(TAG, "Initiating connection to" + mDevice);
                 if (mDevice.isBondingInitiatedLocally() || mDevice.isTwsPlusDevice()) {
                     connect(false);

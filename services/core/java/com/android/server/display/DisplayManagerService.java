@@ -37,7 +37,9 @@ import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.ColorSpace;
+import android.graphics.GraphicBuffer;
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.hardware.SensorManager;
 import android.hardware.display.AmbientBrightnessDayStats;
 import android.hardware.display.BrightnessChangeEvent;
@@ -94,7 +96,6 @@ import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.UiThread;
-import com.android.server.display.ColorDisplayService.ColorDisplayServiceInternal;
 import com.android.server.wm.SurfaceAnimationThread;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -356,7 +357,6 @@ public final class DisplayManagerService extends SystemService {
         publishBinderService(Context.DISPLAY_SERVICE, new BinderService(),
                 true /*allowIsolated*/);
         publishLocalService(DisplayManagerInternal.class, new LocalService());
-        publishLocalService(DisplayTransformManager.class, new DisplayTransformManager());
     }
 
     @Override
@@ -1232,6 +1232,22 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
+    private void setDisplayScalingDisabledInternal(int displayId, boolean disable) {
+        synchronized (mSyncRoot) {
+            final LogicalDisplay display = mLogicalDisplays.get(displayId);
+            if (display == null) {
+                return;
+            }
+            if (display.isDisplayScalingDisabled() != disable) {
+                if (DEBUG) {
+                    Slog.d(TAG, "Display " + displayId + " content scaling disabled = " + disable);
+                }
+                display.setDisplayScalingDisabledLocked(disable);
+                scheduleTraversalLocked(false);
+            }
+        }
+    }
+
     // Updates the lists of UIDs that are present on displays.
     private void setDisplayAccessUIDsInternal(SparseArray<IntArray> newDisplayAccessUIDs) {
         synchronized (mSyncRoot) {
@@ -1271,7 +1287,14 @@ public final class DisplayManagerService extends SystemService {
         if (token == null) {
             return false;
         }
-        SurfaceControl.screenshot(token, outSurface);
+        final GraphicBuffer gb = SurfaceControl.screenshotToBufferWithSecureLayersUnsafe(
+                token, new Rect(), 0 /* width */, 0 /* height */, false /* useIdentityTransform */,
+                0 /* rotation */);
+        try {
+            outSurface.attachAndQueueBuffer(gb);
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Failed to take screenshot - " + e.getMessage());
+        }
         return true;
     }
 
@@ -1346,7 +1369,7 @@ public final class DisplayManagerService extends SystemService {
                 && !TextUtils.isEmpty(info.uniqueId)) {
             viewportType = VIEWPORT_VIRTUAL;
         } else {
-            Slog.wtf(TAG, "Unable to populate viewport for display device: " + info);
+            Slog.i(TAG, "Display " + info + " does not support input device matching.");
             return;
         }
 
@@ -1476,7 +1499,7 @@ public final class DisplayManagerService extends SystemService {
             pw.println("  mSingleDisplayDemoMode=" + mSingleDisplayDemoMode);
             pw.println("  mWifiDisplayScanRequestCount=" + mWifiDisplayScanRequestCount);
             pw.println("  mStableDisplaySize=" + mStableDisplaySize);
-
+            pw.println("  mMinimumBrightnessCurve=" + mMinimumBrightnessCurve);
 
             IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "    ");
             ipw.increaseIndent();
@@ -1520,13 +1543,6 @@ public final class DisplayManagerService extends SystemService {
 
             pw.println();
             mPersistentDataStore.dump(pw);
-
-            final ColorDisplayServiceInternal cds = LocalServices.getService(
-                    ColorDisplayServiceInternal.class);
-            if (cds != null) {
-                pw.println();
-                cds.dump(pw);
-            }
         }
     }
 
@@ -2366,6 +2382,11 @@ public final class DisplayManagerService extends SystemService {
         @Override
         public void setDisplayOffsets(int displayId, int x, int y) {
             setDisplayOffsetsInternal(displayId, x, y);
+        }
+
+        @Override
+        public void setDisplayScalingDisabled(int displayId, boolean disableScaling) {
+            setDisplayScalingDisabledInternal(displayId, disableScaling);
         }
 
         @Override

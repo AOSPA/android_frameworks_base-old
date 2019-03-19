@@ -61,7 +61,6 @@ import static org.mockito.ArgumentMatchers.eq;
 
 import android.app.ActivityOptions;
 import android.app.IApplicationThread;
-import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -648,7 +647,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
                 false, false, false, true, false);
         runAndVerifyBackgroundActivityStartsSubtest(
-                "disallowed_callingPackageIsDeviceOwner_notAborted", false,
+                "disallowed_callingPackageNameIsDeviceOwner_notAborted", false,
                 UNIMPORTANT_UID, false, PROCESS_STATE_TOP + 1,
                 UNIMPORTANT_UID2, false, PROCESS_STATE_TOP + 1,
                 false, false, false, false, true);
@@ -660,15 +659,15 @@ public class ActivityStarterTests extends ActivityTestsBase {
             boolean hasForegroundActivities, boolean callerIsRecents,
             boolean callerIsTempWhitelisted,
             boolean callerIsInstrumentingWithBackgroundActivityStartPrivileges,
-            boolean isCallingPackageDeviceOwner) {
+            boolean isCallingPackageNameDeviceOwner) {
         // window visibility
         doReturn(callingUidHasVisibleWindow).when(mService.mWindowManager.mRoot)
                 .isAnyNonToastWindowVisibleForUid(callingUid);
         doReturn(realCallingUidHasVisibleWindow).when(mService.mWindowManager.mRoot)
                 .isAnyNonToastWindowVisibleForUid(realCallingUid);
         // process importance
-        doReturn(callingUidProcState).when(mService).getUidStateLocked(callingUid);
-        doReturn(realCallingUidProcState).when(mService).getUidStateLocked(realCallingUid);
+        doReturn(callingUidProcState).when(mService).getUidState(callingUid);
+        doReturn(realCallingUidProcState).when(mService).getUidState(realCallingUid);
         // foreground activities
         final IApplicationThread caller = mock(IApplicationThread.class);
         final ApplicationInfo ai = new ApplicationInfo();
@@ -686,9 +685,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         // caller is instrumenting with background activity starts privileges
         callerApp.setInstrumenting(callerIsInstrumentingWithBackgroundActivityStartPrivileges,
                 callerIsInstrumentingWithBackgroundActivityStartPrivileges);
-        // caller is device owner
-        DevicePolicyManager dpmMock = mService.getDevicePolicyManager();
-        doReturn(isCallingPackageDeviceOwner).when(dpmMock).isDeviceOwnerApp(any());
+        // calling package name is whitelisted
+        doReturn(isCallingPackageNameDeviceOwner).when(mService).isDeviceOwner(any());
 
         final ActivityOptions options = spy(ActivityOptions.makeBasic());
         ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_NEW_TASK)

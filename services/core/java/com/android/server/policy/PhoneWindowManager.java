@@ -22,7 +22,6 @@ import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.AppOpsManager.OP_TOAST_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.Context.CONTEXT_RESTRICTED;
-import static android.content.Context.DISPLAY_SERVICE;
 import static android.content.Context.WINDOW_SERVICE;
 import static android.content.pm.PackageManager.FEATURE_HDMI_CEC;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
@@ -36,6 +35,7 @@ import static android.provider.Settings.Secure.VOLUME_HUSH_OFF;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.Display.STATE_OFF;
+import static android.view.KeyEvent.KEYCODE_UNKNOWN;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW;
@@ -84,10 +84,11 @@ import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.ADD_PERMISSION_DENIED;
 
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVERED;
-import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs
-        .CAMERA_LENS_COVER_ABSENT;
-import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs
-        .CAMERA_LENS_UNCOVERED;
+import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVER_ABSENT;
+import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_UNCOVERED;
+import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_BEHAVIOR_LOCK;
+import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_BEHAVIOR_NONE;
+import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_BEHAVIOR_SLEEP;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_CLOSED;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_OPEN;
 import static com.android.server.wm.WindowManagerPolicyProto.KEYGUARD_DELEGATE;
@@ -127,6 +128,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.hardware.hdmi.HdmiAudioSystemClient;
@@ -371,6 +373,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     IStatusBarService mStatusBarService;
     StatusBarManagerInternal mStatusBarManagerInternal;
     AudioManagerInternal mAudioManagerInternal;
+    DisplayManager mDisplayManager;
     boolean mPreloadedRecentApps;
     final Object mServiceAquireLock = new Object();
     Vibrator mVibrator; // Vibrator for giving feedback of orientation changes
@@ -473,8 +476,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     int mLidKeyboardAccessibility;
     int mLidNavigationAccessibility;
-    boolean mLidControlsScreenLock;
-    boolean mLidControlsSleep;
     private boolean mLidControlsDisplayFold;
     int mShortPressOnPowerBehavior;
     int mLongPressOnPowerBehavior;
@@ -808,7 +809,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         public void onWakeUp() {
             synchronized (mLock) {
                 if (shouldEnableWakeGestureLp()) {
-                    performHapticFeedbackLw(null, HapticFeedbackConstants.VIRTUAL_KEY, false,
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY, false,
                             "Wake Up");
                     wakeUp(SystemClock.uptimeMillis(), mAllowTheaterModeWakeFromWakeGesture,
                             PowerManager.WAKE_REASON_GESTURE, "android.policy:GESTURE");
@@ -1195,6 +1196,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    private int getLidBehavior() {
+        return Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.LID_BEHAVIOR, LID_BEHAVIOR_NONE);
+    }
+
     private int getMaxMultiPressPowerCount() {
         if (mTriplePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING) {
             return 3;
@@ -1212,21 +1218,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             break;
         case LONG_PRESS_POWER_GLOBAL_ACTIONS:
             mPowerKeyHandled = true;
-            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false,
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                     "Power - Long Press - Global Actions");
             showGlobalActionsInternal();
             break;
         case LONG_PRESS_POWER_SHUT_OFF:
         case LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM:
             mPowerKeyHandled = true;
-            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false,
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                     "Power - Long Press - Shut Off");
             sendCloseSystemWindows(SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS);
             mWindowManagerFuncs.shutdown(behavior == LONG_PRESS_POWER_SHUT_OFF);
             break;
         case LONG_PRESS_POWER_GO_TO_VOICE_ASSIST:
             mPowerKeyHandled = true;
-            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false,
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                     "Power - Long Press - Go To Voice Assist");
             final boolean keyguardActive = mKeyguardDelegate == null
                     ? false
@@ -1249,7 +1255,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             break;
         case VERY_LONG_PRESS_POWER_GLOBAL_ACTIONS:
             mPowerKeyHandled = true;
-            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false,
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                     "Power - Very Long Press - Show Global Actions");
             showGlobalActionsInternal();
             break;
@@ -1400,7 +1406,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         @Override
         public void run() {
             mEndCallKeyHandled = true;
-            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false,
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                     "End Call - Long Press - Show Global Actions");
             showGlobalActionsInternal();
         }
@@ -1667,7 +1673,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return;
             }
             mHomeConsumed = true;
-            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false,
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                     "Home - Long Press");
             switch (mLongPressOnHomeBehavior) {
                 case LONG_PRESS_HOME_ALL_APPS:
@@ -1717,7 +1723,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mDreamManagerInternal = LocalServices.getService(DreamManagerInternal.class);
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
-        mAppOpsManager = (AppOpsManager) mContext.getSystemService(Context.APP_OPS_SERVICE);
+        mAppOpsManager = mContext.getSystemService(AppOpsManager.class);
+        mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mHasFeatureWatch = mContext.getPackageManager().hasSystemFeature(FEATURE_WATCH);
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(FEATURE_LEANBACK);
         mHasFeatureHdmiCec = mContext.getPackageManager().hasSystemFeature(FEATURE_HDMI_CEC);
@@ -1795,10 +1802,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 com.android.internal.R.integer.config_lidKeyboardAccessibility);
         mLidNavigationAccessibility = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_lidNavigationAccessibility);
-        mLidControlsScreenLock = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_lidControlsScreenLock);
-        mLidControlsSleep = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_lidControlsSleep);
         mLidControlsDisplayFold = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_lidControlsDisplayFold);
 
@@ -1858,7 +1861,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         readConfigurationDependentBehaviors();
 
         if (mLidControlsDisplayFold) {
-            mDisplayFoldController = DisplayFoldController.create(DEFAULT_DISPLAY);
+            mDisplayFoldController = DisplayFoldController.create(context, DEFAULT_DISPLAY);
         } else if (SystemProperties.getBoolean("persist.debug.force_foldable", false)) {
             mDisplayFoldController = DisplayFoldController.createWithProxSensor(context,
                     DEFAULT_DISPLAY);
@@ -2039,7 +2042,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private boolean shouldEnableWakeGestureLp() {
         return mWakeGestureEnabledSetting && !mDefaultDisplayPolicy.isAwake()
-                && (!mLidControlsSleep || mDefaultDisplayPolicy.getLidState() != LID_CLOSED)
+                && (getLidBehavior() != LID_BEHAVIOR_SLEEP
+                || mDefaultDisplayPolicy.getLidState() != LID_CLOSED)
                 && mWakeGestureListener.isSupported();
     }
 
@@ -2315,14 +2319,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         boolean allowWhenLocked = (win.isInputMethodWindow() || imeTarget == this)
                 && showImeOverKeyguard;
 
-        if (isKeyguardLocked() && isKeyguardOccluded()) {
+        final boolean isKeyguardShowing = mKeyguardDelegate.isShowing();
+
+        if (isKeyguardShowing && isKeyguardOccluded()) {
             // Show SHOW_WHEN_LOCKED windows if Keyguard is occluded.
             allowWhenLocked |= win.canShowWhenLocked()
                     // Show error dialogs over apps that are shown on lockscreen
                     || (attrs.privateFlags & PRIVATE_FLAG_SYSTEM_ERROR) != 0;
         }
 
-        boolean keyguardLocked = isKeyguardLocked();
         boolean hideDockDivider = attrs.type == TYPE_DOCK_DIVIDER
                 && !mWindowManagerInternal.isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
         // If AOD is showing, the IME should be hidden. However, sometimes the AOD is considered
@@ -2332,7 +2337,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // now shown.
         final boolean hideIme = win.isInputMethodWindow()
                 && (mAodShowing || !mDefaultDisplayPolicy.isWindowManagerDrawComplete());
-        return (keyguardLocked && !allowWhenLocked && win.getDisplayId() == DEFAULT_DISPLAY)
+        return (isKeyguardShowing && !allowWhenLocked && win.getDisplayId() == DEFAULT_DISPLAY)
                 || hideDockDivider || hideIme;
     }
 
@@ -2508,8 +2513,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return context;
         }
 
-        final DisplayManager dm = (DisplayManager) context.getSystemService(DISPLAY_SERVICE);
-        final Display targetDisplay = dm.getDisplay(displayId);
+        final Display targetDisplay = mDisplayManager.getDisplay(displayId);
         if (targetDisplay == null) {
             // Failed to obtain the non-default display where splash screen should be shown,
             // lets not show at all.
@@ -3222,6 +3226,29 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
+    public void setOverrideFoldedArea(Rect area) {
+        if (mDisplayFoldController != null) {
+            mDisplayFoldController.setOverrideFoldedArea(area);
+        }
+    }
+
+    @Override
+    public Rect getFoldedArea() {
+        if (mDisplayFoldController != null) {
+            return mDisplayFoldController.getFoldedArea();
+        }
+        return new Rect();
+    }
+
+    @Override
+    public void onDefaultDisplayFocusChangedLw(WindowState newFocus) {
+        if (mDisplayFoldController != null) {
+            mDisplayFoldController.onDefaultDisplayFocusChanged(
+                    newFocus != null ? newFocus.getOwningPackage() : null);
+        }
+    }
+
+    @Override
     public void registerShortcutKey(long shortcutCode, IShortcutService shortcutService)
             throws RemoteException {
         synchronized (mLock) {
@@ -3261,7 +3288,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void launchAssistLongPressAction() {
-        performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false,
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                 "Assist - Long Press");
         sendCloseSystemWindows(SYSTEM_DIALOG_REASON_ASSIST);
 
@@ -3530,7 +3557,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (lidOpen) {
             wakeUp(SystemClock.uptimeMillis(), mAllowTheaterModeWakeFromLidSwitch,
                     PowerManager.WAKE_REASON_LID, "android.policy:LID");
-        } else if (!mLidControlsSleep) {
+        } else if (getLidBehavior() != LID_BEHAVIOR_SLEEP) {
             mPowerManager.userActivity(SystemClock.uptimeMillis(), false);
         }
     }
@@ -3655,7 +3682,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // Reset the pending key
                 mPendingWakeKey = PENDING_KEY_NULL;
             }
-        } else if (!interactive && shouldDispatchInputWhenNonInteractive(event)) {
+        } else if (!interactive && shouldDispatchInputWhenNonInteractive(displayId, keyCode)) {
             // If we're currently dozing with the screen on and the keyguard showing, pass the key
             // to the application but preserve its wake key status to make sure we still move
             // from dozing to fully interactive if we would normally go from off to fully
@@ -4023,7 +4050,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         if (useHapticFeedback) {
-            performHapticFeedbackLw(null, HapticFeedbackConstants.VIRTUAL_KEY, false,
+            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY, false,
                     "Virtual Key - Press");
         }
 
@@ -4126,7 +4153,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // TODO(b/117479243): handle it in InputPolicy
     /** {@inheritDoc} */
     @Override
-    public int interceptMotionBeforeQueueingNonInteractive(long whenNanos, int policyFlags) {
+    public int interceptMotionBeforeQueueingNonInteractive(int displayId, long whenNanos,
+            int policyFlags) {
         if ((policyFlags & FLAG_WAKE) != 0) {
             if (wakeUp(whenNanos / 1000000, mAllowTheaterModeWakeFromMotion,
                     PowerManager.WAKE_REASON_WAKE_MOTION, "android.policy:MOTION")) {
@@ -4134,7 +4162,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
-        if (shouldDispatchInputWhenNonInteractive(null)) {
+        if (shouldDispatchInputWhenNonInteractive(displayId, KEYCODE_UNKNOWN)) {
             return ACTION_PASS_TO_USER;
         }
 
@@ -4149,9 +4177,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return 0;
     }
 
-    private boolean shouldDispatchInputWhenNonInteractive(KeyEvent event) {
-        final boolean displayOff = (mDefaultDisplay == null
-                || mDefaultDisplay.getState() == STATE_OFF);
+    private boolean shouldDispatchInputWhenNonInteractive(int displayId, int keyCode) {
+        // Apply the default display policy to unknown displays as well.
+        final boolean isDefaultDisplay = displayId == DEFAULT_DISPLAY
+                || displayId == INVALID_DISPLAY;
+        final Display display = isDefaultDisplay
+                ? mDefaultDisplay
+                : mDisplayManager.getDisplay(displayId);
+        final boolean displayOff = (display == null
+                || display.getState() == STATE_OFF);
 
         if (displayOff && !mHasFeatureWatch) {
             return false;
@@ -4163,25 +4197,25 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         // Watches handle BACK specially
-        if (mHasFeatureWatch
-                && event != null
-                && (event.getKeyCode() == KeyEvent.KEYCODE_BACK
-                        || event.getKeyCode() == KeyEvent.KEYCODE_STEM_PRIMARY)) {
+        if (mHasFeatureWatch && (keyCode == KeyEvent.KEYCODE_BACK
+                || keyCode == KeyEvent.KEYCODE_STEM_PRIMARY)) {
             return false;
         }
 
-        // Send events to a dozing dream even if the screen is off since the dream
-        // is in control of the state of the screen.
-        IDreamManager dreamManager = getDreamManager();
+        // TODO(b/123372519): Refine when dream can support multi display.
+        if (isDefaultDisplay) {
+            // Send events to a dozing dream even if the screen is off since the dream
+            // is in control of the state of the screen.
+            IDreamManager dreamManager = getDreamManager();
 
-        try {
-            if (dreamManager != null && dreamManager.isDreaming()) {
-                return true;
+            try {
+                if (dreamManager != null && dreamManager.isDreaming()) {
+                    return true;
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "RemoteException when checking if dreaming", e);
             }
-        } catch (RemoteException e) {
-            Slog.e(TAG, "RemoteException when checking if dreaming", e);
         }
-
         // Otherwise, consume events since the user can't see what is being
         // interacted with.
         return false;
@@ -4414,6 +4448,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mKeyguardDelegate.onFinishedGoingToSleep(why,
                     mCameraGestureTriggeredDuringGoingToSleep);
         }
+        if (mDisplayFoldController != null) {
+            mDisplayFoldController.finishedGoingToSleep();
+        }
         mCameraGestureTriggeredDuringGoingToSleep = false;
     }
 
@@ -4453,6 +4490,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         if (mKeyguardDelegate != null) {
             mKeyguardDelegate.onFinishedWakingUp();
+        }
+        if (mDisplayFoldController != null) {
+            mDisplayFoldController.finishedWakingUp();
         }
     }
 
@@ -4737,7 +4777,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     public void setSafeMode(boolean safeMode) {
         mSafeMode = safeMode;
         if (safeMode) {
-            performHapticFeedbackLw(null, HapticFeedbackConstants.SAFE_MODE_ENABLED, true,
+            performHapticFeedback(HapticFeedbackConstants.SAFE_MODE_ENABLED, true,
                     "Safe Mode Enabled");
         }
     }
@@ -5018,11 +5058,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final int lidState = mDefaultDisplayPolicy.getLidState();
         if (mLidControlsDisplayFold && mDisplayFoldController != null) {
             mDisplayFoldController.requestDeviceFolded(lidState == LID_CLOSED);
-        } else if (lidState == LID_CLOSED && mLidControlsSleep) {
-            goToSleep(SystemClock.uptimeMillis(), PowerManager.GO_TO_SLEEP_REASON_LID_SWITCH,
-                    PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
-        } else if (lidState == LID_CLOSED && mLidControlsScreenLock) {
-            mWindowManagerFuncs.lockDeviceNow();
+        } else if (lidState == LID_CLOSED) {
+            int lidBehavior = getLidBehavior();
+            switch (lidBehavior) {
+                case LID_BEHAVIOR_LOCK:
+                    mWindowManagerFuncs.lockDeviceNow();
+                    break;
+                case LID_BEHAVIOR_SLEEP:
+                    goToSleep(SystemClock.uptimeMillis(),
+                            PowerManager.GO_TO_SLEEP_REASON_LID_SWITCH,
+                            PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
+                    break;
+                case LID_BEHAVIOR_NONE:
+                    // fall through
+                default:
+                    break;
+            }
         }
 
         synchronized (mLock) {
@@ -5214,9 +5265,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Settings.Global.THEATER_MODE_ON, 0) == 1;
     }
 
+    private boolean performHapticFeedback(int effectId, boolean always, String reason) {
+        return performHapticFeedback(Process.myUid(), mContext.getOpPackageName(),
+            effectId, always, reason);
+    }
+
     @Override
-    public boolean performHapticFeedbackLw(WindowState win, int effectId, boolean always,
-            String reason) {
+    public boolean performHapticFeedback(int uid, String packageName, int effectId,
+            boolean always, String reason) {
         if (!mVibrator.hasVibrator()) {
             return false;
         }
@@ -5231,16 +5287,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return false;
         }
 
-        int owningUid;
-        String owningPackage;
-        if (win != null) {
-            owningUid = win.getOwningUid();
-            owningPackage = win.getOwningPackage();
-        } else {
-            owningUid = android.os.Process.myUid();
-            owningPackage = mContext.getOpPackageName();
-        }
-        mVibrator.vibrate(owningUid, owningPackage, effect, reason, VIBRATION_ATTRIBUTES);
+        mVibrator.vibrate(uid, packageName, effect, reason, VIBRATION_ATTRIBUTES);
         return true;
     }
 
@@ -5382,8 +5429,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         pw.print(prefix); pw.print("mLidKeyboardAccessibility=");
                 pw.print(mLidKeyboardAccessibility);
                 pw.print(" mLidNavigationAccessibility="); pw.print(mLidNavigationAccessibility);
-                pw.print(" mLidControlsScreenLock="); pw.println(mLidControlsScreenLock);
-        pw.print(prefix); pw.print("mLidControlsSleep="); pw.println(mLidControlsSleep);
+                pw.print(" getLidBehavior="); pw.println(lidBehaviorToString(getLidBehavior()));
         pw.print(prefix);
                 pw.print("mLongPressOnBackBehavior=");
                 pw.println(longPressOnBackBehaviorToString(mLongPressOnBackBehavior));
@@ -5612,6 +5658,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return "SHORT_PRESS_WINDOW_NOTHING";
             case SHORT_PRESS_WINDOW_PICTURE_IN_PICTURE:
                 return "SHORT_PRESS_WINDOW_PICTURE_IN_PICTURE";
+            default:
+                return Integer.toString(behavior);
+        }
+    }
+
+    private static String lidBehaviorToString(int behavior) {
+        switch (behavior) {
+            case LID_BEHAVIOR_LOCK:
+                return "LID_BEHAVIOR_LOCK";
+            case LID_BEHAVIOR_SLEEP:
+                return "LID_BEHAVIOR_SLEEP";
+            case LID_BEHAVIOR_NONE:
+                return "LID_BEHAVIOR_NONE";
             default:
                 return Integer.toString(behavior);
         }

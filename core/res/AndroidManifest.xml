@@ -1198,8 +1198,7 @@
     <!-- ====================================================================== -->
     <eat-comment />
 
-    <!-- Used for permissions that are associated with activity recognition.
-         TODO(zezeozue). STOPSHIP: Add icon -->
+    <!-- Used for permissions that are associated with activity recognition. -->
     <permission-group android:name="android.permission-group.ACTIVITY_RECOGNITION"
         android:icon="@drawable/perm_group_activity_recognition"
         android:label="@string/permgrouplab_activityRecognition"
@@ -2187,13 +2186,13 @@
         android:label="@string/permlab_disableKeyguard"
         android:protectionLevel="normal" />
 
-    <!-- Allows an application to get the screen lock complexity and prompt users to update the
+    <!-- Allows an application to request the screen lock complexity and prompt users to update the
      screen lock to a certain complexity level.
      <p>Protection level: normal
     -->
-    <permission android:name="android.permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY"
-                android:label="@string/permlab_getAndRequestScreenLockComplexity"
-                android:description="@string/permdesc_getAndRequestScreenLockComplexity"
+    <permission android:name="android.permission.REQUEST_SCREEN_LOCK_COMPLEXITY"
+                android:label="@string/permlab_requestScreenLockComplexity"
+                android:description="@string/permdesc_requestScreenLockComplexity"
                 android:protectionLevel="normal" />
 
     <!-- ================================== -->
@@ -3454,6 +3453,11 @@
         @hide -->
     <permission android:name="android.permission.GET_RUNTIME_PERMISSIONS"
                 android:protectionLevel="signature" />
+
+    <!-- @SystemApi Allows an application to change policy_fixed permissions.
+    @hide -->
+    <permission android:name="android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY"
+                android:protectionLevel="signature|installer" />
 
     <!-- @hide Allows an application to observe permission changes. -->
     <permission android:name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS"

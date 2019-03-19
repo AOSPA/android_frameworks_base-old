@@ -4167,7 +4167,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertTrue(dpm.isResetPasswordTokenActive(admin1));
 
         // test reset password with token
-        when(getServices().lockPatternUtils.setLockCredentialWithToken(eq(password),
+        when(getServices().lockPatternUtils.setLockCredentialWithToken(eq(password.getBytes()),
                 eq(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD),
                 eq(DevicePolicyManager.PASSWORD_QUALITY_ALPHABETIC), eq(handle), eq(token),
                 eq(UserHandle.USER_SYSTEM)))
@@ -5199,7 +5199,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_currentUserNoPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
         when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
 
@@ -5209,12 +5209,12 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_currentUserHasPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
         when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
         dpms.mUserPasswordMetrics.put(
                 DpmMockContext.CALLER_USER_HANDLE,
-                PasswordMetrics.computeForPassword("asdf"));
+                PasswordMetrics.computeForPassword("asdf".getBytes()));
 
         assertEquals(PASSWORD_COMPLEXITY_MEDIUM, dpm.getPasswordComplexity());
     }
@@ -5222,7 +5222,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_unifiedChallengeReturnsParentUserPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
 
         UserInfo parentUser = new UserInfo();
         parentUser.id = DpmMockContext.CALLER_USER_HANDLE + 10;
@@ -5231,10 +5231,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpms.mUserPasswordMetrics.put(
                 DpmMockContext.CALLER_USER_HANDLE,
-                PasswordMetrics.computeForPassword("asdf"));
+                PasswordMetrics.computeForPassword("asdf".getBytes()));
         dpms.mUserPasswordMetrics.put(
                 parentUser.id,
-                PasswordMetrics.computeForPassword("parentUser"));
+                PasswordMetrics.computeForPassword("parentUser".getBytes()));
 
         assertEquals(PASSWORD_COMPLEXITY_HIGH, dpm.getPasswordComplexity());
     }

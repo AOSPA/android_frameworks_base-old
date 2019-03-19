@@ -2172,6 +2172,11 @@ public final class Telephony {
      * @hide - not meant for public use
      */
     public interface RcsColumns {
+        // TODO(sahinc): Turn this to true once the schema finalizes, so that people can update
+        //  their messaging databases. NOTE: move the switch/case update in MmsSmsDatabaseHelper to
+        //  the latest version of the database before turning this flag to true.
+        boolean IS_RCS_TABLE_SCHEMA_CODE_COMPLETE = false;
+
         /**
          * The authority for the content provider
          */
@@ -2230,7 +2235,10 @@ public final class Telephony {
 
             /**
              * The URI to query or modify {@link android.telephony.ims.Rcs1To1Thread}s via the
-             * content provider
+             * content provider. Can also insert to this URI to create a new 1-to-1 thread. When
+             * performing an insert, ensure that the provided content values contain the other
+             * participant's ID under the key
+             * {@link RcsParticipantColumns.RCS_PARTICIPANT_ID_COLUMN}
              */
             Uri RCS_1_TO_1_THREAD_URI = Uri.withAppendedPath(CONTENT_AND_AUTHORITY,
                     RCS_1_TO_1_THREAD_URI_PART);
@@ -2765,6 +2773,41 @@ public final class Telephony {
              */
             Uri RCS_EVENT_QUERY_URI = Uri.withAppendedPath(CONTENT_AND_AUTHORITY,
                     RCS_EVENT_QUERY_URI_PATH);
+        }
+
+        /**
+         * Allows RCS specific canonical address handling.
+         */
+        interface RcsCanonicalAddressHelper {
+            /**
+             * Returns the canonical address ID for a canonical address, if now row exists, this
+             * will add a row and return its ID. This helper works against the same table used by
+             * the SMS and MMS threads, but is accessible only by the phone process for use by RCS
+             * message storage.
+             *
+             * @throws IllegalArgumentException if unable to retrieve or create the canonical
+             *                                  address entry.
+             */
+            static long getOrCreateCanonicalAddressId(
+                    ContentResolver contentResolver, String canonicalAddress) {
+
+                Uri.Builder uriBuilder = CONTENT_AND_AUTHORITY.buildUpon();
+                uriBuilder.appendPath("canonical-address");
+                uriBuilder.appendQueryParameter("address", canonicalAddress);
+                Uri uri = uriBuilder.build();
+
+                try (Cursor cursor = contentResolver.query(uri, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        return cursor.getLong(cursor.getColumnIndex(CanonicalAddressesColumns._ID));
+                    } else {
+                        Rlog.e(TAG, "getOrCreateCanonicalAddressId returned no rows");
+                    }
+                }
+
+                Rlog.e(TAG, "getOrCreateCanonicalAddressId failed");
+                throw new IllegalArgumentException(
+                        "Unable to find or allocate a canonical address ID");
+            }
         }
     }
 

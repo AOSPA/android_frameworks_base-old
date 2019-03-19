@@ -30,6 +30,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.graphics.Rect;
 import android.os.IBinder;
+import android.platform.test.annotations.Presubmit;
 import android.view.Display;
 import android.view.IRemoteAnimationFinishedCallback;
 import android.view.IRemoteAnimationRunner;
@@ -48,6 +49,7 @@ import org.junit.Test;
  *  atest WmTests:AppChangeTransitionTests
  */
 @SmallTest
+@Presubmit
 public class AppChangeTransitionTests extends WindowTestsBase {
 
     private TaskStack mStack;
@@ -57,8 +59,7 @@ public class AppChangeTransitionTests extends WindowTestsBase {
     public void setUpOnDisplay(DisplayContent dc) {
         mStack = createTaskStackOnDisplay(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, dc);
         mTask = createTaskInStack(mStack, 0 /* userId */);
-        mToken = WindowTestUtils.createTestAppWindowToken(dc);
-        mToken.mSkipOnParentChanged = false;
+        mToken = WindowTestUtils.createTestAppWindowToken(dc, false /* skipOnParentChanged */);
 
         mTask.addChild(mToken, 0);
 

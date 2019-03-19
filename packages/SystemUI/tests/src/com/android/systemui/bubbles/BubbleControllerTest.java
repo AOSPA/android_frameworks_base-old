@@ -82,6 +82,8 @@ public class BubbleControllerTest extends SysuiTestCase {
     @Mock
     private BubbleController.BubbleExpandListener mBubbleExpandListener;
 
+    private BubbleData mBubbleData;
+
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
@@ -104,7 +106,9 @@ public class BubbleControllerTest extends SysuiTestCase {
         when(mNotificationData.getChannel(mRow.getEntry().key)).thenReturn(mRow.getEntry().channel);
         when(mNotificationData.getChannel(mNoChannelRow.getEntry().key)).thenReturn(null);
 
-        mBubbleController = new TestableBubbleController(mContext, mStatusBarWindowController);
+        mBubbleData = new BubbleData();
+        mBubbleController = new TestableBubbleController(mContext, mStatusBarWindowController,
+                mBubbleData);
         mBubbleController.setBubbleStateChangeListener(mBubbleStateChangeListener);
         mBubbleController.setExpandListener(mBubbleExpandListener);
 
@@ -207,12 +211,12 @@ public class BubbleControllerTest extends SysuiTestCase {
         verify(mBubbleExpandListener).onBubbleExpandChanged(true, mRow2.getEntry().key);
 
         // Last added is the one that is expanded
-        assertEquals(mRow2.getEntry(), stackView.getExpandedBubble().getEntry());
+        assertEquals(mRow2.getEntry(), stackView.getExpandedBubbleView().getEntry());
         assertFalse(mRow2.getEntry().showInShadeWhenBubble());
 
         // Switch which bubble is expanded
         stackView.setExpandedBubble(mRow.getEntry());
-        assertEquals(mRow.getEntry(), stackView.getExpandedBubble().getEntry());
+        assertEquals(mRow.getEntry(), stackView.getExpandedBubbleView().getEntry());
         assertFalse(mRow.getEntry().showInShadeWhenBubble());
 
         // collapse for previous bubble
@@ -262,19 +266,19 @@ public class BubbleControllerTest extends SysuiTestCase {
         verify(mBubbleExpandListener).onBubbleExpandChanged(true, mRow2.getEntry().key);
 
         // Last added is the one that is expanded
-        assertEquals(mRow2.getEntry(), stackView.getExpandedBubble().getEntry());
+        assertEquals(mRow2.getEntry(), stackView.getExpandedBubbleView().getEntry());
         assertFalse(mRow2.getEntry().showInShadeWhenBubble());
 
         // Dismiss currently expanded
-        mBubbleController.removeBubble(stackView.getExpandedBubble().getKey());
+        mBubbleController.removeBubble(stackView.getExpandedBubbleView().getKey());
         verify(mBubbleExpandListener).onBubbleExpandChanged(false, mRow2.getEntry().key);
 
         // Make sure next bubble is selected
-        assertEquals(mRow.getEntry(), stackView.getExpandedBubble().getEntry());
+        assertEquals(mRow.getEntry(), stackView.getExpandedBubbleView().getEntry());
         verify(mBubbleExpandListener).onBubbleExpandChanged(true, mRow.getEntry().key);
 
         // Dismiss that one
-        mBubbleController.removeBubble(stackView.getExpandedBubble().getKey());
+        mBubbleController.removeBubble(stackView.getExpandedBubbleView().getKey());
 
         // Make sure state changes and collapse happens
         verify(mBubbleExpandListener).onBubbleExpandChanged(false, mRow.getEntry().key);
@@ -297,8 +301,8 @@ public class BubbleControllerTest extends SysuiTestCase {
     static class TestableBubbleController extends BubbleController {
 
         TestableBubbleController(Context context,
-                StatusBarWindowController statusBarWindowController) {
-            super(context, statusBarWindowController);
+                StatusBarWindowController statusBarWindowController, BubbleData data) {
+            super(context, statusBarWindowController, data);
         }
 
         @Override

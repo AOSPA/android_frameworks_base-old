@@ -33,14 +33,20 @@
     <!-- size of the dead zone when touches have recently occurred elsewhere on screen -->
     <dimen name="navigation_bar_deadzone_size_max">32dp</dimen>
 
+    <!-- dimensions for the navigation bar handle -->
+    <dimen name="navigation_handle_width">180dp</dimen>
+    <dimen name="navigation_handle_radius">2dp</dimen>
+    <dimen name="navigation_handle_bottom">8dp</dimen>
+
     <!-- Height of notification icons in the status bar -->
     <dimen name="status_bar_icon_size">@*android:dimen/status_bar_icon_size</dimen>
 
     <!-- Height of the battery icon in the status bar. -->
     <dimen name="status_bar_battery_icon_height">13.0dp</dimen>
 
-    <!-- Width of the battery icon in the status bar. -->
-    <dimen name="status_bar_battery_icon_width">8.5dp</dimen>
+    <!-- Width of the battery icon in the status bar. The battery drawable assumes a 12x20 canvas,
+    so the width of the icon should be 13.0dp * (12.0 / 20.0) -->
+    <dimen name="status_bar_battery_icon_width">7.8dp</dimen>
 
     <!-- The font size for the clock in the status bar. -->
     <dimen name="status_bar_clock_size">14sp</dimen>
@@ -841,25 +847,14 @@
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
 
+    <!-- Global actions power menu -->
     <dimen name="global_actions_panel_width">120dp</dimen>
-
-    <dimen name="global_actions_grid_container_bottom_margin">16dp</dimen>
-
-    <dimen name="global_actions_grid_side_margin">4dp</dimen>
-    <dimen name="global_actions_grid_separated_panel_width">104dp</dimen>
-    <dimen name="global_actions_grid_top_padding">8dp</dimen>
-    <dimen name="global_actions_grid_bottom_padding">8dp</dimen>
-    <dimen name="global_actions_grid_left_padding">4dp</dimen>
-    <dimen name="global_actions_grid_right_padding">4dp</dimen>
-
-    <dimen name="global_actions_grid_item_side_margin">12dp</dimen>
-    <dimen name="global_actions_grid_item_vertical_margin">8dp</dimen>
-
     <dimen name="global_actions_top_padding">120dp</dimen>
-
     <dimen name="global_actions_padding">12dp</dimen>
-
     <dimen name="global_actions_translate">9dp</dimen>
+
+    <!-- Global actions grid layout -->
+    <dimen name="global_actions_grid_side_margin">4dp</dimen>
 
     <!-- The maximum offset in either direction that elements are moved horizontally to prevent
          burn-in on AOD. -->
@@ -980,26 +975,32 @@
     <dimen name="ongoing_appops_dialog_items_bottom_margin">24dp</dimen>
     <!-- Top and bottom margin of title in Ongoing App Ops dialog -->
     <dimen name="ongoing_appops_dialog_title_margin_top_bottom">18dp</dimen>
-    <!-- Side margins around the Ongoing App Ops chip-->
-    <dimen name="ongoing_appops_chip_margin">12dp</dimen>
-    <!-- Top and bottom margins around the Ongoing App Ops chip -->
-    <dimen name="ongoing_appops_top_chip_margin">12dp</dimen>
-    <!-- Start and End padding for Ongoing App Ops chip -->
-    <dimen name="ongoing_appops_chip_side_padding">6dp</dimen>
-    <!-- Padding between background of Ongoing App Ops chip and content -->
-    <dimen name="ongoing_appops_chip_bg_padding">0dp</dimen>
-    <!-- Margin between icons of Ongoing App Ops chip when QQS-->
-    <dimen name="ongoing_appops_chip_icon_margin_collapsed">0dp</dimen>
-    <!-- Margin between icons of Ongoing App Ops chip when QS-->
-    <dimen name="ongoing_appops_chip_icon_margin_expanded">8dp</dimen>
-    <!-- Icon size of Ongoing App Ops chip -->
-    <dimen name="ongoing_appops_chip_icon_size">18dp</dimen>
-    <!-- Radius of Ongoing App Ops chip corners -->
-    <dimen name="ongoing_appops_chip_bg_corner_radius">4dp</dimen>
     <!-- Text size for Ongoing App Ops dialog title -->
     <dimen name="ongoing_appops_dialog_title_size">20sp</dimen>
     <!-- Text size for Ongoing App Ops dialog items -->
     <dimen name="ongoing_appops_dialog_item_size">16sp</dimen>
+    <!-- Side margins around the Ongoing App Ops chip-->
+    <dimen name="ongoing_appops_chip_margin">0dp</dimen>
+    <!-- Height of the Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_height">32dp</dimen>
+    <!-- Start and End padding for Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_text_padding">8dp</dimen>
+    <!-- Padding between background of Ongoing App Ops chip and content -->
+    <dimen name="ongoing_appops_chip_bg_padding">0dp</dimen>
+    <!-- Side padding between background of Ongoing App Ops chip and content -->
+    <dimen name="ongoing_appops_chip_side_padding">8dp</dimen>
+    <!-- Margin between icons of Ongoing App Ops chip when QQS-->
+    <dimen name="ongoing_appops_chip_icon_margin_collapsed">0dp</dimen>
+    <!-- Margin between icons of Ongoing App Ops chip when QS-->
+    <dimen name="ongoing_appops_chip_icon_margin_expanded">2dp</dimen>
+    <!-- Icon size of Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_icon_size">@*android:dimen/status_bar_icon_size</dimen>
+    <!-- Radius of Ongoing App Ops chip corners -->
+    <dimen name="ongoing_appops_chip_bg_corner_radius">16dp</dimen>
+    <!-- Size of text of Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_text_size">12sp</dimen>
+    <!-- Margin between items in Ongoing App Ops chip -->
+    <dimen name="ongoing_appops_chip_items_margin">8dp</dimen>
 
     <!-- How much a bubble is elevated -->
     <dimen name="bubble_elevation">8dp</dimen>
@@ -1012,9 +1013,9 @@
     <!-- How much to inset the icon in the circle -->
     <dimen name="bubble_icon_inset">16dp</dimen>
     <!-- Padding around the view displayed when the bubble is expanded -->
-    <dimen name="bubble_expanded_view_padding">8dp</dimen>
-    <!-- Default height of the expanded view shown when the bubble is expanded -->
-    <dimen name="bubble_expanded_default_height">400dp</dimen>
+    <dimen name="bubble_expanded_view_padding">4dp</dimen>
+    <!-- Default (and minimum) height of the expanded view shown when the bubble is expanded -->
+    <dimen name="bubble_expanded_default_height">180dp</dimen>
     <!-- Height of the triangle that points to the expanded bubble -->
     <dimen name="bubble_pointer_height">4dp</dimen>
     <!-- Width of the triangle that points to the expanded bubble -->
@@ -1045,4 +1046,11 @@
     <dimen name="bubble_header_icon_size">48dp</dimen>
     <!-- Size of the app icon shown in the bubble permission view -->
     <dimen name="bubble_permission_icon_size">24dp</dimen>
+    <!-- Space between the pointer triangle and the bubble expanded view -->
+    <dimen name="bubble_pointer_margin">8dp</dimen>
+    <!-- Height of the permission prompt shown with bubbles -->
+    <dimen name="bubble_permission_height">120dp</dimen>
+
+    <!-- Size of the RAT type for CellularTile -->
+    <dimen name="celltile_rat_type_size">10sp</dimen>
 </resources>

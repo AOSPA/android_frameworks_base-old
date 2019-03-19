@@ -46,6 +46,7 @@ import static android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT;
 import static android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED;
 import static android.content.Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP;
+import static android.content.Intent.FLAG_ACTIVITY_TASK_ON_HOME;
 import static android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS;
 import static android.content.pm.ActivityInfo.LAUNCH_MULTIPLE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE;
@@ -98,6 +99,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Bundle;
@@ -116,6 +118,7 @@ import android.util.Pools.SynchronizedPool;
 import android.util.Slog;
 import android.widget.Toast;
 
+import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.HeavyWeightSwitcherActivity;
 import com.android.internal.app.IVoiceInteractor;
@@ -765,11 +768,11 @@ class ActivityStarter {
             abort |= (abortBackgroundStart && !mService.isBackgroundActivityStartsEnabled());
             // TODO: remove this toast after feature development is done
             if (abortBackgroundStart) {
-                final String toastMsg = abort
-                        ? "Background activity start from " + callingPackage
-                                + " blocked. See go/q-bg-block."
-                        : "This background activity start from " + callingPackage
-                                + " will be blocked in future Q builds. See go/q-bg-block.";
+                final Resources res = mService.mContext.getResources();
+                final String toastMsg = res.getString(abort
+                            ? R.string.activity_starter_block_bg_activity_starts_enforcing
+                            : R.string.activity_starter_block_bg_activity_starts_permissive,
+                        callingPackage);
                 mService.mUiHandler.post(() -> {
                     Toast.makeText(mService.mContext, toastMsg, Toast.LENGTH_LONG).show();
                 });
@@ -834,12 +837,25 @@ class ActivityStarter {
                         new String[]{resolvedType}, PendingIntent.FLAG_CANCEL_CURRENT
                                 | PendingIntent.FLAG_ONE_SHOT, null);
 
-                final int flags = intent.getFlags();
                 Intent newIntent = new Intent(Intent.ACTION_REVIEW_PERMISSIONS);
-                newIntent.setFlags(flags
-                        | FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_MULTIPLE_TASK
-                        | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+
+                int flags = intent.getFlags();
+                flags |= Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
+
+                /*
+                 * Prevent reuse of review activity: Each app needs their own review activity. By
+                 * default activities launched with NEW_TASK or NEW_DOCUMENT try to reuse activities
+                 * with the same launch parameters (extras are ignored). Hence to avoid possible
+                 * reuse force a new activity via the MULTIPLE_TASK flag.
+                 *
+                 * Activities that are not launched with NEW_TASK or NEW_DOCUMENT are not re-used,
+                 * hence no need to add the flag in this case.
+                 */
+                if ((flags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_NEW_DOCUMENT)) != 0) {
+                    flags |= Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
+                }
+                newIntent.setFlags(flags);
+
                 newIntent.putExtra(Intent.EXTRA_PACKAGE_NAME, aInfo.packageName);
                 newIntent.putExtra(Intent.EXTRA_INTENT, new IntentSender(target));
                 if (resultRecord != null) {
@@ -927,7 +943,7 @@ class ActivityStarter {
             return false;
         }
         // don't abort if the callingUid is in the foreground or is a persistent system process
-        final int callingUidProcState = mService.getUidStateLocked(callingUid);
+        final int callingUidProcState = mService.getUidState(callingUid);
         final boolean callingUidHasAnyVisibleWindow =
                 mService.mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(callingUid);
         final boolean isCallingUidForeground = callingUidHasAnyVisibleWindow
@@ -940,7 +956,7 @@ class ActivityStarter {
         // take realCallingUid into consideration
         final int realCallingUidProcState = (callingUid == realCallingUid)
                 ? callingUidProcState
-                : mService.getUidStateLocked(realCallingUid);
+                : mService.getUidState(realCallingUid);
         final boolean realCallingUidHasAnyVisibleWindow = (callingUid == realCallingUid)
                 ? callingUidHasAnyVisibleWindow
                 : mService.mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(realCallingUid);
@@ -993,8 +1009,8 @@ class ActivityStarter {
         if (mSupervisor.mRecentTasks.isCallerRecents(callingUid)) {
             return false;
         }
-        // don't abort if the callingPackage is a device owner
-        if (mService.getDevicePolicyManager().isDeviceOwnerApp(callingPackage)) {
+        // don't abort if the callingPackage is the device owner
+        if (mService.isDeviceOwner(callingPackage)) {
             return false;
         }
         // anything that has fallen through would currently be aborted
@@ -1446,6 +1462,14 @@ class ActivityStarter {
                 // This task was started because of movement of the activity based on affinity...
                 // Now that we are actually launching it, we can assign the base intent.
                 reusedActivity.getTaskRecord().setIntent(mStartActivity);
+            } else {
+                final boolean taskOnHome =
+                        (mStartActivity.intent.getFlags() & FLAG_ACTIVITY_TASK_ON_HOME) != 0;
+                if (taskOnHome) {
+                    reusedActivity.getTaskRecord().intent.addFlags(FLAG_ACTIVITY_TASK_ON_HOME);
+                } else {
+                    reusedActivity.getTaskRecord().intent.removeFlags(FLAG_ACTIVITY_TASK_ON_HOME);
+                }
             }
 
             // This code path leads to delivering a new intent, we want to make sure we schedule it

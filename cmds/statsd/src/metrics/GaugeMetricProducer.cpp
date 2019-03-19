@@ -184,6 +184,7 @@ void GaugeMetricProducer::clearPastBucketsLocked(const int64_t dumpTimeNs) {
 void GaugeMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
                                              const bool include_current_partial_bucket,
                                              const bool erase_data,
+                                             const DumpLatency dumpLatency,
                                              std::set<string> *str_set,
                                              ProtoOutputStream* protoOutput) {
     VLOG("Gauge metric %lld report now...", (long long)mMetricId);
@@ -320,15 +321,15 @@ void GaugeMetricProducer::pullAndMatchEventsLocked(const int64_t timestampNs) {
         // When the metric wants to do random sampling and there is already one gauge atom for the
         // current bucket, do not do it again.
         case GaugeMetric::RANDOM_ONE_SAMPLE: {
-            triggerPuller = mCondition && mCurrentSlicedBucket->empty();
+            triggerPuller = mCondition == ConditionState::kTrue && mCurrentSlicedBucket->empty();
             break;
         }
         case GaugeMetric::CONDITION_CHANGE_TO_TRUE: {
-            triggerPuller = mCondition;
+            triggerPuller = mCondition == ConditionState::kTrue;
             break;
         }
         case GaugeMetric::FIRST_N_SAMPLES: {
-            triggerPuller = mCondition;
+            triggerPuller = mCondition == ConditionState::kTrue;
             break;
         }
         default:
@@ -364,7 +365,7 @@ void GaugeMetricProducer::onConditionChangedLocked(const bool conditionMet,
                                                    const int64_t eventTimeNs) {
     VLOG("GaugeMetric %lld onConditionChanged", (long long)mMetricId);
     flushIfNeededLocked(eventTimeNs);
-    mCondition = conditionMet;
+    mCondition = conditionMet ? ConditionState::kTrue : ConditionState::kFalse;
     if (mIsPulled && mTriggerAtomId == -1) {
         pullAndMatchEventsLocked(eventTimeNs);
     }  // else: Push mode. No need to proactively pull the gauge data.
@@ -377,7 +378,7 @@ void GaugeMetricProducer::onSlicedConditionMayChangeLocked(bool overallCondition
     flushIfNeededLocked(eventTimeNs);
     // If the condition is sliced, mCondition is true if any of the dimensions is true. And we will
     // pull for every dimension.
-    mCondition = overallCondition;
+    mCondition = overallCondition ? ConditionState::kTrue : ConditionState::kFalse;
     if (mIsPulled && mTriggerAtomId == -1) {
         pullAndMatchEventsLocked(eventTimeNs);
     }  // else: Push mode. No need to proactively pull the gauge data.
@@ -485,8 +486,8 @@ void GaugeMetricProducer::onMatchedLogEventInternalLocked(
                 gaugeVal = value.long_value;
             }
             for (auto& tracker : mAnomalyTrackers) {
-                tracker->detectAndDeclareAnomaly(eventTimeNs, mCurrentBucketNum, eventKey,
-                                                 gaugeVal);
+                tracker->detectAndDeclareAnomaly(eventTimeNs, mCurrentBucketNum, mMetricId,
+                                                 eventKey, gaugeVal);
             }
         }
     }
@@ -528,7 +529,7 @@ void GaugeMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
         return;
     }
 
-    flushCurrentBucketLocked(eventTimeNs);
+    flushCurrentBucketLocked(eventTimeNs, eventTimeNs);
 
     // Adjusts the bucket start and end times.
     int64_t numBucketsForward = 1 + (eventTimeNs - currentBucketEndTimeNs) / mBucketSizeNs;
@@ -538,7 +539,8 @@ void GaugeMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
          (long long)mCurrentBucketStartTimeNs);
 }
 
-void GaugeMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
+void GaugeMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
+                                                   const int64_t& nextBucketStartTimeNs) {
     int64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
 
     GaugeBucket info;
@@ -574,6 +576,7 @@ void GaugeMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
         }
     }
 
+    StatsdStats::getInstance().noteBucketCount(mMetricId);
     mCurrentSlicedBucket = std::make_shared<DimToGaugeAtomsMap>();
 }
 

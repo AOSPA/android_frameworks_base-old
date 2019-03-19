@@ -142,6 +142,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private static final int LOCATION_HAS_SPEED_ACCURACY = 64;
     private static final int LOCATION_HAS_BEARING_ACCURACY = 128;
 
+    // these need to match ElapsedRealtimeFlags enum in types.hal
+    private static final int ELAPSED_REALTIME_HAS_TIMESTAMP_NS = 1;
+
     // IMPORTANT - the GPS_DELETE_* symbols here must match GnssAidingData enum in IGnss.hal
     private static final int GPS_DELETE_EPHEMERIS = 0x0001;
     private static final int GPS_DELETE_ALMANAC = 0x0002;
@@ -375,6 +378,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private final NtpTimeHelper mNtpTimeHelper;
     private final GnssBatchingProvider mGnssBatchingProvider;
     private final GnssGeofenceProvider mGnssGeofenceProvider;
+    // Available only on GNSS HAL 2.0 implementations and later.
     private GnssVisibilityControl mGnssVisibilityControl;
 
     // Handler for processing events
@@ -465,8 +469,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
     };
 
-    // TODO(b/119326010): replace OnSubscriptionsChangedListener with
-    // ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED broadcast reseiver.
+    // TODO: replace OnSubscriptionsChangedListener with ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED
+    //       broadcast receiver.
     private final OnSubscriptionsChangedListener mOnSubscriptionsChangedListener =
             new OnSubscriptionsChangedListener() {
                 @Override
@@ -528,6 +532,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 mPowerManager.getPowerSaveState(ServiceType.LOCATION);
         switch (result.locationMode) {
             case PowerManager.LOCATION_MODE_GPS_DISABLED_WHEN_SCREEN_OFF:
+            case PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF:
                 // If we are in battery saver mode and the screen is off, disable GPS.
                 disableGps |= result.batterySaverEnabled && !mPowerManager.isInteractive();
                 break;
@@ -678,8 +683,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mNtpTimeHelper.onNetworkAvailable();
         if (mDownloadXtraDataPending == STATE_PENDING_NETWORK) {
             if (mSupportsXtra) {
-                // Download only if supported, (prevents an unneccesary on-boot
-                // download)
+                // Download only if supported, (prevents an unnecessary on-boot download)
                 xtraDownloadRequest();
             }
         }
@@ -758,15 +762,21 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         float speedAccuracyMetersPerSecond = location.getSpeedAccuracyMetersPerSecond();
         float bearingAccuracyDegrees = location.getBearingAccuracyDegrees();
         long timestamp = location.getTime();
-        native_inject_best_location(gnssLocationFlags, latitudeDegrees, longitudeDegrees,
-                altitudeMeters, speedMetersPerSec, bearingDegrees, horizontalAccuracyMeters,
-                verticalAccuracyMeters, speedAccuracyMetersPerSecond, bearingAccuracyDegrees,
-                timestamp);
+
+        int elapsedRealtimeFlags = ELAPSED_REALTIME_HAS_TIMESTAMP_NS;
+        long elapsedRealtimeNanos = location.getElapsedRealtimeNanos();
+
+        native_inject_best_location(
+                gnssLocationFlags, latitudeDegrees, longitudeDegrees,
+                altitudeMeters, speedMetersPerSec, bearingDegrees,
+                horizontalAccuracyMeters, verticalAccuracyMeters,
+                speedAccuracyMetersPerSecond, bearingAccuracyDegrees, timestamp,
+                elapsedRealtimeFlags, elapsedRealtimeNanos);
     }
 
     /** Returns true if the location request is too frequent. */
     private boolean isRequestLocationRateLimited() {
-        // TODO(b/73198123): implement exponential backoff.
+        // TODO: implement exponential backoff.
         return false;
     }
 
@@ -919,7 +929,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         synchronized (mLock) {
             boolean enabled =
                     ((mProviderRequest != null && mProviderRequest.reportLocation
-                            && mProviderRequest.forceLocation) || (
+                            && mProviderRequest.locationSettingsIgnored) || (
                             mContext.getSystemService(LocationManager.class).isLocationEnabled()
                                     && !mDisableGps)) && !mShutdown;
             if (enabled == mEnabled) {
@@ -978,7 +988,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
 
         if (DEBUG) Log.d(TAG, "setRequest " + mProviderRequest);
-        if (mProviderRequest.reportLocation && !mDisableGps && isEnabled()) {
+        if (mProviderRequest.reportLocation && isEnabled()) {
             // update client uids
             updateClientUids(mWorkSource);
 
@@ -1261,9 +1271,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
         if (VERBOSE) Log.v(TAG, "reportLocation " + location.toString());
 
-        // It would be nice to push the elapsed real-time timestamp
-        // further down the stack, but this is still useful
-        location.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());
         location.setExtras(mLocationExtras.getBundle());
 
         reportLocation(location);
@@ -2152,17 +2159,11 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private native int native_read_nmea(byte[] buffer, int bufferSize);
 
     private native void native_inject_best_location(
-            int gnssLocationFlags,
-            double latitudeDegrees,
-            double longitudeDegrees,
-            double altitudeMeters,
-            float speedMetersPerSec,
-            float bearingDegrees,
-            float horizontalAccuracyMeters,
-            float verticalAccuracyMeters,
-            float speedAccuracyMetersPerSecond,
-            float bearingAccuracyDegrees,
-            long timestamp);
+            int gnssLocationFlags, double latitudeDegrees, double longitudeDegrees,
+            double altitudeMeters, float speedMetersPerSec, float bearingDegrees,
+            float horizontalAccuracyMeters, float verticalAccuracyMeters,
+            float speedAccuracyMetersPerSecond, float bearingAccuracyDegrees,
+            long timestamp, int elapsedRealtimeFlags, long elapsedRealtimeNanos);
 
     private native void native_inject_location(double latitude, double longitude, float accuracy);
 

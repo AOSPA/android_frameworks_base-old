@@ -955,6 +955,9 @@
     <!-- Interruption level: Alarms only.  Optimized for narrow two-line display. [CHAR LIMIT=40] -->
     <string name="interruption_level_alarms_twoline">Alarms\nonly</string>
 
+    <!-- Indication on the keyguard that is shown when the device is wirelessly charging. [CHAR LIMIT=80]-->
+    <string name="keyguard_indication_charging_time_wireless"><xliff:g id="percentage" example="20%">%2$s</xliff:g> • Wirelessly Charging (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%1$s</xliff:g> until full)</string>
+
     <!-- Indication on the keyguard that is shown when the device is charging. [CHAR LIMIT=50]-->
     <string name="keyguard_indication_charging_time"><xliff:g id="percentage">%2$s</xliff:g> • Charging (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%1$s</xliff:g> until full)</string>
 
@@ -1066,7 +1069,10 @@
     <string name="battery_saver_notification_action_text">Turn off Battery Saver</string>
 
     <!-- Media projection permission dialog warning text. [CHAR LIMIT=NONE] -->
-    <string name="media_projection_dialog_text"><xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> will start capturing everything that\'s displayed on your screen.</string>
+    <string name="media_projection_dialog_text"><xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> will start capturing everything on your screen including notifications, passwords, photos, messages and payment information.</string>
+
+    <!-- Media projection permission dialog warning title. [CHAR LIMIT=NONE] -->
+    <string name="media_projection_dialog_title">Allow <xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> to record or cast your screen?</string>
 
     <!-- Media projection permission dialog permanent grant check box. [CHAR LIMIT=NONE] -->
     <string name="media_projection_remember_text">Don\'t show again</string>
@@ -1579,19 +1585,19 @@
     <!-- Notification Inline controls: continue receiving notifications prompt, channel level -->
     <string name="inline_keep_showing">Keep showing these notifications?</string>
 
-    <!-- Notification inline controls: block notifications button -->
+    <!-- Notification inline controls: block notifications button [CHAR_LIMIT=25] -->
     <string name="inline_stop_button">Stop notifications</string>
 
     <!-- Notification inline controls: button to deliver notifications silently from this channel [CHAR_LIMIT=35] -->
     <string name="inline_deliver_silently_button">Deliver Silently</string>
 
-    <!-- Notification inline controls: button to block notifications from this channel [CHAR_LIMIT=35] -->
+    <!-- Notification inline controls: button to block notifications from this channel [CHAR_LIMIT=20] -->
     <string name="inline_block_button">Block</string>
 
-    <!-- Notification inline controls: keep getting notifications button -->
+    <!-- Notification inline controls: keep getting notifications button [CHAR_LIMIT=25] -->
     <string name="inline_keep_button">Keep showing</string>
 
-    <!-- Notification inline controls: minimize notifications button -->
+    <!-- Notification inline controls: minimize notifications button [CHAR_LIMIT=20] -->
     <string name="inline_minimize_button">Minimize</string>
 
     <!-- Notification inline controls: button to show notifications silently, without alerting the user [CHAR_LIMIT=35] -->
@@ -2112,6 +2118,14 @@
     <string name="high_temp_notif_message">Some features limited while phone cools down</string>
     <!-- Text body for dialog alerting user that their phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=300] -->
     <string name="high_temp_dialog_message">Your phone will automatically try to cool down. You can still use your phone, but it may run slower.\n\nOnce your phone has cooled down, it will run normally.</string>
+    <!-- Title for alarm dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=30] -->
+    <string name="high_temp_alarm_title">Unplug charger</string>
+    <!-- Text body for dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=300] -->
+    <string name="high_temp_alarm_notify_message">There\u2019s an issue charging this device. Unplug the power adapter, and take care as the cable may be warm.</string>
+    <!-- Text for See care steps button [CHAR LIMIT=300] -->
+    <string name="high_temp_alarm_help_care_steps">See care steps</string>
+    <!-- Text link directs to usb overheat help page. -->
+    <string name="high_temp_alarm_help_url" translatable="false">help_uri_usb_warm</string>
 
     <!-- SysUI Tuner: Button to select lock screen shortcut [CHAR LIMIT=60] -->
     <string name="lockscreen_shortcut_left">Left shortcut</string>
@@ -2321,7 +2335,7 @@
     <!-- Action for accepting the Ongoing privacy dialog [CHAR LIMIT=10]-->
     <string name="ongoing_privacy_dialog_ok">Got it</string>
 
-    <!-- Action on Ongoing Privacy Dialog to open privacy hub [CHAR LIMIT=20]-->
+    <!-- Action on Ongoing Privacy Dialog to open privacy hub [CHAR LIMIT=23]-->
     <string name="ongoing_privacy_dialog_open_settings">Privacy settings</string>
 
     <!-- Text for item in Ongoing Privacy Dialog title when only one app is using app ops [CHAR LIMIT=NONE] -->
@@ -2373,5 +2387,4 @@
     <string name="no_bubbles">Block</string>
     <!-- Text used for button allowing user to approve / enable bubbles [CHAR LIMIT=20] -->
     <string name="yes_bubbles">Allow</string>
-
 </resources>

@@ -62,6 +62,8 @@ public class WindowManagerShellCommand extends ShellCommand {
                     return runDisplaySize(pw);
                 case "density":
                     return runDisplayDensity(pw);
+                case "folded-area":
+                    return runDisplayFoldedArea(pw);
                 case "overscan":
                     return runDisplayOverscan(pw);
                 case "scaling":
@@ -207,6 +209,40 @@ public class WindowManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private void printFoldedArea(PrintWriter pw) {
+        final Rect foldedArea = mInternal.getFoldedArea();
+        if (foldedArea.isEmpty()) {
+            pw.println("Folded area: none");
+        } else {
+            pw.println("Folded area: " + foldedArea.left + "," + foldedArea.top + ","
+                    + foldedArea.right + "," + foldedArea.bottom);
+        }
+    }
+
+    private int runDisplayFoldedArea(PrintWriter pw) {
+        final String areaStr = getNextArg();
+        final Rect rect = new Rect();
+        if (areaStr == null) {
+            printFoldedArea(pw);
+            return 0;
+        } else if ("reset".equals(areaStr)) {
+            rect.setEmpty();
+        } else {
+            final Pattern flattenedPattern = Pattern.compile(
+                    "(-?\\d+),(-?\\d+),(-?\\d+),(-?\\d+)");
+            final Matcher matcher = flattenedPattern.matcher(areaStr);
+            if (!matcher.matches()) {
+                getErrPrintWriter().println("Error: area should be LEFT,TOP,RIGHT,BOTTOM");
+                return -1;
+            }
+            rect.set(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)),
+                    Integer.parseInt(matcher.group(3)), Integer.parseInt(matcher.group(4)));
+        }
+
+        mInternal.setOverrideFoldedArea(rect);
+        return 0;
+    }
+
     private int runDisplayOverscan(PrintWriter pw) throws RemoteException {
         String overscanStr = getNextArgRequired();
         Rect rect = new Rect();
@@ -306,21 +342,24 @@ public class WindowManagerShellCommand extends ShellCommand {
             arg = getNextArgRequired();
         }
 
-        final boolean enabled;
+        final @DisplayRotation.FixedToUserRotation  int fixedToUserRotation;
         switch (arg) {
             case "enabled":
-                enabled = true;
+                fixedToUserRotation = DisplayRotation.FIXED_TO_USER_ROTATION_ENABLED;
                 break;
             case "disabled":
-                enabled = false;
+                fixedToUserRotation = DisplayRotation.FIXED_TO_USER_ROTATION_DISABLED;
+                break;
+            case "default":
+                fixedToUserRotation = DisplayRotation.FIXED_TO_USER_ROTATION_DISABLED;
                 break;
             default:
-                getErrPrintWriter().println("Error: expecting enabled or disabled, but we get "
-                        + arg);
+                getErrPrintWriter().println("Error: expecting enabled, disabled or default, but we "
+                        + "get " + arg);
                 return -1;
         }
 
-        mInternal.setRotateForApp(displayId, enabled);
+        mInternal.setRotateForApp(displayId, fixedToUserRotation);
         return 0;
     }
 
@@ -335,6 +374,8 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("    width and height in pixels unless suffixed with 'dp'.");
         pw.println("  density [reset|DENSITY] [-d DISPLAY_ID]");
         pw.println("    Return or override display density.");
+        pw.println("  folded-area [reset|LEFT,TOP,RIGHT,BOTTOM]");
+        pw.println("    Return or override folded area.");
         pw.println("  overscan [reset|LEFT,TOP,RIGHT,BOTTOM] [-d DISPLAY ID]");
         pw.println("    Set overscan area for display.");
         pw.println("  scaling [off|auto] [-d DISPLAY_ID]");

@@ -18,7 +18,9 @@ package android.media.audiopolicy;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
@@ -30,6 +32,7 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.IAudioService;
 import android.media.MediaRecorder;
+import android.media.projection.MediaProjection;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
@@ -93,6 +96,8 @@ public class AudioPolicy {
 
     private AudioPolicyConfig mConfig;
 
+    private final MediaProjection mProjection;
+
     /** @hide */
     public AudioPolicyConfig getConfig() { return mConfig; }
     /** @hide */
@@ -101,13 +106,17 @@ public class AudioPolicy {
     public boolean isFocusPolicy() { return mIsFocusPolicy; }
     /** @hide */
     public boolean isVolumeController() { return mVolCb != null; }
+    /** @hide */
+    public @Nullable MediaProjection getMediaProjection() {
+        return mProjection;
+    }
 
     /**
      * The parameter is guaranteed non-null through the Builder
      */
     private AudioPolicy(AudioPolicyConfig config, Context context, Looper looper,
             AudioPolicyFocusListener fl, AudioPolicyStatusListener sl, boolean isFocusPolicy,
-            AudioPolicyVolumeCallback vc) {
+            AudioPolicyVolumeCallback vc, @Nullable MediaProjection projection) {
         mConfig = config;
         mStatus = POLICY_STATUS_UNREGISTERED;
         mContext = context;
@@ -124,6 +133,7 @@ public class AudioPolicy {
         mStatusListener = sl;
         mIsFocusPolicy = isFocusPolicy;
         mVolCb = vc;
+        mProjection = projection;
     }
 
     /**
@@ -138,6 +148,7 @@ public class AudioPolicy {
         private AudioPolicyStatusListener mStatusListener;
         private boolean mIsFocusPolicy = false;
         private AudioPolicyVolumeCallback mVolCb;
+        private MediaProjection mProjection;
 
         /**
          * Constructs a new Builder with no audio mixes.
@@ -222,6 +233,23 @@ public class AudioPolicy {
         }
 
         /**
+         * Set a media projection obtained through createMediaProjection().
+         *
+         * A MediaProjection that can project audio allows to register an audio
+         * policy LOOPBACK|RENDER without the MODIFY_AUDIO_ROUTING permission.
+         *
+         * @hide
+         */
+        public Builder setMediaProjection(@NonNull MediaProjection projection) {
+            if (projection == null) {
+                throw new IllegalArgumentException("Invalid null volume callback");
+            }
+            mProjection = projection;
+            return this;
+
+        }
+
+        /**
          * Combines all of the attributes that have been set on this {@code Builder} and returns a
          * new {@link AudioPolicy} object.
          * @return a new {@code AudioPolicy} object.
@@ -241,7 +269,7 @@ public class AudioPolicy {
                         + "an AudioPolicyFocusListener");
             }
             return new AudioPolicy(new AudioPolicyConfig(mMixes), mContext, mLooper,
-                    mFocusListener, mStatusListener, mIsFocusPolicy, mVolCb);
+                    mFocusListener, mStatusListener, mIsFocusPolicy, mVolCb, mProjection);
         }
     }
 
@@ -336,11 +364,10 @@ public class AudioPolicy {
      * played.
      * @param uid UID of the application to affect.
      * @param devices list of devices to which the audio stream of the application may be routed.
-     * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
-     *          otherwise.
+     * @return true if the change was successful, false otherwise.
      */
     @SystemApi
-    public int setUidDeviceAffinity(int uid, @NonNull List<AudioDeviceInfo> devices) {
+    public boolean setUidDeviceAffinity(int uid, @NonNull List<AudioDeviceInfo> devices) {
         if (devices == null) {
             throw new IllegalArgumentException("Illegal null list of audio devices");
         }
@@ -365,10 +392,10 @@ public class AudioPolicy {
             try {
                 final int status = service.setUidDeviceAffinity(this.cb(),
                         uid, deviceTypes, deviceAdresses);
-                return status;
+                return (status == AudioManager.SUCCESS);
             } catch (RemoteException e) {
                 Log.e(TAG, "Dead object in setUidDeviceAffinity", e);
-                return AudioManager.ERROR;
+                return false;
             }
         }
     }
@@ -378,11 +405,10 @@ public class AudioPolicy {
      * Removes audio device affinity previously set by
      * {@link #setUidDeviceAffinity(int, java.util.List)}.
      * @param uid UID of the application affected.
-     * @return {@link AudioManager#SUCCESS} if the change was successful, {@link AudioManager#ERROR}
-     *          otherwise.
+     * @return true if the change was successful, false otherwise.
      */
     @SystemApi
-    public int removeUidDeviceAffinity(int uid) {
+    public boolean removeUidDeviceAffinity(int uid) {
         synchronized (mLock) {
             if (mStatus != POLICY_STATUS_REGISTERED) {
                 throw new IllegalStateException("Cannot use unregistered AudioPolicy");
@@ -390,10 +416,10 @@ public class AudioPolicy {
             final IAudioService service = getService();
             try {
                 final int status = service.removeUidDeviceAffinity(this.cb(), uid);
-                return status;
+                return (status == AudioManager.SUCCESS);
             } catch (RemoteException e) {
                 Log.e(TAG, "Dead object in removeUidDeviceAffinity", e);
-                return AudioManager.ERROR;
+                return false;
             }
         }
     }
@@ -417,22 +443,55 @@ public class AudioPolicy {
                 Log.e(TAG, "Cannot use unregistered AudioPolicy");
                 return false;
             }
-            if (mContext == null) {
-                Log.e(TAG, "Cannot use AudioPolicy without context");
-                return false;
-            }
             if (mRegistrationId == null) {
                 Log.e(TAG, "Cannot use unregistered AudioPolicy");
                 return false;
             }
         }
-        if (!(PackageManager.PERMISSION_GRANTED == mContext.checkCallingOrSelfPermission(
-                        android.Manifest.permission.MODIFY_AUDIO_ROUTING))) {
+
+        // Loopback|capture only need an audio projection, everything else need MODIFY_AUDIO_ROUTING
+        boolean canModifyAudioRouting = PackageManager.PERMISSION_GRANTED
+                == checkCallingOrSelfPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING);
+
+        boolean canProjectAudio;
+        try {
+            canProjectAudio = mProjection != null && mProjection.getProjection().canProjectAudio();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to check if MediaProjection#canProjectAudio");
+            throw e.rethrowFromSystemServer();
+        }
+
+        if (!((isLoopbackRenderPolicy() && canProjectAudio) || canModifyAudioRouting)) {
             Slog.w(TAG, "Cannot use AudioPolicy for pid " + Binder.getCallingPid() + " / uid "
-                    + Binder.getCallingUid() + ", needs MODIFY_AUDIO_ROUTING");
+                    + Binder.getCallingUid() + ", needs MODIFY_AUDIO_ROUTING or "
+                    + "MediaProjection that can project audio.");
             return false;
         }
         return true;
+    }
+
+    private boolean isLoopbackRenderPolicy() {
+        synchronized (mLock) {
+            return mConfig.mMixes.stream().allMatch(mix -> mix.getRouteFlags()
+                    == (mix.ROUTE_FLAG_RENDER | mix.ROUTE_FLAG_LOOP_BACK));
+        }
+    }
+
+    /**
+     * Returns {@link PackageManager#PERMISSION_GRANTED} if the caller has the given permission.
+     */
+    private @PackageManager.PermissionResult int checkCallingOrSelfPermission(String permission) {
+        if (mContext != null) {
+            return mContext.checkCallingOrSelfPermission(permission);
+        }
+        Slog.v(TAG, "Null context, checking permission via ActivityManager");
+        int pid = Binder.getCallingPid();
+        int uid = Binder.getCallingUid();
+        try {
+            return ActivityManager.getService().checkPermission(permission, pid, uid);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     private void checkMixReadyToUse(AudioMix mix, boolean forTrack)
@@ -621,7 +680,6 @@ public class AudioPolicy {
      *
      */
     public static abstract class AudioPolicyVolumeCallback {
-        /** @hide */
         public AudioPolicyVolumeCallback() {}
         /**
          * Called when volume key-related changes are triggered, on the key down event.

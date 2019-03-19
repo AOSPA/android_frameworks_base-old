@@ -1180,13 +1180,8 @@ public class MediaPlayer extends PlayerBase
         }
 
         final File file = new File(path);
-        if (file.exists()) {
-            FileInputStream is = new FileInputStream(file);
-            FileDescriptor fd = is.getFD();
-            setDataSource(fd);
-            is.close();
-        } else {
-            throw new IOException("setDataSource failed.");
+        try (FileInputStream is = new FileInputStream(file)) {
+            setDataSource(is.getFD());
         }
     }
 
@@ -2650,6 +2645,7 @@ public class MediaPlayer extends PlayerBase
      */
     private synchronized void setSubtitleAnchor() {
         if ((mSubtitleController == null) && (ActivityThread.currentApplication() != null)) {
+            getMediaTimeProvider();
             final HandlerThread thread = new HandlerThread("SetSubtitleAnchorThread");
             thread.start();
             Handler handler = new Handler(thread.getLooper());
@@ -2665,7 +2661,7 @@ public class MediaPlayer extends PlayerBase
 
                         @Override
                         public Looper getSubtitleLooper() {
-                            return Looper.getMainLooper();
+                            return mTimeProvider.mEventHandler.getLooper();
                         }
                     });
                     thread.getLooper().quitSafely();
@@ -2868,15 +2864,9 @@ public class MediaPlayer extends PlayerBase
             throw new IllegalArgumentException(msg);
         }
 
-        File file = new File(path);
-        if (file.exists()) {
-            FileInputStream is = new FileInputStream(file);
-            FileDescriptor fd = is.getFD();
-            addTimedTextSource(fd, mimeType);
-            is.close();
-        } else {
-            // We do not support the case where the path is not a file.
-            throw new IOException(path);
+        final File file = new File(path);
+        try (FileInputStream is = new FileInputStream(file)) {
+            addTimedTextSource(is.getFD(), mimeType);
         }
     }
 

@@ -15,9 +15,10 @@
  */
 package android.view.contentcapture;
 
-import static android.view.contentcapture.ContentCaptureHelper.DEBUG;
-import static android.view.contentcapture.ContentCaptureHelper.VERBOSE;
+import static android.view.contentcapture.ContentCaptureHelper.sDebug;
+import static android.view.contentcapture.ContentCaptureHelper.sVerbose;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
@@ -25,6 +26,7 @@ import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UiThread;
 import android.content.ComponentName;
+import android.content.ContentCaptureOptions;
 import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
@@ -38,16 +40,11 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.util.SyncResultReceiver;
 
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
-/*
- * NOTE: all methods in this class should return right away, or do the real work in a handler
- * thread.
- *
- * Hence, the only field that must be thread-safe is mEnabled, which is called at the beginning
- * of every method.
- */
 /**
- * TODO(b/123577059): add javadocs / implement
+ * TODO(b/123577059): add javadocs / mention it can be null
  */
 @SystemService(Context.CONTENT_CAPTURE_MANAGER_SERVICE)
 public final class ContentCaptureManager {
@@ -85,13 +82,103 @@ public final class ContentCaptureManager {
     public static final String DEVICE_CONFIG_PROPERTY_SERVICE_EXPLICITLY_ENABLED =
             "service_explicitly_enabled";
 
+    /**
+     * Maximum number of events that are buffered before sent to the app.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String DEVICE_CONFIG_PROPERTY_MAX_BUFFER_SIZE = "max_buffer_size";
+
+    /**
+     * Frequency (in ms) of buffer flushes when no events are received.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String DEVICE_CONFIG_PROPERTY_IDLE_FLUSH_FREQUENCY = "idle_flush_frequency";
+
+    /**
+     * Frequency (in ms) of buffer flushes when no events are received and the last one was a
+     * text change event.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String DEVICE_CONFIG_PROPERTY_TEXT_CHANGE_FLUSH_FREQUENCY =
+            "text_change_flush_frequency";
+
+    /**
+     * Size of events that are logging on {@code dump}.
+     *
+     * <p>Set it to {@code 0} or less to disable history.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String DEVICE_CONFIG_PROPERTY_LOG_HISTORY_SIZE = "log_history_size";
+
+    /**
+     * Sets the logging level for {@code logcat} statements.
+     *
+     * <p>Valid values are: {@link #LOGGING_LEVEL_OFF}, {@value #LOGGING_LEVEL_DEBUG}, and
+     * {@link #LOGGING_LEVEL_VERBOSE}.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String DEVICE_CONFIG_PROPERTY_LOGGING_LEVEL = "logging_level";
+
+    /**
+     * Sets how long (in ms) the service is bound while idle.
+     *
+     * <p>Use {@code 0} to keep it permanently bound.
+     *
+     * @hide
+     */
+    public static final String DEVICE_CONFIG_PROPERTY_IDLE_UNBIND_TIMEOUT = "idle_unbind_timeout";
+
+    /** @hide */
+    @TestApi
+    public static final int LOGGING_LEVEL_OFF = 0;
+
+    /** @hide */
+    @TestApi
+    public static final int LOGGING_LEVEL_DEBUG = 1;
+
+    /** @hide */
+    @TestApi
+    public static final int LOGGING_LEVEL_VERBOSE = 2;
+
+    /** @hide */
+    @IntDef(flag = false, value = {
+            LOGGING_LEVEL_OFF,
+            LOGGING_LEVEL_DEBUG,
+            LOGGING_LEVEL_VERBOSE
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface LoggingLevel {}
+
+
+    /** @hide */
+    public static final int DEFAULT_MAX_BUFFER_SIZE = 100;
+    /** @hide */
+    public static final int DEFAULT_IDLE_FLUSHING_FREQUENCY_MS = 5_000;
+    /** @hide */
+    public static final int DEFAULT_TEXT_CHANGE_FLUSHING_FREQUENCY_MS = 1_000;
+    /** @hide */
+    public static final int DEFAULT_LOG_HISTORY_SIZE = 10;
+
     private final Object mLock = new Object();
 
     @NonNull
     private final Context mContext;
 
-    @Nullable
+    @NonNull
     private final IContentCaptureManager mService;
+
+    @NonNull
+    final ContentCaptureOptions mOptions;
 
     // Flags used for starting session.
     @GuardedBy("mLock")
@@ -107,11 +194,15 @@ public final class ContentCaptureManager {
 
     /** @hide */
     public ContentCaptureManager(@NonNull Context context,
-            @Nullable IContentCaptureManager service) {
+            @NonNull IContentCaptureManager service, @NonNull ContentCaptureOptions options) {
         mContext = Preconditions.checkNotNull(context, "context cannot be null");
-        if (VERBOSE) Log.v(TAG, "Constructor for " + context.getPackageName());
+        mService = Preconditions.checkNotNull(service, "service cannot be null");
+        mOptions = Preconditions.checkNotNull(options, "options cannot be null");
 
-        mService = service;
+        ContentCaptureHelper.setLoggingLevel(mOptions.loggingLevel);
+
+        if (sVerbose) Log.v(TAG, "Constructor for " + context.getPackageName());
+
         // TODO(b/119220549): we might not even need a handler, as the IPCs are oneway. But if we
         // do, then we should optimize it to run the tests after the Choreographer finishes the most
         // important steps of the frame.
@@ -133,7 +224,7 @@ public final class ContentCaptureManager {
         synchronized (mLock) {
             if (mMainSession == null) {
                 mMainSession = new MainContentCaptureSession(mContext, this, mHandler, mService);
-                if (VERBOSE) Log.v(TAG, "getMainContentCaptureSession(): created " + mMainSession);
+                if (sVerbose) Log.v(TAG, "getMainContentCaptureSession(): created " + mMainSession);
             }
             return mMainSession;
         }
@@ -141,7 +232,7 @@ public final class ContentCaptureManager {
 
     /** @hide */
     @UiThread
-    public void onActivityStarted(@NonNull IBinder applicationToken,
+    public void onActivityCreated(@NonNull IBinder applicationToken,
             @NonNull ComponentName activityComponent, int flags) {
         synchronized (mLock) {
             mFlags |= flags;
@@ -151,7 +242,19 @@ public final class ContentCaptureManager {
 
     /** @hide */
     @UiThread
-    public void onActivityStopped() {
+    public void onActivityResumed() {
+        getMainContentCaptureSession().notifySessionLifecycle(/* started= */ true);
+    }
+
+    /** @hide */
+    @UiThread
+    public void onActivityPaused() {
+        getMainContentCaptureSession().notifySessionLifecycle(/* started= */ false);
+    }
+
+    /** @hide */
+    @UiThread
+    public void onActivityDestroyed() {
         getMainContentCaptureSession().destroy();
     }
 
@@ -199,8 +302,6 @@ public final class ContentCaptureManager {
      * </ul>
      */
     public boolean isContentCaptureEnabled() {
-        if (mService == null) return false;
-
         final MainContentCaptureSession mainSession;
         synchronized (mLock) {
             mainSession = mMainSession;
@@ -219,7 +320,7 @@ public final class ContentCaptureManager {
      * it on {@link android.app.Activity#onCreate(android.os.Bundle, android.os.PersistableBundle)}.
      */
     public void setContentCaptureEnabled(boolean enabled) {
-        if (DEBUG) {
+        if (sDebug) {
             Log.d(TAG, "setContentCaptureEnabled(): setting to " + enabled + " for " + mContext);
         }
 
@@ -242,8 +343,6 @@ public final class ContentCaptureManager {
     @SystemApi
     @TestApi
     public boolean isContentCaptureFeatureEnabled() {
-        if (mService == null) return false;
-
         final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
         final int resultCode;
         try {
@@ -260,39 +359,8 @@ public final class ContentCaptureManager {
             case RESULT_CODE_NOT_SERVICE:
                 throw new SecurityException("caller is not user's ContentCapture service");
             default:
-                throw new IllegalStateException("received invalid result: " + resultCode);
-        }
-    }
-
-    /**
-     * Sets whether Content Capture is enabled for the given user.
-     *
-     * @throws SecurityException if caller is not the app that owns the Content Capture service
-     * associated with the user.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    public void setContentCaptureFeatureEnabled(boolean enabled) {
-        if (DEBUG) Log.d(TAG, "setContentCaptureFeatureEnabled(): setting to " + enabled);
-
-        final SyncResultReceiver resultReceiver = new SyncResultReceiver(SYNC_CALLS_TIMEOUT_MS);
-        final int resultCode;
-        try {
-            mService.setContentCaptureFeatureEnabled(enabled, resultReceiver);
-            resultCode = resultReceiver.getIntResult();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-        switch (resultCode) {
-            case RESULT_CODE_TRUE:
-                // Our work is done here, in our void existance...
-                return;
-            case RESULT_CODE_NOT_SERVICE:
-                throw new SecurityException("caller is not user's ContentCapture service");
-            default:
-                throw new IllegalStateException("received invalid result: " + resultCode);
+                Log.wtf(TAG, "received invalid result: " + resultCode);
+                return false;
         }
     }
 
@@ -314,22 +382,24 @@ public final class ContentCaptureManager {
 
     /** @hide */
     public void dump(String prefix, PrintWriter pw) {
+        pw.print(prefix); pw.println("ContentCaptureManager");
+        final String prefix2 = prefix + "  ";
         synchronized (mLock) {
-            pw.print(prefix); pw.println("ContentCaptureManager");
-            pw.print(prefix); pw.print("isContentCaptureEnabled(): ");
+            pw.print(prefix2); pw.print("isContentCaptureEnabled(): ");
             pw.println(isContentCaptureEnabled());
-            pw.print(prefix); pw.print("Context: "); pw.println(mContext);
-            pw.print(prefix); pw.print("User: "); pw.println(mContext.getUserId());
-            if (mService != null) {
-                pw.print(prefix); pw.print("Service: "); pw.println(mService);
-            }
-            pw.print(prefix); pw.print("Flags: "); pw.println(mFlags);
+            pw.print(prefix2); pw.print("Debug: "); pw.print(sDebug);
+            pw.print(" Verbose: "); pw.println(sVerbose);
+            pw.print(prefix2); pw.print("Context: "); pw.println(mContext);
+            pw.print(prefix2); pw.print("User: "); pw.println(mContext.getUserId());
+            pw.print(prefix2); pw.print("Service: "); pw.println(mService);
+            pw.print(prefix2); pw.print("Flags: "); pw.println(mFlags);
+            pw.print(prefix2); pw.print("Options: "); mOptions.dumpShort(pw); pw.println();
             if (mMainSession != null) {
-                final String prefix2 = prefix + "  ";
-                pw.print(prefix); pw.println("Main session:");
-                mMainSession.dump(prefix2, pw);
+                final String prefix3 = prefix2 + "  ";
+                pw.print(prefix2); pw.println("Main session:");
+                mMainSession.dump(prefix3, pw);
             } else {
-                pw.print(prefix); pw.println("No sessions");
+                pw.print(prefix2); pw.println("No sessions");
             }
         }
     }

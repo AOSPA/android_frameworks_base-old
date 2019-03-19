@@ -46,6 +46,8 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
+import android.content.res.Configuration;
+import android.database.Cursor;
 import android.database.DataSetObserver;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -69,6 +71,9 @@ import android.os.ResultReceiver;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
+import android.provider.DocumentsContract;
+import android.provider.Downloads;
+import android.provider.OpenableColumns;
 import android.service.chooser.ChooserTarget;
 import android.service.chooser.ChooserTargetService;
 import android.service.chooser.IChooserTargetResult;
@@ -87,7 +92,6 @@ import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.AbsListView;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -373,54 +377,12 @@ public class ChooserActivity extends ResolverActivity {
         super.onCreate(savedInstanceState, target, title, defaultTitleRes, initialIntents,
                 null, false);
 
-        Button copyButton = findViewById(R.id.copy_button);
-        copyButton.setOnClickListener(view -> {
-            Intent targetIntent = getTargetIntent();
-            if (targetIntent == null) {
-                finish();
-            } else {
-                final String action = targetIntent.getAction();
-
-                ClipData clipData = null;
-                if (Intent.ACTION_SEND.equals(action)) {
-                    String extraText = targetIntent.getStringExtra(Intent.EXTRA_TEXT);
-                    Uri extraStream = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
-
-                    if (extraText != null) {
-                        clipData = ClipData.newPlainText(null, extraText);
-                    } else if (extraStream != null) {
-                        clipData = ClipData.newUri(getContentResolver(), null, extraStream);
-                    } else {
-                        Log.w(TAG, "No data available to copy to clipboard");
-                        return;
-                    }
-                } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
-                    final ArrayList<Uri> streams = targetIntent.getParcelableArrayListExtra(
-                            Intent.EXTRA_STREAM);
-                    clipData = ClipData.newUri(getContentResolver(), null, streams.get(0));
-                    for (int i = 1; i < streams.size(); i++) {
-                        clipData.addItem(getContentResolver(), new ClipData.Item(streams.get(i)));
-                    }
-                } else {
-                    // expected to only be visible with ACTION_SEND or ACTION_SEND_MULTIPLE
-                    // so warn about unexpected action
-                    Log.w(TAG, "Action (" + action + ") not supported for copying to clipboard");
-                    return;
-                }
-
-                ClipboardManager clipboardManager = (ClipboardManager) getSystemService(
-                        Context.CLIPBOARD_SERVICE);
-                clipboardManager.setPrimaryClip(clipData);
-                Toast.makeText(getApplicationContext(), R.string.copied, Toast.LENGTH_SHORT).show();
-
-                finish();
-            }
-        });
-
         mChooserShownTime = System.currentTimeMillis();
         final long systemCost = mChooserShownTime - intentReceivedTime;
 
         getMetricsLogger().write(new LogMaker(MetricsEvent.ACTION_ACTIVITY_CHOOSER_SHOWN)
+                .setSubtype(isWorkProfile() ? MetricsEvent.MANAGED_PROFILE :
+                        MetricsEvent.PARENT_PROFILE)
                 .addTaggedData(MetricsEvent.FIELD_SHARESHEET_MIMETYPE, target.getType())
                 .addTaggedData(MetricsEvent.FIELD_TIME_TO_APP_TARGETS, systemCost));
 
@@ -458,6 +420,16 @@ public class ChooserActivity extends ResolverActivity {
     }
 
     /**
+     * Check if the profile currently used is a work profile.
+     * @return true if it is work profile, false if it is parent profile (or no work profile is
+     * set up)
+     */
+    protected boolean isWorkProfile() {
+        return ((UserManager) getSystemService(Context.USER_SERVICE))
+                .getUserInfo(UserHandle.myUserId()).isManagedProfile();
+    }
+
+    /**
      * Override method to add content preview area, specific to the chooser activity.
      */
     @Override
@@ -474,11 +446,79 @@ public class ChooserActivity extends ResolverActivity {
             return;
         }
 
+        if (mChooserListAdapter == null || mChooserListAdapter.getCount() == 0) {
+            return;
+        }
+
         int previewType = findPreferredContentPreview(targetIntent, getContentResolver());
 
         getMetricsLogger().write(new LogMaker(MetricsEvent.ACTION_SHARE_WITH_PREVIEW)
                 .setSubtype(previewType));
         displayContentPreview(previewType, targetIntent);
+    }
+
+    private void onCopyButtonClicked(View v) {
+        Intent targetIntent = getTargetIntent();
+        if (targetIntent == null) {
+            finish();
+        } else {
+            final String action = targetIntent.getAction();
+
+            ClipData clipData = null;
+            if (Intent.ACTION_SEND.equals(action)) {
+                String extraText = targetIntent.getStringExtra(Intent.EXTRA_TEXT);
+                Uri extraStream = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
+
+                if (extraText != null) {
+                    clipData = ClipData.newPlainText(null, extraText);
+                } else if (extraStream != null) {
+                    clipData = ClipData.newUri(getContentResolver(), null, extraStream);
+                } else {
+                    Log.w(TAG, "No data available to copy to clipboard");
+                    return;
+                }
+            } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
+                final ArrayList<Uri> streams = targetIntent.getParcelableArrayListExtra(
+                        Intent.EXTRA_STREAM);
+                clipData = ClipData.newUri(getContentResolver(), null, streams.get(0));
+                for (int i = 1; i < streams.size(); i++) {
+                    clipData.addItem(getContentResolver(), new ClipData.Item(streams.get(i)));
+                }
+            } else {
+                // expected to only be visible with ACTION_SEND or ACTION_SEND_MULTIPLE
+                // so warn about unexpected action
+                Log.w(TAG, "Action (" + action + ") not supported for copying to clipboard");
+                return;
+            }
+
+            ClipboardManager clipboardManager = (ClipboardManager) getSystemService(
+                    Context.CLIPBOARD_SERVICE);
+            clipboardManager.setPrimaryClip(clipData);
+            Toast.makeText(getApplicationContext(), R.string.copied, Toast.LENGTH_SHORT).show();
+
+            finish();
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+
+        int width = -1;
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            width = getResources().getDimensionPixelSize(R.dimen.chooser_preview_width);
+        }
+
+        updateLayoutWidth(R.id.content_preview_text_layout, width);
+        updateLayoutWidth(R.id.content_preview_title_layout, width);
+        updateLayoutWidth(R.id.content_preview_file_layout, width);
+    }
+
+    private void updateLayoutWidth(int layoutResourceId, int width) {
+        View view = findViewById(layoutResourceId);
+        LayoutParams params = view.getLayoutParams();
+        params.width = width;
+        view.setLayoutParams(params);
     }
 
     private void displayContentPreview(@ContentPreviewType int previewType, Intent targetIntent) {
@@ -501,6 +541,8 @@ public class ChooserActivity extends ResolverActivity {
         ViewGroup contentPreviewLayout = findViewById(R.id.content_preview_text_area);
         contentPreviewLayout.setVisibility(View.VISIBLE);
 
+        findViewById(R.id.copy_button).setOnClickListener(this::onCopyButtonClicked);
+
         CharSequence sharingText = targetIntent.getCharSequenceExtra(Intent.EXTRA_TEXT);
         if (sharingText == null) {
             findViewById(R.id.content_preview_text_layout).setVisibility(View.GONE);
@@ -510,7 +552,7 @@ public class ChooserActivity extends ResolverActivity {
         }
 
         String previewTitle = targetIntent.getStringExtra(Intent.EXTRA_TITLE);
-        if (previewTitle == null || previewTitle.trim().isEmpty()) {
+        if (TextUtils.isEmpty(previewTitle)) {
             findViewById(R.id.content_preview_title_layout).setVisibility(View.GONE);
         } else {
             TextView previewTitleView = findViewById(R.id.content_preview_title);
@@ -561,6 +603,7 @@ public class ChooserActivity extends ResolverActivity {
             if (imageUris.size() == 0) {
                 Log.i(TAG, "Attempted to display image preview area with zero"
                         + " available images detected in EXTRA_STREAM list");
+                contentPreviewLayout.setVisibility(View.GONE);
                 return;
             }
 
@@ -580,15 +623,124 @@ public class ChooserActivity extends ResolverActivity {
         }
     }
 
+    private static class FileInfo {
+        public final String name;
+        public final boolean hasThumbnail;
+
+        FileInfo(String name, boolean hasThumbnail) {
+            this.name = name;
+            this.hasThumbnail = hasThumbnail;
+        }
+    }
+
+    /**
+     * Wrapping the ContentResolver call to expose for easier mocking,
+     * and to avoid mocking Android core classes.
+     */
+    @VisibleForTesting
+    public Cursor queryResolver(ContentResolver resolver, Uri uri) {
+        return resolver.query(uri, null, null, null, null);
+    }
+
+    private FileInfo extractFileInfo(Uri uri, ContentResolver resolver) {
+        String fileName = null;
+        boolean hasThumbnail = false;
+
+        try (Cursor cursor = queryResolver(resolver, uri)) {
+            if (cursor != null && cursor.getCount() > 0) {
+                int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                int titleIndex = cursor.getColumnIndex(Downloads.Impl.COLUMN_TITLE);
+                int flagsIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS);
+
+                cursor.moveToFirst();
+                if (nameIndex != -1) {
+                    fileName = cursor.getString(nameIndex);
+                } else if (titleIndex != -1) {
+                    fileName = cursor.getString(titleIndex);
+                }
+
+                if (flagsIndex != -1) {
+                    hasThumbnail = (cursor.getInt(flagsIndex)
+                            & DocumentsContract.Document.FLAG_SUPPORTS_THUMBNAIL) != 0;
+                }
+            }
+        } catch (SecurityException e) {
+            Log.w(TAG, "Error loading file preview", e);
+        }
+
+        if (TextUtils.isEmpty(fileName)) {
+            fileName = uri.getPath();
+            int index = fileName.lastIndexOf('/');
+            if (index != -1) {
+                fileName = fileName.substring(index + 1);
+            }
+        }
+
+        return new FileInfo(fileName, hasThumbnail);
+    }
+
     private void displayFileContentPreview(Intent targetIntent) {
-        // support coming
+        ViewGroup contentPreviewLayout = findViewById(R.id.content_preview_file_area);
+        contentPreviewLayout.setVisibility(View.VISIBLE);
+
+        // TODO(b/120417119): Disable file copy until after moving to sysui,
+        // due to permissions issues
+        findViewById(R.id.file_copy_button).setVisibility(View.GONE);
+
+        String action = targetIntent.getAction();
+        if (Intent.ACTION_SEND.equals(action)) {
+            Uri uri = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
+            loadFileUriIntoView(uri);
+        } else {
+            List<Uri> uris = targetIntent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            int uriCount = uris.size();
+
+            if (uriCount == 0) {
+                contentPreviewLayout.setVisibility(View.GONE);
+                Log.i(TAG,
+                        "Appears to be no uris available in EXTRA_STREAM, removing "
+                                + "preview area");
+                return;
+            } else if (uriCount == 1) {
+                loadFileUriIntoView(uris.get(0));
+            } else {
+                FileInfo fileInfo = extractFileInfo(uris.get(0), getContentResolver());
+                int remUriCount = uriCount - 1;
+                String fileName = getResources().getQuantityString(R.plurals.file_count,
+                        remUriCount, fileInfo.name, remUriCount);
+
+                TextView fileNameView = findViewById(R.id.content_preview_filename);
+                fileNameView.setText(fileName);
+
+                ImageView fileIconView = findViewById(R.id.content_preview_file_icon);
+                fileIconView.setVisibility(View.VISIBLE);
+                fileIconView.setImageResource(R.drawable.ic_file_copy);
+            }
+        }
+    }
+
+    private void loadFileUriIntoView(Uri uri) {
+        FileInfo fileInfo = extractFileInfo(uri, getContentResolver());
+
+        TextView fileNameView = findViewById(R.id.content_preview_filename);
+        fileNameView.setText(fileInfo.name);
+
+        if (fileInfo.hasThumbnail) {
+            loadUriIntoView(R.id.content_preview_file_thumbnail, uri);
+        } else {
+            ImageView fileIconView = findViewById(R.id.content_preview_file_icon);
+            fileIconView.setVisibility(View.VISIBLE);
+            fileIconView.setImageResource(R.drawable.ic_doc_generic);
+        }
     }
 
     private RoundedRectImageView loadUriIntoView(int imageResourceId, Uri uri) {
         RoundedRectImageView imageView = findViewById(imageResourceId);
-        imageView.setVisibility(View.VISIBLE);
         Bitmap bmp = loadThumbnail(uri, new Size(200, 200));
-        imageView.setImageBitmap(bmp);
+        if (bmp != null) {
+            imageView.setVisibility(View.VISIBLE);
+            imageView.setImageBitmap(bmp);
+        }
 
         return imageView;
     }
@@ -1261,9 +1413,8 @@ public class ChooserActivity extends ResolverActivity {
         }
 
         try {
-            return ImageUtils.decodeSampledBitmapFromStream(getContentResolver(),
-                uri, size.getWidth(), size.getHeight());
-        } catch (IOException | NullPointerException ex) {
+            return ImageUtils.loadThumbnail(getContentResolver(), uri, size);
+        } catch (IOException | NullPointerException | SecurityException ex) {
             Log.w(TAG, "Error loading preview thumbnail for uri: " + uri.toString(), ex);
         }
         return null;

@@ -26,6 +26,8 @@ import java.util.List;
 /**
  * RcsMessageStore is the application interface to RcsProvider and provides access methods to
  * RCS related database tables.
+ *
+ * @hide
  */
 public class RcsMessageStore {
     /**
@@ -118,15 +120,16 @@ public class RcsMessageStore {
     /**
      * Returns the first chunk of existing {@link RcsEvent}s in the common storage.
      *
-     * @param queryParameters Parameters to specify to return a subset of all RcsEvents.
+     * @param queryParams Parameters to specify to return a subset of all RcsEvents.
      *                        Passing a value of null will return all events.
      * @throws RcsMessageStoreException if the query could not be completed on the storage
      */
     @WorkerThread
     @NonNull
     public RcsEventQueryResult getRcsEvents(
-            @Nullable RcsEventQueryParams queryParameters) throws RcsMessageStoreException {
-        return RcsControllerCall.call(iRcs -> iRcs.getEvents(queryParameters));
+            @Nullable RcsEventQueryParams queryParams) throws RcsMessageStoreException {
+        return RcsControllerCall.call(iRcs -> iRcs.getEvents(queryParams))
+                .getRcsEventQueryResult();
     }
 
     /**
@@ -140,7 +143,8 @@ public class RcsMessageStore {
     @NonNull
     public RcsEventQueryResult getRcsEvents(
             @NonNull RcsQueryContinuationToken continuationToken) throws RcsMessageStoreException {
-        return RcsControllerCall.call(iRcs -> iRcs.getEventsWithToken(continuationToken));
+        return RcsControllerCall.call(iRcs -> iRcs.getEventsWithToken(continuationToken))
+                .getRcsEventQueryResult();
     }
 
     /**

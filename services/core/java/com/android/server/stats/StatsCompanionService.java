@@ -85,7 +85,9 @@ import android.os.SystemProperties;
 import android.os.Temperature;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.storage.DiskInfo;
 import android.os.storage.StorageManager;
+import android.os.storage.VolumeInfo;
 import android.telephony.ModemActivityInfo;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
@@ -167,6 +169,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
 
     public static final int CODE_DATA_BROADCAST = 1;
     public static final int CODE_SUBSCRIBER_BROADCAST = 1;
+    public static final int CODE_ACTIVE_CONFIGS_BROADCAST = 1;
     /**
      * The last report time is provided with each intent registered to
      * StatsManager#setFetchReportsOperation. This allows easy de-duping in the receiver if
@@ -352,6 +355,22 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             intentSender.sendIntent(mContext, CODE_DATA_BROADCAST, intent, null, null);
         } catch (IntentSender.SendIntentException e) {
             Slog.w(TAG, "Unable to send using IntentSender");
+        }
+    }
+
+    @Override
+    public void sendActiveConfigsChangedBroadcast(IBinder intentSenderBinder, long[] configIds) {
+        enforceCallingPermission();
+        IntentSender intentSender = new IntentSender(intentSenderBinder);
+        Intent intent = new Intent();
+        intent.putExtra(StatsManager.EXTRA_STATS_ACTIVE_CONFIG_KEYS, configIds);
+        try {
+            intentSender.sendIntent(mContext, CODE_ACTIVE_CONFIGS_BROADCAST, intent, null, null);
+            if (DEBUG) {
+                Slog.d(TAG, "Sent broadcast with config ids " + Arrays.toString(configIds));
+            }
+        } catch (IntentSender.SendIntentException e) {
+            Slog.w(TAG, "Unable to send active configs changed broadcast using IntentSender");
         }
     }
 
@@ -1169,7 +1188,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         BinderCallsStatsService.Internal binderStats =
                 LocalServices.getService(BinderCallsStatsService.Internal.class);
         if (binderStats == null) {
-            return;
+            throw new IllegalStateException("binderStats is null");
         }
 
         List<ExportedCallStat> callStats = binderStats.getExportedCallStats();
@@ -1200,7 +1219,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         BinderCallsStatsService.Internal binderStats =
                 LocalServices.getService(BinderCallsStatsService.Internal.class);
         if (binderStats == null) {
-            return;
+            throw new IllegalStateException("binderStats is null");
         }
 
         ArrayMap<String, Integer> exceptionStats = binderStats.getExportedExceptionStats();
@@ -1218,7 +1237,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             List<StatsLogEventWrapper> pulledData) {
         LooperStats looperStats = LocalServices.getService(LooperStats.class);
         if (looperStats == null) {
-            return;
+            throw new IllegalStateException("looperStats null");
         }
 
         List<LooperStats.ExportedEntry> entries = looperStats.getEntries();
@@ -1689,18 +1708,19 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullCpuTimePerThreadFreq(int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
         if (this.mKernelCpuThreadReader == null) {
-            return;
+            throw new IllegalStateException("mKernelCpuThreadReader is null");
         }
         ArrayList<KernelCpuThreadReader.ProcessCpuUsage> processCpuUsages =
                 this.mKernelCpuThreadReader.getProcessCpuUsageByUids();
         if (processCpuUsages == null) {
-            return;
+            throw new IllegalStateException("processCpuUsages is null");
         }
         int[] cpuFrequencies = mKernelCpuThreadReader.getCpuFrequenciesKhz();
         if (cpuFrequencies.length > CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES) {
-            Slog.w(TAG, "Expected maximum " + CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES
-                    + " frequencies, but got " + cpuFrequencies.length);
-            return;
+            String message = "Expected maximum " + CPU_TIME_PER_THREAD_FREQ_MAX_NUM_FREQUENCIES
+                    + " frequencies, but got " + cpuFrequencies.length;
+            Slog.w(TAG, message);
+            throw new IllegalStateException(message);
         }
         for (int i = 0; i < processCpuUsages.size(); i++) {
             KernelCpuThreadReader.ProcessCpuUsage processCpuUsage = processCpuUsages.get(i);
@@ -1709,10 +1729,11 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             for (int j = 0; j < threadCpuUsages.size(); j++) {
                 KernelCpuThreadReader.ThreadCpuUsage threadCpuUsage = threadCpuUsages.get(j);
                 if (threadCpuUsage.usageTimesMillis.length != cpuFrequencies.length) {
-                    Slog.w(TAG, "Unexpected number of usage times,"
+                    String message = "Unexpected number of usage times,"
                             + " expected " + cpuFrequencies.length
-                            + " but got " + threadCpuUsage.usageTimesMillis.length);
-                    continue;
+                            + " but got " + threadCpuUsage.usageTimesMillis.length;
+                    Slog.w(TAG, message);
+                    throw new IllegalStateException(message);
                 }
 
                 StatsLogEventWrapper e =
@@ -1923,6 +1944,41 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         }
     }
 
+    private void pullTimeZoneDataInfo(int tagId,
+            long elapsedNanos, long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
+        String tzDbVersion = "Unknown";
+        try {
+            tzDbVersion = android.icu.util.TimeZone.getTZDataVersion();
+        } catch (Exception e) {
+            Log.e(TAG, "Getting tzdb version failed: ", e);
+        }
+
+        StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+        e.writeString(tzDbVersion);
+        pulledData.add(e);
+    }
+
+    private void pullSDCardInfo(int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        StorageManager storageManager = mContext.getSystemService(StorageManager.class);
+        if (storageManager != null) {
+            List<VolumeInfo> volumes = storageManager.getVolumes();
+            for (VolumeInfo vol : volumes) {
+                final String envState = VolumeInfo.getEnvironmentForState(vol.getState());
+                final DiskInfo diskInfo = vol.getDisk();
+                if (diskInfo != null && diskInfo.isSd()) {
+                    if (envState.equals(Environment.MEDIA_MOUNTED)) {
+                        StatsLogEventWrapper e =
+                                new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+                        e.writeInt(vol.getType() + 1);
+                        e.writeLong(diskInfo.size);
+                        pulledData.add(e);
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Pulls various data.
      */
@@ -2109,6 +2165,14 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             case StatsLog.DANGEROUS_PERMISSION_STATE: {
                 pullDangerousPermissionState(elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.TIME_ZONE_DATA_INFO: {
+                pullTimeZoneDataInfo(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.SDCARD_INFO: {
+                pullSDCardInfo(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
             default:

@@ -157,7 +157,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private boolean mUserSetup;
     private boolean mSimDetected;
 
-    private FiveGServiceClient mFiveGServiceClient;
+    @VisibleForTesting
+    FiveGServiceClient mFiveGServiceClient;
     /**
      * Construct this controller object and register for updates.
      */
@@ -1061,6 +1062,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean hspaDataDistinguishable;
         boolean inflateSignalStrengths = false;
         boolean alwaysShowDataRatIcon = false;
+        boolean readIconsFromXml;
         boolean showRsrpSignalLevelforLTE = false;
         boolean hideNoInternetState = false;
         boolean showVolteIcon = false;
@@ -1118,6 +1120,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     }
                 }
             }
+            config.readIconsFromXml = res.getBoolean(R.bool.config_read_icons_from_xml);
+            config.showRsrpSignalLevelforLTE =
+                    res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
+            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
             return config;
         }
 

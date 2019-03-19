@@ -38,6 +38,7 @@ import android.content.pm.IPackageMoveObserver;
 import android.content.pm.PackageManager;
 import android.content.res.ObbInfo;
 import android.content.res.ObbScanner;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.FileUtils;
@@ -55,6 +56,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.SystemProperties;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.sysprop.VoldProperties;
 import android.system.ErrnoException;
@@ -134,6 +136,8 @@ public class StorageManager {
     public static final String PROP_ISOLATED_STORAGE = "persist.sys.isolated_storage";
     /** {@hide} */
     public static final String PROP_ISOLATED_STORAGE_SNAPSHOT = "sys.isolated_storage_snapshot";
+    /** {@hide} */
+    public static final String PROP_LEGACY_GREYLIST = "persist.sys.legacy_greylist";
 
     /** {@hide} */
     public static final String PROP_FORCE_AUDIO = "persist.fw.force_audio";
@@ -231,6 +235,8 @@ public class StorageManager {
     public static final int DEBUG_ISOLATED_STORAGE_FORCE_ON = 1 << 6;
     /** {@hide} */
     public static final int DEBUG_ISOLATED_STORAGE_FORCE_OFF = 1 << 7;
+    /** {@hide} */
+    public static final int DEBUG_LEGACY_GREYLIST = 1 << 8;
 
     /** {@hide} */
     public static final int FLAG_STORAGE_DE = IInstalld.FLAG_STORAGE_DE;
@@ -1096,10 +1102,30 @@ public class StorageManager {
     }
 
     /**
-     * Return the {@link StorageVolume} that contains the given file, or {@code null} if none.
+     * Return the {@link StorageVolume} that contains the given file, or
+     * {@code null} if none.
      */
     public @Nullable StorageVolume getStorageVolume(File file) {
         return getStorageVolume(getVolumeList(), file);
+    }
+
+    /**
+     * Return the {@link StorageVolume} that contains the given
+     * {@link MediaStore} item.
+     */
+    public @NonNull StorageVolume getStorageVolume(@NonNull Uri uri) {
+        final String volumeName = MediaStore.getVolumeName(uri);
+        switch (volumeName) {
+            case MediaStore.VOLUME_EXTERNAL:
+                return getPrimaryStorageVolume();
+            default:
+                for (StorageVolume vol : getStorageVolumes()) {
+                    if (Objects.equals(vol.getNormalizedUuid(), volumeName)) {
+                        return vol;
+                    }
+                }
+        }
+        throw new IllegalStateException("Unknown volume for " + uri);
     }
 
     /** {@hide} */
@@ -1539,13 +1565,19 @@ public class StorageManager {
         return SystemProperties.getBoolean(PROP_HAS_ADOPTABLE, false);
     }
 
-    /** {@hide} */
+    /**
+     * Return if the currently booted device has the "isolated storage" feature
+     * flag enabled. This will eventually be fully enabled in the final
+     * {@link android.os.Build.VERSION_CODES#Q} release.
+     *
+     * @hide
+     */
     @SystemApi
     @TestApi
     public static boolean hasIsolatedStorage() {
         // Prefer to use snapshot for current boot when available
         return SystemProperties.getBoolean(PROP_ISOLATED_STORAGE_SNAPSHOT,
-                SystemProperties.getBoolean(PROP_ISOLATED_STORAGE, false));
+                SystemProperties.getBoolean(PROP_ISOLATED_STORAGE, true));
     }
 
     /**

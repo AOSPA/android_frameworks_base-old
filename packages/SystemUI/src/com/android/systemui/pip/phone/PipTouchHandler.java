@@ -37,6 +37,7 @@ import android.os.RemoteException;
 import android.util.Log;
 import android.util.Size;
 import android.view.IPinnedStackController;
+import android.view.InputEvent;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
@@ -206,7 +207,7 @@ public class PipTouchHandler {
         mEnableDimissDragToEdge = res.getBoolean(R.bool.config_pipEnableDismissDragToEdge);
 
         // Register the listener for input consumer touch events
-        inputConsumerController.setTouchListener(this::handleTouchEvent);
+        inputConsumerController.setInputListener(this::handleTouchEvent);
         inputConsumerController.setRegistrationListener(this::onRegistrationChanged);
         onRegistrationChanged(inputConsumerController.isRegistered());
     }
@@ -346,12 +347,11 @@ public class PipTouchHandler {
     }
 
     private void animateToOffset(Rect animatingBounds, Rect toAdjustedBounds) {
-        final Rect bounds = new Rect(animatingBounds);
-        bounds.offset(0, toAdjustedBounds.bottom - bounds.top);
+        int offset = toAdjustedBounds.bottom - animatingBounds.top;
         // In landscape mode, PIP window can go offset while launching IME. We want to align the
         // the top of the PIP window with the top of the movement bounds in that case.
-        bounds.offset(0, Math.max(0, mMovementBounds.top - bounds.top));
-        mMotionHelper.animateToOffset(bounds);
+        offset += Math.max(0, mMovementBounds.top - animatingBounds.top);
+        mMotionHelper.animateToOffset(animatingBounds, offset);
     }
 
     private void onRegistrationChanged(boolean isRegistered) {
@@ -371,11 +371,16 @@ public class PipTouchHandler {
                 mMovementBounds, true /* allowMenuTimeout */, willResizeMenu());
     }
 
-    private boolean handleTouchEvent(MotionEvent ev) {
+    private boolean handleTouchEvent(InputEvent inputEvent) {
+        // Skip any non motion events
+        if (!(inputEvent instanceof MotionEvent)) {
+            return true;
+        }
         // Skip touch handling until we are bound to the controller
         if (mPinnedStackController == null) {
             return true;
         }
+        MotionEvent ev = (MotionEvent) inputEvent;
 
         // Update the touch state
         mTouchState.onTouchEvent(ev);

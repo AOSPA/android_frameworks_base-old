@@ -16,10 +16,6 @@
 
 package com.android.systemui.bubbles;
 
-import static android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS;
-import static android.util.StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_MISSING;
-import static android.util.StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_NOT_RESIZABLE;
-import static android.util.StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__DOCUMENT_LAUNCH_NOT_ALWAYS;
 import static android.view.View.INVISIBLE;
 import static android.view.View.VISIBLE;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
@@ -29,25 +25,22 @@ import static com.android.systemui.statusbar.notification.NotificationAlertingMa
 
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityTaskManager;
 import android.app.IActivityTaskManager;
 import android.app.INotificationManager;
 import android.app.Notification;
-import android.app.PendingIntent;
 import android.content.Context;
-import android.content.pm.ActivityInfo;
-import android.graphics.Point;
+import android.content.pm.ParceledListSlice;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
-import android.util.Log;
-import android.util.StatsLog;
 import android.view.Display;
-import android.view.LayoutInflater;
+import android.view.IPinnedStackController;
+import android.view.IPinnedStackListener;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import androidx.annotation.MainThread;
@@ -59,17 +52,15 @@ import com.android.systemui.R;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListener;
+import com.android.systemui.shared.system.WindowManagerWrapper;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.notification.row.NotificationInflater;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -89,15 +80,20 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
     // Enables some subset of notifs to automatically become bubbles
     private static final boolean DEBUG_ENABLE_AUTO_BUBBLE = false;
 
-    // Secure settings flags
-    // Feature level flag
+    /** Flag to enable or disable the entire feature */
     private static final String ENABLE_BUBBLES = "experiment_enable_bubbles";
-    // Auto bubble flags set whether different notification types should be presented as a bubble
+    /** Auto bubble flags set whether different notif types should be presented as a bubble */
     private static final String ENABLE_AUTO_BUBBLE_MESSAGES = "experiment_autobubble_messaging";
     private static final String ENABLE_AUTO_BUBBLE_ONGOING = "experiment_autobubble_ongoing";
     private static final String ENABLE_AUTO_BUBBLE_ALL = "experiment_autobubble_all";
-    // Use an activity view for an auto-bubbled notification if it has an appropriate content intent
+
+    /** Use an activityView for an auto-bubbled notifs if it has an appropriate content intent */
     private static final String ENABLE_BUBBLE_CONTENT_INTENT = "experiment_bubble_content_intent";
+
+    /** Whether the row of bubble circles are anchored to the top or bottom of the screen. */
+    private static final String ENABLE_BUBBLES_AT_TOP = "experiment_enable_top_bubbles";
+    /** Flag to position the header below the activity view */
+    private static final String ENABLE_BUBBLE_FOOTER = "experiment_enable_bubble_footer";
 
     private final Context mContext;
     private final NotificationEntryManager mNotificationEntryManager;
@@ -105,11 +101,9 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
     private final BubbleTaskStackListener mTaskStackListener;
     private BubbleStateChangeListener mStateChangeListener;
     private BubbleExpandListener mExpandListener;
-    private LayoutInflater mInflater;
 
-    private final Map<String, BubbleView> mBubbles = new HashMap<>();
+    private BubbleData mBubbleData;
     private BubbleStackView mStackView;
-    private final Point mDisplaySize;
 
     // Bubbles get added to the status bar view
     private final StatusBarWindowController mStatusBarWindowController;
@@ -166,12 +160,9 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
     }
 
     @Inject
-    public BubbleController(Context context, StatusBarWindowController statusBarWindowController) {
+    public BubbleController(Context context, StatusBarWindowController statusBarWindowController,
+            BubbleData data) {
         mContext = context;
-        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-        mDisplaySize = new Point();
-        wm.getDefaultDisplay().getSize(mDisplaySize);
-        mInflater = (LayoutInflater) mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 
         mNotificationEntryManager = Dependency.get(NotificationEntryManager.class);
         mNotificationEntryManager.addNotificationEntryListener(mEntryListener);
@@ -190,6 +181,14 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
         mActivityTaskManager = ActivityTaskManager.getService();
         mTaskStackListener = new BubbleTaskStackListener();
         ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
+
+        try {
+            WindowManagerWrapper.getInstance().addPinnedStackListener(new BubblesImeListener());
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+
+        mBubbleData = data;
     }
 
     /**
@@ -219,8 +218,11 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
      * screen (e.g. if on AOD).
      */
     public boolean hasBubbles() {
-        for (BubbleView bv : mBubbles.values()) {
-            if (!bv.getEntry().isBubbleDismissed()) {
+        if (mStackView == null) {
+            return false;
+        }
+        for (Bubble bubble : mBubbleData.getBubbles()) {
+            if (!bubble.entry.isBubbleDismissed()) {
                 return true;
             }
         }
@@ -250,14 +252,20 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
         if (mStackView == null) {
             return;
         }
-        Set<String> keys = mBubbles.keySet();
-        for (String key: keys) {
-            mBubbles.get(key).getEntry().setBubbleDismissed(true);
-        }
         mStackView.stackDismissed();
 
         updateVisibility();
         mNotificationEntryManager.updateNotifications();
+    }
+
+    /**
+     * Directs a back gesture at the bubble stack. When opened, the current expanded bubble
+     * is forwarded a back key down/up pair.
+     */
+    public void performBackPressIfNeeded() {
+        if (mStackView != null) {
+            mStackView.performBackPressIfNeeded();
+        }
     }
 
     /**
@@ -267,13 +275,12 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
      * @param updatePosition whether this update should promote the bubble to the top of the stack.
      */
     public void updateBubble(NotificationEntry notif, boolean updatePosition) {
-        if (mBubbles.containsKey(notif.key)) {
+        if (mStackView != null && mBubbleData.getBubble(notif.key) != null) {
             // It's an update
-            BubbleView bubble = mBubbles.get(notif.key);
-            mStackView.updateBubble(bubble, notif, updatePosition);
+            mStackView.updateBubble(notif, updatePosition);
         } else {
             if (mStackView == null) {
-                mStackView = new BubbleStackView(mContext);
+                mStackView = new BubbleStackView(mContext, mBubbleData);
                 ViewGroup sbv = mStatusBarWindowController.getStatusBarView();
                 // XXX: Bug when you expand the shade on top of expanded bubble, there is no scrim
                 // between bubble and the shade
@@ -286,15 +293,7 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
                 mStackView.setOnBlockedListener(this);
             }
             // It's new
-            BubbleView bubble = (BubbleView) mInflater.inflate(
-                    R.layout.bubble_view, mStackView, false /* attachToRoot */);
-            bubble.setNotif(notif);
-            PendingIntent bubbleIntent = getValidBubbleIntent(notif);
-            if (bubbleIntent != null) {
-                bubble.setBubbleIntent(bubbleIntent);
-            }
-            mBubbles.put(bubble.getKey(), bubble);
-            mStackView.addBubble(bubble);
+            mStackView.addBubble(notif);
         }
         updateVisibility();
     }
@@ -306,25 +305,18 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
      */
     @MainThread
     void removeBubble(String key) {
-        BubbleView bv = mBubbles.remove(key);
-        if (mStackView != null && bv != null) {
-            mStackView.removeBubble(bv);
-            bv.destroyActivityView(mStackView);
+        if (mStackView != null) {
+            mStackView.removeBubble(key);
         }
-
-        NotificationEntry entry = bv != null ? bv.getEntry() : null;
-        if (entry != null) {
-            entry.setBubbleDismissed(true);
-            mNotificationEntryManager.updateNotifications();
-        }
+        mNotificationEntryManager.updateNotifications();
         updateVisibility();
     }
 
     @Override
     public void onBubbleBlocked(NotificationEntry entry) {
-        Object[] bubbles = mBubbles.values().toArray();
+        Object[] bubbles = mBubbleData.getBubbles().toArray();
         for (int i = 0; i < bubbles.length; i++) {
-            NotificationEntry e = ((BubbleView) bubbles[i]).getEntry();
+            NotificationEntry e = ((Bubble) bubbles[i]).entry;
             boolean samePackage = entry.notification.getPackageName().equals(
                     e.notification.getPackageName());
             if (samePackage) {
@@ -349,8 +341,7 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
         }
 
         @Override
-        public void onEntryInflated(NotificationEntry entry,
-                @NotificationInflater.InflationFlag int inflatedFlags) {
+        public void onEntryInflated(NotificationEntry entry, @InflationFlag int inflatedFlags) {
             if (!areBubblesEnabled(mContext)) {
                 return;
             }
@@ -368,10 +359,8 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
                     && alertAgain(entry, entry.notification.getNotification())) {
                 entry.setShowInShadeWhenBubble(true);
                 entry.setBubbleDismissed(false); // updates come back as bubbles even if dismissed
-                if (mBubbles.containsKey(entry.key)) {
-                    mBubbles.get(entry.key).updateDotVisibility();
-                }
                 updateBubble(entry, true /* updatePosition */);
+                mStackView.updateDotVisibility(entry.key);
             }
         }
 
@@ -383,8 +372,8 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
                 return;
             }
             entry.setShowInShadeWhenBubble(false);
-            if (mBubbles.containsKey(entry.key)) {
-                mBubbles.get(entry.key).updateDotVisibility();
+            if (mStackView != null) {
+                mStackView.updateDotVisibility(entry.key);
             }
             if (!removedByUser) {
                 // This was a cancel so we should remove the bubble
@@ -439,65 +428,6 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
     @VisibleForTesting
     BubbleStackView getStackView() {
         return mStackView;
-    }
-
-    @Nullable
-    private PendingIntent getValidBubbleIntent(NotificationEntry notif) {
-        Notification notification = notif.notification.getNotification();
-        String packageName = notif.notification.getPackageName();
-        Notification.BubbleMetadata data = notif.getBubbleMetadata();
-        if (data != null && canLaunchInActivityView(data.getIntent(),
-                true /* enable logging for bubbles */, packageName)) {
-            return data.getIntent();
-        }
-        if (shouldUseContentIntent(mContext)
-                && canLaunchInActivityView(notification.contentIntent,
-                false /* disable logging for notifications */, packageName)) {
-            Log.d(TAG, "[addBubble " + notif.key
-                    + "]: No appOverlayIntent, using contentIntent.");
-            return notification.contentIntent;
-        }
-        Log.d(TAG, "[addBubble " + notif.key + "]: No supported intent for ActivityView.");
-        return null;
-    }
-
-    /**
-     * Whether an intent is properly configured to display in an {@link android.app.ActivityView}.
-     *
-     * @param intent the pending intent of the bubble.
-     * @param enableLogging whether bubble developer error should be logged.
-     * @param packageName the notification package name for this bubble.
-     * @return
-     */
-    private boolean canLaunchInActivityView(PendingIntent intent, boolean enableLogging,
-                                            String packageName) {
-        if (intent == null) {
-            return false;
-        }
-        ActivityInfo info =
-                intent.getIntent().resolveActivityInfo(mContext.getPackageManager(), 0);
-        if (info == null) {
-            if (enableLogging) {
-                StatsLog.write(StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED, packageName,
-                        BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_MISSING);
-            }
-            return false;
-        }
-        if (!ActivityInfo.isResizeableMode(info.resizeMode)) {
-            if (enableLogging) {
-                StatsLog.write(StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED, packageName,
-                        BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_NOT_RESIZABLE);
-            }
-            return false;
-        }
-        if (info.documentLaunchMode != DOCUMENT_LAUNCH_ALWAYS) {
-            if (enableLogging) {
-                StatsLog.write(StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED, packageName,
-                        BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__DOCUMENT_LAUNCH_NOT_ALWAYS);
-            }
-            return false;
-        }
-        return (info.flags & ActivityInfo.FLAG_ALLOW_EMBEDDED) != 0;
     }
 
     /**
@@ -577,15 +507,8 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
         }
 
         @Override
-        public void onTaskMovedToFront(int taskId) {
-            ActivityManager.StackInfo stackInfo = null;
-            try {
-                stackInfo = findStackInfo(taskId);
-            } catch (RemoteException e) {
-                e.rethrowAsRuntimeException();
-            }
-            if (stackInfo != null && stackInfo.displayId == Display.DEFAULT_DISPLAY
-                    && mStackView != null) {
+        public void onTaskMovedToFront(RunningTaskInfo taskInfo) {
+            if (mStackView != null && taskInfo.displayId == Display.DEFAULT_DISPLAY) {
                 mStackView.collapseStack();
             }
         }
@@ -596,9 +519,9 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
          * ultimately ended up, displays an error message toast, and calls this method instead of
          * onTaskMovedToFront.
          */
-        // TODO(b/124058588): add requestedDisplayId to this callback, ignore unless matches
         @Override
-        public void onActivityLaunchOnSecondaryDisplayFailed() {
+        public void onActivityLaunchOnSecondaryDisplayFailed(RunningTaskInfo taskInfo) {
+            // TODO(b/124058588): move to ActivityView.StateCallback, filter on virtualDisplay ID
             if (mStackView != null) {
                 mStackView.collapseStack();
             }
@@ -620,7 +543,7 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
                 ENABLE_AUTO_BUBBLE_ALL, 0) != 0;
     }
 
-    private static boolean shouldUseContentIntent(Context context) {
+    static boolean shouldUseContentIntent(Context context) {
         return Settings.Secure.getInt(context.getContentResolver(),
                 ENABLE_BUBBLE_CONTENT_INTENT, 0) != 0;
     }
@@ -628,5 +551,54 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
     private static boolean areBubblesEnabled(Context context) {
         return Settings.Secure.getInt(context.getContentResolver(),
                 ENABLE_BUBBLES, 1) != 0;
+    }
+
+    /**
+     * Whether bubbles should be positioned at the top of the screen or not.
+     */
+    public static boolean showBubblesAtTop(Context context) {
+        return Settings.Secure.getInt(context.getContentResolver(),
+                ENABLE_BUBBLES_AT_TOP, 0) != 0;
+    }
+
+    /**
+     * Whether the bubble chrome should display as a footer or not (in which case it's a header).
+     */
+    public static boolean useFooter(Context context) {
+        return Settings.Secure.getInt(context.getContentResolver(),
+                ENABLE_BUBBLE_FOOTER, 0) != 0;
+    }
+
+    /** PinnedStackListener that dispatches IME visibility updates to the stack. */
+    private class BubblesImeListener extends IPinnedStackListener.Stub {
+
+        @Override
+        public void onListenerRegistered(IPinnedStackController controller) throws RemoteException {
+        }
+
+        @Override
+        public void onMovementBoundsChanged(Rect insetBounds, Rect normalBounds,
+                Rect animatingBounds, boolean fromImeAdjustment, boolean fromShelfAdjustment,
+                int displayRotation) throws RemoteException {}
+
+        @Override
+        public void onImeVisibilityChanged(boolean imeVisible, int imeHeight)
+                throws RemoteException {
+            if (mStackView != null) {
+                mStackView.post(() -> {
+                    mStackView.onImeVisibilityChanged(imeVisible, imeHeight);
+                });
+            }
+        }
+
+        @Override
+        public void onShelfVisibilityChanged(boolean shelfVisible, int shelfHeight)
+                throws RemoteException {}
+
+        @Override
+        public void onMinimizedStateChanged(boolean isMinimized) throws RemoteException {}
+
+        @Override
+        public void onActionsChanged(ParceledListSlice actions) throws RemoteException {}
     }
 }

@@ -18,6 +18,7 @@ package android.content.pm;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
@@ -1482,6 +1483,7 @@ public final class ShortcutInfo implements Parcelable {
      * @hide
      */
     @Nullable
+    @SystemApi
     public Person[] getPersons() {
         return clonePersons(mPersons);
     }
@@ -2273,7 +2275,8 @@ public final class ShortcutInfo implements Parcelable {
             CharSequence disabledMessage, int disabledMessageResId, String disabledMessageResName,
             Set<String> categories, Intent[] intentsWithExtras, int rank, PersistableBundle extras,
             long lastChangedTimestamp,
-            int flags, int iconResId, String iconResName, String bitmapPath, int disabledReason) {
+            int flags, int iconResId, String iconResName, String bitmapPath, int disabledReason,
+            Person[] persons) {
         mUserId = userId;
         mId = id;
         mPackageName = packageName;
@@ -2299,5 +2302,6 @@ public final class ShortcutInfo implements Parcelable {
         mIconResName = iconResName;
         mBitmapPath = bitmapPath;
         mDisabledReason = disabledReason;
+        mPersons = persons;
     }
 }

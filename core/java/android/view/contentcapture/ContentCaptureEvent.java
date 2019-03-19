@@ -72,32 +72,56 @@ public final class ContentCaptureEvent implements Parcelable {
     public static final int TYPE_VIEW_TEXT_CHANGED = 3;
 
     /**
-     * Called before events (such as {@link #TYPE_VIEW_APPEARED}) representing the initial view
-     * hierarchy are sent.
+     * Called before events (such as {@link #TYPE_VIEW_APPEARED} and/or
+     * {@link #TYPE_VIEW_DISAPPEARED}) representing a view hierarchy are sent.
      *
      * <p><b>NOTE</b>: there is no guarantee this event will be sent. For example, it's not sent
      * if the initial view hierarchy doesn't initially have any view that's important for content
      * capture.
      */
-    public static final int TYPE_INITIAL_VIEW_TREE_APPEARING = 4;
+    public static final int TYPE_VIEW_TREE_APPEARING = 4;
 
     /**
-     * Called after events (such as {@link #TYPE_VIEW_APPEARED}) representing the initial view
-     * hierarchy are sent.
+     * Called after events (such as {@link #TYPE_VIEW_APPEARED} and/or
+     * {@link #TYPE_VIEW_DISAPPEARED}) representing a view hierarchy were sent.
      *
      * <p><b>NOTE</b>: there is no guarantee this event will be sent. For example, it's not sent
      * if the initial view hierarchy doesn't initially have any view that's important for content
      * capture.
      */
-    public static final int TYPE_INITIAL_VIEW_TREE_APPEARED = 5;
+    public static final int TYPE_VIEW_TREE_APPEARED = 5;
+
+    /**
+     * Called after a call to
+     * {@link ContentCaptureSession#setContentCaptureContext(ContentCaptureContext)}.
+     *
+     * <p>The passed context is available through {@link #getContentCaptureContext()}.
+     */
+    public static final int TYPE_CONTEXT_UPDATED = 6;
+
+    /**
+     * Called after the session is ready, typically after the activity resumed and the
+     * initial views appeared
+     */
+    public static final int TYPE_SESSION_RESUMED = 7;
+
+    /**
+     * Called after the session is paused, typically after the activity paused and the
+     * views disappeared.
+     */
+    public static final int TYPE_SESSION_PAUSED = 8;
+
 
     /** @hide */
     @IntDef(prefix = { "TYPE_" }, value = {
             TYPE_VIEW_APPEARED,
             TYPE_VIEW_DISAPPEARED,
             TYPE_VIEW_TEXT_CHANGED,
-            TYPE_INITIAL_VIEW_TREE_APPEARING,
-            TYPE_INITIAL_VIEW_TREE_APPEARED
+            TYPE_VIEW_TREE_APPEARING,
+            TYPE_VIEW_TREE_APPEARED,
+            TYPE_CONTEXT_UPDATED,
+            TYPE_SESSION_PAUSED,
+            TYPE_SESSION_RESUMED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface EventType{}
@@ -193,12 +217,13 @@ public final class ContentCaptureEvent implements Parcelable {
     }
 
     /**
-     * Used by {@link #TYPE_SESSION_STARTED}.
+     * Gets the {@link ContentCaptureContext} set calls to
+     * {@link ContentCaptureSession#setContentCaptureContext(ContentCaptureContext)}.
      *
-     * @hide
+     * <p>Only set on {@link #TYPE_CONTEXT_UPDATED} events.
      */
     @Nullable
-    public ContentCaptureContext getClientContext() {
+    public ContentCaptureContext getContentCaptureContext() {
         return mClientContext;
     }
 
@@ -220,8 +245,9 @@ public final class ContentCaptureEvent implements Parcelable {
      * Gets the type of the event.
      *
      * @return one of {@link #TYPE_VIEW_APPEARED}, {@link #TYPE_VIEW_DISAPPEARED},
-     * {@link #TYPE_VIEW_TEXT_CHANGED}, {@link #TYPE_INITIAL_VIEW_TREE_APPEARING}, or
-     * {@link #TYPE_INITIAL_VIEW_TREE_APPEARED}.
+     * {@link #TYPE_VIEW_TEXT_CHANGED}, {@link #TYPE_VIEW_TREE_APPEARING},
+     * {@link #TYPE_VIEW_TREE_APPEARED}, {@link #TYPE_CONTEXT_UPDATED},
+     * {@link #TYPE_SESSION_RESUMED}, or {@link #TYPE_SESSION_PAUSED}.
      */
     public @EventType int getType() {
         return mType;
@@ -299,6 +325,10 @@ public final class ContentCaptureEvent implements Parcelable {
         if (mText != null) {
             pw.print(", text="); pw.println(getSanitizedString(mText));
         }
+        if (mClientContext != null) {
+            pw.print(", context="); mClientContext.dump(pw); pw.println();
+
+        }
     }
 
     @Override
@@ -325,6 +355,9 @@ public final class ContentCaptureEvent implements Parcelable {
         if (mText != null) {
             string.append(", text=").append(getSanitizedString(mText));
         }
+        if (mClientContext != null) {
+            string.append(", context=").append(mClientContext);
+        }
         return string.append(']').toString();
     }
 
@@ -345,7 +378,7 @@ public final class ContentCaptureEvent implements Parcelable {
         if (mType == TYPE_SESSION_STARTED || mType == TYPE_SESSION_FINISHED) {
             parcel.writeString(mParentSessionId);
         }
-        if (mType == TYPE_SESSION_STARTED) {
+        if (mType == TYPE_SESSION_STARTED || mType == TYPE_CONTEXT_UPDATED) {
             parcel.writeParcelable(mClientContext, flags);
         }
     }
@@ -375,7 +408,7 @@ public final class ContentCaptureEvent implements Parcelable {
             if (type == TYPE_SESSION_STARTED || type == TYPE_SESSION_FINISHED) {
                 event.setParentSessionId(parcel.readString());
             }
-            if (type == TYPE_SESSION_STARTED) {
+            if (type == TYPE_SESSION_STARTED || type == TYPE_CONTEXT_UPDATED) {
                 event.setClientContext(parcel.readParcelable(null));
             }
             return event;
@@ -394,16 +427,22 @@ public final class ContentCaptureEvent implements Parcelable {
                 return "SESSION_STARTED";
             case TYPE_SESSION_FINISHED:
                 return "SESSION_FINISHED";
+            case TYPE_SESSION_RESUMED:
+                return "SESSION_RESUMED";
+            case TYPE_SESSION_PAUSED:
+                return "SESSION_PAUSED";
             case TYPE_VIEW_APPEARED:
                 return "VIEW_APPEARED";
             case TYPE_VIEW_DISAPPEARED:
                 return "VIEW_DISAPPEARED";
             case TYPE_VIEW_TEXT_CHANGED:
                 return "VIEW_TEXT_CHANGED";
-            case TYPE_INITIAL_VIEW_TREE_APPEARING:
-                return "INITIAL_VIEW_HIERARCHY_STARTED";
-            case TYPE_INITIAL_VIEW_TREE_APPEARED:
-                return "INITIAL_VIEW_HIERARCHY_FINISHED";
+            case TYPE_VIEW_TREE_APPEARING:
+                return "VIEW_TREE_APPEARING";
+            case TYPE_VIEW_TREE_APPEARED:
+                return "VIEW_TREE_APPEARED";
+            case TYPE_CONTEXT_UPDATED:
+                return "CONTEXT_UPDATED";
             default:
                 return "UKNOWN_TYPE: " + type;
         }

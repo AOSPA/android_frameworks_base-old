@@ -111,7 +111,7 @@ interface IPackageManager {
     int getPermissionFlags(String permissionName, String packageName, int userId);
 
     void updatePermissionFlags(String permissionName, String packageName, int flagMask,
-            int flagValues, int userId);
+            int flagValues, boolean checkAdjustPolicyFlagPermission, int userId);
 
     void updatePermissionFlagsForAllApps(int flagMask, int flagValues, int userId);
 
@@ -295,8 +295,6 @@ interface IPackageManager {
     void restoreDefaultApps(in byte[] backup, int userId);
     byte[] getIntentFilterVerificationBackup(int userId);
     void restoreIntentFilterVerification(in byte[] backup, int userId);
-    byte[] getPermissionGrantBackup(int userId);
-    void restorePermissionGrants(in byte[] backup, int userId);
 
     /**
      * Report the set of 'Home' activity candidates, plus (if any) which of them

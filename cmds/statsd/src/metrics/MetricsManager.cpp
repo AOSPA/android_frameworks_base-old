@@ -118,6 +118,16 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
         ALOGE("This config has too many alerts! Reject!");
         mConfigValid = false;
     }
+
+    mIsAlwaysActive = (mMetricIndexesWithActivation.size() != mAllMetricProducers.size()) ||
+            (mAllMetricProducers.size() == 0);
+    bool isActive = mIsAlwaysActive;
+    for (int metric : mMetricIndexesWithActivation) {
+        isActive |= mAllMetricProducers[metric]->isActive();
+    }
+    mIsActive = isActive;
+    VLOG("mIsActive is initialized to %d", mIsActive)
+
     // no matter whether this config is valid, log it in the stats.
     StatsdStats::getInstance().noteConfigReceived(
             key, mAllMetricProducers.size(), mAllConditionTrackers.size(), mAllAtomMatchers.size(),
@@ -207,6 +217,7 @@ void MetricsManager::dropData(const int64_t dropTimeNs) {
 void MetricsManager::onDumpReport(const int64_t dumpTimeStampNs,
                                   const bool include_current_partial_bucket,
                                   const bool erase_data,
+                                  const DumpLatency dumpLatency,
                                   std::set<string> *str_set,
                                   ProtoOutputStream* protoOutput) {
     VLOG("=========================Metric Reports Start==========================");
@@ -217,10 +228,10 @@ void MetricsManager::onDumpReport(const int64_t dumpTimeStampNs,
                     FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_METRICS);
             if (mHashStringsInReport) {
                 producer->onDumpReport(dumpTimeStampNs, include_current_partial_bucket, erase_data,
-                                       str_set, protoOutput);
+                                       dumpLatency, str_set, protoOutput);
             } else {
                 producer->onDumpReport(dumpTimeStampNs, include_current_partial_bucket, erase_data,
-                                       nullptr, protoOutput);
+                                       dumpLatency, nullptr, protoOutput);
             }
             protoOutput->end(token);
         } else {
@@ -332,11 +343,13 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
     int tagId = event.GetTagId();
     int64_t eventTimeNs = event.GetElapsedTimestampNs();
 
-    bool isActive = false;
+    bool isActive = mIsAlwaysActive;
     for (int metric : mMetricIndexesWithActivation) {
         mAllMetricProducers[metric]->flushIfExpire(eventTimeNs);
         isActive |= mAllMetricProducers[metric]->isActive();
     }
+
+    mIsActive = isActive;
 
     if (mTagIds.find(tagId) == mTagIds.end()) {
         // not interesting...

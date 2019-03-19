@@ -67,9 +67,11 @@ import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationData.KeyguardEnvironment;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.NotificationRowBinder;
+import com.android.systemui.statusbar.notification.collection.NotificationRowBinderImpl;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
-import com.android.systemui.statusbar.notification.row.NotificationInflater;
 import com.android.systemui.statusbar.notification.row.RowInflaterTask;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
@@ -102,10 +104,8 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Mock private KeyguardEnvironment mEnvironment;
     @Mock private ExpandableNotificationRow mRow;
     @Mock private NotificationListContainer mListContainer;
-    @Mock
-    private NotificationEntryListener mEntryListener;
-    @Mock
-    private NotificationRowBinder.BindRowCallback mBindCallback;
+    @Mock private NotificationEntryListener mEntryListener;
+    @Mock private NotificationRowBinderImpl.BindRowCallback mBindCallback;
     @Mock private HeadsUpManager mHeadsUpManager;
     @Mock private NotificationListenerService.RankingMap mRankingMap;
     @Mock private RemoteInputController mRemoteInputController;
@@ -143,7 +143,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         @Override
         public void onAsyncInflationFinished(NotificationEntry entry,
-                @NotificationInflater.InflationFlag int inflatedFlags) {
+                @InflationFlag int inflatedFlags) {
             super.onAsyncInflationFinished(entry, inflatedFlags);
 
             mCountDownLatch.countDown();
@@ -235,10 +235,12 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         mEntryManager.setUpWithPresenter(mPresenter, mListContainer, mHeadsUpManager);
         mEntryManager.addNotificationEntryListener(mEntryListener);
 
-        NotificationRowBinder notificationRowBinder = Dependency.get(NotificationRowBinder.class);
+        NotificationRowBinderImpl notificationRowBinder =
+                new NotificationRowBinderImpl(mContext, true /* allowLongPress */);
         notificationRowBinder.setUpWithPresenter(
                 mPresenter, mListContainer, mHeadsUpManager, mEntryManager, mBindCallback);
         notificationRowBinder.setNotificationClicker(mock(NotificationClicker.class));
+        mEntryManager.setRowBinder(notificationRowBinder);
 
         setUserSentiment(mEntry.key, NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL);
     }
@@ -519,6 +521,16 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         // THEN extender2 stops managing the notif and extender1 starts managing it
         verify(extender1).setShouldManageLifetime(mEntry, true);
         verify(extender2).setShouldManageLifetime(mEntry, false);
+    }
+
+    /**
+     * Ensure that calling NotificationEntryManager.performRemoveNotification() doesn't crash when
+     * given a notification that has already been removed from NotificationData.
+     */
+    @Test
+    public void testPerformRemoveNotification_removedEntry() {
+        mEntryManager.getNotificationData().remove(mSbn.getKey(), null /* ranking */);
+        mEntryManager.performRemoveNotification(mSbn);
     }
 
     private Notification.Action createAction() {

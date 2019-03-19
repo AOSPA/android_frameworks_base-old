@@ -44,13 +44,13 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 
+import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.view.Surface;
 import android.view.WindowManager;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
@@ -60,9 +60,8 @@ import org.junit.Test;
  * Tests for the {@link AppWindowToken} class.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:AppWindowTokenTests
+ *  atest WmTests:AppWindowTokenTests
  */
-@FlakyTest(bugId = 68267650)
 @SmallTest
 @Presubmit
 public class AppWindowTokenTests extends WindowTestsBase {
@@ -77,7 +76,8 @@ public class AppWindowTokenTests extends WindowTestsBase {
     public void setUp() throws Exception {
         mStack = createTaskStackOnDisplay(mDisplayContent);
         mTask = createTaskInStack(mStack, 0 /* userId */);
-        mToken = WindowTestUtils.createTestAppWindowToken(mDisplayContent);
+        mToken = WindowTestUtils.createTestAppWindowToken(mDisplayContent,
+                false /* skipOnParentChanged */);
 
         mTask.addChild(mToken, 0);
     }
@@ -166,6 +166,8 @@ public class AppWindowTokenTests extends WindowTestsBase {
         mDisplayContent.updateOrientationFromAppTokens(
                 mDisplayContent.getRequestedOverrideConfiguration(),
                 null /* freezeThisOneIfNeeded */, false /* forceUpdate */);
+        // In this test, DC will not get config update. Set the waiting flag to false.
+        mDisplayContent.mWaitingForConfig = false;
         mWm.mRoot.performSurfacePlacement(false /* recoveringMemory */);
         assertEquals(SCREEN_ORIENTATION_REVERSE_LANDSCAPE, mDisplayContent.getLastOrientation());
         assertTrue(appWindow.mResizeReported);
@@ -208,6 +210,48 @@ public class AppWindowTokenTests extends WindowTestsBase {
         // Prevent the next rotation from being deferred by animation.
         mWm.mAnimator.setScreenRotationAnimationLocked(mDisplayContent.getDisplayId(), null);
         mWm.mRoot.performSurfacePlacement(false /* recoveringMemory */);
+    }
+
+    @Test
+    public void testSizeCompatBounds() {
+        // The real surface transaction is unnecessary.
+        mToken.setSkipPrepareSurfaces(true);
+
+        final Rect fixedBounds = mToken.getRequestedOverrideConfiguration().windowConfiguration
+                .getBounds();
+        fixedBounds.set(0, 0, 1200, 1600);
+        final Configuration newParentConfig = mTask.getConfiguration();
+
+        // Change the size of the container to two times smaller with insets.
+        newParentConfig.windowConfiguration.setAppBounds(200, 0, 800, 800);
+        final Rect containerAppBounds = newParentConfig.windowConfiguration.getAppBounds();
+        final Rect containerBounds = newParentConfig.windowConfiguration.getBounds();
+        containerBounds.set(0, 0, 600, 800);
+        mToken.onConfigurationChanged(newParentConfig);
+
+        assertTrue(mToken.inSizeCompatMode());
+        assertEquals(containerAppBounds, mToken.getBounds());
+        assertEquals((float) containerAppBounds.width() / fixedBounds.width(),
+                mToken.getSizeCompatScale(), 0.0001f /* delta */);
+
+        // Change the width of the container to two times bigger.
+        containerAppBounds.set(0, 0, 2400, 1600);
+        containerBounds.set(containerAppBounds);
+        mToken.onConfigurationChanged(newParentConfig);
+
+        assertTrue(mToken.inSizeCompatMode());
+        // Don't scale up, so the bounds keep the same as the fixed width.
+        assertEquals(fixedBounds.width(), mToken.getBounds().width());
+        // Assert the position is horizontal center.
+        assertEquals((containerAppBounds.width() - fixedBounds.width()) / 2,
+                mToken.getBounds().left);
+        assertEquals(1f, mToken.getSizeCompatScale(), 0.0001f  /* delta */);
+
+        // Change the width of the container to fit the fixed bounds.
+        containerBounds.set(0, 0, 1200, 2000);
+        mToken.onConfigurationChanged(newParentConfig);
+        // Assert don't use fixed bounds because the region is enough.
+        assertFalse(mToken.inSizeCompatMode());
     }
 
     @Test
@@ -257,7 +301,6 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(detail = "Promote once confirmed non-flaky")
     public void testStuckExitingWindow() {
         final WindowState closingWindow = createWindow(null, FIRST_APPLICATION_WINDOW,
                 "closingWindow");
@@ -384,6 +427,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
         // bottom one.
         tokenTop.setVisibility(false, false);
         tokenBottom.transferStartingWindowFromHiddenAboveTokenIfNeeded();
+        waitUntilHandlersIdle();
 
         // Assert that the bottom window now has the starting window.
         assertNoStartingWindow(tokenTop);

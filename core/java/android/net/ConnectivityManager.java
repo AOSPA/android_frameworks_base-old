@@ -685,11 +685,20 @@ public class ConnectivityManager {
     @Deprecated
     public static final int TYPE_VPN = 17;
 
-    /** {@hide} */
-    public static final int MAX_RADIO_TYPE   = TYPE_VPN;
+    /**
+     * A network that is exclusively meant to be used for testing
+     *
+     * @deprecated Use {@link NetworkCapabilities} instead.
+     * @hide
+     */
+    @Deprecated
+    public static final int TYPE_TEST = 18; // TODO: Remove this once NetworkTypes are unused.
 
     /** {@hide} */
-    public static final int MAX_NETWORK_TYPE = TYPE_VPN;
+    public static final int MAX_RADIO_TYPE = TYPE_TEST;
+
+    /** {@hide} */
+    public static final int MAX_NETWORK_TYPE = TYPE_TEST;
 
     private static final int MIN_NETWORK_TYPE = TYPE_MOBILE;
 
@@ -3145,9 +3154,9 @@ public class ConnectivityManager {
 
         /**
          * Called if no network is found in the timeout time specified in
-         * {@link #requestNetwork(NetworkRequest, NetworkCallback, int)} call. This callback is not
-         * called for the version of {@link #requestNetwork(NetworkRequest, NetworkCallback)}
-         * without timeout. When this callback is invoked the associated
+         * {@link #requestNetwork(NetworkRequest, NetworkCallback, int)} call or if the
+         * requested network request cannot be fulfilled (whether or not a timeout was
+         * specified). When this callback is invoked the associated
          * {@link NetworkRequest} will have already been removed and released, as if
          * {@link #unregisterNetworkCallback(NetworkCallback)} had been called.
          */
@@ -3934,15 +3943,16 @@ public class ConnectivityManager {
      *
      * <p>This endpoint is exclusively for use by the NetworkStack and is protected by the
      * corresponding permission.
+     * @param network Network on which the captive portal was detected.
      * @param appExtras Extras to include in the app start intent.
      * @hide
      */
     @SystemApi
     @TestApi
     @RequiresPermission(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK)
-    public void startCaptivePortalApp(Bundle appExtras) {
+    public void startCaptivePortalApp(Network network, Bundle appExtras) {
         try {
-            mService.startCaptivePortalAppInternal(appExtras);
+            mService.startCaptivePortalAppInternal(network, appExtras);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

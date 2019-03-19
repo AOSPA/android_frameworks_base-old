@@ -15,40 +15,60 @@
  */
 package com.android.keyguard.clock;
 
+import android.annotation.Nullable;
+import android.app.WallpaperManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.ArrayMap;
+import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
+import android.view.View;
+import android.view.View.MeasureSpec;
+import android.view.ViewGroup;
 
+import androidx.annotation.VisibleForTesting;
+
+import com.android.internal.colorextraction.ColorExtractor;
 import com.android.keyguard.R;
+import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dock.DockManager;
+import com.android.systemui.dock.DockManager.DockEventListener;
 import com.android.systemui.plugins.ClockPlugin;
-import com.android.systemui.statusbar.policy.ExtensionController;
-import com.android.systemui.statusbar.policy.ExtensionController.Extension;
+import com.android.systemui.util.InjectionInflationController;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Consumer;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
- * Manages custom clock faces.
+ * Manages custom clock faces for AOD and lock screen.
  */
 @Singleton
 public final class ClockManager {
 
-    private final LayoutInflater mLayoutInflater;
-    private final ContentResolver mContentResolver;
-
     private final List<ClockInfo> mClockInfos = new ArrayList<>();
+    /**
+     * Map from expected value stored in settings to supplier of custom clock face.
+     */
+    private final Map<String, Supplier<ClockPlugin>> mClocks = new ArrayMap<>();
+    @Nullable private ClockPlugin mCurrentClock;
+
+    private final ContentResolver mContentResolver;
+    private final SettingsWrapper mSettingsWrapper;
     /**
      * Observe settings changes to know when to switch the clock face.
      */
@@ -57,29 +77,48 @@ public final class ClockManager {
                 @Override
                 public void onChange(boolean selfChange) {
                     super.onChange(selfChange);
-                    if (mClockExtension != null) {
-                        mClockExtension.reload();
-                    }
+                    reload();
                 }
             };
-
-    private final ExtensionController mExtensionController;
     /**
-     * Used to select between plugin or default implementations of ClockPlugin interface.
+     * Observe changes to dock state to know when to switch the clock face.
      */
-    private Extension<ClockPlugin> mClockExtension;
+    private final DockEventListener mDockEventListener =
+            new DockEventListener() {
+                @Override
+                public void onEvent(int event) {
+                    mIsDocked = (event == DockManager.STATE_DOCKED
+                            || event == DockManager.STATE_DOCKED_HIDE);
+                    reload();
+                }
+            };
+    @Nullable private final DockManager mDockManager;
     /**
-     * Consumer that accepts the a new ClockPlugin implementation when the Extension reloads.
+     * When docked, the DOCKED_CLOCK_FACE setting will be checked for the custom clock face
+     * to show.
      */
-    private final Consumer<ClockPlugin> mClockPluginConsumer = this::setClockPlugin;
+    private boolean mIsDocked;
 
     private final List<ClockChangedListener> mListeners = new ArrayList<>();
 
+    private final SysuiColorExtractor mColorExtractor;
+    private final int mWidth;
+    private final int mHeight;
+
     @Inject
-    public ClockManager(Context context, ExtensionController extensionController) {
-        mExtensionController = extensionController;
-        mLayoutInflater = LayoutInflater.from(context);
-        mContentResolver = context.getContentResolver();
+    public ClockManager(Context context, InjectionInflationController injectionInflater,
+            @Nullable DockManager dockManager, SysuiColorExtractor colorExtractor) {
+        this(context, injectionInflater, dockManager, colorExtractor, context.getContentResolver(),
+                new SettingsWrapper(context.getContentResolver()));
+    }
+
+    ClockManager(Context context, InjectionInflationController injectionInflater,
+            @Nullable DockManager dockManager, SysuiColorExtractor colorExtractor,
+            ContentResolver contentResolver, SettingsWrapper settingsWrapper) {
+        mDockManager = dockManager;
+        mColorExtractor = colorExtractor;
+        mContentResolver = contentResolver;
+        mSettingsWrapper = settingsWrapper;
 
         Resources res = context.getResources();
         mClockInfos.add(ClockInfo.builder()
@@ -94,22 +133,35 @@ public final class ClockManager {
                 .setTitle(res.getString(R.string.clock_title_bubble))
                 .setId(BubbleClockController.class.getName())
                 .setThumbnail(() -> BitmapFactory.decodeResource(res, R.drawable.bubble_thumbnail))
-                .setPreview(() -> BitmapFactory.decodeResource(res, R.drawable.bubble_preview))
+                .setPreview(() -> getClockPreview(BubbleClockController.class.getName()))
                 .build());
         mClockInfos.add(ClockInfo.builder()
                 .setName("stretch")
                 .setTitle(res.getString(R.string.clock_title_stretch))
                 .setId(StretchAnalogClockController.class.getName())
                 .setThumbnail(() -> BitmapFactory.decodeResource(res, R.drawable.stretch_thumbnail))
-                .setPreview(() -> BitmapFactory.decodeResource(res, R.drawable.stretch_preview))
+                .setPreview(() -> getClockPreview(StretchAnalogClockController.class.getName()))
                 .build());
         mClockInfos.add(ClockInfo.builder()
                 .setName("type")
                 .setTitle(res.getString(R.string.clock_title_type))
                 .setId(TypeClockController.class.getName())
                 .setThumbnail(() -> BitmapFactory.decodeResource(res, R.drawable.type_thumbnail))
-                .setPreview(() -> BitmapFactory.decodeResource(res, R.drawable.type_preview))
+                .setPreview(() -> getClockPreview(TypeClockController.class.getName()))
                 .build());
+
+        LayoutInflater layoutInflater = injectionInflater.injectable(LayoutInflater.from(context));
+        mClocks.put(BubbleClockController.class.getName(),
+                () -> BubbleClockController.build(layoutInflater));
+        mClocks.put(StretchAnalogClockController.class.getName(),
+                () -> StretchAnalogClockController.build(layoutInflater));
+        mClocks.put(TypeClockController.class.getName(),
+                () -> TypeClockController.build(layoutInflater));
+
+        // Store the size of the display for generation of clock preview.
+        DisplayMetrics dm = res.getDisplayMetrics();
+        mWidth = dm.widthPixels;
+        mHeight = dm.heightPixels;
     }
 
     /**
@@ -120,9 +172,7 @@ public final class ClockManager {
             register();
         }
         mListeners.add(listener);
-        if (mClockExtension != null) {
-            mClockExtension.reload();
-        }
+        reload();
     }
 
     /**
@@ -142,7 +192,85 @@ public final class ClockManager {
         return mClockInfos;
     }
 
-    private void setClockPlugin(ClockPlugin plugin) {
+    /**
+     * Get the current clock.
+     * @returns current custom clock or null for default.
+     */
+    @Nullable
+    ClockPlugin getCurrentClock() {
+        return mCurrentClock;
+    }
+
+    @VisibleForTesting
+    boolean isDocked() {
+        return mIsDocked;
+    }
+
+    @VisibleForTesting
+    ContentObserver getContentObserver() {
+        return mContentObserver;
+    }
+
+    /**
+     * Generate a realistic preview of a clock face.
+     * @param clockId ID of clock to use for preview, should be obtained from {@link getClockInfos}.
+     *        Returns null if clockId is not found.
+     */
+    @Nullable
+    private Bitmap getClockPreview(String clockId) {
+        Supplier<ClockPlugin> supplier = mClocks.get(clockId);
+        if (supplier == null) {
+            return null;
+        }
+        ClockPlugin plugin = supplier.get();
+
+        // Use the big clock view for the preview
+        View clockView = plugin.getBigClockView();
+        if (clockView == null) {
+            return null;
+        }
+
+        // Initialize state of plugin before generating preview.
+        plugin.setDarkAmount(1f);
+        plugin.setTextColor(Color.WHITE);
+
+        ColorExtractor.GradientColors colors = mColorExtractor.getColors(WallpaperManager.FLAG_LOCK,
+                true);
+        plugin.setColorPalette(colors.supportsDarkText(), colors.getColorPalette());
+        plugin.dozeTimeTick();
+
+        // Draw clock view hierarchy to canvas.
+        Bitmap bitmap = Bitmap.createBitmap(mWidth, mHeight, Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        dispatchVisibilityAggregated(clockView, true);
+        clockView.measure(MeasureSpec.makeMeasureSpec(mWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(mHeight, MeasureSpec.EXACTLY));
+        clockView.layout(0, 0, mWidth, mHeight);
+        canvas.drawColor(Color.BLACK);
+        clockView.draw(canvas);
+
+        return bitmap;
+    }
+
+    private void dispatchVisibilityAggregated(View view, boolean isVisible) {
+        // Similar to View.dispatchVisibilityAggregated implementation.
+        final boolean thisVisible = view.getVisibility() == View.VISIBLE;
+        if (thisVisible || !isVisible) {
+            view.onVisibilityAggregated(isVisible);
+        }
+
+        if (view instanceof ViewGroup) {
+            isVisible = thisVisible && isVisible;
+            ViewGroup vg = (ViewGroup) view;
+            int count = vg.getChildCount();
+
+            for (int i = 0; i < count; i++) {
+                dispatchVisibilityAggregated(vg.getChildAt(i), isVisible);
+            }
+        }
+    }
+
+    private void notifyClockChanged(ClockPlugin plugin) {
         for (int i = 0; i < mListeners.size(); i++) {
             // It probably doesn't make sense to supply the same plugin instances to multiple
             // listeners. This should be fine for now since there is only a single listener.
@@ -154,39 +282,48 @@ public final class ClockManager {
         mContentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE),
                 false, mContentObserver);
-        mClockExtension = mExtensionController.newExtension(ClockPlugin.class)
-            .withPlugin(ClockPlugin.class)
-            .withCallback(mClockPluginConsumer)
-            // Using withDefault even though this isn't the default as a workaround.
-            // ExtensionBuilder doesn't provide the ability to supply a ClockPlugin
-            // instance based off of the value of a setting. Since multiple "default"
-            // can be provided, using a supplier that changes the settings value.
-            // A null return will cause Extension#reload to look at the next "default"
-            // supplier.
-            .withDefault(
-                    new SettingsGattedSupplier(
-                        mContentResolver,
-                        Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE,
-                        BubbleClockController.class.getName(),
-                            () -> BubbleClockController.build(mLayoutInflater)))
-            .withDefault(
-                    new SettingsGattedSupplier(
-                        mContentResolver,
-                        Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE,
-                        StretchAnalogClockController.class.getName(),
-                            () -> StretchAnalogClockController.build(mLayoutInflater)))
-            .withDefault(
-                    new SettingsGattedSupplier(
-                        mContentResolver,
-                        Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE,
-                        TypeClockController.class.getName(),
-                            () -> TypeClockController.build(mLayoutInflater)))
-            .build();
+        mContentResolver.registerContentObserver(
+                Settings.Secure.getUriFor(Settings.Secure.DOCKED_CLOCK_FACE),
+                false, mContentObserver);
+        if (mDockManager != null) {
+            mDockManager.addListener(mDockEventListener);
+        }
     }
 
     private void unregister() {
         mContentResolver.unregisterContentObserver(mContentObserver);
-        mClockExtension.destroy();
+        if (mDockManager != null) {
+            mDockManager.removeListener(mDockEventListener);
+        }
+    }
+
+    private void reload() {
+        mCurrentClock = getClockPlugin();
+        notifyClockChanged(mCurrentClock);
+    }
+
+    private ClockPlugin getClockPlugin() {
+        ClockPlugin plugin = null;
+        if (mIsDocked) {
+            final String name = mSettingsWrapper.getDockedClockFace();
+            if (name != null) {
+                Supplier<ClockPlugin> supplier = mClocks.get(name);
+                if (supplier != null) {
+                    plugin = supplier.get();
+                    if (plugin != null) {
+                        return plugin;
+                    }
+                }
+            }
+        }
+        final String name = mSettingsWrapper.getLockScreenCustomClockFace();
+        if (name != null) {
+            Supplier<ClockPlugin> supplier = mClocks.get(name);
+            if (supplier != null) {
+                plugin = supplier.get();
+            }
+        }
+        return plugin;
     }
 
     /**
@@ -199,45 +336,5 @@ public final class ClockManager {
          * @param clock Custom clock face to use. A null value indicates the default clock face.
          */
         void onClockChanged(ClockPlugin clock);
-    }
-
-    /**
-     * Supplier that only gets an instance when a settings value matches expected value.
-     */
-    private static class SettingsGattedSupplier implements Supplier<ClockPlugin> {
-
-        private final ContentResolver mContentResolver;
-        private final String mKey;
-        private final String mValue;
-        private final Supplier<ClockPlugin> mSupplier;
-
-        /**
-         * Constructs a supplier that changes secure setting key against value.
-         *
-         * @param contentResolver Used to look up settings value.
-         * @param key Settings key.
-         * @param value If the setting matches this values that get supplies a ClockPlugin
-         *        instance.
-         * @param supplier Supplier of ClockPlugin instance, only used if the setting
-         *        matches value.
-         */
-        SettingsGattedSupplier(ContentResolver contentResolver, String key, String value,
-                Supplier<ClockPlugin> supplier) {
-            mContentResolver = contentResolver;
-            mKey = key;
-            mValue = value;
-            mSupplier = supplier;
-        }
-
-        /**
-         * Returns null if the settings value doesn't match the expected value.
-         *
-         * A null return causes Extension#reload to skip this supplier and move to the next.
-         */
-        @Override
-        public ClockPlugin get() {
-            final String currentValue = Settings.Secure.getString(mContentResolver, mKey);
-            return Objects.equals(currentValue, mValue) ? mSupplier.get() : null;
-        }
     }
 }

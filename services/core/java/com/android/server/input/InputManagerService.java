@@ -17,7 +17,6 @@
 package com.android.server.input;
 
 import android.annotation.NonNull;
-import android.app.IInputForwarder;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -1685,29 +1684,6 @@ public class InputManagerService extends IInputManager.Stub
         nativeMonitor(mPtr);
     }
 
-    // Binder call
-    @Override
-    public IInputForwarder createInputForwarder(int displayId) throws RemoteException {
-        if (!checkCallingPermission(android.Manifest.permission.INJECT_EVENTS,
-                "createInputForwarder()")) {
-            throw new SecurityException("Requires INJECT_EVENTS permission");
-        }
-        final DisplayManager displayManager = mContext.getSystemService(DisplayManager.class);
-        final Display display = displayManager.getDisplay(displayId);
-        if (display == null) {
-            throw new IllegalArgumentException(
-                    "Can't create input forwarder for non-existent displayId: " + displayId);
-        }
-        final int callingUid = Binder.getCallingUid();
-        final int displayOwnerUid = display.getOwnerUid();
-        if (callingUid != displayOwnerUid) {
-            throw new SecurityException(
-                    "Only owner of the display can forward input events to it.");
-        }
-
-        return new InputForwarder(displayId);
-    }
-
     // Native callback.
     private void notifyConfigurationChanged(long whenNanos) {
         mWindowManagerCallbacks.notifyConfigurationChanged();
@@ -1805,9 +1781,10 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     // Native callback.
-    private int interceptMotionBeforeQueueingNonInteractive(long whenNanos, int policyFlags) {
+    private int interceptMotionBeforeQueueingNonInteractive(int displayId,
+            long whenNanos, int policyFlags) {
         return mWindowManagerCallbacks.interceptMotionBeforeQueueingNonInteractive(
-                whenNanos, policyFlags);
+                displayId, whenNanos, policyFlags);
     }
 
     // Native callback.
@@ -2021,7 +1998,13 @@ public class InputManagerService extends IInputManager.Stub
 
         public int interceptKeyBeforeQueueing(KeyEvent event, int policyFlags);
 
-        public int interceptMotionBeforeQueueingNonInteractive(long whenNanos, int policyFlags);
+        /**
+         * Provides an opportunity for the window manager policy to intercept early motion event
+         * processing when the device is in a non-interactive state since these events are normally
+         * dropped.
+         */
+        int interceptMotionBeforeQueueingNonInteractive(int displayId, long whenNanos,
+                int policyFlags);
 
         public long interceptKeyBeforeDispatching(IBinder token,
                 KeyEvent event, int policyFlags);

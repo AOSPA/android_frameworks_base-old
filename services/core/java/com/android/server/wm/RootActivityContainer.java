@@ -300,7 +300,7 @@ public class RootActivityContainer extends ConfigurationContainer
      * corresponding record in display manager.
      */
     // TODO: Look into consolidating with getActivityDisplay()
-    ActivityDisplay getActivityDisplayOrCreate(int displayId) {
+    @Nullable ActivityDisplay getActivityDisplayOrCreate(int displayId) {
         ActivityDisplay activityDisplay = getActivityDisplay(displayId);
         if (activityDisplay != null) {
             return activityDisplay;
@@ -1126,6 +1126,13 @@ public class RootActivityContainer extends ConfigurationContainer
                 if (!stack.isFocusableAndVisible() || topRunningActivity == null) {
                     continue;
                 }
+                if (stack == targetStack) {
+                    // Simply update the result for targetStack because the targetStack had
+                    // already resumed in above. We don't want to resume it again, especially in
+                    // some cases, it would cause a second launch failure if app process was dead.
+                    resumedOnDisplay |= result;
+                    continue;
+                }
                 if (topRunningActivity.isState(RESUMED)) {
                     // Kick off any lingering app transitions form the MoveTaskToFront operation.
                     stack.executeAppTransition(targetOptions);
@@ -1317,6 +1324,9 @@ public class RootActivityContainer extends ConfigurationContainer
         if (DEBUG_STACK) Slog.v(TAG, "Display added displayId=" + displayId);
         synchronized (mService.mGlobalLock) {
             final ActivityDisplay display = getActivityDisplayOrCreate(displayId);
+            if (display == null) {
+                return;
+            }
             // Do not start home before booting, or it may accidentally finish booting before it
             // starts. Instead, we expect home activities to be launched when the system is ready
             // (ActivityManagerService#systemReady).

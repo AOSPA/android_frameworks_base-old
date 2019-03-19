@@ -30,10 +30,12 @@ import static android.app.AppOpsManager.permissionToOpCode;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_WHEN_REQUESTED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_SYSTEM_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
+import static android.content.pm.PackageManager.MASK_PERMISSION_FLAGS;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.os.UserHandle.getAppId;
 import static android.os.UserHandle.getUid;
@@ -43,6 +45,9 @@ import static com.android.server.pm.PackageManagerService.DEBUG_PACKAGE_SCANNING
 import static com.android.server.pm.PackageManagerService.DEBUG_PERMISSIONS;
 import static com.android.server.pm.PackageManagerService.DEBUG_REMOVE;
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
+import static com.android.server.pm.permission.PermissionsState.PERMISSION_OPERATION_FAILURE;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import android.Manifest;
 import android.annotation.NonNull;
@@ -69,7 +74,9 @@ import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageManagerInternal;
+import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
+import android.permission.PermissionManagerInternal;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -77,6 +84,7 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
@@ -91,9 +99,8 @@ import com.android.server.pm.PackageManagerServiceUtils;
 import com.android.server.pm.PackageSetting;
 import com.android.server.pm.SharedUserSetting;
 import com.android.server.pm.UserManagerService;
-import com.android.server.pm.permission.DefaultPermissionGrantPolicy
-        .DefaultPermissionGrantedCallback;
-import com.android.server.pm.permission.PermissionManagerInternal.PermissionCallback;
+import com.android.server.pm.permission.DefaultPermissionGrantPolicy.DefaultPermissionGrantedCallback;
+import com.android.server.pm.permission.PermissionManagerServiceInternal.PermissionCallback;
 import com.android.server.pm.permission.PermissionsState.PermissionState;
 
 import libcore.util.EmptyArray;
@@ -106,6 +113,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Manages all permissions and handles permissions related tasks.
@@ -121,6 +132,8 @@ public class PermissionManagerService {
     private static final int GRANT_RUNTIME = 3;
     /** Permission grant: grant as runtime a permission that was granted as an install time one. */
     private static final int GRANT_UPGRADE = 4;
+
+    private static final long BACKUP_TIMEOUT_MILLIS = SECONDS.toMillis(60);
 
     /** Cap the size of permission trees that 3rd party apps can define; in characters of text */
     private static final int MAX_PERMISSION_TREE_FOOTPRINT = 32768;
@@ -145,6 +158,9 @@ public class PermissionManagerService {
 
     /** Internal connection to the user manager */
     private final UserManagerInternal mUserManagerInt;
+
+    /** Permission controller: User space permission management */
+    private PermissionControllerManager mPermissionControllerManager;
 
     /** Default permission policy to provide proper behaviour out-of-the-box */
     private final DefaultPermissionGrantPolicy mDefaultPermissionGrantPolicy;
@@ -179,6 +195,16 @@ public class PermissionManagerService {
      */
     @GuardedBy("mLock")
     private ArrayMap<String, List<String>> mBackgroundPermissions;
+
+    /**
+     * A permission backup might contain apps that are not installed. In this case we delay the
+     * restoration until the app is installed.
+     *
+     * <p>This array ({@code userId -> noDelayedBackupLeft}) is {@code true} for all the users where
+     * there is <u>no more</u> delayed backup left.
+     */
+    @GuardedBy("mLock")
+    private final SparseBooleanArray mHasNoDelayedPermBackup = new SparseBooleanArray();
 
     PermissionManagerService(Context context,
             @Nullable DefaultPermissionGrantedCallback defaultGrantCallback,
@@ -218,29 +244,31 @@ public class PermissionManagerService {
             }
         }
 
-        LocalServices.addService(
-                PermissionManagerInternal.class, new PermissionManagerInternalImpl());
+        PermissionManagerServiceInternalImpl localService =
+                new PermissionManagerServiceInternalImpl();
+        LocalServices.addService(PermissionManagerServiceInternal.class, localService);
+        LocalServices.addService(PermissionManagerInternal.class, localService);
     }
 
     /**
      * Creates and returns an initialized, internal service for use by other components.
      * <p>
      * The object returned is identical to the one returned by the LocalServices class using:
-     * {@code LocalServices.getService(PermissionManagerInternal.class);}
+     * {@code LocalServices.getService(PermissionManagerServiceInternal.class);}
      * <p>
      * NOTE: The external lock is temporary and should be removed. This needs to be a
      * lock created by the permission manager itself.
      */
-    public static PermissionManagerInternal create(Context context,
+    public static PermissionManagerServiceInternal create(Context context,
             @Nullable DefaultPermissionGrantedCallback defaultGrantCallback,
             @NonNull Object externalLock) {
-        final PermissionManagerInternal permMgrInt =
-                LocalServices.getService(PermissionManagerInternal.class);
+        final PermissionManagerServiceInternal permMgrInt =
+                LocalServices.getService(PermissionManagerServiceInternal.class);
         if (permMgrInt != null) {
             return permMgrInt;
         }
         new PermissionManagerService(context, defaultGrantCallback, externalLock);
-        return LocalServices.getService(PermissionManagerInternal.class);
+        return LocalServices.getService(PermissionManagerServiceInternal.class);
     }
 
     @Nullable BasePermission getPermission(String permName) {
@@ -329,6 +357,74 @@ public class PermissionManagerService {
             }
         }
         return PackageManager.PERMISSION_DENIED;
+    }
+
+    /**
+     * Get the state of the runtime permissions as xml file.
+     *
+     * <p>Can not be called on main thread.
+     *
+     * @param user The user the data should be extracted for
+     *
+     * @return The state as a xml file
+     */
+    private @Nullable byte[] backupRuntimePermissions(@NonNull UserHandle user) {
+        CompletableFuture<byte[]> backup = new CompletableFuture<>();
+        mPermissionControllerManager.getRuntimePermissionBackup(user, mContext.getMainExecutor(),
+                backup::complete);
+
+        try {
+            return backup.get(BACKUP_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException | ExecutionException  | TimeoutException e) {
+            Slog.e(TAG, "Cannot create permission backup for " + user, e);
+            return null;
+        }
+    }
+
+    /**
+     * Restore a permission state previously backed up via {@link #backupRuntimePermissions}.
+     *
+     * <p>If not all state can be restored, the un-appliable state will be delayed and can be
+     * applied via {@link #restoreDelayedRuntimePermissions}.
+     *
+     * @param backup The state as an xml file
+     * @param user The user the data should be restored for
+     */
+    private void restoreRuntimePermissions(@NonNull byte[] backup, @NonNull UserHandle user) {
+        synchronized (mLock) {
+            mHasNoDelayedPermBackup.delete(user.getIdentifier());
+            mPermissionControllerManager.restoreRuntimePermissionBackup(backup, user);
+        }
+    }
+
+    /**
+     * Try to apply permission backup that was previously not applied.
+     *
+     * <p>Can not be called on main thread.
+     *
+     * @param packageName The package that is newly installed
+     * @param user The user the package is installed for
+     *
+     * @see #restoreRuntimePermissions
+     */
+    private void restoreDelayedRuntimePermissions(@NonNull String packageName,
+            @NonNull UserHandle user) {
+        synchronized (mLock) {
+            if (mHasNoDelayedPermBackup.get(user.getIdentifier(), false)) {
+                return;
+            }
+
+            mPermissionControllerManager.restoreDelayedRuntimePermissionBackup(packageName, user,
+                    mContext.getMainExecutor(), (hasMoreBackup) -> {
+                        if (hasMoreBackup) {
+                            return;
+                        }
+
+                        synchronized (mLock) {
+                            mHasNoDelayedPermBackup.put(user.getIdentifier(), true);
+                        }
+                    });
+        }
     }
 
     /**
@@ -741,7 +837,6 @@ public class PermissionManagerService {
         if (ps == null) {
             return;
         }
-        final boolean isLegacySystemApp = mPackageManagerInt.isLegacySystemApp(pkg);
 
         final PermissionsState permissionsState = ps.getPermissionsState();
         PermissionsState origPermissions = permissionsState;
@@ -828,17 +923,9 @@ public class PermissionManagerService {
                     // For all apps normal permissions are install time ones.
                     grant = GRANT_INSTALL;
                 } else if (bp.isRuntime()) {
-                    // If a permission review is required for legacy apps we represent
-                    // their permissions as always granted runtime ones since we need
-                    // to keep the review required permission flag per user while an
-                    // install permission's state is shared across all users.
                     if (origPermissions.hasInstallPermission(bp.getName())) {
-                        // For legacy apps that became modern, install becomes runtime.
-                        grant = GRANT_UPGRADE;
-                    } else if (isLegacySystemApp) {
-                        // For legacy system apps, install becomes runtime.
-                        // We cannot check hasInstallPermission() for system apps since those
-                        // permissions were granted implicitly and not persisted pre-M.
+                        // Before Q we represented some runtime permissions as install permissions,
+                        // in Q we cannot do this anymore. Hence upgrade them all.
                         grant = GRANT_UPGRADE;
                     } else {
                         // For modern apps keep runtime permissions unchanged.
@@ -891,110 +978,113 @@ public class PermissionManagerService {
                             }
                             // Grant an install permission.
                             if (permissionsState.grantInstallPermission(bp) !=
-                                    PermissionsState.PERMISSION_OPERATION_FAILURE) {
+                                    PERMISSION_OPERATION_FAILURE) {
                                 changedInstallPermission = true;
                             }
                         } break;
 
                         case GRANT_RUNTIME: {
-                            // Grant previously granted runtime permissions.
-                            for (int userId : UserManagerService.getInstance().getUserIds()) {
-                                final PermissionState permissionState = origPermissions
+                            for (int userId : currentUserIds) {
+                                PermissionState permState = origPermissions
                                         .getRuntimePermissionState(perm, userId);
-                                int flags = permissionState != null
-                                        ? permissionState.getFlags() : 0;
-                                if (origPermissions.hasRuntimePermission(perm, userId)) {
-                                    // Don't propagate the permission in a permission review
-                                    // mode if the former was revoked, i.e. marked to not
-                                    // propagate on upgrade. Note that in a permission review
-                                    // mode install permissions are represented as constantly
-                                    // granted runtime ones since we need to keep a per user
-                                    // state associated with the permission. Also the revoke
-                                    // on upgrade flag is no longer applicable and is reset.
-                                    final boolean revokeOnUpgrade = (flags & PackageManager
-                                            .FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0;
-                                    if (revokeOnUpgrade) {
-                                        flags &= ~PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE;
-                                        // Since we changed the flags, we have to write.
-                                        updatedUserIds = ArrayUtils.appendInt(
-                                                updatedUserIds, userId);
+                                int flags = permState != null ? permState.getFlags() : 0;
+
+                                boolean wasChanged = false;
+
+                                if (appSupportsRuntimePermissions) {
+                                    // Remove review flag as it is not necessary anymore
+                                    if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
+                                        flags &= ~FLAG_PERMISSION_REVIEW_REQUIRED;
+                                        wasChanged = true;
                                     }
-                                    if (!revokeOnUpgrade) {
-                                        if (permissionsState.grantRuntimePermission(bp, userId) ==
-                                                PermissionsState.PERMISSION_OPERATION_FAILURE) {
-                                            // If we cannot put the permission as it was,
-                                            // we have to write.
-                                            updatedUserIds = ArrayUtils.appendInt(
-                                                    updatedUserIds, userId);
+
+                                    if ((flags & FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0) {
+                                        flags &= ~FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                                        wasChanged = true;
+                                    } else {
+                                        if (permState != null && permState.isGranted()) {
+                                            if (permissionsState.grantRuntimePermission(bp, userId)
+                                                    == PERMISSION_OPERATION_FAILURE) {
+                                                wasChanged = true;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (permState == null) {
+                                        // New permission
+                                        if (PLATFORM_PACKAGE_NAME.equals(
+                                                bp.getSourcePackageName())) {
+                                            if (!bp.isRemoved()) {
+                                                flags |= FLAG_PERMISSION_REVIEW_REQUIRED
+                                                        | FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                                                wasChanged = true;
+                                            }
                                         }
                                     }
 
-                                    // If the app supports runtime permissions no need for a review.
-                                    if (appSupportsRuntimePermissions
-                                            && (flags & PackageManager
-                                                    .FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
-                                        flags &= ~PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
-                                        // Since we changed the flags, we have to write.
-                                        updatedUserIds = ArrayUtils.appendInt(
-                                                updatedUserIds, userId);
-                                    }
-                                } else if (!appSupportsRuntimePermissions) {
-                                    // For legacy apps that need a permission review, every new
-                                    // runtime permission is granted but it is pending a review.
-                                    // We also need to review only platform defined runtime
-                                    // permissions as these are the only ones the platform knows
-                                    // how to disable the API to simulate revocation as legacy
-                                    // apps don't expect to run with revoked permissions.
-                                    if (PLATFORM_PACKAGE_NAME.equals(bp.getSourcePackageName())) {
-                                        if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0
-                                                && !bp.isRemoved()) {
-                                            flags |= FLAG_PERMISSION_REVIEW_REQUIRED;
-                                            // We changed the flags, hence have to write.
-                                            updatedUserIds = ArrayUtils.appendInt(
-                                                    updatedUserIds, userId);
-                                        }
-                                    }
                                     if (permissionsState.grantRuntimePermission(bp, userId)
-                                            != PermissionsState.PERMISSION_OPERATION_FAILURE) {
-                                        // We changed the permission, hence have to write.
-                                        updatedUserIds = ArrayUtils.appendInt(
-                                                updatedUserIds, userId);
+                                            != PERMISSION_OPERATION_FAILURE) {
+                                        wasChanged = true;
                                     }
                                 }
-                                // Propagate the permission flags.
-                                permissionsState.updatePermissionFlags(bp, userId, flags, flags);
+
+                                if (wasChanged) {
+                                    updatedUserIds = ArrayUtils.appendInt(updatedUserIds, userId);
+                                }
+
+                                permissionsState.updatePermissionFlags(bp, userId,
+                                        MASK_PERMISSION_FLAGS, flags);
                             }
                         } break;
 
                         case GRANT_UPGRADE: {
-                            // Grant runtime permissions for a previously held install permission.
-                            final PermissionState permissionState = origPermissions
+                            // Upgrade from Pre-Q to Q permission model. Make all permissions
+                            // runtime
+                            PermissionState permState = origPermissions
                                     .getInstallPermissionState(perm);
-                            final int flags =
-                                    (permissionState != null) ? permissionState.getFlags() : 0;
+                            int flags = (permState != null) ? permState.getFlags() : 0;
 
+                            // Remove install permission
                             if (origPermissions.revokeInstallPermission(bp)
-                                    != PermissionsState.PERMISSION_OPERATION_FAILURE) {
-                                // We will be transferring the permission flags, so clear them.
+                                    != PERMISSION_OPERATION_FAILURE) {
                                 origPermissions.updatePermissionFlags(bp, UserHandle.USER_ALL,
                                         PackageManager.MASK_PERMISSION_FLAGS, 0);
                                 changedInstallPermission = true;
                             }
 
-                            // If the permission is not to be promoted to runtime we ignore it and
-                            // also its other flags as they are not applicable to install permissions.
-                            if ((flags & PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE) == 0) {
-                                for (int userId : currentUserIds) {
+                            for (int userId : currentUserIds) {
+                                boolean wasChanged = false;
+
+                                if (appSupportsRuntimePermissions) {
+                                    // Remove review flag as it is not necessary anymore
+                                    if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
+                                        flags &= ~FLAG_PERMISSION_REVIEW_REQUIRED;
+                                        wasChanged = true;
+                                    }
+
+                                    if ((flags & FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0) {
+                                        flags &= ~FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                                        wasChanged = true;
+                                    } else {
+                                        if (permissionsState.grantRuntimePermission(bp, userId) !=
+                                                PERMISSION_OPERATION_FAILURE) {
+                                             wasChanged = true;
+                                        }
+                                    }
+                                } else {
                                     if (permissionsState.grantRuntimePermission(bp, userId) !=
-                                            PermissionsState.PERMISSION_OPERATION_FAILURE) {
-                                        // Transfer the permission flags.
-                                        permissionsState.updatePermissionFlags(bp, userId,
-                                                flags, flags);
-                                        // If we granted the permission, we have to write.
-                                        updatedUserIds = ArrayUtils.appendInt(
-                                                updatedUserIds, userId);
+                                            PERMISSION_OPERATION_FAILURE) {
+                                        flags |= FLAG_PERMISSION_REVIEW_REQUIRED;
+                                        wasChanged = true;
                                     }
                                 }
+
+                                if (wasChanged) {
+                                    updatedUserIds = ArrayUtils.appendInt(updatedUserIds, userId);
+                                }
+
+                                permissionsState.updatePermissionFlags(bp, userId,
+                                        MASK_PERMISSION_FLAGS, flags);
                             }
                         } break;
 
@@ -1011,7 +1101,7 @@ public class PermissionManagerService {
                     }
                 } else {
                     if (permissionsState.revokeInstallPermission(bp) !=
-                            PermissionsState.PERMISSION_OPERATION_FAILURE) {
+                            PERMISSION_OPERATION_FAILURE) {
                         // Also drop the permission flags.
                         permissionsState.updatePermissionFlags(bp, UserHandle.USER_ALL,
                                 PackageManager.MASK_PERMISSION_FLAGS, 0);
@@ -1095,6 +1185,8 @@ public class PermissionManagerService {
         AppOpsManager appOpsManager = mContext.getSystemService(AppOpsManager.class);
 
         String pkgName = pkg.packageName;
+        boolean supportsRuntimePermissions = pkg.applicationInfo.targetSdkVersion
+                >= Build.VERSION_CODES.M;
 
         int[] users = UserManagerService.getInstance().getUserIds();
         int numUsers = users.length;
@@ -1109,38 +1201,22 @@ public class PermissionManagerService {
                         if ((flags & FLAG_PERMISSION_REVOKE_WHEN_REQUESTED) != 0) {
                             BasePermission bp = mSettings.getPermissionLocked(permission);
 
-                            ps.updatePermissionFlags(bp, userId,
-                                    FLAG_PERMISSION_REVOKE_WHEN_REQUESTED
-                                            | FLAG_PERMISSION_USER_FIXED | FLAG_PERMISSION_USER_SET,
-                                    0);
-                            updatedUserIds = ArrayUtils.appendInt(updatedUserIds,
-                                    userId);
+                            int flagsToRemove = FLAG_PERMISSION_REVOKE_WHEN_REQUESTED;
 
                             if ((flags & (FLAG_PERMISSION_GRANTED_BY_DEFAULT
                                     | FLAG_PERMISSION_POLICY_FIXED | FLAG_PERMISSION_SYSTEM_FIXED))
-                                    == 0) {
-                                if (pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.M) {
-                                    if (permissionToOpCode(permission) != OP_NONE) {
-                                        setAppOpMode(permission, pkg, userId, MODE_IGNORED);
-
-                                        if (DEBUG_PERMISSIONS) {
-                                            Slog.i(TAG, "Revoking app-op "
-                                                    + permissionToOp(permission) + " for " + pkgName
-                                                    + " as it is now requested");
-                                        }
-                                    }
-                                } else {
-                                    int revokeResult = ps.revokeRuntimePermission(bp, userId);
-                                    if (revokeResult
-                                            != PermissionsState.PERMISSION_OPERATION_FAILURE) {
-
-                                        if (DEBUG_PERMISSIONS) {
-                                            Slog.i(TAG, "Revoking runtime permission " + permission
-                                                    + " for " + pkgName
-                                                    + " as it is now requested");
-                                        }
+                                    == 0 && supportsRuntimePermissions) {
+                                int revokeResult = ps.revokeRuntimePermission(bp, userId);
+                                if (revokeResult != PERMISSION_OPERATION_FAILURE) {
+                                    if (DEBUG_PERMISSIONS) {
+                                        Slog.i(TAG, "Revoking runtime permission "
+                                                + permission + " for " + pkgName
+                                                + " as it is now requested");
                                     }
                                 }
+
+                                flagsToRemove |=
+                                        FLAG_PERMISSION_USER_FIXED | FLAG_PERMISSION_USER_SET;
 
                                 List<String> fgPerms = mBackgroundPermissions.get(permission);
                                 if (fgPerms != null) {
@@ -1159,6 +1235,9 @@ public class PermissionManagerService {
                                     }
                                 }
                             }
+
+                            ps.updatePermissionFlags(bp, userId, flagsToRemove, 0);
+                            updatedUserIds = ArrayUtils.appendInt(updatedUserIds, userId);
                         }
                     }
                 }
@@ -1856,7 +1935,7 @@ public class PermissionManagerService {
                     if ((flags & PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
                         updatePermissionFlags(permission, pkg.packageName,
                                 PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED, 0, callingUid,
-                                userId, callback);
+                                userId, false, callback);
                     }
                 }
             }
@@ -1925,7 +2004,7 @@ public class PermissionManagerService {
             // Development permissions must be handled specially, since they are not
             // normal runtime permissions.  For now they apply to all users.
             if (permissionsState.grantInstallPermission(bp) !=
-                    PermissionsState.PERMISSION_OPERATION_FAILURE) {
+                    PERMISSION_OPERATION_FAILURE) {
                 if (callback != null) {
                     callback.onInstallPermissionGranted();
                 }
@@ -1945,7 +2024,7 @@ public class PermissionManagerService {
 
         final int result = permissionsState.grantRuntimePermission(bp, userId);
         switch (result) {
-            case PermissionsState.PERMISSION_OPERATION_FAILURE: {
+            case PERMISSION_OPERATION_FAILURE: {
                 return;
             }
 
@@ -2045,7 +2124,7 @@ public class PermissionManagerService {
             // Development permissions must be handled specially, since they are not
             // normal runtime permissions.  For now they apply to all users.
             if (permissionsState.revokeInstallPermission(bp) !=
-                    PermissionsState.PERMISSION_OPERATION_FAILURE) {
+                    PERMISSION_OPERATION_FAILURE) {
                 if (callback != null) {
                     callback.onInstallPermissionRevoked();
                 }
@@ -2054,7 +2133,7 @@ public class PermissionManagerService {
         }
 
         if (permissionsState.revokeRuntimePermission(bp, userId) ==
-                PermissionsState.PERMISSION_OPERATION_FAILURE) {
+                PERMISSION_OPERATION_FAILURE) {
             return;
         }
 
@@ -2362,7 +2441,8 @@ public class PermissionManagerService {
     }
 
     private void updatePermissionFlags(String permName, String packageName, int flagMask,
-            int flagValues, int callingUid, int userId, PermissionCallback callback) {
+            int flagValues, int callingUid, int userId, boolean overridePolicy,
+            PermissionCallback callback) {
         if (!mUserManagerInt.exists(userId)) {
             return;
         }
@@ -2374,6 +2454,11 @@ public class PermissionManagerService {
                 true,  // checkShell
                 false, // requirePermissionWhenSameUser
                 "updatePermissionFlags");
+
+        if ((flagMask & FLAG_PERMISSION_POLICY_FIXED) != 0 && !overridePolicy) {
+            throw new SecurityException("updatePermissionFlags requires "
+                    + Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY);
+        }
 
         // Only the system can change these flags and nothing else.
         if (callingUid != Process.SYSTEM_UID) {
@@ -2522,6 +2607,8 @@ public class PermissionManagerService {
             throw new IllegalStateException("Signature|privileged permissions not in "
                     + "privapp-permissions whitelist: " + mPrivappPermissionsViolations);
         }
+
+        mPermissionControllerManager = mContext.getSystemService(PermissionControllerManager.class);
     }
 
     private static String getVolumeUuidForPackage(PackageParser.Package pkg) {
@@ -2574,7 +2661,7 @@ public class PermissionManagerService {
         return mBackgroundPermissions;
     }
 
-    private class PermissionManagerInternalImpl extends PermissionManagerInternal {
+    private class PermissionManagerServiceInternalImpl extends PermissionManagerServiceInternal {
         @Override
         public void systemReady() {
             PermissionManagerService.this.systemReady();
@@ -2664,9 +2751,11 @@ public class PermissionManagerService {
         }
         @Override
         public void updatePermissionFlags(String permName, String packageName, int flagMask,
-                int flagValues, int callingUid, int userId, PermissionCallback callback) {
+                int flagValues, int callingUid, int userId, boolean overridePolicy,
+                PermissionCallback callback) {
             PermissionManagerService.this.updatePermissionFlags(
-                    permName, packageName, flagMask, flagValues, callingUid, userId, callback);
+                    permName, packageName, flagMask, flagValues, callingUid, userId,
+                    overridePolicy, callback);
         }
         @Override
         public boolean updatePermissionFlagsForAllApps(int flagMask, int flagValues, int callingUid,
@@ -2736,6 +2825,22 @@ public class PermissionManagerService {
             synchronized (PermissionManagerService.this.mLock) {
                 return mSettings.getPermissionLocked(permName);
             }
+        }
+
+        @Override
+        public @Nullable byte[] backupRuntimePermissions(@NonNull UserHandle user) {
+            return PermissionManagerService.this.backupRuntimePermissions(user);
+        }
+
+        @Override
+        public void restoreRuntimePermissions(@NonNull byte[] backup, @NonNull UserHandle user) {
+            PermissionManagerService.this.restoreRuntimePermissions(backup, user);
+        }
+
+        @Override
+        public void restoreDelayedRuntimePermissions(@NonNull String packageName,
+                @NonNull UserHandle user) {
+            PermissionManagerService.this.restoreDelayedRuntimePermissions(packageName, user);
         }
     }
 }

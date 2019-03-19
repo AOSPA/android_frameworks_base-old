@@ -31,6 +31,7 @@ import "frameworks/base/core/proto/android/bluetooth/hfp/enums.proto";
 import "frameworks/base/core/proto/android/bluetooth/smp/enums.proto";
 import "frameworks/base/core/proto/android/debug/enums.proto";
 import "frameworks/base/core/proto/android/hardware/biometrics/enums.proto";
+import "frameworks/base/core/proto/android/hardware/sensor/assist/enums.proto";
 import "frameworks/base/core/proto/android/net/networkcapabilities.proto";
 import "frameworks/base/core/proto/android/os/enums.proto";
 import "frameworks/base/core/proto/android/server/connectivity/data_stall_event.proto";
@@ -44,6 +45,7 @@ import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
+import "frameworks/base/core/proto/android/stats/style/style_enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
@@ -241,6 +243,12 @@ message Atom {
         BluetoothSocketConnectionStateChanged bluetooth_socket_connection_state_changed = 171;
         DeviceIdentifierAccessDenied device_identifier_access_denied = 172;
         BubbleDeveloperErrorReported bubble_developer_error_reported = 173;
+        AssistGestureStageReported assist_gesture_stage_reported = 174;
+        AssistGestureFeedbackReported assist_gesture_feedback_reported = 175;
+        AssistGestureProgressReported assist_gesture_progress_reported = 176;
+        TouchGestureClassified touch_gesture_classified = 177;
+        HiddenApiUsed hidden_api_used = 178 [(allow_from_any_uid) = true];
+        StyleUIChanged style_ui_changed = 179;
     }
 
     // Pulled events will start at field 10000.
@@ -277,7 +285,7 @@ message Atom {
         CategorySize category_size = 10028;
         ProcStats proc_stats = 10029;
         BatteryVoltage battery_voltage = 10030;
-        NumBiometricsEnrolled num_fingerprints_enrolled = 10031;
+        NumFingerprintsEnrolled num_fingerprints_enrolled = 10031;
         DiskIo disk_io = 10032;
         PowerProfile power_profile = 10033;
         ProcStatsPkgProc proc_stats_pkg_proc = 10034;
@@ -294,10 +302,12 @@ message Atom {
         BatteryCycleCount battery_cycle_count = 10045;
         DebugElapsedClock debug_elapsed_clock = 10046;
         DebugFailingElapsedClock debug_failing_elapsed_clock = 10047;
-        NumBiometricsEnrolled num_faces_enrolled = 10048;
+        NumFacesEnrolled num_faces_enrolled = 10048;
         RoleHolder role_holder = 10049;
         DangerousPermissionState dangerous_permission_state = 10050;
         TrainInfo train_info = 10051;
+        TimeZoneDataInfo time_zone_data_info = 10052;
+        SDCardInfo sdcard_info = 10053;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -2341,6 +2351,17 @@ message LauncherUIChanged {
     optional bool is_swipe_up_enabled = 5;
 }
 
+message StyleUIChanged {
+    optional android.stats.style.Action action = 1;
+    optional int32 color_package_hash = 2;
+    optional int32 font_package_hash  = 3;
+    optional int32 shape_package_hash = 4;
+    optional int32 clock_package_hash = 5;
+    optional int32 launcher_grid = 6;
+    optional int32 wallpaper_category_hash = 7;
+    optional int32 wallpaper_id_hash = 8;
+}
+
 /**
  * Logs when Settings UI has changed.
  *
@@ -2400,6 +2421,37 @@ message TouchEventReported {
     optional float latency_mean_micros = 3;
     // Standard deviation
     optional float latency_stdev_micros = 4;
+}
+
+/**
+ * Logs gesture classification and timing information for touch events.
+ *
+ * Logged from:
+ *   frameworks/base/core/java/android/view/GestureDetector.java
+ *   frameworks/base/core/java/android/view/View.java
+ */
+message TouchGestureClassified {
+    // The source of the classification (e.g. Java class name).
+    optional string source = 1;
+
+    enum Classification {
+        UNKNOWN_CLASSIFICATION = 0;
+        SINGLE_TAP = 1;
+        DOUBLE_TAP = 2;
+        LONG_PRESS = 3;
+        DEEP_PRESS = 4;
+        SCROLL = 5;
+    }
+    // The classification of the gesture.
+    optional Classification classification = 2;
+
+    // The interval from the start of a touch event stream until the
+    // classification was made.
+    optional int32 latency_millis = 3;
+
+    // The distance from the location of the first touch event to the
+    // location of the touch event when the classification was made.
+    optional float displacement_px = 4;
 }
 
 /**
@@ -3152,6 +3204,13 @@ message FlagFlipUpdateOccurred {
     optional int64 order_id = 2;
 }
 
+/**
+ * Potential experiment ids that goes with a train install.
+ */
+message TrainExperimentIds {
+    repeated int64 experiment_id = 1;
+}
+
 /*
  * Logs when a binary push state changes.
  * Logged by the installer via public api.
@@ -3178,8 +3237,14 @@ message BinaryPushStateChanged {
         INSTALL_FAILURE = 6;
         INSTALL_CANCELLED = 7;
         INSTALLER_ROLLBACK_REQUESTED = 8;
+        INSTALLER_ROLLBACK_SUCCESS = 9;
+        INSTALLER_ROLLBACK_FAILURE = 10;
     }
     optional State state = 6;
+    // Possible experiment ids for monitoring this push.
+    optional TrainExperimentIds experiment_ids = 7 [(log_mode) = MODE_BYTES];
+    // user id
+    optional int32 user_id = 8;
 }
 
 /** Represents USB port overheat event. */
@@ -3211,6 +3276,28 @@ message UsbPortOverheatEvent {
 message BatteryCycleCount {
     /* Number of total charge and discharge cycles on the system battery. */
     optional int32 cycle_count = 1;
+}
+
+/**
+ * Logs that an SD card is mounted and information about it, its type (public or private) and the
+ * size in bytes.
+ * Pulled from:
+ *   StatsCompanionService
+ */
+
+message SDCardInfo {
+
+    enum Type {
+        UNKNOWN = 0;
+        TYPE_PUBLIC = 1;
+        TYPE_PRIVATE = 2;
+        OTHERS = 3;
+    }
+
+    // Type of the SD card: TYPE_PUBLIC if portable and TYPE_PRIVATE if internal.
+    optional Type type = 1;
+    // Total size of the sd card in bytes.
+    optional int64 size_bytes = 2;
 }
 
 /*
@@ -3263,6 +3350,33 @@ message ServiceLaunchReported {
     optional string package_name = 2;
 
     optional string service_name = 3;
+}
+
+/**
+ * Logs when a hidden API is used.
+ *
+ * Logged from:
+ *     libcore/libart/src/main/java/dalvik/system/VMRuntime.java
+ */
+message HiddenApiUsed {
+    // The uid of the app making the hidden access.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Signature of the method or field accessed.
+    optional string signature = 2;
+
+    enum AccessMethod {
+        NONE = 0;
+        REFLECTION = 1;
+        JNI = 2;
+        LINKING = 3;
+    }
+
+    // Type of access.
+    optional AccessMethod access_method = 3;
+
+    // Whether the access was prevented or not.
+    optional bool access_denied = 4;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -4013,14 +4127,26 @@ message DiskIo {
  *
  * Pulled from StatsCompanionService, which queries <Biometric>Manager.
  */
-message NumBiometricsEnrolled {
+message NumFingerprintsEnrolled {
     // The associated user. Eg: 0 for owners, 10+ for others.
     // Defined in android/os/UserHandle.java
     optional int32 user = 1;
     // Number of fingerprints registered to that user.
-    optional int32 num_enrolled = 2;
+    optional int32 num_fingerprints_enrolled = 2;
 }
 
+/**
+ * Pulls the number of faces for each user.
+ *
+ * Pulled from StatsCompanionService, which queries <Biometric>Manager.
+ */
+message NumFacesEnrolled {
+    // The associated user. Eg: 0 for owners, 10+ for others.
+    // Defined in android/os/UserHandle.java
+    optional int32 user = 1;
+    // Number of faces registered to that user.
+    optional int32 num_faces_enrolled = 2;
+}
 /**
  * A mapping of role holder -> role
  */
@@ -4748,6 +4874,12 @@ message AppCompacted {
 
   // The process state at the time of compaction.
   optional android.app.ProcessStateEnum process_state = 16 [default = PROCESS_STATE_UNKNOWN];
+
+  // Free ZRAM in kilobytes before compaction.
+  optional int64 before_zram_free_kilobytes = 17;
+
+  // Free ZRAM in kilobytes after compaction.
+  optional int64 after_zram_free_kilobytes = 18;
 }
 
 /**
@@ -5348,7 +5480,7 @@ message BubbleUIChanged {
         HEADER_GO_TO_SETTINGS = 9;
         PERMISSION_OPT_IN = 10;
         PERMISSION_OPT_OUT = 11;
-        PERMISSION_IGNORED = 12;
+        PERMISSION_DIALOG_SHOWN = 12;
         SWIPE_LEFT = 13;
         SWIPE_RIGHT = 14;
         STACK_EXPANDED = 15;
@@ -5507,13 +5639,6 @@ message DeviceIdentifierAccessDenied {
 }
 
 /**
- * Potential experiment ids that goes with a train install.
- */
-message TrainExperimentIds {
-    repeated int64 experiment_id = 1;
-}
-
-/**
  * Pulls the ongoing mainline install train version code.
  * Pulled from StatsCompanionService
  */
@@ -5521,4 +5646,44 @@ message TrainInfo {
     optional int64 train_version_code = 1;
 
     optional TrainExperimentIds train_experiment_id = 2;
+}
+
+/**
+ * Logs the gesture stage changed event.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/
+ */
+message AssistGestureStageReported {
+    optional android.hardware.sensor.assist.AssistGestureStageEnum gesture_stage = 1;
+}
+
+/**
+ * Logs the feedback type.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/
+ */
+message AssistGestureFeedbackReported {
+    // Whether or not the gesture was used.
+    optional android.hardware.sensor.assist.AssistGestureFeedbackEnum feedback_type = 1;
+}
+
+/**
+ * Logs the progress.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/
+ */
+message AssistGestureProgressReported {
+    // [0,100] progress for the assist gesture.
+    optional int32 progress = 1;
+}
+
+/*
+ * Information about the time zone data on a device.
+ */
+message TimeZoneDataInfo {
+    // A version identifier for the data set on device. e.g. "2018i"
+    optional string tzdb_version = 1;
 }

@@ -17,14 +17,13 @@
 package android.net.wifi.p2p;
 
 import android.annotation.UnsupportedAppUsage;
-import android.os.Parcelable;
 import android.os.Parcel;
+import android.os.Parcelable;
 import android.util.Log;
 
 import java.util.Objects;
-
-import java.util.regex.Pattern;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A class representing a Wi-Fi p2p device
@@ -365,7 +364,9 @@ public class WifiP2pDevice implements Parcelable {
             deviceCapability = source.deviceCapability;
             groupCapability = source.groupCapability;
             status = source.status;
-            wfdInfo = new WifiP2pWfdInfo(source.wfdInfo);
+            if (source.wfdInfo != null) {
+                wfdInfo = new WifiP2pWfdInfo(source.wfdInfo);
+            }
         }
     }
 

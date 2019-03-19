@@ -25,6 +25,8 @@
 
 #define LOG_TAG "Zygote"
 
+#include <async_safe/log.h>
+
 // sys/mount.h has to come before linux/fs.h due to redefinition of MS_RDONLY, MS_BIND, etc
 #include <sys/mount.h>
 #include <linux/fs.h>
@@ -155,10 +157,10 @@ static std::atomic_uint32_t gBlastulaPoolCount = 0;
 static int gBlastulaPoolEventFD = -1;
 
 /**
- * The maximum value that the gBlastulaPoolMax variable may take.  This value
- * is a mirror of Zygote.BLASTULA_POOL_MAX_LIMIT
+ * The maximum value that the gBlastulaPoolSizeMax variable may take.  This value
+ * is a mirror of ZygoteServer.BLASTULA_POOL_SIZE_MAX_LIMIT
  */
-static constexpr int BLASTULA_POOL_MAX_LIMIT = 10;
+static constexpr int BLASTULA_POOL_SIZE_MAX_LIMIT = 100;
 
 /**
  * A helper class containing accounting information for Blastulas.
@@ -216,6 +218,19 @@ class BlastulaTableEntry {
     }
   }
 
+  void Clear() {
+    EntryStorage storage = mStorage.load();
+
+    if (storage != INVALID_ENTRY_VALUE) {
+      close(storage.read_pipe_fd);
+      mStorage.store(INVALID_ENTRY_VALUE);
+    }
+  }
+
+  void Invalidate() {
+    mStorage.store(INVALID_ENTRY_VALUE);
+  }
+
   /**
    * @return A copy of the data stored in this entry.
    */
@@ -257,7 +272,7 @@ class BlastulaTableEntry {
  * the BlastulaTableEntry class prevent data races during these concurrent
  * operations.
  */
-static std::array<BlastulaTableEntry, BLASTULA_POOL_MAX_LIMIT> gBlastulaTable;
+static std::array<BlastulaTableEntry, BLASTULA_POOL_SIZE_MAX_LIMIT> gBlastulaTable;
 
 /**
  * The list of open zygote file descriptors.
@@ -305,27 +320,23 @@ static void SigChldHandler(int /*signal_number*/) {
   int saved_errno = errno;
 
   while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-     // Log process-death status that we care about.  In general it is
-     // not safe to call LOG(...) from a signal handler because of
-     // possible reentrancy.  However, we know a priori that the
-     // current implementation of LOG() is safe to call from a SIGCHLD
-     // handler in the zygote process.  If the LOG() implementation
-     // changes its locking strategy or its use of syscalls within the
-     // lazy-init critical section, its use here may become unsafe.
+     // Log process-death status that we care about.
     if (WIFEXITED(status)) {
-      ALOGI("Process %d exited cleanly (%d)", pid, WEXITSTATUS(status));
+      async_safe_format_log(ANDROID_LOG_INFO, LOG_TAG,
+                            "Process %d exited cleanly (%d)", pid, WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
-      ALOGI("Process %d exited due to signal (%d)", pid, WTERMSIG(status));
-      if (WCOREDUMP(status)) {
-        ALOGI("Process %d dumped core.", pid);
-      }
+      async_safe_format_log(ANDROID_LOG_INFO, LOG_TAG,
+                            "Process %d exited due to signal %d (%s)%s", pid,
+                            WTERMSIG(status), strsignal(WTERMSIG(status)),
+                            WCOREDUMP(status) ? "; core dumped" : "");
     }
 
     // If the just-crashed process is the system_server, bring down zygote
     // so that it is restarted by init and system server will be restarted
     // from there.
     if (pid == gSystemServerPid) {
-      ALOGE("Exit zygote because system server (%d) has terminated", pid);
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG,
+                            "Exit zygote because system server (pid %d) has terminated", pid);
       kill(getpid(), SIGKILL);
     }
 
@@ -338,14 +349,17 @@ static void SigChldHandler(int /*signal_number*/) {
   // Note that we shouldn't consider ECHILD an error because
   // the secondary zygote might have no children left to wait for.
   if (pid < 0 && errno != ECHILD) {
-    ALOGW("Zygote SIGCHLD error in waitpid: %s", strerror(errno));
+    async_safe_format_log(ANDROID_LOG_WARN, LOG_TAG,
+                          "Zygote SIGCHLD error in waitpid: %s", strerror(errno));
   }
 
   if (blastulas_removed > 0) {
     if (write(gBlastulaPoolEventFD, &blastulas_removed, sizeof(blastulas_removed)) == -1) {
       // If this write fails something went terribly wrong.  We will now kill
       // the zygote and let the system bring it back up.
-      ALOGE("Zygote failed to write to blastula pool event FD: %s", strerror(errno));
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG,
+                            "Zygote failed to write to blastula pool event FD: %s",
+                            strerror(errno));
       kill(getpid(), SIGKILL);
     }
   }
@@ -580,144 +594,255 @@ static void SetSchedulerPolicy(fail_fn_t fail_fn) {
 }
 
 static int UnmountTree(const char* path) {
-    size_t path_len = strlen(path);
+  size_t path_len = strlen(path);
 
-    FILE* fp = setmntent("/proc/mounts", "r");
-    if (fp == nullptr) {
-        ALOGE("Error opening /proc/mounts: %s", strerror(errno));
-        return -errno;
-    }
+  FILE* fp = setmntent("/proc/mounts", "r");
+  if (fp == nullptr) {
+    ALOGE("Error opening /proc/mounts: %s", strerror(errno));
+    return -errno;
+  }
 
-    // Some volumes can be stacked on each other, so force unmount in
-    // reverse order to give us the best chance of success.
-    std::list<std::string> toUnmount;
-    mntent* mentry;
-    while ((mentry = getmntent(fp)) != nullptr) {
-        if (strncmp(mentry->mnt_dir, path, path_len) == 0) {
-            toUnmount.push_front(std::string(mentry->mnt_dir));
-        }
+  // Some volumes can be stacked on each other, so force unmount in
+  // reverse order to give us the best chance of success.
+  std::list<std::string> to_unmount;
+  mntent* mentry;
+  while ((mentry = getmntent(fp)) != nullptr) {
+    if (strncmp(mentry->mnt_dir, path, path_len) == 0) {
+      to_unmount.push_front(std::string(mentry->mnt_dir));
     }
-    endmntent(fp);
+  }
+  endmntent(fp);
 
-    for (const auto& path : toUnmount) {
-        if (umount2(path.c_str(), MNT_DETACH)) {
-            ALOGW("Failed to unmount %s: %s", path.c_str(), strerror(errno));
-        }
+  for (const auto& path : to_unmount) {
+    if (umount2(path.c_str(), MNT_DETACH)) {
+      ALOGW("Failed to unmount %s: %s", path.c_str(), strerror(errno));
     }
-    return 0;
+  }
+  return 0;
 }
 
 static void CreateDir(const std::string& dir,
                       mode_t mode, uid_t uid, gid_t gid,
                       fail_fn_t fail_fn) {
-    if (TEMP_FAILURE_RETRY(access(dir.c_str(), F_OK)) == 0) {
-        return;
-    } else if (errno != ENOENT) {
-        fail_fn(CREATE_ERROR("Failed to stat %s: %s", dir.c_str(), strerror(errno)));
-    }
-    if (fs_prepare_dir(dir.c_str(), mode, uid, gid) != 0) {
-        fail_fn(CREATE_ERROR("fs_prepare_dir failed on %s: %s",
-                dir.c_str(), strerror(errno)));
-    }
+  if (TEMP_FAILURE_RETRY(access(dir.c_str(), F_OK)) == 0) {
+    return;
+  } else if (errno != ENOENT) {
+    fail_fn(CREATE_ERROR("Failed to stat %s: %s", dir.c_str(), strerror(errno)));
+  }
+  if (fs_prepare_dir(dir.c_str(), mode, uid, gid) != 0) {
+    fail_fn(CREATE_ERROR("fs_prepare_dir failed on %s: %s",
+                         dir.c_str(), strerror(errno)));
+  }
 }
 
-static void CreatePkgSandbox(uid_t uid, const std::string& package_name, fail_fn_t fail_fn) {
-    // Create /mnt/user/0/package/<package-name>
-    userid_t user_id = multiuser_get_user_id(uid);
-    std::string pkg_sandbox_dir = StringPrintf("/mnt/user/%d", user_id);
-    CreateDir(pkg_sandbox_dir, 0751, AID_ROOT, AID_ROOT, fail_fn);
+static void CreatePkgSandboxTarget(userid_t user_id, fail_fn_t fail_fn) {
+  // Create /mnt/user/0/package
+  std::string pkg_sandbox_dir = StringPrintf("/mnt/user/%d", user_id);
+  CreateDir(pkg_sandbox_dir, 0751, AID_ROOT, AID_ROOT, fail_fn);
 
-    StringAppendF(&pkg_sandbox_dir, "/package");
-    CreateDir(pkg_sandbox_dir, 0700, AID_ROOT, AID_ROOT, fail_fn);
-
-    StringAppendF(&pkg_sandbox_dir, "/%s", package_name.c_str());
-    CreateDir(pkg_sandbox_dir, 0700, AID_ROOT, AID_ROOT, fail_fn);
+  StringAppendF(&pkg_sandbox_dir, "/package");
+  CreateDir(pkg_sandbox_dir, 0755, AID_ROOT, AID_ROOT, fail_fn);
 }
 
-static void BindMount(const std::string& sourceDir, const std::string& targetDir,
+static void BindMount(const std::string& source_dir, const std::string& target_dir,
                       fail_fn_t fail_fn) {
-    if (TEMP_FAILURE_RETRY(mount(sourceDir.c_str(), targetDir.c_str(), nullptr,
-                                 MS_BIND, nullptr)) == -1) {
-        fail_fn(CREATE_ERROR("Failed to mount %s to %s: %s",
-                             sourceDir.c_str(), targetDir.c_str(), strerror(errno)));
-    }
+  if (TEMP_FAILURE_RETRY(mount(source_dir.c_str(), target_dir.c_str(), nullptr,
+                               MS_BIND, nullptr)) == -1) {
+    fail_fn(CREATE_ERROR("Failed to mount %s to %s: %s",
+                         source_dir.c_str(), target_dir.c_str(), strerror(errno)));
+  }
 }
 
-static void MountPkgSpecificDir(const std::string& mntSourceRoot,
-                                const std::string& mntTargetRoot,
-                                const std::string& packageName,
+static void MountPkgSpecificDir(const std::string& mnt_source_root,
+                                const std::string& mnt_target_root,
+                                const std::string& package_name,
                                 uid_t uid,
-                                const char* dirName,
+                                const char* dir_name,
                                 fail_fn_t fail_fn) {
-    std::string mntSourceDir = StringPrintf("%s/Android/%s/%s",
-            mntSourceRoot.c_str(), dirName, packageName.c_str());
-    CreateDir(mntSourceDir, 0755, uid, uid, fail_fn);
+  std::string mnt_source_dir = StringPrintf("%s/Android/%s/%s",
+      mnt_source_root.c_str(), dir_name, package_name.c_str());
 
-    std::string mntTargetDir = StringPrintf("%s/Android/%s/%s",
-            mntTargetRoot.c_str(), dirName, packageName.c_str());
-    CreateDir(mntTargetDir, 0755, uid, uid, fail_fn);
+  std::string mnt_target_dir = StringPrintf("%s/Android/%s/%s",
+      mnt_target_root.c_str(), dir_name, package_name.c_str());
 
-    BindMount(mntSourceDir, mntTargetDir, fail_fn);
+  BindMount(mnt_source_dir, mnt_target_dir, fail_fn);
 }
 
-
-static void createPkgSpecificDirRoots(const std::string& parentDir,
-                                      bool createSandbox,
-                                      mode_t mode, uid_t uid, gid_t gid,
-                                      fail_fn_t fail_fn) {
-    std::string androidDir = StringPrintf("%s/Android", parentDir.c_str());
-    CreateDir(androidDir, mode, uid, gid, fail_fn);
-    std::vector<std::string> dirs = {"data", "media", "obb"};
-    if (createSandbox) {
-        dirs.push_back("sandbox");
+static void CreateSubDirs(int parent_fd, const std::string& parent_path,
+                          const std::vector<std::string>& sub_dirs,
+                          fail_fn_t fail_fn) {
+  for (auto& dir_name : sub_dirs) {
+    struct stat sb;
+    if (TEMP_FAILURE_RETRY(fstatat(parent_fd, dir_name.c_str(), &sb, 0)) == 0) {
+      if (S_ISDIR(sb.st_mode)) {
+        continue;
+      } else if (TEMP_FAILURE_RETRY(unlinkat(parent_fd, dir_name.c_str(), 0)) == -1) {
+        fail_fn(CREATE_ERROR("Failed to unlinkat on %s/%s: %s",
+                             parent_path.c_str(), dir_name.c_str(), strerror(errno)));
+      }
+    } else if (errno != ENOENT) {
+      fail_fn(CREATE_ERROR("Failed to fstatat on %s/%s: %s",
+                           parent_path.c_str(), dir_name.c_str(), strerror(errno)));
     }
-    for (auto& dir : dirs) {
-        std::string path = StringPrintf("%s/%s", androidDir.c_str(), dir.c_str());
-        CreateDir(path, mode, uid, gid, fail_fn);
+    if (TEMP_FAILURE_RETRY(mkdirat(parent_fd, dir_name.c_str(), 0700)) == -1 && errno != EEXIST) {
+      fail_fn(CREATE_ERROR("Failed to mkdirat on %s/%s: %s",
+                           parent_path.c_str(), dir_name.c_str(), strerror(errno)));
     }
+  }
 }
 
-static void PreparePkgSpecificDirs(const std::vector<std::string>& packageNames,
-                                   const std::vector<std::string>& volumeLabels,
-                                   bool mountAllObbs, const std::string& sandboxId,
-                                   userid_t userId, uid_t uid, fail_fn_t fail_fn) {
-    for (auto& label : volumeLabels) {
-        std::string mntSource = StringPrintf("/mnt/runtime/write/%s", label.c_str());
-        std::string mntTarget = StringPrintf("/storage/%s", label.c_str());
-        if (label == "emulated") {
-            StringAppendF(&mntSource, "/%d", userId);
-            StringAppendF(&mntTarget, "/%d", userId);
-        }
-
-        if (TEMP_FAILURE_RETRY(access(mntSource.c_str(), F_OK)) < 0) {
-            ALOGE("Can't access %s: %s", mntSource.c_str(), strerror(errno));
-            continue;
-        }
-
-        // Create /mnt/runtime/write/emulated/0/Android/{data,media,obb,sandbox}
-        createPkgSpecificDirRoots(mntSource, true, 0700, AID_ROOT, AID_ROOT, fail_fn);
-
-        std::string sandboxSource = StringPrintf("%s/Android/sandbox/%s",
-            mntSource.c_str(), sandboxId.c_str());
-        CreateDir(sandboxSource, 0755, uid, uid, fail_fn);
-        BindMount(sandboxSource, mntTarget, fail_fn);
-
-        // Create /storage/emulated/0/Android/{data,media,obb}
-        createPkgSpecificDirRoots(mntTarget, false, 0755, uid, uid, fail_fn);
-        for (auto& package : packageNames) {
-            MountPkgSpecificDir(mntSource, mntTarget, package, uid, "data", fail_fn);
-            MountPkgSpecificDir(mntSource, mntTarget, package, uid, "media", fail_fn);
-            if (!mountAllObbs) {
-                MountPkgSpecificDir(mntSource, mntTarget, package, uid, "obb", fail_fn);
-            }
-        }
-
-        if (mountAllObbs) {
-            StringAppendF(&mntSource, "/Android/obb");
-            StringAppendF(&mntTarget, "/Android/obb");
-            BindMount(mntSource, mntTarget, fail_fn);
-        }
+static void EnsurePkgSpecificDirs(const std::string& path,
+                                  const std::vector<std::string>& package_names,
+                                  bool create_sandbox_dir,
+                                  fail_fn_t fail_fn) {
+  std::string android_dir = StringPrintf("%s/Android", path.c_str());
+  android::base::unique_fd android_fd(open(android_dir.c_str(),
+                                           O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+  if (android_fd.get() < 0) {
+    if (errno == ENOENT || errno == ENOTDIR) {
+      if (errno == ENOTDIR && TEMP_FAILURE_RETRY(unlink(android_dir.c_str())) == -1) {
+        fail_fn(CREATE_ERROR("Failed to unlink %s: %s",
+                             android_dir.c_str(), strerror(errno)));
+      }
+      if (TEMP_FAILURE_RETRY(mkdir(android_dir.c_str(), 0700)) == -1
+          && errno != EEXIST) {
+        fail_fn(CREATE_ERROR("Failed to mkdir %s: %s",
+                             android_dir.c_str(), strerror(errno)));
+      }
+      android_fd.reset(open(android_dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC));
     }
+
+    if (android_fd.get() < 0) {
+      fail_fn(CREATE_ERROR("Failed to open %s: %s", android_dir.c_str(), strerror(errno)));
+    }
+  }
+
+  std::vector<std::string> data_media_obb_dirs = {"data", "media", "obb"};
+  if (create_sandbox_dir) {
+    data_media_obb_dirs.push_back("sandbox");
+  }
+  CreateSubDirs(android_fd.get(), android_dir, data_media_obb_dirs, fail_fn);
+  if (create_sandbox_dir) {
+    data_media_obb_dirs.pop_back();
+  }
+  for (auto& dir_name : data_media_obb_dirs) {
+    std::string data_dir = StringPrintf("%s/%s", android_dir.c_str(), dir_name.c_str());
+    android::base::unique_fd data_fd(openat(android_fd, dir_name.c_str(),
+                                            O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+    if (data_fd.get() < 0) {
+      fail_fn(CREATE_ERROR("Failed to openat %s/%s: %s",
+                           android_dir.c_str(), dir_name.c_str(), strerror(errno)));
+    }
+    CreateSubDirs(data_fd.get(), data_dir, package_names, fail_fn);
+  }
+}
+
+static void CreatePkgSandboxSource(const std::string& sandbox_source, fail_fn_t fail_fn) {
+
+  struct stat sb;
+  if (TEMP_FAILURE_RETRY(stat(sandbox_source.c_str(), &sb)) == 0) {
+    if (S_ISDIR(sb.st_mode)) {
+      return;
+    } else if (TEMP_FAILURE_RETRY(unlink(sandbox_source.c_str())) == -1) {
+      fail_fn(CREATE_ERROR("Failed to unlink %s: %s",
+                           sandbox_source.c_str(), strerror(errno)));
+    }
+  } else if (errno != ENOENT) {
+    fail_fn(CREATE_ERROR("Failed to stat %s: %s",
+                         sandbox_source.c_str(), strerror(errno)));
+  }
+  if (TEMP_FAILURE_RETRY(mkdir(sandbox_source.c_str(), 0700)) == -1 && errno != EEXIST) {
+    fail_fn(CREATE_ERROR("Failed to mkdir %s: %s",
+                         sandbox_source.c_str(), strerror(errno)));
+  }
+}
+
+static void PreparePkgSpecificDirs(const std::vector<std::string>& package_names,
+                                   bool mount_all_obbs, const std::string& sandbox_id,
+                                   userid_t user_id, uid_t uid, fail_fn_t fail_fn) {
+  std::unique_ptr<DIR, decltype(&closedir)> dirp(opendir("/storage"), closedir);
+  if (!dirp) {
+    fail_fn(CREATE_ERROR("Failed to opendir /storage: %s", strerror(errno)));
+  }
+  struct dirent* ent;
+  while ((ent = readdir(dirp.get()))) {
+    if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..") || !strcmp(ent->d_name, "self")) {
+      continue;
+    }
+    std::string label(ent->d_name);
+
+    std::string mnt_source = StringPrintf("/mnt/runtime/write/%s", label.c_str());
+    std::string mnt_target = StringPrintf("/storage/%s", label.c_str());
+    if (label == "emulated") {
+      StringAppendF(&mnt_source, "/%d", user_id);
+      StringAppendF(&mnt_target, "/%d", user_id);
+    }
+
+    if (TEMP_FAILURE_RETRY(access(mnt_source.c_str(), F_OK)) == -1) {
+      ALOGE("Can't access %s: %s", mnt_source.c_str(), strerror(errno));
+      continue;
+    } else if (TEMP_FAILURE_RETRY(access(mnt_target.c_str(), F_OK)) == -1) {
+      ALOGE("Can't access %s: %s", mnt_target.c_str(), strerror(errno));
+      continue;
+    }
+
+    // Ensure /mnt/runtime/write/emulated/0/Android/{data,media,obb}
+    EnsurePkgSpecificDirs(mnt_source, package_names, true, fail_fn);
+
+    std::string sandbox_source = StringPrintf("%s/Android/sandbox/%s",
+        mnt_source.c_str(), sandbox_id.c_str());
+    CreatePkgSandboxSource(sandbox_source, fail_fn);
+    BindMount(sandbox_source, mnt_target, fail_fn);
+
+    // Ensure /storage/emulated/0/Android/{data,media,obb}
+    EnsurePkgSpecificDirs(mnt_target, package_names, false, fail_fn);
+    for (auto& package : package_names) {
+      MountPkgSpecificDir(mnt_source, mnt_target, package, uid, "data", fail_fn);
+      MountPkgSpecificDir(mnt_source, mnt_target, package, uid, "media", fail_fn);
+      if (!mount_all_obbs) {
+        MountPkgSpecificDir(mnt_source, mnt_target, package, uid, "obb", fail_fn);
+      }
+    }
+
+    if (mount_all_obbs) {
+      StringAppendF(&mnt_source, "/Android/obb");
+      StringAppendF(&mnt_target, "/Android/obb");
+      BindMount(mnt_source, mnt_target, fail_fn);
+    }
+  }
+}
+
+static void HandleMountModeInstaller(int mount_mode,
+                                     userid_t user_id,
+                                     const std::string& sandbox_id,
+                                     fail_fn_t fail_fn) {
+  std::string obb_mount_dir = StringPrintf("/mnt/user/%d/obb_mount", user_id);
+  std::string obb_mount_file = StringPrintf("%s/%s", obb_mount_dir.c_str(), sandbox_id.c_str());
+  if (mount_mode == MOUNT_EXTERNAL_INSTALLER) {
+    if (TEMP_FAILURE_RETRY(access(obb_mount_file.c_str(), F_OK)) != -1) {
+      return;
+    } else if (errno != ENOENT) {
+      fail_fn(CREATE_ERROR("Failed to access %s: %s", obb_mount_file.c_str(), strerror(errno)));
+    }
+    if (fs_prepare_dir(obb_mount_dir.c_str(), 0700, AID_ROOT, AID_ROOT) != 0) {
+      fail_fn(CREATE_ERROR("Failed to fs_prepare_dir %s: %s",
+                           obb_mount_dir.c_str(), strerror(errno)));
+    }
+    const android::base::unique_fd fd(TEMP_FAILURE_RETRY(
+        open(obb_mount_file.c_str(), O_RDWR | O_CREAT, 0600)));
+    if (fd.get() < 0) {
+      fail_fn(CREATE_ERROR("Failed to create %s: %s", obb_mount_file.c_str(), strerror(errno)));
+    }
+  } else {
+    if (TEMP_FAILURE_RETRY(access(obb_mount_file.c_str(), F_OK)) != -1) {
+      if (TEMP_FAILURE_RETRY(unlink(obb_mount_file.c_str())) == -1) {
+        fail_fn(CREATE_ERROR("Failed to unlink %s: %s",
+                             obb_mount_dir.c_str(), strerror(errno)));
+      }
+    } else if (errno != ENOENT) {
+      fail_fn(CREATE_ERROR("Failed to access %s: %s", obb_mount_file.c_str(), strerror(errno)));
+    }
+  }
 }
 
 // Create a private mount namespace and bind mount appropriate emulated
@@ -725,129 +850,99 @@ static void PreparePkgSpecificDirs(const std::vector<std::string>& packageNames,
 static void MountEmulatedStorage(uid_t uid, jint mount_mode,
         bool force_mount_namespace, const std::string& package_name,
         const std::vector<std::string>& packages_for_uid,
-        const std::vector<std::string>& visible_vol_ids, const std::string& sandbox_id,
+        const std::string& sandbox_id,
         fail_fn_t fail_fn) {
-    // See storage config details at http://source.android.com/tech/storage/
+  // See storage config details at http://source.android.com/tech/storage/
 
-    String8 storageSource;
-    if (mount_mode == MOUNT_EXTERNAL_DEFAULT) {
-        storageSource = "/mnt/runtime/default";
-    } else if (mount_mode == MOUNT_EXTERNAL_READ) {
-        storageSource = "/mnt/runtime/read";
-    } else if (mount_mode == MOUNT_EXTERNAL_WRITE) {
-        storageSource = "/mnt/runtime/write";
-    } else if (mount_mode == MOUNT_EXTERNAL_NONE && !force_mount_namespace) {
-        // Sane default of no storage visible
-        return;
-    }
+  String8 storage_source;
+  if (mount_mode == MOUNT_EXTERNAL_DEFAULT) {
+    storage_source = "/mnt/runtime/default";
+  } else if (mount_mode == MOUNT_EXTERNAL_READ) {
+    storage_source = "/mnt/runtime/read";
+  } else if (mount_mode == MOUNT_EXTERNAL_WRITE) {
+    storage_source = "/mnt/runtime/write";
+  } else if (mount_mode == MOUNT_EXTERNAL_NONE && !force_mount_namespace) {
+    // Sane default of no storage visible
+    return;
+  }
 
-    // Create a second private mount namespace for our process
-    if (unshare(CLONE_NEWNS) == -1) {
-        fail_fn(CREATE_ERROR("Failed to unshare(): %s", strerror(errno)));
-    }
+  // Create a second private mount namespace for our process
+  if (unshare(CLONE_NEWNS) == -1) {
+    fail_fn(CREATE_ERROR("Failed to unshare(): %s", strerror(errno)));
+  }
 
-    // Handle force_mount_namespace with MOUNT_EXTERNAL_NONE.
-    if (mount_mode == MOUNT_EXTERNAL_NONE) {
-        return;
-    }
+  // Handle force_mount_namespace with MOUNT_EXTERNAL_NONE.
+  if (mount_mode == MOUNT_EXTERNAL_NONE) {
+    return;
+  }
 
-    if (GetBoolProperty(kIsolatedStorageSnapshot, GetBoolProperty(kIsolatedStorage, false))) {
-        if (mount_mode == MOUNT_EXTERNAL_FULL || mount_mode == MOUNT_EXTERNAL_LEGACY) {
-            storageSource = (mount_mode == MOUNT_EXTERNAL_FULL)
-                    ? "/mnt/runtime/full" : "/mnt/runtime/write";
-            if (TEMP_FAILURE_RETRY(mount(storageSource.string(), "/storage",
-                                         NULL, MS_BIND | MS_REC | MS_SLAVE, NULL)) == -1) {
-                fail_fn(CREATE_ERROR("Failed to mount %s to /storage: %s",
-                                     storageSource.string(),
-                                     strerror(errno)));
-            }
+  if (GetBoolProperty(kIsolatedStorageSnapshot, GetBoolProperty(kIsolatedStorage, true))) {
+    if (mount_mode == MOUNT_EXTERNAL_FULL || mount_mode == MOUNT_EXTERNAL_LEGACY) {
+      storage_source = (mount_mode == MOUNT_EXTERNAL_FULL)
+          ? "/mnt/runtime/full" : "/mnt/runtime/write";
+      if (TEMP_FAILURE_RETRY(mount(storage_source.string(), "/storage",
+                                   NULL, MS_BIND | MS_REC | MS_SLAVE, NULL)) == -1) {
+        fail_fn(CREATE_ERROR("Failed to mount %s to /storage: %s",
+                             storage_source.string(),
+                             strerror(errno)));
+      }
 
-            // Mount user-specific symlink helper into place
-            userid_t user_id = multiuser_get_user_id(uid);
-            const String8 userSource(String8::format("/mnt/user/%d", user_id));
-            if (fs_prepare_dir(userSource.string(), 0751, 0, 0) == -1) {
-                fail_fn(CREATE_ERROR("fs_prepare_dir failed on %s (%s)",
-                                     userSource.string(), strerror(errno)));
-            }
+      // Mount user-specific symlink helper into place
+      userid_t user_id = multiuser_get_user_id(uid);
+      const String8 user_source(String8::format("/mnt/user/%d", user_id));
+      if (fs_prepare_dir(user_source.string(), 0751, 0, 0) == -1) {
+        fail_fn(CREATE_ERROR("fs_prepare_dir failed on %s (%s)",
+                             user_source.string(), strerror(errno)));
+      }
 
-            if (TEMP_FAILURE_RETRY(mount(userSource.string(), "/storage/self", nullptr, MS_BIND,
-                                         nullptr)) == -1) {
-                fail_fn(CREATE_ERROR("Failed to mount %s to /storage/self: %s",
-                                     userSource.string(),
-                                     strerror(errno)));
-            }
-        } else {
-            if (package_name.empty() || sandbox_id.empty()) {
-                return;
-            }
-
-            userid_t user_id = multiuser_get_user_id(uid);
-            std::string pkgSandboxDir =
-                StringPrintf("/mnt/user/%d/package/%s", user_id, package_name.c_str());
-            struct stat sb;
-            bool sandboxAlreadyCreated = true;
-            if (TEMP_FAILURE_RETRY(lstat(pkgSandboxDir.c_str(), &sb)) == -1) {
-                if (errno == ENOENT) {
-                    ALOGD("Sandbox not yet created for %s", pkgSandboxDir.c_str());
-                    sandboxAlreadyCreated = false;
-                    CreatePkgSandbox(uid, package_name, fail_fn);
-                } else {
-                    fail_fn(CREATE_ERROR("Failed to lstat %s: %s",
-                                         pkgSandboxDir.c_str(), strerror(errno)));
-                }
-            }
-
-            if (TEMP_FAILURE_RETRY(mount(pkgSandboxDir.c_str(), "/storage",
-                                         nullptr, MS_BIND | MS_REC | MS_SLAVE, nullptr)) == -1) {
-                fail_fn(CREATE_ERROR("Failed to mount %s to /storage: %s",
-                                     pkgSandboxDir.c_str(), strerror(errno)));
-            }
-
-            if (access("/storage/obb_mount", F_OK) == 0) {
-                if (mount_mode != MOUNT_EXTERNAL_INSTALLER) {
-                    remove("/storage/obb_mount");
-                }
-            } else {
-                if (mount_mode == MOUNT_EXTERNAL_INSTALLER) {
-                    int fd =
-                        TEMP_FAILURE_RETRY(open("/storage/obb_mount", O_RDWR | O_CREAT, 0660));
-                    if (fd == -1) {
-                        fail_fn(CREATE_ERROR("Couldn't create /storage/obb_mount: %s",
-                                             strerror(errno)));
-                    }
-                    close(fd);
-                }
-            }
-            // If the sandbox was already created by vold, only then set up the bind mounts for
-            // pkg specific directories. Otherwise, leave as is and bind mounts will be taken
-            // care of by vold later.
-            if (sandboxAlreadyCreated) {
-                PreparePkgSpecificDirs(packages_for_uid, visible_vol_ids,
-                    mount_mode == MOUNT_EXTERNAL_INSTALLER, sandbox_id, user_id, uid, fail_fn);
-            }
-        }
+      if (TEMP_FAILURE_RETRY(mount(user_source.string(), "/storage/self", nullptr, MS_BIND,
+                                   nullptr)) == -1) {
+        fail_fn(CREATE_ERROR("Failed to mount %s to /storage/self: %s",
+                             user_source.string(),
+                             strerror(errno)));
+      }
     } else {
-        if (TEMP_FAILURE_RETRY(mount(storageSource.string(), "/storage", nullptr,
-                                     MS_BIND | MS_REC | MS_SLAVE, nullptr)) == -1) {
-            fail_fn(CREATE_ERROR("Failed to mount %s to /storage: %s",
-                                 storageSource.string(),
-                                 strerror(errno)));
-        }
+      if (package_name.empty() || sandbox_id.empty()) {
+        return;
+      }
 
-        // Mount user-specific symlink helper into place
-        userid_t user_id = multiuser_get_user_id(uid);
-        const String8 userSource(String8::format("/mnt/user/%d", user_id));
-        if (fs_prepare_dir(userSource.string(), 0751, 0, 0) == -1) {
-          fail_fn(CREATE_ERROR("fs_prepare_dir failed on %s",
-                               userSource.string()));
-        }
+      userid_t user_id = multiuser_get_user_id(uid);
+      CreatePkgSandboxTarget(user_id, fail_fn);
 
-        if (TEMP_FAILURE_RETRY(mount(userSource.string(), "/storage/self",
-                               nullptr, MS_BIND, nullptr)) == -1) {
-          fail_fn(CREATE_ERROR("Failed to mount %s to /storage/self: %s",
-                               userSource.string(), strerror(errno)));
-        }
+      std::string pkg_sandbox_dir = StringPrintf("/mnt/user/%d/package", user_id);
+      if (TEMP_FAILURE_RETRY(mount(pkg_sandbox_dir.c_str(), "/storage",
+                                   nullptr, MS_BIND | MS_REC | MS_SLAVE, nullptr)) == -1) {
+        fail_fn(CREATE_ERROR("Failed to mount %s to /storage: %s",
+                             pkg_sandbox_dir.c_str(), strerror(errno)));
+      }
+
+      HandleMountModeInstaller(mount_mode, user_id, sandbox_id, fail_fn);
+
+      PreparePkgSpecificDirs(packages_for_uid,
+          mount_mode == MOUNT_EXTERNAL_INSTALLER, sandbox_id, user_id, uid, fail_fn);
     }
+  } else {
+    if (TEMP_FAILURE_RETRY(mount(storage_source.string(), "/storage", nullptr,
+                                 MS_BIND | MS_REC | MS_SLAVE, nullptr)) == -1) {
+      fail_fn(CREATE_ERROR("Failed to mount %s to /storage: %s",
+                           storage_source.string(),
+                           strerror(errno)));
+    }
+
+    // Mount user-specific symlink helper into place
+    userid_t user_id = multiuser_get_user_id(uid);
+    const String8 user_source(String8::format("/mnt/user/%d", user_id));
+    if (fs_prepare_dir(user_source.string(), 0751, 0, 0) == -1) {
+      fail_fn(CREATE_ERROR("fs_prepare_dir failed on %s",
+                           user_source.string()));
+    }
+
+    if (TEMP_FAILURE_RETRY(mount(user_source.string(), "/storage/self",
+                                 nullptr, MS_BIND, nullptr)) == -1) {
+      fail_fn(CREATE_ERROR("Failed to mount %s to /storage/self: %s",
+                           user_source.string(), strerror(errno)));
+    }
+  }
 }
 
 static bool NeedsNoRandomizeWorkaround() {
@@ -1095,6 +1190,14 @@ static void UnblockSignal(int signum, fail_fn_t fail_fn) {
   }
 }
 
+static void ClearBlastulaTable() {
+  for (BlastulaTableEntry& entry : gBlastulaTable) {
+    entry.Clear();
+  }
+
+  gBlastulaPoolCount = 0;
+}
+
 // Utility routine to fork a process from the zygote.
 static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
                         const std::vector<int>& fds_to_close,
@@ -1137,12 +1240,17 @@ static pid_t ForkCommon(JNIEnv* env, bool is_system_server,
     // Clean up any descriptors which must be closed immediately
     DetachDescriptors(env, fds_to_close, fail_fn);
 
+    // Invalidate the entries in the blastula table.
+    ClearBlastulaTable();
+
     // Re-open all remaining open file descriptors so that they aren't shared
     // with the zygote across a fork.
     gOpenFdTable->ReopenOrDetach(fail_fn);
 
     // Turn fdsan back on.
     android_fdsan_set_error_level(fdsan_error_level);
+  } else {
+    ALOGD("Forked child process %d", pid);
   }
 
   // We blocked SIGCHLD prior to a fork, we unblock it here.
@@ -1160,7 +1268,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
                              bool is_child_zygote, jstring managed_instruction_set,
                              jstring managed_app_data_dir, jstring managed_package_name,
                              jobjectArray managed_pacakges_for_uid,
-                             jobjectArray managed_visible_vol_ids, jstring managed_sandbox_id) {
+                             jstring managed_sandbox_id) {
   const char* process_name = is_system_server ? "system_server" : "zygote";
   auto fail_fn = std::bind(ZygoteFailure, env, process_name, managed_nice_name, _1);
   auto extract_fn = std::bind(ExtractJString, env, process_name, managed_nice_name, _1);
@@ -1208,12 +1316,8 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
       ExtractJStringArray(env, process_name, managed_nice_name, managed_pacakges_for_uid).
       value_or(std::vector<std::string>());
 
-  std::vector<std::string> visible_vol_ids =
-      ExtractJStringArray(env, process_name, managed_nice_name, managed_visible_vol_ids).
-      value_or(std::vector<std::string>());
-
   MountEmulatedStorage(uid, mount_external, use_native_bridge, package_name.value(),
-                       packages_for_uid, visible_vol_ids, sandbox_id.value_or(""), fail_fn);
+                       packages_for_uid, sandbox_id.value_or(""), fail_fn);
 
   // If this zygote isn't root, it won't be able to create a process group,
   // since the directory is owned by root.
@@ -1296,6 +1400,9 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
   SetCapabilities(permitted_capabilities, effective_capabilities, permitted_capabilities, fail_fn);
 
   SetSchedulerPolicy(fail_fn);
+
+  __android_log_close();
+  stats_log_close();
 
   const char* se_info_ptr = se_info.has_value() ? se_info.value().c_str() : nullptr;
   const char* nice_name_ptr = nice_name.has_value() ? nice_name.value().c_str() : nullptr;
@@ -1393,8 +1500,8 @@ static jlong CalculateCapabilities(JNIEnv* env, jint uid, jint gid, jintArray gi
       RuntimeAbort(env, __LINE__, "Bad gids array");
     }
 
-    for (int gid_index = gids_num; --gids_num >= 0;) {
-      if (native_gid_proxy[gid_index] == AID_WAKELOCK) {
+    for (int gids_index = 0; gids_index < gids_num; ++gids_index) {
+      if (native_gid_proxy[gids_index] == AID_WAKELOCK) {
         gid_wakelock_found = true;
         break;
       }
@@ -1513,7 +1620,7 @@ static jint com_android_internal_os_Zygote_nativeForkAndSpecialize(
         jint mount_external, jstring se_info, jstring nice_name,
         jintArray managed_fds_to_close, jintArray managed_fds_to_ignore, jboolean is_child_zygote,
         jstring instruction_set, jstring app_data_dir, jstring package_name,
-        jobjectArray packages_for_uid, jobjectArray visible_vol_ids, jstring sandbox_id) {
+        jobjectArray packages_for_uid, jstring sandbox_id) {
     jlong capabilities = CalculateCapabilities(env, uid, gid, gids, is_child_zygote);
 
     if (UNLIKELY(managed_fds_to_close == nullptr)) {
@@ -1545,7 +1652,7 @@ static jint com_android_internal_os_Zygote_nativeForkAndSpecialize(
                        capabilities, capabilities,
                        mount_external, se_info, nice_name, false,
                        is_child_zygote == JNI_TRUE, instruction_set, app_data_dir,
-                       package_name, packages_for_uid, visible_vol_ids, sandbox_id);
+                       package_name, packages_for_uid, sandbox_id);
     }
     return pid;
 }
@@ -1571,7 +1678,7 @@ static jint com_android_internal_os_Zygote_nativeForkSystemServer(
       SpecializeCommon(env, uid, gid, gids, runtime_flags, rlimits,
                        permitted_capabilities, effective_capabilities,
                        MOUNT_EXTERNAL_DEFAULT, nullptr, nullptr, true,
-                       false, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+                       false, nullptr, nullptr, nullptr, nullptr, nullptr);
   } else if (pid > 0) {
       // The zygote process checks whether the child process has died or not.
       ALOGI("System server process %d has been created", pid);
@@ -1725,7 +1832,7 @@ static void com_android_internal_os_Zygote_nativeSpecializeBlastula(
     jint runtime_flags, jobjectArray rlimits,
     jint mount_external, jstring se_info, jstring nice_name,
     jboolean is_child_zygote, jstring instruction_set, jstring app_data_dir,
-    jstring package_name, jobjectArray packages_for_uid, jobjectArray visible_vol_ids,
+    jstring package_name, jobjectArray packages_for_uid,
     jstring sandbox_id) {
   jlong capabilities = CalculateCapabilities(env, uid, gid, gids, is_child_zygote);
 
@@ -1733,7 +1840,7 @@ static void com_android_internal_os_Zygote_nativeSpecializeBlastula(
                    capabilities, capabilities,
                    mount_external, se_info, nice_name, false,
                    is_child_zygote == JNI_TRUE, instruction_set, app_data_dir,
-                   package_name, packages_for_uid, visible_vol_ids, sandbox_id);
+                   package_name, packages_for_uid, sandbox_id);
 }
 
 /**
@@ -1820,11 +1927,32 @@ static jint com_android_internal_os_Zygote_nativeGetBlastulaPoolCount(JNIEnv* en
   return gBlastulaPoolCount;
 }
 
+/**
+ * Kills all processes currently in the blastula pool.
+ *
+ * @param env  Managed runtime environment
+ * @return The number of blastulas currently in the blastula pool
+ */
+static void com_android_internal_os_Zygote_nativeEmptyBlastulaPool(JNIEnv* env, jclass) {
+  for (auto& entry : gBlastulaTable) {
+    auto entry_storage = entry.GetValues();
+
+    if (entry_storage.has_value()) {
+      kill(entry_storage.value().pid, SIGKILL);
+      close(entry_storage.value().read_pipe_fd);
+
+      // Avoid a second atomic load by invalidating instead of clearing.
+      entry.Invalidate();
+      --gBlastulaPoolCount;
+    }
+  }
+}
+
 static const JNINativeMethod gMethods[] = {
     { "nativeSecurityInit", "()V",
       (void *) com_android_internal_os_Zygote_nativeSecurityInit },
     { "nativeForkAndSpecialize",
-      "(II[II[[IILjava/lang/String;Ljava/lang/String;[I[IZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)I",
+      "(II[II[[IILjava/lang/String;Ljava/lang/String;[I[IZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)I",
       (void *) com_android_internal_os_Zygote_nativeForkAndSpecialize },
     { "nativeForkSystemServer", "(II[II[[IJJ)I",
       (void *) com_android_internal_os_Zygote_nativeForkSystemServer },
@@ -1839,7 +1967,7 @@ static const JNINativeMethod gMethods[] = {
     { "nativeForkBlastula", "(II[I)I",
       (void *) com_android_internal_os_Zygote_nativeForkBlastula },
     { "nativeSpecializeBlastula",
-      "(II[II[[IILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)V",
+      "(II[II[[IILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)V",
       (void *) com_android_internal_os_Zygote_nativeSpecializeBlastula },
     { "nativeGetSocketFDs", "(Z)V",
       (void *) com_android_internal_os_Zygote_nativeGetSocketFDs },
@@ -1850,7 +1978,9 @@ static const JNINativeMethod gMethods[] = {
     { "nativeGetBlastulaPoolEventFD", "()I",
       (void *) com_android_internal_os_Zygote_nativeGetBlastulaPoolEventFD },
     { "nativeGetBlastulaPoolCount", "()I",
-      (void *) com_android_internal_os_Zygote_nativeGetBlastulaPoolCount }
+      (void *) com_android_internal_os_Zygote_nativeGetBlastulaPoolCount },
+    { "nativeEmptyBlastulaPool", "()V",
+      (void *) com_android_internal_os_Zygote_nativeEmptyBlastulaPool }
 };
 
 int register_com_android_internal_os_Zygote(JNIEnv* env) {

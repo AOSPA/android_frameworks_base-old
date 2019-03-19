@@ -17,6 +17,7 @@
 package com.android.server;
 
 import static android.net.ConnectivityManager.CONNECTIVITY_ACTION;
+import static android.net.ConnectivityManager.NETID_UNSET;
 import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OFF;
 import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OPPORTUNISTIC;
 import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME;
@@ -123,7 +124,7 @@ import android.net.NetworkMisc;
 import android.net.NetworkParcelable;
 import android.net.NetworkRequest;
 import android.net.NetworkSpecifier;
-import android.net.NetworkStack;
+import android.net.NetworkStackClient;
 import android.net.NetworkUtils;
 import android.net.ProxyInfo;
 import android.net.RouteInfo;
@@ -153,6 +154,7 @@ import android.test.mock.MockContentResolver;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.SparseArray;
 
 import com.android.internal.net.VpnConfig;
 import com.android.internal.util.ArrayUtils;
@@ -245,7 +247,7 @@ public class ConnectivityServiceTest {
     @Mock INetworkStatsService mStatsService;
     @Mock INetworkPolicyManager mNpm;
     @Mock INetd mMockNetd;
-    @Mock NetworkStack mNetworkStack;
+    @Mock NetworkStackClient mNetworkStack;
 
     private ArgumentCaptor<String[]> mStringArrayCaptor = ArgumentCaptor.forClass(String[].class);
 
@@ -554,7 +556,7 @@ public class ConnectivityServiceTest {
 
                 if (mNmValidationRedirectUrl != null) {
                     mNmCallbacks.showProvisioningNotification(
-                            "test_provisioning_notif_action");
+                            "test_provisioning_notif_action", "com.android.test.package");
                     mNmProvNotificationRequested = true;
                 }
             } catch (RemoteException e) {
@@ -747,6 +749,10 @@ public class ConnectivityServiceTest {
         // mExpectations is non-empty.
         private boolean mExpectingAdditions;
 
+        // Used to collect the networks requests managed by this factory. This is a duplicate of
+        // the internal information stored in the NetworkFactory (which is private).
+        private SparseArray<NetworkRequest> mNetworkRequests = new SparseArray<>();
+
         public MockNetworkFactory(Looper looper, Context context, String logTag,
                 NetworkCapabilities filter) {
             super(looper, context, logTag, filter);
@@ -799,6 +805,7 @@ public class ConnectivityServiceTest {
                 }
 
                 // Add the request.
+                mNetworkRequests.put(request.requestId, request);
                 super.handleAddRequest(request, score, factorySerialNumber);
                 mExpectations.notify();
             }
@@ -816,9 +823,15 @@ public class ConnectivityServiceTest {
                 }
 
                 // Remove the request.
+                mNetworkRequests.remove(request.requestId);
                 super.handleRemoveRequest(request);
                 mExpectations.notify();
             }
+        }
+
+        // Trigger releasing the request as unfulfillable
+        public void triggerUnfulfillable(NetworkRequest r) {
+            super.releaseRequestAsUnfulfillableByAnyFactory(r);
         }
 
         private void assertNoExpectations() {
@@ -860,9 +873,11 @@ public class ConnectivityServiceTest {
             assertEquals(msg, 0, count);
         }
 
-        public void waitForNetworkRequests(final int count) throws InterruptedException {
+        public SparseArray<NetworkRequest> waitForNetworkRequests(final int count)
+                throws InterruptedException {
             waitForRequests();
             assertEquals(count, getMyRequestCount());
+            return mNetworkRequests;
         }
     }
 
@@ -901,11 +916,14 @@ public class ConnectivityServiceTest {
 
         public void setUids(Set<UidRange> uids) {
             mNetworkCapabilities.setUids(uids);
-            updateCapabilities();
+            updateCapabilities(null /* defaultNetwork */);
         }
 
         @Override
         public int getNetId() {
+            if (mMockNetworkAgent == null) {
+                return NETID_UNSET;
+            }
             return mMockNetworkAgent.getNetwork().netId;
         }
 
@@ -927,12 +945,13 @@ public class ConnectivityServiceTest {
         }
 
         @Override
-        public void updateCapabilities() {
-            if (!mConnected) return;
-            super.updateCapabilities();
-            // Because super.updateCapabilities will update the capabilities of the agent but not
-            // the mock agent, the mock agent needs to know about them.
+        public NetworkCapabilities updateCapabilities(Network defaultNetwork) {
+            if (!mConnected) return null;
+            super.updateCapabilities(defaultNetwork);
+            // Because super.updateCapabilities will update the capabilities of the agent but
+            // not the mock agent, the mock agent needs to know about them.
             copyCapabilitiesToNetworkAgent();
+            return new NetworkCapabilities(mNetworkCapabilities);
         }
 
         private void copyCapabilitiesToNetworkAgent() {
@@ -1074,6 +1093,11 @@ public class ConnectivityServiceTest {
 
         public WrappedMultinetworkPolicyTracker getMultinetworkPolicyTracker() {
             return (WrappedMultinetworkPolicyTracker) mMultinetworkPolicyTracker;
+        }
+
+        @Override
+        protected NetworkStackClient getNetworkStack() {
+            return mNetworkStack;
         }
 
         @Override
@@ -1802,6 +1826,12 @@ public class ConnectivityServiceTest {
             CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent);
             assertTrue("Received capabilities don't match expectations : " + cbi.arg,
                     fn.test((NetworkCapabilities) cbi.arg));
+        }
+
+        void expectLinkPropertiesLike(Predicate<LinkProperties> fn, MockNetworkAgent agent) {
+            CallbackInfo cbi = expectCallback(CallbackState.LINK_PROPERTIES, agent);
+            assertTrue("Received LinkProperties don't match expectations : " + cbi.arg,
+                    fn.test((LinkProperties) cbi.arg));
         }
 
         void expectBlockedStatusCallback(boolean expectBlocked, MockNetworkAgent agent) {
@@ -3523,6 +3553,55 @@ public class ConnectivityServiceTest {
         networkCallback.assertNoCallback();
     }
 
+    /**
+     * Validate the callback flow for a factory releasing a request as unfulfillable.
+     */
+    @Test
+    public void testUnfulfillableNetworkRequest() throws Exception {
+        NetworkRequest nr = new NetworkRequest.Builder().addTransportType(
+                NetworkCapabilities.TRANSPORT_WIFI).build();
+        final TestNetworkCallback networkCallback = new TestNetworkCallback();
+
+        final HandlerThread handlerThread = new HandlerThread("testUnfulfillableNetworkRequest");
+        handlerThread.start();
+        NetworkCapabilities filter = new NetworkCapabilities()
+                .addTransportType(TRANSPORT_WIFI)
+                .addCapability(NET_CAPABILITY_INTERNET);
+        final MockNetworkFactory testFactory = new MockNetworkFactory(handlerThread.getLooper(),
+                mServiceContext, "testFactory", filter);
+        testFactory.setScoreFilter(40);
+
+        // Register the factory and expect it to receive the default request.
+        testFactory.expectAddRequestsWithScores(0);
+        testFactory.register();
+        SparseArray<NetworkRequest> requests = testFactory.waitForNetworkRequests(1);
+
+        assertEquals(1, requests.size()); // have 1 request at this point
+        int origRequestId = requests.valueAt(0).requestId;
+
+        // Now file the test request and expect it.
+        testFactory.expectAddRequestsWithScores(0);
+        mCm.requestNetwork(nr, networkCallback);
+        requests = testFactory.waitForNetworkRequests(2); // have 2 requests at this point
+
+        int newRequestId = 0;
+        for (int i = 0; i < requests.size(); ++i) {
+            if (requests.valueAt(i).requestId != origRequestId) {
+                newRequestId = requests.valueAt(i).requestId;
+                break;
+            }
+        }
+
+        // Simulate the factory releasing the request as unfulfillable and expect onUnavailable!
+        testFactory.expectRemoveRequests(1);
+        testFactory.triggerUnfulfillable(requests.get(newRequestId));
+        networkCallback.expectCallback(CallbackState.UNAVAILABLE, null);
+        testFactory.waitForRequests();
+
+        testFactory.unregister();
+        handlerThread.quit();
+    }
+
     private static class TestKeepaliveCallback extends PacketKeepaliveCallback {
 
         public static enum CallbackType { ON_STARTED, ON_STOPPED, ON_ERROR };
@@ -3817,11 +3896,14 @@ public class ConnectivityServiceTest {
     }
 
     @Test
-    public void testNattSocketKeepalives() throws Exception {
+    public void testNattSocketKeepalives_SingleThreadExecutor() throws Exception {
         final ExecutorService executorSingleThread = Executors.newSingleThreadExecutor();
         doTestNattSocketKeepalivesWithExecutor(executorSingleThread);
         executorSingleThread.shutdown();
+    }
 
+    @Test
+    public void testNattSocketKeepalives_InlineExecutor() throws Exception {
         final Executor executorInline = (Runnable r) -> r.run();
         doTestNattSocketKeepalivesWithExecutor(executorInline);
     }
@@ -3963,6 +4045,7 @@ public class ConnectivityServiceTest {
         testSocket2.close();
 
         mWiFiNetworkAgent.disconnect();
+        waitFor(mWiFiNetworkAgent.getDisconnectedCV());
     }
 
     @Test
@@ -4686,6 +4769,7 @@ public class ConnectivityServiceTest {
 
         vpnNetworkAgent.connect(false);
         mMockVpn.connect();
+        mMockVpn.setUnderlyingNetworks(new Network[0]);
 
         genericNetworkCallback.expectAvailableCallbacksUnvalidated(vpnNetworkAgent);
         genericNotVpnNetworkCallback.assertNoCallback();
@@ -4718,6 +4802,7 @@ public class ConnectivityServiceTest {
 
         ranges.add(new UidRange(uid, uid));
         mMockVpn.setUids(ranges);
+        vpnNetworkAgent.setUids(ranges);
 
         genericNetworkCallback.expectAvailableCallbacksValidated(vpnNetworkAgent);
         genericNotVpnNetworkCallback.assertNoCallback();
@@ -4751,12 +4836,11 @@ public class ConnectivityServiceTest {
     }
 
     @Test
-    public void testVpnWithAndWithoutInternet() {
+    public void testVpnWithoutInternet() {
         final int uid = Process.myUid();
 
         final TestNetworkCallback defaultCallback = new TestNetworkCallback();
         mCm.registerDefaultNetworkCallback(defaultCallback);
-        defaultCallback.assertNoCallback();
 
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
@@ -4778,25 +4862,36 @@ public class ConnectivityServiceTest {
         vpnNetworkAgent.disconnect();
         defaultCallback.assertNoCallback();
 
-        vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
+        mCm.unregisterNetworkCallback(defaultCallback);
+    }
+
+    @Test
+    public void testVpnWithInternet() {
+        final int uid = Process.myUid();
+
+        final TestNetworkCallback defaultCallback = new TestNetworkCallback();
+        mCm.registerDefaultNetworkCallback(defaultCallback);
+
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        mWiFiNetworkAgent.connect(true);
+
+        defaultCallback.expectAvailableThenValidatedCallbacks(mWiFiNetworkAgent);
+        assertEquals(defaultCallback.getLastAvailableNetwork(), mCm.getActiveNetwork());
+
+        MockNetworkAgent vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
+        final ArraySet<UidRange> ranges = new ArraySet<>();
+        ranges.add(new UidRange(uid, uid));
         mMockVpn.setNetworkAgent(vpnNetworkAgent);
         mMockVpn.setUids(ranges);
         vpnNetworkAgent.connect(true /* validated */, true /* hasInternet */);
         mMockVpn.connect();
+
         defaultCallback.expectAvailableThenValidatedCallbacks(vpnNetworkAgent);
         assertEquals(defaultCallback.getLastAvailableNetwork(), mCm.getActiveNetwork());
 
         vpnNetworkAgent.disconnect();
         defaultCallback.expectCallback(CallbackState.LOST, vpnNetworkAgent);
         defaultCallback.expectAvailableCallbacksValidated(mWiFiNetworkAgent);
-
-        vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
-        ranges.clear();
-        mMockVpn.setNetworkAgent(vpnNetworkAgent);
-        mMockVpn.setUids(ranges);
-        vpnNetworkAgent.connect(false /* validated */, true /* hasInternet */);
-        mMockVpn.connect();
-        defaultCallback.assertNoCallback();
 
         mCm.unregisterNetworkCallback(defaultCallback);
     }
@@ -4891,6 +4986,70 @@ public class ConnectivityServiceTest {
 
         // Disconnect wifi too. No underlying networks means this is now metered.
         mWiFiNetworkAgent.disconnect();
+        vpnNetworkCallback.expectCapabilitiesLike((caps) -> caps.hasTransport(TRANSPORT_VPN)
+                && !caps.hasTransport(TRANSPORT_CELLULAR) && !caps.hasTransport(TRANSPORT_WIFI)
+                && !caps.hasCapability(NET_CAPABILITY_NOT_METERED),
+                vpnNetworkAgent);
+
+        mMockVpn.disconnect();
+    }
+
+    @Test
+    public void testNullUnderlyingNetworks() {
+        final int uid = Process.myUid();
+
+        final TestNetworkCallback vpnNetworkCallback = new TestNetworkCallback();
+        final NetworkRequest vpnNetworkRequest = new NetworkRequest.Builder()
+                .removeCapability(NET_CAPABILITY_NOT_VPN)
+                .addTransportType(TRANSPORT_VPN)
+                .build();
+        NetworkCapabilities nc;
+        mCm.registerNetworkCallback(vpnNetworkRequest, vpnNetworkCallback);
+        vpnNetworkCallback.assertNoCallback();
+
+        final MockNetworkAgent vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
+        final ArraySet<UidRange> ranges = new ArraySet<>();
+        ranges.add(new UidRange(uid, uid));
+        mMockVpn.setNetworkAgent(vpnNetworkAgent);
+        mMockVpn.connect();
+        mMockVpn.setUids(ranges);
+        vpnNetworkAgent.connect(true /* validated */, false /* hasInternet */);
+
+        vpnNetworkCallback.expectAvailableThenValidatedCallbacks(vpnNetworkAgent);
+        nc = mCm.getNetworkCapabilities(vpnNetworkAgent.getNetwork());
+        assertTrue(nc.hasTransport(TRANSPORT_VPN));
+        assertFalse(nc.hasTransport(TRANSPORT_CELLULAR));
+        assertFalse(nc.hasTransport(TRANSPORT_WIFI));
+        // By default, VPN is set to track default network (i.e. its underlying networks is null).
+        // In case of no default network, VPN is considered metered.
+        assertFalse(nc.hasCapability(NET_CAPABILITY_NOT_METERED));
+
+        // Connect to Cell; Cell is the default network.
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        mCellNetworkAgent.connect(true);
+
+        vpnNetworkCallback.expectCapabilitiesLike((caps) -> caps.hasTransport(TRANSPORT_VPN)
+                && caps.hasTransport(TRANSPORT_CELLULAR) && !caps.hasTransport(TRANSPORT_WIFI)
+                && !caps.hasCapability(NET_CAPABILITY_NOT_METERED),
+                vpnNetworkAgent);
+
+        // Connect to WiFi; WiFi is the new default.
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        mWiFiNetworkAgent.addCapability(NET_CAPABILITY_NOT_METERED);
+        mWiFiNetworkAgent.connect(true);
+
+        vpnNetworkCallback.expectCapabilitiesLike((caps) -> caps.hasTransport(TRANSPORT_VPN)
+                && !caps.hasTransport(TRANSPORT_CELLULAR) && caps.hasTransport(TRANSPORT_WIFI)
+                && caps.hasCapability(NET_CAPABILITY_NOT_METERED),
+                vpnNetworkAgent);
+
+        // Disconnect Cell. The default network did not change, so there shouldn't be any changes in
+        // the capabilities.
+        mCellNetworkAgent.disconnect();
+
+        // Disconnect wifi too. Now we have no default network.
+        mWiFiNetworkAgent.disconnect();
+
         vpnNetworkCallback.expectCapabilitiesLike((caps) -> caps.hasTransport(TRANSPORT_VPN)
                 && !caps.hasTransport(TRANSPORT_CELLULAR) && !caps.hasTransport(TRANSPORT_WIFI)
                 && !caps.hasCapability(NET_CAPABILITY_NOT_METERED),
@@ -5023,6 +5182,9 @@ public class ConnectivityServiceTest {
     public void testStackedLinkProperties() throws UnknownHostException, RemoteException {
         final LinkAddress myIpv4 = new LinkAddress("1.2.3.4/24");
         final LinkAddress myIpv6 = new LinkAddress("2001:db8:1::1/64");
+        final String kNat64PrefixString = "2001:db8:64:64:64:64::";
+        final IpPrefix kNat64Prefix = new IpPrefix(InetAddress.getByName(kNat64PrefixString), 96);
+
         final NetworkRequest networkRequest = new NetworkRequest.Builder()
                 .addTransportType(TRANSPORT_CELLULAR)
                 .addCapability(NET_CAPABILITY_INTERNET)
@@ -5030,8 +5192,9 @@ public class ConnectivityServiceTest {
         final TestNetworkCallback networkCallback = new TestNetworkCallback();
         mCm.registerNetworkCallback(networkRequest, networkCallback);
 
-        // Prepare ipv6 only link properties and connect.
+        // Prepare ipv6 only link properties.
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        final int cellNetId = mCellNetworkAgent.getNetwork().netId;
         final LinkProperties cellLp = new LinkProperties();
         cellLp.setInterfaceName(MOBILE_IFNAME);
         cellLp.addLinkAddress(myIpv6);
@@ -5041,15 +5204,44 @@ public class ConnectivityServiceTest {
         when(mNetworkManagementService.getInterfaceConfig(CLAT_PREFIX + MOBILE_IFNAME))
                 .thenReturn(getClatInterfaceConfig(myIpv4));
 
-        // Connect with ipv6 link properties, then expect clat setup ipv4 and update link
-        // properties properly.
+        // Connect with ipv6 link properties. Expect prefix discovery to be started.
         mCellNetworkAgent.sendLinkProperties(cellLp);
         mCellNetworkAgent.connect(true);
         networkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
-        verify(mMockNetd, times(1)).clatdStart(MOBILE_IFNAME);
-        Nat464Xlat clat = mService.getNat464Xlat(mCellNetworkAgent);
+        verify(mMockNetd, times(1)).resolverStartPrefix64Discovery(cellNetId);
 
-        // Clat iface up, expect stack link updated.
+        // Switching default network updates TCP buffer sizes.
+        verifyTcpBufferSizeChange(ConnectivityService.DEFAULT_TCP_BUFFER_SIZES);
+
+        // Add an IPv4 address. Expect prefix discovery to be stopped. Netd doesn't tell us that
+        // the NAT64 prefix was removed because one was never discovered.
+        cellLp.addLinkAddress(myIpv4);
+        mCellNetworkAgent.sendLinkProperties(cellLp);
+        networkCallback.expectCallback(CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
+        verify(mMockNetd, times(1)).resolverStopPrefix64Discovery(cellNetId);
+
+        verifyNoMoreInteractions(mMockNetd);
+        reset(mMockNetd);
+
+        // Remove IPv4 address. Expect prefix discovery to be started again.
+        cellLp.removeLinkAddress(myIpv4);
+        cellLp.removeRoute(new RouteInfo(myIpv4, null, MOBILE_IFNAME));
+        mCellNetworkAgent.sendLinkProperties(cellLp);
+        networkCallback.expectCallback(CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
+        verify(mMockNetd, times(1)).resolverStartPrefix64Discovery(cellNetId);
+
+        // When NAT64 prefix discovery succeeds, LinkProperties are updated and clatd is started.
+        Nat464Xlat clat = mService.getNat464Xlat(mCellNetworkAgent);
+        assertNull(mCm.getLinkProperties(mCellNetworkAgent.getNetwork()).getNat64Prefix());
+        mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, true /* added */,
+                kNat64PrefixString, 96);
+        LinkProperties lpBeforeClat = (LinkProperties) networkCallback.expectCallback(
+                CallbackState.LINK_PROPERTIES, mCellNetworkAgent).arg;
+        assertEquals(0, lpBeforeClat.getStackedLinks().size());
+        assertEquals(kNat64Prefix, lpBeforeClat.getNat64Prefix());
+        verify(mMockNetd, times(1)).clatdStart(MOBILE_IFNAME, kNat64Prefix.toString());
+
+        // Clat iface comes up. Expect stacked link to be added.
         clat.interfaceLinkStateChanged(CLAT_PREFIX + MOBILE_IFNAME, true);
         networkCallback.expectCallback(CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
         List<LinkProperties> stackedLps = mCm.getLinkProperties(mCellNetworkAgent.getNetwork())
@@ -5066,20 +5258,66 @@ public class ConnectivityServiceTest {
         assertNotEquals(stackedLpsAfterChange, Collections.EMPTY_LIST);
         assertEquals(makeClatLinkProperties(myIpv4), stackedLpsAfterChange.get(0));
 
-        // Add ipv4 address, expect stacked linkproperties be cleaned up
+        // Add ipv4 address, expect that clatd and prefix discovery are stopped and stacked
+        // linkproperties are cleaned up.
         cellLp.addLinkAddress(myIpv4);
         cellLp.addRoute(new RouteInfo(myIpv4, null, MOBILE_IFNAME));
         mCellNetworkAgent.sendLinkProperties(cellLp);
         networkCallback.expectCallback(CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
         verify(mMockNetd, times(1)).clatdStop(MOBILE_IFNAME);
+        verify(mMockNetd, times(1)).resolverStopPrefix64Discovery(cellNetId);
 
-        // Clat iface removed, expect linkproperties revert to original one
-        clat.interfaceRemoved(CLAT_PREFIX + MOBILE_IFNAME);
+        // As soon as stop is called, the linkproperties lose the stacked interface.
         networkCallback.expectCallback(CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
         LinkProperties actualLpAfterIpv4 = mCm.getLinkProperties(mCellNetworkAgent.getNetwork());
-        assertEquals(cellLp, actualLpAfterIpv4);
+        LinkProperties expected = new LinkProperties(cellLp);
+        expected.setNat64Prefix(kNat64Prefix);
+        assertEquals(expected, actualLpAfterIpv4);
+        assertEquals(0, actualLpAfterIpv4.getStackedLinks().size());
 
-        // Clean up
+        // The interface removed callback happens but has no effect after stop is called.
+        clat.interfaceRemoved(CLAT_PREFIX + MOBILE_IFNAME);
+        networkCallback.assertNoCallback();
+
+        verifyNoMoreInteractions(mMockNetd);
+        reset(mMockNetd);
+
+        // Stopping prefix discovery causes netd to tell us that the NAT64 prefix is gone.
+        mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, false /* added */,
+                kNat64PrefixString, 96);
+        networkCallback.expectLinkPropertiesLike((lp) -> lp.getNat64Prefix() == null,
+                mCellNetworkAgent);
+
+        // Remove IPv4 address and expect prefix discovery and clatd to be started again.
+        cellLp.removeLinkAddress(myIpv4);
+        cellLp.removeRoute(new RouteInfo(myIpv4, null, MOBILE_IFNAME));
+        cellLp.removeDnsServer(InetAddress.getByName("8.8.8.8"));
+        mCellNetworkAgent.sendLinkProperties(cellLp);
+        networkCallback.expectCallback(CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
+        verify(mMockNetd, times(1)).resolverStartPrefix64Discovery(cellNetId);
+        mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, true /* added */,
+                kNat64PrefixString, 96);
+        networkCallback.expectCallback(CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
+        verify(mMockNetd, times(1)).clatdStart(MOBILE_IFNAME, kNat64Prefix.toString());
+
+
+        // Clat iface comes up. Expect stacked link to be added.
+        clat.interfaceLinkStateChanged(CLAT_PREFIX + MOBILE_IFNAME, true);
+        networkCallback.expectLinkPropertiesLike(
+                (lp) -> lp.getStackedLinks().size() == 1 && lp.getNat64Prefix() != null,
+                mCellNetworkAgent);
+
+        // NAT64 prefix is removed. Expect that clat is stopped.
+        mService.mNetdEventCallback.onNat64PrefixEvent(cellNetId, false /* added */,
+                kNat64PrefixString, 96);
+        networkCallback.expectLinkPropertiesLike(
+                (lp) -> lp.getStackedLinks().size() == 0 && lp.getNat64Prefix() == null,
+                mCellNetworkAgent);
+        verify(mMockNetd, times(1)).clatdStop(MOBILE_IFNAME);
+        networkCallback.expectLinkPropertiesLike((lp) -> lp.getStackedLinks().size() == 0,
+                mCellNetworkAgent);
+
+        // Clean up.
         mCellNetworkAgent.disconnect();
         networkCallback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
         networkCallback.assertNoCallback();
@@ -5160,30 +5398,34 @@ public class ConnectivityServiceTest {
         mCm.unregisterNetworkCallback(networkCallback);
     }
 
-    private static final String TEST_TCP_BUFFER_SIZES = "1,2,3,4,5,6";
-
-    private void verifyTcpBufferSizeChange(String tcpBufferSizes) throws Exception {
+    private void verifyTcpBufferSizeChange(String tcpBufferSizes) {
         String[] values = tcpBufferSizes.split(",");
         String rmemValues = String.join(" ", values[0], values[1], values[2]);
         String wmemValues = String.join(" ", values[3], values[4], values[5]);
         waitForIdle();
-        verify(mMockNetd, atLeastOnce()).setTcpRWmemorySize(rmemValues, wmemValues);
+        try {
+            verify(mMockNetd, atLeastOnce()).setTcpRWmemorySize(rmemValues, wmemValues);
+        } catch (RemoteException e) {
+            fail("mMockNetd should never throw RemoteException");
+        }
         reset(mMockNetd);
     }
 
     @Test
-    public void testTcpBufferReset() throws Exception {
+    public void testTcpBufferReset() {
+        final String testTcpBufferSizes = "1,2,3,4,5,6";
+
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         reset(mMockNetd);
-        // Simple connection should have updated tcp buffer size.
+        // Switching default network updates TCP buffer sizes.
         mCellNetworkAgent.connect(false);
         verifyTcpBufferSizeChange(ConnectivityService.DEFAULT_TCP_BUFFER_SIZES);
 
         // Change link Properties should have updated tcp buffer size.
         LinkProperties lp = new LinkProperties();
-        lp.setTcpBufferSizes(TEST_TCP_BUFFER_SIZES);
+        lp.setTcpBufferSizes(testTcpBufferSizes);
         mCellNetworkAgent.sendLinkProperties(lp);
-        verifyTcpBufferSizeChange(TEST_TCP_BUFFER_SIZES);
+        verifyTcpBufferSizeChange(testTcpBufferSizes);
     }
 
     @Test

@@ -46,6 +46,8 @@
         <item><xliff:g id="id">@string/status_bar_cast</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_vpn</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_bluetooth</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_camera</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_microphone</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_location</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_mute</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_volume</xliff:g></item>
@@ -55,8 +57,6 @@
         <item><xliff:g id="id">@string/status_bar_hotspot</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_microphone</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_camera</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
     </string-array>
 
@@ -868,6 +868,9 @@
          to get a smaller screen and opening the lid causes the device to enter the unfolded state
          which means to get a larger screen. -->
     <bool name="config_lidControlsDisplayFold">false</bool>
+
+    <!-- Indicate the display area rect for foldable devices in folded state. -->
+    <string name="config_foldedArea"></string>
 
     <!-- Desk dock behavior -->
 
@@ -1948,12 +1951,18 @@
 
     <!-- The name of the package that will hold the assistant role by default. -->
     <string name="config_defaultAssistant" translatable="false" />
+    <!-- Whether the default assistant settings should be shown. -->
+    <bool name="config_showDefaultAssistant">true</bool>
     <!-- The name of the package that will hold the browser role by default. -->
     <string name="config_defaultBrowser" translatable="false">@string/default_browser</string>
     <!-- The name of the package that will hold the dialer role by default. -->
     <string name="config_defaultDialer" translatable="false">com.android.phone</string>
     <!-- The name of the package that will hold the SMS role by default. -->
     <string name="config_defaultSms" translatable="false">@string/default_sms_application</string>
+    <!-- Whether the default emergency settings should be shown. -->
+    <bool name="config_showDefaultEmergency">false</bool>
+    <!-- Whether the default home settings should be shown. -->
+    <bool name="config_showDefaultHome">true</bool>
     <!-- The name of the package that will hold the music role by default. -->
     <string name="config_defaultMusic" translatable="false">com.android.music</string>
     <!-- The name of the package that will hold the gallery role by default. -->
@@ -2001,11 +2010,6 @@
          The PERSIST mode results in data persisting in the journal beyond the life of
          a transaction, so it interacts poorly with SECURE_DELETE. -->
     <string name="db_default_journal_mode" translatable="false">TRUNCATE</string>
-
-    <!-- Enables compatibility WAL mode.
-         In this mode, only database journal mode will be changed, connection pool
-         size will still be limited to a single connection. -->
-    <bool name="db_compatibility_wal_supported">true</bool>
 
     <!-- Maximum size of the persistent journal file in bytes.
          If the journal file grows to be larger than this amount then SQLite will
@@ -2266,6 +2270,7 @@
 
     <!-- If the sensor that wakes up the lock screen is available or not. -->
     <bool name="config_dozeWakeLockScreenSensorAvailable">false</bool>
+    <integer name="config_dozeWakeLockScreenDebounce">3000</integer>
 
     <!-- Control whether the always on display mode is available. This should only be enabled on
          devices where the display has been tuned to be power efficient in DOZE and/or DOZE_SUSPEND
@@ -2666,11 +2671,6 @@
         <item>com.android.server.notification.CriticalNotificationExtractor</item>
 
     </string-array>
-
-    <!-- Flag indicating that this device does not rotate and will always remain in its default
-         orientation. Activities that desire to run in a non-compatible orientation will be run
-         from an emulated display within the physical display. -->
-    <bool name="config_forceDefaultOrientation">false</bool>
 
     <!-- Default Gravity setting for the system Toast view. Equivalent to: Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM -->
     <integer name="config_toastDefaultGravity">0x00000051</integer>
@@ -3258,7 +3258,7 @@
          skinny aspect ratio that is not expected to be widely used. -->
     <item name="config_pictureInPictureMinAspectRatio" format="float" type="dimen">0.41841004184</item>
 
-    <!-- The minimum aspect ratio (width/height) that is supported for picture-in-picture. Any
+    <!-- The maximum aspect ratio (width/height) that is supported for picture-in-picture. Any
          ratio larger than this is considered to wide and short to be usable. Currently 2.39:1. -->
     <item name="config_pictureInPictureMaxAspectRatio" format="float" type="dimen">2.39</item>
 
@@ -3278,6 +3278,11 @@
              2 - 1 snap target: 1:1
     -->
     <integer name="config_dockedStackDividerSnapMode">0</integer>
+
+    <!-- The maximum aspect ratio (longerSide/shorterSide) that is treated as close-to-square. If
+         config_forceDefaultOrientation is set to true, the rotation on a close-to-square display
+         will be fixed. -->
+    <item name="config_closeToSquareDisplayMaxAspectRatio" format="float" type="dimen">1.333</item>
 
     <!-- List of comma separated package names for which we the system will not show crash, ANR,
          etc. dialogs. -->
@@ -3360,6 +3365,10 @@
     <!-- True if home app should be pinned via Pinner Service -->
     <bool name="config_pinnerHomeApp">false</bool>
 
+    <!-- List of files pinned by the Pinner Service with the apex boot image b/119800099 -->
+    <string-array translatable="false" name="config_apexBootImagePinnerServiceFiles">
+    </string-array>
+
     <!-- Number of days preloaded file cache should be preserved on a device before it can be
          deleted -->
     <integer name="config_keepPreloadsMinDays">7</integer>
@@ -3431,8 +3440,14 @@
     -->
     <string-array translatable="false" name="config_convert_to_emergency_number_map" />
 
-    <!-- An array of packages for which notifications cannot be blocked. -->
-    <string-array translatable="false" name="config_nonBlockableNotificationPackages" />
+    <!-- An array of packages for which notifications cannot be blocked.
+         Should only be used for core device functionality that must not be
+         rendered inoperative for safety reasons, like the phone dialer and
+         SMS handler. -->
+    <string-array translatable="false" name="config_nonBlockableNotificationPackages">
+        <item>com.android.dialer</item>
+        <item>com.android.messaging</item>
+    </string-array>
 
     <!-- An array of packages which can listen for notifications on low ram devices. -->
     <string-array translatable="false" name="config_allowedManagedServicesOnLowRamDevices" />
@@ -3916,4 +3931,43 @@
          The ambient color temperature (in cct) to which we fall back when the ambient brightness
          drops beneath a certain threshold. -->
     <item name="config_displayWhiteBalanceLowLightAmbientColorTemperature" format="float" type="dimen">6500.0</item>
+
+    <!-- See DisplayWhiteBalanceController.
+         A float array containing a list of ambient color temperatures, in Kelvin. This array,
+         together with config_displayWhiteBalanceDisplayColorTemperatures, is used to generate a
+         lookup table used in DisplayWhiteBalanceController. This lookup table is used to map
+         ambient color temperature readings to a target color temperature for the display.
+         This table is optional. If used, this array must,
+         1) Contain at least two entries
+         2) Be the same length as config_displayWhiteBalanceDisplayColorTemperatures. -->
+    <array name="config_displayWhiteBalanceAmbientColorTemperatures">
+    </array>
+
+    <!-- See DisplayWhiteBalanceController.
+         An array containing a list of display color temperatures, in Kelvin. See
+         config_displayWhiteBalanceAmbientColorTemperatures for additional details.
+         The same restrictions apply to this array. -->
+    <array name="config_displayWhiteBalanceDisplayColorTemperatures">
+    </array>
+
+    <!-- All of the paths defined for the batterymeter are defined on a 12x20 canvas, and must
+     be parsable by android.utill.PathParser -->
+    <string name="config_batterymeterPerimeterPath" translatable="false">
+		M3.5,2 v0 H1.33 C0.6,2 0,2.6 0,3.33 V13v5.67 C0,19.4 0.6,20 1.33,20 h9.33 C11.4,20 12,19.4 12,18.67 V13V3.33 C12,2.6 11.4,2 10.67,2 H8.5 V0 H3.5 z M2,18v-7V4h8v9v5H2L2,18z
+    </string>
+
+    <string name="config_batterymeterFillMask" translatable="false">
+        M2,18 v-14 h8 v14 z
+    </string>
+    <string name="config_batterymeterBoltPath" translatable="false">
+        M5,17.5 V12 H3 L7,4.5 V10 h2 L5,17.5 z
+    </string>
+    <string name="config_batterymeterPowersavePath" translatable="false">
+		M9,10l-2,0l0,-2l-2,0l0,2l-2,0l0,2l2,0l0,2l2,0l0,-2l2,0z
+    </string>
+
+    <!-- A dual tone battery meter draws the perimeter path twice - once to define the shape
+     and a second time clipped to the fill level to indicate charge -->
+    <bool name="config_batterymeterDualTone">false</bool>
+
 </resources>

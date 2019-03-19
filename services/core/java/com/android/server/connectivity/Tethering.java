@@ -99,6 +99,7 @@ import android.util.SparseArray;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
+import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.MessageUtils;
@@ -183,6 +184,7 @@ public class Tethering extends BaseNetworkObserver {
     // into a single coherent structure.
     private final HashSet<IpServer> mForwardedDownstreams;
     private final VersionedBroadcastListener mCarrierConfigChange;
+    private final VersionedBroadcastListener mDefaultSubscriptionChange;
     private final TetheringDependencies mDeps;
     private final EntitlementManager mEntitlementMgr;
 
@@ -235,6 +237,15 @@ public class Tethering extends BaseNetworkObserver {
                     mEntitlementMgr.reevaluateSimCardProvisioning();
                 });
 
+        filter = new IntentFilter();
+        filter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
+        mDefaultSubscriptionChange = new VersionedBroadcastListener(
+                "DefaultSubscriptionChangeListener", mContext, smHandler, filter,
+                (Intent ignored) -> {
+                    mLog.log("OBSERVED default data subscription change");
+                    updateConfiguration();
+                    mEntitlementMgr.reevaluateSimCardProvisioning();
+                });
         mStateReceiver = new StateReceiver();
 
         // Load tethering configuration.
@@ -245,6 +256,7 @@ public class Tethering extends BaseNetworkObserver {
 
     private void startStateMachineUpdaters() {
         mCarrierConfigChange.startListening();
+        mDefaultSubscriptionChange.startListening();
 
         final Handler handler = mTetherMasterSM.getHandler();
         IntentFilter filter = new IntentFilter();
@@ -273,7 +285,8 @@ public class Tethering extends BaseNetworkObserver {
 
     // NOTE: This is always invoked on the mLooper thread.
     private void updateConfiguration() {
-        mConfig = new TetheringConfiguration(mContext, mLog);
+        final int subId = mDeps.getDefaultDataSubscriptionId();
+        mConfig = new TetheringConfiguration(mContext, mLog, subId);
         mUpstreamNetworkMonitor.updateMobileRequiresDun(mConfig.isDunRequired);
         mEntitlementMgr.updateConfiguration(mConfig);
     }
@@ -1854,7 +1867,7 @@ public class Tethering extends BaseNetworkObserver {
         final TetherState tetherState = new TetherState(
                 new IpServer(iface, mLooper, interfaceType, mLog, mNMService, mStatsService,
                              makeControlCallback(), mConfig.enableLegacyDhcpServer,
-                             mDeps.getIpServerDependencies(mContext)));
+                             mDeps.getIpServerDependencies()));
         mTetherStates.put(iface, tetherState);
         tetherState.ipServer.start();
     }

@@ -21,8 +21,10 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
+import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.ContentCaptureOptions;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -214,10 +216,10 @@ class ContextImpl extends Context {
     // The name of the split this Context is representing. May be null.
     private @Nullable String mSplitName = null;
 
-    private AutofillClient mAutofillClient = null;
-    private boolean mIsAutofillCompatEnabled;
+    private @Nullable AutofillClient mAutofillClient = null;
+    private @Nullable AutofillOptions mAutofillOptions;
 
-    private boolean mIsContentCaptureSupported = false;
+    private ContentCaptureOptions mContentCaptureOptions = null;
 
     private final Object mSync = new Object();
 
@@ -2101,7 +2103,8 @@ class ContextImpl extends Context {
     }
 
     private static Resources createResources(IBinder activityToken, LoadedApk pi, String splitName,
-            int displayId, Configuration overrideConfig, CompatibilityInfo compatInfo) {
+            int displayId, Configuration overrideConfig, CompatibilityInfo compatInfo,
+            String[] overlayDirs) {
         final String[] splitResDirs;
         final ClassLoader classLoader;
         try {
@@ -2113,7 +2116,7 @@ class ContextImpl extends Context {
         return ResourcesManager.getInstance().getResources(activityToken,
                 pi.getResDir(),
                 splitResDirs,
-                pi.getOverlayDirs(),
+                overlayDirs,
                 pi.getApplicationInfo().sharedLibraryFiles,
                 displayId,
                 overrideConfig,
@@ -2131,9 +2134,11 @@ class ContextImpl extends Context {
                     new UserHandle(UserHandle.getUserId(application.uid)), flags, null, null);
 
             final int displayId = getDisplayId();
-
+            // overlayDirs is retrieved directly from ApplicationInfo since ActivityThread may have
+            // a LoadedApk containing Resources with stale overlays for a remote application.
+            final String[] overlayDirs = application.resourceDirs;
             c.setResources(createResources(mActivityToken, pi, null, displayId, null,
-                    getDisplayAdjustments(displayId).getCompatibilityInfo()));
+                    getDisplayAdjustments(displayId).getCompatibilityInfo(), overlayDirs));
             if (c.mResources != null) {
                 return c;
             }
@@ -2168,7 +2173,7 @@ class ContextImpl extends Context {
             final int displayId = getDisplayId();
 
             c.setResources(createResources(mActivityToken, pi, null, displayId, null,
-                    getDisplayAdjustments(displayId).getCompatibilityInfo()));
+                    getDisplayAdjustments(displayId).getCompatibilityInfo(), pi.getOverlayDirs()));
             if (c.mResources != null) {
                 return c;
             }
@@ -2218,7 +2223,8 @@ class ContextImpl extends Context {
 
         final int displayId = getDisplayId();
         context.setResources(createResources(mActivityToken, mPackageInfo, mSplitName, displayId,
-                overrideConfiguration, getDisplayAdjustments(displayId).getCompatibilityInfo()));
+                overrideConfiguration, getDisplayAdjustments(displayId).getCompatibilityInfo(),
+                mPackageInfo.getOverlayDirs()));
         return context;
     }
 
@@ -2233,7 +2239,8 @@ class ContextImpl extends Context {
 
         final int displayId = display.getDisplayId();
         context.setResources(createResources(mActivityToken, mPackageInfo, mSplitName, displayId,
-                null, getDisplayAdjustments(displayId).getCompatibilityInfo()));
+                null, getDisplayAdjustments(displayId).getCompatibilityInfo(),
+                mPackageInfo.getOverlayDirs()));
         context.mDisplay = display;
         return context;
     }
@@ -2277,8 +2284,8 @@ class ContextImpl extends Context {
         return (mFlags & Context.CONTEXT_IGNORE_SECURITY) != 0;
     }
 
+    @TestApi
     @Override
-    @UnsupportedAppUsage
     public Display getDisplay() {
         if (mDisplay == null) {
             return mResourcesManager.getAdjustedDisplay(Display.DEFAULT_DISPLAY,
@@ -2370,27 +2377,26 @@ class ContextImpl extends Context {
 
     /** @hide */
     @Override
-    public boolean isAutofillCompatibilityEnabled() {
-        return mIsAutofillCompatEnabled;
-    }
-
-    /** @hide */
-    @TestApi
-    @Override
-    public void setAutofillCompatibilityEnabled(boolean autofillCompatEnabled) {
-        mIsAutofillCompatEnabled = autofillCompatEnabled;
+    public AutofillOptions getAutofillOptions() {
+        return mAutofillOptions;
     }
 
     /** @hide */
     @Override
-    public boolean isContentCaptureSupported() {
-        return mIsContentCaptureSupported;
+    public void setAutofillOptions(AutofillOptions options) {
+        mAutofillOptions = options;
     }
 
     /** @hide */
     @Override
-    public void setContentCaptureSupported(boolean supported) {
-        mIsContentCaptureSupported = supported;
+    public ContentCaptureOptions getContentCaptureOptions() {
+        return mContentCaptureOptions;
+    }
+
+    /** @hide */
+    @Override
+    public void setContentCaptureOptions(ContentCaptureOptions options) {
+        mContentCaptureOptions = options;
     }
 
     @UnsupportedAppUsage
@@ -2416,7 +2422,7 @@ class ContextImpl extends Context {
         ContextImpl context = new ContextImpl(null, systemContext.mMainThread, packageInfo, null,
                 null, null, 0, null, null);
         context.setResources(createResources(null, packageInfo, null, displayId, null,
-                packageInfo.getCompatibilityInfo()));
+                packageInfo.getCompatibilityInfo(), packageInfo.getOverlayDirs()));
         context.updateDisplay(displayId);
         return context;
     }

@@ -42,6 +42,7 @@ import android.graphics.ImageDecoder.ImageInfo;
 import android.graphics.ImageDecoder.Source;
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
@@ -609,10 +610,60 @@ public abstract class ContentResolver implements ContentInterface {
     private static final int SLOW_THRESHOLD_MILLIS = 500;
     private final Random mRandom = new Random();  // guarded by itself
 
-    public ContentResolver(Context context) {
+    public ContentResolver(@Nullable Context context) {
+        this(context, null);
+    }
+
+    /** {@hide} */
+    public ContentResolver(@Nullable Context context, @Nullable ContentInterface wrapped) {
         mContext = context != null ? context : ActivityThread.currentApplication();
         mPackageName = mContext.getOpPackageName();
         mTargetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
+        mWrapped = wrapped;
+    }
+
+    /** {@hide} */
+    public static ContentResolver wrap(@NonNull ContentInterface wrapped) {
+        Preconditions.checkNotNull(wrapped);
+
+        return new ContentResolver(null, wrapped) {
+            @Override
+            public void unstableProviderDied(IContentProvider icp) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            public boolean releaseUnstableProvider(IContentProvider icp) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            public boolean releaseProvider(IContentProvider icp) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            protected IContentProvider acquireUnstableProvider(Context c, String name) {
+                throw new UnsupportedOperationException();
+            }
+            @Override
+            protected IContentProvider acquireProvider(Context c, String name) {
+                throw new UnsupportedOperationException();
+            }
+        };
+    }
+
+    /**
+     * Create a {@link ContentResolver} instance that redirects all its methods
+     * to the given {@link ContentProvider}.
+     */
+    public static ContentResolver wrap(@NonNull ContentProvider wrapped) {
+        return wrap((ContentInterface) wrapped);
+    }
+
+    /**
+     * Create a {@link ContentResolver} instance that redirects all its methods
+     * to the given {@link ContentProviderClient}.
+     */
+    public static ContentResolver wrap(@NonNull ContentProviderClient wrapped) {
+        return wrap((ContentInterface) wrapped);
     }
 
     /** @hide */
@@ -659,6 +710,12 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable String getType(@NonNull Uri url) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.getType(url);
+        } catch (RemoteException e) {
+            return null;
+        }
 
         // XXX would like to have an acquireExistingUnstableProvider for this.
         IContentProvider provider = acquireExistingProvider(url);
@@ -714,6 +771,12 @@ public abstract class ContentResolver implements ContentInterface {
     public @Nullable String[] getStreamTypes(@NonNull Uri url, @NonNull String mimeTypeFilter) {
         Preconditions.checkNotNull(url, "url");
         Preconditions.checkNotNull(mimeTypeFilter, "mimeTypeFilter");
+
+        try {
+            if (mWrapped != null) return mWrapped.getStreamTypes(url, mimeTypeFilter);
+        } catch (RemoteException e) {
+            return null;
+        }
 
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
@@ -845,6 +908,15 @@ public abstract class ContentResolver implements ContentInterface {
             @Nullable CancellationSignal cancellationSignal) {
         android.util.SeempLog.record_uri(13, uri);
         Preconditions.checkNotNull(uri, "uri");
+
+        try {
+            if (mWrapped != null) {
+                return mWrapped.query(uri, projection, queryArgs, cancellationSignal);
+            }
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider unstableProvider = acquireUnstableProvider(uri);
         if (unstableProvider == null) {
             return null;
@@ -944,6 +1016,13 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable Uri canonicalize(@NonNull Uri url) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.canonicalize(url);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             return null;
@@ -981,6 +1060,13 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable Uri uncanonicalize(@NonNull Uri url) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.uncanonicalize(url);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             return null;
@@ -1017,6 +1103,13 @@ public abstract class ContentResolver implements ContentInterface {
     public final boolean refresh(@NonNull Uri url, @Nullable Bundle args,
             @Nullable CancellationSignal cancellationSignal) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.refresh(url, args, cancellationSignal);
+        } catch (RemoteException e) {
+            return false;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             return false;
@@ -1128,6 +1221,12 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable ParcelFileDescriptor openFile(@NonNull Uri uri, @NonNull String mode,
             @Nullable CancellationSignal signal) throws FileNotFoundException {
+        try {
+            if (mWrapped != null) return mWrapped.openFile(uri, mode, signal);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         return openFileDescriptor(uri, mode, signal);
     }
 
@@ -1239,6 +1338,12 @@ public abstract class ContentResolver implements ContentInterface {
     @Override
     public final @Nullable AssetFileDescriptor openAssetFile(@NonNull Uri uri, @NonNull String mode,
             @Nullable CancellationSignal signal) throws FileNotFoundException {
+        try {
+            if (mWrapped != null) return mWrapped.openAssetFile(uri, mode, signal);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         return openAssetFileDescriptor(uri, mode, signal);
     }
 
@@ -1450,6 +1555,14 @@ public abstract class ContentResolver implements ContentInterface {
     public final @Nullable AssetFileDescriptor openTypedAssetFile(@NonNull Uri uri,
             @NonNull String mimeTypeFilter, @Nullable Bundle opts,
             @Nullable CancellationSignal signal) throws FileNotFoundException {
+        try {
+            if (mWrapped != null) {
+                return mWrapped.openTypedAssetFile(uri, mimeTypeFilter, opts, signal);
+            }
+        } catch (RemoteException e) {
+            return null;
+        }
+
         return openTypedAssetFileDescriptor(uri, mimeTypeFilter, opts, signal);
     }
 
@@ -1667,6 +1780,13 @@ public abstract class ContentResolver implements ContentInterface {
                 @Nullable ContentValues values) {
         android.util.SeempLog.record_uri(37, url);
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.insert(url, values);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URL " + url);
@@ -1708,6 +1828,13 @@ public abstract class ContentResolver implements ContentInterface {
                     throws RemoteException, OperationApplicationException {
         Preconditions.checkNotNull(authority, "authority");
         Preconditions.checkNotNull(operations, "operations");
+
+        try {
+            if (mWrapped != null) return mWrapped.applyBatch(authority, operations);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         ContentProviderClient provider = acquireContentProviderClient(authority);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown authority " + authority);
@@ -1734,6 +1861,13 @@ public abstract class ContentResolver implements ContentInterface {
                 @NonNull ContentValues[] values) {
         Preconditions.checkNotNull(url, "url");
         Preconditions.checkNotNull(values, "values");
+
+        try {
+            if (mWrapped != null) return mWrapped.bulkInsert(url, values);
+        } catch (RemoteException e) {
+            return 0;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URL " + url);
@@ -1767,6 +1901,13 @@ public abstract class ContentResolver implements ContentInterface {
     public final int delete(@RequiresPermission.Write @NonNull Uri url, @Nullable String where,
             @Nullable String[] selectionArgs) {
         Preconditions.checkNotNull(url, "url");
+
+        try {
+            if (mWrapped != null) return mWrapped.delete(url, where, selectionArgs);
+        } catch (RemoteException e) {
+            return 0;
+        }
+
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URL " + url);
@@ -1804,6 +1945,13 @@ public abstract class ContentResolver implements ContentInterface {
             @Nullable ContentValues values, @Nullable String where,
             @Nullable String[] selectionArgs) {
         Preconditions.checkNotNull(uri, "uri");
+
+        try {
+            if (mWrapped != null) return mWrapped.update(uri, values, where, selectionArgs);
+        } catch (RemoteException e) {
+            return 0;
+        }
+
         IContentProvider provider = acquireProvider(uri);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown URI " + uri);
@@ -1847,6 +1995,13 @@ public abstract class ContentResolver implements ContentInterface {
             @Nullable String arg, @Nullable Bundle extras) {
         Preconditions.checkNotNull(authority, "authority");
         Preconditions.checkNotNull(method, "method");
+
+        try {
+            if (mWrapped != null) return mWrapped.call(authority, method, arg, extras);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         IContentProvider provider = acquireProvider(authority);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown authority " + authority);
@@ -2997,12 +3152,18 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
-     * Put the cache with the key.
+     * Store the given {@link Bundle} as a long-lived cached object within the
+     * system. This can be useful to avoid expensive re-parsing when apps are
+     * restarted multiple times on low-RAM devices.
+     * <p>
+     * The {@link Bundle} is automatically invalidated when a
+     * {@link #notifyChange(Uri, ContentObserver)} event applies to the key.
      *
-     * @param key the key to add
-     * @param value the value to add
+     * @hide
      */
-    public void putCache(Uri key, Bundle value) {
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CACHE_CONTENT)
+    public void putCache(@NonNull Uri key, @Nullable Bundle value) {
         try {
             getContentService().putCache(mContext.getPackageName(), key, value,
                     mContext.getUserId());
@@ -3012,13 +3173,17 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
-     * Get the cache with the key.
+     * Retrieve the last {@link Bundle} stored as a long-lived cached object
+     * within the system.
      *
-     * @param key the key to get the value
-     * @return the matched value. If the key doesn't exist, will return null.
-     * @see #putCache(Uri, Bundle)
+     * @return {@code null} if no cached object has been stored, or if the
+     *         stored object has been invalidated due to a
+     *         {@link #notifyChange(Uri, ContentObserver)} event.
+     * @hide
      */
-    public Bundle getCache(Uri key) {
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CACHE_CONTENT)
+    public @Nullable Bundle getCache(@NonNull Uri key) {
         try {
             final Bundle bundle = getContentService().getCache(mContext.getPackageName(), key,
                     mContext.getUserId());
@@ -3192,6 +3357,7 @@ public abstract class ContentResolver implements ContentInterface {
     @UnsupportedAppUsage
     final String mPackageName;
     final int mTargetSdkVersion;
+    final ContentInterface mWrapped;
 
     private static final String TAG = "ContentResolver";
 
@@ -3205,16 +3371,68 @@ public abstract class ContentResolver implements ContentInterface {
         return mContext.getUserId();
     }
 
-    /**
-     * Get the system drawable of the mime type.
-     *
-     * @param mimeType the requested mime type
-     * @return the matched drawable
-     * @hide
-     */
-    @SystemApi
+    /** {@hide} */
+    @Deprecated
     public Drawable getTypeDrawable(String mimeType) {
-        return MimeIconUtils.loadMimeIcon(mContext, mimeType);
+        return getTypeInfo(mimeType).getIcon().loadDrawable(mContext);
+    }
+
+    /**
+     * Return a detailed description of the given MIME type, including an icon
+     * and label that describe the type.
+     *
+     * @param mimeType Valid, concrete MIME type.
+     */
+    public final @NonNull TypeInfo getTypeInfo(@NonNull String mimeType) {
+        Objects.requireNonNull(mimeType);
+        return MimeIconUtils.getTypeInfo(mimeType);
+    }
+
+    /**
+     * Detailed description of a specific MIME type, including an icon and label
+     * that describe the type.
+     */
+    public static final class TypeInfo {
+        private final Icon mIcon;
+        private final CharSequence mLabel;
+        private final CharSequence mContentDescription;
+
+        /** {@hide} */
+        public TypeInfo(@NonNull Icon icon, @NonNull CharSequence label,
+                @NonNull CharSequence contentDescription) {
+            mIcon = Objects.requireNonNull(icon);
+            mLabel = Objects.requireNonNull(label);
+            mContentDescription = Objects.requireNonNull(contentDescription);
+        }
+
+        /**
+         * Return a visual representation of this MIME type. This can be styled
+         * using {@link Icon#setTint(int)} to match surrounding UI.
+         *
+         * @see Icon#loadDrawable(Context)
+         * @see android.widget.ImageView#setImageDrawable(Drawable)
+         */
+        public @NonNull Icon getIcon() {
+            return mIcon;
+        }
+
+        /**
+         * Return a textual representation of this MIME type.
+         *
+         * @see android.widget.TextView#setText(CharSequence)
+         */
+        public @NonNull CharSequence getLabel() {
+            return mLabel;
+        }
+
+        /**
+         * Return a content description for this MIME type.
+         *
+         * @see android.view.View#setContentDescription(CharSequence)
+         */
+        public @NonNull CharSequence getContentDescription() {
+            return mContentDescription;
+        }
     }
 
     /**

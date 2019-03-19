@@ -121,6 +121,7 @@ public:
     virtual void onDumpReport(const int64_t dumpTimeNs,
                               const bool include_current_partial_bucket,
                               const bool erase_data,
+                              const DumpLatency dumpLatency,
                               std::set<string> *str_set,
                               android::util::ProtoOutputStream* protoOutput);
 
@@ -128,6 +129,8 @@ public:
     // Does not change the state.
     virtual size_t byteSize();
 
+    // Returns whether or not this config is active.
+    // The config is active if any metric in the config is active.
     inline bool isActive() const {
         return mIsActive;
     }
@@ -241,8 +244,11 @@ private:
     // The metrics that don't need to be uploaded or even reported.
     std::set<int64_t> mNoReportMetricIds;
 
-    // Any metric active means the config is active.
+   // The config is active if any metric in the config is active.
     bool mIsActive;
+
+    // The config is always active if any metric in the config does not have an activation signal.
+    bool mIsAlwaysActive;
 
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensions);
     FRIEND_TEST(MetricConditionLinkE2eTest, TestMultiplePredicatesAndLinks);

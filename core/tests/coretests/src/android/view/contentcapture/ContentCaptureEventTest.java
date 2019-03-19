@@ -15,6 +15,7 @@
  */
 package android.view.contentcapture;
 
+import static android.view.contentcapture.ContentCaptureEvent.TYPE_CONTEXT_UPDATED;
 import static android.view.contentcapture.ContentCaptureEvent.TYPE_SESSION_FINISHED;
 import static android.view.contentcapture.ContentCaptureEvent.TYPE_SESSION_STARTED;
 import static android.view.contentcapture.ContentCaptureEvent.TYPE_VIEW_DISAPPEARED;
@@ -23,6 +24,8 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.testng.Assert.assertThrows;
 
+import android.content.LocusId;
+import android.net.Uri;
 import android.os.Parcel;
 import android.os.SystemClock;
 import android.view.autofill.AutofillId;
@@ -44,9 +47,11 @@ public class ContentCaptureEventTest {
 
     private static final long MY_EPOCH = SystemClock.uptimeMillis();
 
+    private static final LocusId ID = new LocusId(Uri.parse("WHATEVER"));
+
     // Not using @Mock because it's final - no need to be fancy here....
-    private final ContentCaptureContext mClientContext = new ContentCaptureContext.Builder()
-            .setAction("WHATEVER").build();
+    private final ContentCaptureContext mClientContext =
+            new ContentCaptureContext.Builder(ID).build();
 
     @Test
     public void testSetAutofillId_null() {
@@ -174,8 +179,9 @@ public class ContentCaptureEventTest {
         assertThat(event.getIds()).isNull();
         assertThat(event.getText()).isNull();
         assertThat(event.getViewNode()).isNull();
-        final ContentCaptureContext clientContext = event.getClientContext();
-        assertThat(clientContext.getAction()).isEqualTo("WHATEVER");
+        final ContentCaptureContext clientContext = event.getContentCaptureContext();
+        assertThat(clientContext).isNotNull();
+        assertThat(clientContext.getLocusId()).isEqualTo(ID);
     }
 
     @Test
@@ -205,8 +211,42 @@ public class ContentCaptureEventTest {
         assertThat(event.getIds()).isNull();
         assertThat(event.getText()).isNull();
         assertThat(event.getViewNode()).isNull();
-        assertThat(event.getClientContext()).isNull();
+        assertThat(event.getContentCaptureContext()).isNull();
     }
+
+    @Test
+    public void testContextUpdated_directly() {
+        final ContentCaptureEvent event = new ContentCaptureEvent("42", TYPE_CONTEXT_UPDATED)
+                .setClientContext(mClientContext);
+        assertThat(event).isNotNull();
+        assertContextUpdatedEvent(event);
+    }
+
+    @Test
+    public void testContextUpdated_throughParcel() {
+        final ContentCaptureEvent event = new ContentCaptureEvent("42", TYPE_CONTEXT_UPDATED)
+                .setClientContext(mClientContext);
+        assertThat(event).isNotNull();
+        final ContentCaptureEvent clone = cloneThroughParcel(event);
+        assertContextUpdatedEvent(clone);
+    }
+
+    private void assertContextUpdatedEvent(ContentCaptureEvent event) {
+        assertThat(event.getType()).isEqualTo(TYPE_CONTEXT_UPDATED);
+        assertThat(event.getEventTime()).isAtLeast(MY_EPOCH);
+        assertThat(event.getSessionId()).isEqualTo("42");
+        assertThat(event.getParentSessionId()).isNull();
+        assertThat(event.getId()).isNull();
+        assertThat(event.getIds()).isNull();
+        assertThat(event.getText()).isNull();
+        assertThat(event.getViewNode()).isNull();
+        final ContentCaptureContext clientContext = event.getContentCaptureContext();
+        assertThat(clientContext).isNotNull();
+        assertThat(clientContext.getLocusId()).isEqualTo(ID);
+    }
+
+    // TODO(b/123036895): add test for all events type (right now we're just testing the 3 types
+    // that use logic to write to parcel
 
     private ContentCaptureEvent cloneThroughParcel(ContentCaptureEvent event) {
         Parcel parcel = Parcel.obtain();

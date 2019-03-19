@@ -102,12 +102,21 @@ FileType GetFileType(const std::string& path) {
 #endif
 
 bool mkdirs(const std::string& path) {
-  #ifdef _WIN32
-  // Start after the drive path if present. Calling mkdir with only the drive will cause an error.
-  size_t current_pos = 1u;
-  if (path.size() >= 3 && path[1] == ':' &&
-        (path[2] == '\\' || path[2] == '/')) {
-    current_pos = 3u;
+ #ifdef _WIN32
+  // Start after the long path prefix if present.
+  bool require_drive = false;
+  size_t current_pos = 0u;
+  if (util::StartsWith(path, R"(\\?\)")) {
+    require_drive = true;
+    current_pos = 4u;
+  }
+
+  // Start after the drive path if present.
+  if (path.size() >= 3 && path[current_pos + 1] == ':' &&
+       (path[current_pos + 2] == '\\' || path[current_pos + 2] == '/')) {
+    current_pos += 3u;
+  } else if (require_drive) {
+    return false;
   }
  #else
   // Start after the first character so that we don't consume the root '/'.
@@ -246,6 +255,25 @@ bool AppendArgsFromFile(const StringPiece& path, std::vector<std::string>* out_a
     line = util::TrimWhitespace(line);
     if (!line.empty()) {
       out_arglist->push_back(line.to_string());
+    }
+  }
+  return true;
+}
+
+bool AppendSetArgsFromFile(const StringPiece& path, std::unordered_set<std::string>* out_argset,
+                           std::string* out_error) {
+  std::string contents;
+  if(!ReadFileToString(path.to_string(), &contents, true /*follow_symlinks*/)) {
+    if (out_error) {
+      *out_error = "failed to read argument-list file";
+    }
+    return false;
+  }
+
+  for (StringPiece line : util::Tokenize(contents, ' ')) {
+    line = util::TrimWhitespace(line);
+    if (!line.empty()) {
+      out_argset->insert(line.to_string());
     }
   }
   return true;

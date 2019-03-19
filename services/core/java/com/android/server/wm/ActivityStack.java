@@ -4059,7 +4059,7 @@ public class ActivityStack extends ConfigurationContainer {
                         "Prepare close transition: finishing " + r);
                 if (endTask) {
                     mService.getTaskChangeNotificationController().notifyTaskRemovalStarted(
-                            task.taskId);
+                            task.getTaskInfo());
                 }
                 getDisplay().mDisplayContent.prepareAppTransition(transit, false);
 
@@ -4965,8 +4965,7 @@ public class ActivityStack extends ConfigurationContainer {
 
             mRootActivityContainer.resumeFocusedStacksTopActivities();
             EventLog.writeEvent(EventLogTags.AM_TASK_TO_FRONT, tr.userId, tr.taskId);
-
-            mService.getTaskChangeNotificationController().notifyTaskMovedToFront(tr.taskId);
+            mService.getTaskChangeNotificationController().notifyTaskMovedToFront(tr.getTaskInfo());
         } finally {
             getDisplay().continueUpdateImeTarget();
         }
@@ -5670,6 +5669,19 @@ public class ActivityStack extends ConfigurationContainer {
             getTaskStack().animateResizePinnedStack(toBounds, sourceHintBounds,
                     animationDuration, fromFullscreen);
         }
+    }
+
+    /**
+     * Get current bounds of this stack, return empty when it is unavailable.
+     * @see TaskStack#getAnimationOrCurrentBounds(Rect)
+     */
+    void getAnimationOrCurrentBounds(Rect outBounds) {
+        final TaskStack stack = getTaskStack();
+        if (stack == null) {
+            outBounds.setEmpty();
+            return;
+        }
+        stack.getAnimationOrCurrentBounds(outBounds);
     }
 
     private boolean skipResizeAnimation(boolean toFullscreen) {

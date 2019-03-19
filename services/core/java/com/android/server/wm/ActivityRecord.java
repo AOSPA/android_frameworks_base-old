@@ -75,20 +75,18 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
 import static android.content.pm.ActivityInfo.isFixedOrientationPortrait;
 import static android.content.res.Configuration.EMPTY;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
+import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
 import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
 import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_RIGHT;
 
 import static com.android.server.am.ActivityRecordProto.CONFIGURATION_CONTAINER;
 import static com.android.server.am.ActivityRecordProto.FRONT_OF_TASK;
@@ -2662,10 +2660,6 @@ public final class ActivityRecord extends ConfigurationContainer {
         }
     }
 
-    int getRequestedOrientation() {
-        return getOrientation();
-    }
-
     void setRequestedOrientation(int requestedOrientation) {
         setOrientation(requestedOrientation, mayFreezeScreenLocked(app));
         mAtmService.getTaskChangeNotificationController().notifyActivityRequestedOrientationChanged(
@@ -2693,7 +2687,7 @@ public final class ActivityRecord extends ConfigurationContainer {
 
     int getOrientation() {
         if (mAppWindowToken == null) {
-            return SCREEN_ORIENTATION_UNSPECIFIED;
+            return info.screenOrientation;
         }
 
         return mAppWindowToken.getOrientationIgnoreVisibility();
@@ -2729,25 +2723,95 @@ public final class ActivityRecord extends ConfigurationContainer {
         mLastReportedConfiguration.setConfiguration(global, override);
     }
 
+    /**
+     * Get the configuration orientation by the requested screen orientation
+     * ({@link ActivityInfo.ScreenOrientation}) of this activity.
+     *
+     * @return orientation in ({@link Configuration#ORIENTATION_LANDSCAPE},
+     *         {@link Configuration#ORIENTATION_PORTRAIT},
+     *         {@link Configuration#ORIENTATION_UNDEFINED}).
+     */
+    int getRequestedConfigurationOrientation() {
+        final int screenOrientation = getOrientation();
+        if (screenOrientation == ActivityInfo.SCREEN_ORIENTATION_NOSENSOR) {
+            // NOSENSOR means the display's "natural" orientation, so return that.
+            final ActivityDisplay display = getDisplay();
+            if (display != null && display.mDisplayContent != null) {
+                return display.mDisplayContent.getNaturalOrientation();
+            }
+        } else if (screenOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) {
+            // LOCKED means the activity's orientation remains unchanged, so return existing value.
+            return getConfiguration().orientation;
+        } else if (isFixedOrientationLandscape(screenOrientation)) {
+            return ORIENTATION_LANDSCAPE;
+        } else if (isFixedOrientationPortrait(screenOrientation)) {
+            return ORIENTATION_PORTRAIT;
+        }
+        return ORIENTATION_UNDEFINED;
+    }
+
+    /**
+     * Indicates the activity will keep the bounds and screen configuration when it was first
+     * launched, no matter how its parent changes.
+     *
+     * @return {@code true} if this activity is declared as non-resizable and fixed orientation or
+     *         aspect ratio.
+     */
+    private boolean inSizeCompatMode() {
+        return !isResizeable() && (info.isFixedOrientation() || info.hasFixedAspectRatio())
+                // The configuration of non-standard type should be enforced by system.
+                && isActivityTypeStandard()
+                && !mAtmService.mForceResizableActivities;
+    }
+
     // TODO(b/36505427): Consider moving this method and similar ones to ConfigurationContainer.
     private void updateOverrideConfiguration() {
+        final boolean inSizeCompatMode = inSizeCompatMode();
+        if (inSizeCompatMode) {
+            if (!matchParentBounds()) {
+                // The override configuration is set only once in size compatible mode.
+                return;
+            }
+            if (!hasProcess() && !isConfigurationCompatible(task.getConfiguration())) {
+                // Don't compute when launching in fullscreen and the fixed orientation is not the
+                // current orientation. It is more accurately to compute the override bounds from
+                // the updated configuration after the fixed orientation is applied.
+                return;
+            }
+        }
+
         computeBounds(mTmpBounds);
 
+        if (inSizeCompatMode && mTmpBounds.isEmpty()) {
+            mTmpBounds.set(task.getWindowConfiguration().getBounds());
+        }
         if (mTmpBounds.equals(getRequestedOverrideBounds())) {
+            // The bounds is not changed or the activity is resizable (both the 2 bounds are empty).
             return;
         }
 
-        setBounds(mTmpBounds);
-
-        // Bounds changed...update configuration to match.
-        if (!matchParentBounds()) {
-            mTmpConfig.setTo(getRequestedOverrideConfiguration());
-            task.computeConfigResourceOverrides(mTmpConfig, task.getParent().getConfiguration());
-        } else {
-            mTmpConfig.unset();
+        final Configuration overrideConfig = mTmpConfig;
+        overrideConfig.unset();
+        if (!mTmpBounds.isEmpty()) {
+            overrideConfig.windowConfiguration.setBounds(mTmpBounds);
+            if (inSizeCompatMode) {
+                // Ensure the screen related fields are set. It is used to prevent activity relaunch
+                // when moving between displays. For screenWidthDp and screenWidthDp, because they
+                // are relative to bounds and density, they will be calculated in
+                // {@link TaskRecord#computeConfigResourceOverrides} and the result will also be
+                // relatively fixed.
+                final Configuration srcConfig = task.getConfiguration();
+                overrideConfig.colorMode = srcConfig.colorMode;
+                overrideConfig.densityDpi = srcConfig.densityDpi;
+                overrideConfig.screenLayout = srcConfig.screenLayout
+                        & (Configuration.SCREENLAYOUT_LONG_MASK
+                                | Configuration.SCREENLAYOUT_SIZE_MASK);
+                // The smallest screen width is the short side of screen bounds. Because the bounds
+                // and density won't be changed, smallestScreenWidthDp is also fixed.
+                overrideConfig.smallestScreenWidthDp = srcConfig.smallestScreenWidthDp;
+            }
         }
-
-        onRequestedOverrideConfigurationChanged(mTmpConfig);
+        onRequestedOverrideConfigurationChanged(overrideConfig);
     }
 
     @Override
@@ -2759,6 +2823,64 @@ public final class ActivityRecord extends ConfigurationContainer {
         // layout traversals.
         mConfigurationSeq = Math.max(++mConfigurationSeq, 1);
         getResolvedOverrideConfiguration().seq = mConfigurationSeq;
+
+        if (matchParentBounds()) {
+            return;
+        }
+
+        final Configuration resolvedConfig = getResolvedOverrideConfiguration();
+        if (!inSizeCompatMode()) {
+            computeConfigResourceOverrides(resolvedConfig, newParentConfiguration,
+                    ORIENTATION_UNDEFINED, true /* insideParentBounds */);
+            return;
+        }
+
+        final Configuration displayConfig = getDisplay().getConfiguration();
+        int orientation = getConfiguration().orientation;
+        if (orientation != displayConfig.orientation && isConfigurationCompatible(displayConfig)) {
+            // The activity is compatible to apply the orientation change or it requests different
+            // fixed orientation.
+            orientation = displayConfig.orientation;
+        } else {
+            if (resolvedConfig.windowConfiguration.getAppBounds() != null) {
+                // Keep the computed resolved override configuration.
+                return;
+            }
+            final int requestedOrientation = getRequestedConfigurationOrientation();
+            if (requestedOrientation != ORIENTATION_UNDEFINED) {
+                orientation = requestedOrientation;
+            }
+        }
+
+        // Adjust the bounds to match the current orientation.
+        if (orientation != ORIENTATION_UNDEFINED) {
+            final Rect resolvedBounds = resolvedConfig.windowConfiguration.getBounds();
+            final int longSide = Math.max(resolvedBounds.height(), resolvedBounds.width());
+            final int shortSide = Math.min(resolvedBounds.height(), resolvedBounds.width());
+            final boolean toBeLandscape = orientation == ORIENTATION_LANDSCAPE;
+            final int width = toBeLandscape ? longSide : shortSide;
+            final int height = toBeLandscape ? shortSide : longSide;
+            // Assume the bounds is always started from zero because the size may be bigger than its
+            // parent (task ~ display). The actual letterboxing will be done by surface offset.
+            resolvedBounds.set(0, 0, width, height);
+        }
+
+        // In size compatible mode, activity is allowed to have larger bounds than its parent.
+        computeConfigResourceOverrides(resolvedConfig, newParentConfiguration, orientation,
+                false /* insideParentBounds */);
+    }
+
+    private void computeConfigResourceOverrides(Configuration inOutConfig,
+            Configuration parentConfig, int orientation, boolean insideParentBounds) {
+        // Set the real orientation or undefined value to ensure the output orientation won't be the
+        // old value. Also reset app bounds so it will be updated according to bounds.
+        inOutConfig.orientation = orientation;
+        final Rect outAppBounds = inOutConfig.windowConfiguration.getAppBounds();
+        if (outAppBounds != null) {
+            outAppBounds.setEmpty();
+        }
+
+        task.computeConfigResourceOverrides(inOutConfig, parentConfig, insideParentBounds);
     }
 
     @Override
@@ -2791,8 +2913,7 @@ public final class ActivityRecord extends ConfigurationContainer {
 
     /** Returns true if the configuration is compatible with this activity. */
     boolean isConfigurationCompatible(Configuration config) {
-        final int orientation = mAppWindowToken != null
-                ? getOrientation() : info.screenOrientation;
+        final int orientation = getOrientation();
         if (isFixedOrientationPortrait(orientation)
                 && config.orientation != ORIENTATION_PORTRAIT) {
             return false;
@@ -2846,14 +2967,36 @@ public final class ActivityRecord extends ConfigurationContainer {
                 // should be given the aspect ratio.
                 activityWidth = (int) ((activityHeight * maxAspectRatio) + 0.5f);
             }
-        } else if (containingRatio < minAspectRatio && minAspectRatio != 0) {
-            if (containingAppWidth < containingAppHeight) {
-                // Width is the shorter side, so we use the height to figure-out what the max. width
-                // should be given the aspect ratio.
+        } else if (containingRatio < minAspectRatio) {
+            boolean adjustWidth;
+            switch (getRequestedConfigurationOrientation()) {
+                case ORIENTATION_LANDSCAPE:
+                    // Width should be the longer side for this landscape app, so we use the width
+                    // to figure-out what the max. height should be given the aspect ratio.
+                    adjustWidth = false;
+                    break;
+                case ORIENTATION_PORTRAIT:
+                    // Height should be the longer side for this portrait app, so we use the height
+                    // to figure-out what the max. width should be given the aspect ratio.
+                    adjustWidth = true;
+                    break;
+                default:
+                    // This app doesn't have a preferred orientation, so we keep the length of the
+                    // longer side, and use it to figure-out the length of the shorter side.
+                    if (containingAppWidth < containingAppHeight) {
+                        // Width is the shorter side, so we use the height to figure-out what the
+                        // max. width should be given the aspect ratio.
+                        adjustWidth = true;
+                    } else {
+                        // Height is the shorter side, so we use the width to figure-out what the
+                        // max. height should be given the aspect ratio.
+                        adjustWidth = false;
+                    }
+                    break;
+            }
+            if (adjustWidth) {
                 activityWidth = (int) ((activityHeight / minAspectRatio) + 0.5f);
             } else {
-                // Height is the shorter side, so we use the width to figure-out what the max.
-                // height should be given the aspect ratio.
                 activityHeight = (int) ((activityWidth / minAspectRatio) + 0.5f);
             }
         }
@@ -2874,21 +3017,6 @@ public final class ActivityRecord extends ConfigurationContainer {
         // away later in StackWindowController.adjustConfigurationForBounds(). Otherwise, the app
         // bounds would end up too small.
         outBounds.set(0, 0, activityWidth + appBounds.left, activityHeight + appBounds.top);
-
-        final int navBarPosition = mAtmService.mWindowManager.getNavBarPosition(getDisplayId());
-        if (navBarPosition == NAV_BAR_LEFT) {
-            // Position the activity frame on the opposite side of the nav bar.
-            outBounds.left = appBounds.right - activityWidth;
-            outBounds.right = appBounds.right;
-        } else if (navBarPosition == NAV_BAR_RIGHT) {
-            // Position the activity frame on the opposite side of the nav bar.
-            outBounds.left = 0;
-            outBounds.right = activityWidth + appBounds.left;
-        } else {
-            // Horizontally center the frame.
-            outBounds.left = appBounds.left + (containingAppWidth - activityWidth) / 2;
-            outBounds.right = outBounds.left + activityWidth;
-        }
     }
 
     /**

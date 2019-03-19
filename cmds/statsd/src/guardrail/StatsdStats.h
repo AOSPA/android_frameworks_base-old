@@ -42,6 +42,13 @@ struct ConfigStats {
     bool is_valid;
 
     std::list<int32_t> broadcast_sent_time_sec;
+
+    // Times at which this config is activated.
+    std::list<int32_t> activation_time_sec;
+
+    // Times at which this config is deactivated.
+    std::list<int32_t> deactivation_time_sec;
+
     std::list<int32_t> data_drop_time_sec;
     // Number of bytes dropped at corresponding time.
     std::list<int64_t> data_drop_bytes;
@@ -132,6 +139,9 @@ public:
     /* Min period between two checks of byte size per config key in nanoseconds. */
     static const int64_t kMinByteSizeCheckPeriodNs = 60 * NS_PER_SEC;
 
+    /* Minimum period between two activation broadcasts in nanoseconds. */
+    static const int64_t kMinActivationBroadcastPeriodNs = 10 * NS_PER_SEC;
+
     // Maximum age (30 days) that files on disk can exist in seconds.
     static const int kMaxAgeSecond = 60 * 60 * 24 * 30;
 
@@ -146,6 +156,10 @@ public:
 
     // Max time to do a pull.
     static const int64_t kPullMaxDelayNs = 10 * NS_PER_SEC;
+
+    // Max platform atom tag number.
+    static const int32_t kMaxPlatformAtomTag = 100000;
+
     /**
      * Report a new config has been received and report the static stats about the config.
      *
@@ -169,6 +183,13 @@ public:
      * Report a broadcast has been sent to a config owner to collect the data.
      */
     void noteBroadcastSent(const ConfigKey& key);
+
+    /**
+     * Report that a config has become activated or deactivated.
+     * This can be different from whether or not a broadcast is sent if the
+     * guardrail prevented the broadcast from being sent.
+     */
+    void noteActiveStatusChanged(const ConfigKey& key, bool activate);
 
     /**
      * Report a config's metrics data has been dropped.
@@ -340,6 +361,13 @@ public:
     void noteEmptyData(int atomId);
 
     /**
+     * Records that a puller callback for the given atomId was registered or unregistered.
+     *
+     * @param registered True if the callback was registered, false if was unregistered.
+     */
+    void notePullerCallbackRegistrationChanged(int atomId, bool registered);
+
+    /**
      * Hard limit was reached in the cardinality of an atom
      */
     void noteHardDimensionLimitReached(int64_t metricId);
@@ -375,10 +403,20 @@ public:
     void noteInvalidatedBucket(int64_t metricId);
 
     /**
+     * Tracks the total number of buckets (include skipped/invalid buckets).
+     */
+    void noteBucketCount(int64_t metricId);
+
+    /**
      * For pulls at bucket boundaries, it represents the misalignment between the real timestamp and
      * the end of the bucket.
      */
     void noteBucketBoundaryDelayNs(int64_t metricId, int64_t timeDelayNs);
+
+    /**
+     * Number of buckets with unknown condition.
+     */
+    void noteBucketUnknownCondition(int64_t metricId);
 
     /**
      * Reset the historical stats. Including all stats in icebox, and the tracked stats about
@@ -416,6 +454,8 @@ public:
         long statsCompanionPullFailed = 0;
         long statsCompanionPullBinderTransactionFailed = 0;
         long emptyData = 0;
+        long registeredCount = 0;
+        long unregisteredCount = 0;
     } PulledAtomStats;
 
     typedef struct {
@@ -428,6 +468,8 @@ public:
         long bucketDropped = 0;
         int64_t minBucketBoundaryDelayNs = 0;
         int64_t maxBucketBoundaryDelayNs = 0;
+        long bucketUnknownCondition = 0;
+        long bucketCount = 0;
     } AtomMetricStats;
 
 private:
@@ -458,7 +500,7 @@ private:
     std::map<int, PulledAtomStats> mPulledAtomStats;
 
     // Maps metric ID to its stats. The size is capped by the number of metrics.
-    std::map<int, AtomMetricStats> mAtomMetricStats;
+    std::map<int64_t, AtomMetricStats> mAtomMetricStats;
 
     struct LogLossStats {
         LogLossStats(int32_t sec, int32_t count, int32_t error)
@@ -494,13 +536,15 @@ private:
 
     void noteBroadcastSent(const ConfigKey& key, int32_t timeSec);
 
+    void noteActiveStatusChanged(const ConfigKey& key, bool activate, int32_t timeSec);
+
     void addToIceBoxLocked(std::shared_ptr<ConfigStats>& stats);
 
     /**
      * Get a reference to AtomMetricStats for a metric. If none exists, create it. The reference
      * will live as long as `this`.
      */
-    StatsdStats::AtomMetricStats& getAtomMetricStats(int metricId);
+    StatsdStats::AtomMetricStats& getAtomMetricStats(int64_t metricId);
 
     FRIEND_TEST(StatsdStatsTest, TestValidConfigAdd);
     FRIEND_TEST(StatsdStatsTest, TestInvalidConfigAdd);

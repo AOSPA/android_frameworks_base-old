@@ -31,6 +31,7 @@ import android.util.LongSparseArray;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
+import android.view.DisplayAddress;
 import android.view.DisplayCutout;
 import android.view.DisplayEventReceiver;
 import android.view.Surface;
@@ -64,7 +65,8 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             new LongSparseArray<LocalDisplayDevice>();
 
     @SuppressWarnings("unused")  // Becomes active at instantiation time.
-    private HotplugDisplayEventReceiver mHotplugReceiver;
+    private PhysicalDisplayEventReceiver mPhysicalDisplayEventReceiver;
+
 
     // Called with SyncRoot lock held.
     public LocalDisplayAdapter(DisplayManagerService.SyncRoot syncRoot,
@@ -76,7 +78,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
     public void registerLocked() {
         super.registerLocked();
 
-        mHotplugReceiver = new HotplugDisplayEventReceiver(getHandler().getLooper());
+        mPhysicalDisplayEventReceiver = new PhysicalDisplayEventReceiver(getHandler().getLooper());
 
         for (long physicalDisplayId : SurfaceControl.getPhysicalDisplayIds()) {
             tryConnectDisplayLocked(physicalDisplayId);
@@ -383,6 +385,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 mInfo.presentationDeadlineNanos = phys.presentationDeadlineNanos;
                 mInfo.state = mState;
                 mInfo.uniqueId = getUniqueId();
+                mInfo.address = DisplayAddress.fromPhysicalDisplayId(mPhysicalDisplayId);
 
                 // Assume that all built-in displays that have secure output (eg. HDCP) also
                 // support compositing from gralloc protected buffers.
@@ -747,8 +750,8 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         }
     }
 
-    private final class HotplugDisplayEventReceiver extends DisplayEventReceiver {
-        public HotplugDisplayEventReceiver(Looper looper) {
+    private final class PhysicalDisplayEventReceiver extends DisplayEventReceiver {
+        PhysicalDisplayEventReceiver(Looper looper) {
             super(looper, VSYNC_SOURCE_APP);
         }
 
@@ -760,6 +763,16 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 } else {
                     tryDisconnectDisplayLocked(physicalDisplayId);
                 }
+            }
+        }
+
+        @Override
+        public void onConfigChanged(long timestampNanos, long physicalDisplayId, int configId) {
+            if (DEBUG) {
+                Slog.d(TAG, "onConfigChanged("
+                        + "timestampNanos=" + timestampNanos
+                        + ", builtInDisplayId=" + physicalDisplayId
+                        + ", configId=" + configId + ")");
             }
         }
     }

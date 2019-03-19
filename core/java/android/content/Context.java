@@ -49,7 +49,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDatabase.CursorFactory;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
-import android.net.NetworkStack;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -3647,11 +3646,10 @@ public abstract class Context {
     public static final String NETD_SERVICE = "netd";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link NetworkStack} for communicating with the network stack
+     * Use with {@link android.os.ServiceManager.getService()} to retrieve a
+     * {@link NetworkStackClient} IBinder for communicating with the network stack
      * @hide
-     * @see #getSystemService(String)
-     * @see NetworkStack
+     * @see NetworkStackClient
      */
     public static final String NETWORK_STACK_SERVICE = "network_stack";
 
@@ -5243,9 +5241,10 @@ public abstract class Context {
     public abstract DisplayAdjustments getDisplayAdjustments(int displayId);
 
     /**
+     * @return Returns the {@link Display} object this context is associated with.
      * @hide
      */
-    @UnsupportedAppUsage
+    @TestApi
     public abstract Display getDisplay();
 
     /**
@@ -5342,35 +5341,42 @@ public abstract class Context {
     /**
      * @hide
      */
-    public boolean isAutofillCompatibilityEnabled() {
-        return false;
+    public final boolean isAutofillCompatibilityEnabled() {
+        final AutofillOptions options = getAutofillOptions();
+        return options != null && options.compatModeEnabled;
+    }
+
+    /**
+     * @hide
+     */
+    @Nullable
+    public AutofillOptions getAutofillOptions() {
+        return null;
     }
 
     /**
      * @hide
      */
     @TestApi
-    public void setAutofillCompatibilityEnabled(
-            @SuppressWarnings("unused") boolean autofillCompatEnabled) {
+    public void setAutofillOptions(@SuppressWarnings("unused") @Nullable AutofillOptions options) {
     }
 
     /**
-     * Checks whether this context supports content capture.
+     * Gets the Content Capture options for this context, or {@code null} if it's not whitelisted.
      *
      * @hide
      */
-    // NOTE: for now we just need to check if it's supported so we can optimize calls that can be
-    // skipped when it isn't. Eventually, we might need a full
-    // ContentCaptureManager.ContentCaptureClient interface (as it's done with AutofillClient).
-    //
-    public boolean isContentCaptureSupported() {
-        return false;
+    @Nullable
+    public ContentCaptureOptions getContentCaptureOptions() {
+        return null;
     }
 
     /**
      * @hide
      */
-    public void setContentCaptureSupported(@SuppressWarnings("unused") boolean supported) {
+    @TestApi
+    public void setContentCaptureOptions(
+            @SuppressWarnings("unused") @Nullable ContentCaptureOptions options) {
     }
 
     /**

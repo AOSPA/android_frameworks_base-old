@@ -157,7 +157,12 @@ public class ContentCaptureSessionTest {
         }
 
         @Override
-        public void internalNotifyViewHierarchyEvent(boolean started) {
+        public void internalNotifyViewTreeEvent(boolean started) {
+            throw new UnsupportedOperationException("should not have been called");
+        }
+
+        @Override
+        public void updateContentCaptureContext(ContentCaptureContext context) {
             throw new UnsupportedOperationException("should not have been called");
         }
     }

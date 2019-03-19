@@ -17,6 +17,10 @@ package android {
     field public static final String WRITE_OBB = "android.permission.WRITE_OBB";
   }
 
+  public static final class R.bool {
+    field public static final int config_perDisplayFocusEnabled = 17891332; // 0x1110004
+  }
+
   public static final class R.string {
     field public static final int config_defaultAssistant = 17039393; // 0x1040021
     field public static final int config_defaultDialer = 17039395; // 0x1040023
@@ -48,6 +52,7 @@ package android.app {
     method public long getTotalRam();
     method @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) public int getUidImportance(int);
     method @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) public void removeOnUidImportanceListener(android.app.ActivityManager.OnUidImportanceListener);
+    method public static void resumeAppSwitches() throws android.os.RemoteException;
     method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public void scheduleApplicationInfoChanged(java.util.List<java.lang.String>, int);
   }
 
@@ -94,6 +99,31 @@ package android.app {
     field public static final int SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT = 0; // 0x0
   }
 
+  public class ActivityView extends android.view.ViewGroup {
+    ctor public ActivityView(android.content.Context);
+    ctor public ActivityView(android.content.Context, android.util.AttributeSet);
+    ctor public ActivityView(android.content.Context, android.util.AttributeSet, int);
+    ctor public ActivityView(android.content.Context, android.util.AttributeSet, int, boolean);
+    method public void onLayout(boolean, int, int, int, int);
+    method public void onLocationChanged();
+    method public void performBackPress();
+    method public void release();
+    method public void setCallback(android.app.ActivityView.StateCallback);
+    method public void setForwardedInsets(android.graphics.Insets);
+    method public void startActivity(@NonNull android.content.Intent);
+    method public void startActivity(@NonNull android.content.Intent, android.os.UserHandle);
+    method public void startActivity(@NonNull android.app.PendingIntent);
+  }
+
+  public abstract static class ActivityView.StateCallback {
+    ctor public ActivityView.StateCallback();
+    method public abstract void onActivityViewDestroyed(android.app.ActivityView);
+    method public abstract void onActivityViewReady(android.app.ActivityView);
+    method public void onTaskCreated(int, android.content.ComponentName);
+    method public void onTaskMovedToFront(int);
+    method public void onTaskRemovalStarted(int);
+  }
+
   public class AppDetailsActivity extends android.app.Activity {
     ctor public AppDetailsActivity();
   }
@@ -101,8 +131,8 @@ package android.app {
   public class AppOpsManager {
     method @RequiresPermission("android.permission.MANAGE_APPOPS") public void addHistoricalOps(@NonNull android.app.AppOpsManager.HistoricalOps);
     method @RequiresPermission("android.permission.MANAGE_APPOPS") public void clearHistory();
-    method @RequiresPermission("android.permission.GET_APP_OPS_STATS") public void getHistoricalOps(int, @Nullable String, @Nullable String[], long, long, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.app.AppOpsManager.HistoricalOps>);
-    method @RequiresPermission("android.permission.GET_APP_OPS_STATS") public void getHistoricalOpsFromDiskRaw(int, @Nullable String, @Nullable String[], long, long, @Nullable java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.app.AppOpsManager.HistoricalOps>);
+    method @RequiresPermission("android.permission.GET_APP_OPS_STATS") public void getHistoricalOps(@NonNull android.app.AppOpsManager.HistoricalOpsRequest, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.app.AppOpsManager.HistoricalOps>);
+    method @RequiresPermission("android.permission.GET_APP_OPS_STATS") public void getHistoricalOpsFromDiskRaw(@NonNull android.app.AppOpsManager.HistoricalOpsRequest, @Nullable java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.app.AppOpsManager.HistoricalOps>);
     method public static int getNumOps();
     method public static String[] getOpStrs();
     method public boolean isOperationActive(int, int, String);
@@ -204,6 +234,17 @@ package android.app {
     method public void offsetBeginAndEndTime(long);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.HistoricalOps> CREATOR;
+  }
+
+  public static final class AppOpsManager.HistoricalOpsRequest {
+  }
+
+  public static final class AppOpsManager.HistoricalOpsRequest.Builder {
+    ctor public AppOpsManager.HistoricalOpsRequest.Builder(long, long);
+    method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest build();
+    method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest.Builder setOpNames(@Nullable java.util.List<java.lang.String>);
+    method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest.Builder setPackageName(@Nullable String);
+    method @NonNull public android.app.AppOpsManager.HistoricalOpsRequest.Builder setUid(int);
   }
 
   public static final class AppOpsManager.HistoricalPackageOps implements android.os.Parcelable {
@@ -435,7 +476,6 @@ package android.app.role {
     method @NonNull @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public java.util.List<java.lang.String> getRoleHolders(@NonNull String);
     method @NonNull @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public java.util.List<java.lang.String> getRoleHoldersAsUser(@NonNull String, @NonNull android.os.UserHandle);
     method @RequiresPermission("android.permission.MANAGE_ROLE_HOLDERS") public void removeRoleHolderAsUser(@NonNull String, @NonNull String, int, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull android.app.role.RoleManagerCallback);
-    field public static final String ROLE_ASSISTANT = "android.app.role.ASSISTANT";
   }
 
   public interface RoleManagerCallback {
@@ -472,19 +512,50 @@ package android.bluetooth {
 
 package android.content {
 
-  public class ContentProviderClient implements java.lang.AutoCloseable android.content.ContentInterface {
+  public final class AutofillOptions implements android.os.Parcelable {
+    ctor public AutofillOptions(int, boolean);
+    method public int describeContents();
+    method public static android.content.AutofillOptions forWhitelistingItself();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.content.AutofillOptions> CREATOR;
+    field public boolean augmentedEnabled;
+    field public final boolean compatModeEnabled;
+    field public final int loggingLevel;
+  }
+
+  public final class ContentCaptureOptions implements android.os.Parcelable {
+    ctor public ContentCaptureOptions(int, int, int, int, int, @Nullable android.util.ArraySet<android.content.ComponentName>);
+    method public int describeContents();
+    method public static android.content.ContentCaptureOptions forWhitelistingItself();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.content.ContentCaptureOptions> CREATOR;
+    field public final int idleFlushingFrequencyMs;
+    field public final int logHistorySize;
+    field public final int loggingLevel;
+    field public final int maxBufferSize;
+    field public final int textChangeFlushingFrequencyMs;
+    field @Nullable public final android.util.ArraySet<android.content.ComponentName> whitelistedComponents;
+  }
+
+  public class ContentProviderClient implements java.lang.AutoCloseable {
     method @RequiresPermission(android.Manifest.permission.REMOVE_TASKS) public void setDetectNotResponding(long);
   }
 
-  public abstract class ContentResolver implements android.content.ContentInterface {
+  public abstract class ContentResolver {
     method public static String[] getSyncAdapterPackagesForAuthorityAsUser(String, int);
   }
 
   public abstract class Context {
     method public android.content.Context createPackageContextAsUser(String, int, android.os.UserHandle) throws android.content.pm.PackageManager.NameNotFoundException;
+    method public abstract android.view.Display getDisplay();
     method public android.os.UserHandle getUser();
     method public int getUserId();
-    method public void setAutofillCompatibilityEnabled(boolean);
+    method public void setAutofillOptions(@Nullable android.content.AutofillOptions);
+    method public void setContentCaptureOptions(@Nullable android.content.ContentCaptureOptions);
+  }
+
+  public class ContextWrapper extends android.content.Context {
+    method public android.view.Display getDisplay();
   }
 
 }
@@ -516,13 +587,20 @@ package android.content.pm {
     method @RequiresPermission("android.permission.INTERACT_ACROSS_USERS_FULL") public abstract java.util.List<android.content.pm.PackageInfo> getInstalledPackagesAsUser(int, int);
     method @Nullable public abstract String[] getNamesForUids(int[]);
     method public abstract String getPermissionControllerPackageName();
+    method @RequiresPermission(anyOf={"android.permission.GRANT_RUNTIME_PERMISSIONS", "android.permission.REVOKE_RUNTIME_PERMISSIONS"}) public abstract int getPermissionFlags(String, String, @NonNull android.os.UserHandle);
     method @NonNull public abstract String getServicesSystemSharedLibraryPackageName();
     method @NonNull public abstract String getSharedSystemSharedLibraryPackageName();
     method public String getWellbeingPackageName();
     method @RequiresPermission("android.permission.GRANT_RUNTIME_PERMISSIONS") public abstract void grantRuntimePermission(@NonNull String, @NonNull String, @NonNull android.os.UserHandle);
     method @RequiresPermission("android.permission.REVOKE_RUNTIME_PERMISSIONS") public abstract void revokeRuntimePermission(@NonNull String, @NonNull String, @NonNull android.os.UserHandle);
+    method @RequiresPermission(anyOf={"android.permission.GRANT_RUNTIME_PERMISSIONS", "android.permission.REVOKE_RUNTIME_PERMISSIONS"}) public abstract void updatePermissionFlags(String, String, int, int, @NonNull android.os.UserHandle);
     field public static final String FEATURE_ADOPTABLE_STORAGE = "android.software.adoptable_storage";
     field public static final String FEATURE_FILE_BASED_ENCRYPTION = "android.software.file_based_encryption";
+    field public static final int FLAG_PERMISSION_REVIEW_REQUIRED = 64; // 0x40
+    field public static final int FLAG_PERMISSION_REVOKE_ON_UPGRADE = 8; // 0x8
+    field public static final int FLAG_PERMISSION_REVOKE_WHEN_REQUESTED = 128; // 0x80
+    field public static final int FLAG_PERMISSION_USER_FIXED = 2; // 0x2
+    field public static final int FLAG_PERMISSION_USER_SET = 1; // 0x1
     field public static final int MATCH_FACTORY_ONLY = 2097152; // 0x200000
     field public static final int MATCH_KNOWN_PACKAGES = 4202496; // 0x402000
     field public static final String SYSTEM_SHARED_LIBRARY_SERVICES = "android.ext.services";
@@ -606,7 +684,6 @@ package android.database.sqlite {
     method public static int getWALAutoCheckpoint();
     method public static int getWALConnectionPoolSize();
     method public static String getWALSyncMode();
-    method public static boolean isCompatibilityWalSupported();
     method public static int releaseMemory();
   }
 
@@ -663,6 +740,13 @@ package android.hardware.display {
     field public static final android.os.Parcelable.Creator<android.hardware.display.AmbientBrightnessDayStats> CREATOR;
   }
 
+  public class AmbientDisplayConfiguration {
+    ctor public AmbientDisplayConfiguration(android.content.Context);
+    method public boolean alwaysOnAvailable();
+    method public boolean alwaysOnAvailableForUser(int);
+    method public boolean alwaysOnEnabled(int);
+  }
+
   public final class BrightnessChangeEvent implements android.os.Parcelable {
     method public int describeContents();
     method public void writeToParcel(android.os.Parcel, int);
@@ -686,7 +770,7 @@ package android.hardware.display {
   public final class BrightnessConfiguration implements android.os.Parcelable {
     method public int describeContents();
     method @Nullable public android.hardware.display.BrightnessCorrection getCorrectionByCategory(int);
-    method @Nullable public android.hardware.display.BrightnessCorrection getCorrectionByPackageName(String);
+    method @Nullable public android.hardware.display.BrightnessCorrection getCorrectionByPackageName(@NonNull String);
     method public android.util.Pair<float[],float[]> getCurve();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessConfiguration> CREATOR;
@@ -694,8 +778,8 @@ package android.hardware.display {
 
   public static class BrightnessConfiguration.Builder {
     ctor public BrightnessConfiguration.Builder(float[], float[]);
-    method public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByCategory(int, android.hardware.display.BrightnessCorrection);
-    method public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByPackageName(String, android.hardware.display.BrightnessCorrection);
+    method public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByCategory(int, @NonNull android.hardware.display.BrightnessCorrection);
+    method public android.hardware.display.BrightnessConfiguration.Builder addCorrectionByPackageName(@NonNull String, @NonNull android.hardware.display.BrightnessCorrection);
     method public android.hardware.display.BrightnessConfiguration build();
     method public int getMaxCorrectionsByCategory();
     method public int getMaxCorrectionsByPackageName();
@@ -703,7 +787,7 @@ package android.hardware.display {
   }
 
   public final class BrightnessCorrection implements android.os.Parcelable {
-    method public float apply(float);
+    method @FloatRange(from=0.0) public float apply(@FloatRange(from=0.0) float);
     method @NonNull public static android.hardware.display.BrightnessCorrection createScaleAndTranslateLog(float, float);
     method public int describeContents();
     method public void writeToParcel(android.os.Parcel, int);
@@ -802,6 +886,7 @@ package android.location {
 
   public class LocationManager {
     method public String[] getBackgroundThrottlingWhitelist();
+    method public String[] getIgnoreSettingsWhitelist();
     method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(android.location.LocationRequest, android.location.LocationListener, android.os.Looper);
     method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void requestLocationUpdates(android.location.LocationRequest, android.app.PendingIntent);
     method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void setLocationEnabledForUser(boolean, android.os.UserHandle);
@@ -924,6 +1009,50 @@ package android.media.audiofx {
 
 }
 
+package android.metrics {
+
+  public class LogMaker {
+    ctor public LogMaker(int);
+    ctor public LogMaker(Object[]);
+    method public android.metrics.LogMaker addTaggedData(int, Object);
+    method public android.metrics.LogMaker clearCategory();
+    method public android.metrics.LogMaker clearPackageName();
+    method public android.metrics.LogMaker clearSubtype();
+    method public android.metrics.LogMaker clearTaggedData(int);
+    method public android.metrics.LogMaker clearType();
+    method public void deserialize(Object[]);
+    method public int getCategory();
+    method public long getCounterBucket();
+    method public String getCounterName();
+    method public int getCounterValue();
+    method public String getPackageName();
+    method public int getProcessId();
+    method public int getSubtype();
+    method public Object getTaggedData(int);
+    method public long getTimestamp();
+    method public int getType();
+    method public int getUid();
+    method public boolean isLongCounterBucket();
+    method public boolean isSubsetOf(android.metrics.LogMaker);
+    method public boolean isValidValue(Object);
+    method public Object[] serialize();
+    method public android.metrics.LogMaker setCategory(int);
+    method public android.metrics.LogMaker setPackageName(String);
+    method public android.metrics.LogMaker setSubtype(int);
+    method public android.metrics.LogMaker setType(int);
+  }
+
+  public class MetricsReader {
+    ctor public MetricsReader();
+    method public void checkpoint();
+    method public boolean hasNext();
+    method public android.metrics.LogMaker next();
+    method public void read(long);
+    method public void reset();
+  }
+
+}
+
 package android.net {
 
   public class CaptivePortal implements android.os.Parcelable {
@@ -936,7 +1065,7 @@ package android.net {
   }
 
   public class ConnectivityManager {
-    method @RequiresPermission(android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK) public void startCaptivePortalApp(android.os.Bundle);
+    method @RequiresPermission(android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK) public void startCaptivePortalApp(android.net.Network, android.os.Bundle);
     field public static final String EXTRA_CAPTIVE_PORTAL_PROBE_SPEC = "android.net.extra.CAPTIVE_PORTAL_PROBE_SPEC";
     field public static final String EXTRA_CAPTIVE_PORTAL_USER_AGENT = "android.net.extra.CAPTIVE_PORTAL_USER_AGENT";
   }
@@ -996,6 +1125,7 @@ package android.net {
     method public int[] getCapabilities();
     method public int[] getTransportTypes();
     method public boolean satisfiedByNetworkCapabilities(android.net.NetworkCapabilities);
+    field public static final int TRANSPORT_TEST = 7; // 0x7
   }
 
   public class NetworkStack {
@@ -1261,8 +1391,13 @@ package android.net.util {
 
 package android.os {
 
+  public class BatteryManager {
+    method @RequiresPermission("android.permission.POWER_SAVER") public boolean setChargingStateUpdateDelayMillis(int);
+  }
+
   public class Build {
     method public static boolean is64BitAbi(String);
+    field public static final boolean IS_EMULATOR;
   }
 
   public static class Build.VERSION {
@@ -1281,7 +1416,7 @@ package android.os {
     method public static java.io.File getStorageDirectory();
   }
 
-  public class FileUtils {
+  public final class FileUtils {
     method public static boolean contains(java.io.File, java.io.File);
   }
 
@@ -1815,12 +1950,14 @@ package android.provider {
 
   public final class Settings {
     field public static final String ACTION_ENTERPRISE_PRIVACY_SETTINGS = "android.settings.ENTERPRISE_PRIVACY_SETTINGS";
+    field public static final String ACTION_REQUEST_ENABLE_CONTENT_CAPTURE = "android.settings.REQUEST_ENABLE_CONTENT_CAPTURE";
     field public static final int RESET_MODE_PACKAGE_DEFAULTS = 1; // 0x1
   }
 
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {
     field public static final String AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES = "autofill_compat_mode_allowed_packages";
     field public static final String AUTOMATIC_POWER_SAVER_MODE = "automatic_power_saver_mode";
+    field public static final String BATTERY_SAVER_CONSTANTS = "battery_saver_constants";
     field public static final String CAPTIVE_PORTAL_FALLBACK_PROBE_SPECS = "captive_portal_fallback_probe_specs";
     field public static final String CAPTIVE_PORTAL_FALLBACK_URL = "captive_portal_fallback_url";
     field public static final String CAPTIVE_PORTAL_HTTPS_URL = "captive_portal_https_url";
@@ -1842,6 +1979,7 @@ package android.provider {
     field public static final String LOCATION_GLOBAL_KILL_SWITCH = "location_global_kill_switch";
     field public static final String LOW_POWER_MODE = "low_power";
     field public static final String LOW_POWER_MODE_STICKY = "low_power_sticky";
+    field public static final String OVERLAY_DISPLAY_DEVICES = "overlay_display_devices";
     field public static final String SMS_ACCESS_RESTRICTION_ENABLED = "sms_access_restriction_enabled";
     field public static final String USE_OPEN_WIFI_PACKAGE = "use_open_wifi_package";
   }
@@ -1859,7 +1997,9 @@ package android.provider {
     field public static final String AUTOFILL_USER_DATA_MIN_VALUE_LENGTH = "autofill_user_data_min_value_length";
     field public static final String CONTENT_CAPTURE_ENABLED = "content_capture_enabled";
     field public static final String DISABLED_PRINT_SERVICES = "disabled_print_services";
+    field public static final String DOZE_ALWAYS_ON = "doze_always_on";
     field @Deprecated public static final String ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES = "enabled_notification_policy_access_packages";
+    field public static final String ENABLED_VR_LISTENERS = "enabled_vr_listeners";
     field public static final String LOCATION_ACCESS_CHECK_DELAY_MILLIS = "location_access_check_delay_millis";
     field public static final String LOCATION_ACCESS_CHECK_INTERVAL_MILLIS = "location_access_check_interval_millis";
     field public static final String NOTIFICATION_BADGING = "notification_badging";
@@ -2036,6 +2176,8 @@ package android.service.autofill.augmented {
     ctor public AugmentedAutofillService();
     method protected final void dump(java.io.FileDescriptor, java.io.PrintWriter, String[]);
     method protected void dump(@NonNull java.io.PrintWriter, @NonNull String[]);
+    method public void onConnected();
+    method public void onDisconnected();
     method public void onFillRequest(@NonNull android.service.autofill.augmented.FillRequest, @NonNull android.os.CancellationSignal, @NonNull android.service.autofill.augmented.FillController, @NonNull android.service.autofill.augmented.FillCallback);
     field public static final String SERVICE_INTERFACE = "android.service.autofill.augmented.AugmentedAutofillService";
   }
@@ -2073,44 +2215,29 @@ package android.service.autofill.augmented {
   }
 
   public abstract class PresentationParams {
-    method public int getFlags();
-    method @Nullable public android.service.autofill.augmented.PresentationParams.Area getFullArea();
     method @Nullable public android.service.autofill.augmented.PresentationParams.Area getSuggestionArea();
-    field public static final int FLAG_HINT_GRAVITY_BOTTOM = 2; // 0x2
-    field public static final int FLAG_HINT_GRAVITY_LEFT = 4; // 0x4
-    field public static final int FLAG_HINT_GRAVITY_RIGHT = 8; // 0x8
-    field public static final int FLAG_HINT_GRAVITY_TOP = 1; // 0x1
-    field public static final int FLAG_HOST_IME = 16; // 0x10
-    field public static final int FLAG_HOST_SYSTEM = 32; // 0x20
   }
 
   public abstract static class PresentationParams.Area {
     method @NonNull public android.graphics.Rect getBounds();
-    method @Nullable public android.service.autofill.augmented.PresentationParams.Area getSubArea(@NonNull android.graphics.Rect);
   }
 
 }
 
 package android.service.contentcapture {
 
-  @Deprecated public final class ContentCaptureEventsRequest implements android.os.Parcelable {
-    method @Deprecated public int describeContents();
-    method @Deprecated @NonNull public java.util.List<android.view.contentcapture.ContentCaptureEvent> getEvents();
-    method @Deprecated public void writeToParcel(android.os.Parcel, int);
-    field @Deprecated public static final android.os.Parcelable.Creator<android.service.contentcapture.ContentCaptureEventsRequest> CREATOR;
-  }
-
   public abstract class ContentCaptureService extends android.app.Service {
     ctor public ContentCaptureService();
+    method public final void disableContentCaptureServices();
     method public void onActivitySnapshot(@NonNull android.view.contentcapture.ContentCaptureSessionId, @NonNull android.service.contentcapture.SnapshotData);
     method public void onConnected();
     method public void onContentCaptureEvent(@NonNull android.view.contentcapture.ContentCaptureSessionId, @NonNull android.view.contentcapture.ContentCaptureEvent);
-    method @Deprecated public void onContentCaptureEventsRequest(@NonNull android.view.contentcapture.ContentCaptureSessionId, @NonNull android.service.contentcapture.ContentCaptureEventsRequest);
     method public void onCreateContentCaptureSession(@NonNull android.view.contentcapture.ContentCaptureContext, @NonNull android.view.contentcapture.ContentCaptureSessionId);
     method public void onDestroyContentCaptureSession(@NonNull android.view.contentcapture.ContentCaptureSessionId);
     method public void onDisconnected();
     method public void onUserDataRemovalRequest(@NonNull android.view.contentcapture.UserDataRemovalRequest);
-    method public final void setContentCaptureWhitelist(@Nullable java.util.List<java.lang.String>, @Nullable java.util.List<android.content.ComponentName>);
+    method @Deprecated public final void setContentCaptureWhitelist(@Nullable java.util.List<java.lang.String>, @Nullable java.util.List<android.content.ComponentName>);
+    method public final void setContentCaptureWhitelist(@Nullable java.util.Set<java.lang.String>, @Nullable java.util.Set<android.content.ComponentName>);
     field public static final String SERVICE_INTERFACE = "android.service.contentcapture.ContentCaptureService";
   }
 
@@ -2219,6 +2346,7 @@ package android.telephony {
   public class TelephonyManager {
     method public int checkCarrierPrivilegesForPackage(String);
     method public int getCarrierIdListVersion();
+    method public android.util.Pair<java.lang.Integer,java.lang.Integer> getRadioHalVersion();
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void refreshUiccProfile();
     method public void setCarrierTestOverride(String, String, String, String, String, String, String);
     field public static final int CARRIER_PRIVILEGE_STATUS_ERROR_LOADING_RULES = -2; // 0xfffffffe
@@ -2350,6 +2478,10 @@ package android.util {
 
   public final class ArraySet<E> implements java.util.Collection<E> java.util.Set<E> {
     method public E valueAtUnchecked(int);
+  }
+
+  public class TimeUtils {
+    method public static String formatDuration(long);
   }
 
 }
@@ -2573,6 +2705,10 @@ package android.view {
     field public static final int CALLBACK_ANIMATION = 1; // 0x1
   }
 
+  public final class Display {
+    method public boolean supportsSystemDecorations();
+  }
+
   public class FocusFinder {
     method public static void sort(android.view.View[], int, int, android.view.ViewGroup, boolean);
   }
@@ -2634,7 +2770,8 @@ package android.view {
   }
 
   public class ViewDebug {
-    method @Nullable public static AutoCloseable startRenderingCommandsCapture(android.view.View, java.util.concurrent.Executor, java.util.function.Function<android.graphics.Picture,java.lang.Boolean>);
+    method @Deprecated @Nullable public static AutoCloseable startRenderingCommandsCapture(android.view.View, java.util.concurrent.Executor, java.util.function.Function<android.graphics.Picture,java.lang.Boolean>);
+    method @Nullable public static AutoCloseable startRenderingCommandsCapture(android.view.View, java.util.concurrent.Executor, java.util.concurrent.Callable<java.io.OutputStream>);
   }
 
   public interface WindowManager extends android.view.ViewManager {
@@ -2699,7 +2836,8 @@ package android.view.autofill {
   }
 
   public final class AutofillManager {
-    method public void setAugmentedAutofillWhitelist(@Nullable java.util.List<java.lang.String>, @Nullable java.util.List<android.content.ComponentName>);
+    method @Deprecated public void setAugmentedAutofillWhitelist(@Nullable java.util.List<java.lang.String>, @Nullable java.util.List<android.content.ComponentName>);
+    method public void setAugmentedAutofillWhitelist(@Nullable java.util.Set<java.lang.String>, @Nullable java.util.Set<android.content.ComponentName>);
     field public static final String DEVICE_CONFIG_AUTOFILL_SMART_SUGGESTION_SUPPORTED_MODES = "smart_suggestion_supported_modes";
     field public static final int FLAG_SMART_SUGGESTION_OFF = 0; // 0x0
     field public static final int FLAG_SMART_SUGGESTION_SYSTEM = 1; // 0x1
@@ -2711,20 +2849,18 @@ package android.view.autofill {
 package android.view.contentcapture {
 
   public final class ContentCaptureContext implements android.os.Parcelable {
-    method @Nullable public String getAction();
     method @Nullable public android.content.ComponentName getActivityComponent();
     method public int getDisplayId();
-    method @Nullable public android.os.Bundle getExtras();
     method public int getFlags();
     method @Nullable public android.view.contentcapture.ContentCaptureSessionId getParentSessionId();
     method public int getTaskId();
-    method @Nullable public android.net.Uri getUri();
     field public static final int FLAG_DISABLED_BY_APP = 1; // 0x1
     field public static final int FLAG_DISABLED_BY_FLAG_SECURE = 2; // 0x2
   }
 
   public final class ContentCaptureEvent implements android.os.Parcelable {
     method public int describeContents();
+    method @Nullable public android.view.contentcapture.ContentCaptureContext getContentCaptureContext();
     method public long getEventTime();
     method @Nullable public android.view.autofill.AutofillId getId();
     method @Nullable public java.util.List<android.view.autofill.AutofillId> getIds();
@@ -2733,17 +2869,27 @@ package android.view.contentcapture {
     method @Nullable public android.view.contentcapture.ViewNode getViewNode();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.view.contentcapture.ContentCaptureEvent> CREATOR;
-    field public static final int TYPE_INITIAL_VIEW_TREE_APPEARED = 5; // 0x5
-    field public static final int TYPE_INITIAL_VIEW_TREE_APPEARING = 4; // 0x4
+    field public static final int TYPE_CONTEXT_UPDATED = 6; // 0x6
+    field public static final int TYPE_SESSION_PAUSED = 8; // 0x8
+    field public static final int TYPE_SESSION_RESUMED = 7; // 0x7
     field public static final int TYPE_VIEW_APPEARED = 1; // 0x1
     field public static final int TYPE_VIEW_DISAPPEARED = 2; // 0x2
     field public static final int TYPE_VIEW_TEXT_CHANGED = 3; // 0x3
+    field public static final int TYPE_VIEW_TREE_APPEARED = 5; // 0x5
+    field public static final int TYPE_VIEW_TREE_APPEARING = 4; // 0x4
   }
 
   public final class ContentCaptureManager {
     method public boolean isContentCaptureFeatureEnabled();
-    method public void setContentCaptureFeatureEnabled(boolean);
+    field public static final String DEVICE_CONFIG_PROPERTY_IDLE_FLUSH_FREQUENCY = "idle_flush_frequency";
+    field public static final String DEVICE_CONFIG_PROPERTY_LOGGING_LEVEL = "logging_level";
+    field public static final String DEVICE_CONFIG_PROPERTY_LOG_HISTORY_SIZE = "log_history_size";
+    field public static final String DEVICE_CONFIG_PROPERTY_MAX_BUFFER_SIZE = "max_buffer_size";
     field public static final String DEVICE_CONFIG_PROPERTY_SERVICE_EXPLICITLY_ENABLED = "service_explicitly_enabled";
+    field public static final String DEVICE_CONFIG_PROPERTY_TEXT_CHANGE_FLUSH_FREQUENCY = "text_change_flush_frequency";
+    field public static final int LOGGING_LEVEL_DEBUG = 1; // 0x1
+    field public static final int LOGGING_LEVEL_OFF = 0; // 0x0
+    field public static final int LOGGING_LEVEL_VERBOSE = 2; // 0x2
   }
 
   public final class ViewNode extends android.app.assist.AssistStructure.ViewNode {

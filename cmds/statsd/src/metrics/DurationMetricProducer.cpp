@@ -433,7 +433,7 @@ void DurationMetricProducer::onSlicedConditionMayChangeLocked(bool overallCondit
 void DurationMetricProducer::onConditionChangedLocked(const bool conditionMet,
                                                       const int64_t eventTime) {
     VLOG("Metric %lld onConditionChanged", (long long)mMetricId);
-    mCondition = conditionMet;
+    mCondition = conditionMet ? ConditionState::kTrue : ConditionState::kFalse;
     flushIfNeededLocked(eventTime);
     for (auto& whatIt : mCurrentSlicedDurationTrackerMap) {
         for (auto& pair : whatIt.second) {
@@ -456,6 +456,7 @@ void DurationMetricProducer::clearPastBucketsLocked(const int64_t dumpTimeNs) {
 void DurationMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
                                                 const bool include_current_partial_bucket,
                                                 const bool erase_data,
+                                                const DumpLatency dumpLatency,
                                                 std::set<string> *str_set,
                                                 ProtoOutputStream* protoOutput) {
     if (include_current_partial_bucket) {
@@ -581,7 +582,8 @@ void DurationMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
     mCurrentBucketNum += numBucketsForward;
 }
 
-void DurationMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
+void DurationMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
+                                                      const int64_t& nextBucketStartTimeNs) {
     for (auto whatIt = mCurrentSlicedDurationTrackerMap.begin();
             whatIt != mCurrentSlicedDurationTrackerMap.end();) {
         for (auto it = whatIt->second.begin(); it != whatIt->second.end();) {
@@ -599,6 +601,7 @@ void DurationMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs
             whatIt++;
         }
     }
+    StatsdStats::getInstance().noteBucketCount(mMetricId);
 }
 
 void DurationMetricProducer::dumpStatesLocked(FILE* out, bool verbose) const {
@@ -767,12 +770,13 @@ void DurationMetricProducer::onMatchedLogEventLocked(const size_t matcherIndex,
                            !mSameConditionDimensionsInTracker,
                            !mHasLinksToAllConditionDimensionsInTracker,
                            &dimensionKeysInCondition);
-        condition = (conditionState == ConditionState::kTrue);
+        condition = conditionState == ConditionState::kTrue;
         if (mDimensionsInCondition.empty() && condition) {
             dimensionKeysInCondition.insert(DEFAULT_DIMENSION_KEY);
         }
     } else {
-        condition = mCondition;
+        // TODO: The unknown condition state is not handled here, we should fix it.
+        condition = mCondition == ConditionState::kTrue;
         if (condition) {
             dimensionKeysInCondition.insert(DEFAULT_DIMENSION_KEY);
         }

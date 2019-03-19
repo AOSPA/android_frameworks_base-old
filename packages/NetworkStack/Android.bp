@@ -28,6 +28,7 @@ java_library {
     static_libs: [
         "netd_aidl_interface-java",
         "networkstack-aidl-interfaces-java",
+        "datastallprotosnano",
     ]
 }
 
@@ -35,11 +36,12 @@ java_library {
 android_app {
     name: "NetworkStack",
     sdk_version: "system_current",
-    certificate: "platform",
+    certificate: "networkstack",
     privileged: true,
     static_libs: [
         "NetworkStackLib"
     ],
+    jarjar_rules: "jarjar-rules-shared.txt",
     manifest: "AndroidManifest.xml",
     required: ["NetworkStackPermissionStub"],
 }

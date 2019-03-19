@@ -170,7 +170,6 @@ Landroid/app/IAppTask;->getTaskInfo()Landroid/app/ActivityManager$RecentTaskInfo
 Landroid/app/IAssistDataReceiver$Stub;-><init>()V
 Landroid/app/IAssistDataReceiver;->onHandleAssistData(Landroid/os/Bundle;)V
 Landroid/app/IAssistDataReceiver;->onHandleAssistScreenshot(Landroid/graphics/Bitmap;)V
-Landroid/app/IInputForwarder;->forwardEvent(Landroid/view/InputEvent;)Z
 Landroid/app/IInstrumentationWatcher$Stub;-><init>()V
 Landroid/app/IInstrumentationWatcher;->instrumentationStatus(Landroid/content/ComponentName;ILandroid/os/Bundle;)V
 Landroid/app/INotificationManager$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
@@ -542,8 +541,6 @@ Landroid/net/IConnectivityManager;->getTetherableWifiRegexs()[Ljava/lang/String;
 Landroid/net/IConnectivityManager;->getTetheredIfaces()[Ljava/lang/String;
 Landroid/net/IConnectivityManager;->getTetheringErroredIfaces()[Ljava/lang/String;
 Landroid/net/IConnectivityManager;->startLegacyVpn(Lcom/android/internal/net/VpnProfile;)V
-Landroid/net/INetd$Stub;->asInterface(Landroid/os/IBinder;)Landroid/net/INetd;
-Landroid/net/INetd;->interfaceAddAddress(Ljava/lang/String;Ljava/lang/String;I)V
 Landroid/net/INetworkManagementEventObserver$Stub;-><init>()V
 Landroid/net/INetworkPolicyListener$Stub;-><init>()V
 Landroid/net/INetworkPolicyManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/net/INetworkPolicyManager;
@@ -691,7 +688,6 @@ Landroid/os/Build$VERSION;->ACTIVE_CODENAMES:[Ljava/lang/String;
 Landroid/os/Build;->getLong(Ljava/lang/String;)J
 Landroid/os/Build;->getString(Ljava/lang/String;)Ljava/lang/String;
 Landroid/os/Build;->IS_DEBUGGABLE:Z
-Landroid/os/Build;->IS_EMULATOR:Z
 Landroid/os/Bundle;->filterValues()Landroid/os/Bundle;
 Landroid/os/Bundle;->forPair(Ljava/lang/String;Ljava/lang/String;)Landroid/os/Bundle;
 Landroid/os/Bundle;->getIBinder(Ljava/lang/String;)Landroid/os/IBinder;
@@ -1527,7 +1523,7 @@ Landroid/view/IWindowSession$Stub;->asInterface(Landroid/os/IBinder;)Landroid/vi
 Landroid/view/IWindowSession;->finishDrawing(Landroid/view/IWindow;)V
 Landroid/view/IWindowSession;->getInTouchMode()Z
 Landroid/view/IWindowSession;->performDrag(Landroid/view/IWindow;ILandroid/view/SurfaceControl;IFFFFLandroid/content/ClipData;)Landroid/os/IBinder;
-Landroid/view/IWindowSession;->performHapticFeedback(Landroid/view/IWindow;IZ)Z
+Landroid/view/IWindowSession;->performHapticFeedback(IZ)Z
 Landroid/view/IWindowSession;->remove(Landroid/view/IWindow;)V
 Landroid/view/IWindowSession;->setInTouchMode(Z)V
 Landroid/view/IWindowSession;->setTransparentRegion(Landroid/view/IWindow;Landroid/graphics/Region;)V
@@ -2439,7 +2435,6 @@ Lcom/android/internal/telephony/cat/CatService;->isStkAppInstalled()Z
 Lcom/android/internal/telephony/cat/CatService;->mCmdIf:Lcom/android/internal/telephony/CommandsInterface;
 Lcom/android/internal/telephony/cat/CatService;->mContext:Landroid/content/Context;
 Lcom/android/internal/telephony/cat/CatService;->mCurrntCmd:Lcom/android/internal/telephony/cat/CatCmdMessage;
-Lcom/android/internal/telephony/cat/CatService;->mHandlerThread:Landroid/os/HandlerThread;
 Lcom/android/internal/telephony/cat/CatService;->mMenuCmd:Lcom/android/internal/telephony/cat/CatCmdMessage;
 Lcom/android/internal/telephony/cat/CatService;->mMsgDecoder:Lcom/android/internal/telephony/cat/RilMessageDecoder;
 Lcom/android/internal/telephony/cat/CatService;->mSlotId:I
@@ -2826,7 +2821,6 @@ Lcom/android/internal/telephony/gsm/UsimPhoneBookManager;->reset()V
 Lcom/android/internal/telephony/GsmAlphabet$TextEncodingDetails;-><init>()V
 Lcom/android/internal/telephony/GsmCdmaCall;->attachFake(Lcom/android/internal/telephony/Connection;Lcom/android/internal/telephony/Call$State;)V
 Lcom/android/internal/telephony/GsmCdmaCallTracker;->clearDisconnected()V
-Lcom/android/internal/telephony/GsmCdmaCallTracker;->dialThreeWay(Ljava/lang/String;)Lcom/android/internal/telephony/Connection;
 Lcom/android/internal/telephony/GsmCdmaCallTracker;->disableDataCallInEmergencyCall(Ljava/lang/String;)V
 Lcom/android/internal/telephony/GsmCdmaCallTracker;->fakeHoldForegroundBeforeDial()V
 Lcom/android/internal/telephony/GsmCdmaCallTracker;->getPhone()Lcom/android/internal/telephony/GsmCdmaPhone;
@@ -2914,15 +2908,8 @@ Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->DBG:Z
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->logd(Ljava/lang/String;)V
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->loge(Ljava/lang/String;)V
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mAdnCache:Lcom/android/internal/telephony/uicc/AdnRecordCache;
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mCurrentApp:Lcom/android/internal/telephony/uicc/UiccCardApplication;
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mIs3gCard:Z
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mLock:Ljava/lang/Object;
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mPhone:Lcom/android/internal/telephony/Phone;
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mRecords:Ljava/util/List;
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mRecordSize:[I
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mSuccess:Z
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->updateEfForIccType(I)I
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->waitForResult(Ljava/util/concurrent/atomic/AtomicBoolean;)V
 Lcom/android/internal/telephony/IccProvider;-><init>()V
 Lcom/android/internal/telephony/IccProvider;->ADDRESS_BOOK_COLUMN_NAMES:[Ljava/lang/String;
 Lcom/android/internal/telephony/IccProvider;->DBG:Z
@@ -3110,10 +3097,6 @@ Lcom/android/internal/telephony/ISms$Stub;-><init>()V
 Lcom/android/internal/telephony/ISms$Stub;->asInterface(Landroid/os/IBinder;)Lcom/android/internal/telephony/ISms;
 Lcom/android/internal/telephony/ISub$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Lcom/android/internal/telephony/ISub$Stub;->asInterface(Landroid/os/IBinder;)Lcom/android/internal/telephony/ISub;
-Lcom/android/internal/telephony/ISub;->getActiveSubIdList()[I
-Lcom/android/internal/telephony/ISub;->getDefaultDataSubId()I
-Lcom/android/internal/telephony/ISub;->getDefaultSubId()I
-Lcom/android/internal/telephony/ISub;->setDefaultDataSubId(I)V
 Lcom/android/internal/telephony/ITelephony$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Lcom/android/internal/telephony/ITelephony$Stub$Proxy;->getDeviceId(Ljava/lang/String;)Ljava/lang/String;
 Lcom/android/internal/telephony/ITelephony$Stub$Proxy;->isRadioOn(Ljava/lang/String;)Z

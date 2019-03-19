@@ -1498,6 +1498,13 @@ public final class ProcessList {
                 // Also turn on CheckJNI for debuggable apps. It's quite
                 // awkward to turn on otherwise.
                 runtimeFlags |= Zygote.DEBUG_ENABLE_CHECKJNI;
+
+                // Check if the developer does not want ART verification
+                if (android.provider.Settings.Global.getInt(mService.mContext.getContentResolver(),
+                        android.provider.Settings.Global.ART_VERIFIER_VERIFY_DEBUGGABLE, 1) == 0) {
+                    runtimeFlags |= Zygote.DISABLE_VERIFIER;
+                    Slog.w(TAG_PROCESSES, app + ": ART verification disabled");
+                }
             }
             // Run the app in safe mode if its manifest requests so or the
             // system is booted in safe mode.
@@ -1681,7 +1688,8 @@ public final class ProcessList {
     public void killAppZygoteIfNeededLocked(AppZygote appZygote) {
         final ApplicationInfo appInfo = appZygote.getAppInfo();
         ArrayList<ProcessRecord> zygoteProcesses = mAppZygoteProcesses.get(appZygote);
-        if (zygoteProcesses.size() == 0) { // Only remove if no longer in use now
+        if (zygoteProcesses != null && zygoteProcesses.size() == 0) {
+            // Only remove if no longer in use now
             mAppZygotes.remove(appInfo.processName, appInfo.uid);
             mAppZygoteProcesses.remove(appZygote);
             mAppIsolatedUidRangeAllocator.freeUidRangeLocked(appInfo);
@@ -1703,9 +1711,16 @@ public final class ProcessList {
             ArrayList<ProcessRecord> zygoteProcesses = mAppZygoteProcesses.get(appZygote);
             zygoteProcesses.remove(app);
             if (zygoteProcesses.size() == 0) {
-                Message msg = mService.mHandler.obtainMessage(KILL_APP_ZYGOTE_MSG);
-                msg.obj = appZygote;
-                mService.mHandler.sendMessageDelayed(msg, KILL_APP_ZYGOTE_DELAY_MS);
+                mService.mHandler.removeMessages(KILL_APP_ZYGOTE_MSG);
+                if (app.removed) {
+                    // If we stopped this process because the package hosting it was removed,
+                    // there's no point in delaying the app zygote kill.
+                    killAppZygoteIfNeededLocked(appZygote);
+                } else {
+                    Message msg = mService.mHandler.obtainMessage(KILL_APP_ZYGOTE_MSG);
+                    msg.obj = appZygote;
+                    mService.mHandler.sendMessageDelayed(msg, KILL_APP_ZYGOTE_DELAY_MS);
+                }
             }
         }
     }
@@ -1749,8 +1764,6 @@ public final class ProcessList {
                     .getPackagesForUid(uid);
             final StorageManagerInternal storageManagerInternal =
                     LocalServices.getService(StorageManagerInternal.class);
-            final String[] visibleVolIds = storageManagerInternal
-                    .getVisibleVolumesForUser(UserHandle.getUserId(uid));
             final String sandboxId = storageManagerInternal.getSandboxId(app.info.packageName);
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Start proc: " +
                     app.processName);
@@ -1761,7 +1774,7 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        packageNames, visibleVolIds, sandboxId,
+                        packageNames, sandboxId,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else if (hostingType.equals("app_zygote")) {
                 final AppZygote appZygote = createAppZygoteForProcessIfNeeded(app);
@@ -1770,14 +1783,14 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        packageNames, visibleVolIds, sandboxId, /*useBlastulaPool=*/ false,
+                        packageNames, sandboxId, /*useBlastulaPool=*/ false,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, invokeWith, app.info.packageName,
-                        packageNames, visibleVolIds, sandboxId,
+                        packageNames, sandboxId,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             }
             checkSlow(startTime, "startProcess: returned from zygote!");
@@ -2159,6 +2172,29 @@ public final class ProcessList {
         int N = procs.size();
         for (int i=0; i<N; i++) {
             removeProcessLocked(procs.get(i), callerWillRestart, allowRestart, reason);
+        }
+        // See if there are any app zygotes running for this packageName / UID combination,
+        // and kill it if so.
+        final ArrayList<AppZygote> zygotesToKill = new ArrayList<>();
+        for (SparseArray<AppZygote> appZygotes : mAppZygotes.getMap().values()) {
+            for (int i = 0; i < appZygotes.size(); ++i) {
+                final int appZygoteUid = appZygotes.keyAt(i);
+                if (userId != UserHandle.USER_ALL && UserHandle.getUserId(appZygoteUid) != userId) {
+                    continue;
+                }
+                if (appId >= 0 && UserHandle.getAppId(appZygoteUid) != appId) {
+                    continue;
+                }
+                final AppZygote appZygote = appZygotes.valueAt(i);
+                if (packageName != null
+                        && !packageName.equals(appZygote.getAppInfo().packageName)) {
+                    continue;
+                }
+                zygotesToKill.add(appZygote);
+            }
+        }
+        for (AppZygote appZygote : zygotesToKill) {
+            killAppZygoteIfNeededLocked(appZygote);
         }
         mService.updateOomAdjLocked();
         return N > 0;

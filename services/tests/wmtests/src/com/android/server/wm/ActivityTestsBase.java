@@ -42,7 +42,6 @@ import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
 import android.app.IApplicationThread;
-import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -75,7 +74,6 @@ import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.wm.utils.MockTracker;
 
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -90,8 +88,6 @@ import java.util.List;
 class ActivityTestsBase {
     private static int sNextDisplayId = DEFAULT_DISPLAY + 1;
 
-    private static MockTracker sMockTracker;
-
     @Rule
     public final DexmakerShareClassLoaderRule mDexmakerShareClassLoaderRule =
             new DexmakerShareClassLoaderRule();
@@ -103,6 +99,8 @@ class ActivityTestsBase {
     RootActivityContainer mRootActivityContainer;
     ActivityStackSupervisor mSupervisor;
 
+    private MockTracker mMockTracker;
+
     // Default package name
     static final String DEFAULT_COMPONENT_PACKAGE_NAME = "com.foo";
 
@@ -111,19 +109,13 @@ class ActivityTestsBase {
 
     @BeforeClass
     public static void setUpOnceBase() {
-        sMockTracker = new MockTracker();
-
         AttributeCache.init(getInstrumentation().getTargetContext());
-    }
-
-    @AfterClass
-    public static void tearDownOnceBase() {
-        sMockTracker.close();
-        sMockTracker = null;
     }
 
     @Before
     public void setUpBase() {
+        mMockTracker = new MockTracker();
+
         mTestInjector.setUp();
 
         mService = new TestActivityTaskManagerService(mContext);
@@ -138,6 +130,9 @@ class ActivityTestsBase {
             mService.setWindowManager(null);
             mService = null;
         }
+
+        mMockTracker.close();
+        mMockTracker = null;
     }
 
     /** Creates a {@link TestActivityDisplay}. */
@@ -437,7 +432,6 @@ class ActivityTestsBase {
             spyOn(getLifecycleManager());
             spyOn(getLockTaskController());
             doReturn(mock(IPackageManager.class)).when(this).getPackageManager();
-            doReturn(mock(DevicePolicyManager.class)).when(this).getDevicePolicyManager();
             // allow background activity starts by default
             doReturn(true).when(this).isBackgroundActivityStartsEnabled();
             doNothing().when(this).updateCpuStats();
@@ -600,7 +594,7 @@ class ActivityTestsBase {
             doNothing().when(this).acquireLaunchWakelock();
             doReturn(mKeyguardController).when(this).getKeyguardController();
 
-            mLaunchingActivity = mock(PowerManager.WakeLock.class);
+            mLaunchingActivityWakeLock = mock(PowerManager.WakeLock.class);
 
             initialize();
         }
@@ -653,7 +647,10 @@ class ActivityTestsBase {
 
         @Override
         protected DisplayContent createDisplayContent() {
-            return WindowTestUtils.createTestDisplayContent();
+            final DisplayContent displayContent = mock(DisplayContent.class);
+            DockedStackDividerController divider = mock(DockedStackDividerController.class);
+            doReturn(divider).when(displayContent).getDockedDividerController();
+            return displayContent;
         }
 
         void removeAllTasks() {
@@ -734,14 +731,13 @@ class ActivityTestsBase {
 
         @Override
         protected void createTaskStack(int displayId, boolean onTop, Rect outBounds) {
-            mTaskStack = WindowTestUtils.createMockTaskStack();
+            mTaskStack = mock(TaskStack.class);
 
             // Primary pinned stacks require a non-empty out bounds to be set or else all tasks
             // will be moved to the full screen stack.
             if (getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
                 outBounds.set(0, 0, 100, 100);
             }
-
         }
 
         @Override

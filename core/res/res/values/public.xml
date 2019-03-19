@@ -2951,6 +2951,8 @@
     <public-group type="style" first-id="0x010302e2">
         <!-- @hide @SystemApi -->
         <public name="Theme.DeviceDefault.DocumentsUI" />
+        <public name="Theme.DeviceDefault.DayNight" />
+        <public name="ThemeOverlay.DeviceDefault.Accent.DayNight" />
     </public-group>
 
     <public-group type="id" first-id="0x01020046">
@@ -2990,6 +2992,14 @@
     <public-group type="bool" first-id="0x01110000">
         <!-- @hide @SystemApi -->
         <public name="config_sendPackageName" />
+      <!-- @hide @SystemApi -->
+      <public name="config_showDefaultAssistant" />
+      <!-- @hide @SystemApi -->
+      <public name="config_showDefaultEmergency" />
+      <!-- @hide @SystemApi -->
+      <public name="config_showDefaultHome" />
+      <!-- @hide @TestApi -->
+      <public name="config_perDisplayFocusEnabled" />
     </public-group>
 
     <public-group type="dimen" first-id="0x01050007">

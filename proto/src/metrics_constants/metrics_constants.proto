@@ -247,6 +247,12 @@ message MetricsEvent {
     LOCATION_GONE = 6; // the view isn't laid out at all
   }
 
+  // Subtypes for profile logging
+  enum ActiveUserProfile {
+    PARENT_PROFILE = 1;
+    MANAGED_PROFILE = 2;
+  }
+
   // Known visual elements: views or controls.
   enum View {
     // Unknown view
@@ -3589,7 +3595,7 @@ message MetricsEvent {
     // OPEN: Settings > Apps > Default Apps > Default sms
     DEFAULT_SMS_PICKER = 789;
 
-    // OPEN: Settings > Apps > Default Apps > Default notification assistant
+    // OPEN: Settings > Apps > Notification > Notification Assistant
     DEFAULT_NOTIFICATION_ASSISTANT = 790;
 
     // OPEN: Settings > Apps > Default Apps > Warning dialog to confirm selection
@@ -5428,7 +5434,7 @@ message MetricsEvent {
     FIELD_END_BATTERY_PERCENT = 1308;
 
     // ACTION: Settings > Display > Night Light
-    // SUBTYPE: com.android.server.display.ColorDisplayService.AutoMode value
+    // SUBTYPE: com.android.server.display.color.ColorDisplayService.AutoMode value
     // CATEGORY: SETTINGS
     // OS: P
     ACTION_NIGHT_DISPLAY_AUTO_MODE_CHANGED = 1309;
@@ -6161,6 +6167,11 @@ message MetricsEvent {
     // FIELD: Id of the autofill session associated with this metric.
     // OS: P
     FIELD_AUTOFILL_SESSION_ID = 1456;
+
+    // FIELD: Device USB overheat alarm trigger.
+    // CATEGORY: GLOBAL_SYSTEM_UI
+    // OS: P
+    POWER_OVERHEAT_ALARM = 1457;
 
     // ---- End P Constants, all P constants go above this line ----
 
@@ -6974,6 +6985,85 @@ message MetricsEvent {
     // The time elapsed from triggering the share to displaying the app targets
     // formerly: histogram system_cost_for_smart_sharing
     FIELD_TIME_TO_APP_TARGETS = 1653;
+
+    // Open: Settings > Panel for Internet Connectivity
+    PANEL_INTERNET_CONNECTIVITY = 1654;
+
+    // Open: Settings > Panel for Volume
+    PANEL_VOLUME = 1655;
+
+    // Open: Settings > Panel for NFC
+    PANEL_NFC = 1656;
+
+    // Open: Settings > Panel for Media Output
+    PANEL_MEDIA_OUTPUT = 1657;
+
+    // ACTION: An interaction with a Slice or other component in the Panel.
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACTION_PANEL_INTERACTION = 1658;
+
+    // ACTION: Change phone orientation
+    // OS: Q
+    // SUBTYPE is orientation defined in Configuration.class
+    ACTION_PHONE_ORIENTATION_CHANGED = 1659;
+
+    // CATEGORY: ACTION_PHONE_ORIENTATION_CHANGED
+    // OS: Q
+    // Different display can have different orientations, so need to log display id
+    FIELD_DISPLAY_ID = 1660;
+
+    // ACTION: Changing from work to parent profile or vice versa
+    // OS: Q
+    ACTION_SWITCH_SHARE_PROFILE = 1661;
+
+    // ACTION: Show Contextual homepage, log latency in loading cards
+    ACTION_CONTEXTUAL_HOME_SHOW = 1662;
+
+    // ACTION: Contextual card displays
+    ACTION_CONTEXTUAL_CARD_SHOW = 1663;
+
+    // ACTION: Contextual cards are eligible to be shown, but don't rank high
+    ACTION_CONTEXTUAL_CARD_NOT_SHOW = 1664;
+
+    // ACTION: Settings > long press a card, and click dismiss
+    // Contextual card is dismissed
+    ACTION_CONTEXTUAL_CARD_DISMISS = 1665;
+
+    // ACTION: Settings > click a card
+    // Contextual card is clicked
+    ACTION_CONTEXTUAL_CARD_CLICK = 1666;
+
+    // Mapping: go/at-mapping
+    PAGE_ATSSI = 1667;
+
+    PAGE_ATSII = 1668;
+
+    PAGE_ATUS = 1669;
+
+    PAGE_ATSSP = 1670;
+
+    PAGE_ATSAP = 1671;
+
+    PAGE_ATSCP = 1672;
+
+    PAGE_ATHNP = 1673;
+
+    ACTION_ATSG = 1674;
+
+    ACTION_ATPG = 1675;
+
+    ACTION_ATCLPB = 1676;
+
+    ACTION_ATCGIB = 1677;
+
+    ACTION_ATCPAB = 1678;
+
+    ACTION_ATCSAUC = 1679;
+
+    ACTION_ATCSCUC = 1680;
+
+    ACTION_ATCHNUC = 1681;
 
     // ---- End Q Constants, all Q constants go above this line ----
     // Add new aosp constants above this line.

@@ -2704,9 +2704,8 @@ public class DisplayPolicy {
             DisplayCutout displayCutout) {
         int width = fullWidth;
         if (hasNavigationBar()) {
-            // For a basic navigation bar, when we are in landscape mode we place
-            // the navigation bar to the side.
-            if (navigationBarCanMove() && fullWidth > fullHeight) {
+            final int navBarPosition = navigationBarPosition(fullWidth, fullHeight, rotation);
+            if (navBarPosition == NAV_BAR_LEFT || navBarPosition == NAV_BAR_RIGHT) {
                 width -= getNavigationBarWidth(rotation, uiMode);
             }
         }
@@ -2733,9 +2732,8 @@ public class DisplayPolicy {
             DisplayCutout displayCutout) {
         int height = fullHeight;
         if (hasNavigationBar()) {
-            // For a basic navigation bar, when we are in portrait mode we place
-            // the navigation bar to the bottom.
-            if (!navigationBarCanMove() || fullWidth < fullHeight) {
+            final int navBarPosition = navigationBarPosition(fullWidth, fullHeight, rotation);
+            if (navBarPosition == NAV_BAR_BOTTOM) {
                 height -= getNavigationBarHeight(rotation, uiMode);
             }
         }
@@ -2876,6 +2874,9 @@ public class DisplayPolicy {
     public int focusChangedLw(WindowState lastFocus, WindowState newFocus) {
         mFocusedWindow = newFocus;
         mLastFocusedWindow = lastFocus;
+        if (mDisplayContent.isDefaultDisplay) {
+            mService.mPolicy.onDefaultDisplayFocusChangedLw(newFocus);
+        }
         if ((updateSystemUiVisibilityLw() & SYSTEM_UI_CHANGING_LAYOUT) != 0) {
             // If the navigation bar has been hidden or shown, we need to do another
             // layout pass to update that window.
@@ -3360,7 +3361,12 @@ public class DisplayPolicy {
         }
 
         final WindowState w = mTopFullscreenOpaqueWindowState;
-        if (w != mFocusedWindow) {
+        if (w == null || w != mFocusedWindow) {
+            return false;
+        }
+        // If the bounds of activity window is different from its parent, then reject to be seamless
+        // because the window position may change after rotation that will look like a sudden jump.
+        if (w.mAppToken != null && !w.mAppToken.matchParentBounds()) {
             return false;
         }
 
@@ -3368,8 +3374,7 @@ public class DisplayPolicy {
         // it and is in the fullscreen opaque state. Seamless rotation
         // requires freezing various Surface states and won't work well
         // with animations, so we disable it in the animation case for now.
-        if (w != null && !w.isAnimatingLw()
-                && w.getAttrs().rotationAnimation == ROTATION_ANIMATION_SEAMLESS) {
+        if (!w.isAnimatingLw() && w.getAttrs().rotationAnimation == ROTATION_ANIMATION_SEAMLESS) {
             return true;
         }
         return false;

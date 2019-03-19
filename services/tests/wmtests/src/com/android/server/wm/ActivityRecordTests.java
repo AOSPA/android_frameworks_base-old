@@ -27,9 +27,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
-import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_BOTTOM;
-import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_LEFT;
-import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_RIGHT;
 import static com.android.server.wm.ActivityStack.ActivityState.INITIALIZING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
@@ -158,34 +155,8 @@ public class ActivityRecordTests extends ActivityTestsBase {
         assertTrue(mActivity.isState(STOPPED));
     }
 
-    @Test
-    public void testPositionLimitedAspectRatioNavBarBottom() {
-        verifyPositionWithLimitedAspectRatio(NAV_BAR_BOTTOM, new Rect(0, 0, 1000, 2000), 1.5f,
-                new Rect(0, 0, 1000, 1500));
-    }
-
-    @Test
-    public void testPositionLimitedAspectRatioNavBarLeft() {
-        verifyPositionWithLimitedAspectRatio(NAV_BAR_LEFT, new Rect(0, 0, 2000, 1000), 1.5f,
-                new Rect(500, 0, 2000, 1000));
-    }
-
-    @Test
-    public void testPositionLimitedAspectRatioNavBarRight() {
-        verifyPositionWithLimitedAspectRatio(NAV_BAR_RIGHT, new Rect(0, 0, 2000, 1000), 1.5f,
-                new Rect(0, 0, 1500, 1000));
-    }
-
-    private void verifyPositionWithLimitedAspectRatio(int navBarPosition, Rect taskBounds,
-            float aspectRatio, Rect expectedActivityBounds) {
-        // Verify with nav bar on the right.
-        when(mService.mWindowManager.getNavBarPosition(mActivity.getDisplayId()))
-                .thenReturn(navBarPosition);
-        mTask.getConfiguration().windowConfiguration.setAppBounds(taskBounds);
-        mActivity.info.maxAspectRatio = aspectRatio;
-        mActivity.ensureActivityConfiguration(
-                0 /* globalChanges */, false /* preserveWindow */);
-        assertEquals(expectedActivityBounds, mActivity.getBounds());
+    private void ensureActivityConfiguration() {
+        mActivity.ensureActivityConfiguration(0 /* globalChanges */, false /* preserveWindow */);
     }
 
     @Test
@@ -281,7 +252,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         mActivity.mRelaunchReason = ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 
-        mActivity.ensureActivityConfiguration(0, false, false);
+        ensureActivityConfiguration();
 
         assertEquals(ActivityTaskManagerService.RELAUNCH_REASON_WINDOWING_MODE_RESIZE,
                 mActivity.mRelaunchReason);
@@ -305,7 +276,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         mActivity.mRelaunchReason = ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 
-        mActivity.ensureActivityConfiguration(0, false, false);
+        ensureActivityConfiguration();
 
         assertEquals(ActivityTaskManagerService.RELAUNCH_REASON_FREE_RESIZE,
                 mActivity.mRelaunchReason);
@@ -327,7 +298,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mActivity.mRelaunchReason =
                 ActivityTaskManagerService.RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
 
-        mActivity.ensureActivityConfiguration(0, false, false);
+        ensureActivityConfiguration();
 
         assertEquals(ActivityTaskManagerService.RELAUNCH_REASON_NONE,
                 mActivity.mRelaunchReason);
@@ -432,5 +403,71 @@ public class ActivityRecordTests extends ActivityTestsBase {
         } finally {
             stack.getDisplay().removeChild(stack);
         }
+    }
+
+    @Test
+    public void testSizeCompatMode_FixedScreenConfigurationWhenMovingToDisplay() {
+        // Initialize different bounds on a new display.
+        final ActivityDisplay newDisplay = addNewActivityDisplayAt(ActivityDisplay.POSITION_TOP);
+        newDisplay.setBounds(0, 0, 1000, 2000);
+        newDisplay.getConfiguration().densityDpi = 300;
+
+        mTask.getWindowConfiguration().setAppBounds(mStack.getDisplay().getBounds());
+        mTask.getConfiguration().densityDpi = 200;
+        when(mActivity.mAppWindowToken.getOrientationIgnoreVisibility()).thenReturn(
+                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+        mActivity.info.maxAspectRatio = 1.5f;
+        ensureActivityConfiguration();
+        final Rect originalBounds = new Rect(mActivity.getBounds());
+        final int originalDpi = mActivity.getConfiguration().densityDpi;
+
+        // Move the non-resizable activity to the new display.
+        mStack.reparent(newDisplay, true /* onTop */, false /* displayRemoved */);
+        ensureActivityConfiguration();
+
+        assertEquals(originalBounds, mActivity.getBounds());
+        assertEquals(originalDpi, mActivity.getConfiguration().densityDpi);
+    }
+
+    @Test
+    public void testSizeCompatMode_FixedScreenBoundsWhenDisplaySizeChanged() {
+        when(mActivity.mAppWindowToken.getOrientationIgnoreVisibility()).thenReturn(
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        mTask.getWindowConfiguration().setAppBounds(mStack.getDisplay().getBounds());
+        mActivity.info.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+        ensureActivityConfiguration();
+        final Rect originalBounds = new Rect(mActivity.getBounds());
+
+        // Change the size of current display.
+        mStack.getDisplay().setBounds(0, 0, 1000, 2000);
+        ensureActivityConfiguration();
+
+        assertEquals(originalBounds, mActivity.getBounds());
+    }
+
+    @Test
+    public void testSizeCompatMode_FixedScreenLayoutSizeBits() {
+        final int fixedScreenLayout = Configuration.SCREENLAYOUT_LONG_NO
+                | Configuration.SCREENLAYOUT_SIZE_NORMAL;
+        mTask.getConfiguration().screenLayout = fixedScreenLayout
+                | Configuration.SCREENLAYOUT_LAYOUTDIR_LTR;
+        mTask.getWindowConfiguration().setAppBounds(mStack.getDisplay().getBounds());
+        mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+        mActivity.info.maxAspectRatio = 1.5f;
+        ensureActivityConfiguration();
+
+        // The initial configuration should inherit from parent.
+        assertEquals(mTask.getConfiguration().screenLayout,
+                mActivity.getConfiguration().screenLayout);
+
+        mTask.getConfiguration().screenLayout = Configuration.SCREENLAYOUT_LAYOUTDIR_RTL
+                | Configuration.SCREENLAYOUT_LONG_YES | Configuration.SCREENLAYOUT_SIZE_LARGE;
+        mActivity.onConfigurationChanged(mTask.getConfiguration());
+
+        // The size and aspect ratio bits don't change, but the layout direction should be updated.
+        assertEquals(fixedScreenLayout | Configuration.SCREENLAYOUT_LAYOUTDIR_RTL,
+                mActivity.getConfiguration().screenLayout);
     }
 }
