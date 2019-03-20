@@ -614,6 +614,7 @@ public class KeyHandler {
         int action = event.getAction();
         int scanCode = event.getScanCode();
         int repeatCount = event.getRepeatCount();
+        int keyCode = event.getKeyCode();
 
         if (scanCode <= 0) {
             if (DEBUG) {
@@ -623,10 +624,16 @@ public class KeyHandler {
         }
 
         if (action != KeyEvent.ACTION_UP || repeatCount != 0) {
-            if (DEBUG) {
-                Log.w(TAG, "handleKeyEvent(): action != ACTION_UP || repeatCount != 0, returning.");
+            if (keyCode == KeyEvent.KEYCODE_WAKEUP) {
+                if (DEBUG) {
+                    Log.w(TAG, "handleKeyEvent(): KEY_WAKEUP detected, allowing event handling.");
+                }
+            } else {
+                if (DEBUG) {
+                    Log.w(TAG, "handleKeyEvent(): action != ACTION_UP || repeatCount != 0, returning.");
+                }
+                return false;
             }
-            return false;
         }
 
         boolean isKeySupportedAndEnabled = mGestures.get(scanCode) > 0;
