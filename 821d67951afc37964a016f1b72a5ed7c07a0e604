@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c2b5dc21_5fd4c463",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 2838,
+      "author": {
+        "id": 1000441
+      },
+      "writtenOn": "2019-03-22T23:23:54Z",
+      "side": 1,
+      "message": "This line doesn\u0027t work with my device. It throws a RuntimeException: failed to set system property.\nUnable to set property \"qemu.hw.mainkeys\" to \"0\": error code: 0x18",
+      "revId": "821d67951afc37964a016f1b72a5ed7c07a0e604",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
