@@ -81,6 +81,7 @@ import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.IOns;
 import com.android.internal.telephony.IPhoneSubInfo;
+import com.android.internal.telephony.ISetOpportunisticDataCallback;
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.ITelephonyRegistry;
 import com.android.internal.telephony.OperatorInfo;
@@ -98,6 +99,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -1355,12 +1357,7 @@ public class TelephonyManager {
      */
     public static final String EXTRA_RECOVERY_ACTION = "recoveryAction";
 
-    /**
-     * The max value for the timeout passed in {@link #requestNumberVerification}.
-     * @hide
-     */
-    @SystemApi
-    public static final long MAX_NUMBER_VERIFICATION_TIMEOUT_MILLIS = 60000;
+    private static final long MAX_NUMBER_VERIFICATION_TIMEOUT_MILLIS = 60000;
 
     /**
      * Intent sent when an error occurs that debug tools should log and possibly take further
@@ -1572,6 +1569,7 @@ public class TelephonyManager {
      * Returns the Type Allocation Code from the IMEI. Return null if Type Allocation Code is not
      * available.
      */
+    @Nullable
     public String getTypeAllocationCode() {
         return getTypeAllocationCode(getSlotIndex());
     }
@@ -1582,6 +1580,7 @@ public class TelephonyManager {
      *
      * @param slotIndex of which Type Allocation Code is returned
      */
+    @Nullable
     public String getTypeAllocationCode(int slotIndex) {
         ITelephony telephony = getITelephony();
         if (telephony == null) return null;
@@ -1642,6 +1641,7 @@ public class TelephonyManager {
      * Returns the Manufacturer Code from the MEID. Return null if Manufacturer Code is not
      * available.
      */
+    @Nullable
     public String getManufacturerCode() {
         return getManufacturerCode(getSlotIndex());
     }
@@ -1652,6 +1652,7 @@ public class TelephonyManager {
      *
      * @param slotIndex of which Type Allocation Code is returned
      */
+    @Nullable
     public String getManufacturerCode(int slotIndex) {
         ITelephony telephony = getITelephony();
         if (telephony == null) return null;
@@ -2028,6 +2029,15 @@ public class TelephonyManager {
         }
         Rlog.d(TAG, "/proc/cmdline=" + cmdline);
         return cmdline;
+    }
+
+    /**
+     * @return The max value for the timeout passed in {@link #requestNumberVerification}.
+     * @hide
+     */
+    @SystemApi
+    public static long getMaxNumberVerificationTimeoutMillis() {
+        return MAX_NUMBER_VERIFICATION_TIMEOUT_MILLIS;
     }
 
     /** Kernel command line */
@@ -2796,8 +2806,8 @@ public class TelephonyManager {
      * (see {@link #hasCarrierPrivileges}).
      * <p>
      * These "secret codes" are used to activate developer menus by dialing certain codes.
-     * And they are of the form {@code *#*#&lt;code&gt;#*#*}. The intent will have the data
-     * URI: {@code android_secret_code://&lt;code&gt;}. It is possible that a manifest
+     * And they are of the form {@code *#*#<code>#*#*}. The intent will have the data
+     * URI: {@code android_secret_code://<code>}. It is possible that a manifest
      * receiver would be woken up even if it is not currently running.
      * <p>
      * It is supposed to replace {@link android.provider.Telephony.Sms.Intents#SECRET_CODE_ACTION}
@@ -3253,6 +3263,7 @@ public class TelephonyManager {
      * the caller does not have adequate permissions for that card.
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @NonNull
     public List<UiccCardInfo> getUiccCardsInfo() {
         try {
             ITelephony telephony = getITelephony();
@@ -4500,6 +4511,7 @@ public class TelephonyManager {
      * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
      * @hide
      */
+    @Nullable
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public String getIsimDomain() {
@@ -5748,8 +5760,8 @@ public class TelephonyManager {
      *
      * @hide
      * @param range The range of phone numbers the caller expects a phone call from.
-     * @param timeoutMillis The amount of time to wait for such a call, or
-     *                      {@link #MAX_NUMBER_VERIFICATION_TIMEOUT_MILLIS}, whichever is lesser.
+     * @param timeoutMillis The amount of time to wait for such a call, or the value of
+     *                      {@link #getMaxNumberVerificationTimeoutMillis()}, whichever is lesser.
      * @param executor The {@link Executor} that callbacks should be executed on.
      * @param callback The callback to use for delivering results.
      */
@@ -6005,6 +6017,7 @@ public class TelephonyManager {
      * @return IMS Service Table or null if not present or not loaded
      * @hide
      */
+    @Nullable
     @SystemApi
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public String getIsimIst() {
@@ -6856,12 +6869,12 @@ public class TelephonyManager {
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
      * @param subId the id of the subscription to set the preferred network type for.
-     * @param networkType the preferred network type, defined in RILConstants.java.
+     * @param networkType the preferred network type
      * @return true on success; false on any failure.
      * @hide
      */
     @UnsupportedAppUsage
-    public boolean setPreferredNetworkType(int subId, int networkType) {
+    public boolean setPreferredNetworkType(int subId, @PrefNetworkMode int networkType) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
@@ -6931,14 +6944,12 @@ public class TelephonyManager {
     }
 
     /**
-     * Check TETHER_DUN_REQUIRED and TETHER_DUN_APN settings, net.tethering.noprovisioning
-     * SystemProperty to decide whether DUN APN is required for
-     * tethering.
+     * Check whether DUN APN is required for tethering.
      *
-     * @return 0: Not required. 1: required. 2: Not set.
+     * @return {@code true} if DUN APN is required for tethering.
      * @hide
      */
-    public int getTetherApnRequired() {
+    public boolean getTetherApnRequired() {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null)
@@ -6948,7 +6959,7 @@ public class TelephonyManager {
         } catch (NullPointerException ex) {
             Rlog.e(TAG, "hasMatchedTetherApnSetting NPE", ex);
         }
-        return 2;
+        return false;
     }
 
 
@@ -9076,6 +9087,7 @@ public class TelephonyManager {
      * @return Application ID for specified app type or {@code null} if no uicc or error.
      * @hide
      */
+    @Nullable
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public String getAidForAppType(@UiccAppType int appType) {
@@ -10181,21 +10193,40 @@ public class TelephonyManager {
      * @param subId which opportunistic subscription
      * {@link SubscriptionManager#getOpportunisticSubscriptions} is preferred for cellular data.
      * Pass {@link SubscriptionManager#DEFAULT_SUBSCRIPTION_ID} to unset the preference
-     * @return true if request is accepted, else false.
+     * @param needValidation whether validation is needed before switch happens.
+     * @param executor The executor of where the callback will execute.
+     * @param callback Callback will be triggered once it succeeds or failed.
+     *                 See {@link TelephonyManager.SetOpportunisticSubscriptionResult}
+     *                 for more details. Pass null if don't care about the result.
      *
      */
-    public boolean setPreferredOpportunisticDataSubscription(int subId) {
+    public void setPreferredOpportunisticDataSubscription(int subId, boolean needValidation,
+            @Nullable @CallbackExecutor Executor executor, @Nullable Consumer<Integer> callback) {
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         try {
             IOns iOpportunisticNetworkService = getIOns();
-            if (iOpportunisticNetworkService != null) {
-                return iOpportunisticNetworkService
-                        .setPreferredDataSubscriptionId(subId, pkgForDebug);
+            if (iOpportunisticNetworkService == null) {
+                return;
             }
+            ISetOpportunisticDataCallback callbackStub = new ISetOpportunisticDataCallback.Stub() {
+                @Override
+                public void onComplete(int result) {
+                    if (executor == null || callback == null) {
+                        return;
+                    }
+                    Binder.withCleanCallingIdentity(() -> executor.execute(() -> {
+                        callback.accept(result);
+                    }));
+                }
+            };
+
+            iOpportunisticNetworkService
+                    .setPreferredDataSubscriptionId(subId, needValidation, callbackStub,
+                            pkgForDebug);
         } catch (RemoteException ex) {
             Rlog.e(TAG, "setPreferredDataSubscriptionId RemoteException", ex);
         }
-        return false;
+        return;
     }
 
     /**
@@ -10362,18 +10393,16 @@ public class TelephonyManager {
      * <p>Requires Permission:
      * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the
      * calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     *
+     * Note: with only carrier privileges, it is not allowed to switch from multi-sim
+     * to single-sim
+     *
      * @param numOfSims number of live SIMs we want to switch to
      * @throws android.os.RemoteException
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void switchMultiSimConfig(int numOfSims) {
-        //only proceed if multi-sim is not restricted
-        if (!isMultisimSupported()) {
-            Rlog.e(TAG, "switchMultiSimConfig not possible. It is restricted or not supported.");
-            return;
-        }
-
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {

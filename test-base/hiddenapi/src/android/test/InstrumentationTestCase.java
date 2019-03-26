@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,26 @@
  * limitations under the License.
  */
 
-package android.service.textclassifier;
+package android.test;
 
-import android.view.textclassifier.TextClassification;
+import android.annotation.UnsupportedAppUsage;
+
+import junit.framework.TestCase;
+
+import java.lang.reflect.Method;
 
 /**
- * Callback for a TextClassification request.
- * @hide
+ * @deprecated Stub only
  */
-oneway interface ITextClassificationCallback {
-    void onSuccess(in TextClassification classification);
-    void onFailure();
+@SuppressWarnings({ "unchecked", "deprecation", "all" })
+@Deprecated
+public class InstrumentationTestCase extends TestCase {
+
+    /**
+     * Stub only
+     */
+    @UnsupportedAppUsage
+    private void runMethod(Method runMethod, int tolerance) throws Throwable {
+        throw new RuntimeException("Stub!");
+    }
 }

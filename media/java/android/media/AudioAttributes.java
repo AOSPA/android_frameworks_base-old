@@ -630,7 +630,7 @@ public final class AudioAttributes implements Parcelable {
          *                     true to allow apps to capture the audio
          * @return the same Builder instance
          */
-        public Builder setAllowCapture(boolean allowCapture) {
+        public @NonNull Builder setAllowCapture(boolean allowCapture) {
             if (allowCapture) {
                 mFlags &= ~FLAG_NO_CAPTURE;
             } else {
@@ -877,7 +877,7 @@ public final class AudioAttributes implements Parcelable {
         }
     }
 
-    public static final Parcelable.Creator<AudioAttributes> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<AudioAttributes> CREATOR
             = new Parcelable.Creator<AudioAttributes>() {
         /**
          * Rebuilds an AudioAttributes previously stored with writeToParcel().

@@ -1400,7 +1400,6 @@ public final class SystemServer {
                 ServiceManager.addService(Context.CONNECTIVITY_SERVICE, connectivity,
                         /* allowIsolated= */ false,
                         DUMP_FLAG_PRIORITY_HIGH | DUMP_FLAG_PRIORITY_NORMAL);
-                networkStats.bindConnectivityManager(connectivity);
                 networkPolicy.bindConnectivityManager(connectivity);
             } catch (Throwable e) {
                 reportWtf("starting Connectivity Service", e);
@@ -1915,19 +1914,6 @@ public final class SystemServer {
         traceBeginAndSlog("StartIncidentCompanionService");
         mSystemServiceManager.startService(IncidentCompanionService.class);
         traceEnd();
-
-        if (safeMode) {
-            traceBeginAndSlog("EnterSafeModeAndDisableJitCompilation");
-            mActivityManagerService.enterSafeMode();
-            // Disable the JIT for the system_server process
-            VMRuntime.getRuntime().disableJitCompilation();
-            traceEnd();
-        } else {
-            // Enable the JIT for the system_server process
-            traceBeginAndSlog("StartJitCompilation");
-            VMRuntime.getRuntime().startJitCompilation();
-            traceEnd();
-        }
 
         // MMS service broker
         traceBeginAndSlog("StartMmsService");

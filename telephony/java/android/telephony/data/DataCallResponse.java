@@ -25,6 +25,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.data.ApnSetting.ProtocolType;
 
+import com.android.internal.annotations.VisibleForTesting;
+
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -90,6 +92,8 @@ public final class DataCallResponse implements Parcelable {
         mMtu = mtu;
     }
 
+    /** @hide */
+    @VisibleForTesting
     public DataCallResponse(Parcel source) {
         mStatus = source.readInt();
         mSuggestedRetryTime = source.readInt();
@@ -244,7 +248,7 @@ public final class DataCallResponse implements Parcelable {
         dest.writeInt(mMtu);
     }
 
-    public static final Parcelable.Creator<DataCallResponse> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<DataCallResponse> CREATOR =
             new Parcelable.Creator<DataCallResponse>() {
                 @Override
                 public DataCallResponse createFromParcel(Parcel source) {

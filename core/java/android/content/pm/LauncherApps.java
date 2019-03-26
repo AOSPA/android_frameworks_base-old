@@ -792,7 +792,7 @@ public class LauncherApps {
      *
      * @return an {@link AppUsageLimit} object describing the app time limit containing
      * the given package with the smallest time remaining, or {@code null} if none exist.
-     * @throws SecurityException when the caller is not the active launcher.
+     * @throws SecurityException when the caller is not the recents app.
      */
     @Nullable
     public LauncherApps.AppUsageLimit getAppUsageLimit(@NonNull String packageName,
@@ -1725,7 +1725,7 @@ public class LauncherApps {
             dest.writeStrongBinder(mInner.asBinder());
         }
 
-        public static final Creator<PinItemRequest> CREATOR =
+        public static final @android.annotation.NonNull Creator<PinItemRequest> CREATOR =
                 new Creator<PinItemRequest>() {
                     public PinItemRequest createFromParcel(Parcel source) {
                         return new PinItemRequest(source);
@@ -1785,7 +1785,7 @@ public class LauncherApps {
             mUsageRemaining = source.readLong();
         }
 
-        public static final Creator<AppUsageLimit> CREATOR = new Creator<AppUsageLimit>() {
+        public static final @android.annotation.NonNull Creator<AppUsageLimit> CREATOR = new Creator<AppUsageLimit>() {
             @Override
             public AppUsageLimit createFromParcel(Parcel source) {
                 return new AppUsageLimit(source);

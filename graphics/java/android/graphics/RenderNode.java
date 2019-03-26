@@ -27,6 +27,8 @@ import android.view.RenderNodeAnimator;
 import android.view.Surface;
 import android.view.View;
 
+import com.android.internal.util.ArrayUtils;
+
 import dalvik.annotation.optimization.CriticalNative;
 import dalvik.annotation.optimization.FastNative;
 
@@ -60,7 +62,7 @@ import java.lang.annotation.RetentionPolicy;
  *
  * <h3>Creating a RenderNode</h3>
  * <pre class="prettyprint">
- *     RenderNode renderNode = RenderNode.create("myRenderNode");
+ *     RenderNode renderNode = new RenderNode("myRenderNode");
  *     renderNode.setLeftTopRightBottom(0, 0, 50, 50); // Set the size to 50x50
  *     RecordingCanvas canvas = renderNode.beginRecording();
  *     try {
@@ -104,7 +106,7 @@ import java.lang.annotation.RetentionPolicy;
  *
  * <pre class="prettyprint">
  *     private void createDisplayList() {
- *         mRenderNode = RenderNode.create("MyRenderNode");
+ *         mRenderNode = new RenderNode("MyRenderNode");
  *         mRenderNode.setLeftTopRightBottom(0, 0, width, height);
  *         RecordingCanvas canvas = mRenderNode.beginRecording();
  *         try {
@@ -179,6 +181,10 @@ public final class RenderNode {
     private final AnimationHost mAnimationHost;
     private RecordingCanvas mCurrentRecordingCanvas;
 
+    // Will be null if not currently registered
+    @Nullable
+    private CompositePositionUpdateListener mCompositePositionUpdateListener;
+
     /**
      * Creates a new RenderNode that can be used to record batches of
      * drawing operations, and store / apply render properties when drawn.
@@ -248,15 +254,70 @@ public final class RenderNode {
 
     }
 
+    private static final class CompositePositionUpdateListener implements PositionUpdateListener {
+        private final PositionUpdateListener[] mListeners;
+
+        CompositePositionUpdateListener(PositionUpdateListener... listeners) {
+            mListeners = listeners;
+        }
+
+        public CompositePositionUpdateListener with(PositionUpdateListener listener) {
+            return new CompositePositionUpdateListener(
+                    ArrayUtils.appendElement(PositionUpdateListener.class, mListeners, listener));
+        }
+
+        public CompositePositionUpdateListener without(PositionUpdateListener listener) {
+            return new CompositePositionUpdateListener(
+                    ArrayUtils.removeElement(PositionUpdateListener.class, mListeners, listener));
+        }
+
+        @Override
+        public void positionChanged(long frameNumber, int left, int top, int right, int bottom) {
+            for (PositionUpdateListener pul : mListeners) {
+                pul.positionChanged(frameNumber, left, top, right, bottom);
+            }
+        }
+
+        @Override
+        public void positionLost(long frameNumber) {
+            for (PositionUpdateListener pul : mListeners) {
+                pul.positionLost(frameNumber);
+            }
+        }
+    }
+
     /**
-     * Enable callbacks for position changes.
+     * Enable callbacks for position changes. Call only from the UI thread or with
+     * external synchronization.
      *
      * @hide
      */
-    public void requestPositionUpdates(PositionUpdateListener listener) {
-        nRequestPositionUpdates(mNativeRenderNode, listener);
+    public void addPositionUpdateListener(@NonNull PositionUpdateListener listener) {
+        CompositePositionUpdateListener comp = mCompositePositionUpdateListener;
+        if (comp == null) {
+            comp = new CompositePositionUpdateListener(listener);
+        } else {
+            comp = comp.with(listener);
+        }
+        mCompositePositionUpdateListener = comp;
+        nRequestPositionUpdates(mNativeRenderNode, comp);
     }
 
+    /**
+     * Disable a callback for position changes. Call only from the UI thread or with
+     * external synchronization.
+     *
+     * @param listener Callback to remove
+     * @hide
+     */
+    public void removePositionUpdateListener(@NonNull PositionUpdateListener listener) {
+        CompositePositionUpdateListener comp = mCompositePositionUpdateListener;
+        if (comp != null) {
+            comp = comp.without(listener);
+            mCompositePositionUpdateListener = comp;
+            nRequestPositionUpdates(mNativeRenderNode, comp);
+        }
+    }
 
     /**
      * Starts recording a display list for the render node. All
@@ -277,7 +338,7 @@ public final class RenderNode {
      * @see #endRecording()
      * @see #hasDisplayList()
      */
-    public RecordingCanvas beginRecording(int width, int height) {
+    public @NonNull RecordingCanvas beginRecording(int width, int height) {
         if (mCurrentRecordingCanvas != null) {
             throw new IllegalStateException(
                     "Recording currently in progress - missing #endRecording() call?");
@@ -297,7 +358,7 @@ public final class RenderNode {
      * @see #endRecording()
      * @see #hasDisplayList()
      */
-    public RecordingCanvas beginRecording() {
+    public @NonNull RecordingCanvas beginRecording() {
         return beginRecording(nGetWidth(mNativeRenderNode), nGetHeight(mNativeRenderNode));
     }
 
@@ -1224,7 +1285,7 @@ public final class RenderNode {
      * @param position The position rectangle in pixels
      * @return True if the value changed, false if the new value was the same as the previous value.
      */
-    public boolean setPosition(Rect position) {
+    public boolean setPosition(@NonNull Rect position) {
         return nSetLeftTopRightBottom(mNativeRenderNode,
                 position.left, position.top, position.right, position.bottom);
     }

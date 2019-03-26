@@ -125,6 +125,7 @@ import android.net.NetworkParcelable;
 import android.net.NetworkRequest;
 import android.net.NetworkSpecifier;
 import android.net.NetworkStackClient;
+import android.net.NetworkState;
 import android.net.NetworkUtils;
 import android.net.ProxyInfo;
 import android.net.RouteInfo;
@@ -157,6 +158,7 @@ import android.util.Log;
 import android.util.SparseArray;
 
 import com.android.internal.net.VpnConfig;
+import com.android.internal.net.VpnInfo;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.WakeupMessage;
 import com.android.internal.util.test.BroadcastInterceptingContext;
@@ -937,11 +939,19 @@ public class ConnectivityServiceTest {
             return mConnected;  // Similar trickery
         }
 
-        public void connect() {
+        private void connect(boolean isAlwaysMetered) {
             mNetworkCapabilities.set(mMockNetworkAgent.getNetworkCapabilities());
             mConnected = true;
             mConfig = new VpnConfig();
-            mConfig.isMetered = false;
+            mConfig.isMetered = isAlwaysMetered;
+        }
+
+        public void connectAsAlwaysMetered() {
+            connect(true /* isAlwaysMetered */);
+        }
+
+        public void connect() {
+            connect(false /* isAlwaysMetered */);
         }
 
         @Override
@@ -4362,48 +4372,91 @@ public class ConnectivityServiceTest {
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
 
-        Network[] onlyCell = new Network[]{mCellNetworkAgent.getNetwork()};
-        Network[] onlyWifi = new Network[]{mWiFiNetworkAgent.getNetwork()};
+        Network[] onlyCell = new Network[] {mCellNetworkAgent.getNetwork()};
+        Network[] onlyWifi = new Network[] {mWiFiNetworkAgent.getNetwork()};
+
+        LinkProperties cellLp = new LinkProperties();
+        cellLp.setInterfaceName(MOBILE_IFNAME);
+        LinkProperties wifiLp = new LinkProperties();
+        wifiLp.setInterfaceName(WIFI_IFNAME);
 
         // Simple connection should have updated ifaces
         mCellNetworkAgent.connect(false);
+        mCellNetworkAgent.sendLinkProperties(cellLp);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
+        verify(mStatsService, atLeastOnce())
+                .forceUpdateIfaces(
+                        eq(onlyCell),
+                        eq(new VpnInfo[0]),
+                        any(NetworkState[].class),
+                        eq(MOBILE_IFNAME));
         reset(mStatsService);
 
         // Default network switch should update ifaces.
         mWiFiNetworkAgent.connect(false);
+        mWiFiNetworkAgent.sendLinkProperties(wifiLp);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyWifi);
+        assertEquals(wifiLp, mService.getActiveLinkProperties());
+        verify(mStatsService, atLeastOnce())
+                .forceUpdateIfaces(
+                        eq(onlyWifi),
+                        eq(new VpnInfo[0]),
+                        any(NetworkState[].class),
+                        eq(WIFI_IFNAME));
         reset(mStatsService);
 
         // Disconnect should update ifaces.
         mWiFiNetworkAgent.disconnect();
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
+        verify(mStatsService, atLeastOnce())
+                .forceUpdateIfaces(
+                        eq(onlyCell),
+                        eq(new VpnInfo[0]),
+                        any(NetworkState[].class),
+                        eq(MOBILE_IFNAME));
         reset(mStatsService);
 
         // Metered change should update ifaces
         mCellNetworkAgent.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
+        verify(mStatsService, atLeastOnce())
+                .forceUpdateIfaces(
+                        eq(onlyCell),
+                        eq(new VpnInfo[0]),
+                        any(NetworkState[].class),
+                        eq(MOBILE_IFNAME));
         reset(mStatsService);
 
         mCellNetworkAgent.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
+        verify(mStatsService, atLeastOnce())
+                .forceUpdateIfaces(
+                        eq(onlyCell),
+                        eq(new VpnInfo[0]),
+                        any(NetworkState[].class),
+                        eq(MOBILE_IFNAME));
         reset(mStatsService);
 
         // Captive portal change shouldn't update ifaces
         mCellNetworkAgent.addCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL);
         waitForIdle();
-        verify(mStatsService, never()).forceUpdateIfaces(onlyCell);
+        verify(mStatsService, never())
+                .forceUpdateIfaces(
+                        eq(onlyCell),
+                        eq(new VpnInfo[0]),
+                        any(NetworkState[].class),
+                        eq(MOBILE_IFNAME));
         reset(mStatsService);
 
         // Roaming change should update ifaces
         mCellNetworkAgent.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
+        verify(mStatsService, atLeastOnce())
+                .forceUpdateIfaces(
+                        eq(onlyCell),
+                        eq(new VpnInfo[0]),
+                        any(NetworkState[].class),
+                        eq(MOBILE_IFNAME));
         reset(mStatsService);
     }
 
@@ -5056,6 +5109,202 @@ public class ConnectivityServiceTest {
                 vpnNetworkAgent);
 
         mMockVpn.disconnect();
+    }
+
+    @Test
+    public void testIsActiveNetworkMeteredOverWifi() {
+        // Returns true by default when no network is available.
+        assertTrue(mCm.isActiveNetworkMetered());
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        mWiFiNetworkAgent.addCapability(NET_CAPABILITY_NOT_METERED);
+        mWiFiNetworkAgent.connect(true);
+        waitForIdle();
+
+        assertFalse(mCm.isActiveNetworkMetered());
+    }
+
+    @Test
+    public void testIsActiveNetworkMeteredOverCell() {
+        // Returns true by default when no network is available.
+        assertTrue(mCm.isActiveNetworkMetered());
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        mCellNetworkAgent.removeCapability(NET_CAPABILITY_NOT_METERED);
+        mCellNetworkAgent.connect(true);
+        waitForIdle();
+
+        assertTrue(mCm.isActiveNetworkMetered());
+    }
+
+    @Test
+    public void testIsActiveNetworkMeteredOverVpnTrackingPlatformDefault() {
+        // Returns true by default when no network is available.
+        assertTrue(mCm.isActiveNetworkMetered());
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        mCellNetworkAgent.removeCapability(NET_CAPABILITY_NOT_METERED);
+        mCellNetworkAgent.connect(true);
+        waitForIdle();
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        // Connect VPN network. By default it is using current default network (Cell).
+        MockNetworkAgent vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
+        final ArraySet<UidRange> ranges = new ArraySet<>();
+        final int uid = Process.myUid();
+        ranges.add(new UidRange(uid, uid));
+        mMockVpn.setNetworkAgent(vpnNetworkAgent);
+        mMockVpn.setUids(ranges);
+        vpnNetworkAgent.connect(true);
+        mMockVpn.connect();
+        waitForIdle();
+        // Ensure VPN is now the active network.
+        assertEquals(vpnNetworkAgent.getNetwork(), mCm.getActiveNetwork());
+
+        // Expect VPN to be metered.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        // Connect WiFi.
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        mWiFiNetworkAgent.addCapability(NET_CAPABILITY_NOT_METERED);
+        mWiFiNetworkAgent.connect(true);
+        waitForIdle();
+        // VPN should still be the active network.
+        assertEquals(vpnNetworkAgent.getNetwork(), mCm.getActiveNetwork());
+
+        // Expect VPN to be unmetered as it should now be using WiFi (new default).
+        assertFalse(mCm.isActiveNetworkMetered());
+
+        // Disconnecting Cell should not affect VPN's meteredness.
+        mCellNetworkAgent.disconnect();
+        waitForIdle();
+
+        assertFalse(mCm.isActiveNetworkMetered());
+
+        // Disconnect WiFi; Now there is no platform default network.
+        mWiFiNetworkAgent.disconnect();
+        waitForIdle();
+
+        // VPN without any underlying networks is treated as metered.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        vpnNetworkAgent.disconnect();
+        mMockVpn.disconnect();
+    }
+
+   @Test
+   public void testIsActiveNetworkMeteredOverVpnSpecifyingUnderlyingNetworks() {
+        // Returns true by default when no network is available.
+        assertTrue(mCm.isActiveNetworkMetered());
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        mCellNetworkAgent.removeCapability(NET_CAPABILITY_NOT_METERED);
+        mCellNetworkAgent.connect(true);
+        waitForIdle();
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        mWiFiNetworkAgent.addCapability(NET_CAPABILITY_NOT_METERED);
+        mWiFiNetworkAgent.connect(true);
+        waitForIdle();
+        assertFalse(mCm.isActiveNetworkMetered());
+
+        // Connect VPN network.
+        MockNetworkAgent vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
+        final ArraySet<UidRange> ranges = new ArraySet<>();
+        final int uid = Process.myUid();
+        ranges.add(new UidRange(uid, uid));
+        mMockVpn.setNetworkAgent(vpnNetworkAgent);
+        mMockVpn.setUids(ranges);
+        vpnNetworkAgent.connect(true);
+        mMockVpn.connect();
+        waitForIdle();
+        // Ensure VPN is now the active network.
+        assertEquals(vpnNetworkAgent.getNetwork(), mCm.getActiveNetwork());
+        // VPN is using Cell
+        mService.setUnderlyingNetworksForVpn(
+                new Network[] { mCellNetworkAgent.getNetwork() });
+        waitForIdle();
+
+        // Expect VPN to be metered.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        // VPN is now using WiFi
+        mService.setUnderlyingNetworksForVpn(
+                new Network[] { mWiFiNetworkAgent.getNetwork() });
+        waitForIdle();
+
+        // Expect VPN to be unmetered
+        assertFalse(mCm.isActiveNetworkMetered());
+
+        // VPN is using Cell | WiFi.
+        mService.setUnderlyingNetworksForVpn(
+                new Network[] { mCellNetworkAgent.getNetwork(), mWiFiNetworkAgent.getNetwork() });
+        waitForIdle();
+
+        // Expect VPN to be metered.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        // VPN is using WiFi | Cell.
+        mService.setUnderlyingNetworksForVpn(
+                new Network[] { mWiFiNetworkAgent.getNetwork(), mCellNetworkAgent.getNetwork() });
+        waitForIdle();
+
+        // Order should not matter and VPN should still be metered.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        // VPN is not using any underlying networks.
+        mService.setUnderlyingNetworksForVpn(new Network[0]);
+        waitForIdle();
+
+        // VPN without underlying networks is treated as metered.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        vpnNetworkAgent.disconnect();
+        mMockVpn.disconnect();
+    }
+
+    @Test
+    public void testIsActiveNetworkMeteredOverAlwaysMeteredVpn() {
+        // Returns true by default when no network is available.
+        assertTrue(mCm.isActiveNetworkMetered());
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        mWiFiNetworkAgent.addCapability(NET_CAPABILITY_NOT_METERED);
+        mWiFiNetworkAgent.connect(true);
+        waitForIdle();
+        assertFalse(mCm.isActiveNetworkMetered());
+
+        // Connect VPN network.
+        MockNetworkAgent vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
+        final ArraySet<UidRange> ranges = new ArraySet<>();
+        final int uid = Process.myUid();
+        ranges.add(new UidRange(uid, uid));
+        mMockVpn.setNetworkAgent(vpnNetworkAgent);
+        mMockVpn.setUids(ranges);
+        vpnNetworkAgent.connect(true);
+        mMockVpn.connectAsAlwaysMetered();
+        waitForIdle();
+        assertEquals(vpnNetworkAgent.getNetwork(), mCm.getActiveNetwork());
+
+        // VPN is tracking current platform default (WiFi).
+        mService.setUnderlyingNetworksForVpn(null);
+        waitForIdle();
+
+        // Despite VPN using WiFi (which is unmetered), VPN itself is marked as always metered.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        // VPN explicitly declares WiFi as its underlying network.
+        mService.setUnderlyingNetworksForVpn(
+                new Network[] { mWiFiNetworkAgent.getNetwork() });
+        waitForIdle();
+
+        // Doesn't really matter whether VPN declares its underlying networks explicitly.
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        // With WiFi lost, VPN is basically without any underlying networks. And in that case it is
+        // anyways suppose to be metered.
+        mWiFiNetworkAgent.disconnect();
+        waitForIdle();
+
+        assertTrue(mCm.isActiveNetworkMetered());
+
+        vpnNetworkAgent.disconnect();
     }
 
     @Test

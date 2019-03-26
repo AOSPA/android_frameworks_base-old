@@ -1826,7 +1826,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                     + " checkState=" + checkState + "}";
         }
 
-        public static final Parcelable.Creator<SavedState> CREATOR
+        public static final @android.annotation.NonNull Parcelable.Creator<SavedState> CREATOR
                 = new Parcelable.Creator<SavedState>() {
             @Override
             public SavedState createFromParcel(Parcel in) {
@@ -2844,7 +2844,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @attr ref android.R.styleable#AbsListView_drawSelectorOnTop
      */
     @InspectableProperty
-    public boolean getDrawSelectorOnTop() {
+    public boolean isDrawSelectorOnTop() {
         return mDrawSelectorOnTop;
     }
 

@@ -249,6 +249,10 @@ public final class ProcessList {
     // Threshold of number of cached+empty where we consider memory critical.
     static final int TRIM_LOW_THRESHOLD = 5;
 
+    // If true, then we pass the flag to ART to load the app image startup cache.
+    private static final String PROPERTY_USE_APP_IMAGE_STARTUP_CACHE =
+            "persist.device_config.runtime_native.use_app_image_startup_cache";
+
     // Low Memory Killer Daemon command codes.
     // These must be kept in sync with the definitions in lmkd.c
     //
@@ -1559,6 +1563,13 @@ public final class ProcessList {
                 runtimeFlags |= policyBits;
             }
 
+            String useAppImageCache = SystemProperties.get(
+                    PROPERTY_USE_APP_IMAGE_STARTUP_CACHE, "");
+            // Property defaults to true currently.
+            if (!TextUtils.isEmpty(useAppImageCache) && !useAppImageCache.equals("false")) {
+                runtimeFlags |= Zygote.USE_APP_IMAGE_STARTUP_CACHE;
+            }
+
             String invokeWith = null;
             if ((app.info.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
                 // Debuggable apps may include a wrapper script with their library directory.
@@ -1783,7 +1794,7 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        packageNames, sandboxId, /*useBlastulaPool=*/ false,
+                        packageNames, sandboxId, /*useUnspecializedAppProcessPool=*/ false,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
@@ -2852,6 +2863,15 @@ public final class ProcessList {
                     pos--;
                 }
                 mLruProcesses.add(pos, app);
+                if (pos == mLruProcessActivityStart) {
+                    mLruProcessActivityStart++;
+                }
+                if (pos == mLruProcessServiceStart) {
+                    // Unless {@code #hasService} is implemented, currently the starting position
+                    // for activity and service are the same, so the incoming position may equal to
+                    // the starting position of service.
+                    mLruProcessServiceStart++;
+                }
                 // If this process is part of a group, need to pull up any other processes
                 // in that group to be with it.
                 int endIndex = pos - 1;

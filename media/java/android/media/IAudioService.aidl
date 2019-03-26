@@ -66,6 +66,7 @@ interface IAudioService {
 
     void adjustStreamVolume(int streamType, int direction, int flags, String callingPackage);
 
+    @UnsupportedAppUsage
     void setStreamVolume(int streamType, int index, int flags, String callingPackage);
 
     boolean isStreamMute(int streamType);
@@ -76,10 +77,12 @@ interface IAudioService {
 
     void setMasterMute(boolean mute, int flags, String callingPackage, int userId);
 
+    @UnsupportedAppUsage
     int getStreamVolume(int streamType);
 
     int getStreamMinVolume(int streamType);
 
+    @UnsupportedAppUsage
     int getStreamMaxVolume(int streamType);
 
     AudioVolumeGroups listAudioVolumeGroups();
@@ -171,6 +174,7 @@ interface IAudioService {
     int handleBluetoothA2dpActiveDeviceChange(in BluetoothDevice device,
             int state, int profile, boolean suppressNoisyIntent, int a2dpVolume);
 
+    @UnsupportedAppUsage
     AudioRoutesInfo startWatchingRoutes(in IAudioRoutesObserver observer);
 
     boolean isCameraSoundForced();
@@ -224,10 +228,10 @@ interface IAudioService {
 
     oneway void playerHasOpPlayAudio(in int piid, in boolean hasOpPlayAudio);
 
-    int setBluetoothHearingAidDeviceConnectionState(in BluetoothDevice device,
+    void setBluetoothHearingAidDeviceConnectionState(in BluetoothDevice device,
             int state, boolean suppressNoisyIntent, int musicDevice);
 
-    int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(in BluetoothDevice device,
+    void setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(in BluetoothDevice device,
             int state, int profile, boolean suppressNoisyIntent, int a2dpVolume);
 
     oneway void setFocusRequestResultFromExtPolicy(in AudioFocusInfo afi, int requestResult,

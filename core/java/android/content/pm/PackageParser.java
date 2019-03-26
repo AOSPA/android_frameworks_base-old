@@ -45,6 +45,7 @@ import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.StringRes;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityTaskManager;
@@ -3260,10 +3261,21 @@ public class PackageParser {
     private boolean parsePermissionGroup(Package owner, int flags, Resources res,
             XmlResourceParser parser, String[] outError)
             throws XmlPullParserException, IOException {
-        PermissionGroup perm = new PermissionGroup(owner);
-
         TypedArray sa = res.obtainAttributes(parser,
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup);
+
+        int requestDetailResourceId = sa.getResourceId(
+                com.android.internal.R.styleable.AndroidManifestPermissionGroup_requestDetail, 0);
+        int backgroundRequestResourceId = sa.getResourceId(
+                com.android.internal.R.styleable.AndroidManifestPermissionGroup_backgroundRequest,
+                0);
+        int backgroundRequestDetailResourceId = sa.getResourceId(
+                com.android.internal.R.styleable
+                        .AndroidManifestPermissionGroup_backgroundRequestDetail, 0);
+
+        PermissionGroup perm = new PermissionGroup(owner, requestDetailResourceId,
+                backgroundRequestResourceId, backgroundRequestDetailResourceId);
+
         if (!parsePackageItemInfo(owner, perm.info, outError,
                 "<permission-group>", sa, true /*nameRequired*/,
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_name,
@@ -3282,14 +3294,6 @@ public class PackageParser {
                 0);
         perm.info.requestRes = sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_request, 0);
-        perm.info.requestDetailResourceId = sa.getResourceId(
-                com.android.internal.R.styleable.AndroidManifestPermissionGroup_requestDetail, 0);
-        perm.info.backgroundRequestResourceId = sa.getResourceId(
-                com.android.internal.R.styleable.AndroidManifestPermissionGroup_backgroundRequest,
-                0);
-        perm.info.backgroundRequestDetailResourceId = sa.getResourceId(
-                com.android.internal.R.styleable
-                        .AndroidManifestPermissionGroup_backgroundRequestDetail, 0);
         perm.info.flags = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_permissionGroupFlags, 0);
         perm.info.priority = sa.getInt(
@@ -3754,6 +3758,12 @@ public class PackageParser {
                         .AndroidManifestApplication_allowClearUserDataOnFailedRestore,
                 true)) {
             ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ALLOW_CLEAR_USER_DATA_ON_FAILED_RESTORE;
+        }
+
+        if (sa.getBoolean(
+                R.styleable.AndroidManifestApplication_allowAudioPlaybackCapture,
+                owner.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q)) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ALLOW_AUDIO_PLAYBACK_CAPTURE;
         }
 
         ai.maxAspectRatio = sa.getFloat(R.styleable.AndroidManifestApplication_maxAspectRatio, 0);
@@ -6402,7 +6412,7 @@ public class PackageParser {
             this.pastSigningCertificates = in.createTypedArray(Signature.CREATOR);
         }
 
-        public static final Creator<SigningDetails> CREATOR = new Creator<SigningDetails>() {
+        public static final @android.annotation.NonNull Creator<SigningDetails> CREATOR = new Creator<SigningDetails>() {
             @Override
             public SigningDetails createFromParcel(Parcel source) {
                 if (source.readBoolean()) {
@@ -7670,9 +7680,12 @@ public class PackageParser {
         @UnsupportedAppUsage
         public final PermissionGroupInfo info;
 
-        public PermissionGroup(Package _owner) {
-            super(_owner);
-            info = new PermissionGroupInfo();
+        public PermissionGroup(Package owner, @StringRes int requestDetailResourceId,
+                @StringRes int backgroundRequestResourceId,
+                @StringRes int backgroundRequestDetailResourceId) {
+            super(owner);
+            info = new PermissionGroupInfo(requestDetailResourceId, backgroundRequestResourceId,
+                    backgroundRequestDetailResourceId);
         }
 
         public PermissionGroup(Package _owner, PermissionGroupInfo _info) {
@@ -8438,6 +8451,21 @@ public class PackageParser {
     public static PackageInfo generatePackageInfoFromApex(File apexFile, boolean collectCerts)
             throws PackageParserException {
         PackageInfo pi = new PackageInfo();
+        int parseFlags = 0;
+        if (collectCerts) {
+            parseFlags |= PARSE_COLLECT_CERTIFICATES;
+            try {
+                if (apexFile.getCanonicalPath().startsWith("/system")) {
+                    // Don't need verify the APK integrity of APEXes on /system, just like
+                    // we don't do that for APKs.
+                    // TODO(b/126514108): we may be able to do this for APEXes on /data as well.
+                    parseFlags |= PARSE_IS_SYSTEM_DIR;
+                }
+            } catch (IOException e) {
+                throw new PackageParserException(INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
+                        "Failed to get path for " + apexFile.getPath(), e);
+            }
+        }
 
         // TODO(b/123086053) properly fill in the ApplicationInfo with data from AndroidManifest
         // Add ApplicationInfo to the PackageInfo.
@@ -8452,8 +8480,7 @@ public class PackageParser {
 
         // TODO(b/123052859): We should avoid these repeated calls to parseApkLite each time
         // we want to generate information for APEX modules.
-        PackageParser.ApkLite apk = PackageParser.parseApkLite(apexFile,
-            collectCerts ? PackageParser.PARSE_COLLECT_CERTIFICATES : 0);
+        PackageParser.ApkLite apk = PackageParser.parseApkLite(apexFile, parseFlags);
 
         pi.packageName = apk.packageName;
         ai.packageName = apk.packageName;

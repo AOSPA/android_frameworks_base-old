@@ -293,10 +293,11 @@ public final class ActivityRecord extends ConfigurationContainer {
     public int perfActivityBoostHandler = -1; //perflock handler when activity is created.
     private TaskRecord task;        // the task this is in.
     private long createTime = System.currentTimeMillis();
-    long lastVisibleTime;   // last time this activity became visible
-    long cpuTimeAtResume;   // the cpu time of host process at the time of resuming activity
-    long pauseTime;         // last time we started pausing the activity
-    long launchTickTime;    // base time for launch tick messages
+    long lastVisibleTime;         // last time this activity became visible
+    long cpuTimeAtResume;         // the cpu time of host process at the time of resuming activity
+    long pauseTime;               // last time we started pausing the activity
+    long launchTickTime;          // base time for launch tick messages
+    long topResumedStateLossTime; // last time we reported top resumed state loss to an activity
     // Last configuration reported to the activity in the client process.
     private MergedConfiguration mLastReportedConfiguration;
     private int mLastReportedDisplayId;
@@ -572,11 +573,8 @@ public final class ActivityRecord extends ConfigurationContainer {
             pw.print("requestedVrComponent=");
             pw.println(requestedVrComponent);
         }
-        final boolean waitingVisible =
-                mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(this);
-        if (lastVisibleTime != 0 || waitingVisible || nowVisible) {
-            pw.print(prefix); pw.print("waitingVisible="); pw.print(waitingVisible);
-                    pw.print(" nowVisible="); pw.print(nowVisible);
+        if (lastVisibleTime != 0 || nowVisible) {
+            pw.print(prefix); pw.print(" nowVisible="); pw.print(nowVisible);
                     pw.print(" lastVisibleTime=");
                     if (lastVisibleTime == 0) pw.print("0");
                     else TimeUtils.formatDuration(lastVisibleTime, now, pw);
@@ -703,14 +701,14 @@ public final class ActivityRecord extends ConfigurationContainer {
 
     void scheduleTopResumedActivityChanged(boolean onTop) {
         if (!attachedToProcess()) {
-            if (DEBUG_CONFIGURATION) {
+            if (DEBUG_STATES) {
                 Slog.w(TAG, "Can't report activity position update - client not running"
                                 + ", activityRecord=" + this);
             }
             return;
         }
         try {
-            if (DEBUG_CONFIGURATION) {
+            if (DEBUG_STATES) {
                 Slog.v(TAG, "Sending position change to " + this + ", onTop: " + onTop);
             }
 
@@ -2408,27 +2406,6 @@ public final class ActivityRecord extends ConfigurationContainer {
                 nowVisible = true;
                 launching = false;
                 lastVisibleTime = SystemClock.uptimeMillis();
-                if (idle || mStackSupervisor.isStoppingNoHistoryActivity()) {
-                    // If this activity was already idle or there is an activity that must be
-                    // stopped immediately after visible, then we now need to make sure we perform
-                    // the full stop of any activities that are waiting to do so. This is because
-                    // we won't do that while they are still waiting for this one to become visible.
-                    final int size = mStackSupervisor.mActivitiesWaitingForVisibleActivity.size();
-                    if (size > 0) {
-                        for (int i = 0; i < size; i++) {
-                            final ActivityRecord r =
-                                    mStackSupervisor.mActivitiesWaitingForVisibleActivity.get(i);
-                            if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "Was waiting for visible: " + r);
-                        }
-                        mStackSupervisor.mActivitiesWaitingForVisibleActivity.clear();
-                        mStackSupervisor.scheduleIdleLocked();
-                    }
-                } else {
-                    // Instead of doing the full stop routine here, let's just hide any activities
-                    // we now can, and let them stop when the normal idle happens.
-                    mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
-                            false /* remove */, true /* processPausingActivities */);
-                }
                 mAtmService.scheduleAppGcsLocked();
             }
         }
@@ -2440,6 +2417,24 @@ public final class ActivityRecord extends ConfigurationContainer {
             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "windowsGone(): " + this);
             nowVisible = false;
             launching = false;
+        }
+    }
+
+    void onAnimationFinished() {
+        if (mRootActivityContainer.allResumedActivitiesIdle()
+                || mStackSupervisor.isStoppingNoHistoryActivity()) {
+            // If all activities are already idle or there is an activity that must be
+            // stopped immediately after visible, then we now need to make sure we perform
+            // the full stop of this activity. This is because we won't do that while they are still
+            // waiting for the animation to finish.
+            if (mStackSupervisor.mStoppingActivities.contains(this)) {
+                mStackSupervisor.scheduleIdleLocked();
+            }
+        } else {
+            // Instead of doing the full stop routine here, let's just hide any activities
+            // we now can, and let them stop when the normal idle happens.
+            mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
+                    false /* remove */, true /* processPausingActivities */);
         }
     }
 
@@ -2475,10 +2470,9 @@ public final class ActivityRecord extends ConfigurationContainer {
     }
 
     private ActivityRecord getWaitingHistoryRecordLocked() {
-        // First find the real culprit...  if this activity is waiting for
-        // another activity to start or has stopped, then the key dispatching
+        // First find the real culprit...  if this activity has stopped, then the key dispatching
         // timeout should not be caused by this.
-        if (mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(this) || stopped) {
+        if (stopped) {
             final ActivityStack stack = mRootActivityContainer.getTopDisplayFocusedStack();
             // Try to use the one which is closest to top.
             ActivityRecord r = stack.getResumedActivity();
@@ -3337,7 +3331,7 @@ public final class ActivityRecord extends ConfigurationContainer {
             transaction.addCallback(callbackItem);
             transaction.setLifecycleStateRequest(lifecycleItem);
             mAtmService.getLifecycleManager().scheduleTransaction(transaction);
-            mRootActivityContainer.updateTopResumedActivityIfNeeded();
+            mStackSupervisor.updateTopResumedActivityIfNeeded();
             // Note: don't need to call pauseIfSleepingLocked() here, because the caller will only
             // request resume if this activity is currently resumed, which implies we aren't
             // sleeping.

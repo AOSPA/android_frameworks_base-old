@@ -16,13 +16,14 @@
 
 package android.service.textclassifier;
 
+import android.os.Bundle;
 import android.view.textclassifier.TextSelection;
 
 /**
- * Callback for a TextSelection request.
+ * Callback for all requests from SystemTextClassifier.
  * @hide
  */
-oneway interface ITextSelectionCallback {
-    void onSuccess(in TextSelection selection);
+oneway interface ITextClassifierCallback {
+    void onSuccess(in Bundle result);
     void onFailure();
 }

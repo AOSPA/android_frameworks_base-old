@@ -92,7 +92,8 @@ public class SettingsBackupTest {
                     Settings.System.VOLUME_SYSTEM, // deprecated since API 2?
                     Settings.System.VOLUME_VOICE, // deprecated since API 2?
                     Settings.System.WHEN_TO_MAKE_WIFI_CALLS, // bug?
-                    Settings.System.WINDOW_ORIENTATION_LISTENER_LOG // used for debugging only
+                    Settings.System.WINDOW_ORIENTATION_LISTENER_LOG, // used for debugging only
+                    Settings.System.PEAK_REFRESH_RATE // depends on hardware capabilities
                     );
 
     private static final Set<String> BACKUP_BLACKLISTED_GLOBAL_SETTINGS =
@@ -131,6 +132,7 @@ public class SettingsBackupTest {
                     Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
                     Settings.Global.AUTOMATIC_POWER_SAVER_MODE,
                     Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED,
+                    Settings.Global.BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST,
                     Settings.Global.BATTERY_CHARGING_STATE_UPDATE_DELAY,
                     Settings.Global.BROADCAST_BG_CONSTANTS,
                     Settings.Global.BROADCAST_FG_CONSTANTS,
@@ -287,6 +289,7 @@ public class SettingsBackupTest {
                     Settings.Global.HDMI_SYSTEM_AUDIO_CONTROL_ENABLED,
                     Settings.Global.HEADS_UP_NOTIFICATIONS_ENABLED,
                     Settings.Global.HIDDEN_API_ACCESS_LOG_SAMPLING_RATE,
+                    Settings.Global.HIDDEN_API_ACCESS_STATSLOG_SAMPLING_RATE,
                     Settings.Global.HIDDEN_API_POLICY,
                     Settings.Global.HIDE_ERROR_DIALOGS,
                     Settings.Global.HTTP_PROXY,

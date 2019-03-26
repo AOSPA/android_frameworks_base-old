@@ -144,6 +144,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     // these need to match ElapsedRealtimeFlags enum in types.hal
     private static final int ELAPSED_REALTIME_HAS_TIMESTAMP_NS = 1;
+    private static final int ELAPSED_REALTIME_HAS_TIME_UNCERTAINTY_NS = 2;
 
     // IMPORTANT - the GPS_DELETE_* symbols here must match GnssAidingData enum in IGnss.hal
     private static final int GPS_DELETE_EPHEMERIS = 0x0001;
@@ -602,12 +603,11 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         // while IO initialization and registration is delegated to our internal handler
         // this approach is just fine because events are posted to our handler anyway
         mGnssConfiguration = new GnssConfiguration(mContext);
-        sendMessage(INITIALIZE_HANDLER, 0, null);
-
-        // Create a GPS net-initiated handler.
+        // Create a GPS net-initiated handler (also needed by handleInitialize)
         mNIHandler = new GpsNetInitiatedHandler(context,
                 mNetInitiatedListener,
                 mSuplEsEnabled);
+        sendMessage(INITIALIZE_HANDLER, 0, null);
 
         mGnssStatusListenerHelper = new GnssStatusListenerHelper(mContext, mHandler) {
             @Override
@@ -689,7 +689,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
     }
 
-    private void handleRequestLocation(boolean independentFromGnss) {
+    private void handleRequestLocation(boolean independentFromGnss, boolean isUserEmergency) {
         if (isRequestLocationRateLimited()) {
             if (DEBUG) {
                 Log.d(TAG, "RequestLocation is denied due to too frequent requests.");
@@ -725,9 +725,17 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 String.format(
                         "GNSS HAL Requesting location updates from %s provider for %d millis.",
                         provider, durationMillis));
+
+        LocationRequest locationRequest = LocationRequest.createFromDeprecatedProvider(provider,
+                LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS, /* minDistance= */ 0,
+                /* singleShot= */ false);
+
+        // Ignore location settings if in emergency mode.
+        if (isUserEmergency && mNIHandler.getInEmergency()) {
+            locationRequest.setLocationSettingsIgnored(true);
+        }
         try {
-            locationManager.requestLocationUpdates(provider,
-                    LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS, /*minDistance=*/ 0,
+            locationManager.requestLocationUpdates(locationRequest,
                     locationListener, mHandler.getLooper());
             locationListener.mNumLocationUpdateRequest++;
             mHandler.postDelayed(() -> {
@@ -763,15 +771,18 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         float bearingAccuracyDegrees = location.getBearingAccuracyDegrees();
         long timestamp = location.getTime();
 
-        int elapsedRealtimeFlags = ELAPSED_REALTIME_HAS_TIMESTAMP_NS;
+        int elapsedRealtimeFlags = ELAPSED_REALTIME_HAS_TIMESTAMP_NS
+                | (location.hasElapsedRealtimeUncertaintyNanos()
+                        ? ELAPSED_REALTIME_HAS_TIME_UNCERTAINTY_NS : 0);
         long elapsedRealtimeNanos = location.getElapsedRealtimeNanos();
+        long elapsedRealtimeUncertaintyNanos = location.getElapsedRealtimeUncertaintyNanos();
 
         native_inject_best_location(
                 gnssLocationFlags, latitudeDegrees, longitudeDegrees,
                 altitudeMeters, speedMetersPerSec, bearingDegrees,
                 horizontalAccuracyMeters, verticalAccuracyMeters,
                 speedAccuracyMetersPerSecond, bearingAccuracyDegrees, timestamp,
-                elapsedRealtimeFlags, elapsedRealtimeNanos);
+                elapsedRealtimeFlags, elapsedRealtimeNanos, elapsedRealtimeUncertaintyNanos);
     }
 
     /** Returns true if the location request is too frequent. */
@@ -1830,11 +1841,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     @NativeEntryPoint
-    private void requestLocation(boolean independentFromGnss) {
+    private void requestLocation(boolean independentFromGnss, boolean isUserEmergency) {
         if (DEBUG) {
-            Log.d(TAG, "requestLocation. independentFromGnss: " + independentFromGnss);
+            Log.d(TAG, "requestLocation. independentFromGnss: " + independentFromGnss
+                    + ", isUserEmergency: "
+                    + isUserEmergency);
         }
-        sendMessage(REQUEST_LOCATION, 0, independentFromGnss);
+        sendMessage(REQUEST_LOCATION, independentFromGnss ? 1 : 0, isUserEmergency);
     }
 
     @NativeEntryPoint
@@ -1925,7 +1938,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     mNtpTimeHelper.retrieveAndInjectNtpTime();
                     break;
                 case REQUEST_LOCATION:
-                    handleRequestLocation((boolean) msg.obj);
+                    handleRequestLocation(msg.arg1 == 1, (boolean) msg.obj);
                     break;
                 case DOWNLOAD_XTRA_DATA:
                     handleDownloadXtraData();
@@ -2163,7 +2176,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             double altitudeMeters, float speedMetersPerSec, float bearingDegrees,
             float horizontalAccuracyMeters, float verticalAccuracyMeters,
             float speedAccuracyMetersPerSecond, float bearingAccuracyDegrees,
-            long timestamp, int elapsedRealtimeFlags, long elapsedRealtimeNanos);
+            long timestamp, int elapsedRealtimeFlags, long elapsedRealtimeNanos,
+            long elapsedRealtimeUncertaintyNanos);
 
     private native void native_inject_location(double latitude, double longitude, float accuracy);
 

@@ -52,9 +52,11 @@ public class CarrierTextController {
     private boolean mTelephonyCapable;
     private boolean mShowMissingSim;
     private boolean mShowAirplaneMode;
-    private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    @VisibleForTesting
+    protected KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private WifiManager mWifiManager;
-    private boolean[] mSimErrorState = new boolean[TelephonyManager.getDefault().getPhoneCount()];
+    private boolean[] mSimErrorState;
+    private final int mSimSlotsNumber;
     private CarrierTextCallback mCarrierTextCallback;
     private Context mContext;
     private CharSequence mSeparator;
@@ -72,7 +74,8 @@ public class CarrierTextController {
                 }
             };
 
-    private final KeyguardUpdateMonitorCallback mCallback = new KeyguardUpdateMonitorCallback() {
+    @VisibleForTesting
+    protected final KeyguardUpdateMonitorCallback mCallback = new KeyguardUpdateMonitorCallback() {
         @Override
         public void onRefreshCarrierInfo() {
             if (DEBUG) {
@@ -93,7 +96,7 @@ public class CarrierTextController {
         }
 
         public void onSimStateChanged(int subId, int slotId, IccCardConstants.State simState) {
-            if (slotId < 0) {
+            if (slotId < 0 || slotId >= mSimSlotsNumber) {
                 Log.d(TAG, "onSimStateChanged() - slotId invalid: " + slotId
                         + " mTelephonyCapable: " + Boolean.toString(mTelephonyCapable));
                 return;
@@ -144,36 +147,48 @@ public class CarrierTextController {
         mWifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         mSeparator = separator;
         mWakefulnessLifecycle = Dependency.get(WakefulnessLifecycle.class);
+        mSimSlotsNumber = ((TelephonyManager) context.getSystemService(
+                Context.TELEPHONY_SERVICE)).getPhoneCount();
+        mSimErrorState = new boolean[mSimSlotsNumber];
     }
 
     /**
      * Checks if there are faulty cards. Adds the text depending on the slot of the card
      *
      * @param text:   current carrier text based on the sim state
+     * @param carrierNames names order by subscription order
+     * @param subOrderBySlot array containing the sub index for each slot ID
      * @param noSims: whether a valid sim card is inserted
      * @return text
      */
-    private CharSequence updateCarrierTextWithSimIoError(CharSequence text, boolean noSims) {
+    private CharSequence updateCarrierTextWithSimIoError(CharSequence text,
+            CharSequence[] carrierNames, int[] subOrderBySlot, boolean noSims) {
         final CharSequence carrier = "";
         CharSequence carrierTextForSimIOError = getCarrierTextForSimState(
                 IccCardConstants.State.CARD_IO_ERROR, carrier);
+        // mSimErrorState has the state of each sim indexed by slotID.
         for (int index = 0; index < mSimErrorState.length; index++) {
-            if (mSimErrorState[index]) {
-                // In the case when no sim cards are detected but a faulty card is inserted
-                // overwrite the text and only show "Invalid card"
-                if (noSims) {
-                    return concatenate(carrierTextForSimIOError,
-                            getContext().getText(
-                                    com.android.internal.R.string.emergency_calls_only),
-                            mSeparator);
-                } else if (index == 0) {
-                    // prepend "Invalid card" when faulty card is inserted in slot 0
-                    text = concatenate(carrierTextForSimIOError, text, mSeparator);
-                } else {
-                    // concatenate "Invalid card" when faulty card is inserted in slot 1
-                    text = concatenate(text, carrierTextForSimIOError, mSeparator);
-                }
+            if (!mSimErrorState[index]) {
+                continue;
             }
+            // In the case when no sim cards are detected but a faulty card is inserted
+            // overwrite the text and only show "Invalid card"
+            if (noSims) {
+                return concatenate(carrierTextForSimIOError,
+                        getContext().getText(
+                                com.android.internal.R.string.emergency_calls_only),
+                        mSeparator);
+            } else if (subOrderBySlot[index] != -1) {
+                int subIndex = subOrderBySlot[index];
+                // prepend "Invalid card" when faulty card is inserted in slot 0 or 1
+                carrierNames[subIndex] = concatenate(carrierTextForSimIOError,
+                        carrierNames[subIndex],
+                        mSeparator);
+            } else {
+                // concatenate "Invalid card" when faulty card is inserted in other slot
+                text = concatenate(text, carrierTextForSimIOError, mSeparator);
+            }
+
         }
         return text;
     }
@@ -213,15 +228,25 @@ public class CarrierTextController {
         boolean showCustomizeName = getContext().getResources().getBoolean(
                 com.android.systemui.R.bool.config_show_customize_carrier_name);
         CharSequence displayText = null;
-
         List<SubscriptionInfo> subs = mKeyguardUpdateMonitor.getSubscriptionInfo(false);
-        final int N = subs.size();
-        final int[] subsIds = new int[N];
-        if (DEBUG) Log.d(TAG, "updateCarrierText(): " + N);
-        for (int i = 0; i < N; i++) {
-            CharSequence networkClass = "";
+
+        final int numSubs = subs.size();
+        final int[] subsIds = new int[numSubs];
+        if (DEBUG) Log.d(TAG, "updateCarrierText(): " + numSubs);
+        // This array will contain in position i, the index of subscription in slot ID i.
+        // -1 if no subscription in that slot
+        final int[] subOrderBySlot = new int[mSimSlotsNumber];
+        for (int i = 0; i < mSimSlotsNumber; i++) {
+            subOrderBySlot[i] = -1;
+        }
+        final CharSequence[] carrierNames = new CharSequence[numSubs];
+        if (DEBUG) Log.d(TAG, "updateCarrierText(): " + numSubs);
+
+        for (int i = 0; i < numSubs; i++) {
             int subId = subs.get(i).getSubscriptionId();
+            carrierNames[i] = "";
             subsIds[i] = subId;
+            subOrderBySlot[subs.get(i).getSimSlotIndex()] = i;
             IccCardConstants.State simState = mKeyguardUpdateMonitor.getSimState(subId);
             CharSequence carrierName = subs.get(i).getCarrierName();
             if ( showCustomizeName ) {
@@ -233,7 +258,7 @@ public class CarrierTextController {
             }
             if (carrierTextForSimState != null) {
                 allSimsMissing = false;
-                displayText = concatenate(displayText, carrierTextForSimState, mSeparator);
+                carrierNames[i] = carrierTextForSimState;
             }
             if (simState == IccCardConstants.State.READY) {
                 ServiceState ss = mKeyguardUpdateMonitor.mServiceStates.get(subId);
@@ -253,7 +278,7 @@ public class CarrierTextController {
             }
         }
         if (allSimsMissing) {
-            if (N != 0) {
+            if (numSubs != 0) {
                 // Shows "No SIM card | Emergency calls only" on devices that are voice-capable.
                 // This depends on mPlmn containing the text "Emergency calls only" when the radio
                 // has some connectivity. Otherwise, it should be null or empty and just show
@@ -262,7 +287,6 @@ public class CarrierTextController {
                 // described above.
                 displayText =  makeCarrierStringOnEmergencyCapable(
                         getMissingSimMessage(), subs.get(0).getCarrierName());
-                missingSimsWithSubs = true;
             } else {
                 // We don't have a SubscriptionInfo to get the emergency calls only from.
                 // Grab it from the old sticky broadcast if possible instead. We can use it
@@ -292,26 +316,32 @@ public class CarrierTextController {
             }
         }
 
-        displayText = updateCarrierTextWithSimIoError(displayText, allSimsMissing);
+        displayText = updateCarrierTextWithSimIoError(displayText, carrierNames, subOrderBySlot,
+                allSimsMissing);
         // APM (airplane mode) != no carrier state. There are carrier services
         // (e.g. WFC = Wi-Fi calling) which may operate in APM.
         if (!anySimReadyAndInService && WirelessUtils.isAirplaneModeOn(mContext)) {
             displayText = getAirplaneModeMessage();
         }
 
-
-
-        Handler handler = Dependency.get(Dependency.MAIN_HANDLER);
+        if (TextUtils.isEmpty(displayText)) {
+            displayText = TextUtils.join(mSeparator, carrierNames);
+        }
         final CarrierTextCallbackInfo info = new CarrierTextCallbackInfo(
                 displayText,
-                displayText.toString().split(mSeparator.toString()),
-                anySimReadyAndInService && !missingSimsWithSubs,
+                carrierNames,
+                !allSimsMissing,
                 subsIds);
+        postToCallback(info);
+    }
+
+    @VisibleForTesting
+    protected void postToCallback(CarrierTextCallbackInfo info) {
+        Handler handler = Dependency.get(Dependency.MAIN_HANDLER);
         final CarrierTextCallback callback = mCarrierTextCallback;
         if (callback != null) {
             handler.post(() -> callback.updateCarrierInfo(info));
         }
-
     }
 
     private Context getContext() {
