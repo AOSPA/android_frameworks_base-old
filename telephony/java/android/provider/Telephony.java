@@ -17,6 +17,7 @@
 package android.provider;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
@@ -1225,8 +1226,8 @@ public final class Telephony {
              * Broadcast Action: A debug code has been entered in the dialer. This intent is
              * broadcast by the system and OEM telephony apps may need to receive these broadcasts.
              * These "secret codes" are used to activate developer menus by dialing certain codes.
-             * And they are of the form {@code *#*#&lt;code&gt;#*#*}. The intent will have the data
-             * URI: {@code android_secret_code://&lt;code&gt;}. It is possible that a manifest
+             * And they are of the form {@code *#*#<code>#*#*}. The intent will have the data
+             * URI: {@code android_secret_code://<code>}. It is possible that a manifest
              * receiver would be woken up even if it is not currently running.
              *
              * <p>Requires {@code android.Manifest.permission#CONTROL_INCALL_EXPERIENCE} to
@@ -3879,6 +3880,42 @@ public final class Telephony {
          */
         public static final String CARRIER_ID = "carrier_id";
 
+        /**
+         * The skip 464xlat flag. Flag works as follows.
+         * {@link #SKIP_464XLAT_DEFAULT}: the APN will skip only APN is IMS and no internet.
+         * {@link #SKIP_464XLAT_DISABLE}: the APN will NOT skip 464xlat
+         * {@link #SKIP_464XLAT_ENABLE}: the APN will skip 464xlat
+         * <p>Type: INTEGER</p>
+         *
+         * @hide
+         */
+        public static final String SKIP_464XLAT = "skip_464xlat";
+
+        /**
+         * Possible value for the {@link #SKIP_464XLAT} field.
+         * <p>Type: INTEGER</p>
+         *
+         * @hide
+         */
+        public static final int SKIP_464XLAT_DEFAULT = -1;
+
+        /**
+         * Possible value for the {@link #SKIP_464XLAT} field.
+         * <p>Type: INTEGER</p>
+         *
+         * @hide
+         */
+        public static final int SKIP_464XLAT_DISABLE = 0;
+
+        /**
+         * Possible value for the {@link #SKIP_464XLAT} field.
+         * <p>Type: INTEGER</p>
+         *
+         * @hide
+         */
+        public static final int SKIP_464XLAT_ENABLE = 1;
+
+
         /** @hide */
         @IntDef({
                 UNEDITED,
@@ -3889,6 +3926,16 @@ public final class Telephony {
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface EditStatus {}
+
+        /** @hide */
+        @IntDef({
+                SKIP_464XLAT_DEFAULT,
+                SKIP_464XLAT_DISABLE,
+                SKIP_464XLAT_ENABLE,
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface Skip464XlatStatus {}
+
     }
 
     /**
@@ -4391,6 +4438,7 @@ public final class Telephony {
          * @param subscriptionId the subscriptionId to receive updates on
          * @return the Uri used to observe precise carrier identity changes
          */
+        @NonNull
         public static Uri getPreciseCarrierIdUriForSubscriptionId(int subscriptionId) {
             return Uri.withAppendedPath(Uri.withAppendedPath(CONTENT_URI, "precise"),
                     String.valueOf(subscriptionId));

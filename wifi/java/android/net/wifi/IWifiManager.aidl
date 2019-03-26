@@ -148,8 +148,10 @@ interface IWifiManager
 
     void stopWatchLocalOnlyHotspot();
 
+    @UnsupportedAppUsage
     int getWifiApEnabledState();
 
+    @UnsupportedAppUsage
     WifiConfiguration getWifiApConfiguration();
 
     boolean setWifiApConfiguration(in WifiConfiguration wifiConfig, String packageName);
@@ -174,6 +176,7 @@ interface IWifiManager
 
     void factoryReset(String packageName);
 
+    @UnsupportedAppUsage
     Network getCurrentNetwork();
 
     byte[] retrieveBackupData();

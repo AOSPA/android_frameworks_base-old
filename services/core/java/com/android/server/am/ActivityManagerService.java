@@ -2150,6 +2150,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         private String mExemptionsStr;
         private List<String> mExemptions = Collections.emptyList();
         private int mLogSampleRate = -1;
+        private int mStatslogSampleRate = -1;
         @HiddenApiEnforcementPolicy private int mPolicy = HIDDEN_API_ENFORCEMENT_DEFAULT;
 
         public HiddenApiSettings(Handler handler, Context context) {
@@ -2164,6 +2165,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                     this);
             mContext.getContentResolver().registerContentObserver(
                     Settings.Global.getUriFor(Settings.Global.HIDDEN_API_ACCESS_LOG_SAMPLING_RATE),
+                    false,
+                    this);
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.Global.getUriFor(
+                        Settings.Global.HIDDEN_API_ACCESS_STATSLOG_SAMPLING_RATE),
                     false,
                     this);
             mContext.getContentResolver().registerContentObserver(
@@ -2201,6 +2207,15 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (logSampleRate != -1 && logSampleRate != mLogSampleRate) {
                 mLogSampleRate = logSampleRate;
                 ZYGOTE_PROCESS.setHiddenApiAccessLogSampleRate(mLogSampleRate);
+            }
+            int statslogSampleRate = Settings.Global.getInt(mContext.getContentResolver(),
+                    Settings.Global.HIDDEN_API_ACCESS_STATSLOG_SAMPLING_RATE, 0);
+            if (statslogSampleRate < 0 || statslogSampleRate > 0x10000) {
+                statslogSampleRate = -1;
+            }
+            if (statslogSampleRate != -1 && statslogSampleRate != mStatslogSampleRate) {
+                mStatslogSampleRate = statslogSampleRate;
+                ZYGOTE_PROCESS.setHiddenApiAccessStatslogSampleRate(mStatslogSampleRate);
             }
             mPolicy = getValidEnforcementPolicy(Settings.Global.HIDDEN_API_POLICY);
         }
@@ -17913,6 +17928,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             return mConstants.mFlagActivityStartsLoggingEnabled;
         }
 
+        public boolean isPackageNameWhitelistedForBgActivityStarts(String packageName) {
+            return mConstants.mPackageNamesWhitelistedForBgActivityStarts.contains(packageName);
+        }
+
         public boolean isBackgroundActivityStartsEnabled() {
             return mConstants.mFlagBackgroundActivityStartsEnabled;
         }
@@ -18526,7 +18545,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         public int checkPermission(String permName, String pkgName, int userId,
                 TriFunction<String, String, Integer, Integer> superImpl) {
             if (mTargetPackageName.equals(pkgName) && isTargetPermission(permName)) {
-                return superImpl.apply(permName, "com.android.shell", userId);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    return superImpl.apply(permName, "com.android.shell", userId);
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
             }
             return superImpl.apply(permName, pkgName, userId);
         }
@@ -18535,7 +18559,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         public int checkUidPermission(String permName, int uid,
                 BiFunction<String, Integer, Integer> superImpl) {
             if (uid == mTargetUid  && isTargetPermission(permName)) {
-                return superImpl.apply(permName, Process.SHELL_UID);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    return superImpl.apply(permName, Process.SHELL_UID);
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
             }
             return superImpl.apply(permName, uid);
         }

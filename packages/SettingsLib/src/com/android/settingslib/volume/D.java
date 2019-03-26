@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
-package android.service.textclassifier;
+package com.android.settingslib.volume;
 
-import android.view.textclassifier.ConversationActions;
+import android.util.Log;
 
-/**
- * Callback for a ConversationActions request.
- * @hide
- */
-oneway interface IConversationActionsCallback {
-    void onSuccess(in ConversationActions conversationActions);
-    void onFailure();
+class D {
+    public static boolean BUG = Log.isLoggable("volume", Log.DEBUG);
 }

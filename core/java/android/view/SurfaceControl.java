@@ -117,6 +117,8 @@ public final class SurfaceControl implements Parcelable {
             float dtdy, float dsdy);
     private static native void nativeSetColorTransform(long transactionObj, long nativeObject,
             float[] matrix, float[] translation);
+    private static native void nativeSetColorSpaceAgnostic(long transactionObj, long nativeObject,
+            boolean agnostic);
     private static native void nativeSetGeometry(long transactionObj, long nativeObject,
             Rect sourceCrop, Rect dest, long orientation);
     private static native void nativeSetColor(long transactionObj, long nativeObject, float[] color);
@@ -160,6 +162,7 @@ public final class SurfaceControl implements Parcelable {
     private static native boolean nativeSetActiveConfig(IBinder displayToken, int id);
     private static native boolean nativeSetAllowedDisplayConfigs(IBinder displayToken,
                                                                  int[] allowedConfigs);
+    private static native int[] nativeGetAllowedDisplayConfigs(IBinder displayToken);
     private static native int[] nativeGetDisplayColorModes(IBinder displayToken);
     private static native SurfaceControl.DisplayPrimaries nativeGetDisplayNativePrimaries(
             IBinder displayToken);
@@ -849,7 +852,7 @@ public final class SurfaceControl implements Parcelable {
         proto.end(token);
     }
 
-    public static final Creator<SurfaceControl> CREATOR
+    public static final @android.annotation.NonNull Creator<SurfaceControl> CREATOR
             = new Creator<SurfaceControl>() {
         public SurfaceControl createFromParcel(Parcel in) {
             return new SurfaceControl(in);
@@ -1237,6 +1240,19 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
+     * Sets the Surface to be color space agnostic. If a surface is color space agnostic,
+     * the color can be interpreted in any color space.
+     * @param agnostic A boolean to indicate whether the surface is color space agnostic
+     * @hide
+     */
+    public void setColorSpaceAgnostic(boolean agnostic) {
+        checkNotReleased();
+        synchronized (SurfaceControl.class) {
+            sGlobalTransaction.setColorSpaceAgnostic(this, agnostic);
+        }
+    }
+
+    /**
      * Bounds the surface and its children to the bounds specified. Size of the surface will be
      * ignored and only the crop and buffer size will be used to determine the bounds of the
      * surface. If no crop is specified and the surface has no buffer, the surface bounds is only
@@ -1564,6 +1580,16 @@ public final class SurfaceControl implements Parcelable {
         }
 
         return nativeSetAllowedDisplayConfigs(displayToken, allowedConfigs);
+    }
+
+    /**
+     * @hide
+     */
+    public static int[] getAllowedDisplayConfigs(IBinder displayToken) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        return nativeGetAllowedDisplayConfigs(displayToken);
     }
 
     /**
@@ -2243,6 +2269,18 @@ public final class SurfaceControl implements Parcelable {
                 @Size(3) float[] translation) {
             sc.checkNotReleased();
             nativeSetColorTransform(mNativeObject, sc.mNativeObject, matrix, translation);
+            return this;
+        }
+
+        /**
+         * Sets the Surface to be color space agnostic. If a surface is color space agnostic,
+         * the color can be interpreted in any color space.
+         * @param agnostic A boolean to indicate whether the surface is color space agnostic
+         * @hide
+         */
+        public Transaction setColorSpaceAgnostic(SurfaceControl sc, boolean agnostic) {
+            sc.checkNotReleased();
+            nativeSetColorSpaceAgnostic(mNativeObject, sc.mNativeObject, agnostic);
             return this;
         }
 

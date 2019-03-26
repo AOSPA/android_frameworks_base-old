@@ -308,6 +308,22 @@ public final class Settings {
             "android.settings.ACCESSIBILITY_SETTINGS";
 
     /**
+     * Activity Action: Show detail settings of a particular accessibility service.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
+     * <p>
+     * Input: {@link Intent#EXTRA_COMPONENT_NAME} must specify the accessibility service component
+     * name to be shown.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     **/
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_ACCESSIBILITY_DETAILS_SETTINGS =
+            "android.settings.ACCESSIBILITY_DETAILS_SETTINGS";
+
+    /**
      * Activity Action: Show settings to control access to usage information.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -496,25 +512,16 @@ public final class Settings {
      * In some cases, a matching Activity may not exist, so ensure you safeguard
      * against this by checking WifiManager.isEasyConnectSupported();
      * <p>
-     * Input:
-     * The following keys in the bundle with their associated value.
-     * <ul>
-     *     <li>"qrCode": Standard Easy Connect (Wi-Fi DPP) URI bootstrapping information as a
-     *     string.</li>
-     * </ul>
+     * Input: The Intent's data URI specifies bootstrapping information for authenticating and
+     * provisioning the peer, with the "DPP" scheme.
      * <p>
-     * Output: Nothing.
+     * Output: After {@code startActivityForResult}, the callback {@code onActivityResult} will have
+     *         resultCode {@link android.app.Activity#RESULT_OK} if Wi-Fi Easy Connect configuration
+     *         success and the user clicks 'Done' button.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_PROCESS_WIFI_EASY_CONNECT_QR_CODE =
-            "android.settings.PROCESS_WIFI_EASY_CONNECT_QR_CODE";
-
-    /**
-     * An extra to put in the bundle for {@link #ACTION_PROCESS_WIFI_EASY_CONNECT_QR_CODE} intents.
-     * It must contain properly formatted Easy Connect (Wi-Fi DPP) URI bootstrapping information for
-     * the process to proceed.
-     */
-    public static final String EXTRA_QR_CODE = "android.provider.extra.QR_CODE";
+    public static final String ACTION_PROCESS_WIFI_EASY_CONNECT_URI =
+            "android.settings.PROCESS_WIFI_EASY_CONNECT_URI";
 
     /**
      * Activity Action: Show settings to allow configuration of data and view data usage.
@@ -3314,6 +3321,17 @@ public final class Settings {
                 new SettingsValidators.InclusiveIntegerRangeValidator(
                         ColorDisplayManager.COLOR_MODE_NATURAL,
                         ColorDisplayManager.COLOR_MODE_AUTOMATIC);
+
+        /**
+         * The user selected peak refresh rate in frames per second.
+         *
+         * If this isn't set, the system falls back to a device specific default.
+         * @hide
+         */
+        public static final String PEAK_REFRESH_RATE = "peak_refresh_rate";
+
+        private static final Validator PEAK_REFRESH_RATE_VALIDATOR =
+                new SettingsValidators.InclusiveFloatRangeValidator(24f, Float.MAX_VALUE);
 
         /**
          * The amount of time in milliseconds before the device goes to sleep or begins
@@ -8013,9 +8031,9 @@ public final class Settings {
 
         /**
          * Whether or not face unlock always requires user confirmation, meaning {@link
-         * android.hardware.biometrics.BiometricPrompt.Builder#setRequireConfirmation(boolean)}
+         * android.hardware.biometrics.BiometricPrompt.Builder#setConfirmationRequired(boolean)}
          * is always 'true'. This overrides the behavior that apps choose in the
-         * setRequireConfirmation API.
+         * setConfirmationRequired API.
          * @hide
          */
         public static final String FACE_UNLOCK_ALWAYS_REQUIRE_CONFIRMATION =
@@ -9651,6 +9669,7 @@ public final class Settings {
          * when user location settings are off), for emergency purposes.
          * @hide
          */
+        @TestApi
         public static final String LOCATION_IGNORE_SETTINGS_PACKAGE_WHITELIST =
                 "location_ignore_settings_package_whitelist";
 
@@ -11458,6 +11477,15 @@ public final class Settings {
          */
         public static final String BACKGROUND_ACTIVITY_STARTS_ENABLED =
                 "background_activity_starts_enabled";
+
+        /**
+         * The packages temporarily whitelisted to be able so start activities from background.
+         * The list of packages is {@code ":"} colon delimited.
+         *
+         * @hide
+         */
+        public static final String BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST =
+                "background_activity_starts_package_names_whitelist";
 
         /**
          * @hide
@@ -13402,13 +13430,22 @@ public final class Settings {
                 "hidden_api_blacklist_exemptions";
 
         /**
-         * Sampling rate for hidden API access event logs, as an integer in the range 0 to 0x10000
-         * inclusive.
+         * Sampling rate for hidden API access event logs with libmetricslogger, as an integer in
+         * the range 0 to 0x10000 inclusive.
          *
          * @hide
          */
         public static final String HIDDEN_API_ACCESS_LOG_SAMPLING_RATE =
                 "hidden_api_access_log_sampling_rate";
+
+        /**
+         * Sampling rate for hidden API access event logging with statslog, as an integer in the
+         * range 0 to 0x10000 inclusive.
+         *
+         * @hide
+         */
+        public static final String HIDDEN_API_ACCESS_STATSLOG_SAMPLING_RATE =
+                "hidden_api_access_statslog_sampling_rate";
 
         /**
          * Hidden API enforcement policy for apps.

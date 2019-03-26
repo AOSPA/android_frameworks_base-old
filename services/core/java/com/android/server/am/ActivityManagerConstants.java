@@ -16,8 +16,6 @@
 
 package com.android.server.am;
 
-import static android.provider.DeviceConfig.ActivityManager.KEY_MAX_CACHED_PROCESSES;
-
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_POWER_QUICK;
 
 import android.app.ActivityThread;
@@ -31,6 +29,8 @@ import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.OnPropertyChangedListener;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.text.TextUtils.SimpleStringSplitter;
+import android.util.ArraySet;
 import android.util.KeyValueListParser;
 import android.util.Slog;
 
@@ -107,6 +107,12 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final boolean DEFAULT_PROCESS_START_ASYNC = true;
     private static final long DEFAULT_MEMORY_INFO_THROTTLE_TIME = 5*60*1000;
     private static final long DEFAULT_TOP_TO_FGS_GRACE_DURATION = 15 * 1000;
+
+    // Flag stored in the DeviceConfig API.
+    /**
+     * Maximum number of cached processes.
+     */
+    private static final String KEY_MAX_CACHED_PROCESSES = "max_cached_processes";
 
     // Maximum number of cached processes we will allow.
     public int MAX_CACHED_PROCESSES = DEFAULT_MAX_CACHED_PROCESSES;
@@ -234,6 +240,8 @@ final class ActivityManagerConstants extends ContentObserver {
     // Controlled by Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED
     volatile boolean mFlagBackgroundActivityStartsEnabled;
 
+    volatile ArraySet<String> mPackageNamesWhitelistedForBgActivityStarts = new ArraySet<>();
+
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
     private final KeyValueListParser mParser = new KeyValueListParser(',');
@@ -283,6 +291,10 @@ final class ActivityManagerConstants extends ContentObserver {
                 Settings.Global.getUriFor(
                         Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED);
 
+    private static final Uri BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST_URI =
+                Settings.Global.getUriFor(
+                        Settings.Global.BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST);
+
     private final OnPropertyChangedListener mOnDeviceConfigChangedListener =
             new OnPropertyChangedListener() {
                 @Override
@@ -303,10 +315,13 @@ final class ActivityManagerConstants extends ContentObserver {
         mResolver.registerContentObserver(ACTIVITY_MANAGER_CONSTANTS_URI, false, this);
         mResolver.registerContentObserver(ACTIVITY_STARTS_LOGGING_ENABLED_URI, false, this);
         mResolver.registerContentObserver(BACKGROUND_ACTIVITY_STARTS_ENABLED_URI, false, this);
+        mResolver.registerContentObserver(BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST_URI,
+                false, this);
         updateConstants();
         updateActivityStartsLoggingEnabled();
         updateBackgroundActivityStartsEnabled();
-        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.ActivityManager.NAMESPACE,
+        updateBackgroundActivityStartsPackageNamesWhitelist();
+        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 ActivityThread.currentApplication().getMainExecutor(),
                 mOnDeviceConfigChangedListener);
         updateMaxCachedProcesses();
@@ -355,6 +370,8 @@ final class ActivityManagerConstants extends ContentObserver {
             updateActivityStartsLoggingEnabled();
         } else if (BACKGROUND_ACTIVITY_STARTS_ENABLED_URI.equals(uri)) {
             updateBackgroundActivityStartsEnabled();
+        } else if (BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST_URI.equals(uri)) {
+            updateBackgroundActivityStartsPackageNamesWhitelist();
         }
     }
 
@@ -444,9 +461,24 @@ final class ActivityManagerConstants extends ContentObserver {
                 Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED, 1) == 1;
     }
 
+    private void updateBackgroundActivityStartsPackageNamesWhitelist() {
+        final String setting = Settings.Global.getString(mResolver,
+                Settings.Global.BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST);
+        if (TextUtils.isEmpty(setting)) {
+            return;
+        }
+        ArraySet<String> newSet = new ArraySet<>();
+        SimpleStringSplitter splitter = new SimpleStringSplitter(':');
+        splitter.setString(setting);
+        while (splitter.hasNext()) {
+            newSet.add(splitter.next());
+        }
+        mPackageNamesWhitelistedForBgActivityStarts = newSet;
+    }
+
     private void updateMaxCachedProcesses() {
         String maxCachedProcessesFlag = DeviceConfig.getProperty(
-                DeviceConfig.ActivityManager.NAMESPACE, KEY_MAX_CACHED_PROCESSES);
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_MAX_CACHED_PROCESSES);
         try {
             CUR_MAX_CACHED_PROCESSES = mOverrideMaxCachedProcesses < 0
                     ? (TextUtils.isEmpty(maxCachedProcessesFlag)

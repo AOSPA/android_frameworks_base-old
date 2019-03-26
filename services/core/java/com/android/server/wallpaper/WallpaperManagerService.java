@@ -100,7 +100,9 @@ import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.JournaledFile;
 import com.android.server.EventLogTags;
 import com.android.server.FgThread;
+import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.wm.WindowManagerInternal;
 
 import libcore.io.IoUtils;
 
@@ -472,7 +474,13 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         int wallpaperId;
 
         if (wallpaper.equals(mFallbackWallpaper)) {
-            extractDefaultImageWallpaperColors();
+            synchronized (mLock) {
+                if (mFallbackWallpaper.primaryColors != null) return;
+            }
+            final WallpaperColors colors = extractDefaultImageWallpaperColors();
+            synchronized (mLock) {
+                mFallbackWallpaper.primaryColors = colors;
+            }
             return;
         }
 
@@ -497,23 +505,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             }
         } else if (defaultImageWallpaper) {
             // There is no crop and source file because this is default image wallpaper.
-            try (final InputStream is =
-                         WallpaperManager.openDefaultWallpaper(mContext, FLAG_SYSTEM)) {
-                if (is != null) {
-                    try {
-                        final BitmapFactory.Options options = new BitmapFactory.Options();
-                        final Bitmap bitmap = BitmapFactory.decodeStream(is, null, options);
-                        if (bitmap != null) {
-                            colors = WallpaperColors.fromBitmap(bitmap);
-                            bitmap.recycle();
-                        }
-                    } catch (OutOfMemoryError e) {
-                        Slog.w(TAG, "Can't decode default wallpaper stream", e);
-                    }
-                }
-            } catch (IOException e) {
-                Slog.w(TAG, "Can't close default wallpaper stream", e);
-            }
+            colors = extractDefaultImageWallpaperColors();
         }
 
         if (colors == null) {
@@ -533,37 +525,41 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         }
     }
 
-    private void extractDefaultImageWallpaperColors() {
+    private WallpaperColors extractDefaultImageWallpaperColors() {
+        if (DEBUG) Slog.d(TAG, "Extract default image wallpaper colors");
+
         synchronized (mLock) {
-            if (mFallbackWallpaper.primaryColors != null) return;
+            if (mCacheDefaultImageWallpaperColors != null) return mCacheDefaultImageWallpaperColors;
         }
 
-        if (DEBUG) Slog.d(TAG, "Extract default image wallpaper colors");
         WallpaperColors colors = null;
-        final InputStream is = WallpaperManager.openDefaultWallpaper(mContext, FLAG_SYSTEM);
-        if (is != null) {
-            try {
-                final BitmapFactory.Options options = new BitmapFactory.Options();
-                final Bitmap bitmap = BitmapFactory.decodeStream(is, null, options);
-                if (bitmap != null) {
-                    colors = WallpaperColors.fromBitmap(bitmap);
-                    bitmap.recycle();
-                }
-            } catch (OutOfMemoryError e) {
-                Slog.w(TAG, "Can't decode default wallpaper stream", e);
-            } finally {
-                IoUtils.closeQuietly(is);
+        try (InputStream is = WallpaperManager.openDefaultWallpaper(mContext, FLAG_SYSTEM)) {
+            if (is == null) {
+                Slog.w(TAG, "Can't open default wallpaper stream");
+                return null;
             }
+
+            final BitmapFactory.Options options = new BitmapFactory.Options();
+            final Bitmap bitmap = BitmapFactory.decodeStream(is, null, options);
+            if (bitmap != null) {
+                colors = WallpaperColors.fromBitmap(bitmap);
+                bitmap.recycle();
+            }
+        } catch (OutOfMemoryError e) {
+            Slog.w(TAG, "Can't decode default wallpaper stream", e);
+        } catch (IOException e) {
+            Slog.w(TAG, "Can't close default wallpaper stream", e);
         }
 
         if (colors == null) {
             Slog.e(TAG, "Extract default image wallpaper colors failed");
-            return;
+        } else {
+            synchronized (mLock) {
+                mCacheDefaultImageWallpaperColors = colors;
+            }
         }
 
-        synchronized (mLock) {
-            mFallbackWallpaper.primaryColors = colors;
-        }
+        return colors;
     }
 
     /**
@@ -743,6 +739,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
 
     private final Context mContext;
     private final IWindowManager mIWindowManager;
+    private final WindowManagerInternal mWindowManagerInternal;
     private final IPackageManager mIPackageManager;
     private final MyPackageMonitor mMonitor;
     private final AppOpsManager mAppOpsManager;
@@ -753,27 +750,6 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
 
         @Override
         public void onDisplayAdded(int displayId) {
-            synchronized (mLock) {
-                if (mLastWallpaper != null) {
-                    if (supportsMultiDisplay(mLastWallpaper.connection)) {
-                        final WallpaperConnection.DisplayConnector connector =
-                                mLastWallpaper.connection.getDisplayConnectorOrCreate(displayId);
-                        if (connector == null) return;
-                        connector.connectLocked(mLastWallpaper.connection, mLastWallpaper);
-                        return;
-                    }
-                    // System wallpaper does not support multiple displays, attach this display to
-                    // the fallback wallpaper.
-                    if (mFallbackWallpaper != null) {
-                        final WallpaperConnection.DisplayConnector connector = mFallbackWallpaper
-                                .connection.getDisplayConnectorOrCreate(displayId);
-                        if (connector == null) return;
-                        connector.connectLocked(mFallbackWallpaper.connection, mFallbackWallpaper);
-                    } else {
-                        Slog.w(TAG, "No wallpaper can be added to the new display");
-                    }
-                }
-            }
         }
 
         @Override
@@ -831,6 +807,12 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      * built-in wallpapers.
      */
     private final ComponentName mImageWallpaper;
+
+    /**
+     * Default image wallpaper shall never changed after system service started, caching it when we
+     * first read the image file.
+     */
+    private WallpaperColors mCacheDefaultImageWallpaperColors;
 
     /**
      * Name of the default wallpaper component; might be different from mImageWallpaper
@@ -1185,9 +1167,12 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         }
 
         private boolean isUsableDisplay(Display display) {
-            return display != null &&  display.hasAccess(mClientUid)
-                    && (display.supportsSystemDecorations()
-                            || display.getDisplayId() == DEFAULT_DISPLAY);
+            if (display == null || !display.hasAccess(mClientUid)) {
+                return false;
+            }
+            final int displayId = display.getDisplayId();
+            return displayId == DEFAULT_DISPLAY
+                    || mWindowManagerInternal.shouldShowSystemDecorOnDisplay(displayId);
         }
 
         void forEachDisplayConnector(Consumer<DisplayConnector> action) {
@@ -1577,12 +1562,22 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         mDefaultWallpaperComponent = WallpaperManager.getDefaultWallpaperComponent(context);
         mIWindowManager = IWindowManager.Stub.asInterface(
                 ServiceManager.getService(Context.WINDOW_SERVICE));
+        mWindowManagerInternal = LocalServices.getService(WindowManagerInternal.class);
         mIPackageManager = AppGlobals.getPackageManager();
         mAppOpsManager = (AppOpsManager) mContext.getSystemService(Context.APP_OPS_SERVICE);
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mDisplayManager.registerDisplayListener(mDisplayListener, null /* handler */);
         mMonitor = new MyPackageMonitor();
         mColorsChangedListeners = new SparseArray<>();
+
+        LocalServices.addService(WallpaperManagerInternal.class, new LocalService());
+    }
+
+    private final class LocalService extends WallpaperManagerInternal {
+        @Override
+        public void onDisplayReady(int displayId) {
+            onDisplayReadyInternal(displayId);
+        }
     }
 
     void initialize() {
@@ -2766,6 +2761,31 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 ? mLockWallpaperMap.get(userId)
                 : mWallpaperMap.get(userId);
         return (wallpaper != null) ? wallpaper.allowBackup : false;
+    }
+
+    private void onDisplayReadyInternal(int displayId) {
+        synchronized (mLock) {
+            if (mLastWallpaper == null) {
+                return;
+            }
+            if (supportsMultiDisplay(mLastWallpaper.connection)) {
+                final WallpaperConnection.DisplayConnector connector =
+                        mLastWallpaper.connection.getDisplayConnectorOrCreate(displayId);
+                if (connector == null) return;
+                connector.connectLocked(mLastWallpaper.connection, mLastWallpaper);
+                return;
+            }
+            // System wallpaper does not support multiple displays, attach this display to
+            // the fallback wallpaper.
+            if (mFallbackWallpaper != null) {
+                final WallpaperConnection.DisplayConnector connector = mFallbackWallpaper
+                        .connection.getDisplayConnectorOrCreate(displayId);
+                if (connector == null) return;
+                connector.connectLocked(mFallbackWallpaper.connection, mFallbackWallpaper);
+            } else {
+                Slog.w(TAG, "No wallpaper can be added to the new display");
+            }
+        }
     }
 
     private static JournaledFile makeJournaledFile(int userId) {

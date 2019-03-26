@@ -175,12 +175,6 @@ public class RootActivityContainer extends ConfigurationContainer
     private ActivityDisplay mDefaultDisplay;
     private final SparseArray<IntArray> mDisplayAccessUIDs = new SparseArray<>();
 
-    /**
-     * Cached value of the topmost resumed activity in the system. Updated when new activity is
-     * resumed.
-     */
-    private ActivityRecord mTopResumedActivity;
-
     /** The current user */
     int mCurrentUser;
     /** Stack id of the front stack when user switched, indexed by userId. */
@@ -1155,23 +1149,6 @@ public class RootActivityContainer extends ConfigurationContainer
         return result;
     }
 
-    void updateTopResumedActivityIfNeeded() {
-        final ActivityRecord prevTopActivity = mTopResumedActivity;
-        final ActivityStack topStack = getTopDisplayFocusedStack();
-        if (topStack == null || topStack.mResumedActivity == prevTopActivity) {
-            return;
-        }
-        // Clear previous top state
-        if (prevTopActivity != null) {
-            prevTopActivity.scheduleTopResumedActivityChanged(false /* onTop */);
-        }
-        // Update the current top activity
-        mTopResumedActivity = topStack.mResumedActivity;
-        if (mTopResumedActivity != null) {
-            mTopResumedActivity.scheduleTopResumedActivityChanged(true /* onTop */);
-        }
-    }
-
     void applySleepTokens(boolean applyToStacks) {
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
             // Set the sleeping state of the display.
@@ -1434,7 +1411,7 @@ public class RootActivityContainer extends ConfigurationContainer
             mActivityDisplays.remove(display);
             mActivityDisplays.add(position, display);
         }
-        updateTopResumedActivityIfNeeded();
+        mStackSupervisor.updateTopResumedActivityIfNeeded();
     }
 
     @VisibleForTesting
@@ -2039,8 +2016,7 @@ public class RootActivityContainer extends ConfigurationContainer
                 final ActivityStack stack = display.getChildAt(stackNdx);
                 final ActivityRecord r = stack.getResumedActivity();
                 if (r != null) {
-                    if (!r.nowVisible
-                            || mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(r)) {
+                    if (!r.nowVisible) {
                         return false;
                     }
                     foundResumed = true;
@@ -2368,10 +2344,6 @@ public class RootActivityContainer extends ConfigurationContainer
         printed |= dumpHistoryList(fd, pw, mStackSupervisor.mStoppingActivities, "  ",
                 "Stop", false, !dumpAll,
                 false, dumpPackage, true, "  Activities waiting to stop:", null);
-        printed |= dumpHistoryList(fd, pw,
-                mStackSupervisor.mActivitiesWaitingForVisibleActivity, "  ", "Wait",
-                false, !dumpAll, false, dumpPackage, true,
-                "  Activities waiting for another to become visible:", null);
         printed |= dumpHistoryList(fd, pw, mStackSupervisor.mGoingToSleepActivities,
                 "  ", "Sleep", false, !dumpAll,
                 false, dumpPackage, true, "  Activities waiting to sleep:", null);

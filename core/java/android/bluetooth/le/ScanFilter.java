@@ -185,7 +185,7 @@ public final class ScanFilter implements Parcelable {
     /**
      * A {@link android.os.Parcelable.Creator} to create {@link ScanFilter} from parcel.
      */
-    public static final Creator<ScanFilter> CREATOR =
+    public static final @android.annotation.NonNull Creator<ScanFilter> CREATOR =
             new Creator<ScanFilter>() {
 
         @Override

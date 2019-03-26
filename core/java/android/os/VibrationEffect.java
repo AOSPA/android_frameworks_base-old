@@ -17,6 +17,7 @@
 package android.os;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.content.ContentResolver;
@@ -240,7 +241,8 @@ public abstract class VibrationEffect implements Parcelable {
      *
      * @return The desired effect.
      */
-    public static VibrationEffect createPrebaked(@EffectType int effectId) {
+    @NonNull
+    public static VibrationEffect createPredefined(@EffectType int effectId) {
         return get(effectId, true);
     }
 
@@ -471,7 +473,7 @@ public abstract class VibrationEffect implements Parcelable {
             out.writeInt(mAmplitude);
         }
 
-        public static final Parcelable.Creator<OneShot> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<OneShot> CREATOR =
             new Parcelable.Creator<OneShot>() {
                 @Override
                 public OneShot createFromParcel(Parcel in) {
@@ -659,7 +661,7 @@ public abstract class VibrationEffect implements Parcelable {
         }
 
 
-        public static final Parcelable.Creator<Waveform> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<Waveform> CREATOR =
             new Parcelable.Creator<Waveform>() {
                 @Override
                 public Waveform createFromParcel(Parcel in) {
@@ -796,7 +798,7 @@ public abstract class VibrationEffect implements Parcelable {
             out.writeInt(mEffectStrength);
         }
 
-        public static final Parcelable.Creator<Prebaked> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<Prebaked> CREATOR =
             new Parcelable.Creator<Prebaked>() {
                 @Override
                 public Prebaked createFromParcel(Parcel in) {
@@ -811,7 +813,7 @@ public abstract class VibrationEffect implements Parcelable {
             };
     }
 
-    public static final Parcelable.Creator<VibrationEffect> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<VibrationEffect> CREATOR =
             new Parcelable.Creator<VibrationEffect>() {
                 @Override
                 public VibrationEffect createFromParcel(Parcel in) {

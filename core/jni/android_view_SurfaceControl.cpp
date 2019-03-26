@@ -463,6 +463,13 @@ static void nativeSetColorTransform(JNIEnv* env, jclass clazz, jlong transaction
     transaction->setColorTransform(surfaceControl, matrix, translation);
 }
 
+static void nativeSetColorSpaceAgnostic(JNIEnv* env, jclass clazz, jlong transactionObj,
+        jlong nativeObject, jboolean agnostic) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    SurfaceControl* const surfaceControl = reinterpret_cast<SurfaceControl*>(nativeObject);
+    transaction->setColorSpaceAgnostic(surfaceControl, agnostic);
+}
+
 static void nativeSetWindowCrop(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject,
         jint l, jint t, jint r, jint b) {
@@ -715,6 +722,29 @@ static jboolean nativeSetAllowedDisplayConfigs(JNIEnv* env, jclass clazz,
 
     size_t result = SurfaceComposerClient::setAllowedDisplayConfigs(token, allowedConfigs);
     return result == NO_ERROR ? JNI_TRUE : JNI_FALSE;
+}
+
+static jintArray nativeGetAllowedDisplayConfigs(JNIEnv* env, jclass clazz, jobject tokenObj) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+    if (token == nullptr) return JNI_FALSE;
+
+    std::vector<int32_t> allowedConfigs;
+    size_t result = SurfaceComposerClient::getAllowedDisplayConfigs(token, &allowedConfigs);
+    if (result != NO_ERROR) {
+        return nullptr;
+    }
+
+    jintArray allowedConfigsArray = env->NewIntArray(allowedConfigs.size());
+    if (allowedConfigsArray == nullptr) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+        return nullptr;
+    }
+    jint* allowedConfigsArrayValues = env->GetIntArrayElements(allowedConfigsArray, 0);
+    for (size_t i = 0; i < allowedConfigs.size(); i++) {
+        allowedConfigsArrayValues[i] = static_cast<jint>(allowedConfigs[i]);
+    }
+    env->ReleaseIntArrayElements(allowedConfigsArray, allowedConfigsArrayValues, 0);
+    return allowedConfigsArray;
 }
 
 static jint nativeGetActiveConfig(JNIEnv* env, jclass clazz, jobject tokenObj) {
@@ -1183,6 +1213,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetMatrix },
     {"nativeSetColorTransform", "(JJ[F[F)V",
             (void*)nativeSetColorTransform },
+    {"nativeSetColorSpaceAgnostic", "(JJZ)V",
+            (void*)nativeSetColorSpaceAgnostic },
     {"nativeSetFlags", "(JJII)V",
             (void*)nativeSetFlags },
     {"nativeSetWindowCrop", "(JJIIII)V",
@@ -1215,6 +1247,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetActiveConfig },
     {"nativeSetAllowedDisplayConfigs", "(Landroid/os/IBinder;[I)Z",
             (void*)nativeSetAllowedDisplayConfigs },
+    {"nativeGetAllowedDisplayConfigs", "(Landroid/os/IBinder;)[I",
+            (void*)nativeGetAllowedDisplayConfigs },
     {"nativeGetDisplayColorModes", "(Landroid/os/IBinder;)[I",
             (void*)nativeGetDisplayColorModes},
     {"nativeGetDisplayNativePrimaries", "(Landroid/os/IBinder;)Landroid/view/SurfaceControl$DisplayPrimaries;",

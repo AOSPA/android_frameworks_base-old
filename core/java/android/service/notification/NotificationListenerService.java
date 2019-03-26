@@ -1638,7 +1638,7 @@ public abstract class NotificationListenerService extends Service {
          * Returns a list of smart {@link Notification.Action} that can be added by the
          * {@link NotificationAssistantService}
          */
-        public List<Notification.Action> getSmartActions() {
+        public @NonNull List<Notification.Action> getSmartActions() {
             return mSmartActions;
         }
 
@@ -1646,7 +1646,7 @@ public abstract class NotificationListenerService extends Service {
          * Returns a list of smart replies that can be added by the
          * {@link NotificationAssistantService}
          */
-        public List<CharSequence> getSmartReplies() {
+        public @NonNull List<CharSequence> getSmartReplies() {
             return mSmartReplies;
         }
 
@@ -2163,7 +2163,7 @@ public abstract class NotificationListenerService extends Service {
             dest.writeParcelable(mRankingUpdate, flags);
         }
 
-        public static final Creator<RankingMap> CREATOR = new Creator<RankingMap>() {
+        public static final @android.annotation.NonNull Creator<RankingMap> CREATOR = new Creator<RankingMap>() {
             @Override
             public RankingMap createFromParcel(Parcel source) {
                 NotificationRankingUpdate rankingUpdate = source.readParcelable(null);

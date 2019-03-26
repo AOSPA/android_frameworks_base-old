@@ -1718,6 +1718,11 @@ public final class Bitmap implements Parcelable {
      * <p>Modifies the bitmap to have the specified {@link ColorSpace}, without
      * affecting the underlying allocation backing the bitmap.</p>
      *
+     * <p>This affects how the framework will interpret the color at each pixel. A bitmap
+     * with {@link Config#ALPHA_8} never has a color space, since a color space does not
+     * affect the alpha channel. Other {@code Config}s must always have a non-null
+     * {@code ColorSpace}.</p>
+     *
      * @throws IllegalArgumentException If the specified color space is {@code null}, not
      *         {@link ColorSpace.Model#RGB RGB}, has a transfer function that is not an
      *         {@link ColorSpace.Rgb.TransferParameters ICC parametric curve}, or whose
@@ -1845,6 +1850,7 @@ public final class Bitmap implements Parcelable {
      * @throws IllegalStateException if the bitmap's config is {@link Config#HARDWARE}
      *
      */
+    @NonNull
     public Color getColor(int x, int y) {
         checkRecycled("Can't call getColor() on a recycled bitmap");
         checkHardware("unable to getColor(), "
@@ -2024,7 +2030,7 @@ public final class Bitmap implements Parcelable {
                         x, y, width, height);
     }
 
-    public static final Parcelable.Creator<Bitmap> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<Bitmap> CREATOR
             = new Parcelable.Creator<Bitmap>() {
         /**
          * Rebuilds a bitmap previously stored with writeToParcel().
