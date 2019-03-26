@@ -328,7 +328,7 @@ public class Tethering extends BaseNetworkObserver {
         final TetheringConfiguration cfg = mConfig;
 
         if (cfg.isWifi(iface)) {
-            String wigigIface = SystemProperties.get("vendor.wigig.interface", "wigig0");
+            String wigigIface = SystemProperties.get("persist.vendor.wigig.interface", "wigig0");
             if (wigigIface.equals(iface)) {
                 return TETHERING_WIGIG;
             }
