@@ -42,9 +42,9 @@ public final class BluetoothCodecConfig implements Parcelable {
     @UnsupportedAppUsage
     public static final int SOURCE_CODEC_TYPE_APTX_HD = 3;
     @UnsupportedAppUsage
-    public static final int SOURCE_CODEC_TYPE_LDAC = 4;
+    public static final int SOURCE_CODEC_TYPE_APTX_ADAPTIVE = 4;
     @UnsupportedAppUsage
-    public static final int SOURCE_CODEC_TYPE_APTX_ADAPTIVE = 5;
+    public static final int SOURCE_CODEC_TYPE_LDAC = 5;
     @UnsupportedAppUsage
     public static final int SOURCE_CODEC_TYPE_MAX = 6;
 
