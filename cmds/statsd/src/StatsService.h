@@ -31,6 +31,7 @@
 #include <android/frameworks/stats/1.0/types.h>
 #include <android/os/BnStatsManager.h>
 #include <android/os/IStatsCompanionService.h>
+#include <android/os/IStatsManager.h>
 #include <binder/IResultReceiver.h>
 #include <utils/Looper.h>
 
@@ -173,6 +174,26 @@ public:
     virtual Status sendAppBreadcrumbAtom(int32_t label, int32_t state) override;
 
     /**
+     * Binder call to register a callback function for a vendor pulled atom.
+     * Note: this atom must NOT have uid as a field.
+     */
+    virtual Status registerPullerCallback(int32_t atomTag,
+        const sp<android::os::IStatsPullerCallback>& pullerCallback,
+        const String16& packageName) override;
+
+    /**
+     * Binder call to unregister any existing callback function for a vendor pulled atom.
+     */
+    virtual Status unregisterPullerCallback(int32_t atomTag, const String16& packageName) override;
+
+    /**
+     * Binder call to log BinaryPushStateChanged atom.
+     */
+    virtual Status sendBinaryPushStateChangedAtom(
+            const android::String16& trainName, int64_t trainVersionCode, int options,
+            int32_t state, const std::vector<int64_t>& experimentIds) override;
+
+    /**
      * Binder call to get SpeakerImpedance atom.
      */
     virtual Return<void> reportSpeakerImpedance(const SpeakerImpedance& speakerImpedance) override;
@@ -262,6 +283,12 @@ private:
      */
     status_t cmd_trigger_broadcast(int outFd, Vector<String8>& args);
 
+
+    /**
+     * Trigger an active configs changed broadcast.
+     */
+    status_t cmd_trigger_active_config_broadcast(int outFd, Vector<String8>& args);
+
     /**
      * Handle the config sub-command.
      */
@@ -326,6 +353,15 @@ private:
      * 3. the caller is AID_ROOT and the uid is AID_SHELL (i.e. ROOT can impersonate SHELL).
      */
     bool getUidFromArgs(const Vector<String8>& args, size_t uidArgIndex, int32_t& uid);
+
+    /**
+     * Writes the value of uidSting into uid.
+     * Returns whether the uid is reasonable (type uid_t) and whether
+     * 1. it is equal to the calling uid, or
+     * 2. the device is mEngBuild, or
+     * 3. the caller is AID_ROOT and the uid is AID_SHELL (i.e. ROOT can impersonate SHELL).
+     */
+     bool getUidFromString(const char* uidString, int32_t& uid);
 
     /**
      * Adds a configuration after checking permissions and obtaining UID from binder call.

@@ -109,6 +109,9 @@ extern int register_android_media_AudioRecord(JNIEnv *env);
 extern int register_android_media_AudioSystem(JNIEnv *env);
 extern int register_android_media_AudioTrack(JNIEnv *env);
 extern int register_android_media_AudioAttributes(JNIEnv *env);
+extern int register_android_media_AudioProductStrategies(JNIEnv *env);
+extern int register_android_media_AudioVolumeGroups(JNIEnv *env);
+extern int register_android_media_AudioVolumeGroupChangeHandler(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_JetPlayer(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
@@ -163,6 +166,7 @@ extern int register_android_view_RenderNodeAnimator(JNIEnv* env);
 extern int register_android_view_Surface(JNIEnv* env);
 extern int register_android_view_SurfaceControl(JNIEnv* env);
 extern int register_android_view_SurfaceSession(JNIEnv* env);
+extern int register_android_view_CompositionSamplingListener(JNIEnv* env);
 extern int register_android_view_TextureView(JNIEnv* env);
 extern int register_android_view_ThreadedRenderer(JNIEnv* env);
 extern int register_com_android_internal_view_animation_NativeInterpolatorFactoryHelper(JNIEnv *env);
@@ -231,6 +235,23 @@ extern int register_com_android_internal_os_Zygote(JNIEnv *env);
 extern int register_com_android_internal_os_ZygoteInit(JNIEnv *env);
 extern int register_com_android_internal_util_VirtualRefBasePtr(JNIEnv *env);
 extern int register_com_android_internal_app_ActivityTrigger(JNIEnv *env);
+
+// Namespace for Android Runtime flags applied during boot time.
+static const char* RUNTIME_NATIVE_BOOT_NAMESPACE = "runtime_native_boot";
+// Feature flag name to enable/disable generational garbage collection in ART's
+// Concurrent Copying (CC) garbage collector.
+static const char* ENABLE_GENERATIONAL_CC = "enable_generational_cc";
+// Runtime option enabling generational garbage collection in ART's Concurrent
+// Copying (CC) garbage collector.
+static const char* kGenerationalCCRuntimeOption = "-Xgc:generational_cc";
+// Runtime option disabling generational garbage collection in ART's Concurrent
+// Copying (CC) garbage collector.
+static const char* kNoGenerationalCCRuntimeOption = "-Xgc:nogenerational_cc";
+
+// Feature flag name for running the JIT in Zygote experiment, b/119800099.
+static const char* ENABLE_APEX_IMAGE = "enable_apex_image";
+// Flag to pass to the runtime when using the apex image.
+static const char* kApexImageOption = "-Ximage:/system/framework/apex.art";
 
 static AndroidRuntime* gCurRuntime = NULL;
 
@@ -664,6 +685,20 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
     char methodTraceFileSizeBuf[sizeof("-Xmethod-trace-file-size:") + PROPERTY_VALUE_MAX];
     std::string fingerprintBuf;
     char jdwpProviderBuf[sizeof("-XjdwpProvider:") - 1 + PROPERTY_VALUE_MAX];
+    char bootImageBuf[sizeof("-Ximage:") - 1 + PROPERTY_VALUE_MAX];
+
+    std::string use_apex_image =
+        server_configurable_flags::GetServerConfigurableFlag(RUNTIME_NATIVE_BOOT_NAMESPACE,
+                                                             ENABLE_APEX_IMAGE,
+                                                             /*default_value=*/ "");
+    if (use_apex_image == "true") {
+        addOption(kApexImageOption);
+        ALOGI("Using Apex boot image: '%s'\n", kApexImageOption);
+    } else if (parseRuntimeOption("dalvik.vm.boot-image", bootImageBuf, "-Ximage:")) {
+        ALOGI("Using dalvik.vm.boot-image: '%s'\n", bootImageBuf);
+    } else {
+        ALOGI("Using default boot image");
+    }
 
     bool checkJni = false;
     property_get("dalvik.vm.checkjni", propBuf, "");
@@ -777,15 +812,21 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
       addOption("-XX:LowMemoryMode");
     }
 
-    std::string gc_type_override =
-            server_configurable_flags::GetServerConfigurableFlag("runtime_native", "gctype", "");
-    std::string gc_type_override_temp;
-    if (gc_type_override.empty()) {
-        parseRuntimeOption("dalvik.vm.gctype", gctypeOptsBuf, "-Xgc:");
-    } else {
-        // Copy the string so it doesn't go out of scope since addOption does not make a copy.
-        gc_type_override_temp = "-Xgc:" + gc_type_override;
-        addOption(gc_type_override_temp.c_str());
+    /*
+     * Garbage-collection related options.
+     */
+    parseRuntimeOption("dalvik.vm.gctype", gctypeOptsBuf, "-Xgc:");
+
+    // If it set, honor the "enable_generational_cc" device configuration;
+    // otherwise, let the runtime use its default behavior.
+    std::string enable_generational_cc =
+        server_configurable_flags::GetServerConfigurableFlag(RUNTIME_NATIVE_BOOT_NAMESPACE,
+                                                             ENABLE_GENERATIONAL_CC,
+                                                             /*default_value=*/ "");
+    if (enable_generational_cc == "true") {
+        addOption(kGenerationalCCRuntimeOption);
+    } else if (enable_generational_cc == "false") {
+        addOption(kNoGenerationalCCRuntimeOption);
     }
 
     parseRuntimeOption("dalvik.vm.backgroundgctype", backgroundgcOptsBuf, "-XX:BackgroundGC=");
@@ -1394,6 +1435,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_view_Surface),
     REG_JNI(register_android_view_SurfaceControl),
     REG_JNI(register_android_view_SurfaceSession),
+    REG_JNI(register_android_view_CompositionSamplingListener),
     REG_JNI(register_android_view_TextureView),
     REG_JNI(register_com_android_internal_view_animation_NativeInterpolatorFactoryHelper),
     REG_JNI(register_com_google_android_gles_jni_EGLImpl),
@@ -1486,6 +1528,9 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_media_AudioRecord),
     REG_JNI(register_android_media_AudioTrack),
     REG_JNI(register_android_media_AudioAttributes),
+    REG_JNI(register_android_media_AudioProductStrategies),
+    REG_JNI(register_android_media_AudioVolumeGroups),
+    REG_JNI(register_android_media_AudioVolumeGroupChangeHandler),
     REG_JNI(register_android_media_JetPlayer),
     REG_JNI(register_android_media_MicrophoneInfo),
     REG_JNI(register_android_media_RemoteDisplay),

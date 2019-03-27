@@ -36,20 +36,16 @@ import com.android.systemui.plugins.ActivityStarter
 import java.util.concurrent.TimeUnit
 
 class OngoingPrivacyDialog constructor(
-    val context: Context,
-    val dialogBuilder: PrivacyDialogBuilder
+    private val context: Context,
+    private val dialogBuilder: PrivacyDialogBuilder
 ) {
 
     private val iconSize = context.resources.getDimensionPixelSize(
             R.dimen.ongoing_appops_dialog_icon_size)
-    private val plusSize = context.resources.getDimensionPixelSize(
-            R.dimen.ongoing_appops_dialog_app_plus_size)
     private val iconColor = context.resources.getColor(
             com.android.internal.R.color.text_color_primary, context.theme)
-    private val plusColor: Int
     private val iconMargin = context.resources.getDimensionPixelSize(
             R.dimen.ongoing_appops_dialog_icon_margin)
-    private val MAX_ITEMS = context.resources.getInteger(R.integer.ongoing_appops_dialog_max_apps)
     private val iconFactory = IconDrawableFactory.newInstance(context, true)
     private var dismissDialog: (() -> Unit)? = null
     private val appsAndTypes = dialogBuilder.appsAndTypes
@@ -57,19 +53,12 @@ class OngoingPrivacyDialog constructor(
             { it.second.min() },
             { it.first }))
 
-    init {
-        val a = context.theme.obtainStyledAttributes(
-                intArrayOf(com.android.internal.R.attr.colorAccent))
-        plusColor = a.getColor(0, 0)
-        a.recycle()
-    }
-
     fun createDialog(): Dialog {
         val builder = AlertDialog.Builder(context).apply {
             setPositiveButton(R.string.ongoing_privacy_dialog_ok, null)
             setNeutralButton(R.string.ongoing_privacy_dialog_open_settings,
                     object : DialogInterface.OnClickListener {
-                        val intent = Intent(Settings.ACTION_ENTERPRISE_PRIVACY_SETTINGS).putExtra(
+                        val intent = Intent(Settings.ACTION_PRIVACY_SETTINGS).putExtra(
                                 Intent.EXTRA_DURATION_MILLIS, TimeUnit.MINUTES.toMillis(1))
 
                         @Suppress("DEPRECATION")
@@ -96,33 +85,9 @@ class OngoingPrivacyDialog constructor(
 
         val numItems = appsAndTypes.size
         for (i in 0..(numItems - 1)) {
-            if (i >= MAX_ITEMS) break
             val item = appsAndTypes[i]
             addAppItem(appsList, item.first, item.second, dialogBuilder.types.size > 1)
         }
-
-        if (numItems > MAX_ITEMS) {
-            val overflow = contentView.findViewById(R.id.overflow) as LinearLayout
-            overflow.visibility = View.VISIBLE
-            val overflowText = overflow.findViewById(R.id.app_name) as TextView
-            overflowText.text = context.resources.getQuantityString(
-                    R.plurals.ongoing_privacy_dialog_overflow_text,
-                    numItems - MAX_ITEMS,
-                    numItems - MAX_ITEMS
-            )
-            val overflowPlus = overflow.findViewById(R.id.app_icon) as ImageView
-            val lp = overflowPlus.layoutParams.apply {
-                height = plusSize
-                width = plusSize
-            }
-            overflowPlus.layoutParams = lp
-            overflowPlus.apply {
-                val plus = context.getDrawable(R.drawable.plus)
-                imageTintList = ColorStateList.valueOf(plusColor)
-                setImageDrawable(plus)
-            }
-        }
-
         return contentView
     }
 
@@ -167,7 +132,7 @@ class OngoingPrivacyDialog constructor(
             // Check if package exists
             context.packageManager.getPackageInfo(app.packageName, 0)
             item.setOnClickListener(object : View.OnClickListener {
-                val intent = Intent(Intent.ACTION_REVIEW_APP_PERMISSION_USAGE)
+                val intent = Intent(Intent.ACTION_MANAGE_APP_PERMISSIONS)
                         .putExtra(Intent.EXTRA_PACKAGE_NAME, app.packageName)
                         .putExtra(Intent.EXTRA_USER, UserHandle.getUserHandleForUid(app.uid))
                 override fun onClick(v: View?) {

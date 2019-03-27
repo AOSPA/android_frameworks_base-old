@@ -17,13 +17,13 @@
 package com.android.systemui.statusbar.notification.row;
 
 import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
+import static com.android.systemui.statusbar.notification.row.NotificationContentInflater.FLAG_CONTENT_VIEW_AMBIENT;
+import static com.android.systemui.statusbar.notification.row.NotificationContentInflater.FLAG_CONTENT_VIEW_HEADS_UP;
+import static com.android.systemui.statusbar.notification.row.NotificationContentInflater.FLAG_CONTENT_VIEW_PUBLIC;
+import static com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationCallback;
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_AMBIENT;
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_CONTRACTED;
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_HEADSUP;
-import static com.android.systemui.statusbar.notification.row.NotificationInflater.FLAG_CONTENT_VIEW_AMBIENT;
-import static com.android.systemui.statusbar.notification.row.NotificationInflater.FLAG_CONTENT_VIEW_HEADS_UP;
-import static com.android.systemui.statusbar.notification.row.NotificationInflater.FLAG_CONTENT_VIEW_PUBLIC;
-import static com.android.systemui.statusbar.notification.row.NotificationInflater.InflationCallback;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -89,7 +89,8 @@ import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.logging.NotificationCounters;
-import com.android.systemui.statusbar.notification.row.NotificationInflater.InflationFlag;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
+import com.android.systemui.statusbar.notification.row.wrapper.NotificationMediaTemplateViewWrapper;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
@@ -123,6 +124,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public static final float DEFAULT_HEADER_VISIBLE_AMOUNT = 1.0f;
     private static final long RECENTLY_ALERTED_THRESHOLD_MS = TimeUnit.SECONDS.toMillis(30);
     private boolean mUpdateBackgroundOnUpdate;
+    private boolean mNotificationTranslationFinished = false;
 
     /**
      * Listener for when {@link ExpandableNotificationRow} is laid out.
@@ -132,8 +134,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     private LayoutListener mLayoutListener;
-    private boolean mLowPriorityStateUpdated;
-    private final NotificationInflater mNotificationInflater;
+    private final NotificationContentInflater mNotificationInflater;
     private int mIconTransformContentShift;
     private int mIconTransformContentShiftNoIcon;
     private int mMaxHeadsUpHeightBeforeN;
@@ -144,6 +145,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private int mNotificationMinHeightBeforeP;
     private int mNotificationMinHeight;
     private int mNotificationMinHeightLarge;
+    private int mNotificationMinHeightMedia;
     private int mNotificationMaxHeight;
     private int mIncreasedPaddingBetweenElements;
     private int mNotificationLaunchHeight;
@@ -652,8 +654,15 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean beforeN = mEntry.targetSdk < Build.VERSION_CODES.N;
         boolean beforeP = mEntry.targetSdk < Build.VERSION_CODES.P;
         int minHeight;
+
+        View expandedView = layout.getExpandedChild();
+        boolean isMediaLayout = expandedView != null
+                && expandedView.findViewById(com.android.internal.R.id.media_actions) != null;
+
         if (customView && beforeP && !mIsSummaryWithChildren) {
             minHeight = beforeN ? mNotificationMinHeightBeforeN : mNotificationMinHeightBeforeP;
+        } else if (isMediaLayout && !NotificationMediaTemplateViewWrapper.HIDE_COMPACT_SCRUBBER) {
+            minHeight = mNotificationMinHeightMedia;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
             minHeight = mNotificationMinHeightLarge;
         } else {
@@ -1204,6 +1213,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             l.initView();
             l.reInflateViews();
         }
+        mStatusBarNotification.clearPackageContext();
         mNotificationInflater.clearCachesAndReInflate();
         onNotificationUpdated();
     }
@@ -1444,6 +1454,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return mIsBlockingHelperShowing;
     }
 
+    public boolean isBlockingHelperShowingAndTranslationFinished() {
+        return mIsBlockingHelperShowing && mNotificationTranslationFinished;
+    }
+
     public void setOnDismissRunnable(Runnable onDismissRunnable) {
         mOnDismissRunnable = onDismissRunnable;
     }
@@ -1568,15 +1582,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
     }
 
-
-    public void setLowPriorityStateUpdated(boolean lowPriorityStateUpdated) {
-        mLowPriorityStateUpdated = lowPriorityStateUpdated;
-    }
-
-    public boolean hasLowPriorityStateUpdated() {
-        return mLowPriorityStateUpdated;
-    }
-
     public boolean isLowPriority() {
         return mIsLowPriority;
     }
@@ -1611,7 +1616,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     @VisibleForTesting
-    public NotificationInflater getNotificationInflater() {
+    public NotificationContentInflater getNotificationInflater() {
         return mNotificationInflater;
     }
 
@@ -1626,7 +1631,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public ExpandableNotificationRow(Context context, AttributeSet attrs) {
         super(context, attrs);
         mFalsingManager = FalsingManager.getInstance(context);
-        mNotificationInflater = new NotificationInflater(this);
+        mNotificationInflater = new NotificationContentInflater(this);
         mMenuRow = new NotificationMenuRow(mContext);
         mImageResolver = new NotificationInlineImageResolver(context,
                 new NotificationInlineImageCache());
@@ -1642,6 +1647,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 R.dimen.notification_min_height);
         mNotificationMinHeightLarge = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_min_height_increased);
+        mNotificationMinHeightMedia = NotificationUtils.getFontScaledHeight(mContext,
+                R.dimen.notification_min_height_media);
         mNotificationMaxHeight = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_height);
         mMaxHeadsUpHeightBeforeN = NotificationUtils.getFontScaledHeight(mContext,
@@ -1840,7 +1847,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     void onGutsOpened() {
-        resetTranslation();
         updateContentAccessibilityImportanceForGuts(false /* isEnabled */);
     }
 
@@ -1894,11 +1900,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     @Override
     public void setTranslation(float translationX) {
-        if (areGutsExposed()) {
-            // Don't translate if guts are showing.
+        if (isBlockingHelperShowingAndTranslationFinished()) {
+            mGuts.setTranslationX(translationX);
             return;
-        }
-        if (!mShouldTranslateContents) {
+        } else if (!mShouldTranslateContents) {
             setTranslationX(translationX);
         } else if (mTranslateableViews != null) {
             // Translate the group of views
@@ -1914,6 +1919,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             // positioning, so we can use the scrollX instead.
             getEntry().expandedIcon.setScrollX((int) -translationX);
         }
+
         if (mMenuRow.getMenuView() != null) {
             mMenuRow.onParentTranslationUpdate(translationX);
         }
@@ -1925,6 +1931,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return getTranslationX();
         }
 
+        if (isBlockingHelperShowingAndCanTranslate()) {
+            return mGuts.getTranslationX();
+        }
+
         if (mTranslateableViews != null && mTranslateableViews.size() > 0) {
             // All of the views in the list should have same translation, just use first one.
             return mTranslateableViews.get(0).getTranslationX();
@@ -1933,15 +1943,16 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return 0;
     }
 
+    private boolean isBlockingHelperShowingAndCanTranslate() {
+        return areGutsExposed() && mIsBlockingHelperShowing && mNotificationTranslationFinished;
+    }
+
     public Animator getTranslateViewAnimator(final float leftTarget,
             AnimatorUpdateListener listener) {
         if (mTranslateAnim != null) {
             mTranslateAnim.cancel();
         }
-        if (areGutsExposed()) {
-            // No translation if guts are exposed.
-            return null;
-        }
+
         final ObjectAnimator translateAnim = ObjectAnimator.ofFloat(this, TRANSLATE_CONTENT,
                 leftTarget);
         if (listener != null) {
@@ -1957,6 +1968,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
             @Override
             public void onAnimationEnd(Animator anim) {
+                if (mIsBlockingHelperShowing) {
+                    mNotificationTranslationFinished = true;
+                }
                 if (!cancelled && leftTarget == 0) {
                     mMenuRow.resetMenu();
                     mTranslateAnim = null;

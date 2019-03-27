@@ -19,6 +19,7 @@ package com.android.server.content;
 import android.Manifest;
 import android.accounts.Account;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
@@ -899,9 +900,20 @@ public final class ContentService extends IContentService.Stub {
 
     @Override
     public void setIsSyncable(Account account, String providerName, int syncable) {
+        setIsSyncableAsUser(account, providerName, syncable, UserHandle.getCallingUserId());
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public void setIsSyncableAsUser(Account account, String providerName, int syncable,
+            int userId) {
         if (TextUtils.isEmpty(providerName)) {
             throw new IllegalArgumentException("Authority must not be empty");
         }
+        enforceCrossUserPermission(userId,
+                "no permission to set the sync settings for user " + userId);
         mContext.enforceCallingOrSelfPermission(Manifest.permission.WRITE_SYNC_SETTINGS,
                 "no permission to write the sync settings");
 
@@ -909,7 +921,6 @@ public final class ContentService extends IContentService.Stub {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
 
-        int userId = UserHandle.getCallingUserId();
         long identityToken = clearCallingIdentity();
         try {
             SyncManager syncManager = getSyncManager();
@@ -1164,6 +1175,7 @@ public final class ContentService extends IContentService.Stub {
     }
 
     @Override
+    @RequiresPermission(android.Manifest.permission.CACHE_CONTENT)
     public void putCache(String packageName, Uri key, Bundle value, int userId) {
         Bundle.setDefusable(value, true);
         enforceCrossUserPermission(userId, TAG);
@@ -1186,6 +1198,7 @@ public final class ContentService extends IContentService.Stub {
     }
 
     @Override
+    @RequiresPermission(android.Manifest.permission.CACHE_CONTENT)
     public Bundle getCache(String packageName, Uri key, int userId) {
         enforceCrossUserPermission(userId, TAG);
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.CACHE_CONTENT, TAG);

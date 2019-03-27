@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 
@@ -31,8 +32,12 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.same;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
+import static com.android.server.wm.DisplayRotation.FIXED_TO_USER_ROTATION_DEFAULT;
+import static com.android.server.wm.DisplayRotation.FIXED_TO_USER_ROTATION_DISABLED;
+import static com.android.server.wm.DisplayRotation.FIXED_TO_USER_ROTATION_ENABLED;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.content.ContentResolver;
@@ -59,6 +64,7 @@ import com.android.server.LocalServices;
 import com.android.server.UiThread;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.statusbar.StatusBarManagerInternal;
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.After;
 import org.junit.Before;
@@ -112,6 +118,7 @@ public class DisplayRotationTests {
     public static void setUpOnce() {
         sMockWm = mock(WindowManagerService.class);
         sMockWm.mPowerManagerInternal = mock(PowerManagerInternal.class);
+        sMockWm.mPolicy = mock(WindowManagerPolicy.class);
     }
 
     @Before
@@ -157,9 +164,7 @@ public class DisplayRotationTests {
 
     @Test
     public void testPersistsUserRotation_LockRotation_NonDefaultDisplay() throws Exception {
-        mBuilder.mIsDefaultDisplay = false;
-
-        mBuilder.build();
+        mBuilder.setIsDefaultDisplay(false).build();
 
         freezeRotation(Surface.ROTATION_180);
 
@@ -184,9 +189,7 @@ public class DisplayRotationTests {
 
     @Test
     public void testPersistsUserRotation_UnlockRotation_NonDefaultDisplay() throws Exception {
-        mBuilder.mIsDefaultDisplay = false;
-
-        mBuilder.build();
+        mBuilder.setIsDefaultDisplay(false).build();
 
         thawRotation();
 
@@ -200,14 +203,22 @@ public class DisplayRotationTests {
     public void testPersistsFixedToUserRotation() throws Exception {
         mBuilder.build();
 
-        mTarget.setFixedToUserRotation(true);
+        mTarget.setFixedToUserRotation(FIXED_TO_USER_ROTATION_ENABLED);
 
-        verify(mMockDisplayWindowSettings).setFixedToUserRotation(mMockDisplayContent, true);
+        verify(mMockDisplayWindowSettings).setFixedToUserRotation(mMockDisplayContent,
+                FIXED_TO_USER_ROTATION_ENABLED);
 
         reset(mMockDisplayWindowSettings);
-        mTarget.setFixedToUserRotation(false);
+        mTarget.setFixedToUserRotation(FIXED_TO_USER_ROTATION_DISABLED);
 
-        verify(mMockDisplayWindowSettings).setFixedToUserRotation(mMockDisplayContent, false);
+        verify(mMockDisplayWindowSettings).setFixedToUserRotation(mMockDisplayContent,
+                FIXED_TO_USER_ROTATION_DISABLED);
+
+        reset(mMockDisplayWindowSettings);
+        mTarget.setFixedToUserRotation(FIXED_TO_USER_ROTATION_DEFAULT);
+
+        verify(mMockDisplayWindowSettings).setFixedToUserRotation(mMockDisplayContent,
+                FIXED_TO_USER_ROTATION_DEFAULT);
     }
 
     // ========================================
@@ -352,22 +363,7 @@ public class DisplayRotationTests {
         when(mMockDisplayPolicy.isAwake()).thenReturn(true);
         when(mMockDisplayPolicy.isKeyguardDrawComplete()).thenReturn(true);
         when(mMockDisplayPolicy.isWindowManagerDrawComplete()).thenReturn(true);
-        mTarget.setFixedToUserRotation(true);
-        mTarget.updateOrientationListener();
-        verifyOrientationListenerRegistration(0);
-    }
-
-    @Test
-    public void testNotEnablesSensor_ForceDefaultRotation() throws Exception {
-        mBuilder.build();
-        when(mMockRes.getBoolean(com.android.internal.R.bool.config_forceDefaultOrientation))
-                .thenReturn(true);
-        configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false, false);
-
-        when(mMockDisplayPolicy.isScreenOnEarly()).thenReturn(true);
-        when(mMockDisplayPolicy.isAwake()).thenReturn(true);
-        when(mMockDisplayPolicy.isKeyguardDrawComplete()).thenReturn(true);
-        when(mMockDisplayPolicy.isWindowManagerDrawComplete()).thenReturn(true);
+        mTarget.setFixedToUserRotation(FIXED_TO_USER_ROTATION_ENABLED);
         mTarget.updateOrientationListener();
         verifyOrientationListenerRegistration(0);
     }
@@ -375,8 +371,6 @@ public class DisplayRotationTests {
     @Test
     public void testNotEnablesSensor_ForceDefaultRotation_Car() throws Exception {
         mBuilder.build();
-        when(mMockRes.getBoolean(com.android.internal.R.bool.config_forceDefaultOrientation))
-                .thenReturn(true);
         configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, true, false);
 
         when(mMockDisplayPolicy.isScreenOnEarly()).thenReturn(true);
@@ -390,9 +384,20 @@ public class DisplayRotationTests {
     @Test
     public void testNotEnablesSensor_ForceDefaultRotation_Tv() throws Exception {
         mBuilder.build();
-        when(mMockRes.getBoolean(com.android.internal.R.bool.config_forceDefaultOrientation))
-                .thenReturn(true);
         configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false, true);
+
+        when(mMockDisplayPolicy.isScreenOnEarly()).thenReturn(true);
+        when(mMockDisplayPolicy.isAwake()).thenReturn(true);
+        when(mMockDisplayPolicy.isKeyguardDrawComplete()).thenReturn(true);
+        when(mMockDisplayPolicy.isWindowManagerDrawComplete()).thenReturn(true);
+        mTarget.updateOrientationListener();
+        verifyOrientationListenerRegistration(0);
+    }
+
+    @Test
+    public void testNotEnablesSensor_ForceDefaultRotation_Squared() throws Exception {
+        mBuilder.build();
+        configureDisplayRotation(SCREEN_ORIENTATION_LOCKED, false, false);
 
         when(mMockDisplayPolicy.isScreenOnEarly()).thenReturn(true);
         when(mMockDisplayPolicy.isAwake()).thenReturn(true);
@@ -510,21 +515,8 @@ public class DisplayRotationTests {
     // Tests for Policy based Rotation
     // =================================
     @Test
-    public void testReturnsUserRotation_ForceDefaultRotation() throws Exception {
-        mBuilder.build();
-        when(mMockRes.getBoolean(com.android.internal.R.bool.config_forceDefaultOrientation))
-                .thenReturn(true);
-        configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false, false);
-
-        assertEquals(Surface.ROTATION_0, mTarget.rotationForOrientation(SCREEN_ORIENTATION_PORTRAIT,
-                Surface.ROTATION_180));
-    }
-
-    @Test
     public void testReturnsUserRotation_ForceDefaultRotation_Car() throws Exception {
         mBuilder.build();
-        when(mMockRes.getBoolean(com.android.internal.R.bool.config_forceDefaultOrientation))
-                .thenReturn(true);
         configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, true, false);
 
         assertEquals(Surface.ROTATION_0, mTarget.rotationForOrientation(SCREEN_ORIENTATION_PORTRAIT,
@@ -534,9 +526,16 @@ public class DisplayRotationTests {
     @Test
     public void testReturnsUserRotation_ForceDefaultRotation_Tv() throws Exception {
         mBuilder.build();
-        when(mMockRes.getBoolean(com.android.internal.R.bool.config_forceDefaultOrientation))
-                .thenReturn(true);
         configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false, true);
+
+        assertEquals(Surface.ROTATION_0, mTarget.rotationForOrientation(SCREEN_ORIENTATION_PORTRAIT,
+                Surface.ROTATION_180));
+    }
+
+    @Test
+    public void testReturnsUserRotation_ForceDefaultRotation_Squared() throws Exception {
+        mBuilder.build();
+        configureDisplayRotation(SCREEN_ORIENTATION_LOCKED, false, false);
 
         assertEquals(Surface.ROTATION_0, mTarget.rotationForOrientation(SCREEN_ORIENTATION_PORTRAIT,
                 Surface.ROTATION_180));
@@ -588,7 +587,7 @@ public class DisplayRotationTests {
         mBuilder.build();
         configureDisplayRotation(SCREEN_ORIENTATION_PORTRAIT, false, false);
 
-        mTarget.setFixedToUserRotation(true);
+        mTarget.setFixedToUserRotation(FIXED_TO_USER_ROTATION_ENABLED);
 
         freezeRotation(Surface.ROTATION_180);
 
@@ -611,6 +610,23 @@ public class DisplayRotationTests {
     // ========================
     // Non-rotation API Tests
     // ========================
+    @Test
+    public void testRespectsAppRequestedOrientationByDefault() throws Exception {
+        mBuilder.build();
+
+        assertTrue("Display rotation should respect app requested orientation by"
+                + " default.", mTarget.respectAppRequestedOrientation());
+    }
+
+    @Test
+    public void testNotRespectAppRequestedOrientation_FixedToUserRotation() throws Exception {
+        mBuilder.build();
+        mTarget.setFixedToUserRotation(FIXED_TO_USER_ROTATION_ENABLED);
+
+        assertFalse("Display rotation shouldn't respect app requested orientation if"
+                + " fixed to user rotation.", mTarget.respectAppRequestedOrientation());
+    }
+
     /**
      * Call {@link DisplayRotation#configure(int, int, int, int)} to configure {@link #mTarget}
      * according to given parameters.
@@ -627,9 +643,14 @@ public class DisplayRotationTests {
                 width = 1080;
                 height = 1920;
                 break;
+            case SCREEN_ORIENTATION_LOCKED:
+                // We use locked for squared display.
+                width = 1080;
+                height = 1080;
+                break;
             default:
-                throw new IllegalArgumentException("displayOrientation needs to be either landscape"
-                        + " or portrait, but we got "
+                throw new IllegalArgumentException("displayOrientation needs to be landscape, "
+                        + "portrait or locked, but we got "
                         + ActivityInfo.screenOrientationToString(displayOrientation));
         }
 
@@ -639,6 +660,10 @@ public class DisplayRotationTests {
                 .thenReturn(isCar);
         when(mockPackageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK))
                 .thenReturn(isTv);
+        when(mMockDisplayPolicy.getNonDecorDisplayWidth(anyInt(), anyInt(), anyInt(), anyInt(),
+                any())).thenReturn(width);
+        when(mMockDisplayPolicy.getNonDecorDisplayHeight(anyInt(), anyInt(), anyInt(), anyInt(),
+                any())).thenReturn(height);
 
         final int shortSizeDp = (isCar || isTv) ? 540 : 720;
         final int longSizeDp = 960;
@@ -787,8 +812,10 @@ public class DisplayRotationTests {
         private void build() throws Exception {
             mMockContext = mock(Context.class);
 
-            mMockDisplayContent = mock(WindowTestUtils.TestDisplayContent.class);
+            mMockDisplayContent = mock(DisplayContent.class);
             mMockDisplayContent.isDefaultDisplay = mIsDefaultDisplay;
+            when(mMockDisplayContent.calculateDisplayCutoutForRotation(anyInt()))
+                    .thenReturn(WmDisplayCutout.NO_CUTOUT);
 
             mMockDisplayPolicy = mock(DisplayPolicy.class);
 
@@ -804,6 +831,9 @@ public class DisplayRotationTests {
                     .thenReturn(convertRotationToDegrees(mDeskDockRotation));
             when(mMockRes.getInteger(com.android.internal.R.integer.config_undockedHdmiRotation))
                     .thenReturn(convertRotationToDegrees(mUndockedHdmiRotation));
+            when(mMockRes.getFloat(
+                    com.android.internal.R.dimen.config_closeToSquareDisplayMaxAspectRatio))
+                    .thenReturn(1.33f);
 
             mMockSensorManager = mock(SensorManager.class);
             when(mMockContext.getSystemService(Context.SENSOR_SERVICE))

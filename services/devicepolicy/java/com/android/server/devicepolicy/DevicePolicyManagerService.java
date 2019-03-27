@@ -17,8 +17,8 @@
 package com.android.server.devicepolicy;
 
 import static android.Manifest.permission.BIND_DEVICE_ADMIN;
-import static android.Manifest.permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY;
 import static android.Manifest.permission.MANAGE_CA_CERTIFICATES;
+import static android.Manifest.permission.REQUEST_SCREEN_LOCK_COMPLEXITY;
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
 import static android.app.admin.DeviceAdminReceiver.EXTRA_TRANSFER_OWNERSHIP_ADMIN_EXTRAS_BUNDLE;
 import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_USER;
@@ -134,6 +134,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.PermissionChecker;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageDataObserver;
@@ -171,6 +172,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.os.ParcelableException;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
@@ -187,6 +189,7 @@ import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.os.UserManagerInternal.UserRestrictionsListener;
 import android.os.storage.StorageManager;
+import android.permission.PermissionControllerManager;
 import android.provider.CalendarContract;
 import android.provider.ContactsContract.QuickContact;
 import android.provider.ContactsInternal;
@@ -247,6 +250,7 @@ import com.android.server.net.NetworkPolicyManagerInternal;
 import com.android.server.pm.UserRestrictionsUtils;
 import com.android.server.storage.DeviceStorageMonitorInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.wm.ActivityTaskManagerInternal;
 
 import com.google.android.collect.Sets;
 
@@ -1870,7 +1874,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         Owners newOwners() {
             return new Owners(getUserManager(), getUserManagerInternal(),
-                    getPackageManagerInternal());
+                    getPackageManagerInternal(), getActivityTaskManagerInternal());
         }
 
         UserManager getUserManager() {
@@ -1883,6 +1887,25 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         PackageManagerInternal getPackageManagerInternal() {
             return LocalServices.getService(PackageManagerInternal.class);
+        }
+
+        ActivityTaskManagerInternal getActivityTaskManagerInternal() {
+            return LocalServices.getService(ActivityTaskManagerInternal.class);
+        }
+
+        @NonNull PermissionControllerManager getPermissionControllerManager(
+                @NonNull UserHandle user) {
+            if (user.equals(mContext.getUser())) {
+                return mContext.getSystemService(PermissionControllerManager.class);
+            } else {
+                try {
+                    return mContext.createPackageContextAsUser(mContext.getPackageName(), 0,
+                            user).getSystemService(PermissionControllerManager.class);
+                } catch (NameNotFoundException notPossible) {
+                    // not possible
+                    throw new IllegalStateException(notPossible);
+                }
+            }
         }
 
         UsageStatsManagerInternal getUsageStatsManagerInternal() {
@@ -4773,8 +4796,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final int callingUserId = mInjector.userHandleGetCallingUserId();
         enforceUserUnlocked(callingUserId);
         mContext.enforceCallingOrSelfPermission(
-                GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY,
-                "Must have " + GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY + " permission.");
+                REQUEST_SCREEN_LOCK_COMPLEXITY,
+                "Must have " + REQUEST_SCREEN_LOCK_COMPLEXITY + " permission.");
 
         synchronized (getLockObject()) {
             int targetUserId = getCredentialOwner(callingUserId, /* parent= */ false);
@@ -5023,7 +5046,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             if (quality == DevicePolicyManager.PASSWORD_QUALITY_MANAGED) {
                 quality = PASSWORD_QUALITY_UNSPECIFIED;
             }
-            final PasswordMetrics metrics = PasswordMetrics.computeForPassword(password);
+            // TODO(b/120484642): remove getBytes() below
+            final PasswordMetrics metrics = PasswordMetrics.computeForPassword(password.getBytes());
             final int realQuality = metrics.quality;
             if (realQuality < quality
                     && quality != DevicePolicyManager.PASSWORD_QUALITY_COMPLEX) {
@@ -5110,16 +5134,22 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         try {
             if (token == null) {
                 if (!TextUtils.isEmpty(password)) {
-                    mLockPatternUtils.saveLockPassword(password, null, quality, userHandle);
+                    mLockPatternUtils.saveLockPassword(password.getBytes(), null, quality,
+                            userHandle);
                 } else {
                     mLockPatternUtils.clearLock(null, userHandle);
                 }
                 result = true;
             } else {
-                result = mLockPatternUtils.setLockCredentialWithToken(password,
-                        TextUtils.isEmpty(password) ? LockPatternUtils.CREDENTIAL_TYPE_NONE
-                                : LockPatternUtils.CREDENTIAL_TYPE_PASSWORD,
-                        quality, tokenHandle, token, userHandle);
+                if (!TextUtils.isEmpty(password)) {
+                    result = mLockPatternUtils.setLockCredentialWithToken(password.getBytes(),
+                            LockPatternUtils.CREDENTIAL_TYPE_PASSWORD,
+                            quality, tokenHandle, token, userHandle);
+                } else {
+                    result = mLockPatternUtils.setLockCredentialWithToken(null,
+                            LockPatternUtils.CREDENTIAL_TYPE_NONE,
+                            quality, tokenHandle, token, userHandle);
+                }
             }
             boolean requireEntry = (flags & DevicePolicyManager.RESET_PASSWORD_REQUIRE_ENTRY) != 0;
             if (requireEntry) {
@@ -5176,7 +5206,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         Preconditions.checkNotNull(who, "ComponentName is null");
         final int userHandle = mInjector.userHandleGetCallingUserId();
         synchronized (getLockObject()) {
-            ActiveAdmin ap = getActiveAdminForCallerLocked(
+            final ActiveAdmin ap = getActiveAdminForCallerLocked(
                     who, DeviceAdminInfo.USES_POLICY_FORCE_LOCK, parent);
             if (ap.maximumTimeToUnlock != timeMs) {
                 ap.maximumTimeToUnlock = timeMs;
@@ -8383,7 +8413,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             return true;
         }
 
-        Log.w(LOG_TAG, String.format("Package if %s (uid=%d, pid=%d) cannot access Device IDs",
+        Log.w(LOG_TAG, String.format("Package %s (uid=%d, pid=%d) cannot access Device IDs",
                     packageName, uid, pid));
         return false;
     }
@@ -11577,8 +11607,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     @Override
-    public boolean setPermissionGrantState(ComponentName admin, String callerPackage,
-            String packageName, String permission, int grantState) throws RemoteException {
+    public void setPermissionGrantState(ComponentName admin, String callerPackage,
+            String packageName, String permission, int grantState, RemoteCallback callback)
+            throws RemoteException {
+        Preconditions.checkNotNull(callback);
+
         UserHandle user = mInjector.binderGetCallingUserHandle();
         synchronized (getLockObject()) {
             // Ensure the caller is a DO/PO or a permission grant state delegate.
@@ -11586,53 +11619,60 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     DELEGATION_PERMISSION_GRANT);
             long ident = mInjector.binderClearCallingIdentity();
             try {
-                if (getTargetSdk(packageName, user.getIdentifier())
-                        < android.os.Build.VERSION_CODES.M) {
-                    return false;
+                boolean isPostQAdmin = getTargetSdk(callerPackage, user.getIdentifier())
+                        >= android.os.Build.VERSION_CODES.Q;
+                if (!isPostQAdmin) {
+                    // Legacy admins assume that they cannot control pre-M apps
+                    if (getTargetSdk(packageName, user.getIdentifier())
+                            < android.os.Build.VERSION_CODES.M) {
+                        callback.sendResult(null);
+                        return;
+                    }
                 }
-                if (!isRuntimePermission(permission)) {
-                    return false;
+                try {
+                    if (!isRuntimePermission(permission)) {
+                        callback.sendResult(null);
+                        return;
+                    }
+                } catch (NameNotFoundException e) {
+                    throw new RemoteException(
+                            "Cannot check if " + permission + "is a runtime permission", e, false,
+                            true);
                 }
-                final PackageManager packageManager = mInjector.getPackageManager();
-                switch (grantState) {
-                    case DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED: {
-                        mInjector.getPackageManagerInternal().grantRuntimePermission(packageName,
-                                permission, user.getIdentifier(), true /* override policy */);
-                        packageManager.updatePermissionFlags(permission, packageName,
-                                PackageManager.FLAG_PERMISSION_POLICY_FIXED,
-                                PackageManager.FLAG_PERMISSION_POLICY_FIXED, user);
-                    } break;
 
-                    case DevicePolicyManager.PERMISSION_GRANT_STATE_DENIED: {
-                        mInjector.getPackageManagerInternal().revokeRuntimePermission(packageName,
-                                permission, user.getIdentifier(), true /* override policy */);
-                        packageManager.updatePermissionFlags(permission, packageName,
-                                PackageManager.FLAG_PERMISSION_POLICY_FIXED,
-                                PackageManager.FLAG_PERMISSION_POLICY_FIXED, user);
-                    } break;
+                if (grantState == DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                        || grantState == DevicePolicyManager.PERMISSION_GRANT_STATE_DENIED
+                        || grantState == DevicePolicyManager.PERMISSION_GRANT_STATE_DEFAULT) {
+                    mInjector.getPermissionControllerManager(user)
+                            .setRuntimePermissionGrantStateByDeviceAdmin(callerPackage,
+                                    packageName, permission, grantState, mContext.getMainExecutor(),
+                                    (permissionWasSet) -> {
+                                        if (isPostQAdmin && !permissionWasSet) {
+                                            callback.sendResult(null);
+                                            return;
+                                        }
 
-                    case DevicePolicyManager.PERMISSION_GRANT_STATE_DEFAULT: {
-                        packageManager.updatePermissionFlags(permission, packageName,
-                                PackageManager.FLAG_PERMISSION_POLICY_FIXED, 0, user);
-                    } break;
+                                        final boolean isDelegate = (admin == null);
+                                        DevicePolicyEventLogger
+                                                .createEvent(DevicePolicyEnums
+                                                        .SET_PERMISSION_GRANT_STATE)
+                                                .setAdmin(callerPackage)
+                                                .setStrings(permission)
+                                                .setInt(grantState)
+                                                .setBoolean(isDelegate)
+                                                .write();
+
+                                        callback.sendResult(Bundle.EMPTY);
+                                    });
                 }
-            } catch (SecurityException se) {
-                return false;
-            } catch (NameNotFoundException e) {
-                return false;
+            } catch (SecurityException e) {
+                Slog.e(LOG_TAG, "Could not set permission grant state", e);
+
+                callback.sendResult(null);
             } finally {
                 mInjector.binderRestoreCallingIdentity(ident);
             }
         }
-        final boolean isDelegate = (admin == null);
-        DevicePolicyEventLogger
-                .createEvent(DevicePolicyEnums.SET_PERMISSION_GRANT_STATE)
-                .setAdmin(callerPackage)
-                .setStrings(permission)
-                .setInt(grantState)
-                .setBoolean(isDelegate)
-                .write();
-        return true;
     }
 
     @Override
@@ -11649,8 +11689,26 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         synchronized (getLockObject()) {
             long ident = mInjector.binderClearCallingIdentity();
             try {
-                int granted = mIPackageManager.checkPermission(permission,
-                        packageName, user.getIdentifier());
+                int granted;
+                if (getTargetSdk(callerPackage, user.getIdentifier())
+                        < android.os.Build.VERSION_CODES.Q) {
+                    // The per-Q behavior was to not check the app-ops state.
+                    granted = mIPackageManager.checkPermission(permission, packageName,
+                            user.getIdentifier());
+                } else {
+                    try {
+                        int uid = packageManager.getPackageUidAsUser(packageName,
+                                user.getIdentifier());
+
+                        // TODO: Prevent noting the app-op
+                        granted = PermissionChecker.checkPermission(mContext, permission, -1,
+                                uid, packageName);
+                    } catch (NameNotFoundException e) {
+                        throw new RemoteException(
+                                "Cannot check if " + permission + "is a runtime permission", e,
+                                false, true);
+                    }
+                }
                 int permFlags = packageManager.getPermissionFlags(permission, packageName, user);
                 if ((permFlags & PackageManager.FLAG_PERMISSION_POLICY_FIXED)
                         != PackageManager.FLAG_PERMISSION_POLICY_FIXED) {
@@ -12790,10 +12848,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
-    // TODO(b/22388012): When backup is available for secondary users and profiles, consider
-    // whether there are any privacy/security implications of enabling the backup service here
-    // if there are other users or profiles unmanaged or managed by a different entity (i.e. not
-    // affiliated).
     @Override
     public void setBackupServiceEnabled(ComponentName admin, boolean enabled) {
         if (!mHasFeature) {

@@ -860,7 +860,7 @@ public final class AudioDeviceInventory {
         // also checks whether media routing if affected by a dynamic policy
         if (((device == musicDevice) || mDeviceBroker.isInCommunication())
                 && (device == devices) && !mDeviceBroker.hasMediaDynamicPolicy()) {
-            mDeviceBroker.broadcastBecomingNoisy();
+            mDeviceBroker.postBroadcastBecomingNoisy();
             delay = SystemProperties.getInt("vendor.audio.noisy.broadcast.delay", 700);
         }
 

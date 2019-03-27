@@ -28,10 +28,8 @@ import android.app.NotificationManager;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
 import android.app.admin.DevicePolicyManagerInternal;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.IntentSender.SendIntentException;
 import android.content.pm.ApplicationInfo;
@@ -84,7 +82,7 @@ import com.android.internal.util.ImageUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
-import com.android.server.pm.permission.PermissionManagerInternal;
+import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
 import libcore.io.IoUtils;
 
@@ -130,8 +128,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
     private final Context mContext;
     private final PackageManagerService mPm;
+    private final ApexManager mApexManager;
     private final StagingManager mStagingManager;
-    private final PermissionManagerInternal mPermissionManager;
+    private final PermissionManagerServiceInternal mPermissionManager;
 
     private AppOpsManager mAppOps;
 
@@ -140,7 +139,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
     private final Callbacks mCallbacks;
 
-    private volatile boolean mBootCompleted = false;
+    private volatile boolean mOkToSendBroadcasts = false;
 
     /**
      * File storing persisted {@link #mSessions} metadata.
@@ -186,10 +185,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     };
 
-    public PackageInstallerService(Context context, PackageManagerService pm) {
+    public PackageInstallerService(Context context, PackageManagerService pm, ApexManager am) {
         mContext = context;
         mPm = pm;
-        mPermissionManager = LocalServices.getService(PermissionManagerInternal.class);
+        mPermissionManager = LocalServices.getService(PermissionManagerServiceInternal.class);
 
         mInstallThread = new HandlerThread(TAG);
         mInstallThread.start();
@@ -204,27 +203,18 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mSessionsDir = new File(Environment.getDataSystemDirectory(), "install_sessions");
         mSessionsDir.mkdirs();
 
-        mStagingManager = new StagingManager(pm, this);
+        mApexManager = am;
+
+        mStagingManager = new StagingManager(pm, this, am, context);
     }
 
-    private void setBootCompleted()  {
-        mBootCompleted = true;
-    }
-
-    boolean isBootCompleted()  {
-        return mBootCompleted;
+    boolean okToSendBroadcasts()  {
+        return mOkToSendBroadcasts;
     }
 
     public void systemReady() {
         mAppOps = mContext.getSystemService(AppOpsManager.class);
 
-        mContext.registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                setBootCompleted();
-                mContext.unregisterReceiver(this);
-            }
-        }, new IntentFilter(Intent.ACTION_BOOT_COMPLETED));
         synchronized (mSessions) {
             readSessionsLocked();
 
@@ -267,6 +257,16 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         for (PackageInstallerSession session : stagedSessionsToRestore) {
             mStagingManager.restoreSession(session);
         }
+        // Broadcasts are not sent while we restore sessions on boot, since no processes would be
+        // ready to listen to them. From now on, we greedily assume that broadcasts requests are
+        // safe to send out. The worst that can happen is that a broadcast is attempted before
+        // ActivityManagerService completes its own systemReady(), in which case it will be rejected
+        // with an otherwise harmless exception.
+        // A more appropriate way to do this would be to wait until the correct  boot phase is
+        // reached, but since we are not a SystemService we can't override onBootPhase.
+        // Waiting on the BOOT_COMPLETED broadcast can take several minutes, so that's not a viable
+        // way either.
+        mOkToSendBroadcasts = true;
     }
 
     @GuardedBy("mSessions")
@@ -479,6 +479,22 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             if ((params.installFlags & PackageManager.INSTALL_VIRTUAL_PRELOAD) != 0
                     && !mPm.isCallerVerifier(callingUid)) {
                 params.installFlags &= ~PackageManager.INSTALL_VIRTUAL_PRELOAD;
+            }
+        }
+
+        boolean isApex = (params.installFlags & PackageManager.INSTALL_APEX) != 0;
+        if (params.isStaged || isApex) {
+            mContext.enforceCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES, TAG);
+        }
+
+        if (isApex) {
+            if (!mApexManager.isApexSupported()) {
+                throw new IllegalArgumentException(
+                    "This device doesn't support the installation of APEX files");
+            }
+            if (!params.isStaged) {
+                throw new IllegalArgumentException(
+                    "APEX files can only be installed as part of a staged session.");
             }
         }
 
@@ -802,6 +818,13 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             intent.putExtra(PackageInstaller.EXTRA_CALLBACK, adapter.getBinder().asBinder());
             adapter.onUserActionRequired(intent);
         }
+    }
+
+    @Override
+    public void installExistingPackage(String packageName, int installFlags, int installReason,
+            IntentSender statusReceiver, int userId) {
+        mPm.installExistingPackageAsUser(packageName, userId, installFlags, installReason,
+                statusReceiver);
     }
 
     @Override
@@ -1163,7 +1186,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         public void onStagedSessionChanged(PackageInstallerSession session) {
             writeSessionsAsync();
-            if (mBootCompleted) {
+            if (mOkToSendBroadcasts) {
                 mPm.sendSessionUpdatedBroadcast(session.generateInfo(false),
                         session.userId);
             }

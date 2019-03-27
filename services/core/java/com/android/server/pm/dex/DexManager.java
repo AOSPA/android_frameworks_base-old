@@ -86,11 +86,11 @@ public class DexManager {
     // encode and save the dex usage data.
     private final PackageDexUsage mPackageDexUsage;
 
-    // DexLogger handles recording of dynamic code loading - which is similar to PackageDexUsage
-    // but records a different aspect of the data.
+    // DynamicCodeLogger handles recording of dynamic code loading - which is similar to
+    // PackageDexUsage but records a different aspect of the data.
     // (It additionally includes DEX files loaded with unsupported class loaders, and doesn't
     // record class loaders or ISAs.)
-    private final DexLogger mDexLogger;
+    private final DynamicCodeLogger mDynamicCodeLogger;
 
     private final IPackageManager mPackageManager;
     private final PackageDexOptimizer mPackageDexOptimizer;
@@ -126,11 +126,11 @@ public class DexManager {
         mPackageDexOptimizer = pdo;
         mInstaller = installer;
         mInstallLock = installLock;
-        mDexLogger = new DexLogger(pms, installer);
+        mDynamicCodeLogger = new DynamicCodeLogger(pms, installer);
     }
 
-    public DexLogger getDexLogger() {
-        return mDexLogger;
+    public DynamicCodeLogger getDynamicCodeLogger() {
+        return mDynamicCodeLogger;
     }
 
     /**
@@ -228,8 +228,11 @@ public class DexManager {
                     continue;
                 }
 
-                mDexLogger.recordDex(loaderUserId, dexPath, searchResult.mOwningPackageName,
-                        loadingAppInfo.packageName);
+                if (!primaryOrSplit) {
+                    // Record loading of a DEX file from an app data directory.
+                    mDynamicCodeLogger.recordDex(loaderUserId, dexPath,
+                            searchResult.mOwningPackageName, loadingAppInfo.packageName);
+                }
 
                 if (classLoaderContexts != null) {
 
@@ -266,7 +269,7 @@ public class DexManager {
             loadInternal(existingPackages);
         } catch (Exception e) {
             mPackageDexUsage.clear();
-            mDexLogger.clear();
+            mDynamicCodeLogger.clear();
             Slog.w(TAG, "Exception while loading. Starting with a fresh state.", e);
         }
     }
@@ -317,12 +320,12 @@ public class DexManager {
             if (mPackageDexUsage.removePackage(packageName)) {
                 mPackageDexUsage.maybeWriteAsync();
             }
-            mDexLogger.removePackage(packageName);
+            mDynamicCodeLogger.removePackage(packageName);
         } else {
             if (mPackageDexUsage.removeUserPackage(packageName, userId)) {
                 mPackageDexUsage.maybeWriteAsync();
             }
-            mDexLogger.removeUserPackage(packageName, userId);
+            mDynamicCodeLogger.removeUserPackage(packageName, userId);
         }
     }
 
@@ -401,9 +404,9 @@ public class DexManager {
         }
 
         try {
-            mDexLogger.readAndSync(packageToUsersMap);
+            mDynamicCodeLogger.readAndSync(packageToUsersMap);
         } catch (Exception e) {
-            mDexLogger.clear();
+            mDynamicCodeLogger.clear();
             Slog.w(TAG, "Exception while loading package dynamic code usage. "
                     + "Starting with a fresh state.", e);
         }
@@ -689,7 +692,7 @@ public class DexManager {
      */
     public void writePackageDexUsageNow() {
         mPackageDexUsage.writeNow();
-        mDexLogger.writeNow();
+        mDynamicCodeLogger.writeNow();
     }
 
     /**

@@ -590,6 +590,30 @@ public class PackageInstaller {
         }
     }
 
+    /**
+     * Install the given package, which already exists on the device, for the user for which this
+     * installer was created.
+     *
+     * @param packageName The package to install.
+     * @param installReason Reason for install.
+     * @param statusReceiver Where to deliver the result.
+     */
+    @RequiresPermission(allOf = {
+            Manifest.permission.INSTALL_PACKAGES,
+            Manifest.permission.INSTALL_EXISTING_PACKAGES})
+    public void installExistingPackage(@NonNull String packageName,
+            @InstallReason int installReason,
+            @Nullable IntentSender statusReceiver) {
+        Preconditions.checkNotNull(packageName, "packageName cannot be null");
+        try {
+            mInstaller.installExistingPackage(packageName, 0, installReason, statusReceiver,
+                    mUserId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+
     /** {@hide} */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.INSTALL_PACKAGES)
@@ -791,11 +815,6 @@ public class PackageInstaller {
      * individual session IDs can be added with {@link #addChildSessionId(int)}
      * and commit of the multi-package session will result in all child sessions
      * being committed atomically.
-     * <p>
-     * If a package requires to be installed only at reboot, the session should
-     * be marked as a staged session by calling {@link SessionParams#setStaged()}
-     * with {@code true}. This can also apply to a multi-package session, in
-     * which case all the packages in the session will be applied at reboot.
      */
     public static class Session implements Closeable {
         /** {@hide} */
@@ -1539,14 +1558,22 @@ public class PackageInstaller {
          * Staged sessions are scheduled to be installed at next reboot. Staged sessions can also be
          * multi-package. In that case, if any of the children sessions fail to install at reboot,
          * all the other children sessions are aborted as well.
+         *
+         * {@hide}
          */
+        @SystemApi
+        @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setStaged() {
             this.isStaged = true;
         }
 
         /**
          * Set this session to be installing an APEX package.
+         *
+         * {@hide}
          */
+        @SystemApi
+        @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setInstallAsApex() {
             installFlags |= PackageManager.INSTALL_APEX;
         }
@@ -1716,11 +1743,11 @@ public class PackageInstaller {
         public int[] childSessionIds = NO_SESSIONS;
 
         /** {@hide} */
-        public boolean isSessionApplied;
+        public boolean isStagedSessionApplied;
         /** {@hide} */
-        public boolean isSessionReady;
+        public boolean isStagedSessionReady;
         /** {@hide} */
-        public boolean isSessionFailed;
+        public boolean isStagedSessionFailed;
         private int mStagedSessionErrorCode;
         private String mStagedSessionErrorMessage;
 
@@ -1759,9 +1786,9 @@ public class PackageInstaller {
             if (childSessionIds == null) {
                 childSessionIds = NO_SESSIONS;
             }
-            isSessionApplied = source.readBoolean();
-            isSessionReady = source.readBoolean();
-            isSessionFailed = source.readBoolean();
+            isStagedSessionApplied = source.readBoolean();
+            isStagedSessionReady = source.readBoolean();
+            isStagedSessionFailed = source.readBoolean();
             mStagedSessionErrorCode = source.readInt();
             mStagedSessionErrorMessage = source.readString();
         }
@@ -2055,36 +2082,46 @@ public class PackageInstaller {
             return childSessionIds;
         }
 
+        private void checkSessionIsStaged() {
+            if (!isStaged) {
+                throw new IllegalStateException("Session is not marked as staged.");
+            }
+        }
+
         /**
          * Whether the staged session has been applied successfully, meaning that all of its
          * packages have been activated and no further action is required.
          * Only meaningful if {@code isStaged} is true.
          */
-        public boolean isSessionApplied() {
-            return isSessionApplied;
+        public boolean isStagedSessionApplied() {
+            checkSessionIsStaged();
+            return isStagedSessionApplied;
         }
 
         /**
          * Whether the staged session is ready to be applied at next reboot. Only meaningful if
          * {@code isStaged} is true.
          */
-        public boolean isSessionReady() {
-            return isSessionReady;
+        public boolean isStagedSessionReady() {
+            checkSessionIsStaged();
+            return isStagedSessionReady;
         }
 
         /**
          * Whether something went wrong and the staged session is declared as failed, meaning that
          * it will be ignored at next reboot. Only meaningful if {@code isStaged} is true.
          */
-        public boolean isSessionFailed() {
-            return isSessionFailed;
+        public boolean isStagedSessionFailed() {
+            checkSessionIsStaged();
+            return isStagedSessionFailed;
         }
 
         /**
          * If something went wrong with a staged session, clients can check this error code to
          * understand which kind of failure happened. Only meaningful if {@code isStaged} is true.
          */
-        public int getStagedSessionErrorCode() {
+        public @StagedSessionErrorCode int getStagedSessionErrorCode() {
+            checkSessionIsStaged();
             return mStagedSessionErrorCode;
         }
 
@@ -2093,6 +2130,7 @@ public class PackageInstaller {
          * empty string if no error was encountered.
          */
         public String getStagedSessionErrorMessage() {
+            checkSessionIsStaged();
             return mStagedSessionErrorMessage;
         }
 
@@ -2135,9 +2173,9 @@ public class PackageInstaller {
             dest.writeBoolean(isStaged);
             dest.writeInt(parentSessionId);
             dest.writeIntArray(childSessionIds);
-            dest.writeBoolean(isSessionApplied);
-            dest.writeBoolean(isSessionReady);
-            dest.writeBoolean(isSessionFailed);
+            dest.writeBoolean(isStagedSessionApplied);
+            dest.writeBoolean(isStagedSessionReady);
+            dest.writeBoolean(isStagedSessionFailed);
             dest.writeInt(mStagedSessionErrorCode);
             dest.writeString(mStagedSessionErrorMessage);
         }

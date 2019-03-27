@@ -28,7 +28,6 @@ import static org.junit.Assert.assertTrue;
 
 import android.platform.test.annotations.Presubmit;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
@@ -37,9 +36,8 @@ import org.junit.Test;
  * Tests for the {@link WindowToken} class.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:WindowTokenTests
+ *  atest WmTests:WindowTokenTests
  */
-@FlakyTest(bugId = 74078662)
 @SmallTest
 @Presubmit
 public class WindowTokenTests extends WindowTestsBase {

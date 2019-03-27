@@ -26,7 +26,6 @@ import static org.junit.Assert.assertTrue;
 import android.content.res.Configuration;
 import android.platform.test.annotations.Presubmit;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
@@ -35,9 +34,8 @@ import org.junit.Test;
  * Test class for {@link WindowContainerController}.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:WindowContainerControllerTests
+ *  atest WmTests:WindowContainerControllerTests
  */
-@FlakyTest(bugId = 74078662)
 @SmallTest
 @Presubmit
 public class WindowContainerControllerTests extends WindowTestsBase {

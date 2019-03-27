@@ -46,6 +46,8 @@ import android.util.ArrayMap;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
+
+import com.android.internal.annotations.Immutable;
 import com.android.internal.app.IAppOpsActiveCallback;
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsNotedCallback;
@@ -189,9 +191,19 @@ public class AppOpsManager {
 
     /**
      * Special mode that means "allow only when app is in foreground."  This is <b>not</b>
-     * returned from {@link #checkOp}, {@link #noteOp}, {@link #startOp}; rather, when this
-     * mode is set, these functions will return {@link #MODE_ALLOWED} when the app being
-     * checked is currently in the foreground, otherwise {@link #MODE_IGNORED}.
+     * returned from {@link #unsafeCheckOp}, {@link #noteOp}, {@link #startOp}.  Rather,
+     * {@link #unsafeCheckOp} will always return {@link #MODE_ALLOWED} (because it is always
+     * possible for it to be ultimately allowed, depending on the app's background state),
+     * and {@link #noteOp} and {@link #startOp} will return {@link #MODE_ALLOWED} when the app
+     * being checked is currently in the foreground, otherwise {@link #MODE_IGNORED}.
+     *
+     * <p>The only place you will this normally see this value is through
+     * {@link #unsafeCheckOpRaw}, which returns the actual raw mode of the op.  Note that because
+     * you can't know the current state of the app being checked (and it can change at any
+     * point), you can only treat the result here as an indication that it will vary between
+     * {@link #MODE_ALLOWED} and {@link #MODE_IGNORED} depending on changes in the background
+     * state of the app.  You thus must always use {@link #noteOp} or {@link #startOp} to do
+     * the actual check for access to the op.</p>
      */
     public static final int MODE_FOREGROUND = 4;
 
@@ -838,6 +850,7 @@ public class AppOpsManager {
     /** @hide Has a legacy (non-isolated) view of storage. */
     public static final String OPSTR_LEGACY_STORAGE = "android:legacy_storage";
     /** @hide Interact with accessibility. */
+    @SystemApi
     public static final String OPSTR_ACCESS_ACCESSIBILITY = "android:access_accessibility";
 
     // Warning: If an permission is added here it also has to be added to
@@ -2196,6 +2209,115 @@ public class AppOpsManager {
         void visitHistoricalUidOps(@NonNull HistoricalUidOps ops);
         void visitHistoricalPackageOps(@NonNull HistoricalPackageOps ops);
         void visitHistoricalOp(@NonNull HistoricalOp ops);
+    }
+
+    /**
+     * Request for getting historical app op usage. The request acts
+     * as a filtering criteria when querying historical op usage.
+     *
+     * @hide
+     */
+    @Immutable
+    @TestApi
+    @SystemApi
+    public static final class HistoricalOpsRequest {
+        private final int mUid;
+        private final @Nullable String mPackageName;
+        private final @Nullable List<String> mOpNames;
+        private final long mBeginTimeMillis;
+        private final long mEndTimeMillis;
+
+        private HistoricalOpsRequest(int uid, @Nullable String packageName,
+                @Nullable List<String> opNames, long beginTimeMillis, long endTimeMillis) {
+            mUid = uid;
+            mPackageName = packageName;
+            mOpNames = opNames;
+            mBeginTimeMillis = beginTimeMillis;
+            mEndTimeMillis = endTimeMillis;
+        }
+
+        /**
+         * Builder for creating a {@link HistoricalOpsRequest}.
+         *
+         * @hide
+         */
+        @TestApi
+        @SystemApi
+        public static final class Builder {
+            private int mUid = Process.INVALID_UID;
+            private @Nullable String mPackageName;
+            private @Nullable List<String> mOpNames;
+            private final long mBeginTimeMillis;
+            private final long mEndTimeMillis;
+
+            /**
+             * Creates a new builder.
+             *
+             * @param beginTimeMillis The beginning of the interval in milliseconds since
+             *     epoch start (January 1, 1970 00:00:00.000 GMT - Gregorian). Must be non
+             *     negative.
+             * @param endTimeMillis The end of the interval in milliseconds since
+             *     epoch start (January 1, 1970 00:00:00.000 GMT - Gregorian). Must be after
+             *     {@code beginTimeMillis}. Pass {@link Long#MAX_VALUE} to get the most recent
+             *     history including ops that happen while this call is in flight.
+             */
+            public Builder(long beginTimeMillis, long endTimeMillis) {
+                Preconditions.checkArgument(beginTimeMillis >= 0 && beginTimeMillis < endTimeMillis,
+                        "beginTimeMillis must be non negative and lesser than endTimeMillis");
+                mBeginTimeMillis = beginTimeMillis;
+                mEndTimeMillis = endTimeMillis;
+            }
+
+            /**
+             * Sets the UID to query for.
+             *
+             * @param uid The uid. Pass {@link android.os.Process#INVALID_UID} for any uid.
+             * @return This builder.
+             */
+            public @NonNull Builder setUid(int uid) {
+                Preconditions.checkArgument(uid == Process.INVALID_UID || uid >= 0,
+                        "uid must be " + Process.INVALID_UID + " or non negative");
+                mUid = uid;
+                return this;
+            }
+
+            /**
+             * Sets the package to query for.
+             *
+             * @param packageName The package name. <code>Null</code> for any package.
+             * @return This builder.
+             */
+            public @NonNull Builder setPackageName(@Nullable String packageName) {
+                mPackageName = packageName;
+                return this;
+            }
+
+            /**
+             * Sets the op names to query for.
+             *
+             * @param opNames The op names. <code>Null</code> for any op.
+             * @return This builder.
+             */
+            public @NonNull Builder setOpNames(@Nullable List<String> opNames) {
+                if (opNames != null) {
+                    final int opCount = opNames.size();
+                    for (int i = 0; i < opCount; i++) {
+                        Preconditions.checkArgument(AppOpsManager.strOpToOp(
+                                opNames.get(i)) != AppOpsManager.OP_NONE);
+                    }
+                }
+                mOpNames = opNames;
+                return this;
+            }
+
+            /**
+             * @return a new {@link HistoricalOpsRequest}.
+             */
+            public @NonNull HistoricalOpsRequest build() {
+                return new HistoricalOpsRequest(mUid, mPackageName, mOpNames,
+                        mBeginTimeMillis, mEndTimeMillis);
+            }
+        }
     }
 
     /**
@@ -3660,26 +3782,7 @@ public class AppOpsManager {
     /**
      * Retrieve historical app op stats for a period.
      *
-     * <p>Historical data can be obtained
-     * for a specific package by specifying the <code>packageName</code> argument,
-     * for a specific UID if specifying the <code>uid</code> argument, for a
-     * specific package in a UID by specifying the <code>packageName</code>
-     * and the <code>uid</code> arguments, for all packages by passing
-     * {@link android.os.Process#INVALID_UID} and <code>null</code> for the
-     *  <code>uid</code> and <code>packageName</code> arguments, respectively.
-     *  Similarly, you can specify the <code>opNames</code> argument to get
-     *  data only for these ops or <code>null</code> for all ops.
-     *
-     * @param uid The UID to query for.
-     * @param packageName The package to query for.
-     * @param beginTimeMillis The beginning of the interval in milliseconds since
-     *     epoch start (January 1, 1970 00:00:00.000 GMT - Gregorian). Must be non
-     *     negative.
-     * @param endTimeMillis The end of the interval in milliseconds since
-     *     epoch start (January 1, 1970 00:00:00.000 GMT - Gregorian). Must be after
-     *     {@code beginTimeMillis}. Pass {@link Long#MAX_VALUE} to get the most recent
-     *     history including ops that happen while this call is in flight.
-     * @param opNames The ops to query for. Pass {@code null} for all ops.
+     * @param request A request object describing the data being queried for.
      * @param executor Executor on which to run the callback. If <code>null</code>
      *     the callback is executed on the default executor running on the main thread.
      * @param callback Callback on which to deliver the result.
@@ -3691,13 +3794,13 @@ public class AppOpsManager {
     @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
-    public void getHistoricalOps(int uid, @Nullable String packageName,
-            @Nullable String[] opNames, long beginTimeMillis, long endTimeMillis,
+    public void getHistoricalOps(@NonNull HistoricalOpsRequest request,
             @NonNull Executor executor, @NonNull Consumer<HistoricalOps> callback) {
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
-            mService.getHistoricalOps(uid, packageName, opNames, beginTimeMillis, endTimeMillis,
+            mService.getHistoricalOps(request.mUid, request.mPackageName, request.mOpNames,
+                    request.mBeginTimeMillis, request.mEndTimeMillis,
                     new RemoteCallback((result) -> {
                 final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
                 final long identity = Binder.clearCallingIdentity();
@@ -3714,29 +3817,12 @@ public class AppOpsManager {
 
     /**
      * Retrieve historical app op stats for a period.
-     *
-     * <p>Historical data can be obtained
-     * for a specific package by specifying the <code>packageName</code> argument,
-     * for a specific UID if specifying the <code>uid</code> argument, for a
-     * specific package in a UID by specifying the <code>packageName</code>
-     * and the <code>uid</code> arguments, for all packages by passing
-     * {@link android.os.Process#INVALID_UID} and <code>null</code> for the
-     *  <code>uid</code> and <code>packageName</code> arguments, respectively.
-     *  Similarly, you can specify the <code>opNames</code> argument to get
-     *  data only for these ops or <code>null</code> for all ops.
      *  <p>
      *  This method queries only the on disk state and the returned ops are raw,
      *  which is their times are relative to the history start as opposed to the
      *  epoch start.
      *
-     * @param uid The UID to query for.
-     * @param packageName The package to query for.
-     * @param beginTimeMillis The beginning of the interval in milliseconds since
-     *      history start. History time grows as one goes into the past.
-     * @param endTimeMillis The end of the interval in milliseconds since
-     *      history start. History time grows as one goes into the past. Must be after
-     *     {@code beginTimeMillis}.
-     * @param opNames The ops to query for. Pass {@code null} for all ops.
+     * @param request A request object describing the data being queried for.
      * @param executor Executor on which to run the callback. If <code>null</code>
      *     the callback is executed on the default executor running on the main thread.
      * @param callback Callback on which to deliver the result.
@@ -3747,15 +3833,15 @@ public class AppOpsManager {
      */
     @TestApi
     @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
-    public void getHistoricalOpsFromDiskRaw(int uid, @Nullable String packageName,
-            @Nullable String[] opNames, long beginTimeMillis, long endTimeMillis,
+    public void getHistoricalOpsFromDiskRaw(@NonNull HistoricalOpsRequest request,
             @Nullable Executor executor, @NonNull Consumer<HistoricalOps> callback) {
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
-            mService.getHistoricalOpsFromDiskRaw(uid, packageName, opNames, beginTimeMillis,
-                    endTimeMillis, new RemoteCallback((result) -> {
-               final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
+            mService.getHistoricalOpsFromDiskRaw(request.mUid, request.mPackageName,
+                    request.mOpNames, request.mBeginTimeMillis, request.mEndTimeMillis,
+                    new RemoteCallback((result) -> {
+                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     executor.execute(() -> callback.accept(ops));
@@ -4280,9 +4366,32 @@ public class AppOpsManager {
     /**
      * Like {@link #noteProxyOp(String, String)} but instead
      * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * <p>This API requires the package with the {@code proxiedPackageName} to belongs to
+     * {@link Binder#getCallingUid()}.
      */
     public int noteProxyOpNoThrow(String op, String proxiedPackageName) {
         return noteProxyOpNoThrow(strOpToOp(op), proxiedPackageName);
+    }
+
+    /**
+     * Like {@link #noteProxyOp(String, String)} but instead
+     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * <p>This API requires package with the {@code proxiedPackageName} to belong to
+     * {@code proxiedUid}.
+     *
+     * @param op The op to note
+     * @param proxiedPackageName The package to note the op for or {@code null} if the op should be
+     *                           noted for the "android" package
+     * @param proxiedUid The uid the package belongs to
+     *
+     * @hide
+     */
+    @SystemApi
+    public int noteProxyOpNoThrow(@NonNull String op, @Nullable String proxiedPackageName,
+            int proxiedUid) {
+        return noteProxyOpNoThrow(strOpToOp(op), proxiedPackageName, proxiedUid);
     }
 
     /**
@@ -4484,13 +4593,27 @@ public class AppOpsManager {
      * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
      * @hide
      */
-    public int noteProxyOpNoThrow(int op, String proxiedPackageName) {
+    public int noteProxyOpNoThrow(int op, String proxiedPackageName, int proxiedUid) {
+        logOperationIfNeeded(op, mContext.getOpPackageName(), proxiedPackageName);
         try {
             return mService.noteProxyOperation(op, Process.myUid(), mContext.getOpPackageName(),
-                    Binder.getCallingUid(), proxiedPackageName);
+                    proxiedUid, proxiedPackageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Like {@link #noteProxyOp(int, String)} but instead
+     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * <p>This API requires the package with {@code proxiedPackageName} to belongs to
+     * {@link Binder#getCallingUid()}.
+     *
+     * @hide
+     */
+    public int noteProxyOpNoThrow(int op, String proxiedPackageName) {
+        return noteProxyOpNoThrow(op, proxiedPackageName, Binder.getCallingUid());
     }
 
     /**
@@ -4500,7 +4623,7 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int noteOpNoThrow(int op, int uid, String packageName) {
-        logNoteOpIfNeeded(op, packageName);
+        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.noteOperation(op, uid, packageName);
         } catch (RemoteException e) {
@@ -4608,6 +4731,7 @@ public class AppOpsManager {
      * @hide
      */
     public int startOpNoThrow(int op, int uid, String packageName, boolean startIfModeDefault) {
+        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.startOperation(getToken(mService), op, uid, packageName,
                     startIfModeDefault);
@@ -4624,6 +4748,7 @@ public class AppOpsManager {
      * @hide
      */
     public void finishOp(int op, int uid, String packageName) {
+        logOperationIfNeeded(op, packageName, null);
         try {
             mService.finishOperation(getToken(mService), op, uid, packageName);
         } catch (RemoteException e) {
@@ -4870,7 +4995,7 @@ public class AppOpsManager {
         return AppOpsManager.MODE_DEFAULT;
     }
 
-    private static void logNoteOpIfNeeded(int op, String callingPackage) {
+    private static void logOperationIfNeeded(int op, String callingPackage, String proxiedPackage) {
         // Check if debug logging propety is enabled.
         if (!SystemProperties.getBoolean(DEBUG_LOGGING_ENABLE_PROP, false)) {
             return;
@@ -4908,6 +5033,6 @@ public class AppOpsManager {
         // Log a stack trace
         Exception here = new Exception("HERE!");
         android.util.Log.i(DEBUG_LOGGING_TAG, "Note operation package= " + callingPackage
-                + " op= " + opStr, here);
+                + " proxied= " + proxiedPackage + " op= " + opStr, here);
     }
 }

@@ -54,8 +54,8 @@ import com.android.systemui.statusbar.InflationTask;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.row.NotificationGuts;
-import com.android.systemui.statusbar.notification.row.NotificationInflater;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -105,6 +105,14 @@ public final class NotificationEntry {
     /** Smart replies provided by the NotificationAssistantService. */
     @NonNull
     public CharSequence[] systemGeneratedSmartReplies = new CharSequence[0];
+
+    /**
+     * If {@link android.app.RemoteInput#getEditChoicesBeforeSending} is enabled, and the user is
+     * currently editing a choice (smart reply), then this field contains the information about the
+     * suggestion being edited. Otherwise <code>null</code>.
+     */
+    public EditedSuggestionInfo editedSuggestionInfo;
+
     @VisibleForTesting
     public int suppressedVisualEffects;
     public boolean suspended;
@@ -141,6 +149,12 @@ public final class NotificationEntry {
      * Whether this notification should be displayed as a bubble.
      */
     private boolean mIsBubble;
+
+    /**
+     * Whether this notification has been approved globally, at the app level, and at the channel
+     * level for bubbling.
+     */
+    public boolean canBubble;
 
     /**
      * Whether this notification should be shown in the shade when it is also displayed as a bubble.
@@ -189,6 +203,7 @@ public final class NotificationEntry {
                 : ranking.getSmartReplies().toArray(new CharSequence[0]);
         suppressedVisualEffects = ranking.getSuppressedVisualEffects();
         suspended = ranking.isSuspended();
+        canBubble = ranking.canBubble();
     }
 
     public void setInterruption() {
@@ -500,7 +515,7 @@ public final class NotificationEntry {
         if (row != null) row.resetUserExpansion();
     }
 
-    public void freeContentViewWhenSafe(@NotificationInflater.InflationFlag int inflationFlag) {
+    public void freeContentViewWhenSafe(@InflationFlag int inflationFlag) {
         if (row != null) row.freeContentViewWhenSafe(inflationFlag);
     }
 
@@ -607,10 +622,6 @@ public final class NotificationEntry {
         return null;
     }
 
-    public boolean hasLowPriorityStateUpdated() {
-        return row != null && row.hasLowPriorityStateUpdated();
-    }
-
     public void removeRow() {
         if (row != null) row.setRemoved();
     }
@@ -633,10 +644,6 @@ public final class NotificationEntry {
 
     public boolean isChildInGroup() {
         return parent == null;
-    }
-
-    public void setLowPriorityStateUpdated(boolean updated) {
-        if (row != null) row.setLowPriorityStateUpdated(updated);
     }
 
     /**
@@ -745,5 +752,24 @@ public final class NotificationEntry {
 
     private static boolean isCategory(String category, Notification n) {
         return Objects.equals(n.category, category);
+    }
+
+    /** Information about a suggestion that is being edited. */
+    public static class EditedSuggestionInfo {
+
+        /**
+         * The value of the suggestion (before any user edits).
+         */
+        public final CharSequence originalText;
+
+        /**
+         * The index of the suggestion that is being edited.
+         */
+        public final int index;
+
+        public EditedSuggestionInfo(CharSequence originalText, int index) {
+            this.originalText = originalText;
+            this.index = index;
+        }
     }
 }

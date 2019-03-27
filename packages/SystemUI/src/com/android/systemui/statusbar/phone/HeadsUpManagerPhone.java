@@ -38,9 +38,9 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.ScreenDecorations;
 import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
@@ -139,10 +139,6 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
 
     public void setAnimationStateHandler(AnimationStateHandler handler) {
         mAnimationStateHandler = handler;
-    }
-
-    public void destroy() {
-        Dependency.get(StatusBarStateController.class).removeCallback(this);
     }
 
     private void initResources() {

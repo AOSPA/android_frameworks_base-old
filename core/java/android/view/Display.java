@@ -21,6 +21,7 @@ import static android.Manifest.permission.CONFIGURE_DISPLAY_COLOR_MODE;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.KeyguardManager;
 import android.content.res.CompatibilityInfo;
@@ -32,6 +33,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerGlobal;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Process;
@@ -75,7 +77,7 @@ public final class Display {
     private final int mLayerStack;
     private final int mFlags;
     private final int mType;
-    private final String mAddress;
+    private final DisplayAddress mAddress;
     private final int mOwnerUid;
     private final String mOwnerPackageName;
     private final Resources mResources;
@@ -495,7 +497,7 @@ public final class Display {
      * @return True if the display is still valid.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public boolean getDisplayInfo(DisplayInfo outDisplayInfo) {
         synchronized (this) {
             updateDisplayInfoLocked();
@@ -556,7 +558,7 @@ public final class Display {
      * @hide
      */
     @UnsupportedAppUsage
-    public String getAddress() {
+    public DisplayAddress getAddress() {
         return mAddress;
     }
 
@@ -910,6 +912,7 @@ public final class Display {
      * @see #FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
      * @hide
      */
+    @TestApi
     // TODO (b/114338689): Remove the method and use IWindowManager#shouldShowSystemDecors
     public boolean supportsSystemDecorations() {
         return (mDisplayInfo.flags & FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS) != 0;

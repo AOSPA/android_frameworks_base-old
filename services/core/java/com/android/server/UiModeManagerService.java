@@ -30,13 +30,17 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.BatteryManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.PowerManager;
+import android.os.PowerManager.ServiceType;
+import android.os.PowerManagerInternal;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
@@ -161,9 +165,6 @@ final class UiModeManagerService extends SystemService {
                 case Intent.ACTION_BATTERY_CHANGED:
                     mCharging = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
                     break;
-                case PowerManager.ACTION_POWER_SAVE_MODE_CHANGING:
-                    mPowerSave = intent.getBooleanExtra(PowerManager.EXTRA_POWER_SAVE_MODE, false);
-                    break;
             }
             synchronized (mLock) {
                 if (mSystemReady) {
@@ -208,8 +209,23 @@ final class UiModeManagerService extends SystemService {
         context.registerReceiver(mDockModeReceiver,
                 new IntentFilter(Intent.ACTION_DOCK_EVENT));
         IntentFilter batteryFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        batteryFilter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGING);
         context.registerReceiver(mBatteryReceiver, batteryFilter);
+
+        PowerManagerInternal localPowerManager =
+                LocalServices.getService(PowerManagerInternal.class);
+        mPowerSave = localPowerManager.getLowPowerState(ServiceType.NIGHT_MODE).batterySaverEnabled;
+        localPowerManager.registerLowPowerModeObserver(ServiceType.NIGHT_MODE,
+                state -> {
+                    synchronized (mLock) {
+                        if (mPowerSave == state.batterySaverEnabled) {
+                            return;
+                        }
+                        mPowerSave = state.batterySaverEnabled;
+                        if (mSystemReady) {
+                            updateLocked(0, 0);
+                        }
+                    }
+                });
 
         mConfiguration.setToDefaults();
 
@@ -340,8 +356,12 @@ final class UiModeManagerService extends SystemService {
             try {
                 synchronized (mLock) {
                     if (mNightMode != mode) {
-                        Settings.Secure.putIntForUser(getContext().getContentResolver(),
-                                Settings.Secure.UI_NIGHT_MODE, mode, user);
+                        // Only persist setting if not transient night mode or not in car mode
+                        if (!shouldTransientNightWhenInCarMode() || !mCarModeEnabled) {
+                            Settings.Secure.putIntForUser(getContext().getContentResolver(),
+                                    Settings.Secure.UI_NIGHT_MODE, mode, user);
+                        }
+
                         mNightMode = mode;
                         updateLocked(0, 0);
                     }
@@ -424,9 +444,39 @@ final class UiModeManagerService extends SystemService {
         }
     }
 
+    // Night mode settings in car mode are only persisted below Q.
+    // When targeting Q, changes are not saved and night mode will be re-read
+    // from settings when exiting car mode.
+    private boolean shouldTransientNightWhenInCarMode() {
+        int uid = Binder.getCallingUid();
+        PackageManager packageManager = getContext().getPackageManager();
+        String[] packagesForUid = packageManager.getPackagesForUid(uid);
+        if (packagesForUid == null || packagesForUid.length == 0) {
+            return false;
+        }
+
+        try {
+            ApplicationInfo appInfo = packageManager.getApplicationInfoAsUser(
+                    packagesForUid[0], 0, uid);
+
+            return appInfo.targetSdkVersion >= Build.VERSION_CODES.Q;
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
+
+        return false;
+    }
+
     void setCarModeLocked(boolean enabled, int flags) {
         if (mCarModeEnabled != enabled) {
             mCarModeEnabled = enabled;
+
+            // When transient night mode and exiting car mode, restore night mode from settings
+            if (shouldTransientNightWhenInCarMode() && !mCarModeEnabled) {
+                Context context = getContext();
+                updateNightModeFromSettings(context,
+                        context.getResources(),
+                        UserHandle.getCallingUserId());
+            }
         }
         mCarModeEnableFlags = flags;
     }
@@ -484,7 +534,9 @@ final class UiModeManagerService extends SystemService {
             uiMode |= mNightMode << 4;
         }
 
-        if (mPowerSave) {
+        // Override night mode in power save mode if not transient night mode or not in car mode
+        boolean shouldOverrideNight = !mCarModeEnabled || !shouldTransientNightWhenInCarMode();
+        if (mPowerSave && shouldOverrideNight) {
             uiMode &= ~Configuration.UI_MODE_NIGHT_NO;
             uiMode |= Configuration.UI_MODE_NIGHT_YES;
         }

@@ -110,13 +110,30 @@ BootAnimation::BootAnimation(sp<Callbacks> callbacks)
     } else {
         mShuttingDown = true;
     }
+    ALOGD("%sAnimationStartTiming start time: %" PRId64 "ms", mShuttingDown ? "Shutdown" : "Boot",
+            elapsedRealtime());
+}
+
+BootAnimation::~BootAnimation() {
+    if (mAnimation != nullptr) {
+        releaseAnimation(mAnimation);
+        mAnimation = nullptr;
+    }
+    ALOGD("%sAnimationStopTiming start time: %" PRId64 "ms", mShuttingDown ? "Shutdown" : "Boot",
+            elapsedRealtime());
 }
 
 void BootAnimation::onFirstRef() {
     status_t err = mSession->linkToComposerDeath(this);
     SLOGE_IF(err, "linkToComposerDeath failed (%s) ", strerror(-err));
     if (err == NO_ERROR) {
-        run("BootAnimation", PRIORITY_DISPLAY);
+        // Load the animation content -- this can be slow (eg 200ms)
+        // called before waitForSurfaceFlinger() in main() to avoid wait
+        ALOGD("%sAnimationPreloadTiming start time: %" PRId64 "ms",
+                mShuttingDown ? "Shutdown" : "Boot", elapsedRealtime());
+        preloadAnimation();
+        ALOGD("%sAnimationPreloadStopTiming start time: %" PRId64 "ms",
+                mShuttingDown ? "Shutdown" : "Boot", elapsedRealtime());
     }
 }
 
@@ -252,10 +269,12 @@ status_t BootAnimation::initTexture(FileMap* map, int* width, int* height)
 status_t BootAnimation::readyToRun() {
     mAssets.addDefaultAssets();
 
-    sp<IBinder> dtoken(SurfaceComposerClient::getBuiltInDisplay(
-            ISurfaceComposer::eDisplayIdMain));
+    mDisplayToken = SurfaceComposerClient::getInternalDisplayToken();
+    if (mDisplayToken == nullptr)
+        return -1;
+
     DisplayInfo dinfo;
-    status_t status = SurfaceComposerClient::getDisplayInfo(dtoken, &dinfo);
+    status_t status = SurfaceComposerClient::getDisplayInfo(mDisplayToken, &dinfo);
     if (status)
         return -1;
 
@@ -304,6 +323,20 @@ status_t BootAnimation::readyToRun() {
     mFlingerSurface = s;
     mTargetInset = -1;
 
+    return NO_ERROR;
+}
+
+bool BootAnimation::preloadAnimation() {
+    findBootAnimationFile();
+    if (!mZipFileName.isEmpty()) {
+        mAnimation = loadAnimation(mZipFileName);
+        return (mAnimation != nullptr);
+    }
+
+    return false;
+}
+
+void BootAnimation::findBootAnimationFile() {
     // If the device has encryption turned on or is in process
     // of being encrypted we show the encrypted boot animation.
     char decrypt[PROPERTY_VALUE_MAX];
@@ -318,7 +351,7 @@ status_t BootAnimation::readyToRun() {
         for (const char* f : encryptedBootFiles) {
             if (access(f, R_OK) == 0) {
                 mZipFileName = f;
-                return NO_ERROR;
+                return;
             }
         }
     }
@@ -330,10 +363,9 @@ status_t BootAnimation::readyToRun() {
     for (const char* f : (!mShuttingDown ? bootFiles : shutdownFiles)) {
         if (access(f, R_OK) == 0) {
             mZipFileName = f;
-            return NO_ERROR;
+            return;
         }
     }
-    return NO_ERROR;
 }
 
 bool BootAnimation::threadLoop()
@@ -788,8 +820,6 @@ bool BootAnimation::preloadZip(Animation& animation)
         }
     }
 
-    mCallbacks->init(animation.parts);
-
     zip->endIteration(cookie);
 
     return true;
@@ -797,13 +827,25 @@ bool BootAnimation::preloadZip(Animation& animation)
 
 bool BootAnimation::movie()
 {
-    Animation* animation = loadAnimation(mZipFileName);
-    if (animation == NULL)
+    if (mAnimation == nullptr) {
+        mAnimation = loadAnimation(mZipFileName);
+    }
+
+    if (mAnimation == nullptr)
         return false;
 
+    // mCallbacks->init() may get called recursively,
+    // this loop is needed to get the same results
+    for (const Animation::Part& part : mAnimation->parts) {
+        if (part.animation != nullptr) {
+            mCallbacks->init(part.animation->parts);
+        }
+    }
+    mCallbacks->init(mAnimation->parts);
+
     bool anyPartHasClock = false;
-    for (size_t i=0; i < animation->parts.size(); i++) {
-        if(validClock(animation->parts[i])) {
+    for (size_t i=0; i < mAnimation->parts.size(); i++) {
+        if(validClock(mAnimation->parts[i])) {
             anyPartHasClock = true;
             break;
         }
@@ -844,7 +886,7 @@ bool BootAnimation::movie()
     bool clockFontInitialized = false;
     if (mClockEnabled) {
         clockFontInitialized =
-            (initFont(&animation->clockFont, CLOCK_FONT_ASSET) == NO_ERROR);
+            (initFont(&mAnimation->clockFont, CLOCK_FONT_ASSET) == NO_ERROR);
         mClockEnabled = clockFontInitialized;
     }
 
@@ -853,7 +895,7 @@ bool BootAnimation::movie()
         mTimeCheckThread->run("BootAnimation::TimeCheckThread", PRIORITY_NORMAL);
     }
 
-    playAnimation(*animation);
+    playAnimation(*mAnimation);
 
     if (mTimeCheckThread != nullptr) {
         mTimeCheckThread->requestExit();
@@ -861,10 +903,11 @@ bool BootAnimation::movie()
     }
 
     if (clockFontInitialized) {
-        glDeleteTextures(1, &animation->clockFont.texture.name);
+        glDeleteTextures(1, &mAnimation->clockFont.texture.name);
     }
 
-    releaseAnimation(animation);
+    releaseAnimation(mAnimation);
+    mAnimation = nullptr;
 
     return false;
 }
@@ -1014,16 +1057,13 @@ void BootAnimation::handleViewport(nsecs_t timestep) {
         // At the end of the animation, we switch to the viewport that DisplayManager will apply
         // later. This changes the coordinate system, and means we must move the surface up by
         // the inset amount.
-        sp<IBinder> dtoken(SurfaceComposerClient::getBuiltInDisplay(
-                ISurfaceComposer::eDisplayIdMain));
-
         Rect layerStackRect(0, 0, mWidth, mHeight - mTargetInset);
         Rect displayRect(0, mTargetInset, mWidth, mHeight);
 
         SurfaceComposerClient::Transaction t;
         t.setPosition(mFlingerSurfaceControl, 0, -mTargetInset)
                 .setCrop(mFlingerSurfaceControl, Rect(0, mTargetInset, mWidth, mHeight));
-        t.setDisplayProjection(dtoken, 0 /* orientation */, layerStackRect, displayRect);
+        t.setDisplayProjection(mDisplayToken, 0 /* orientation */, layerStackRect, displayRect);
         t.apply();
 
         mTargetInset = mCurrentInset = 0;

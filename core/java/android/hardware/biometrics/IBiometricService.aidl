@@ -49,12 +49,12 @@ interface IBiometricService {
     // Client lifecycle is still managed in <Biometric>Service.
     void onReadyForAuthentication(int cookie, boolean requireConfirmation, int userId);
 
-    // Reset the timeout when user authenticates with strong auth (e.g. PIN, pattern or password)
-    void resetTimeout(in byte [] token);
+    // Reset the lockout when user authenticates with strong auth (e.g. PIN, pattern or password)
+    void resetLockout(in byte [] token);
 
     // TODO(b/123378871): Remove when moved.
     // CDCA needs to send results to BiometricService if it was invoked using BiometricPrompt's
-    // setEnableFallback method, since there's no way for us to intercept onActivityResult.
+    // setAllowDeviceCredential method, since there's no way for us to intercept onActivityResult.
     // CDCA is launched from BiometricService (startActivityAsUser) instead of *ForResult.
     void onConfirmDeviceCredentialSuccess();
     // TODO(b/123378871): Remove when moved.

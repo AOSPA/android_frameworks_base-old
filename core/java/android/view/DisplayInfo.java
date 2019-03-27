@@ -27,6 +27,7 @@ import android.annotation.UnsupportedAppUsage;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.ArraySet;
@@ -60,7 +61,7 @@ public final class DisplayInfo implements Parcelable {
      * Display address, or null if none.
      * Interpretation varies by display type.
      */
-    public String address;
+    public DisplayAddress address;
 
     /**
      * The human-readable name of the display.
@@ -157,8 +158,9 @@ public final class DisplayInfo implements Parcelable {
      *
      * @hide
      */
+    // Remark on @UnsupportedAppUsage: Display.getCutout should be used instead
     @Nullable
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public DisplayCutout displayCutout;
 
     /**
@@ -281,7 +283,7 @@ public final class DisplayInfo implements Parcelable {
         }
     };
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769467)
     public DisplayInfo() {
     }
 
@@ -383,7 +385,7 @@ public final class DisplayInfo implements Parcelable {
         layerStack = source.readInt();
         flags = source.readInt();
         type = source.readInt();
-        address = source.readString();
+        address = source.readParcelable(null);
         name = source.readString();
         appWidth = source.readInt();
         appHeight = source.readInt();
@@ -430,7 +432,7 @@ public final class DisplayInfo implements Parcelable {
         dest.writeInt(layerStack);
         dest.writeInt(this.flags);
         dest.writeInt(type);
-        dest.writeString(address);
+        dest.writeParcelable(address, flags);
         dest.writeString(name);
         dest.writeInt(appWidth);
         dest.writeInt(appHeight);

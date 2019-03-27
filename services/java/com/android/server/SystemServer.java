@@ -36,6 +36,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources.Theme;
 import android.database.sqlite.SQLiteCompatibilityWalFlags;
 import android.database.sqlite.SQLiteGlobal;
+import android.net.NetworkStackClient;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
@@ -65,6 +66,7 @@ import android.util.EventLog;
 import android.util.Slog;
 import android.util.TimingsTraceLog;
 import android.view.WindowManager;
+import android.view.contentcapture.ContentCaptureManager;
 import android.view.inputmethod.InputMethodSystemProperty;
 
 import com.android.internal.R;
@@ -88,8 +90,8 @@ import com.android.server.clipboard.ClipboardService;
 import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.coverage.CoverageService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
-import com.android.server.display.ColorDisplayService;
 import com.android.server.display.DisplayManagerService;
+import com.android.server.display.color.ColorDisplayService;
 import com.android.server.dreams.DreamManagerService;
 import com.android.server.emergency.EmergencyAffordanceService;
 import com.android.server.gpu.GpuService;
@@ -280,6 +282,8 @@ public final class SystemServer {
     private static final String UNCRYPT_PACKAGE_FILE = "/cache/recovery/uncrypt_file";
     private static final String BLOCK_MAP_FILE = "/cache/recovery/block.map";
 
+    private static final String GSI_RUNNING_PROP = "ro.gsid.image_running";
+
     // maximum number of binder threads used for system_server
     // will be higher than the system default
     private static final int sMaxBinderThreads = 31;
@@ -310,6 +314,7 @@ public final class SystemServer {
 
     private boolean mOnlyCore;
     private boolean mFirstBoot;
+    private final int mStartCount;
     private final boolean mRuntimeRestart;
     private final long mRuntimeStartElapsedTime;
     private final long mRuntimeStartUptime;
@@ -317,6 +322,9 @@ public final class SystemServer {
     private static final String START_SENSOR_SERVICE = "StartSensorService";
     private static final String START_HIDL_SERVICES = "StartHidlServices";
 
+    private static final String SYSPROP_START_COUNT = "sys.system_server.start_count";
+    private static final String SYSPROP_START_ELAPSED = "sys.system_server.start_elapsed";
+    private static final String SYSPROP_START_UPTIME = "sys.system_server.start_uptime";
 
     private Future<?> mSensorServiceStart;
     private Future<?> mZygotePreload;
@@ -346,16 +354,33 @@ public final class SystemServer {
     public SystemServer() {
         // Check for factory test mode.
         mFactoryTestMode = FactoryTest.getMode();
-        // Remember if it's runtime restart(when sys.boot_completed is already set) or reboot
-        mRuntimeRestart = "1".equals(SystemProperties.get("sys.boot_completed"));
 
+        // Record process start information.
+        // Note SYSPROP_START_COUNT will increment by *2* on a FDE device when it fully boots;
+        // one for the password screen, second for the actual boot.
+        mStartCount = SystemProperties.getInt(SYSPROP_START_COUNT, 0) + 1;
         mRuntimeStartElapsedTime = SystemClock.elapsedRealtime();
         mRuntimeStartUptime = SystemClock.uptimeMillis();
+
+        // Remember if it's runtime restart(when sys.boot_completed is already set) or reboot
+        // We don't use "mStartCount > 1" here because it'll be wrong on a FDE device.
+        // TODO: mRuntimeRestart will *not* be set to true if the proccess crashes before
+        // sys.boot_completed is set. Fix it.
+        mRuntimeRestart = "1".equals(SystemProperties.get("sys.boot_completed"));
     }
 
     private void run() {
         try {
             traceBeginAndSlog("InitBeforeStartServices");
+
+            // Record the process start information in sys props.
+            SystemProperties.set(SYSPROP_START_COUNT, String.valueOf(mStartCount));
+            SystemProperties.set(SYSPROP_START_ELAPSED, String.valueOf(mRuntimeStartElapsedTime));
+            SystemProperties.set(SYSPROP_START_UPTIME, String.valueOf(mRuntimeStartUptime));
+
+            EventLog.writeEvent(EventLogTags.SYSTEM_SERVER_START,
+                    mStartCount, mRuntimeStartUptime, mRuntimeStartElapsedTime);
+
             // If a device's clock is before 1970 (before 0), a lot of
             // APIs crash dealing with negative numbers, notably
             // java.io.File#setLastModified, so instead we fake it and
@@ -1172,7 +1197,8 @@ public final class SystemServer {
             traceEnd();
 
             final boolean hasPdb = !SystemProperties.get(PERSISTENT_DATA_BLOCK_PROP).equals("");
-            if (hasPdb) {
+            final boolean hasGsi = SystemProperties.getInt(GSI_RUNNING_PROP, 0) > 0;
+            if (hasPdb && !hasGsi) {
                 traceBeginAndSlog("StartPersistentDataBlock");
                 mSystemServiceManager.startService(PersistentDataBlockService.class);
                 traceEnd();
@@ -1292,47 +1318,45 @@ public final class SystemServer {
             }
             traceEnd();
 
-            if (!mOnlyCore) {
-                if (context.getPackageManager().hasSystemFeature(
-                        PackageManager.FEATURE_WIFI)) {
-                    // Wifi Service must be started first for wifi-related services.
-                    traceBeginAndSlog("StartWifi");
-                    mSystemServiceManager.startService(WIFI_SERVICE_CLASS);
-                    traceEnd();
-                    traceBeginAndSlog("StartWifiScanning");
-                    mSystemServiceManager.startService(
-                            "com.android.server.wifi.scanner.WifiScanningService");
-                    traceEnd();
-                }
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI)) {
+                // Wifi Service must be started first for wifi-related services.
+                traceBeginAndSlog("StartWifi");
+                mSystemServiceManager.startService(WIFI_SERVICE_CLASS);
+                traceEnd();
+                traceBeginAndSlog("StartWifiScanning");
+                mSystemServiceManager.startService(
+                        "com.android.server.wifi.scanner.WifiScanningService");
+                traceEnd();
+            }
 
-                if (context.getPackageManager().hasSystemFeature(
-                        PackageManager.FEATURE_WIFI_RTT)) {
-                    traceBeginAndSlog("StartRttService");
-                    mSystemServiceManager.startService(
-                            "com.android.server.wifi.rtt.RttService");
-                    traceEnd();
-                }
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI_RTT)) {
+                traceBeginAndSlog("StartRttService");
+                mSystemServiceManager.startService(
+                        "com.android.server.wifi.rtt.RttService");
+                traceEnd();
+            }
 
-                if (context.getPackageManager().hasSystemFeature(
-                        PackageManager.FEATURE_WIFI_AWARE)) {
-                    traceBeginAndSlog("StartWifiAware");
-                    mSystemServiceManager.startService(WIFI_AWARE_SERVICE_CLASS);
-                    traceEnd();
-                }
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI_AWARE)) {
+                traceBeginAndSlog("StartWifiAware");
+                mSystemServiceManager.startService(WIFI_AWARE_SERVICE_CLASS);
+                traceEnd();
+            }
 
-                if (context.getPackageManager().hasSystemFeature(
-                        PackageManager.FEATURE_WIFI_DIRECT)) {
-                    traceBeginAndSlog("StartWifiP2P");
-                    mSystemServiceManager.startService(WIFI_P2P_SERVICE_CLASS);
-                    traceEnd();
-                }
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI_DIRECT)) {
+                traceBeginAndSlog("StartWifiP2P");
+                mSystemServiceManager.startService(WIFI_P2P_SERVICE_CLASS);
+                traceEnd();
+            }
 
-                if (context.getPackageManager().hasSystemFeature(
-                        PackageManager.FEATURE_LOWPAN)) {
-                    traceBeginAndSlog("StartLowpan");
-                    mSystemServiceManager.startService(LOWPAN_SERVICE_CLASS);
-                    traceEnd();
-                }
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_LOWPAN)) {
+                traceBeginAndSlog("StartLowpan");
+                mSystemServiceManager.startService(LOWPAN_SERVICE_CLASS);
+                traceEnd();
             }
 
             if (enableWigig) {
@@ -1385,9 +1409,7 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartNetworkStack");
             try {
-                final android.net.NetworkStack networkStack =
-                        context.getSystemService(android.net.NetworkStack.class);
-                networkStack.start(context);
+                NetworkStackClient.getInstance().start(context);
             } catch (Throwable e) {
                 reportWtf("starting Network Stack", e);
             }
@@ -2270,33 +2292,30 @@ public final class SystemServer {
     }
 
     private void startContentCaptureService(@NonNull Context context) {
-        // Check if it was explicitly enabled by DeviceConfig
-        final String settings = DeviceConfig.getProperty(DeviceConfig.ContentCapture.NAMESPACE,
-                DeviceConfig.ContentCapture.PROPERTY_CONTENTCAPTURE_ENABLED);
-        if (settings == null) {
-            // Better be safe than sorry...
-            Slog.d(TAG, "ContentCaptureService disabled because its not set by OEM");
-            return;
-        }
-        switch (settings) {
-            case "always":
-                // Should be used only during development
+        // First check if it was explicitly enabled by DeviceConfig
+        boolean explicitlyEnabled = false;
+        String settings = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_CONTENT_CAPTURE,
+                ContentCaptureManager.DEVICE_CONFIG_PROPERTY_SERVICE_EXPLICITLY_ENABLED);
+        if (settings != null && !settings.equalsIgnoreCase("default")) {
+            explicitlyEnabled = Boolean.parseBoolean(settings);
+            if (explicitlyEnabled) {
                 Slog.d(TAG, "ContentCaptureService explicitly enabled by DeviceConfig");
-                break;
-            case "default":
-                // Default case: check if OEM overlaid the resource that defines the service.
-                final String serviceName = context.getString(
-                        com.android.internal.R.string.config_defaultContentCaptureService);
-                if (TextUtils.isEmpty(serviceName)) {
-                    Slog.d(TAG, "ContentCaptureService disabled because resource is not overlaid");
-                    return;
-                }
-                break;
-            default:
-                // Kill switch for OEMs
-                Slog.d(TAG, "ContentCaptureService disabled because its set to: " + settings);
+            } else {
+                Slog.d(TAG, "ContentCaptureService explicitly disabled by DeviceConfig");
                 return;
+            }
         }
+
+        // Then check if OEM overlaid the resource that defines the service.
+        if (!explicitlyEnabled) {
+            final String serviceName = context
+                    .getString(com.android.internal.R.string.config_defaultContentCaptureService);
+            if (TextUtils.isEmpty(serviceName)) {
+                Slog.d(TAG, "ContentCaptureService disabled because resource is not overlaid");
+                return;
+            }
+        }
+
         traceBeginAndSlog("StartContentCaptureService");
         mSystemServiceManager.startService(CONTENT_CAPTURE_MANAGER_SERVICE_CLASS);
         traceEnd();

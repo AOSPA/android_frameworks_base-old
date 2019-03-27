@@ -89,7 +89,6 @@ interface ILocationManager
     List<String> getProviders(in Criteria criteria, boolean enabledOnly);
     String getBestProvider(in Criteria criteria, boolean enabledOnly);
     ProviderProperties getProviderProperties(String provider);
-    String getNetworkProviderPackage();
     boolean isProviderPackage(String packageName);
 
     void setLocationControllerExtraPackage(String packageName);
@@ -115,6 +114,7 @@ interface ILocationManager
     // for reporting callback completion
     void locationCallbackFinished(ILocationListener listener);
 
-    // used by gts tests to verify throttling whitelist
+    // used by gts tests to verify whitelists
     String[] getBackgroundThrottlingWhitelist();
+    String[] getIgnoreSettingsWhitelist();
 }

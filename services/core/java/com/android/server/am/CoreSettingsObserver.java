@@ -56,6 +56,8 @@ final class CoreSettingsObserver extends ContentObserver {
 
         sGlobalSettingToTypeMap.put(Settings.Global.DEBUG_VIEW_ATTRIBUTES, int.class);
         sGlobalSettingToTypeMap.put(
+                Settings.Global.DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE, String.class);
+        sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE, String.class);
         sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS, String.class);
@@ -63,6 +65,8 @@ final class CoreSettingsObserver extends ContentObserver {
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES, String.class);
         sGlobalSettingToTypeMap.put(
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_WHITELIST, String.class);
+        sGlobalSettingToTypeMap.put(
+                Settings.Global.GLOBAL_SETTINGS_SHOW_ANGLE_IN_USE_DIALOG_BOX, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.ENABLE_GPU_DEBUG_LAYERS, int.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_APP, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_LAYERS, String.class);
@@ -74,6 +78,8 @@ final class CoreSettingsObserver extends ContentObserver {
         sGlobalSettingToTypeMap.put(Settings.Global.GAME_DRIVER_OPT_OUT_APPS, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GAME_DRIVER_BLACKLIST, String.class);
         sGlobalSettingToTypeMap.put(Settings.Global.GAME_DRIVER_WHITELIST, String.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.GAME_DRIVER_BLACKLISTS, String.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.GAME_DRIVER_SPHAL_LIBRARIES, String.class);
         // add other global settings here...
     }
 

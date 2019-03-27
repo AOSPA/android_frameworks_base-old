@@ -31,7 +31,7 @@ import android.os.SystemClock;
 import android.service.autofill.augmented.AugmentedAutofillService;
 import android.service.autofill.augmented.IAugmentedAutofillService;
 import android.service.autofill.augmented.IFillCallback;
-import android.text.format.DateUtils;
+import android.util.Pair;
 import android.util.Slog;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
@@ -47,17 +47,24 @@ final class RemoteAugmentedAutofillService
 
     private static final String TAG = RemoteAugmentedAutofillService.class.getSimpleName();
 
-    private static final long TIMEOUT_REMOTE_REQUEST_MILLIS = 2 * DateUtils.SECOND_IN_MILLIS;
+    private final int mIdleUnbindTimeoutMs;
+    private final int mRequestTimeoutMs;
 
     RemoteAugmentedAutofillService(Context context, ComponentName serviceName,
             int userId, RemoteAugmentedAutofillServiceCallbacks callbacks,
-            boolean bindInstantServiceAllowed, boolean verbose) {
+            boolean bindInstantServiceAllowed, boolean verbose, int idleUnbindTimeoutMs,
+            int requestTimeoutMs) {
         super(context, AugmentedAutofillService.SERVICE_INTERFACE, serviceName, userId, callbacks,
                 bindInstantServiceAllowed, verbose);
+        mIdleUnbindTimeoutMs = idleUnbindTimeoutMs;
+        mRequestTimeoutMs = requestTimeoutMs;
+
+        // Bind right away.
+        scheduleBind();
     }
 
     @Nullable
-    public static ComponentName getComponentName(@NonNull String componentName,
+    static Pair<ServiceInfo, ComponentName> getComponentName(@NonNull String componentName,
             @UserIdInt int userId, boolean isTemporary) {
         int flags = PackageManager.GET_META_DATA;
         if (!isTemporary) {
@@ -78,7 +85,23 @@ final class RemoteAugmentedAutofillService
             Slog.e(TAG, "Error getting service info for '" + componentName + "': " + e);
             return null;
         }
-        return serviceComponent;
+        return new Pair<>(serviceInfo, serviceComponent);
+    }
+
+    @Override // from RemoteService
+    protected void handleOnConnectedStateChanged(boolean state) {
+        if (state && getTimeoutIdleBindMillis() != PERMANENT_BOUND_TIMEOUT_MS) {
+            scheduleUnbind();
+        }
+        try {
+            if (state) {
+                mService.onConnected();
+            } else {
+                mService.onDisconnected();
+            }
+        } catch (Exception e) {
+            Slog.w(mTag, "Exception calling onConnectedStateChanged(" + state + "): " + e);
+        }
     }
 
     @Override // from AbstractRemoteService
@@ -88,12 +111,12 @@ final class RemoteAugmentedAutofillService
 
     @Override // from AbstractRemoteService
     protected long getTimeoutIdleBindMillis() {
-        return PERMANENT_BOUND_TIMEOUT_MS;
+        return mIdleUnbindTimeoutMs;
     }
 
     @Override // from AbstractRemoteService
     protected long getRemoteRequestMillis() {
-        return TIMEOUT_REMOTE_REQUEST_MILLIS;
+        return mRequestTimeoutMs;
     }
 
     /**
@@ -104,6 +127,12 @@ final class RemoteAugmentedAutofillService
             @Nullable AutofillValue focusedValue) {
         scheduleRequest(new PendingAutofillRequest(this, sessionId, client, taskId,
                 activityComponent, focusedId, focusedValue));
+    }
+
+    @Override
+    public String toString() {
+        return "RemoteAugmentedAutofillService["
+                + ComponentName.flattenToShortString(getComponentName()) + "]";
     }
 
     /**
@@ -181,11 +210,13 @@ final class RemoteAugmentedAutofillService
 
         @Override
         protected void onTimeout(RemoteAugmentedAutofillService remoteService) {
-            Slog.wtf(TAG, "timed out: " + this);
+            // TODO(b/122858578): must update the logged AUTOFILL_AUGMENTED_REQUEST with the
+            // timeout
+            Slog.w(TAG, "PendingAutofillRequest timed out (" + remoteService.mRequestTimeoutMs
+                    + "ms) for " + remoteService);
             // NOTE: so far we don't need notify RemoteAugmentedAutofillServiceCallbacks
             finish();
         }
-
     }
 
     public interface RemoteAugmentedAutofillServiceCallbacks

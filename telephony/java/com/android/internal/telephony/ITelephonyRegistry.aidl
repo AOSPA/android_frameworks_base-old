@@ -81,9 +81,9 @@ interface ITelephonyRegistry {
     void notifyCarrierNetworkChange(in boolean active);
     void notifyUserMobileDataStateChangedForPhoneId(in int phoneId, in int subId, in boolean state);
     void notifyPhoneCapabilityChanged(in PhoneCapability capability);
-    void notifyPreferredDataSubIdChanged(int preferredSubId);
+    void notifyActiveDataSubIdChanged(int activeDataSubId);
     void notifyRadioPowerStateChanged(in int state);
     void notifyEmergencyNumberList();
-    void notifyCallQualityChanged(in CallQuality callQuality, int phoneId);
+    void notifyCallQualityChanged(in CallQuality callQuality, int phoneId, int callNetworkType);
     void notifyImsDisconnectCause(int subId, in ImsReasonInfo imsReasonInfo);
 }

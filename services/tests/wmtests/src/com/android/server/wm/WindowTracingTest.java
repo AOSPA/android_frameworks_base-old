@@ -34,8 +34,8 @@ import android.content.Context;
 import android.platform.test.annotations.Presubmit;
 import android.testing.DexmakerShareClassLoaderRule;
 import android.util.proto.ProtoOutputStream;
+import android.view.Choreographer;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.util.Preconditions;
@@ -58,9 +58,8 @@ import java.nio.charset.StandardCharsets;
  * Test class for {@link WindowTracing}.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:WindowTracingTest
+ *  atest WmTests:WindowTracingTest
  */
-@FlakyTest(bugId = 74078662)
 @SmallTest
 @Presubmit
 public class WindowTracingTest {
@@ -75,6 +74,8 @@ public class WindowTracingTest {
 
     @Mock
     private WindowManagerService mWmMock;
+    @Mock
+    private Choreographer mChoreographer;
     private WindowTracing mWindowTracing;
     private File mFile;
 
@@ -86,7 +87,8 @@ public class WindowTracingTest {
         mFile = testContext.getFileStreamPath("tracing_test.dat");
         mFile.delete();
 
-        mWindowTracing = new WindowTracing(mFile);
+        mWindowTracing = new WindowTracing(mFile, mWmMock, mChoreographer,
+                new WindowManagerGlobalLock(), 1024);
     }
 
     @After
@@ -100,13 +102,13 @@ public class WindowTracingTest {
     }
 
     @Test
-    public void isEnabled_returnsTrueAfterStart() throws Exception {
+    public void isEnabled_returnsTrueAfterStart() {
         mWindowTracing.startTrace(mock(PrintWriter.class));
         assertTrue(mWindowTracing.isEnabled());
     }
 
     @Test
-    public void isEnabled_returnsFalseAfterStop() throws Exception {
+    public void isEnabled_returnsFalseAfterStop() {
         mWindowTracing.startTrace(mock(PrintWriter.class));
         mWindowTracing.stopTrace(mock(PrintWriter.class));
         assertFalse(mWindowTracing.isEnabled());
@@ -114,15 +116,14 @@ public class WindowTracingTest {
 
     @Test
     public void trace_discared_whenNotTracing() {
-        mWindowTracing.traceStateLocked("where", mWmMock);
+        mWindowTracing.logState("where");
         verifyZeroInteractions(mWmMock);
     }
 
     @Test
     public void trace_dumpsWindowManagerState_whenTracing() throws Exception {
         mWindowTracing.startTrace(mock(PrintWriter.class));
-        mWindowTracing.traceStateLocked("where", mWmMock);
-
+        mWindowTracing.logState("where");
         verify(mWmMock).writeToProtoLocked(any(), eq(WindowTraceLogLevel.TRIM));
     }
 
@@ -130,6 +131,8 @@ public class WindowTracingTest {
     public void traceFile_startsWithMagicHeader() throws Exception {
         mWindowTracing.startTrace(mock(PrintWriter.class));
         mWindowTracing.stopTrace(mock(PrintWriter.class));
+
+        assertTrue("Trace file should exist", mFile.exists());
 
         byte[] header = new byte[MAGIC_HEADER.length];
         try (InputStream is = new FileInputStream(mFile)) {
@@ -148,7 +151,7 @@ public class WindowTracingTest {
                     WindowManagerTraceProto.WHERE, "TEST_WM_PROTO");
             return null;
         }).when(mWmMock).writeToProtoLocked(any(), any());
-        mWindowTracing.traceStateLocked("TEST_WHERE", mWmMock);
+        mWindowTracing.logState("TEST_WHERE");
 
         mWindowTracing.stopTrace(mock(PrintWriter.class));
 

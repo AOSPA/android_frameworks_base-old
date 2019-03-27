@@ -28,6 +28,7 @@ import static android.provider.DeviceConfig.ActivityManager.KEY_USE_COMPACTION;
 
 import android.app.ActivityManager;
 import android.app.ActivityThread;
+import android.os.Debug;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Process;
@@ -55,6 +56,8 @@ public final class AppCompactor {
     private static final int COMPACT_ACTION_FILE_FLAG = 1;
     private static final int COMPACT_ACTION_ANON_FLAG = 2;
     private static final int COMPACT_ACTION_FULL_FLAG = 3;
+    private static final int COMPACT_ACTION_NONE_FLAG = 4;
+    private static final String COMPACT_ACTION_NONE = "";
     private static final String COMPACT_ACTION_FILE = "file";
     private static final String COMPACT_ACTION_ANON = "anon";
     private static final String COMPACT_ACTION_FULL = "all";
@@ -170,6 +173,9 @@ public final class AppCompactor {
             updateCompactionThrottles();
             updateStatsdSampleRate();
         }
+        Process.setThreadGroupAndCpuset(mCompactionThread.getThreadId(),
+                Process.THREAD_GROUP_SYSTEM);
+
     }
 
     /**
@@ -317,6 +323,8 @@ public final class AppCompactor {
     @VisibleForTesting
     static String compactActionIntToString(int action) {
         switch(action) {
+            case COMPACT_ACTION_NONE_FLAG:
+                return COMPACT_ACTION_NONE;
             case COMPACT_ACTION_FILE_FLAG:
                 return COMPACT_ACTION_FILE;
             case COMPACT_ACTION_ANON_FLAG:
@@ -324,7 +332,7 @@ public final class AppCompactor {
             case COMPACT_ACTION_FULL_FLAG:
                 return COMPACT_ACTION_FULL;
             default:
-                return COMPACT_ACTION_FILE;
+                return COMPACT_ACTION_NONE;
         }
     }
 
@@ -395,10 +403,15 @@ public final class AppCompactor {
                         action = mCompactActionFull;
                     }
 
+                    if (action.equals(COMPACT_ACTION_NONE)) {
+                        return;
+                    }
+
                     try {
                         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Compact "
                                 + ((pendingAction == COMPACT_PROCESS_SOME) ? "some" : "full")
                                 + ": " + name);
+                        long zramFreeKbBefore = Debug.getZramFreeKb();
                         long[] rssBefore = Process.getRss(pid);
                         FileOutputStream fos = new FileOutputStream("/proc/" + pid + "/reclaim");
                         fos.write(action.getBytes());
@@ -406,10 +419,12 @@ public final class AppCompactor {
                         long[] rssAfter = Process.getRss(pid);
                         long end = SystemClock.uptimeMillis();
                         long time = end - start;
+                        long zramFreeKbAfter = Debug.getZramFreeKb();
                         EventLog.writeEvent(EventLogTags.AM_COMPACT, pid, name, action,
                                 rssBefore[0], rssBefore[1], rssBefore[2], rssBefore[3],
                                 rssAfter[0], rssAfter[1], rssAfter[2], rssAfter[3], time,
-                                lastCompactAction, lastCompactTime, msg.arg1, msg.arg2);
+                                lastCompactAction, lastCompactTime, msg.arg1, msg.arg2,
+                                zramFreeKbBefore, zramFreeKbAfter);
                         // Note that as above not taking mPhenoTypeFlagLock here to avoid locking
                         // on every single compaction for a flag that will seldom change and the
                         // impact of reading the wrong value here is low.
@@ -418,7 +433,8 @@ public final class AppCompactor {
                                     rssBefore[0], rssBefore[1], rssBefore[2], rssBefore[3],
                                     rssAfter[0], rssAfter[1], rssAfter[2], rssAfter[3], time,
                                     lastCompactAction, lastCompactTime, msg.arg1,
-                                    ActivityManager.processStateAmToProto(msg.arg2));
+                                    ActivityManager.processStateAmToProto(msg.arg2),
+                                    zramFreeKbBefore, zramFreeKbAfter);
                         }
                         synchronized (mAm) {
                             proc.lastCompactTime = end;

@@ -16,6 +16,9 @@
 
 package com.android.internal.app;
 
+import static java.lang.annotation.RetentionPolicy.SOURCE;
+
+import android.annotation.IntDef;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.prediction.AppPredictionContext;
@@ -27,6 +30,7 @@ import android.app.prediction.AppTargetId;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -42,13 +46,17 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
+import android.content.res.Configuration;
+import android.database.Cursor;
 import android.database.DataSetObserver;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.metrics.LogMaker;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -63,6 +71,9 @@ import android.os.ResultReceiver;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
+import android.provider.DocumentsContract;
+import android.provider.Downloads;
+import android.provider.OpenableColumns;
 import android.service.chooser.ChooserTarget;
 import android.service.chooser.ChooserTargetService;
 import android.service.chooser.IChooserTargetResult;
@@ -81,7 +92,6 @@ import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.AbsListView;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -93,11 +103,13 @@ import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.util.ImageUtils;
 
 import com.google.android.collect.Lists;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.annotation.Retention;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -173,6 +185,18 @@ public class ChooserActivity extends ResolverActivity {
     private static final int CHOOSER_TARGET_SERVICE_WATCHDOG_TIMEOUT = 2;
     private static final int SHORTCUT_MANAGER_SHARE_TARGET_RESULT = 3;
     private static final int SHORTCUT_MANAGER_SHARE_TARGET_RESULT_COMPLETED = 4;
+
+    @Retention(SOURCE)
+    @IntDef({CONTENT_PREVIEW_FILE, CONTENT_PREVIEW_IMAGE, CONTENT_PREVIEW_TEXT})
+    private @interface ContentPreviewType {
+    }
+
+    // Starting at 1 since 0 is considered "undefined" for some of the database transformations
+    // of tron logs.
+    private static final int CONTENT_PREVIEW_IMAGE = 1;
+    private static final int CONTENT_PREVIEW_FILE = 2;
+    private static final int CONTENT_PREVIEW_TEXT = 3;
+    protected MetricsLogger mMetricsLogger;
 
     private final Handler mChooserHandler = new Handler() {
         @Override
@@ -353,55 +377,14 @@ public class ChooserActivity extends ResolverActivity {
         super.onCreate(savedInstanceState, target, title, defaultTitleRes, initialIntents,
                 null, false);
 
-        Button copyButton = findViewById(R.id.copy_button);
-        copyButton.setOnClickListener(view -> {
-            Intent targetIntent = getTargetIntent();
-            if (targetIntent == null) {
-                finish();
-            } else {
-                final String action = targetIntent.getAction();
-
-                ClipData clipData = null;
-                if (Intent.ACTION_SEND.equals(action)) {
-                    String extraText = targetIntent.getStringExtra(Intent.EXTRA_TEXT);
-                    Uri extraStream = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
-
-                    if (extraText != null) {
-                        clipData = ClipData.newPlainText(null, extraText);
-                    } else if (extraStream != null) {
-                        clipData = ClipData.newUri(getContentResolver(), null, extraStream);
-                    } else {
-                        Log.w(TAG, "No data available to copy to clipboard");
-                        return;
-                    }
-                } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
-                    final ArrayList<Uri> streams = targetIntent.getParcelableArrayListExtra(
-                            Intent.EXTRA_STREAM);
-                    clipData = ClipData.newUri(getContentResolver(), null, streams.get(0));
-                    for (int i = 1; i < streams.size(); i++) {
-                        clipData.addItem(getContentResolver(), new ClipData.Item(streams.get(i)));
-                    }
-                } else {
-                    // expected to only be visible with ACTION_SEND or ACTION_SEND_MULTIPLE
-                    // so warn about unexpected action
-                    Log.w(TAG, "Action (" + action + ") not supported for copying to clipboard");
-                    return;
-                }
-
-                ClipboardManager clipboardManager = (ClipboardManager) getSystemService(
-                        Context.CLIPBOARD_SERVICE);
-                clipboardManager.setPrimaryClip(clipData);
-                Toast.makeText(getApplicationContext(), R.string.copied, Toast.LENGTH_SHORT).show();
-
-                finish();
-            }
-        });
-
-        MetricsLogger.action(this, MetricsEvent.ACTION_ACTIVITY_CHOOSER_SHOWN);
-
         mChooserShownTime = System.currentTimeMillis();
         final long systemCost = mChooserShownTime - intentReceivedTime;
-        MetricsLogger.histogram(null, "system_cost_for_smart_sharing", (int) systemCost);
+
+        getMetricsLogger().write(new LogMaker(MetricsEvent.ACTION_ACTIVITY_CHOOSER_SHOWN)
+                .setSubtype(isWorkProfile() ? MetricsEvent.MANAGED_PROFILE :
+                        MetricsEvent.PARENT_PROFILE)
+                .addTaggedData(MetricsEvent.FIELD_SHARESHEET_MIMETYPE, target.getType())
+                .addTaggedData(MetricsEvent.FIELD_TIME_TO_APP_TARGETS, systemCost));
 
         if (USE_PREDICTION_MANAGER_FOR_DIRECT_TARGETS) {
             final IntentFilter filter = getTargetIntentFilter();
@@ -437,6 +420,16 @@ public class ChooserActivity extends ResolverActivity {
     }
 
     /**
+     * Check if the profile currently used is a work profile.
+     * @return true if it is work profile, false if it is parent profile (or no work profile is
+     * set up)
+     */
+    protected boolean isWorkProfile() {
+        return ((UserManager) getSystemService(Context.USER_SERVICE))
+                .getUserInfo(UserHandle.myUserId()).isManagedProfile();
+    }
+
+    /**
      * Override method to add content preview area, specific to the chooser activity.
      */
     @Override
@@ -448,18 +441,108 @@ public class ChooserActivity extends ResolverActivity {
             return;
         }
 
-        ViewGroup contentPreviewLayout = findViewById(R.id.content_preview);
         String action = targetIntent.getAction();
         if (!(Intent.ACTION_SEND.equals(action) || Intent.ACTION_SEND_MULTIPLE.equals(action))) {
-            contentPreviewLayout.setVisibility(View.GONE);
             return;
         }
 
-        showDefaultContentPreview(contentPreviewLayout, targetIntent);
+        if (mChooserListAdapter == null || mChooserListAdapter.getCount() == 0) {
+            return;
+        }
+
+        int previewType = findPreferredContentPreview(targetIntent, getContentResolver());
+
+        getMetricsLogger().write(new LogMaker(MetricsEvent.ACTION_SHARE_WITH_PREVIEW)
+                .setSubtype(previewType));
+        displayContentPreview(previewType, targetIntent);
     }
 
-    private void showDefaultContentPreview(final ViewGroup parentLayout,
-            final Intent targetIntent) {
+    private void onCopyButtonClicked(View v) {
+        Intent targetIntent = getTargetIntent();
+        if (targetIntent == null) {
+            finish();
+        } else {
+            final String action = targetIntent.getAction();
+
+            ClipData clipData = null;
+            if (Intent.ACTION_SEND.equals(action)) {
+                String extraText = targetIntent.getStringExtra(Intent.EXTRA_TEXT);
+                Uri extraStream = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
+
+                if (extraText != null) {
+                    clipData = ClipData.newPlainText(null, extraText);
+                } else if (extraStream != null) {
+                    clipData = ClipData.newUri(getContentResolver(), null, extraStream);
+                } else {
+                    Log.w(TAG, "No data available to copy to clipboard");
+                    return;
+                }
+            } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
+                final ArrayList<Uri> streams = targetIntent.getParcelableArrayListExtra(
+                        Intent.EXTRA_STREAM);
+                clipData = ClipData.newUri(getContentResolver(), null, streams.get(0));
+                for (int i = 1; i < streams.size(); i++) {
+                    clipData.addItem(getContentResolver(), new ClipData.Item(streams.get(i)));
+                }
+            } else {
+                // expected to only be visible with ACTION_SEND or ACTION_SEND_MULTIPLE
+                // so warn about unexpected action
+                Log.w(TAG, "Action (" + action + ") not supported for copying to clipboard");
+                return;
+            }
+
+            ClipboardManager clipboardManager = (ClipboardManager) getSystemService(
+                    Context.CLIPBOARD_SERVICE);
+            clipboardManager.setPrimaryClip(clipData);
+            Toast.makeText(getApplicationContext(), R.string.copied, Toast.LENGTH_SHORT).show();
+
+            finish();
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+
+        int width = -1;
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            width = getResources().getDimensionPixelSize(R.dimen.chooser_preview_width);
+        }
+
+        updateLayoutWidth(R.id.content_preview_text_layout, width);
+        updateLayoutWidth(R.id.content_preview_title_layout, width);
+        updateLayoutWidth(R.id.content_preview_file_layout, width);
+    }
+
+    private void updateLayoutWidth(int layoutResourceId, int width) {
+        View view = findViewById(layoutResourceId);
+        LayoutParams params = view.getLayoutParams();
+        params.width = width;
+        view.setLayoutParams(params);
+    }
+
+    private void displayContentPreview(@ContentPreviewType int previewType, Intent targetIntent) {
+        switch (previewType) {
+            case CONTENT_PREVIEW_TEXT:
+                displayTextContentPreview(targetIntent);
+                break;
+            case CONTENT_PREVIEW_IMAGE:
+                displayImageContentPreview(targetIntent);
+                break;
+            case CONTENT_PREVIEW_FILE:
+                displayFileContentPreview(targetIntent);
+                break;
+            default:
+                Log.e(TAG, "Unexpected content preview type: " + previewType);
+        }
+    }
+
+    private void displayTextContentPreview(Intent targetIntent) {
+        ViewGroup contentPreviewLayout = findViewById(R.id.content_preview_text_area);
+        contentPreviewLayout.setVisibility(View.VISIBLE);
+
+        findViewById(R.id.copy_button).setOnClickListener(this::onCopyButtonClicked);
+
         CharSequence sharingText = targetIntent.getCharSequenceExtra(Intent.EXTRA_TEXT);
         if (sharingText == null) {
             findViewById(R.id.content_preview_text_layout).setVisibility(View.GONE);
@@ -469,7 +552,7 @@ public class ChooserActivity extends ResolverActivity {
         }
 
         String previewTitle = targetIntent.getStringExtra(Intent.EXTRA_TITLE);
-        if (previewTitle == null || previewTitle.trim().isEmpty()) {
+        if (TextUtils.isEmpty(previewTitle)) {
             findViewById(R.id.content_preview_title_layout).setVisibility(View.GONE);
         } else {
             TextView previewTitleView = findViewById(R.id.content_preview_title);
@@ -496,6 +579,215 @@ public class ChooserActivity extends ResolverActivity {
                 }
             }
         }
+    }
+
+    private void displayImageContentPreview(Intent targetIntent) {
+        ViewGroup contentPreviewLayout = findViewById(R.id.content_preview_image_area);
+        contentPreviewLayout.setVisibility(View.VISIBLE);
+
+        String action = targetIntent.getAction();
+        if (Intent.ACTION_SEND.equals(action)) {
+            Uri uri = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
+            loadUriIntoView(R.id.content_preview_image_1_large, uri);
+        } else {
+            ContentResolver resolver = getContentResolver();
+
+            List<Uri> uris = targetIntent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            List<Uri> imageUris = new ArrayList<>();
+            for (Uri uri : uris) {
+                if (isImageType(resolver.getType(uri))) {
+                    imageUris.add(uri);
+                }
+            }
+
+            if (imageUris.size() == 0) {
+                Log.i(TAG, "Attempted to display image preview area with zero"
+                        + " available images detected in EXTRA_STREAM list");
+                contentPreviewLayout.setVisibility(View.GONE);
+                return;
+            }
+
+            loadUriIntoView(R.id.content_preview_image_1_large, imageUris.get(0));
+
+            if (imageUris.size() == 2) {
+                loadUriIntoView(R.id.content_preview_image_2_large, imageUris.get(1));
+            } else if (imageUris.size() > 2) {
+                loadUriIntoView(R.id.content_preview_image_2_small, imageUris.get(1));
+                RoundedRectImageView imageView = loadUriIntoView(
+                        R.id.content_preview_image_3_small, imageUris.get(2));
+
+                if (imageUris.size() > 3) {
+                    imageView.setExtraImageCount(imageUris.size() - 3);
+                }
+            }
+        }
+    }
+
+    private static class FileInfo {
+        public final String name;
+        public final boolean hasThumbnail;
+
+        FileInfo(String name, boolean hasThumbnail) {
+            this.name = name;
+            this.hasThumbnail = hasThumbnail;
+        }
+    }
+
+    /**
+     * Wrapping the ContentResolver call to expose for easier mocking,
+     * and to avoid mocking Android core classes.
+     */
+    @VisibleForTesting
+    public Cursor queryResolver(ContentResolver resolver, Uri uri) {
+        return resolver.query(uri, null, null, null, null);
+    }
+
+    private FileInfo extractFileInfo(Uri uri, ContentResolver resolver) {
+        String fileName = null;
+        boolean hasThumbnail = false;
+
+        try (Cursor cursor = queryResolver(resolver, uri)) {
+            if (cursor != null && cursor.getCount() > 0) {
+                int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                int titleIndex = cursor.getColumnIndex(Downloads.Impl.COLUMN_TITLE);
+                int flagsIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS);
+
+                cursor.moveToFirst();
+                if (nameIndex != -1) {
+                    fileName = cursor.getString(nameIndex);
+                } else if (titleIndex != -1) {
+                    fileName = cursor.getString(titleIndex);
+                }
+
+                if (flagsIndex != -1) {
+                    hasThumbnail = (cursor.getInt(flagsIndex)
+                            & DocumentsContract.Document.FLAG_SUPPORTS_THUMBNAIL) != 0;
+                }
+            }
+        } catch (SecurityException e) {
+            Log.w(TAG, "Error loading file preview", e);
+        }
+
+        if (TextUtils.isEmpty(fileName)) {
+            fileName = uri.getPath();
+            int index = fileName.lastIndexOf('/');
+            if (index != -1) {
+                fileName = fileName.substring(index + 1);
+            }
+        }
+
+        return new FileInfo(fileName, hasThumbnail);
+    }
+
+    private void displayFileContentPreview(Intent targetIntent) {
+        ViewGroup contentPreviewLayout = findViewById(R.id.content_preview_file_area);
+        contentPreviewLayout.setVisibility(View.VISIBLE);
+
+        // TODO(b/120417119): Disable file copy until after moving to sysui,
+        // due to permissions issues
+        findViewById(R.id.file_copy_button).setVisibility(View.GONE);
+
+        String action = targetIntent.getAction();
+        if (Intent.ACTION_SEND.equals(action)) {
+            Uri uri = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
+            loadFileUriIntoView(uri);
+        } else {
+            List<Uri> uris = targetIntent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            int uriCount = uris.size();
+
+            if (uriCount == 0) {
+                contentPreviewLayout.setVisibility(View.GONE);
+                Log.i(TAG,
+                        "Appears to be no uris available in EXTRA_STREAM, removing "
+                                + "preview area");
+                return;
+            } else if (uriCount == 1) {
+                loadFileUriIntoView(uris.get(0));
+            } else {
+                FileInfo fileInfo = extractFileInfo(uris.get(0), getContentResolver());
+                int remUriCount = uriCount - 1;
+                String fileName = getResources().getQuantityString(R.plurals.file_count,
+                        remUriCount, fileInfo.name, remUriCount);
+
+                TextView fileNameView = findViewById(R.id.content_preview_filename);
+                fileNameView.setText(fileName);
+
+                ImageView fileIconView = findViewById(R.id.content_preview_file_icon);
+                fileIconView.setVisibility(View.VISIBLE);
+                fileIconView.setImageResource(R.drawable.ic_file_copy);
+            }
+        }
+    }
+
+    private void loadFileUriIntoView(Uri uri) {
+        FileInfo fileInfo = extractFileInfo(uri, getContentResolver());
+
+        TextView fileNameView = findViewById(R.id.content_preview_filename);
+        fileNameView.setText(fileInfo.name);
+
+        if (fileInfo.hasThumbnail) {
+            loadUriIntoView(R.id.content_preview_file_thumbnail, uri);
+        } else {
+            ImageView fileIconView = findViewById(R.id.content_preview_file_icon);
+            fileIconView.setVisibility(View.VISIBLE);
+            fileIconView.setImageResource(R.drawable.ic_doc_generic);
+        }
+    }
+
+    private RoundedRectImageView loadUriIntoView(int imageResourceId, Uri uri) {
+        RoundedRectImageView imageView = findViewById(imageResourceId);
+        Bitmap bmp = loadThumbnail(uri, new Size(200, 200));
+        if (bmp != null) {
+            imageView.setVisibility(View.VISIBLE);
+            imageView.setImageBitmap(bmp);
+        }
+
+        return imageView;
+    }
+
+    @VisibleForTesting
+    protected boolean isImageType(String mimeType) {
+        return mimeType != null && mimeType.startsWith("image/");
+    }
+
+    @ContentPreviewType
+    private int findPreferredContentPreview(Uri uri, ContentResolver resolver) {
+        if (uri == null) {
+            return CONTENT_PREVIEW_TEXT;
+        }
+
+        String mimeType = resolver.getType(uri);
+        return isImageType(mimeType) ? CONTENT_PREVIEW_IMAGE : CONTENT_PREVIEW_FILE;
+    }
+
+    /**
+     * In {@link android.content.Intent#getType}, the app may specify a very general
+     * mime-type that broadly covers all data being shared, such as {@literal *}/*
+     * when sending an image and text. We therefore should inspect each item for the
+     * the preferred type, in order of IMAGE, FILE, TEXT.
+     */
+    @ContentPreviewType
+    private int findPreferredContentPreview(Intent targetIntent, ContentResolver resolver) {
+        String action = targetIntent.getAction();
+        if (Intent.ACTION_SEND.equals(action)) {
+            Uri uri = targetIntent.getParcelableExtra(Intent.EXTRA_STREAM);
+            return findPreferredContentPreview(uri, resolver);
+        } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
+            List<Uri> uris = targetIntent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            if (uris == null || uris.isEmpty()) {
+                return CONTENT_PREVIEW_TEXT;
+            }
+
+            for (Uri uri : uris) {
+                if (findPreferredContentPreview(uri, resolver) == CONTENT_PREVIEW_IMAGE) {
+                    return CONTENT_PREVIEW_IMAGE;
+                }
+            }
+
+            return CONTENT_PREVIEW_FILE;
+        }
+
+        return CONTENT_PREVIEW_TEXT;
     }
 
     static SharedPreferences getPinnedSharedPrefs(Context context) {
@@ -1048,6 +1340,13 @@ public class ChooserActivity extends ResolverActivity {
         }
     }
 
+    protected MetricsLogger getMetricsLogger() {
+        if (mMetricsLogger == null) {
+            mMetricsLogger = new MetricsLogger();
+        }
+        return mMetricsLogger;
+    }
+
     public class ChooserListController extends ResolverListController {
         public ChooserListController(Context context,
                 PackageManager pm,
@@ -1114,8 +1413,8 @@ public class ChooserActivity extends ResolverActivity {
         }
 
         try {
-            return getContentResolver().loadThumbnail(uri, size, null);
-        } catch (IOException | NullPointerException ex) {
+            return ImageUtils.loadThumbnail(getContentResolver(), uri, size);
+        } catch (IOException | NullPointerException | SecurityException ex) {
             Log.w(TAG, "Error loading preview thumbnail for uri: " + uri.toString(), ex);
         }
         return null;
@@ -1593,6 +1892,8 @@ public class ChooserActivity extends ResolverActivity {
             if (show != mShowServiceTargets) {
                 mShowServiceTargets = show;
                 notifyDataSetChanged();
+                getMetricsLogger().write(
+                        new LogMaker(MetricsEvent.ACTION_ACTIVITY_CHOOSER_SHOWN_DIRECT_TARGET));
             }
         }
 
@@ -1751,8 +2052,6 @@ public class ChooserActivity extends ResolverActivity {
             }
 
             if (startType == ChooserListAdapter.TARGET_SERVICE) {
-                holder.row.setBackgroundColor(
-                        getColor(R.color.chooser_service_row_background_color));
                 int nextStartType = mChooserListAdapter.getPositionTargetType(
                         getFirstRowPosition(rowPosition + 1));
                 int serviceSpacing = holder.row.getContext().getResources()
@@ -2045,6 +2344,9 @@ public class ChooserActivity extends ResolverActivity {
     public static class RoundedRectImageView extends ImageView {
         private int mRadius = 0;
         private Path mPath = new Path();
+        private Paint mOverlayPaint = new Paint(0);
+        private Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private String mExtraImageCount = null;
 
         public RoundedRectImageView(Context context) {
             super(context);
@@ -2062,6 +2364,14 @@ public class ChooserActivity extends ResolverActivity {
                 int defStyleRes) {
             super(context, attrs, defStyleAttr, defStyleRes);
             mRadius = context.getResources().getDimensionPixelSize(R.dimen.chooser_corner_radius);
+
+            mOverlayPaint.setColor(0x99000000);
+            mOverlayPaint.setStyle(Paint.Style.FILL);
+
+            mTextPaint.setColor(Color.WHITE);
+            mTextPaint.setTextSize(context.getResources()
+                    .getDimensionPixelSize(R.dimen.chooser_preview_image_font_size));
+            mTextPaint.setTextAlign(Paint.Align.CENTER);
         }
 
         private void updatePath(int width, int height) {
@@ -2083,11 +2393,23 @@ public class ChooserActivity extends ResolverActivity {
             updatePath(getWidth(), getHeight());
         }
 
+        /**
+          * Display an overlay with extra image count on 3rd image
+          */
+        public void setExtraImageCount(int count) {
+            if (count > 0) {
+                this.mExtraImageCount = "+" + count;
+            } else {
+                this.mExtraImageCount = null;
+            }
+        }
+
         @Override
         protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
             super.onSizeChanged(width, height, oldWidth, oldHeight);
             updatePath(width, height);
         }
+
 
         @Override
         protected void onDraw(Canvas canvas) {
@@ -2096,6 +2418,16 @@ public class ChooserActivity extends ResolverActivity {
             }
 
             super.onDraw(canvas);
+
+            if (mExtraImageCount != null) {
+                canvas.drawRect(0, 0, canvas.getWidth(), canvas.getHeight(), mOverlayPaint);
+
+                int xPos = canvas.getWidth() / 2;
+                int yPos = (int) ((canvas.getHeight() / 2.0f)
+                        - ((mTextPaint.descent() + mTextPaint.ascent()) / 2.0f));
+
+                canvas.drawText(mExtraImageCount, xPos, yPos, mTextPaint);
+            }
         }
     }
 }

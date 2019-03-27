@@ -51,27 +51,33 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 
 import android.annotation.SuppressLint;
+import android.app.WindowConfiguration;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.metrics.LogMaker;
 import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
 import android.util.DisplayMetrics;
 import android.view.DisplayCutout;
-import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.Surface;
+import android.view.ViewRootImpl;
+import android.view.test.InsetsModeSession;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -83,18 +89,21 @@ import java.util.List;
  * Tests for the {@link DisplayContent} class.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:DisplayContentTests
+ *  atest WmTests:DisplayContentTests
  */
 @SmallTest
 @Presubmit
 public class DisplayContentTests extends WindowTestsBase {
 
     @Test
-    @FlakyTest(bugId = 77772044)
     public void testForAllWindows() {
         final WindowState exitingAppWindow = createWindow(null, TYPE_BASE_APPLICATION,
                 mDisplayContent, "exiting app");
         final AppWindowToken exitingAppToken = exitingAppWindow.mAppToken;
+        // Wait until everything in animation handler get executed to prevent the exiting window
+        // from being removed during WindowSurfacePlacer Traversal.
+        waitUntilHandlersIdle();
+
         exitingAppToken.mIsExiting = true;
         exitingAppToken.getTask().mStack.mExitingAppTokens.add(exitingAppToken);
 
@@ -585,17 +594,15 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testOnDescendantOrientationRequestChanged() {
-        final DisplayInfo info = new DisplayInfo();
-        info.logicalWidth = 1080;
-        info.logicalHeight = 1920;
-        info.logicalDensityDpi = 240;
-        final DisplayContent dc = createNewDisplay(info);
-        dc.configureDisplayPolicy();
+        final DisplayContent dc = createNewDisplay();
         mWm.mAtmService.mRootActivityContainer = mock(RootActivityContainer.class);
+        final int newOrientation = dc.getLastOrientation() == SCREEN_ORIENTATION_LANDSCAPE
+                ? SCREEN_ORIENTATION_PORTRAIT
+                : SCREEN_ORIENTATION_LANDSCAPE;
 
         final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
         window.getTask().mTaskRecord = mock(TaskRecord.class, ExtendedMockito.RETURNS_DEEP_STUBS);
-        window.mAppToken.mOrientation = SCREEN_ORIENTATION_LANDSCAPE;
+        window.mAppToken.setOrientation(newOrientation);
 
         ActivityRecord activityRecord = mock(ActivityRecord.class);
 
@@ -606,22 +613,22 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(mWm.mAtmService).updateDisplayOverrideConfigurationLocked(captor.capture(),
                 same(activityRecord), anyBoolean(), eq(dc.getDisplayId()));
         final Configuration newDisplayConfig = captor.getValue();
-        assertEquals(Configuration.ORIENTATION_LANDSCAPE, newDisplayConfig.orientation);
+        assertEquals(Configuration.ORIENTATION_PORTRAIT, newDisplayConfig.orientation);
     }
 
     @Test
     public void testOnDescendantOrientationRequestChanged_FrozenToUserRotation() {
-        final DisplayInfo info = new DisplayInfo();
-        info.logicalWidth = 1080;
-        info.logicalHeight = 1920;
-        info.logicalDensityDpi = 240;
-        final DisplayContent dc = createNewDisplay(info);
-        dc.getDisplayRotation().setFixedToUserRotation(true);
+        final DisplayContent dc = createNewDisplay();
+        dc.getDisplayRotation().setFixedToUserRotation(
+                DisplayRotation.FIXED_TO_USER_ROTATION_ENABLED);
         mWm.mAtmService.mRootActivityContainer = mock(RootActivityContainer.class);
+        final int newOrientation = dc.getLastOrientation() == SCREEN_ORIENTATION_LANDSCAPE
+                ? SCREEN_ORIENTATION_PORTRAIT
+                : SCREEN_ORIENTATION_LANDSCAPE;
 
         final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
         window.getTask().mTaskRecord = mock(TaskRecord.class, ExtendedMockito.RETURNS_DEEP_STUBS);
-        window.mAppToken.mOrientation = SCREEN_ORIENTATION_LANDSCAPE;
+        window.mAppToken.setOrientation(newOrientation);
 
         ActivityRecord activityRecord = mock(ActivityRecord.class);
 
@@ -630,6 +637,61 @@ public class DisplayContentTests extends WindowTestsBase {
                 dc.onDescendantOrientationChanged(window.mToken.token, activityRecord));
         verify(mWm.mAtmService, never()).updateDisplayOverrideConfigurationLocked(any(),
                 eq(activityRecord), anyBoolean(), eq(dc.getDisplayId()));
+    }
+
+    @Test
+    public void testComputeImeParent_app() throws Exception {
+        try (final InsetsModeSession session =
+                     new InsetsModeSession(ViewRootImpl.NEW_INSETS_MODE_IME)) {
+            final DisplayContent dc = createNewDisplay();
+            dc.mInputMethodTarget = createWindow(null, TYPE_BASE_APPLICATION, "app");
+            assertEquals(dc.mInputMethodTarget.mAppToken.getSurfaceControl(),
+                    dc.computeImeParent());
+        }
+    }
+
+    @Test
+    public void testComputeImeParent_app_notFullscreen() throws Exception {
+        try (final InsetsModeSession session =
+                     new InsetsModeSession(ViewRootImpl.NEW_INSETS_MODE_IME)) {
+            final DisplayContent dc = createNewDisplay();
+            dc.mInputMethodTarget = createWindow(null, TYPE_STATUS_BAR, "app");
+            dc.mInputMethodTarget.setWindowingMode(
+                    WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+            assertEquals(dc.getWindowingLayer(), dc.computeImeParent());
+        }
+    }
+
+    @Test
+    public void testComputeImeParent_noApp() throws Exception {
+        try (final InsetsModeSession session =
+                     new InsetsModeSession(ViewRootImpl.NEW_INSETS_MODE_IME)) {
+            final DisplayContent dc = createNewDisplay();
+            dc.mInputMethodTarget = createWindow(null, TYPE_STATUS_BAR, "statusBar");
+            assertEquals(dc.getWindowingLayer(), dc.computeImeParent());
+        }
+    }
+
+    @Test
+    public void testOrientationChangeLogging() {
+        MetricsLogger mockLogger = mock(MetricsLogger.class);
+        Configuration oldConfig = new Configuration();
+        oldConfig.orientation = Configuration.ORIENTATION_LANDSCAPE;
+
+        Configuration newConfig = new Configuration();
+        newConfig.orientation = Configuration.ORIENTATION_PORTRAIT;
+        final DisplayContent displayContent = spy(createNewDisplay());
+        Mockito.doReturn(mockLogger).when(displayContent).getMetricsLogger();
+        Mockito.doReturn(oldConfig).doReturn(newConfig).when(displayContent).getConfiguration();
+
+        displayContent.onConfigurationChanged(newConfig);
+
+        ArgumentCaptor<LogMaker> logMakerCaptor = ArgumentCaptor.forClass(LogMaker.class);
+        verify(mockLogger).write(logMakerCaptor.capture());
+        assertThat(logMakerCaptor.getValue().getCategory(),
+                is(MetricsProto.MetricsEvent.ACTION_PHONE_ORIENTATION_CHANGED));
+        assertThat(logMakerCaptor.getValue().getSubtype(),
+                is(Configuration.ORIENTATION_PORTRAIT));
     }
 
     private boolean isOptionsPanelAtRight(int displayId) {

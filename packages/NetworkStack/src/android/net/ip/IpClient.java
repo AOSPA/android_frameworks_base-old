@@ -23,6 +23,7 @@ import static android.net.shared.LinkPropertiesParcelableUtil.toStableParcelable
 
 import static com.android.server.util.PermissionUtil.checkNetworkStackCallingPermission;
 
+import android.annotation.NonNull;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.DhcpResults;
@@ -34,6 +35,7 @@ import android.net.ProvisioningConfigurationParcelable;
 import android.net.ProxyInfo;
 import android.net.ProxyInfoParcelable;
 import android.net.RouteInfo;
+import android.net.TcpKeepalivePacketDataParcelable;
 import android.net.apf.ApfCapabilities;
 import android.net.apf.ApfFilter;
 import android.net.dhcp.DhcpClient;
@@ -44,6 +46,7 @@ import android.net.shared.ProvisioningConfiguration;
 import android.net.util.InterfaceParams;
 import android.net.util.SharedLog;
 import android.os.ConditionVariable;
+import android.os.IBinder;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemClock;
@@ -293,6 +296,8 @@ public class IpClient extends StateMachine {
     private static final int EVENT_PROVISIONING_TIMEOUT           = 10;
     private static final int EVENT_DHCPACTION_TIMEOUT             = 11;
     private static final int EVENT_READ_PACKET_FILTER_COMPLETE    = 12;
+    private static final int CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF = 13;
+    private static final int CMD_REMOVE_KEEPALIVE_PACKET_FILTER_FROM_APF = 14;
 
     // Internal commands to use instead of trying to call transitionTo() inside
     // a given State's enter() method. Calling transitionTo() from enter/exit
@@ -377,6 +382,13 @@ public class IpClient extends StateMachine {
         public InterfaceParams getInterfaceParams(String ifname) {
             return InterfaceParams.getByName(ifname);
         }
+
+        /**
+         * Get a INetd connector.
+         */
+        public INetd getNetd(Context context) {
+            return INetd.Stub.asInterface((IBinder) context.getSystemService(Context.NETD_SERVICE));
+        }
     }
 
     public IpClient(Context context, String ifName, IIpClientCallbacks callback,
@@ -410,7 +422,7 @@ public class IpClient extends StateMachine {
 
         // TODO: Consider creating, constructing, and passing in some kind of
         // InterfaceController.Dependencies class.
-        mNetd = mContext.getSystemService(INetd.class);
+        mNetd = deps.getNetd(mContext);
         mInterfaceCtrl = new InterfaceController(mInterfaceName, mNetd, mLog);
 
         mLinkObserver = new IpClientLinkObserver(
@@ -522,6 +534,16 @@ public class IpClient extends StateMachine {
         public void setMulticastFilter(boolean enabled) {
             checkNetworkStackCallingPermission();
             IpClient.this.setMulticastFilter(enabled);
+        }
+        @Override
+        public void addKeepalivePacketFilter(int slot, TcpKeepalivePacketDataParcelable pkt) {
+            checkNetworkStackCallingPermission();
+            IpClient.this.addKeepalivePacketFilter(slot, pkt);
+        }
+        @Override
+        public void removeKeepalivePacketFilter(int slot) {
+            checkNetworkStackCallingPermission();
+            IpClient.this.removeKeepalivePacketFilter(slot);
         }
     }
 
@@ -642,6 +664,22 @@ public class IpClient extends StateMachine {
      */
     public void setMulticastFilter(boolean enabled) {
         sendMessage(CMD_SET_MULTICAST_FILTER, enabled);
+    }
+
+    /**
+     * Called by WifiStateMachine to add keepalive packet filter before setting up
+     * keepalive offload.
+     */
+    public void addKeepalivePacketFilter(int slot, @NonNull TcpKeepalivePacketDataParcelable pkt) {
+        sendMessage(CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF, slot, 0 /* Unused */, pkt);
+    }
+
+    /**
+     * Called by WifiStateMachine to remove keepalive packet filter after stopping keepalive
+     * offload.
+     */
+    public void removeKeepalivePacketFilter(int slot) {
+        sendMessage(CMD_REMOVE_KEEPALIVE_PACKET_FILTER_FROM_APF, slot, 0 /* Unused */);
     }
 
     /**
@@ -1520,6 +1558,23 @@ public class IpClient extends StateMachine {
                         mApfFilter.setDataSnapshot((byte[]) msg.obj);
                     }
                     mApfDataSnapshotComplete.open();
+                    break;
+                }
+
+                case CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF: {
+                    final int slot = msg.arg1;
+                    if (mApfFilter != null) {
+                        mApfFilter.addKeepalivePacketFilter(slot,
+                                (TcpKeepalivePacketDataParcelable) msg.obj);
+                    }
+                    break;
+                }
+
+                case CMD_REMOVE_KEEPALIVE_PACKET_FILTER_FROM_APF: {
+                    final int slot = msg.arg1;
+                    if (mApfFilter != null) {
+                        mApfFilter.removeKeepalivePacketFilter(slot);
+                    }
                     break;
                 }
 

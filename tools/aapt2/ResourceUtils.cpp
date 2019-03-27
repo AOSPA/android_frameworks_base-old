@@ -44,6 +44,7 @@ constexpr int32_t kNonBreakingSpace = 0xa0;
 
 Maybe<ResourceName> ToResourceName(
     const android::ResTable::resource_name& name_in) {
+  // TODO: Remove this when ResTable and AssetManager(1) are removed from AAPT2
   ResourceName name_out;
   if (!name_in.package) {
     return {};
@@ -73,6 +74,41 @@ Maybe<ResourceName> ToResourceName(
         util::Utf16ToUtf8(StringPiece16(name_in.name, name_in.nameLen));
   } else if (name_in.name8) {
     name_out.entry.assign(name_in.name8, name_in.nameLen);
+  } else {
+    return {};
+  }
+  return name_out;
+}
+
+Maybe<ResourceName> ToResourceName(const android::AssetManager2::ResourceName& name_in) {
+  ResourceName name_out;
+  if (!name_in.package) {
+    return {};
+  }
+
+  name_out.package = std::string(name_in.package, name_in.package_len);
+
+  const ResourceType* type;
+  if (name_in.type16) {
+    type = ParseResourceType(
+        util::Utf16ToUtf8(StringPiece16(name_in.type16, name_in.type_len)));
+  } else if (name_in.type) {
+    type = ParseResourceType(StringPiece(name_in.type, name_in.type_len));
+  } else {
+    return {};
+  }
+
+  if (!type) {
+    return {};
+  }
+
+  name_out.type = *type;
+
+  if (name_in.entry16) {
+    name_out.entry =
+        util::Utf16ToUtf8(StringPiece16(name_in.entry16, name_in.entry_len));
+  } else if (name_in.entry) {
+    name_out.entry = std::string(name_in.entry, name_in.entry_len);
   } else {
     return {};
   }
@@ -727,7 +763,7 @@ std::unique_ptr<Item> ParseBinaryResValue(const ResourceType& type, const Config
           // This must be a FileReference.
           std::unique_ptr<FileReference> file_ref =
               util::make_unique<FileReference>(dst_pool->MakeRef(
-                  str, StringPool::Context(StringPool::Context::kHighPriority, config), data));
+                  str, StringPool::Context(StringPool::Context::kHighPriority, config)));
           if (type == ResourceType::kRaw) {
             file_ref->type = ResourceFile::Type::kUnknown;
           } else if (util::EndsWith(*file_ref->path, ".xml")) {
@@ -739,7 +775,7 @@ std::unique_ptr<Item> ParseBinaryResValue(const ResourceType& type, const Config
         }
 
         // There are no styles associated with this string, so treat it as a simple string.
-        return util::make_unique<String>(dst_pool->MakeRef(str, StringPool::Context(config), data));
+        return util::make_unique<String>(dst_pool->MakeRef(str, StringPool::Context(config)));
       }
     } break;
 

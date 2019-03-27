@@ -22,8 +22,9 @@ import static org.junit.Assert.assertTrue;
 
 import android.os.Process;
 import android.os.SystemClock;
-import android.support.test.filters.LargeTest;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.filters.LargeTest;
 
 import com.android.internal.os.KernelCpuThreadReader.ProcessCpuUsage;
 import com.android.internal.os.KernelCpuThreadReader.ThreadCpuUsage;
@@ -123,7 +124,7 @@ public class KernelCpuThreadReaderEndToEndTest {
 
         // Get thread data from KernelCpuThreadReader
         final KernelCpuThreadReader kernelCpuThreadReader =
-                KernelCpuThreadReader.create(8, uid -> uid == Process.myUid());
+                KernelCpuThreadReader.create(8, uid -> uid == Process.myUid(), 0);
         assertNotNull(kernelCpuThreadReader);
         final ProcessCpuUsage currentProcessCpuUsage =
                 kernelCpuThreadReader.getCurrentProcessCpuUsage();

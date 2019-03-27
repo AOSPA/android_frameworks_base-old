@@ -70,6 +70,8 @@ const int FIELD_ID_PULL_FAILED = 12;
 const int FIELD_ID_STATS_COMPANION_FAILED = 13;
 const int FIELD_ID_STATS_COMPANION_BINDER_TRANSACTION_FAILED = 14;
 const int FIELD_ID_EMPTY_DATA = 15;
+const int FIELD_ID_PULL_REGISTERED_COUNT = 16;
+const int FIELD_ID_PULL_UNREGISTERED_COUNT = 17;
 // for AtomMetricStats proto
 const int FIELD_ID_ATOM_METRIC_STATS = 17;
 const int FIELD_ID_METRIC_ID = 1;
@@ -78,6 +80,12 @@ const int FIELD_ID_LATE_LOG_EVENT_SKIPPED = 3;
 const int FIELD_ID_SKIPPED_FORWARD_BUCKETS = 4;
 const int FIELD_ID_BAD_VALUE_TYPE = 5;
 const int FIELD_ID_CONDITION_CHANGE_IN_NEXT_BUCKET = 6;
+const int FIELD_ID_INVALIDATED_BUCKET = 7;
+const int FIELD_ID_BUCKET_DROPPED = 8;
+const int FIELD_ID_MIN_BUCKET_BOUNDARY_DELAY_NS = 9;
+const int FIELD_ID_MAX_BUCKET_BOUNDARY_DELAY_NS = 10;
+const int FIELD_ID_BUCKET_UNKNOWN_CONDITION = 11;
+const int FIELD_ID_BUCKET_COUNT = 12;
 
 namespace {
 
@@ -476,14 +484,18 @@ void writePullerStatsToStream(const std::pair<int, StatsdStats::PulledAtomStats>
                        (long long)pair.second.statsCompanionPullBinderTransactionFailed);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_EMPTY_DATA,
                        (long long)pair.second.emptyData);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_PULL_REGISTERED_COUNT,
+                       (long long) pair.second.registeredCount);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_PULL_UNREGISTERED_COUNT,
+                       (long long) pair.second.unregisteredCount);
     protoOutput->end(token);
 }
 
-void writeAtomMetricStatsToStream(const std::pair<int, StatsdStats::AtomMetricStats> &pair,
+void writeAtomMetricStatsToStream(const std::pair<int64_t, StatsdStats::AtomMetricStats> &pair,
                                   util::ProtoOutputStream *protoOutput) {
     uint64_t token = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_ATOM_METRIC_STATS |
                                         FIELD_COUNT_REPEATED);
-    protoOutput->write(FIELD_TYPE_INT32 | FIELD_ID_METRIC_ID, (int32_t)pair.first);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_METRIC_ID, (long long)pair.first);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_HARD_DIMENSION_LIMIT_REACHED,
                        (long long)pair.second.hardDimensionLimitReached);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_LATE_LOG_EVENT_SKIPPED,
@@ -494,6 +506,18 @@ void writeAtomMetricStatsToStream(const std::pair<int, StatsdStats::AtomMetricSt
                        (long long)pair.second.badValueType);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_CONDITION_CHANGE_IN_NEXT_BUCKET,
                        (long long)pair.second.conditionChangeInNextBucket);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_INVALIDATED_BUCKET,
+                       (long long)pair.second.invalidatedBucket);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_BUCKET_DROPPED,
+                       (long long)pair.second.bucketDropped);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_MIN_BUCKET_BOUNDARY_DELAY_NS,
+                       (long long)pair.second.minBucketBoundaryDelayNs);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_MAX_BUCKET_BOUNDARY_DELAY_NS,
+                       (long long)pair.second.maxBucketBoundaryDelayNs);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_BUCKET_UNKNOWN_CONDITION,
+                       (long long)pair.second.bucketUnknownCondition);
+    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_BUCKET_COUNT,
+                       (long long)pair.second.bucketCount);
     protoOutput->end(token);
 }
 

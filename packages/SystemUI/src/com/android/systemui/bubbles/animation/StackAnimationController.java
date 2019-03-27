@@ -16,15 +16,12 @@
 
 package com.android.systemui.bubbles.animation;
 
-import android.content.Context;
 import android.content.res.Resources;
-import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.RectF;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowInsets;
-import android.view.WindowManager;
 
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.FlingAnimation;
@@ -69,6 +66,15 @@ public class StackAnimationController extends
      */
     private PointF mStackPosition = new PointF();
 
+    /** The height of the most recently visible IME. */
+    private float mImeHeight = 0f;
+
+    /**
+     * The Y position of the stack before the IME became visible, or {@link Float#MIN_VALUE} if the
+     * IME is not visible or the user moved the stack since the IME became visible.
+     */
+    private float mPreImeY = Float.MIN_VALUE;
+
     /**
      * Animations on the stack position itself, which would have been started in
      * {@link #flingThenSpringFirstBubbleWithStackFollowing}. These animations dispatch to
@@ -88,9 +94,8 @@ public class StackAnimationController extends
     private int mBubbleOffscreen;
     /** How far down the screen the stack starts, when there is no pre-existing location. */
     private int mStackStartingVerticalOffset;
-
-    private Point mDisplaySize;
-    private RectF mAllowableStackPositionRegion;
+    /** Height of the status bar. */
+    private float mStatusBarHeight;
 
     @Override
     protected void setLayout(PhysicsAnimationLayout layout) {
@@ -103,11 +108,8 @@ public class StackAnimationController extends
         mBubbleOffscreen = res.getDimensionPixelSize(R.dimen.bubble_stack_offscreen);
         mStackStartingVerticalOffset =
                 res.getDimensionPixelSize(R.dimen.bubble_stack_starting_offset_y);
-
-        mDisplaySize = new Point();
-        WindowManager wm =
-                (WindowManager) layout.getContext().getSystemService(Context.WINDOW_SERVICE);
-        wm.getDefaultDisplay().getSize(mDisplaySize);
+        mStatusBarHeight =
+                res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height);
     }
 
     /**
@@ -115,6 +117,10 @@ public class StackAnimationController extends
      * it with the 'following' effect.
      */
     public void moveFirstBubbleWithStackFollowing(float x, float y) {
+        // If we manually move the bubbles with the IME open, clear the return point since we don't
+        // want the stack to snap away from the new position.
+        mPreImeY = Float.MIN_VALUE;
+
         moveFirstBubbleWithStackFollowing(DynamicAnimation.TRANSLATION_X, x);
         moveFirstBubbleWithStackFollowing(DynamicAnimation.TRANSLATION_Y, y);
     }
@@ -196,6 +202,44 @@ public class StackAnimationController extends
     }
 
     /**
+     * Save the IME height so that the allowable stack bounds reflect the now-visible IME, and
+     * animate the stack out of the way if necessary.
+     */
+    public void updateBoundsForVisibleImeAndAnimate(int imeHeight) {
+        mImeHeight = imeHeight;
+
+        final float maxBubbleY = getAllowableStackPositionRegion().bottom;
+        if (mStackPosition.y > maxBubbleY && mPreImeY == Float.MIN_VALUE) {
+            mPreImeY = mStackPosition.y;
+
+            springFirstBubbleWithStackFollowing(
+                    DynamicAnimation.TRANSLATION_Y,
+                    getSpringForce(DynamicAnimation.TRANSLATION_Y, /* view */ null)
+                            .setStiffness(SpringForce.STIFFNESS_LOW),
+                    /* startVel */ 0f,
+                    maxBubbleY);
+        }
+    }
+
+    /**
+     * Clear the IME height from the bounds and animate the stack back to its original position,
+     * assuming it wasn't moved in the meantime.
+     */
+    public void updateBoundsForInvisibleImeAndAnimate() {
+        mImeHeight = 0;
+
+        if (mPreImeY > Float.MIN_VALUE) {
+            springFirstBubbleWithStackFollowing(
+                    DynamicAnimation.TRANSLATION_Y,
+                    getSpringForce(DynamicAnimation.TRANSLATION_Y, /* view */ null)
+                        .setStiffness(SpringForce.STIFFNESS_LOW),
+                    /* startVel */ 0f,
+                    mPreImeY);
+            mPreImeY = Float.MIN_VALUE;
+        }
+    }
+
+    /**
      * Returns the region within which the stack is allowed to rest. This goes slightly off the left
      * and right sides of the screen, below the status bar/cutout and above the navigation bar.
      * While the stack is not allowed to rest outside of these bounds, it can temporarily be
@@ -203,10 +247,9 @@ public class StackAnimationController extends
      */
     public RectF getAllowableStackPositionRegion() {
         final WindowInsets insets = mLayout.getRootWindowInsets();
-        mAllowableStackPositionRegion = new RectF();
-
+        final RectF allowableRegion = new RectF();
         if (insets != null) {
-            mAllowableStackPositionRegion.left =
+            allowableRegion.left =
                     -mBubbleOffscreen
                             - mBubblePadding
                             + Math.max(
@@ -214,7 +257,7 @@ public class StackAnimationController extends
                             insets.getDisplayCutout() != null
                                     ? insets.getDisplayCutout().getSafeInsetLeft()
                                     : 0);
-            mAllowableStackPositionRegion.right =
+            allowableRegion.right =
                     mLayout.getWidth()
                             - mIndividualBubbleSize
                             + mBubbleOffscreen
@@ -222,20 +265,21 @@ public class StackAnimationController extends
                             - Math.max(
                             insets.getSystemWindowInsetRight(),
                             insets.getDisplayCutout() != null
-                                ? insets.getDisplayCutout().getSafeInsetRight()
-                                : 0);
+                                    ? insets.getDisplayCutout().getSafeInsetRight()
+                                    : 0);
 
-            mAllowableStackPositionRegion.top =
+            allowableRegion.top =
                     mBubblePadding
                             + Math.max(
-                            insets.getSystemWindowInsetTop(),
+                            mStatusBarHeight,
                             insets.getDisplayCutout() != null
-                                ? insets.getDisplayCutout().getSafeInsetTop()
-                                : 0);
-            mAllowableStackPositionRegion.bottom =
+                                    ? insets.getDisplayCutout().getSafeInsetTop()
+                                    : 0);
+            allowableRegion.bottom =
                     mLayout.getHeight()
                             - mIndividualBubbleSize
                             - mBubblePadding
+                            - (mImeHeight > Float.MIN_VALUE ? mImeHeight + mBubblePadding : 0f)
                             - Math.max(
                             insets.getSystemWindowInsetBottom(),
                             insets.getDisplayCutout() != null
@@ -243,7 +287,7 @@ public class StackAnimationController extends
                                     : 0);
         }
 
-        return mAllowableStackPositionRegion;
+        return allowableRegion;
     }
 
     @Override
@@ -287,39 +331,22 @@ public class StackAnimationController extends
 
     @Override
     void onChildAdded(View child, int index) {
-        // If this is the first child added, position the stack in its starting position.
         if (mLayout.getChildCount() == 1) {
-            moveStackToStartPosition();
-        }
-
-        if (mLayout.indexOfChild(child) == 0) {
-            child.setTranslationY(mStackPosition.y);
-
-            // Pop in the new bubble.
-            child.setScaleX(ANIMATE_IN_STARTING_SCALE);
-            child.setScaleY(ANIMATE_IN_STARTING_SCALE);
-            mLayout.animateValueForChildAtIndex(DynamicAnimation.SCALE_X, 0, 1f);
-            mLayout.animateValueForChildAtIndex(DynamicAnimation.SCALE_Y, 0, 1f);
-
-            // Fade in the new bubble.
-            child.setAlpha(0);
-            mLayout.animateValueForChildAtIndex(DynamicAnimation.ALPHA, 0, 1f);
-
-            // Start the new bubble 4x the normal offset distance in the opposite direction. We'll
-            // animate in from this position. Since the animations are chained, when the new bubble
-            // flies in from the side, it will push the other ones out of the way.
-            float xOffset = getOffsetForChainedPropertyAnimation(DynamicAnimation.TRANSLATION_X);
-            child.setTranslationX(mStackPosition.x - ANIMATE_TRANSLATION_FACTOR * xOffset);
-            mLayout.animateValueForChildAtIndex(
-                    DynamicAnimation.TRANSLATION_X, 0, mStackPosition.x);
+            // If this is the first child added, position the stack in its starting position before
+            // animating in.
+            moveStackToStartPosition(() -> animateInBubble(child));
+        } else if (mLayout.indexOfChild(child) == 0) {
+            // Otherwise, animate the bubble in if it's the newest bubble. If we're adding a bubble
+            // to the back of the stack, it'll be largely invisible so don't bother animating it in.
+            animateInBubble(child);
         }
     }
 
     @Override
-    void onChildToBeRemoved(View child, int index, Runnable actuallyRemove) {
+    void onChildRemoved(View child, int index, Runnable finishRemoval) {
         // Animate the child out, actually removing it once its alpha is zero.
         mLayout.animateValueForChild(
-                DynamicAnimation.ALPHA, child, 0f, actuallyRemove);
+                DynamicAnimation.ALPHA, child, 0f, finishRemoval);
         mLayout.animateValueForChild(DynamicAnimation.SCALE_X, child, ANIMATE_IN_STARTING_SCALE);
         mLayout.animateValueForChild(DynamicAnimation.SCALE_Y, child, ANIMATE_IN_STARTING_SCALE);
 
@@ -334,10 +361,14 @@ public class StackAnimationController extends
     }
 
     /** Moves the stack, without any animation, to the starting position. */
-    private void moveStackToStartPosition() {
-        mLayout.post(() -> setStackPosition(
-                getAllowableStackPositionRegion().right,
-                getAllowableStackPositionRegion().top + mStackStartingVerticalOffset));
+    private void moveStackToStartPosition(Runnable after) {
+        // Post to ensure that the layout's width and height have been calculated.
+        mLayout.post(() -> {
+            setStackPosition(
+                    getAllowableStackPositionRegion().right,
+                    getAllowableStackPositionRegion().top + mStackStartingVerticalOffset);
+            after.run();
+        });
     }
 
     /**
@@ -379,6 +410,29 @@ public class StackAnimationController extends
         }
     }
 
+    /** Animates in the given bubble. */
+    private void animateInBubble(View child) {
+        child.setTranslationY(mStackPosition.y);
+
+        // Pop in the new bubble.
+        child.setScaleX(ANIMATE_IN_STARTING_SCALE);
+        child.setScaleY(ANIMATE_IN_STARTING_SCALE);
+        mLayout.animateValueForChildAtIndex(DynamicAnimation.SCALE_X, 0, 1f);
+        mLayout.animateValueForChildAtIndex(DynamicAnimation.SCALE_Y, 0, 1f);
+
+        // Fade in the new bubble.
+        child.setAlpha(0);
+        mLayout.animateValueForChildAtIndex(DynamicAnimation.ALPHA, 0, 1f);
+
+        // Start the new bubble 4x the normal offset distance in the opposite direction. We'll
+        // animate in from this position. Since the animations are chained, when the new bubble
+        // flies in from the side, it will push the other ones out of the way.
+        float xOffset = getOffsetForChainedPropertyAnimation(DynamicAnimation.TRANSLATION_X);
+        child.setTranslationX(mStackPosition.x - ANIMATE_TRANSLATION_FACTOR * xOffset);
+        mLayout.animateValueForChildAtIndex(
+                DynamicAnimation.TRANSLATION_X, 0, mStackPosition.x);
+    }
+
     /**
      * Springs the first bubble to the given final position, with the rest of the stack 'following'.
      */
@@ -387,8 +441,8 @@ public class StackAnimationController extends
             float vel, float finalPosition) {
 
         Log.d(TAG, String.format("Springing %s to final position %f.",
-                        PhysicsAnimationLayout.getReadablePropertyName(property),
-                        finalPosition));
+                PhysicsAnimationLayout.getReadablePropertyName(property),
+                finalPosition));
 
         StackPositionProperty firstBubbleProperty = new StackPositionProperty(property);
         SpringAnimation springAnimation =

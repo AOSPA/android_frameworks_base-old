@@ -325,10 +325,6 @@ public final class ActiveServices {
                 ServiceRecord r = mDelayedStartList.remove(0);
                 if (DEBUG_DELAYED_STARTS) Slog.v(TAG_SERVICE,
                         "REM FR DELAY LIST (exec next): " + r);
-                if (r.pendingStarts.size() <= 0) {
-                    Slog.w(TAG, "**** NO PENDING STARTS! " + r + " startReq=" + r.startRequested
-                            + " delayedStop=" + r.delayedStop);
-                }
                 if (DEBUG_DELAYED_SERVICE) {
                     if (mDelayedStartList.size() > 0) {
                         Slog.v(TAG_SERVICE, "Remaining delayed list:");
@@ -338,10 +334,16 @@ public final class ActiveServices {
                     }
                 }
                 r.delayed = false;
-                try {
-                    startServiceInnerLocked(this, r.pendingStarts.get(0).intent, r, false, true);
-                } catch (TransactionTooLargeException e) {
-                    // Ignore, nobody upstack cares.
+                if (r.pendingStarts.size() <= 0) {
+                    Slog.wtf(TAG, "**** NO PENDING STARTS! " + r + " startReq=" + r.startRequested
+                            + " delayedStop=" + r.delayedStop);
+                } else {
+                    try {
+                        startServiceInnerLocked(this, r.pendingStarts.get(0).intent, r, false, true,
+                                false);
+                    } catch (TransactionTooLargeException e) {
+                        // Ignore, nobody upstack cares.
+                    }
                 }
             }
             if (mStartingBackground.size() > 0) {
@@ -649,7 +651,8 @@ public final class ActiveServices {
                         SERVICE_BG_ACTIVITY_START_TIMEOUT_MS);
             }
         }
-        ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
+        ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting,
+                allowBackgroundActivityStarts);
         return cmp;
     }
 
@@ -708,7 +711,8 @@ public final class ActiveServices {
     }
 
     ComponentName startServiceInnerLocked(ServiceMap smap, Intent service, ServiceRecord r,
-            boolean callerFg, boolean addToStarting) throws TransactionTooLargeException {
+            boolean callerFg, boolean addToStarting, boolean allowBackgroundActivityStarts)
+            throws TransactionTooLargeException {
         ServiceState stracker = r.getTracker();
         if (stracker != null) {
             stracker.setStarted(true, mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
@@ -719,7 +723,8 @@ public final class ActiveServices {
         synchronized (r.stats.getBatteryStats()) {
             r.stats.startRunningLocked();
         }
-        String error = bringUpServiceLocked(r, service.getFlags(), callerFg, false, false);
+        String error = bringUpServiceLocked(r, service.getFlags(), callerFg, false, false,
+                allowBackgroundActivityStarts);
         if (error != null) {
             return new ComponentName("!!", error);
         }
@@ -932,6 +937,27 @@ public final class ActiveServices {
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
+    }
+
+    /**
+     * Return the current foregroundServiceType of the ServiceRecord.
+     * @param className ComponentName of the Service class.
+     * @param token IBinder token.
+     * @return current foreground service type.
+     */
+    public int getForegroundServiceTypeLocked(ComponentName className, IBinder token) {
+        final int userId = UserHandle.getCallingUserId();
+        final long origId = Binder.clearCallingIdentity();
+        int ret = ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE;
+        try {
+            ServiceRecord r = findServiceLocked(className, token, userId);
+            if (r != null) {
+                ret = r.foregroundServiceType;
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+        return ret;
     }
 
     boolean foregroundAppShownEnoughLocked(ActiveForegroundApp aa, long nowElapsed) {
@@ -1261,10 +1287,11 @@ public final class ActiveServices {
                 // Check the passed in foreground service type flags is a subset of manifest
                 // foreground service type flags.
                 if ((foregroundServiceType & manifestType) != foregroundServiceType) {
-                    // STOPSHIP(b/120611119): replace log message with IllegalArgumentException.
-                    Slog.w(TAG, "foregroundServiceType must be a subset of "
-                            + "foregroundServiceType attribute in "
-                            + "service element of manifest file");
+                    throw new IllegalArgumentException("foregroundServiceType "
+                        + String.format("0x%08X", foregroundServiceType)
+                        + " is not a subset of foregroundServiceType attribute "
+                        +  String.format("0x%08X", manifestType)
+                        + " in service element of manifest file");
                 }
             }
             boolean alreadyStartedOp = false;
@@ -1651,7 +1678,7 @@ public final class ActiveServices {
                                 try {
                                     bringUpServiceLocked(serviceRecord,
                                             serviceIntent.getFlags(),
-                                            callerFg, false, false);
+                                            callerFg, false, false, false);
                                 } catch (RemoteException e) {
                                     /* ignore - local call */
                                 }
@@ -1754,7 +1781,7 @@ public final class ActiveServices {
             if ((flags&Context.BIND_AUTO_CREATE) != 0) {
                 s.lastActivity = SystemClock.uptimeMillis();
                 if (bringUpServiceLocked(s, service.getFlags(), callerFg, false,
-                        permissionsReviewRequired) != null) {
+                        permissionsReviewRequired, false) != null) {
                     return 0;
                 }
             }
@@ -2473,7 +2500,8 @@ public final class ActiveServices {
                     }
                 }
                 if(!shouldDelay) {
-                    bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
+                    bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false,
+                            false);
                 } else {
                     if (DEBUG_DELAYED_SERVICE) {
                         Slog.v(TAG, "Reschedule service restart due to app launch"
@@ -2483,7 +2511,8 @@ public final class ActiveServices {
                     scheduleServiceRestartLocked(r, true);
                 }
             } else {
-                bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
+                bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false,
+                        false);
             }
         } catch (TransactionTooLargeException e) {
             // Ignore, it's been logged and nothing upstack cares.
@@ -2529,8 +2558,8 @@ public final class ActiveServices {
     }
 
     private String bringUpServiceLocked(ServiceRecord r, int intentFlags, boolean execInFg,
-            boolean whileRestarting, boolean permissionsReviewRequired)
-            throws TransactionTooLargeException {
+            boolean whileRestarting, boolean permissionsReviewRequired,
+            boolean allowBackgroundActivityStarts) throws TransactionTooLargeException {
         //Slog.i(TAG, "Bring up service:");
         //r.dump("  ");
 
@@ -2639,6 +2668,13 @@ public final class ActiveServices {
             if (isolated) {
                 r.isolatedProc = app;
             }
+        }
+
+        if (app != null && allowBackgroundActivityStarts) {
+            app.addAllowBackgroundActivityStartsToken(r);
+            // schedule removal of the whitelisting token after the timeout
+            removeAllowBackgroundActivityStartsServiceToken(app, r,
+                    SERVICE_BG_ACTIVITY_START_TIMEOUT_MS);
         }
 
         if (r.fgRequired) {
@@ -3037,6 +3073,7 @@ public final class ActiveServices {
         // Clear start entries.
         r.clearDeliveredStartsLocked();
         r.pendingStarts.clear();
+        smap.mDelayedStartList.remove(r);
 
         if (r.app != null) {
             synchronized (r.stats.getBatteryStats()) {

@@ -17,6 +17,8 @@
 package android.widget;
 
 import android.annotation.CallSuper;
+import android.annotation.ColorInt;
+import android.annotation.FloatRange;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.Px;
@@ -340,7 +342,7 @@ public class NumberPicker extends LinearLayout {
     /**
      * The {@link Paint} for drawing the selector.
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private final Paint mSelectorWheelPaint;
 
     /**
@@ -639,6 +641,8 @@ public class NumberPicker extends LinearLayout {
         // process style attributes
         final TypedArray attributesArray = context.obtainStyledAttributes(
                 attrs, R.styleable.NumberPicker, defStyleAttr, defStyleRes);
+        saveAttributeDataForStyleable(context, R.styleable.NumberPicker,
+                attrs, attributesArray, defStyleAttr, defStyleRes);
         final int layoutResId = attributesArray.getResourceId(
                 R.styleable.NumberPicker_internalLayout, DEFAULT_LAYOUT_RESOURCE_ID);
 
@@ -1713,6 +1717,44 @@ public class NumberPicker extends LinearLayout {
             mAccessibilityNodeProvider = new AccessibilityNodeProviderImpl();
         }
         return mAccessibilityNodeProvider;
+    }
+
+    /**
+     * Sets the text color for all the states (normal, selected, focused) to be the given color.
+     *
+     * @param color A color value in the form 0xAARRGGBB.
+     */
+    public void setTextColor(@ColorInt int color) {
+        mSelectorWheelPaint.setColor(color);
+        mInputText.setTextColor(color);
+        invalidate();
+    }
+
+    /**
+     * @return the text color.
+     */
+    @ColorInt
+    public int getTextColor() {
+        return mSelectorWheelPaint.getColor();
+    }
+
+    /**
+     * Sets the text size to the given value. This value must be > 0
+     *
+     * @param size The size in pixel units.
+     */
+    public void setTextSize(@FloatRange(from = 0.0, fromInclusive = false) float size) {
+        mSelectorWheelPaint.setTextSize(size);
+        mInputText.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
+        invalidate();
+    }
+
+    /**
+     * @return the size (in pixels) of the text size in this NumberPicker.
+     */
+    @FloatRange(from = 0.0, fromInclusive = false)
+    public float getTextSize() {
+        return mSelectorWheelPaint.getTextSize();
     }
 
     /**

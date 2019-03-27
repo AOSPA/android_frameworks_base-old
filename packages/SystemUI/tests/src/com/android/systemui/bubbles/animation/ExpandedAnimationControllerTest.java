@@ -19,9 +19,12 @@ package com.android.systemui.bubbles.animation;
 import static org.junit.Assert.assertEquals;
 
 import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.PointF;
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
+import android.view.View;
+import android.widget.FrameLayout;
 
 import androidx.dynamicanimation.animation.DynamicAnimation;
 
@@ -38,7 +41,8 @@ import org.mockito.Spy;
 public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestCase {
 
     @Spy
-    private ExpandedAnimationController mExpandedController = new ExpandedAnimationController();
+    private ExpandedAnimationController mExpandedController =
+            new ExpandedAnimationController(new Point(500, 1000) /* displaySize */);
 
     private int mStackOffset;
     private float mBubblePadding;
@@ -55,26 +59,92 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
         mStackOffset = res.getDimensionPixelSize(R.dimen.bubble_stack_offset);
         mBubblePadding = res.getDimensionPixelSize(R.dimen.bubble_padding);
         mBubbleSize = res.getDimensionPixelSize(R.dimen.individual_bubble_size);
+
+        mExpansionPoint = new PointF(100, 100);
     }
 
     @Test
     public void testExpansionAndCollapse() throws InterruptedException {
-        mExpansionPoint = new PointF(100, 100);
         Runnable afterExpand = Mockito.mock(Runnable.class);
         mExpandedController.expandFromStack(mExpansionPoint, afterExpand);
-
         waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
 
-        testExpanded();
+        testBubblesInCorrectExpandedPositions();
         Mockito.verify(afterExpand).run();
 
         Runnable afterCollapse = Mockito.mock(Runnable.class);
         mExpandedController.collapseBackToStack(afterCollapse);
-
         waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
 
         testStackedAtPosition(mExpansionPoint.x, mExpansionPoint.y, -1);
         Mockito.verify(afterExpand).run();
+    }
+
+    @Test
+    public void testOnChildAdded() throws InterruptedException {
+        expand();
+
+        // Add another new view and wait for its animation.
+        final View newView = new FrameLayout(getContext());
+        mLayout.addView(newView, 0);
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+
+        testBubblesInCorrectExpandedPositions();
+    }
+
+    @Test
+    public void testOnChildRemoved() throws InterruptedException {
+        expand();
+
+        // Remove some views and see if the remaining child views still pass the expansion test.
+        mLayout.removeView(mViews.get(0));
+        mLayout.removeView(mViews.get(3));
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+        testBubblesInCorrectExpandedPositions();
+    }
+
+    @Test
+    public void testBubbleDraggedNotDismissedSnapsBack() throws InterruptedException {
+        expand();
+
+        final View draggedBubble = mViews.get(0);
+        mExpandedController.prepareForBubbleDrag(draggedBubble);
+        mExpandedController.dragBubbleOut(draggedBubble, 500f, 500f);
+
+        assertEquals(500f, draggedBubble.getTranslationX(), 1f);
+        assertEquals(500f, draggedBubble.getTranslationY(), 1f);
+
+        // Snap it back and make sure it made it back correctly.
+        mExpandedController.snapBubbleBack(draggedBubble, 0f, 0f);
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+        testBubblesInCorrectExpandedPositions();
+    }
+
+    @Test
+    public void testBubbleDismissed() throws InterruptedException {
+        expand();
+
+        final View draggedBubble = mViews.get(0);
+        mExpandedController.prepareForBubbleDrag(draggedBubble);
+        mExpandedController.dragBubbleOut(draggedBubble, 500f, 500f);
+
+        assertEquals(500f, draggedBubble.getTranslationX(), 1f);
+        assertEquals(500f, draggedBubble.getTranslationY(), 1f);
+
+        // Snap it back and make sure it made it back correctly.
+        mExpandedController.prepareForDismissalWithVelocity(draggedBubble, 0f, 0f);
+        mLayout.removeView(draggedBubble);
+        waitForLayoutMessageQueue();
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+
+        assertEquals(-1, mLayout.indexOfChild(draggedBubble));
+        testBubblesInCorrectExpandedPositions();
+    }
+
+    /** Expand the stack and wait for animations to finish. */
+    private void expand() throws InterruptedException {
+        mExpandedController.expandFromStack(mExpansionPoint, Mockito.mock(Runnable.class));
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
     }
 
     /** Check that children are in the correct positions for being stacked. */
@@ -83,21 +153,28 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
         // is stacked to the right now that we're on the right side of the screen.
         for (int i = 0; i < mLayout.getChildCount(); i++) {
             assertEquals(x + i * offsetMultiplier * mStackOffset,
-                    mViews.get(i).getTranslationX(), 2f);
-            assertEquals(y, mViews.get(i).getTranslationY(), 2f);
+                    mLayout.getChildAt(i).getTranslationX(), 2f);
+            assertEquals(y, mLayout.getChildAt(i).getTranslationY(), 2f);
+
+            if (i < mMaxRenderedBubbles) {
+                assertEquals(1f, mLayout.getChildAt(i).getAlpha(), .01f);
+            }
         }
     }
 
     /** Check that children are in the correct positions for being expanded. */
-    private void testExpanded() {
-        // Make sure the rest of the stack moved again, including the first bubble not moving, and
-        // is stacked to the right now that we're on the right side of the screen.
-        for (int i = 0; i < mLayout.getChildCount(); i++) {
+    private void testBubblesInCorrectExpandedPositions() {
+        // Check all the visible bubbles to see if they're in the right place.
+        for (int i = 0; i < Math.min(mLayout.getChildCount(), mMaxRenderedBubbles); i++) {
             assertEquals(mBubblePadding + (i * (mBubbleSize + mBubblePadding)),
-                    mViews.get(i).getTranslationX(),
+                    mLayout.getChildAt(i).getTranslationX(),
                     2f);
-            assertEquals(mBubblePadding + mCutoutInsetSize,
-                    mViews.get(i).getTranslationY(), 2f);
+            assertEquals(mExpandedController.getExpandedY(),
+                    mLayout.getChildAt(i).getTranslationY(), 2f);
+
+            if (i < mMaxRenderedBubbles) {
+                assertEquals(1f, mLayout.getChildAt(i).getAlpha(), .01f);
+            }
         }
     }
 }

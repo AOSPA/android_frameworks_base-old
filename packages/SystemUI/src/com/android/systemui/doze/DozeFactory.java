@@ -21,9 +21,9 @@ import android.app.Application;
 import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
+import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Handler;
 
-import com.android.internal.hardware.AmbientDisplayConfiguration;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
@@ -71,7 +71,7 @@ public class DozeFactory {
                 new DozeScreenState(wrappedService, handler, params, wakeLock),
                 createDozeScreenBrightness(context, wrappedService, sensorManager, host, params,
                         handler),
-                new DozeWallpaperState(context),
+                new DozeWallpaperState(context, machine),
                 new DozeDockHandler(context, machine, host, config, handler, dockManager)
         });
 

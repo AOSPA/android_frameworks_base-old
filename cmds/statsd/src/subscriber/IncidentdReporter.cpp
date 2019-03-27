@@ -16,33 +16,134 @@
 #define DEBUG false
 #include "Log.h"
 
+#include "FieldValue.h"
 #include "IncidentdReporter.h"
-#include "frameworks/base/libs/incident/proto/android/os/header.pb.h"
+#include "packages/UidMap.h"
+#include "stats_log_util.h"
 
 #include <android/os/IIncidentManager.h>
 #include <android/os/IncidentReportArgs.h>
+#include <android/util/ProtoOutputStream.h>
 #include <binder/IBinder.h>
 #include <binder/IServiceManager.h>
+
+#include <vector>
 
 namespace android {
 namespace os {
 namespace statsd {
 
-bool GenerateIncidentReport(const IncidentdDetails& config, const int64_t& rule_id,
+using android::util::ProtoOutputStream;
+using std::vector;
+
+using util::FIELD_TYPE_MESSAGE;
+using util::FIELD_TYPE_INT32;
+using util::FIELD_TYPE_INT64;
+
+// field ids in IncidentHeaderProto
+const int FIELD_ID_ALERT_ID = 1;
+const int FIELD_ID_CONFIG_KEY = 3;
+const int FIELD_ID_CONFIG_KEY_UID = 1;
+const int FIELD_ID_CONFIG_KEY_ID = 2;
+
+const int FIELD_ID_TRIGGER_DETAILS = 4;
+const int FIELD_ID_TRIGGER_DETAILS_TRIGGER_METRIC = 1;
+const int FIELD_ID_METRIC_VALUE_METRIC_ID = 1;
+const int FIELD_ID_METRIC_VALUE_DIMENSION_IN_WHAT = 2;
+const int FIELD_ID_METRIC_VALUE_DIMENSION_IN_CONDITION = 3;
+const int FIELD_ID_METRIC_VALUE_VALUE = 4;
+
+const int FIELD_ID_PACKAGE_INFO = 3;
+
+namespace {
+void getProtoData(const int64_t& rule_id, int64_t metricId, const MetricDimensionKey& dimensionKey,
+                  int64_t metricValue, const ConfigKey& configKey, vector<uint8_t>* protoData) {
+    ProtoOutputStream headerProto;
+    headerProto.write(FIELD_TYPE_INT64 | FIELD_ID_ALERT_ID, (long long)rule_id);
+    uint64_t token =
+            headerProto.start(FIELD_TYPE_MESSAGE | FIELD_ID_CONFIG_KEY);
+    headerProto.write(FIELD_TYPE_INT32 | FIELD_ID_CONFIG_KEY_UID, configKey.GetUid());
+    headerProto.write(FIELD_TYPE_INT64 | FIELD_ID_CONFIG_KEY_ID, (long long)configKey.GetId());
+    headerProto.end(token);
+
+    token = headerProto.start(FIELD_TYPE_MESSAGE | FIELD_ID_TRIGGER_DETAILS);
+
+    // MetricValue trigger_metric = 1;
+    uint64_t metricToken =
+            headerProto.start(FIELD_TYPE_MESSAGE | FIELD_ID_TRIGGER_DETAILS_TRIGGER_METRIC);
+    // message MetricValue {
+    // optional int64 metric_id = 1;
+    headerProto.write(FIELD_TYPE_INT64 | FIELD_ID_METRIC_VALUE_METRIC_ID, (long long)metricId);
+    // optional DimensionsValue dimension_in_what = 2;
+    uint64_t dimToken =
+            headerProto.start(FIELD_TYPE_MESSAGE | FIELD_ID_METRIC_VALUE_DIMENSION_IN_WHAT);
+    writeDimensionToProto(dimensionKey.getDimensionKeyInWhat(), nullptr, &headerProto);
+    headerProto.end(dimToken);
+
+    // optional DimensionsValue dimension_in_condition = 3;
+    dimToken = headerProto.start(FIELD_TYPE_MESSAGE | FIELD_ID_METRIC_VALUE_DIMENSION_IN_CONDITION);
+    writeDimensionToProto(dimensionKey.getDimensionKeyInCondition(), nullptr, &headerProto);
+    headerProto.end(dimToken);
+
+    // optional int64 value = 4;
+    headerProto.write(FIELD_TYPE_INT64 | FIELD_ID_METRIC_VALUE_VALUE, (long long)metricValue);
+
+    // }
+    headerProto.end(metricToken);
+
+    // write relevant uid package info
+    std::set<int32_t> uids;
+
+    for (const auto& dim : dimensionKey.getDimensionKeyInWhat().getValues()) {
+        int uid = getUidIfExists(dim);
+        // any uid <= 2000 are predefined AID_*
+        if (uid > 2000) {
+            uids.insert(uid);
+        }
+    }
+
+    for (const auto& dim : dimensionKey.getDimensionKeyInCondition().getValues()) {
+        int uid = getUidIfExists(dim);
+        if (uid > 2000) {
+            uids.insert(uid);
+        }
+    }
+
+    if (!uids.empty()) {
+        uint64_t token = headerProto.start(FIELD_TYPE_MESSAGE | FIELD_ID_PACKAGE_INFO);
+        UidMap::getInstance()->writeUidMapSnapshot(getElapsedRealtimeNs(), true, true, uids,
+                                                   nullptr /*string set*/, &headerProto);
+        headerProto.end(token);
+    }
+
+    headerProto.end(token);
+
+    protoData->resize(headerProto.size());
+    size_t pos = 0;
+    auto iter = headerProto.data();
+    while (iter.readBuffer() != NULL) {
+        size_t toRead = iter.currentToRead();
+        std::memcpy(&((*protoData)[pos]), iter.readBuffer(), toRead);
+        pos += toRead;
+        iter.rp()->move(toRead);
+    }
+}
+}  // namespace
+
+bool GenerateIncidentReport(const IncidentdDetails& config, int64_t rule_id, int64_t metricId,
+                            const MetricDimensionKey& dimensionKey, int64_t metricValue,
                             const ConfigKey& configKey) {
     if (config.section_size() == 0) {
         VLOG("The alert %lld contains zero section in config(%d,%lld)", (unsigned long long)rule_id,
-            configKey.GetUid(), (long long) configKey.GetId());
+             configKey.GetUid(), (long long)configKey.GetId());
         return false;
     }
 
     IncidentReportArgs incidentReport;
 
-    android::os::IncidentHeaderProto header;
-    header.set_alert_id(rule_id);
-    header.mutable_config_key()->set_uid(configKey.GetUid());
-    header.mutable_config_key()->set_id(configKey.GetId());
-    incidentReport.addHeader(header);
+    vector<uint8_t> protoData;
+    getProtoData(rule_id, metricId, dimensionKey, metricValue, configKey, &protoData);
+    incidentReport.addHeader(protoData);
 
     for (int i = 0; i < config.section_size(); i++) {
         incidentReport.addSection(config.section(i));

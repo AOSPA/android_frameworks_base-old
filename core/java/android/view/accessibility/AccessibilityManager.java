@@ -36,6 +36,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.content.res.Resources;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -173,7 +174,7 @@ public final class AccessibilityManager {
 
     final Handler.Callback mCallback;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     boolean mIsEnabled;
 
     int mRelevantEventTypes = AccessibilityEvent.TYPES_ALL_MASK;
@@ -183,7 +184,7 @@ public final class AccessibilityManager {
 
     boolean mIsTouchExplorationEnabled;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123768939)
     boolean mIsHighTextContrastEnabled;
 
     AccessibilityPolicy mAccessibilityPolicy;

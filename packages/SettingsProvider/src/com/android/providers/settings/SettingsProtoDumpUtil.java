@@ -457,6 +457,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.DEBUG_VIEW_ATTRIBUTES,
                 GlobalSettingsProto.Debug.VIEW_ATTRIBUTES);
+        dumpSetting(s, p,
+                Settings.Global.DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE,
+                GlobalSettingsProto.Debug.VIEW_ATTRIBUTES_APPLICATION_PACKAGE);
         p.end(debugToken);
 
         final long defaultToken = p.start(GlobalSettingsProto.DEFAULT);
@@ -695,6 +698,9 @@ class SettingsProtoDumpUtil {
                 Settings.Global.GLOBAL_SETTINGS_ANGLE_WHITELIST,
                 GlobalSettingsProto.Gpu.ANGLE_WHITELIST);
         dumpSetting(s, p,
+                Settings.Global.GLOBAL_SETTINGS_SHOW_ANGLE_IN_USE_DIALOG_BOX,
+                GlobalSettingsProto.Gpu.SHOW_ANGLE_IN_USE_DIALOG);
+        dumpSetting(s, p,
                 Settings.Global.GPU_DEBUG_LAYER_APP,
                 GlobalSettingsProto.Gpu.DEBUG_LAYER_APP);
         dumpSetting(s, p,
@@ -715,6 +721,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.GAME_DRIVER_WHITELIST,
                 GlobalSettingsProto.Gpu.GAME_DRIVER_WHITELIST);
+        dumpSetting(s, p,
+                Settings.Global.GAME_DRIVER_BLACKLISTS,
+                GlobalSettingsProto.Gpu.GAME_DRIVER_BLACKLISTS);
+        dumpSetting(s, p,
+                Settings.Global.GAME_DRIVER_SPHAL_LIBRARIES,
+                GlobalSettingsProto.Gpu.GAME_DRIVER_SPHAL_LIBRARIES);
         p.end(gpuToken);
 
         final long hdmiToken = p.start(GlobalSettingsProto.HDMI);
@@ -1344,11 +1356,11 @@ class SettingsProtoDumpUtil {
                 Settings.Global.SHOW_TEMPERATURE_WARNING,
                 GlobalSettingsProto.TemperatureWarning.SHOW_TEMPERATURE_WARNING);
         dumpSetting(s, p,
+                Settings.Global.SHOW_USB_TEMPERATURE_ALARM,
+                GlobalSettingsProto.TemperatureWarning.SHOW_USB_TEMPERATURE_ALARM);
+        dumpSetting(s, p,
                 Settings.Global.WARNING_TEMPERATURE,
                 GlobalSettingsProto.TemperatureWarning.WARNING_TEMPERATURE_LEVEL);
-        dumpSetting(s, p,
-                Settings.Global.USB_ALARM_TEMPERATURE,
-                GlobalSettingsProto.TemperatureWarning.USB_ALARM_TEMPERATURE_LEVEL);
         p.end(tempWarningToken);
 
         final long tetherToken = p.start(GlobalSettingsProto.TETHER);
@@ -2081,6 +2093,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.NOTIFICATION_BADGING,
                 SecureSettingsProto.Notification.BADGING);
+        dumpSetting(s, p,
+                Settings.Secure.NOTIFICATION_BUBBLES,
+                SecureSettingsProto.Notification.BUBBLES);
         dumpSetting(s, p,
                 Settings.Secure.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING,
                 SecureSettingsProto.Notification.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING);

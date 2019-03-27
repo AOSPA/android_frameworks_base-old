@@ -206,6 +206,11 @@ public final class DefaultPermissionGrantPolicy {
         // STOPSHIP(b/112545973): remove once feature enabled by default
         if (StorageManager.hasIsolatedStorage()) {
             MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_AUDIO);
+
+            // STOPSHIP(b/124466734): remove these manual grants once the legacy
+            // permission logic is unified with PermissionController
+            MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+            MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
     }
 
@@ -215,6 +220,11 @@ public final class DefaultPermissionGrantPolicy {
         if (StorageManager.hasIsolatedStorage()) {
             MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_VIDEO);
             MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_IMAGES);
+
+            // STOPSHIP(b/124466734): remove these manual grants once the legacy
+            // permission logic is unified with PermissionController
+            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+            MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
     }
 
@@ -645,7 +655,7 @@ public final class DefaultPermissionGrantPolicy {
                 grantPermissionsToSystemPackage(packageName, userId,
                         CONTACTS_PERMISSIONS, CALENDAR_PERMISSIONS, MICROPHONE_PERMISSIONS,
                         PHONE_PERMISSIONS, SMS_PERMISSIONS, CAMERA_PERMISSIONS,
-                        SENSORS_PERMISSIONS, STORAGE_PERMISSIONS);
+                        SENSORS_PERMISSIONS, STORAGE_PERMISSIONS, MEDIA_AURAL_PERMISSIONS);
                 grantSystemFixedPermissionsToSystemPackage(packageName, userId,
                         LOCATION_PERMISSIONS, ACTIVITY_RECOGNITION_PERMISSIONS);
             }
@@ -721,7 +731,7 @@ public final class DefaultPermissionGrantPolicy {
         grantSystemFixedPermissionsToSystemPackage(
                 getDefaultSystemHandlerActivityPackage(
                         RingtoneManager.ACTION_RINGTONE_PICKER, userId),
-                userId, STORAGE_PERMISSIONS);
+                userId, STORAGE_PERMISSIONS, MEDIA_AURAL_PERMISSIONS);
 
         // TextClassifier Service
         String textClassifierPackageName =
@@ -840,7 +850,7 @@ public final class DefaultPermissionGrantPolicy {
         }
         for (String packageName : packageNames) {
             grantPermissionsToSystemPackage(packageName, userId,
-                    PHONE_PERMISSIONS, LOCATION_PERMISSIONS, SMS_PERMISSIONS);
+                    PHONE_PERMISSIONS, ALWAYS_LOCATION_PERMISSIONS, SMS_PERMISSIONS);
         }
     }
 
@@ -1462,14 +1472,15 @@ public final class DefaultPermissionGrantPolicy {
                         outGrantExceptions.get(packageName);
                 if (packageExceptions == null) {
                     // The package must be on the system image
-                    if (!isSystemPackage(packageName)) {
-                        Log.w(TAG, "Unknown package:" + packageName);
+                    PackageInfo packageInfo = getSystemPackageInfo(packageName);
+                    if (!isSystemPackage(packageInfo)) {
+                        Log.w(TAG, "Unknown system package:" + packageName);
                         XmlUtils.skipCurrentTag(parser);
                         continue;
                     }
 
                     // The package must support runtime permissions
-                    if (!doesPackageSupportRuntimePermissions(getSystemPackageInfo(packageName))) {
+                    if (!doesPackageSupportRuntimePermissions(packageInfo)) {
                         Log.w(TAG, "Skipping non supporting runtime permissions package:"
                                 + packageName);
                         XmlUtils.skipCurrentTag(parser);

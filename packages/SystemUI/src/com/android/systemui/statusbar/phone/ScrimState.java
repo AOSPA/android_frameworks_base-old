@@ -128,7 +128,8 @@ public enum ScrimState {
         public void prepare(ScrimState previousState) {
             mCurrentInFrontAlpha = 0f;
             if (mPulseReason == DozeLog.PULSE_REASON_NOTIFICATION
-                    || mPulseReason == DozeLog.PULSE_REASON_DOCKING) {
+                    || mPulseReason == DozeLog.PULSE_REASON_DOCKING
+                    || mPulseReason == DozeLog.PULSE_REASON_INTENT) {
                 mCurrentBehindAlpha = previousState.getBehindAlpha();
                 mCurrentBehindTint = Color.BLACK;
             } else {
@@ -211,14 +212,6 @@ public enum ScrimState {
     }
 
     public void prepare(ScrimState previousState) {
-    }
-
-    /**
-     * Check if lockscreen wallpaper or music album art exists.
-     * @return true if lockscreen wallpaper or music album art exists.
-     */
-    public boolean hasBackdrop() {
-        return mHasBackdrop;
     }
 
     public int getIndex() {

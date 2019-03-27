@@ -59,6 +59,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
+import android.os.ParcelableException;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteCallback;
@@ -115,6 +116,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 
 /**
@@ -1376,7 +1379,7 @@ public class DevicePolicyManager {
      * complexity, and use this activity with extra {@link #EXTRA_PASSWORD_COMPLEXITY} to suggest
      * to users how complex the app wants the new screen lock to be. Note that both {@link
      * #getPasswordComplexity()} and the extra {@link #EXTRA_PASSWORD_COMPLEXITY} require the
-     * calling app to have the permission {@link permission#GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY}.
+     * calling app to have the permission {@link permission#REQUEST_SCREEN_LOCK_COMPLEXITY}.
      *
      * <p>If the intent is launched from within a managed profile with a profile
      * owner built against {@link android.os.Build.VERSION_CODES#M} or before,
@@ -1404,7 +1407,7 @@ public class DevicePolicyManager {
      *
      * <p>If an invalid value is used, it will be treated as {@link #PASSWORD_COMPLEXITY_NONE}.
      */
-    @RequiresPermission(android.Manifest.permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY)
+    @RequiresPermission(android.Manifest.permission.REQUEST_SCREEN_LOCK_COMPLEXITY)
     public static final String EXTRA_PASSWORD_COMPLEXITY =
             "android.app.extra.PASSWORD_COMPLEXITY";
 
@@ -1574,6 +1577,19 @@ public class DevicePolicyManager {
      * Already granted or denied permissions are not affected by this.
      */
     public static final int PERMISSION_POLICY_AUTO_DENY = 2;
+
+    /**
+     * Possible policy values for permissions.
+     *
+     * @hide
+     */
+    @IntDef(prefix = { "PERMISSION_GRANT_STATE_" }, value = {
+            PERMISSION_GRANT_STATE_DEFAULT,
+            PERMISSION_GRANT_STATE_GRANTED,
+            PERMISSION_GRANT_STATE_DENIED
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface PermissionGrantState {}
 
     /**
      * Runtime permission state: The user can manage the permission
@@ -2125,7 +2141,7 @@ public class DevicePolicyManager {
      * Callback used in {@link #installSystemUpdate} to indicate that there was an error while
      * trying to install an update.
      */
-    public abstract static class InstallUpdateCallback {
+    public abstract static class InstallSystemUpdateCallback {
         /** Represents an unknown error while trying to install an update. */
         public static final int UPDATE_ERROR_UNKNOWN = 1;
 
@@ -2144,7 +2160,12 @@ public class DevicePolicyManager {
         /** Represents the battery being too low to apply an update. */
         public static final int UPDATE_ERROR_BATTERY_LOW = 5;
 
-        /** Method invoked when there was an error while installing an update. */
+        /**
+         * Method invoked when there was an error while installing an update.
+         *
+         * <p>The given error message is not intended to be user-facing. It is intended to be
+         * reported back to the IT admin to be read.
+         */
         public void onInstallUpdateError(
                 @InstallUpdateCallbackErrorConstants int errorCode, String errorMessage) {
         }
@@ -2154,11 +2175,11 @@ public class DevicePolicyManager {
      * @hide
      */
     @IntDef(prefix = { "UPDATE_ERROR_" }, value = {
-            InstallUpdateCallback.UPDATE_ERROR_UNKNOWN,
-            InstallUpdateCallback.UPDATE_ERROR_INCORRECT_OS_VERSION,
-            InstallUpdateCallback.UPDATE_ERROR_UPDATE_FILE_INVALID,
-            InstallUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND,
-            InstallUpdateCallback.UPDATE_ERROR_BATTERY_LOW
+            InstallSystemUpdateCallback.UPDATE_ERROR_UNKNOWN,
+            InstallSystemUpdateCallback.UPDATE_ERROR_INCORRECT_OS_VERSION,
+            InstallSystemUpdateCallback.UPDATE_ERROR_UPDATE_FILE_INVALID,
+            InstallSystemUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND,
+            InstallSystemUpdateCallback.UPDATE_ERROR_BATTERY_LOW
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallUpdateCallbackErrorConstants {}
@@ -3346,10 +3367,10 @@ public class DevicePolicyManager {
      *
      * @throws IllegalStateException if the user is not unlocked.
      * @throws SecurityException if the calling application does not have the permission
-     *                           {@link permission#GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY}
+     *                           {@link permission#REQUEST_SCREEN_LOCK_COMPLEXITY}
      */
     @PasswordComplexity
-    @RequiresPermission(android.Manifest.permission.GET_AND_REQUEST_SCREEN_LOCK_COMPLEXITY)
+    @RequiresPermission(android.Manifest.permission.REQUEST_SCREEN_LOCK_COMPLEXITY)
     public int getPasswordComplexity() {
         throwIfParentInstance("getPasswordComplexity");
         if (mService == null) {
@@ -4618,6 +4639,10 @@ public class DevicePolicyManager {
      * <p>If the installer must have access to the credentials, call
      * {@link #installKeyPair(ComponentName, PrivateKey, Certificate[], String, boolean)} instead.
      *
+     * <p>Note: If the provided {@code alias} is of an existing alias, all former grants that apps
+     * have been given to access the key and certificates associated with this alias will be
+     * revoked.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *            {@code null} if calling from a delegated certificate installer.
      * @param privKey The private key to install.
@@ -4644,6 +4669,10 @@ public class DevicePolicyManager {
      * <p>The caller of this API may grant itself access to the certificate and private key
      * immediately, without user approval. It is a best practice not to request this unless strictly
      * necessary since it opens up additional security vulnerabilities.
+     *
+     * <p>Note: If the provided {@code alias} is of an existing alias, all former grants that apps
+     * have been given to access the key and certificates associated with this alias will be
+     * revoked.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *        {@code null} if calling from a delegated certificate installer.
@@ -4684,6 +4713,10 @@ public class DevicePolicyManager {
      *
      * <p>Include {@link #INSTALLKEY_SET_USER_SELECTABLE} in the {@code flags} argument to allow
      * the user to select the key from a dialog.
+     *
+     * <p>Note: If the provided {@code alias} is of an existing alias, all former grants that apps
+     * have been given to access the key and certificates associated with this alias will be
+     * revoked.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *        {@code null} if calling from a delegated certificate installer.
@@ -4760,6 +4793,10 @@ public class DevicePolicyManager {
      *
      * <p>Because this method might take several seconds to complete, it should only be called from
      * a worker thread. This method returns {@code null} when called from the main thread.
+     *
+     * <p>Note: If the provided {@code alias} is of an existing alias, all former grants that apps
+     * have been given to access the key and certificates associated with this alias will be
+     * revoked.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *            {@code null} if calling from a delegated certificate installer.
@@ -6408,11 +6445,9 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param packageName The name of the package to set as the default SMS application.
      * @throws SecurityException if {@code admin} is not a device owner.
-     *
-     * @hide
      */
-    @UnsupportedAppUsage
-    public void setDefaultSmsApplication(@NonNull ComponentName admin, String packageName) {
+    public void setDefaultSmsApplication(@NonNull ComponentName admin,
+            @NonNull String packageName) {
         throwIfParentInstance("setDefaultSmsApplication");
         if (mService != null) {
             try {
@@ -7017,9 +7052,9 @@ public class DevicePolicyManager {
      }
 
     /**
-     * Called by a profile or device owner to set the permitted input methods services. When set by
-     * a device owner or profile owner the restriction applies to all profiles of the user the
-     * device owner or profile owner is an admin for. By default, the user can use any input method.
+     * Called by a profile or device owner to set the permitted input methods services for this
+     * user. By default, the user can use any input method.
+     * <p>
      * When zero or more packages have been added, input method that are not in the list and not
      * part of the system can not be enabled by the user. This method will fail if it is called for
      * a admin that is not for the foreground user or a profile of the foreground user. Any
@@ -7028,7 +7063,7 @@ public class DevicePolicyManager {
      * Calling with a null value for the list disables the restriction so that all input methods can
      * be used, calling with an empty list disables all but the system's own input methods.
      * <p>
-     * System input methods are always available to the user this method can't modify this.
+     * System input methods are always available to the user - this method can't modify this.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param packageNames List of input method package names.
@@ -8648,8 +8683,15 @@ public class DevicePolicyManager {
      * Setting the grant state to {@link #PERMISSION_GRANT_STATE_DEFAULT default} does not revoke
      * the permission. It retains the previous grant, if any.
      * <p/>
-     * Permissions can be granted or revoked only for applications built with a
-     * {@code targetSdkVersion} of {@link android.os.Build.VERSION_CODES#M} or later.
+     * Device admins with a {@code targetSdkVersion} &lt; {@link android.os.Build.VERSION_CODES#Q}
+     * cannot grant and revoke permissions for applications built with a {@code targetSdkVersion}
+     * &lt; {@link android.os.Build.VERSION_CODES#M}.
+     * <p/>
+     * Admins with a {@code targetSdkVersion} &ge; {@link android.os.Build.VERSION_CODES#Q} can
+     * grant and revoke permissions of all apps. Similar to the user revoking a permission from a
+     * application built with a {@code targetSdkVersion} &lt;
+     * {@link android.os.Build.VERSION_CODES#M} the app-op matching the permission is set to
+     * {@link android.app.AppOpsManager#MODE_IGNORED}, but the permission stays granted.
      *
      * @param admin Which profile or device owner this request is associated with.
      * @param packageName The application to grant or revoke a permission to.
@@ -8665,14 +8707,21 @@ public class DevicePolicyManager {
      * @see #setDelegatedScopes
      * @see #DELEGATION_PERMISSION_GRANT
      */
-    public boolean setPermissionGrantState(@NonNull ComponentName admin, String packageName,
-            String permission, int grantState) {
+    public boolean setPermissionGrantState(@NonNull ComponentName admin,
+            @NonNull String packageName, @NonNull String permission,
+            @PermissionGrantState int grantState) {
         throwIfParentInstance("setPermissionGrantState");
         try {
-            return mService.setPermissionGrantState(admin, mContext.getPackageName(), packageName,
-                    permission, grantState);
+            CompletableFuture<Boolean> result = new CompletableFuture<>();
+
+            mService.setPermissionGrantState(admin, mContext.getPackageName(), packageName,
+                    permission, grantState, new RemoteCallback((b) -> result.complete(b != null)));
+
+            return result.get();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -8700,8 +8749,8 @@ public class DevicePolicyManager {
      * @see #setDelegatedScopes
      * @see #DELEGATION_PERMISSION_GRANT
      */
-    public int getPermissionGrantState(@Nullable ComponentName admin, String packageName,
-            String permission) {
+    public @PermissionGrantState int getPermissionGrantState(@Nullable ComponentName admin,
+            @NonNull String packageName, @NonNull String permission) {
         throwIfParentInstance("getPermissionGrantState");
         try {
             return mService.getPermissionGrantState(admin, mContext.getPackageName(), packageName,
@@ -9630,7 +9679,7 @@ public class DevicePolicyManager {
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param enabled {@code true} to enable the backup service, {@code false} to disable it.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not a device owner or a profile owner.
      */
     public void setBackupServiceEnabled(@NonNull ComponentName admin, boolean enabled) {
         throwIfParentInstance("setBackupServiceEnabled");
@@ -10417,9 +10466,9 @@ public class DevicePolicyManager {
      * doesn't necessarily mean that the update has been applied successfully. The caller should
      * additionally check the system version with {@link android.os.Build#FINGERPRINT} or {@link
      * android.os.Build.VERSION}. If an error occurs during processing the OTA before the reboot,
-     * the caller will be notified by {@link InstallUpdateCallback}. If device does not have
+     * the caller will be notified by {@link InstallSystemUpdateCallback}. If device does not have
      * sufficient battery level, the installation will fail with error {@link
-     * InstallUpdateCallback#UPDATE_ERROR_BATTERY_LOW}.
+     * InstallSystemUpdateCallback#UPDATE_ERROR_BATTERY_LOW}.
      *
      * @param admin The {@link DeviceAdminReceiver} that this request is associated with.
      * @param updateFilePath An Uri of the file that contains the update. The file should be
@@ -10431,7 +10480,7 @@ public class DevicePolicyManager {
     public void installSystemUpdate(
             @NonNull ComponentName admin, @NonNull Uri updateFilePath,
             @NonNull @CallbackExecutor Executor executor,
-            @NonNull InstallUpdateCallback callback) {
+            @NonNull InstallSystemUpdateCallback callback) {
         throwIfParentInstance("installUpdate");
         if (mService == null) {
             return;
@@ -10451,19 +10500,20 @@ public class DevicePolicyManager {
         } catch (FileNotFoundException e) {
             Log.w(TAG, e);
             executeCallback(
-                    InstallUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND, Log.getStackTraceString(e),
+                    InstallSystemUpdateCallback.UPDATE_ERROR_FILE_NOT_FOUND,
+                    Log.getStackTraceString(e),
                     executor, callback);
         } catch (IOException e) {
             Log.w(TAG, e);
             executeCallback(
-                    InstallUpdateCallback.UPDATE_ERROR_UNKNOWN, Log.getStackTraceString(e),
+                    InstallSystemUpdateCallback.UPDATE_ERROR_UNKNOWN, Log.getStackTraceString(e),
                     executor, callback);
         }
     }
 
     private void executeCallback(int errorCode, String errorMessage,
             @NonNull @CallbackExecutor Executor executor,
-            @NonNull InstallUpdateCallback callback) {
+            @NonNull InstallSystemUpdateCallback callback) {
         executor.execute(() -> callback.onInstallUpdateError(errorCode, errorMessage));
     }
 
@@ -10523,6 +10573,8 @@ public class DevicePolicyManager {
      * @hide
      */
     @SystemApi
+    @RequiresPermission(value = android.Manifest.permission.GRANT_PROFILE_OWNER_DEVICE_IDS_ACCESS,
+            conditional = true)
     public void setProfileOwnerCanAccessDeviceIdsForUser(
             @NonNull ComponentName who, @NonNull UserHandle userHandle) {
         if (mService == null) {

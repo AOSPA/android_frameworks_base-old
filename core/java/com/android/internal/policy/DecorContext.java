@@ -16,12 +16,14 @@
 
 package com.android.internal.policy;
 
+import android.content.ContentCaptureOptions;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.view.ContextThemeWrapper;
 import android.view.WindowManager;
 import android.view.WindowManagerImpl;
+import android.view.contentcapture.ContentCaptureManager;
 
 import java.lang.ref.WeakReference;
 
@@ -36,6 +38,7 @@ class DecorContext extends ContextThemeWrapper {
     private PhoneWindow mPhoneWindow;
     private WindowManager mWindowManager;
     private Resources mActivityResources;
+    private ContentCaptureManager mContentCaptureManager;
 
     private WeakReference<Context> mActivityContext;
 
@@ -60,6 +63,16 @@ class DecorContext extends ContextThemeWrapper {
             }
             return mWindowManager;
         }
+        if (Context.CONTENT_CAPTURE_MANAGER_SERVICE.equals(name)) {
+            if (mContentCaptureManager == null) {
+                Context activityContext = mActivityContext.get();
+                if (activityContext != null) {
+                    mContentCaptureManager = (ContentCaptureManager) activityContext
+                            .getSystemService(name);
+                }
+            }
+            return mContentCaptureManager;
+        }
         return super.getSystemService(name);
     }
 
@@ -78,5 +91,14 @@ class DecorContext extends ContextThemeWrapper {
     @Override
     public AssetManager getAssets() {
         return mActivityResources.getAssets();
+    }
+
+    @Override
+    public ContentCaptureOptions getContentCaptureOptions() {
+        Context activityContext = mActivityContext.get();
+        if (activityContext != null) {
+            return activityContext.getContentCaptureOptions();
+        }
+        return null;
     }
 }

@@ -34,6 +34,7 @@ import static android.opengl.GLES20.glVertexAttribPointer;
 
 import android.graphics.Bitmap;
 import android.opengl.GLUtils;
+import android.os.Build;
 import android.util.Log;
 
 import java.nio.ByteBuffer;
@@ -53,7 +54,6 @@ class ImageGLWallpaper {
     static final String U_REVEAL = "uReveal";
     static final String U_AOD2OPACITY = "uAod2Opacity";
     static final String U_TEXTURE = "uTexture";
-    static final String U_AOD_MODE = "uAodMode";
 
     private static final int HANDLE_UNDEFINED = -1;
     private static final int POSITION_COMPONENT_COUNT = 2;
@@ -87,7 +87,6 @@ class ImageGLWallpaper {
     private int mAttrPosition;
     private int mAttrTextureCoordinates;
     private int mUniAod2Opacity;
-    private int mUniAodMode;
     private int mUniCenterReveal;
     private int mUniReveal;
     private int mUniTexture;
@@ -132,7 +131,6 @@ class ImageGLWallpaper {
 
     private void setupUniforms() {
         mUniAod2Opacity = mProgram.getUniformHandle(U_AOD2OPACITY);
-        mUniAodMode = mProgram.getUniformHandle(U_AOD_MODE);
         mUniCenterReveal = mProgram.getUniformHandle(U_CENTER_REVEAL);
         mUniReveal = mProgram.getUniformHandle(U_REVEAL);
         mUniTexture = mProgram.getUniformHandle(U_TEXTURE);
@@ -146,8 +144,6 @@ class ImageGLWallpaper {
                 return mAttrTextureCoordinates;
             case U_AOD2OPACITY:
                 return mUniAod2Opacity;
-            case U_AOD_MODE:
-                return mUniAodMode;
             case U_CENTER_REVEAL:
                 return mUniCenterReveal;
             case U_REVEAL:
@@ -206,39 +202,57 @@ class ImageGLWallpaper {
             return;
         }
 
-        float ratioW = 1f;
-        float ratioH = 1f;
         int bitmapWidth = bitmap.getWidth();
         int bitmapHeight = bitmap.getHeight();
+        float ratioW = 1f;
+        float ratioH = 1f;
+        float rX = 0f;
+        float rY = 0f;
+        float[] coordinates = null;
 
-        boolean adjustWidth = bitmapWidth > surfaceWidth;
-        if (adjustWidth) {
-            ratioW = (float) surfaceWidth / bitmapWidth;
-            float referenceX = xOffset + ratioW > 1f ? 1f - ratioW : xOffset;
-            for (int i = 0; i < TEXTURES.length; i += 2) {
-                if (i == 2 || i == 4 || i == 6) {
-                    TEXTURES[i] = Math.min(1f, referenceX + ratioW);
-                } else {
-                    TEXTURES[i] = referenceX;
-                }
-            }
+        final boolean adjustWidth = bitmapWidth > surfaceWidth;
+        final boolean adjustHeight = bitmapHeight > surfaceHeight;
+
+        if (adjustWidth || adjustHeight) {
+            coordinates = TEXTURES.clone();
         }
 
-        boolean adjustHeight = bitmapHeight > surfaceHeight;
-        if (adjustHeight) {
-            ratioH = (float) surfaceHeight / bitmapHeight;
-            float referenceY = yOffset + ratioH > 1f ? 1f - ratioH : yOffset;
-            for (int i = 1; i < TEXTURES.length; i += 2) {
-                if (i == 1 || i == 3 || i == 11) {
-                    TEXTURES[i] = Math.min(1f, referenceY + ratioH);
+        if (adjustWidth) {
+            float x = (float) Math.round((bitmapWidth - surfaceWidth) * xOffset) / bitmapWidth;
+            ratioW = (float) surfaceWidth / bitmapWidth;
+            float referenceX = x + ratioW > 1f ? 1f - ratioW : x;
+            for (int i = 0; i < coordinates.length; i += 2) {
+                if (i == 2 || i == 4 || i == 6) {
+                    coordinates[i] = Math.min(1f, referenceX + ratioW);
                 } else {
-                    TEXTURES[i] = referenceY;
+                    coordinates[i] = referenceX;
                 }
             }
+            rX = referenceX;
+        }
+
+
+        if (adjustHeight) {
+            float y = (float) Math.round((bitmapHeight - surfaceHeight) * yOffset) / bitmapHeight;
+            ratioH = (float) surfaceHeight / bitmapHeight;
+            float referenceY = y + ratioH > 1f ? 1f - ratioH : y;
+            for (int i = 1; i < coordinates.length; i += 2) {
+                if (i == 1 || i == 3 || i == 11) {
+                    coordinates[i] = Math.min(1f, referenceY + ratioH);
+                } else {
+                    coordinates[i] = referenceY;
+                }
+            }
+            rY = referenceY;
         }
 
         if (adjustWidth || adjustHeight) {
-            mTextureBuffer.put(TEXTURES);
+            if (Build.IS_DEBUGGABLE) {
+                Log.d(TAG, "adjustTextureCoordinates: sW=" + surfaceWidth + ", sH=" + surfaceHeight
+                        + ", bW=" + bitmapWidth + ", bH=" + bitmapHeight
+                        + ", rW=" + ratioW + ", rH=" + ratioH + ", rX=" + rX + ", rY=" + rY);
+            }
+            mTextureBuffer.put(coordinates);
             mTextureBuffer.position(0);
         }
     }

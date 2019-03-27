@@ -20,7 +20,6 @@ import static android.opengl.GLES20.GL_COLOR_BUFFER_BIT;
 import static android.opengl.GLES20.glClear;
 import static android.opengl.GLES20.glClearColor;
 import static android.opengl.GLES20.glUniform1f;
-import static android.opengl.GLES20.glUniform1i;
 import static android.opengl.GLES20.glViewport;
 
 import android.app.WallpaperManager;
@@ -28,6 +27,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.opengl.GLSurfaceView;
+import android.os.Build;
 import android.util.Log;
 
 import com.android.systemui.ImageWallpaper;
@@ -41,8 +41,7 @@ import javax.microedition.khronos.opengles.GL10;
  * A GL renderer for image wallpaper.
  */
 public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
-        ImageWallpaper.SensorEventListener, ImageWallpaper.WallpaperStatusListener,
-        ImageRevealHelper.RevealStateListener {
+        ImageWallpaper.WallpaperStatusListener, ImageRevealHelper.RevealStateListener {
     private static final String TAG = ImageWallpaperRenderer.class.getSimpleName();
 
     private final WallpaperManager mWallpaperManager;
@@ -51,7 +50,6 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
     private final ImageProcessHelper mImageProcessHelper;
     private final ImageRevealHelper mImageRevealHelper;
     private final ImageGLView mGLView;
-    private boolean mIsInAmbientMode;
     private float mXOffset = 0f;
     private float mYOffset = 0f;
 
@@ -85,6 +83,10 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         glViewport(0, 0, width, height);
+        if (Build.IS_DEBUGGABLE) {
+            Log.d(TAG, "onSurfaceChanged: width=" + width + ", height=" + height
+                    + ", xOffset=" + mXOffset + ", yOffset=" + mYOffset);
+        }
         mWallpaper.adjustTextureCoordinates(mWallpaperManager.getBitmap(),
                 width, height, mXOffset, mYOffset);
     }
@@ -96,26 +98,17 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
 
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_AOD2OPACITY), .25f);
+        glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_AOD2OPACITY), 1);
         glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_CENTER_REVEAL), threshold);
         glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_REVEAL), reveal);
-        glUniform1i(mWallpaper.getHandle(ImageGLWallpaper.U_AOD_MODE), mIsInAmbientMode ? 1 : 0);
 
         mWallpaper.useTexture();
         mWallpaper.draw();
     }
 
     @Override
-    public void onSensorEvent(boolean awake) {
-        mImageRevealHelper.updateAwake(awake);
-    }
-
-    @Override
-    public void onAmbientModeChanged(boolean inAmbientMode) {
-        mIsInAmbientMode = inAmbientMode;
-        if (inAmbientMode) {
-            mImageRevealHelper.sleep();
-        }
+    public void onAmbientModeChanged(boolean inAmbientMode, long duration) {
+        mImageRevealHelper.updateAwake(!inAmbientMode, duration);
         requestRender();
     }
 
@@ -136,6 +129,10 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
         mXOffset = xOffset;
         mYOffset = yOffset;
 
+        if (Build.IS_DEBUGGABLE) {
+            Log.d(TAG, "onOffsetsChanged: width=" + width + ", height=" + height
+                    + ", xOffset=" + mXOffset + ", yOffset=" + mYOffset);
+        }
         mWallpaper.adjustTextureCoordinates(bitmap, width, height, mXOffset, mYOffset);
         requestRender();
     }

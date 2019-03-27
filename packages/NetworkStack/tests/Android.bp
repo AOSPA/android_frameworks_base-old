@@ -18,6 +18,7 @@ android_test {
     name: "NetworkStackTests",
     certificate: "platform",
     srcs: ["src/**/*.java"],
+    test_suites: ["device-tests"],
     resource_dirs: ["res"],
     static_libs: [
         "android-support-test",
@@ -49,6 +50,7 @@ android_test {
         "libhidlbase",
         "libhidltransport",
         "libhwbinder",
+        "libjsoncpp",
         "liblog",
         "liblzma",
         "libnativehelper",

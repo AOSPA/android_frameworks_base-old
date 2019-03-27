@@ -65,7 +65,8 @@ public final class ColorDisplayManager {
     @SystemApi
     public static final int CAPABILITY_NONE = 0x0;
     /**
-     * The device can properly apply transforms over protected content.
+     * The device can use GPU composition on protected content (layers whose buffers are protected
+     * in the trusted memory zone).
      *
      * @hide
      */
@@ -365,6 +366,17 @@ public final class ColorDisplayManager {
     }
 
     /**
+     * Gets whether or not a non-default saturation level is currently applied to the display.
+     *
+     * @return {@code true} if the display is not at full saturation
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
+    public boolean isSaturationActivated() {
+        return mManager.isSaturationActivated();
+    }
+
+    /**
      * Set the level of color saturation to apply to a specific app.
      *
      * @param packageName the package name of the app whose windows should be desaturated
@@ -583,6 +595,14 @@ public final class ColorDisplayManager {
         boolean setSaturationLevel(int saturationLevel) {
             try {
                 return mCdm.setSaturationLevel(saturationLevel);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        boolean isSaturationActivated() {
+            try {
+                return mCdm.isSaturationActivated();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

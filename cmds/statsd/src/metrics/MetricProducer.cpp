@@ -45,7 +45,8 @@ void MetricProducer::onMatchedLogEventLocked(const size_t matcherIndex, const Lo
                            &dimensionKeysInCondition);
         condition = (conditionState == ConditionState::kTrue);
     } else {
-        condition = mCondition;
+        // TODO: The unknown condition state is not handled here, we should fix it.
+        condition = mCondition == ConditionState::kTrue;
     }
 
     if (mDimensionsInCondition.empty() && condition) {
@@ -94,7 +95,7 @@ void MetricProducer::flushIfExpire(int64_t elapsedTimestampNs) {
 void MetricProducer::addActivation(int activationTrackerIndex, int64_t ttl_seconds) {
     std::lock_guard<std::mutex> lock(mMutex);
     // When a metric producer does not depend on any activation, its mIsActive is true.
-    // Therefor, if this is the 1st activation, mIsActive will turn to false. Otherwise it does not
+    // Therefore, if this is the 1st activation, mIsActive will turn to false. Otherwise it does not
     // change.
     if  (mEventActivationMap.empty()) {
         mIsActive = false;
@@ -107,11 +108,58 @@ void MetricProducer::activateLocked(int activationTrackerIndex, int64_t elapsedT
     if (it == mEventActivationMap.end()) {
         return;
     }
+    if (mActivationType == MetricActivation::ACTIVATE_ON_BOOT &&
+        it->second.state == ActivationState::kNotActive) {
+        it->second.state = ActivationState::kActiveOnBoot;
+        return;
+    }
     it->second.activation_ns = elapsedTimestampNs;
     it->second.state = ActivationState::kActive;
     mIsActive = true;
 }
 
+void MetricProducer::setActiveLocked(int64_t currentTimeNs, int64_t remainingTtlNs) {
+    if (mEventActivationMap.size() == 0) {
+        return;
+    }
+    for (auto& pair : mEventActivationMap) {
+        auto& activation = pair.second;
+        if (activation.ttl_ns >= remainingTtlNs) {
+            activation.activation_ns = currentTimeNs + remainingTtlNs - activation.ttl_ns;
+            activation.state = kActive;
+            mIsActive = true;
+            VLOG("setting new activation time to %lld, %lld, %lld",
+                 (long long)activation.activation_ns, (long long)currentTimeNs,
+                 (long long)remainingTtlNs);
+            return;
+        }
+    }
+    ALOGE("Required ttl is longer than all possible activations.");
+}
+
+int64_t MetricProducer::getRemainingTtlNsLocked(int64_t currentTimeNs) const {
+    int64_t maxTtl = 0;
+    for (const auto& activation : mEventActivationMap) {
+        if (activation.second.state == kActive) {
+            maxTtl = std::max(maxTtl, activation.second.ttl_ns + activation.second.activation_ns -
+                                              currentTimeNs);
+        }
+    }
+    return maxTtl;
+}
+
+void MetricProducer::prepActiveForBootIfNecessaryLocked(int64_t currentTimeNs) {
+    if (mActivationType != MetricActivation::ACTIVATE_ON_BOOT) {
+        return;
+    }
+    for (auto& activation : mEventActivationMap) {
+        if (activation.second.state == kActiveOnBoot) {
+            activation.second.state = kActive;
+            activation.second.activation_ns = currentTimeNs;
+            mIsActive = true;
+        }
+    }
+}
 
 }  // namespace statsd
 }  // namespace os

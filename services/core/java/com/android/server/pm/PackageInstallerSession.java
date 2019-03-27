@@ -44,7 +44,6 @@ import static com.android.server.pm.PackageInstallerService.prepareStageDir;
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.apex.IApexService;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.content.Context;
 import android.content.IIntentReceiver;
@@ -80,7 +79,6 @@ import android.os.ParcelableException;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.RevocableFileDescriptor;
-import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
@@ -324,18 +322,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         public boolean handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_COMMIT:
-                    synchronized (mLock) {
-                        try {
-                            commitLocked();
-                        } catch (PackageManagerException e) {
-                            final String completeMsg = ExceptionUtils.getCompleteMessage(e);
-                            Slog.e(TAG,
-                                    "Commit of session " + sessionId + " failed: " + completeMsg);
-                            destroyInternal();
-                            dispatchSessionFinished(e.error, completeMsg, null);
-                        }
-                    }
-
+                    handleCommit();
                     break;
                 case MSG_ON_PACKAGE_INSTALLED:
                     final SomeArgs args = (SomeArgs) msg.obj;
@@ -503,9 +490,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             if (info.childSessionIds == null) {
                 info.childSessionIds = EMPTY_CHILD_SESSION_ARRAY;
             }
-            info.isSessionApplied = mStagedSessionApplied;
-            info.isSessionReady = mStagedSessionReady;
-            info.isSessionFailed = mStagedSessionFailed;
+            info.isStagedSessionApplied = mStagedSessionApplied;
+            info.isStagedSessionReady = mStagedSessionReady;
+            info.isStagedSessionFailed = mStagedSessionFailed;
             info.setStagedSessionErrorCode(mStagedSessionErrorCode, mStagedSessionErrorMessage);
         }
         return info;
@@ -1075,39 +1062,66 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mCallback.onSessionSealedBlocking(this);
     }
 
-    @GuardedBy("mLock")
-    private void commitLocked()
-            throws PackageManagerException {
+    private void handleCommit() {
         if (params.isStaged) {
             mStagingManager.commitSession(this);
             destroyInternal();
             dispatchSessionFinished(PackageManager.INSTALL_SUCCEEDED, "Session staged", null);
             return;
         }
+
+        if ((params.installFlags & PackageManager.INSTALL_APEX) != 0) {
+            destroyInternal();
+            dispatchSessionFinished(PackageManager.INSTALL_FAILED_INTERNAL_ERROR,
+                    "APEX packages can only be installed using staged sessions.", null);
+            return;
+        }
+
+        // For a multiPackage session, read the child sessions
+        // outside of the lock, because reading the child
+        // sessions with the lock held could lead to deadlock
+        // (b/123391593).
+        List<PackageInstallerSession> childSessions = null;
+        if (isMultiPackage()) {
+            final int[] childSessionIds = getChildSessionIds();
+            childSessions = new ArrayList<>(childSessionIds.length);
+            for (int childSessionId : childSessionIds) {
+                childSessions.add(mSessionProvider.getSession(childSessionId));
+            }
+        }
+
+        try {
+            synchronized (mLock) {
+                commitNonStagedLocked(childSessions);
+            }
+        } catch (PackageManagerException e) {
+            final String completeMsg = ExceptionUtils.getCompleteMessage(e);
+            Slog.e(TAG, "Commit of session " + sessionId + " failed: " + completeMsg);
+            destroyInternal();
+            dispatchSessionFinished(e.error, completeMsg, null);
+        }
+    }
+
+    @GuardedBy("mLock")
+    private void commitNonStagedLocked(List<PackageInstallerSession> childSessions)
+            throws PackageManagerException {
         final PackageManagerService.ActiveInstallSession committingSession =
                 makeSessionActiveLocked();
         if (committingSession == null) {
             return;
         }
         if (isMultiPackage()) {
-            final int[] childSessionIds = getChildSessionIds();
-            List<PackageManagerService.ActiveInstallSession> childSessions =
-                    new ArrayList<>(childSessionIds.length);
+            List<PackageManagerService.ActiveInstallSession> activeChildSessions =
+                    new ArrayList<>(childSessions.size());
             boolean success = true;
             PackageManagerException failure = null;
-            for (int childSessionId : getChildSessionIds()) {
-                final PackageInstallerSession session = mSessionProvider.getSession(childSessionId);
+            for (int i = 0; i < childSessions.size(); ++i) {
+                final PackageInstallerSession session = childSessions.get(i);
                 try {
                     final PackageManagerService.ActiveInstallSession activeSession =
                             session.makeSessionActiveLocked();
                     if (activeSession != null) {
-                        if ((activeSession.getSessionParams().installFlags
-                                & PackageManager.INSTALL_APEX) != 0) {
-                            throw new PackageManagerException(
-                                    PackageManager.INSTALL_FAILED_INTERNAL_ERROR,
-                                    "Atomic install is not supported for APEX packages.");
-                        }
-                        childSessions.add(activeSession);
+                        activeChildSessions.add(activeSession);
                     }
                 } catch (PackageManagerException e) {
                     failure = e;
@@ -1122,29 +1136,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 }
                 return;
             }
-            mPm.installStage(childSessions);
+            mPm.installStage(activeChildSessions);
         } else {
-            if ((params.installFlags & PackageManager.INSTALL_APEX) != 0) {
-                commitApexLocked();
-            } else {
-                mPm.installStage(committingSession);
-            }
-        }
-    }
-
-    @GuardedBy("mLock")
-    private void commitApexLocked() throws PackageManagerException {
-        try {
-            IApexService apex = IApexService.Stub.asInterface(
-                    ServiceManager.getService("apexservice"));
-            apex.stagePackage(mResolvedBaseFile.toString());
-        } catch (Throwable e) {
-            // Convert all exceptions into package manager exceptions as only those are handled
-            // in the code above
-            throw new PackageManagerException(e);
-        } finally {
-            destroyInternal();
-            dispatchSessionFinished(PackageManager.INSTALL_SUCCEEDED, "APEX installed", null);
+            mPm.installStage(committingSession);
         }
     }
 
@@ -1497,12 +1491,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             // Inherit base if not overridden
             if (mResolvedBaseFile == null) {
                 mResolvedBaseFile = new File(appInfo.getBaseCodePath());
-                mResolvedInheritedFiles.add(mResolvedBaseFile);
+                resolveInheritedFile(mResolvedBaseFile);
                 // Inherit the dex metadata if present.
                 final File baseDexMetadataFile =
                         DexMetadataHelper.findDexMetadataForFile(mResolvedBaseFile);
                 if (baseDexMetadataFile != null) {
-                    mResolvedInheritedFiles.add(baseDexMetadataFile);
+                    resolveInheritedFile(baseDexMetadataFile);
                 }
                 baseApk = existingBase;
             }
@@ -1514,12 +1508,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     final File splitFile = new File(existing.splitCodePaths[i]);
                     final boolean splitRemoved = removeSplitList.contains(splitName);
                     if (!stagedSplits.contains(splitName) && !splitRemoved) {
-                        mResolvedInheritedFiles.add(splitFile);
+                        resolveInheritedFile(splitFile);
                         // Inherit the dex metadata if present.
                         final File splitDexMetadataFile =
                                 DexMetadataHelper.findDexMetadataForFile(splitFile);
                         if (splitDexMetadataFile != null) {
-                            mResolvedInheritedFiles.add(splitDexMetadataFile);
+                            resolveInheritedFile(splitDexMetadataFile);
                         }
                     }
                 }
@@ -1631,6 +1625,17 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 VerityUtils.getFsveritySignatureFilePath(targetFile.getPath()));
         maybeRenameFile(originalSignature, stagedSignature);
         mResolvedStagedFiles.add(stagedSignature);
+    }
+
+    private void resolveInheritedFile(File origFile) {
+        mResolvedInheritedFiles.add(origFile);
+
+        // Inherit the fsverity signature file if present.
+        final File fsveritySignatureFile = new File(
+                VerityUtils.getFsveritySignatureFilePath(origFile.getPath()));
+        if (fsveritySignatureFile.exists()) {
+            mResolvedInheritedFiles.add(fsveritySignatureFile);
+        }
     }
 
     @GuardedBy("mLock")
@@ -1862,6 +1867,15 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
 
+            if (mCommitted && params.isStaged) {
+                synchronized (mLock) {
+                    mDestroyed = true;
+                }
+                mStagingManager.abortCommittedSession(this);
+
+                cleanStageDir();
+            }
+
             if (mRelinquished) {
                 Slog.d(TAG, "Ignoring abandon after commit relinquished control");
                 return;
@@ -1892,7 +1906,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     @Override
-    public void addChildSessionId(int childSessionId) {
+    public void addChildSessionId(int childSessionId) throws RemoteException {
         final PackageInstallerSession childSession = mSessionProvider.getSession(childSessionId);
         if (childSession == null) {
             throw new RemoteException("Unable to add child.",
@@ -1907,9 +1921,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     new PackageManagerException("Child session " + childSessionId
                             + " and parent session " + this.sessionId + " do not have consistent"
                             + " staging session settings."),
-                    false, true).rethrowAsRuntimeException();
+                    false, true);
         }
         synchronized (mLock) {
+            assertCallerIsOwnerOrRootLocked();
+            assertPreparedAndNotSealedLocked("addChildSessionId");
+
             final int indexOfSession = mChildSessionIds.indexOfKey(childSessionId);
             if (indexOfSession >= 0) {
                 return;
@@ -1991,7 +2008,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         // Send broadcast to default launcher only if it's a new install
         final boolean isNewInstall = extras == null || !extras.getBoolean(Intent.EXTRA_REPLACING);
-        if (success && isNewInstall && mPm.mInstallerService.isBootCompleted()) {
+        if (success && isNewInstall && mPm.mInstallerService.okToSendBroadcasts()) {
             mPm.sendSessionCommitBroadcast(generateInfo(), userId);
         }
 
@@ -2021,6 +2038,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mStagedSessionErrorMessage = errorMessage;
             Slog.d(TAG, "Marking session " + sessionId + " as failed: " + errorMessage);
         }
+        cleanStageDir();
         mCallback.onStagedSessionChanged(this);
     }
 
@@ -2032,7 +2050,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mStagedSessionFailed = false;
             mStagedSessionErrorCode = SessionInfo.STAGED_SESSION_NO_ERROR;
             mStagedSessionErrorMessage = "";
+            Slog.d(TAG, "Marking session " + sessionId + " as applied");
         }
+        cleanStageDir();
         mCallback.onStagedSessionChanged(this);
     }
 
@@ -2076,10 +2096,22 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
         // For staged sessions, we don't delete the directory where the packages have been copied,
-        // since these packages are supposed to be read on reboot. StagingManager is in charge of
-        // deleting these dirs when the staged session has reached a final state.
-        // TODO(b/118865310): Implement packageDir deletion in StagingManager.
+        // since these packages are supposed to be read on reboot.
+        // Those dirs are deleted when the staged session has reached a final state.
         if (stageDir != null && !params.isStaged) {
+            try {
+                mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
+            } catch (InstallerException ignored) {
+            }
+        }
+    }
+
+    private void cleanStageDir() {
+        if (isMultiPackage()) {
+            for (int childSessionId : getChildSessionIds()) {
+                mSessionProvider.getSession(childSessionId).cleanStageDir();
+            }
+        } else {
             try {
                 mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
             } catch (InstallerException ignored) {

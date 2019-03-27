@@ -16,12 +16,13 @@
 
 #pragma once
 
-#include "external/StatsPullerManager.h"
+#include <frameworks/base/cmds/statsd/src/active_config_list.pb.h>
 #include "anomaly/AlarmMonitor.h"
 #include "anomaly/AlarmTracker.h"
 #include "anomaly/AnomalyTracker.h"
 #include "condition/ConditionTracker.h"
 #include "config/ConfigKey.h"
+#include "external/StatsPullerManager.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "logd/LogEvent.h"
 #include "matchers/LogMatchingTracker.h"
@@ -47,6 +48,10 @@ public:
 
     // Return whether the configuration is valid.
     bool isConfigValid() const;
+
+    bool checkLogCredentials(const LogEvent& event);
+
+    bool eventSanityCheck(const LogEvent& event);
 
     void onLogEvent(const LogEvent& event);
 
@@ -116,12 +121,35 @@ public:
     virtual void onDumpReport(const int64_t dumpTimeNs,
                               const bool include_current_partial_bucket,
                               const bool erase_data,
+                              const DumpLatency dumpLatency,
                               std::set<string> *str_set,
                               android::util::ProtoOutputStream* protoOutput);
 
     // Computes the total byte size of all metrics managed by a single config source.
     // Does not change the state.
     virtual size_t byteSize();
+
+    // Returns whether or not this config is active.
+    // The config is active if any metric in the config is active.
+    inline bool isActive() const {
+        return mIsActive;
+    }
+
+    inline void getActiveMetrics(std::vector<MetricProducer*>& metrics) const {
+        for (const auto& metric : mAllMetricProducers) {
+            if (metric->isActive()) {
+                metrics.push_back(metric.get());
+            }
+        }
+    }
+
+    inline void prepForShutDown(int64_t currentTimeNs) {
+        for (const auto& metric : mAllMetricProducers) {
+            metric->prepActiveForBootIfNecessary(currentTimeNs);
+        }
+    }
+
+    void setActiveMetrics(ActiveConfig config, int64_t currentTimeNs);
 
 private:
     // For test only.
@@ -216,6 +244,12 @@ private:
     // The metrics that don't need to be uploaded or even reported.
     std::set<int64_t> mNoReportMetricIds;
 
+   // The config is active if any metric in the config is active.
+    bool mIsActive;
+
+    // The config is always active if any metric in the config does not have an activation signal.
+    bool mIsAlwaysActive;
+
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensions);
     FRIEND_TEST(MetricConditionLinkE2eTest, TestMultiplePredicatesAndLinks);
     FRIEND_TEST(AttributionE2eTest, TestAttributionMatchAndSliceByFirstUid);
@@ -247,6 +281,9 @@ private:
     FRIEND_TEST(AlarmE2eTest, TestMultipleAlarms);
     FRIEND_TEST(ConfigTtlE2eTest, TestCountMetric);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetric);
+
+    FRIEND_TEST(StatsLogProcessorTest, TestActiveConfigMetricDiskWriteRead);
+    FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBoot);
 };
 
 }  // namespace statsd

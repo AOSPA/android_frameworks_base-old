@@ -19,21 +19,14 @@ package android.view.textclassifier;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.WorkerThread;
-import android.app.PendingIntent;
 import android.app.RemoteAction;
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.graphics.drawable.Icon;
 import android.icu.util.ULocale;
 import android.os.Bundle;
 import android.os.LocaleList;
 import android.os.ParcelFileDescriptor;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 
@@ -113,6 +106,7 @@ public final class TextClassifierImpl implements TextClassifier {
     private final ModelFileManager mActionsModelFileManager;
 
     private final IntentFactory mIntentFactory;
+    private final TemplateIntentFactory mTemplateIntentFactory;
 
     public TextClassifierImpl(
             Context context, TextClassificationConstants settings, TextClassifier fallback) {
@@ -142,8 +136,10 @@ public final class TextClassifierImpl implements TextClassifier {
                         ActionsSuggestionsModel::getVersion,
                         ActionsSuggestionsModel::getLocales));
 
+        mTemplateIntentFactory = new TemplateIntentFactory();
         mIntentFactory = mSettings.isTemplateIntentFactoryEnabled()
-                ? new TemplateIntentFactory(new LegacyIntentFactory())
+                ? new TemplateClassificationIntentFactory(
+                mTemplateIntentFactory, new LegacyIntentFactory())
                 : new LegacyIntentFactory();
     }
 
@@ -189,7 +185,10 @@ public final class TextClassifierImpl implements TextClassifier {
                                             refTime.toInstant().toEpochMilli(),
                                             refTime.getZone().getId(),
                                             localesString),
-                                    mContext);
+                                    // Passing null here to suppress intent generation
+                                    // TODO: Use an explicit flag to suppress it.
+                                    /* appContext */ null,
+                                    /* deviceLocales */null);
                     final int size = results.length;
                     for (int i = 0; i < size; i++) {
                         tsBuilder.setEntityType(results[i].getCollection(), results[i].getScore());
@@ -233,7 +232,9 @@ public final class TextClassifierImpl implements TextClassifier {
                                                 refTime.toInstant().toEpochMilli(),
                                                 refTime.getZone().getId(),
                                                 localesString),
-                                        mContext);
+                                        mContext,
+                                        getResourceLocaleString()
+                                );
                 if (results.length > 0) {
                     return createClassificationResult(
                             results, string,
@@ -389,37 +390,59 @@ public final class TextClassifierImpl implements TextClassifier {
                     new ActionsSuggestionsModel.Conversation(nativeMessages);
 
             ActionsSuggestionsModel.ActionSuggestion[] nativeSuggestions =
-                    actionsImpl.suggestActions(nativeConversation, null);
-
-            Collection<String> expectedTypes = resolveActionTypesFromRequest(request);
-            List<ConversationAction> conversationActions = new ArrayList<>();
-            int maxSuggestions = nativeSuggestions.length;
-            if (request.getMaxSuggestions() > 0) {
-                maxSuggestions = Math.min(request.getMaxSuggestions(), nativeSuggestions.length);
-            }
-            for (int i = 0; i < maxSuggestions; i++) {
-                ActionsSuggestionsModel.ActionSuggestion nativeSuggestion = nativeSuggestions[i];
-                String actionType = nativeSuggestion.getActionType();
-                if (!expectedTypes.contains(actionType)) {
-                    continue;
-                }
-                conversationActions.add(
-                        new ConversationAction.Builder(actionType)
-                                .setTextReply(nativeSuggestion.getResponseText())
-                                .setConfidenceScore(nativeSuggestion.getScore())
-                                .build());
-            }
-            String resultId = ActionsSuggestionsHelper.createResultId(
-                    mContext,
-                    request.getConversation(),
-                    mActionModelInUse.getVersion(),
-                    mActionModelInUse.getSupportedLocales());
-            return new ConversationActions(conversationActions, resultId);
+                    actionsImpl.suggestActionsWithIntents(
+                            nativeConversation,
+                            null,
+                            mContext,
+                            getResourceLocaleString());
+            return createConversationActionResult(request, nativeSuggestions);
         } catch (Throwable t) {
             // Avoid throwing from this method. Log the error.
             Log.e(LOG_TAG, "Error suggesting conversation actions.", t);
         }
         return mFallback.suggestConversationActions(request);
+    }
+
+    private ConversationActions createConversationActionResult(
+            ConversationActions.Request request,
+            ActionsSuggestionsModel.ActionSuggestion[] nativeSuggestions) {
+        Collection<String> expectedTypes = resolveActionTypesFromRequest(request);
+        List<ConversationAction> conversationActions = new ArrayList<>();
+        for (ActionsSuggestionsModel.ActionSuggestion nativeSuggestion : nativeSuggestions) {
+            if (request.getMaxSuggestions() >= 0
+                    && conversationActions.size() == request.getMaxSuggestions()) {
+                break;
+            }
+            String actionType = nativeSuggestion.getActionType();
+            if (!expectedTypes.contains(actionType)) {
+                continue;
+            }
+            List<LabeledIntent> labeledIntents =
+                    mTemplateIntentFactory.create(nativeSuggestion.getRemoteActionTemplates());
+            RemoteAction remoteAction = null;
+            // Given that we only support implicit intent here, we should expect there is just one
+            // intent for each action type.
+            if (!labeledIntents.isEmpty()) {
+                LabeledIntent.TitleChooser titleChooser =
+                        ActionsSuggestionsHelper.createTitleChooser(actionType);
+                LabeledIntent.Result result = labeledIntents.get(0).resolve(mContext, titleChooser);
+                if (result != null) {
+                    remoteAction = result.remoteAction;
+                }
+            }
+            conversationActions.add(
+                    new ConversationAction.Builder(actionType)
+                            .setConfidenceScore(nativeSuggestion.getScore())
+                            .setTextReply(nativeSuggestion.getResponseText())
+                            .setAction(remoteAction)
+                            .build());
+        }
+        String resultId = ActionsSuggestionsHelper.createResultId(
+                mContext,
+                request.getConversation(),
+                mActionModelInUse.getVersion(),
+                mActionModelInUse.getSupportedLocales());
+        return new ConversationActions(conversationActions, resultId);
     }
 
     @Nullable
@@ -428,10 +451,9 @@ public final class TextClassifierImpl implements TextClassifier {
         TextLanguage textLanguage = detectLanguage(request);
         int localeHypothesisCount = textLanguage.getLocaleHypothesisCount();
         List<String> languageTags = new ArrayList<>();
-        // TODO: Reconsider this and probably make the score threshold configurable.
         for (int i = 0; i < localeHypothesisCount; i++) {
             ULocale locale = textLanguage.getLocale(i);
-            if (textLanguage.getConfidenceScore(locale) < 0.5) {
+            if (textLanguage.getConfidenceScore(locale) < getForeignLanguageThreshold()) {
                 break;
             }
             languageTags.add(locale.toLanguageTag());
@@ -462,11 +484,13 @@ public final class TextClassifierImpl implements TextClassifier {
             }
             if (mAnnotatorImpl == null || !Objects.equals(mAnnotatorModelInUse, bestModel)) {
                 Log.d(DEFAULT_LOG_TAG, "Loading " + bestModel);
-                destroyAnnotatorImplIfExistsLocked();
                 final ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
                         new File(bestModel.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
                 try {
                     if (pfd != null) {
+                        // The current annotator model may be still used by another thread / model.
+                        // Do not call close() here, and let the GC to clean it up when no one else
+                        // is using it.
                         mAnnotatorImpl = new AnnotatorModel(pfd.getFd());
                         mAnnotatorModelInUse = bestModel;
                     }
@@ -475,14 +499,6 @@ public final class TextClassifierImpl implements TextClassifier {
                 }
             }
             return mAnnotatorImpl;
-        }
-    }
-
-    @GuardedBy("mLock") // Do not call outside this lock.
-    private void destroyAnnotatorImplIfExistsLocked() {
-        if (mAnnotatorImpl != null) {
-            mAnnotatorImpl.close();
-            mAnnotatorImpl = null;
         }
     }
 
@@ -522,7 +538,8 @@ public final class TextClassifierImpl implements TextClassifier {
                         new File(bestModel.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
                 try {
                     if (pfd != null) {
-                        mActionsImpl = new ActionsSuggestionsModel(pfd.getFd());
+                        mActionsImpl = new ActionsSuggestionsModel(
+                                pfd.getFd(), getAnnotatorImpl(LocaleList.getDefault()));
                         mActionModelInUse = bestModel;
                     }
                 } finally {
@@ -564,38 +581,36 @@ public final class TextClassifierImpl implements TextClassifier {
             }
         }
 
-        final float foreignTextThreshold = mSettings.getLangIdThresholdOverride() >= 0
-                ? mSettings.getLangIdThresholdOverride()
-                : 0.5f /* TODO: Load this from the langId model. */;
-        final Bundle foreignLanguageBundle =
-                detectForeignLanguage(classifiedText, foreignTextThreshold);
+        final Bundle foreignLanguageBundle = detectForeignLanguage(classifiedText);
         builder.setForeignLanguageExtra(foreignLanguageBundle);
 
         boolean isPrimaryAction = true;
-        final ArrayList<Intent> sourceIntents = new ArrayList<>();
         List<LabeledIntent> labeledIntents = mIntentFactory.create(
                 mContext,
                 classifiedText,
                 foreignLanguageBundle != null,
                 referenceTime,
                 highestScoringResult);
+        LabeledIntent.TitleChooser titleChooser =
+                (labeledIntent, resolveInfo) -> labeledIntent.titleWithoutEntity;
         for (LabeledIntent labeledIntent : labeledIntents) {
-            final RemoteAction action = labeledIntent.asRemoteAction(mContext);
-            if (action == null) {
+            LabeledIntent.Result result = labeledIntent.resolve(mContext, titleChooser);
+            if (result == null) {
                 continue;
             }
+            final RemoteAction action = result.remoteAction;
             if (isPrimaryAction) {
                 // For O backwards compatibility, the first RemoteAction is also written to the
                 // legacy API fields.
                 builder.setIcon(action.getIcon().loadDrawable(mContext));
                 builder.setLabel(action.getTitle().toString());
-                builder.setIntent(labeledIntent.getIntent());
+                builder.setIntent(result.resolvedIntent);
                 builder.setOnClickListener(TextClassification.createIntentOnClickListener(
                         TextClassification.createPendingIntent(mContext,
-                                labeledIntent.getIntent(), labeledIntent.getRequestCode())));
+                                result.resolvedIntent, labeledIntent.requestCode)));
                 isPrimaryAction = false;
             }
-            builder.addAction(action, labeledIntent.getIntent());
+            builder.addAction(action, result.resolvedIntent);
         }
 
         return builder.setId(createId(text, start, end)).build();
@@ -603,16 +618,20 @@ public final class TextClassifierImpl implements TextClassifier {
 
     /**
      * Returns a bundle with the language and confidence score if it finds the text to be
-     * in a foreign language. Otherwise returns null.
+     * in a foreign language. Otherwise returns null. This algorithm defines what the system thinks
+     * is a foreign language.
      */
+    // TODO: Revisit this algorithm.
+    // TODO: Consider making this public API.
     @Nullable
-    private Bundle detectForeignLanguage(String text, float threshold) {
-        if (threshold > 1) {
-            return null;
-        }
-
-        // TODO: Revisit this algorithm.
+    private Bundle detectForeignLanguage(String text) {
         try {
+            final float threshold = getForeignLanguageThreshold();
+            if (threshold > 1) {
+                Log.v(LOG_TAG, "Foreign language detection disabled.");
+                return null;
+            }
+
             final LangIdModel langId = getLangIdImpl();
             final LangIdModel.LanguageResult[] langResults = langId.detectLanguages(text);
             if (langResults.length <= 0) {
@@ -628,8 +647,8 @@ public final class TextClassifierImpl implements TextClassifier {
             if (highestScoringResult.getScore() < threshold) {
                 return null;
             }
-            // TODO: Remove
-            Log.d(LOG_TAG, String.format("Language detected: <%s:%s>",
+
+            Log.v(LOG_TAG, String.format("Language detected: <%s:%s>",
                     highestScoringResult.getLanguage(), highestScoringResult.getScore()));
 
             final Locale detected = new Locale(highestScoringResult.getLanguage());
@@ -646,6 +665,18 @@ public final class TextClassifierImpl implements TextClassifier {
             Log.e(LOG_TAG, "Error detecting foreign text. Ignored.", t);
         }
         return null;
+    }
+
+    private float getForeignLanguageThreshold() {
+        try {
+            return mSettings.getLangIdThresholdOverride() >= 0
+                    ? mSettings.getLangIdThresholdOverride()
+                    : getLangIdImpl().getTranslateThreshold();
+        } catch (FileNotFoundException e) {
+            final float defaultThreshold = 0.5f;
+            Log.v(LOG_TAG, "Using default foreign language threshold: " + defaultThreshold);
+            return defaultThreshold;
+        }
     }
 
     @Override
@@ -696,86 +727,15 @@ public final class TextClassifierImpl implements TextClassifier {
     }
 
     /**
-     * Helper class to store the information from which RemoteActions are built.
+     * Returns the locale string for the current resources configuration.
      */
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
-    public static final class LabeledIntent {
-
-        static final int DEFAULT_REQUEST_CODE = 0;
-
-        private final String mTitle;
-        private final String mDescription;
-        private final Intent mIntent;
-        private final int mRequestCode;
-
-        /**
-         * Initializes a LabeledIntent.
-         *
-         * <p>NOTE: {@code reqestCode} is required to not be {@link #DEFAULT_REQUEST_CODE}
-         * if distinguishing info (e.g. the classified text) is represented in intent extras only.
-         * In such circumstances, the request code should represent the distinguishing info
-         * (e.g. by generating a hashcode) so that the generated PendingIntent is (somewhat)
-         * unique. To be correct, the PendingIntent should be definitely unique but we try a
-         * best effort approach that avoids spamming the system with PendingIntents.
-         */
-        // TODO: Fix the issue mentioned above so the behaviour is correct.
-        LabeledIntent(String title, String description, Intent intent, int requestCode) {
-            mTitle = title;
-            mDescription = description;
-            mIntent = intent;
-            mRequestCode = requestCode;
-        }
-
-        @VisibleForTesting
-        public String getTitle() {
-            return mTitle;
-        }
-
-        @VisibleForTesting
-        public String getDescription() {
-            return mDescription;
-        }
-
-        @VisibleForTesting
-        public Intent getIntent() {
-            return mIntent;
-        }
-
-        @VisibleForTesting
-        public int getRequestCode() {
-            return mRequestCode;
-        }
-
-        @Nullable
-        RemoteAction asRemoteAction(Context context) {
-            final PackageManager pm = context.getPackageManager();
-            final ResolveInfo resolveInfo = pm.resolveActivity(mIntent, 0);
-            final String packageName = resolveInfo != null && resolveInfo.activityInfo != null
-                    ? resolveInfo.activityInfo.packageName : null;
-            Icon icon = null;
-            boolean shouldShowIcon = false;
-            if (packageName != null && !"android".equals(packageName)) {
-                // There is a default activity handling the intent.
-                mIntent.setComponent(new ComponentName(packageName, resolveInfo.activityInfo.name));
-                if (resolveInfo.activityInfo.getIconResource() != 0) {
-                    icon = Icon.createWithResource(
-                            packageName, resolveInfo.activityInfo.getIconResource());
-                    shouldShowIcon = true;
-                }
-            }
-            if (icon == null) {
-                // RemoteAction requires that there be an icon.
-                icon = Icon.createWithResource("android",
-                        com.android.internal.R.drawable.ic_more_items);
-            }
-            final PendingIntent pendingIntent =
-                    TextClassification.createPendingIntent(context, mIntent, mRequestCode);
-            if (pendingIntent == null) {
-                return null;
-            }
-            final RemoteAction action = new RemoteAction(icon, mTitle, mDescription, pendingIntent);
-            action.setShouldShowIcon(shouldShowIcon);
-            return action;
+    private String getResourceLocaleString() {
+        // TODO: Pass the locale list once it is supported in native side.
+        try {
+            return mContext.getResources().getConfiguration().getLocales().get(0).toLanguageTag();
+        } catch (NullPointerException e) {
+            // NPE is unexpected. Erring on the side of caution.
+            return LocaleList.getDefault().get(0).toLanguageTag();
         }
     }
 }

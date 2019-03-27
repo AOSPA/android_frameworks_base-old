@@ -20,6 +20,7 @@ import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LE
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
@@ -31,14 +32,11 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.InsetsState.TYPE_IME;
-import static android.view.InsetsState.TYPE_NAVIGATION_BAR;
-import static android.view.InsetsState.TYPE_TOP_BAR;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_180;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
 import static android.view.View.GONE;
-import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.WindowManager.DOCKED_BOTTOM;
 import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.DOCKED_TOP;
@@ -139,12 +137,14 @@ import android.content.pm.PackageManager;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
 import android.graphics.Region.Op;
 import android.hardware.display.DisplayManagerInternal;
+import android.metrics.LogMaker;
 import android.os.Binder;
 import android.os.Debug;
 import android.os.Handler;
@@ -173,11 +173,12 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.SurfaceSession;
 import android.view.View;
-import android.view.ViewRootImpl;
 import android.view.WindowManager;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.TriConsumer;
 import com.android.server.AnimationThread;
@@ -259,6 +260,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     final ArraySet<AppWindowToken> mChangingApps = new ArraySet<>();
     final UnknownAppVisibilityController mUnknownAppVisibilityController;
     BoundsAnimationController mBoundsAnimationController;
+
+    private MetricsLogger mMetricsLogger;
 
     /**
      * List of clients without a transtiton animation that we notify once we are done
@@ -896,7 +899,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mDividerControllerLocked = new DockedStackDividerController(service, this);
         mPinnedStackControllerLocked = new PinnedStackController(service, this);
 
-        final SurfaceControl.Builder b = mWmService.makeSurfaceBuilder(mSession).setOpaque(true);
+        final SurfaceControl.Builder b = mWmService.makeSurfaceBuilder(mSession)
+                .setOpaque(true)
+                .setContainerLayer();
         mWindowingLayer = b.setName("Display Root").build();
         mOverlayLayer = b.setName("Display Overlays").build();
 
@@ -1160,14 +1165,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     @Override
     boolean onDescendantOrientationChanged(IBinder freezeDisplayToken,
             ConfigurationContainer requestingContainer) {
-        final int previousRotation = mRotation;
         final Configuration config = updateOrientationFromAppTokens(
                 getRequestedOverrideConfiguration(), freezeDisplayToken, false);
-        // This event is considered handled iff a configuration propagation is triggered, because
-        // that's the only place lower level containers check if they need to do something to this
-        // request. The only guaranteed signal is that the display is rotated to a different
-        // orientation (i.e. rotating 180 degrees doesn't count).
-        final boolean handled = (mRotation - previousRotation) % 2 != 0;
+        // If display rotation class tells us that it doesn't consider app requested orientation,
+        // this display won't rotate just because of an app changes its requested orientation. Thus
+        // it indicates that this display chooses not to handle this request.
+        final boolean handled = getDisplayRotation().respectAppRequestedOrientation();
         if (config == null) {
             return handled;
         }
@@ -1187,6 +1190,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     config, null /* starting */, false /* deferResume */, getDisplayId());
         }
         return handled;
+    }
+
+    @Override
+    boolean handlesOrientationChangeFromDescendant() {
+        return getDisplayRotation().respectAppRequestedOrientation();
     }
 
     /**
@@ -1369,8 +1377,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Display id=" + mDisplayId
                 + " selected orientation " + lastOrientation
-                + ", got rotation " + rotation + " which has "
-                + " metrics");
+                + ", got rotation " + rotation);
 
         if (oldRotation == rotation) {
             // No change.
@@ -1498,8 +1505,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final int shortSizeDp = shortSize * DisplayMetrics.DENSITY_DEFAULT / mBaseDisplayDensity;
         final int longSizeDp = longSize * DisplayMetrics.DENSITY_DEFAULT / mBaseDisplayDensity;
 
-        mDisplayRotation.configure(width, height, shortSizeDp, longSizeDp);
         mDisplayPolicy.configure(width, height, shortSizeDp);
+        mDisplayRotation.configure(width, height, shortSizeDp, longSizeDp);
 
         mDisplayFrames.onDisplayInfoUpdated(mDisplayInfo,
                 calculateDisplayCutoutForRotation(mDisplayInfo.rotation));
@@ -1978,9 +1985,17 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
+        final int lastOrientation = getConfiguration().orientation;
         super.onConfigurationChanged(newParentConfig);
         if (mDisplayPolicy != null) {
             mDisplayPolicy.onConfigurationChanged();
+        }
+
+        if (lastOrientation != getConfiguration().orientation) {
+            getMetricsLogger().write(
+                    new LogMaker(MetricsEvent.ACTION_PHONE_ORIENTATION_CHANGED)
+                    .setSubtype(getConfiguration().orientation)
+                    .addTaggedData(MetricsEvent.FIELD_DISPLAY_ID, getDisplayId()));
         }
 
         // If there was no pinned stack, we still need to notify the controller of the display info
@@ -3250,6 +3265,34 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mInputMethodTarget = target;
         mInputMethodTargetWaitingAnim = targetWaitingAnim;
         assignWindowLayers(false /* setLayoutNeeded */);
+        mInsetsStateController.onImeTargetChanged(target);
+        updateImeParent();
+    }
+
+    private void updateImeParent() {
+        final SurfaceControl newParent = computeImeParent();
+        if (newParent != null) {
+            mPendingTransaction.reparent(mImeWindowsContainers.mSurfaceControl, newParent);
+            scheduleAnimation();
+        }
+    }
+
+    /**
+     * Computes the window the IME should be attached to.
+     */
+    @VisibleForTesting
+    SurfaceControl computeImeParent() {
+
+        // Attach it to app if the target is part of an app and such app is covering the entire
+        // screen. If it's not covering the entire screen the IME might extend beyond the apps
+        // bounds.
+        if (mInputMethodTarget != null && mInputMethodTarget.mAppToken != null &&
+                mInputMethodTarget.getWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
+            return mInputMethodTarget.mAppToken.getSurfaceControl();
+        }
+
+        // Otherwise, we just attach it to the display.
+        return mWindowingLayer;
     }
 
     boolean getNeedsMenu(WindowState top, WindowManagerPolicy.WindowState bottom) {
@@ -4417,13 +4460,13 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                         .show(mSplitScreenDividerAnchor);
                 scheduleAnimation();
             } else {
-                mAppAnimationLayer.destroy();
+                mAppAnimationLayer.remove();
                 mAppAnimationLayer = null;
-                mBoostedAppAnimationLayer.destroy();
+                mBoostedAppAnimationLayer.remove();
                 mBoostedAppAnimationLayer = null;
-                mHomeAppAnimationLayer.destroy();
+                mHomeAppAnimationLayer.remove();
                 mHomeAppAnimationLayer = null;
-                mSplitScreenDividerAnchor.destroy();
+                mSplitScreenDividerAnchor.remove();
                 mSplitScreenDividerAnchor = null;
             }
         }
@@ -4606,7 +4649,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     @Override
     SurfaceControl.Builder makeChildSurface(WindowContainer child) {
         SurfaceSession s = child != null ? child.getSession() : getSession();
-        final SurfaceControl.Builder b = mWmService.makeSurfaceBuilder(s);
+        final SurfaceControl.Builder b = mWmService.makeSurfaceBuilder(s).setContainerLayer();
         if (child == null) {
             return b;
         }
@@ -4884,6 +4927,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 .reparent(mWindowingLayer, sc).reparent(mOverlayLayer, sc);
     }
 
+    @VisibleForTesting
+    SurfaceControl getWindowingLayer() {
+        return mWindowingLayer;
+    }
+
     /**
      * Create a portal window handle for input. This window transports any touch to the display
      * indicated by {@link InputWindowHandle#portalToDisplayId} if the touch hits this window.
@@ -4907,5 +4955,27 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         portalWindowHandle.ownerUid = Process.myUid();
         portalWindowHandle.portalToDisplayId = mDisplayId;
         return portalWindowHandle;
+    }
+
+    /**
+     * @see IWindowManager#setForwardedInsets
+     */
+    public void setForwardedInsets(Insets insets) {
+        if (insets == null) {
+            insets = Insets.NONE;
+        }
+        if (mDisplayPolicy.getForwardedInsets().equals(insets)) {
+            return;
+        }
+        mDisplayPolicy.setForwardedInsets(insets);
+        setLayoutNeeded();
+        mWmService.mWindowPlacerLocked.requestTraversal();
+    }
+
+    protected MetricsLogger getMetricsLogger() {
+        if (mMetricsLogger == null) {
+            mMetricsLogger = new MetricsLogger();
+        }
+        return mMetricsLogger;
     }
 }

@@ -24,12 +24,12 @@ import static com.android.server.wm.WindowManagerTraceProto.WHERE;
 import static com.android.server.wm.WindowManagerTraceProto.WINDOW_MANAGER_SERVICE;
 
 import android.annotation.Nullable;
-import android.content.Context;
 import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
+import android.view.Choreographer;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,39 +45,261 @@ class WindowTracing {
      * Maximum buffer size, currently defined as 512 KB
      * Size was experimentally defined to fit between 100 to 150 elements.
      */
-    private static final int WINDOW_TRACE_BUFFER_SIZE = 512 * 1024;
+    private static final int BUFFER_CAPACITY_CRITICAL = 512 * 1024;
+    private static final int BUFFER_CAPACITY_TRIM = 2048 * 1024;
+    private static final int BUFFER_CAPACITY_ALL = 4096 * 1024;
+    private static final String TRACE_FILENAME = "/data/misc/wmtrace/wm_trace.pb";
     private static final String TAG = "WindowTracing";
 
-    private final Object mLock = new Object();
-    private final WindowTraceBuffer.Builder mBufferBuilder;
+    private final WindowManagerService mService;
+    private final Choreographer mChoreographer;
+    private final WindowManagerGlobalLock mGlobalLock;
 
-    private WindowTraceBuffer mTraceBuffer;
+    private final Object mEnabledLock = new Object();
+    private final File mTraceFile;
+    private final WindowTraceBuffer mBuffer;
+    private final Choreographer.FrameCallback mFrameCallback = (frameTimeNanos) ->
+            log("onFrame" /* where */);
 
-    private @WindowTraceLogLevel int mWindowTraceLogLevel = WindowTraceLogLevel.TRIM;
-    private boolean mContinuousMode;
+    private @WindowTraceLogLevel int mLogLevel = WindowTraceLogLevel.TRIM;
+    private boolean mLogOnFrame = false;
     private boolean mEnabled;
     private volatile boolean mEnabledLockFree;
+    private boolean mScheduled;
 
-    WindowTracing(File file) {
-        mBufferBuilder = new WindowTraceBuffer.Builder()
-                .setTraceFile(file)
-                .setBufferCapacity(WINDOW_TRACE_BUFFER_SIZE);
+    static WindowTracing createDefaultAndStartLooper(WindowManagerService service,
+            Choreographer choreographer) {
+        File file = new File(TRACE_FILENAME);
+        return new WindowTracing(file, service, choreographer, BUFFER_CAPACITY_TRIM);
     }
 
-    void startTrace(@Nullable PrintWriter pw) throws IOException {
+    private WindowTracing(File file, WindowManagerService service, Choreographer choreographer,
+            int bufferCapacity) {
+        this(file, service, choreographer, service.mGlobalLock, bufferCapacity);
+    }
+
+    WindowTracing(File file, WindowManagerService service, Choreographer choreographer,
+            WindowManagerGlobalLock globalLock, int bufferCapacity) {
+        mChoreographer = choreographer;
+        mService = service;
+        mGlobalLock = globalLock;
+        mTraceFile = file;
+        mBuffer = new WindowTraceBuffer(bufferCapacity);
+        setLogLevel(WindowTraceLogLevel.TRIM, null /* pw */);
+    }
+
+    void startTrace(@Nullable PrintWriter pw) {
         if (IS_USER) {
             logAndPrintln(pw, "Error: Tracing is not supported on user builds.");
             return;
         }
-        synchronized (mLock) {
-            logAndPrintln(pw, "Start tracing to " + mBufferBuilder.getFile() + ".");
-            if (mTraceBuffer != null) {
-                writeTraceToFileLocked();
-            }
-            mTraceBuffer = mBufferBuilder
-                    .setContinuousMode(mContinuousMode)
-                    .build();
+        synchronized (mEnabledLock) {
+            logAndPrintln(pw, "Start tracing to " + mTraceFile + ".");
+            mBuffer.resetBuffer();
             mEnabled = mEnabledLockFree = true;
+        }
+    }
+
+    void stopTrace(@Nullable PrintWriter pw) {
+        if (IS_USER) {
+            logAndPrintln(pw, "Error: Tracing is not supported on user builds.");
+            return;
+        }
+        synchronized (mEnabledLock) {
+            logAndPrintln(pw, "Stop tracing to " + mTraceFile + ". Waiting for traces to flush.");
+            mEnabled = mEnabledLockFree = false;
+
+            if (mEnabled) {
+                logAndPrintln(pw, "ERROR: tracing was re-enabled while waiting for flush.");
+                throw new IllegalStateException("tracing enabled while waiting for flush.");
+            }
+            writeTraceToFileLocked();
+            logAndPrintln(pw, "Trace written to " + mTraceFile + ".");
+        }
+    }
+
+    private void setLogLevel(@WindowTraceLogLevel int logLevel, PrintWriter pw) {
+        logAndPrintln(pw, "Setting window tracing log level to " + logLevel);
+        mLogLevel = logLevel;
+
+        switch (logLevel) {
+            case WindowTraceLogLevel.ALL: {
+                setBufferCapacity(BUFFER_CAPACITY_ALL, pw);
+                break;
+            }
+            case WindowTraceLogLevel.TRIM: {
+                setBufferCapacity(BUFFER_CAPACITY_TRIM, pw);
+                break;
+            }
+            case WindowTraceLogLevel.CRITICAL: {
+                setBufferCapacity(BUFFER_CAPACITY_CRITICAL, pw);
+                break;
+            }
+        }
+    }
+
+    private void setLogFrequency(boolean onFrame, PrintWriter pw) {
+        logAndPrintln(pw, "Setting window tracing log frequency to "
+                + ((onFrame) ? "frame" : "transaction"));
+        mLogOnFrame = onFrame;
+    }
+
+    private void setBufferCapacity(int capacity, PrintWriter pw) {
+        logAndPrintln(pw, "Setting window tracing buffer capacity to " + capacity + "bytes");
+        mBuffer.setCapacity(capacity);
+    }
+
+    boolean isEnabled() {
+        return mEnabledLockFree;
+    }
+
+    int onShellCommand(ShellCommand shell) {
+        PrintWriter pw = shell.getOutPrintWriter();
+        String cmd = shell.getNextArgRequired();
+        switch (cmd) {
+            case "start":
+                startTrace(pw);
+                return 0;
+            case "stop":
+                stopTrace(pw);
+                return 0;
+            case "status":
+                logAndPrintln(pw, getStatus());
+                return 0;
+            case "frame":
+                setLogFrequency(true /* onFrame */, pw);
+                mBuffer.resetBuffer();
+                return 0;
+            case "transaction":
+                setLogFrequency(false /* onFrame */, pw);
+                mBuffer.resetBuffer();
+                return 0;
+            case "level":
+                String logLevelStr = shell.getNextArgRequired().toLowerCase();
+                switch (logLevelStr) {
+                    case "all": {
+                        setLogLevel(WindowTraceLogLevel.ALL, pw);
+                        break;
+                    }
+                    case "trim": {
+                        setLogLevel(WindowTraceLogLevel.TRIM, pw);
+                        break;
+                    }
+                    case "critical": {
+                        setLogLevel(WindowTraceLogLevel.CRITICAL, pw);
+                        break;
+                    }
+                    default: {
+                        setLogLevel(WindowTraceLogLevel.TRIM, pw);
+                        break;
+                    }
+                }
+                mBuffer.resetBuffer();
+                return 0;
+            case "size":
+                setBufferCapacity(Integer.parseInt(shell.getNextArgRequired()) * 1024, pw);
+                mBuffer.resetBuffer();
+                return 0;
+            default:
+                pw.println("Unknown command: " + cmd);
+                pw.println("Window manager trace options:");
+                pw.println("  start: Start logging");
+                pw.println("  stop: Stop logging");
+                pw.println("  frame: Log trace once per frame");
+                pw.println("  transaction: Log each transaction");
+                pw.println("  size: Set the maximum log size (in KB)");
+                pw.println("  status: Print trace status");
+                pw.println("  level [lvl]: Set the log level between");
+                pw.println("    lvl may be one of:");
+                pw.println("      critical: Only visible windows with reduced information");
+                pw.println("      trim: All windows with reduced");
+                pw.println("      all: All window and information");
+                return -1;
+        }
+    }
+
+    String getStatus() {
+        return "Status: "
+                + ((isEnabled()) ? "Enabled" : "Disabled")
+                + "\n"
+                + "Log level: "
+                + mLogLevel
+                + "\n"
+                + mBuffer.getStatus();
+    }
+
+    /**
+     * If tracing is enabled, log the current state or schedule the next frame to be logged,
+     * according to {@link #mLogOnFrame}.
+     *
+     * @param where Logging point descriptor
+     */
+    void logState(String where) {
+        if (!isEnabled()) {
+            return;
+        }
+
+        if (mLogOnFrame) {
+            schedule();
+        } else {
+            log(where);
+        }
+    }
+
+    /**
+     * Schedule the log to trace the next frame
+     */
+    private void schedule() {
+        if (mScheduled) {
+            return;
+        }
+
+        mScheduled = true;
+        mChoreographer.postFrameCallback(mFrameCallback);
+    }
+
+    /**
+     * Write the current frame to the buffer
+     *
+     * @param where Logging point descriptor
+     */
+    private void log(String where) {
+        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "traceStateLocked");
+        try {
+            ProtoOutputStream os = new ProtoOutputStream();
+            long tokenOuter = os.start(ENTRY);
+            os.write(ELAPSED_REALTIME_NANOS, SystemClock.elapsedRealtimeNanos());
+            os.write(WHERE, where);
+
+            long tokenInner = os.start(WINDOW_MANAGER_SERVICE);
+            synchronized (mGlobalLock) {
+                Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "writeToProtoLocked");
+                try {
+                    mService.writeToProtoLocked(os, mLogLevel);
+                } finally {
+                    Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
+                }
+            }
+            os.end(tokenInner);
+            os.end(tokenOuter);
+            mBuffer.add(os);
+            mScheduled = false;
+        } catch (Exception e) {
+            Log.wtf(TAG, "Exception while tracing state", e);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
+        }
+    }
+
+    /**
+     * Writes the trace buffer to new file for the bugreport.
+     *
+     * This method is synchronized with {@code #startTrace(PrintWriter)} and
+     * {@link #stopTrace(PrintWriter)}.
+     */
+    void writeTraceToFile() {
+        synchronized (mEnabledLock) {
+            writeTraceToFileLocked();
         }
     }
 
@@ -89,134 +311,18 @@ class WindowTracing {
         }
     }
 
-    void stopTrace(@Nullable PrintWriter pw) {
-        if (IS_USER) {
-            logAndPrintln(pw, "Error: Tracing is not supported on user builds.");
-            return;
-        }
-        synchronized (mLock) {
-            logAndPrintln(pw, "Stop tracing to " + mBufferBuilder.getFile()
-                    + ". Waiting for traces to flush.");
-            mEnabled = mEnabledLockFree = false;
-
-            synchronized (mLock) {
-                if (mEnabled) {
-                    logAndPrintln(pw, "ERROR: tracing was re-enabled while waiting for flush.");
-                    throw new IllegalStateException("tracing enabled while waiting for flush.");
-                }
-                writeTraceToFileLocked();
-                mTraceBuffer = null;
-            }
-            logAndPrintln(pw, "Trace written to " + mBufferBuilder.getFile() + ".");
-        }
-    }
-
-    private void setContinuousMode(boolean continuous, PrintWriter pw) {
-        logAndPrintln(pw, "Setting window tracing continuous mode to " + continuous);
-
-        if (mEnabled) {
-            logAndPrintln(pw, "Trace is currently active, change will take effect once the "
-                    + "trace is restarted.");
-        }
-        mContinuousMode = continuous;
-        mWindowTraceLogLevel = (continuous) ? WindowTraceLogLevel.CRITICAL :
-                WindowTraceLogLevel.TRIM;
-    }
-
-    private void appendTraceEntry(ProtoOutputStream proto) {
-        if (!mEnabledLockFree) {
-            return;
-        }
-
-        mTraceBuffer.add(proto);
-    }
-
-    boolean isEnabled() {
-        return mEnabledLockFree;
-    }
-
-    static WindowTracing createDefaultAndStartLooper(Context context) {
-        File file = new File("/data/misc/wmtrace/wm_trace.pb");
-        return new WindowTracing(file);
-    }
-
-    int onShellCommand(ShellCommand shell) {
-        PrintWriter pw = shell.getOutPrintWriter();
-        try {
-            String cmd = shell.getNextArgRequired();
-            switch (cmd) {
-                case "start":
-                    startTrace(pw);
-                    return 0;
-                case "stop":
-                    stopTrace(pw);
-                    return 0;
-                case "continuous":
-                    setContinuousMode(Boolean.valueOf(shell.getNextArgRequired()), pw);
-                    return 0;
-                default:
-                    pw.println("Unknown command: " + cmd);
-                    return -1;
-            }
-        } catch (IOException e) {
-            logAndPrintln(pw, e.toString());
-            throw new RuntimeException(e);
-        }
-    }
-
-    void traceStateLocked(String where, WindowManagerService service) {
-        if (!isEnabled()) {
-            return;
-        }
-
-        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "writeToBufferLocked");
-        try {
-            ProtoOutputStream os = new ProtoOutputStream();
-            long tokenOuter = os.start(ENTRY);
-            os.write(ELAPSED_REALTIME_NANOS, SystemClock.elapsedRealtimeNanos());
-            os.write(WHERE, where);
-
-            Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "writeToProtoLocked");
-            try {
-                long tokenInner = os.start(WINDOW_MANAGER_SERVICE);
-                service.writeToProtoLocked(os, mWindowTraceLogLevel);
-                os.end(tokenInner);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
-            }
-            os.end(tokenOuter);
-            appendTraceEntry(os);
-        } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
-        }
-    }
-
     /**
      * Writes the trace buffer to disk. This method has no internal synchronization and should be
      * externally synchronized
      */
     private void writeTraceToFileLocked() {
-        if (mTraceBuffer == null) {
-            return;
-        }
-
         try {
-            mTraceBuffer.dump();
+            Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "writeTraceToFileLocked");
+            mBuffer.writeTraceToFile(mTraceFile);
         } catch (IOException e) {
             Log.e(TAG, "Unable to write buffer to file", e);
-        } catch (InterruptedException e) {
-            Log.e(TAG, "Unable to interrupt window tracing file write thread", e);
-        }
-    }
-
-    /**
-     * Writes the trace buffer to disk and clones it into a new file for the bugreport.
-     * This method is synchronized with {@code #startTrace(PrintWriter)} and
-     * {@link #stopTrace(PrintWriter)}.
-     */
-    void writeTraceToFile() {
-        synchronized (mLock) {
-            writeTraceToFileLocked();
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
         }
     }
 }

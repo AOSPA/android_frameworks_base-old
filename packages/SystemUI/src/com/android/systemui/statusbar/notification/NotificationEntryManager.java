@@ -35,9 +35,10 @@ import com.android.systemui.statusbar.NotificationUpdateHandler;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationData.KeyguardEnvironment;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
-import com.android.systemui.statusbar.notification.row.NotificationInflater;
-import com.android.systemui.statusbar.notification.row.NotificationInflater.InflationFlag;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.util.leak.LeakDetector;
@@ -56,7 +57,7 @@ import java.util.Map;
  */
 public class NotificationEntryManager implements
         Dumpable,
-        NotificationInflater.InflationCallback,
+        NotificationContentInflater.InflationCallback,
         NotificationUpdateHandler,
         VisualStabilityManager.Callback {
     private static final String TAG = "NotificationEntryMgr";
@@ -124,16 +125,7 @@ public class NotificationEntryManager implements
         return mRemoteInputManager;
     }
 
-    private NotificationRowBinder getRowBinder() {
-        if (mNotificationRowBinder == null) {
-            mNotificationRowBinder = Dependency.get(NotificationRowBinder.class);
-        }
-        return mNotificationRowBinder;
-    }
-
-    // TODO: Remove this once we can always use a mocked row binder in our tests
-    @VisibleForTesting
-    void setRowBinder(NotificationRowBinder notificationRowBinder) {
+    public void setRowBinder(NotificationRowBinder notificationRowBinder) {
         mNotificationRowBinder = notificationRowBinder;
     }
 
@@ -230,7 +222,6 @@ public class NotificationEntryManager implements
                 }
             }
         }
-        entry.setLowPriorityStateUpdated(false);
     }
 
     @Override
@@ -346,8 +337,7 @@ public class NotificationEntryManager implements
 
         Dependency.get(LeakDetector.class).trackInstance(entry);
         // Construct the expanded view.
-        getRowBinder().inflateViews(entry, () -> performRemoveNotification(notification),
-                mNotificationData.get(entry.key) != null);
+        requireBinder().inflateViews(entry, () -> performRemoveNotification(notification));
 
         abortExistingInflation(key);
 
@@ -384,13 +374,11 @@ public class NotificationEntryManager implements
 
         mNotificationData.update(entry, ranking, notification);
 
-        getRowBinder().inflateViews(entry, () -> performRemoveNotification(notification),
-                mNotificationData.get(entry.key) != null);
-
         for (NotificationEntryListener listener : mNotificationEntryListeners) {
             listener.onPreEntryUpdated(entry);
         }
 
+        requireBinder().inflateViews(entry, () -> performRemoveNotification(notification));
         updateNotifications();
 
         if (DEBUG) {
@@ -422,6 +410,7 @@ public class NotificationEntryManager implements
         }
     }
 
+    @Override
     public void updateNotificationRanking(NotificationListenerService.RankingMap rankingMap) {
         List<NotificationEntry> entries = new ArrayList<>();
         entries.addAll(mNotificationData.getActiveNotifications());
@@ -443,12 +432,11 @@ public class NotificationEntryManager implements
 
         // By comparing the old and new UI adjustments, reinflate the view accordingly.
         for (NotificationEntry entry : entries) {
-            getRowBinder().onNotificationRankingUpdated(
+            requireBinder().onNotificationRankingUpdated(
                     entry,
                     oldImportances.get(entry.key),
                     oldAdjustments.get(entry.key),
-                    NotificationUiAdjustment.extractFromNotificationEntry(entry),
-                    mNotificationData.get(entry.key) != null);
+                    NotificationUiAdjustment.extractFromNotificationEntry(entry));
         }
 
         updateNotifications();
@@ -489,5 +477,13 @@ public class NotificationEntryManager implements
         if (activeExtender != null) {
             activeExtender.setShouldManageLifetime(entry, false);
         }
+    }
+
+    private NotificationRowBinder requireBinder() {
+        if (mNotificationRowBinder == null) {
+            throw new RuntimeException("You must initialize NotificationEntryManager by calling"
+                    + "setRowBinder() before using.");
+        }
+        return mNotificationRowBinder;
     }
 }

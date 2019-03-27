@@ -19,6 +19,7 @@ package com.android.server.display;
 import android.graphics.Rect;
 import android.hardware.display.DisplayViewport;
 import android.os.IBinder;
+import android.view.DisplayAddress;
 import android.view.Surface;
 import android.view.SurfaceControl;
 
@@ -35,7 +36,7 @@ abstract class DisplayDevice {
     private final DisplayAdapter mDisplayAdapter;
     private final IBinder mDisplayToken;
     private final String mUniqueId;
-    private int mPhysicalId = -1;
+    private long mPhysicalId = -1;
 
     // The display device does not manage these properties itself, they are set by
     // the display manager service.  The display device shouldn't really be looking at these.
@@ -53,7 +54,7 @@ abstract class DisplayDevice {
     DisplayDeviceInfo mDebugLastLoggedDeviceInfo;
 
     public DisplayDevice(DisplayAdapter displayAdapter, IBinder displayToken, String uniqueId,
-                         int physicalId) {
+                         long physicalId) {
       this(displayAdapter, displayToken, uniqueId);
       mPhysicalId = physicalId;
     }
@@ -97,7 +98,7 @@ abstract class DisplayDevice {
      *
      * @return The display device id.
      */
-    public final int getPhysicalId() {
+    public final long getPhysicalId() {
         return mPhysicalId;
     }
 
@@ -241,8 +242,12 @@ abstract class DisplayDevice {
         viewport.deviceHeight = isRotated ? info.width : info.height;
 
         viewport.uniqueId = info.uniqueId;
-        // TODO(b/112898898) Use an actual port here.
-        viewport.physicalPort = null;
+
+        if (info.address instanceof DisplayAddress.Physical) {
+            viewport.physicalPort = ((DisplayAddress.Physical) info.address).getPort();
+        } else {
+            viewport.physicalPort = null;
+        }
     }
 
     /**

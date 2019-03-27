@@ -118,7 +118,7 @@ public class WindowFrameTests extends WindowTestsBase {
     public void setUp() throws Exception {
         mWindowToken = createAppWindowToken(mWm.getDefaultDisplayContentLocked(),
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
-        mStubStack = WindowTestUtils.createMockTaskStack();
+        mStubStack = mock(TaskStack.class);
     }
 
     // Do not use this function directly in the tests below. Instead, use more explicit function
@@ -449,8 +449,7 @@ public class WindowFrameTests extends WindowTestsBase {
 
         // Now simulate switch to fullscreen for letterboxed app.
         final int xInset = logicalWidth / 10;
-        final int yInset = logicalWidth / 10;
-        final Rect cf = new Rect(xInset, yInset, logicalWidth - xInset, logicalHeight - yInset);
+        final Rect cf = new Rect(xInset, 0, logicalWidth - xInset, logicalHeight);
         Configuration config = new Configuration(w.mAppToken.getRequestedOverrideConfiguration());
         config.windowConfiguration.setBounds(cf);
         w.mAppToken.onRequestedOverrideConfigurationChanged(config);

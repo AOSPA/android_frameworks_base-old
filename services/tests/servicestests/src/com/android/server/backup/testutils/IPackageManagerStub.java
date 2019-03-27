@@ -213,7 +213,8 @@ public class IPackageManagerStub implements IPackageManager {
 
     @Override
     public void updatePermissionFlags(String permissionName, String packageName, int flagMask,
-        int flagValues, int userId) throws RemoteException {
+            int flagValues, boolean checkAdjustPolicyFlagPermission, int userId)
+            throws RemoteException {
 
     }
 
@@ -552,16 +553,6 @@ public class IPackageManagerStub implements IPackageManager {
 
     @Override
     public void restoreIntentFilterVerification(byte[] backup, int userId) throws RemoteException {
-
-    }
-
-    @Override
-    public byte[] getPermissionGrantBackup(int userId) throws RemoteException {
-        return new byte[0];
-    }
-
-    @Override
-    public void restorePermissionGrants(byte[] backup, int userId) throws RemoteException {
 
     }
 

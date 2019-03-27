@@ -35,21 +35,27 @@ import com.android.server.wm.WindowManagerInternal;
 
 /**
  * Controls the behavior of foldable devices whose screen can literally bend and fold.
+ * TODO(b/126160895): Move DisplayFoldController from PhoneWindowManager to DisplayPolicy.
  */
 class DisplayFoldController {
 
     private static final String TAG = "DisplayFoldController";
+
     private final WindowManagerInternal mWindowManagerInternal;
     private final DisplayManagerInternal mDisplayManagerInternal;
     private final int mDisplayId;
+    private final Handler mHandler;
 
     /** The display area while device is folded. */
     private final Rect mFoldedArea;
-    private final Handler mHandler;
+    /** The display area to override the original folded area. */
+    private Rect mOverrideFoldedArea = new Rect();
 
     private final DisplayInfo mNonOverrideDisplayInfo = new DisplayInfo();
     private final RemoteCallbackList<IDisplayFoldListener> mListeners = new RemoteCallbackList<>();
     private Boolean mFolded;
+    private String mFocusedApp;
+    private final DisplayFoldDurationLogger mDurationLogger = new DisplayFoldDurationLogger();
 
     DisplayFoldController(WindowManagerInternal windowManagerInternal,
             DisplayManagerInternal displayManagerInternal, int displayId, Rect foldedArea,
@@ -61,6 +67,14 @@ class DisplayFoldController {
         mHandler = handler;
     }
 
+    void finishedGoingToSleep() {
+        mDurationLogger.onFinishedGoingToSleep();
+    }
+
+    void finishedWakingUp() {
+        mDurationLogger.onFinishedWakingUp(mFolded);
+    }
+
     void requestDeviceFolded(boolean folded) {
         mHandler.post(() -> setDeviceFolded(folded));
     }
@@ -70,19 +84,33 @@ class DisplayFoldController {
             return;
         }
         if (folded) {
-            mDisplayManagerInternal.getNonOverrideDisplayInfo(mDisplayId, mNonOverrideDisplayInfo);
-            final int dx = (mNonOverrideDisplayInfo.logicalWidth - mFoldedArea.width()) / 2
-                    - mFoldedArea.left;
-            final int dy = (mNonOverrideDisplayInfo.logicalHeight - mFoldedArea.height()) / 2
-                    - mFoldedArea.top;
+            Rect foldedArea;
+            if (!mOverrideFoldedArea.isEmpty()) {
+                foldedArea = mOverrideFoldedArea;
+            } else if (!mFoldedArea.isEmpty()) {
+                foldedArea = mFoldedArea;
+            } else {
+                return;
+            }
 
-            mWindowManagerInternal.setForcedDisplaySize(mDisplayId, mFoldedArea.width(),
-                    mFoldedArea.height());
+            mDisplayManagerInternal.getNonOverrideDisplayInfo(mDisplayId, mNonOverrideDisplayInfo);
+            final int dx = (mNonOverrideDisplayInfo.logicalWidth - foldedArea.width()) / 2
+                    - foldedArea.left;
+            final int dy = (mNonOverrideDisplayInfo.logicalHeight - foldedArea.height()) / 2
+                    - foldedArea.top;
+
+            // Bypass scaling otherwise LogicalDisplay will scale contents by default.
+            mDisplayManagerInternal.setDisplayScalingDisabled(mDisplayId, true);
+            mWindowManagerInternal.setForcedDisplaySize(mDisplayId,
+                    foldedArea.width(), foldedArea.height());
             mDisplayManagerInternal.setDisplayOffsets(mDisplayId, -dx, -dy);
         } else {
+            mDisplayManagerInternal.setDisplayScalingDisabled(mDisplayId, false);
             mWindowManagerInternal.clearForcedDisplaySize(mDisplayId);
             mDisplayManagerInternal.setDisplayOffsets(mDisplayId, 0, 0);
         }
+        mDurationLogger.setDeviceFolded(folded);
+        mDurationLogger.logFocusedAppWithFoldState(folded, mFocusedApp);
         mFolded = folded;
 
         final int n = mListeners.beginBroadcast();
@@ -114,6 +142,18 @@ class DisplayFoldController {
         mListeners.unregister(listener);
     }
 
+    void setOverrideFoldedArea(Rect area) {
+        mOverrideFoldedArea.set(area);
+    }
+
+    Rect getFoldedArea() {
+        if (!mOverrideFoldedArea.isEmpty()) {
+            return mOverrideFoldedArea;
+        } else {
+            return mFoldedArea;
+        }
+    }
+
     /**
      * Only used for the case that persist.debug.force_foldable is set.
      * This is using proximity sensor to simulate the fold state switch.
@@ -125,7 +165,7 @@ class DisplayFoldController {
             return null;
         }
 
-        final DisplayFoldController result = create(displayId);
+        final DisplayFoldController result = create(context, displayId);
         sensorManager.registerListener(new SensorEventListener() {
             @Override
             public void onSensorChanged(SensorEvent event) {
@@ -141,13 +181,21 @@ class DisplayFoldController {
         return result;
     }
 
-    static DisplayFoldController create(int displayId) {
+    void onDefaultDisplayFocusChanged(String pkg) {
+        mFocusedApp = pkg;
+    }
+
+    static DisplayFoldController create(Context context, int displayId) {
         final DisplayManagerInternal displayService =
                 LocalServices.getService(DisplayManagerInternal.class);
-        final DisplayInfo displayInfo = new DisplayInfo();
-        displayService.getNonOverrideDisplayInfo(displayId, displayInfo);
-        final Rect foldedArea = new Rect(0, displayInfo.logicalHeight / 2,
-                displayInfo.logicalWidth, displayInfo.logicalHeight);
+        final String configFoldedArea = context.getResources().getString(
+                com.android.internal.R.string.config_foldedArea);
+        final Rect foldedArea;
+        if (configFoldedArea == null || configFoldedArea.isEmpty()) {
+            foldedArea = new Rect();
+        } else {
+            foldedArea = Rect.unflattenFromString(configFoldedArea);
+        }
 
         return new DisplayFoldController(LocalServices.getService(WindowManagerInternal.class),
                 displayService, displayId, foldedArea, DisplayThread.getHandler());

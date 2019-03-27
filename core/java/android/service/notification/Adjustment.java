@@ -15,13 +15,22 @@
  */
 package android.service.notification;
 
+import android.annotation.SystemApi;
 import android.app.Notification;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.UserHandle;
 
 /**
  * Ranking updates from the Assistant.
+ *
+ * The updates are provides as a {@link Bundle} of signals, using the keys provided in this
+ * class.
+ * Each {@code KEY} specifies what type of data it supports and what kind of Adjustment it
+ * realizes on the notification rankings.
+ *
+ * Notifications affected by the Adjustment will be re-ranked if necessary.
  */
 public final class Adjustment implements Parcelable {
     private final String mPackage;
@@ -36,13 +45,13 @@ public final class Adjustment implements Parcelable {
      * See {@link android.app.Notification.Builder#addPerson(String)}.
      * @hide
      */
+    @SystemApi
     public static final String KEY_PEOPLE = "key_people";
     /**
      * Parcelable {@code ArrayList} of {@link SnoozeCriterion}. These criteria may be visible to
      * users. If a user chooses to snooze a notification until one of these criterion, the
      * assistant will be notified via
      * {@link NotificationAssistantService#onNotificationSnoozedUntilContext}.
-     * @hide
      */
     public static final String KEY_SNOOZE_CRITERIA = "key_snooze_criteria";
     /**
@@ -102,7 +111,9 @@ public final class Adjustment implements Parcelable {
      * @param signals A bundle of signals that should inform notification display, ordering, and
      *                interruptiveness.
      * @param explanation A human-readable justification for the adjustment.
+     * @hide
      */
+    @SystemApi
     public Adjustment(String pkg, String key, Bundle signals, CharSequence explanation, int user) {
         mPackage = pkg;
         mKey = key;
@@ -111,7 +122,30 @@ public final class Adjustment implements Parcelable {
         mUser = user;
     }
 
-    private Adjustment(Parcel in) {
+    /**
+     * Create a notification adjustment.
+     *
+     * @param pkg The package of the notification.
+     * @param key The notification key.
+     * @param signals A bundle of signals that should inform notification display, ordering, and
+     *                interruptiveness.
+     * @param explanation A human-readable justification for the adjustment.
+     * @param userHandle User handle for for whose the adjustments will be applied.
+     */
+    public Adjustment(String pkg, String key, Bundle signals, CharSequence explanation,
+            UserHandle userHandle) {
+        mPackage = pkg;
+        mKey = key;
+        mSignals = signals;
+        mExplanation = explanation;
+        mUser = userHandle.getIdentifier();
+    }
+
+    /**
+     * @hide
+     */
+    @SystemApi
+    protected Adjustment(Parcel in) {
         if (in.readInt() == 1) {
             mPackage = in.readString();
         } else {
@@ -159,8 +193,14 @@ public final class Adjustment implements Parcelable {
         return mSignals;
     }
 
+    /** @hide */
+    @SystemApi
     public int getUser() {
         return mUser;
+    }
+
+    public UserHandle getUserHandle() {
+        return UserHandle.of(mUser);
     }
 
     @Override

@@ -4,7 +4,6 @@ uniform sampler2D uTexture;
 uniform float uCenterReveal;
 uniform float uReveal;
 uniform float uAod2Opacity;
-uniform int uAodMode;
 varying vec2 vTextureCoordinates;
 
 vec3 luminosity(vec3 color) {
@@ -24,10 +23,5 @@ vec4 transform(vec3 diffuse) {
 
 void main() {
     vec4 fragColor = texture2D(uTexture, vTextureCoordinates);
-    // TODO: Remove the branch logic here, tracking on b/123615467.
-    if (uAodMode != 0) {
-        gl_FragColor = transform(fragColor.rgb);
-    } else {
-        gl_FragColor = fragColor;
-    }
+    gl_FragColor = transform(fragColor.rgb);
 }

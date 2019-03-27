@@ -70,6 +70,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -130,6 +131,7 @@ import com.android.server.backup.transport.TransportNotRegisteredException;
 import com.android.server.backup.utils.AppBackupUtils;
 import com.android.server.backup.utils.BackupManagerMonitorUtils;
 import com.android.server.backup.utils.BackupObserverUtils;
+import com.android.server.backup.utils.FileUtils;
 import com.android.server.backup.utils.SparseArrayUtils;
 
 import com.google.android.collect.Sets;
@@ -243,6 +245,8 @@ public class UserBackupManagerService {
     // This is fuzzed, so there are two parameters; backoff_min + Rand[0, backoff_fuzz)
     private static final long BUSY_BACKOFF_MIN_MILLIS = 1000 * 60 * 60;  // one hour
     private static final int BUSY_BACKOFF_FUZZ = 1000 * 60 * 60 * 2;  // two hours
+
+    private static final String SERIAL_ID_FILE = "serial_id";
 
     private final @UserIdInt int mUserId;
     private final BackupAgentTimeoutParameters mAgentTimeoutParameters;
@@ -360,6 +364,8 @@ public class UserBackupManagerService {
     private Set<String> mAncestralPackages = null;
     private long mAncestralToken = 0;
     private long mCurrentToken = 0;
+    @Nullable private File mAncestralSerialNumberFile;
+
 
     /**
      * Creates an instance of {@link UserBackupManagerService} and initializes state for it. This
@@ -1479,19 +1485,50 @@ public class UserBackupManagerService {
     }
 
     /**
-     * Clear an application's data, blocking until the operation completes or times out. If {@code
-     * keepSystemState} is {@code true}, we intentionally do not clear system state that would
-     * ordinarily also be cleared, because we aren't actually wiping the app back to empty; we're
-     * bringing it into the actual expected state related to the already-restored notification state
-     * etc.
+     * Clear an application's data after a failed restore, blocking until the operation completes or
+     * times out.
      */
-    public void clearApplicationDataSynchronous(String packageName, boolean keepSystemState) {
-        // Don't wipe packages marked allowClearUserData=false
+    public void clearApplicationDataAfterRestoreFailure(String packageName) {
+        clearApplicationDataSynchronous(packageName, true, false);
+    }
+
+    /**
+     * Clear an application's data before restore, blocking until the operation completes or times
+     * out.
+     */
+    public void clearApplicationDataBeforeRestore(String packageName) {
+        clearApplicationDataSynchronous(packageName, false, true);
+    }
+
+    /**
+     * Clear an application's data, blocking until the operation completes or times out.
+     *
+     * @param checkFlagAllowClearUserDataOnFailedRestore if {@code true} uses
+     *    {@link ApplicationInfo#PRIVATE_FLAG_ALLOW_CLEAR_USER_DATA_ON_FAILED_RESTORE} to decide if
+     *    clearing data is allowed after a failed restore.
+     *
+     * @param keepSystemState if {@code true}, we don't clear system state such as already restored
+     *    notification settings, permission grants, etc.
+     */
+    private void clearApplicationDataSynchronous(String packageName,
+            boolean checkFlagAllowClearUserDataOnFailedRestore, boolean keepSystemState) {
         try {
-            PackageInfo info = mPackageManager.getPackageInfoAsUser(packageName, 0, mUserId);
-            if ((info.applicationInfo.flags & ApplicationInfo.FLAG_ALLOW_CLEAR_USER_DATA) == 0) {
+            ApplicationInfo applicationInfo = mPackageManager.getPackageInfoAsUser(
+                    packageName, 0, mUserId).applicationInfo;
+
+            boolean shouldClearData;
+            if (checkFlagAllowClearUserDataOnFailedRestore
+                    && applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q) {
+                shouldClearData = (applicationInfo.privateFlags
+                    & ApplicationInfo.PRIVATE_FLAG_ALLOW_CLEAR_USER_DATA_ON_FAILED_RESTORE) != 0;
+            } else {
+                shouldClearData =
+                    (applicationInfo.flags & ApplicationInfo.FLAG_ALLOW_CLEAR_USER_DATA) != 0;
+            }
+
+            if (!shouldClearData) {
                 if (MORE_DEBUG) {
-                    Slog.i(TAG, "allowClearUserData=false so not wiping "
+                    Slog.i(TAG, "Clearing app data is not allowed so not wiping "
                             + packageName);
                 }
                 return;
@@ -1506,8 +1543,8 @@ public class UserBackupManagerService {
         synchronized (mClearDataLock) {
             mClearingData = true;
             try {
-                mActivityManager.clearApplicationUserData(
-                        packageName, keepSystemState, observer, mUserId);
+                mActivityManager.clearApplicationUserData(packageName, keepSystemState, observer,
+                        mUserId);
             } catch (RemoteException e) {
                 // can't happen because the activity manager is in this process
             }
@@ -2307,6 +2344,51 @@ public class UserBackupManagerService {
             Binder.restoreCallingIdentity(oldId);
         }
     }
+
+    /**
+     * Sets the work profile serial number of the ancestral work profile.
+     */
+    public void setAncestralSerialNumber(long ancestralSerialNumber) {
+        mContext.enforceCallingPermission(android.Manifest.permission.BACKUP,
+                "setAncestralSerialNumber");
+        Slog.v(TAG, "Setting ancestral work profile id to " + ancestralSerialNumber);
+        // TODO (b/124359804)
+        try (RandomAccessFile af = getAncestralSerialNumberFile()) {
+            af.writeLong(ancestralSerialNumber);
+        } catch (IOException e) {
+            Slog.w(TAG, "Unable to write to work profile serial mapping file:", e);
+        }
+    }
+
+    /**
+     * Returns the work profile serial number of the ancestral device. This will be set by
+     * {@link #setAncestralSerialNumber(long)}. Will return {@code -1} if not set.
+     */
+    public long getAncestralSerialNumber() {
+        // TODO (b/124359804)
+        try (RandomAccessFile af = getAncestralSerialNumberFile()) {
+            return af.readLong();
+        } catch (IOException e) {
+            Slog.w(TAG, "Unable to write to work profile serial number file:", e);
+            return -1;
+        }
+    }
+
+    private RandomAccessFile getAncestralSerialNumberFile() throws FileNotFoundException {
+        if (mAncestralSerialNumberFile == null) {
+            mAncestralSerialNumberFile = new File(
+                UserBackupManagerFiles.getBaseStateDir(getUserId()),
+                SERIAL_ID_FILE);
+            FileUtils.createNewFile(mAncestralSerialNumberFile);
+        }
+        return new RandomAccessFile(mAncestralSerialNumberFile, "rwd");
+    }
+
+    @VisibleForTesting
+    void setAncestralSerialNumberFile(File ancestralSerialNumberFile) {
+        mAncestralSerialNumberFile = ancestralSerialNumberFile;
+    }
+
 
     /** Clear the given package's backup data from the current transport. */
     public void clearBackupData(String transportName, String packageName) {

@@ -969,6 +969,11 @@ public class SettingsProvider extends ContentProvider {
                 try {
                     synchronized (mLock) {
                         Setting setting = getSecureSetting(
+                                Settings.Secure.LOCATION_MODE, userId);
+                        updateSecureSetting(Settings.Secure.LOCATION_MODE,
+                                setting != null ? setting.getValue() : null, null,
+                                true, userId, true);
+                        setting = getSecureSetting(
                                 Settings.Secure.LOCATION_PROVIDERS_ALLOWED, userId);
                         updateSecureSetting(Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
                                 setting != null ? setting.getValue() : null, null,
@@ -1379,8 +1384,8 @@ public class SettingsProvider extends ContentProvider {
             }
         }
         if (enableOverride) {
-            if (Secure.LOCATION_PROVIDERS_ALLOWED.equals(name)) {
-                final Setting overridden = getLocationProvidersAllowedSetting(owningUserId);
+            if (Secure.LOCATION_MODE.equals(name)) {
+                final Setting overridden = getLocationModeSetting(owningUserId);
                 if (overridden != null) {
                     return overridden;
                 }
@@ -1475,7 +1480,7 @@ public class SettingsProvider extends ContentProvider {
         return null;
     }
 
-    private Setting getLocationProvidersAllowedSetting(int owningUserId) {
+    private Setting getLocationModeSetting(int owningUserId) {
         synchronized (mLock) {
             final Setting setting = getGlobalSetting(
                     Global.LOCATION_GLOBAL_KILL_SWITCH);
@@ -1486,7 +1491,7 @@ public class SettingsProvider extends ContentProvider {
             final SettingsState settingsState = mSettingsRegistry.getSettingsLocked(
                     SETTINGS_TYPE_SECURE, owningUserId);
             return settingsState.new Setting(
-                    Secure.LOCATION_PROVIDERS_ALLOWED,
+                    Secure.LOCATION_MODE,
                     "", // value
                     "", // tag
                     "", // default value
@@ -1497,7 +1502,7 @@ public class SettingsProvider extends ContentProvider {
                 @Override
                 public boolean update(String value, boolean setDefault, String packageName,
                         String tag, boolean forceNonSystemPackage) {
-                    Slog.wtf(LOG_TAG, "update shoudln't be called on this instance.");
+                    Slog.wtf(LOG_TAG, "update shouldn't be called on this instance.");
                     return false;
                 }
             };
@@ -3115,7 +3120,7 @@ public class SettingsProvider extends ContentProvider {
                 final int key = makeKey(SETTINGS_TYPE_SECURE, userId);
                 mGenerationRegistry.incrementGeneration(key);
 
-                final Uri uri = getNotificationUriFor(key, Secure.LOCATION_PROVIDERS_ALLOWED);
+                final Uri uri = getNotificationUriFor(key, Secure.LOCATION_MODE);
                 mHandler.obtainMessage(MyHandler.MSG_NOTIFY_URI_CHANGED,
                         userId, 0, uri).sendToTarget();
             }
@@ -3232,7 +3237,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 173;
+            private static final int SETTINGS_VERSION = 174;
 
             private final int mUserId;
 
@@ -4239,27 +4244,40 @@ public class SettingsProvider extends ContentProvider {
                         final Setting locationProvidersAllowed = secureSettings.getSettingLocked(
                                 Secure.LOCATION_PROVIDERS_ALLOWED);
 
-                        String defLocationMode = Integer.toString(
-                                !TextUtils.isEmpty(locationProvidersAllowed.getValue())
-                                        ? Secure.LOCATION_MODE_ON
-                                        : Secure.LOCATION_MODE_OFF);
+                        final int defLocationMode;
+                        if (locationProvidersAllowed.isNull()) {
+                            defLocationMode = getContext().getResources().getInteger(
+                                    R.integer.def_location_mode);
+                        } else {
+                            defLocationMode =
+                                    !TextUtils.isEmpty(locationProvidersAllowed.getValue())
+                                            ? Secure.LOCATION_MODE_ON
+                                            : Secure.LOCATION_MODE_OFF;
+                        }
                         secureSettings.insertSettingLocked(
-                                Secure.LOCATION_MODE, defLocationMode,
-                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
-
-                        // also reset LOCATION_PROVIDERS_ALLOWED back to the default value - this
-                        // setting is now only for debug/test purposes, and will likely be removed
-                        // in a later release. LocationManagerService is responsible for adjusting
-                        // these settings to the proper state.
-
-                        String defLocationProvidersAllowed = getContext().getResources().getString(
-                                R.string.def_location_providers_allowed);
-                        secureSettings.insertSettingLocked(
-                                Secure.LOCATION_PROVIDERS_ALLOWED, defLocationProvidersAllowed,
+                                Secure.LOCATION_MODE, Integer.toString(defLocationMode),
                                 null, true, SettingsState.SYSTEM_PACKAGE_NAME);
                     }
 
                     currentVersion = 173;
+                }
+
+                if (currentVersion == 173) {
+                    // Version 173: Set the default value for Secure Settings: NOTIFICATION_BUBBLES
+
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+
+                    final Setting bubblesSetting = secureSettings.getSettingLocked(
+                            Secure.NOTIFICATION_BUBBLES);
+
+                    if (bubblesSetting.isNull()) {
+                        secureSettings.insertSettingLocked(Secure.NOTIFICATION_BUBBLES,
+                                getContext().getResources().getBoolean(
+                                        R.bool.def_notification_bubbles) ? "1" : "0", null,
+                                true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+
+                    currentVersion = 174;
                 }
 
                 // vXXX: Add new settings above this point.

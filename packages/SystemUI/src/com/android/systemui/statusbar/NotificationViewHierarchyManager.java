@@ -24,6 +24,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.android.systemui.R;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -61,7 +62,7 @@ public class NotificationViewHierarchyManager {
     protected final NotificationLockscreenUserManager mLockscreenUserManager;
     protected final NotificationGroupManager mGroupManager;
     protected final VisualStabilityManager mVisualStabilityManager;
-    private final StatusBarStateController mStatusBarStateController;
+    private final SysuiStatusBarStateController mStatusBarStateController;
     private final NotificationEntryManager mEntryManager;
 
     // Lazy
@@ -88,7 +89,7 @@ public class NotificationViewHierarchyManager {
         mLockscreenUserManager = notificationLockscreenUserManager;
         mGroupManager = groupManager;
         mVisualStabilityManager = visualStabilityManager;
-        mStatusBarStateController = statusBarStateController;
+        mStatusBarStateController = (SysuiStatusBarStateController) statusBarStateController;
         mEntryManager = notificationEntryManager;
         mShadeController = shadeController;
         Resources res = context.getResources();

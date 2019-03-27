@@ -69,7 +69,6 @@ java_defaults {
         "core/java/android/app/ITaskStackListener.aidl",
         "core/java/android/app/IBackupAgent.aidl",
         "core/java/android/app/IEphemeralResolver.aidl",
-        "core/java/android/app/IInputForwarder.aidl",
         "core/java/android/app/IInstantAppResolver.aidl",
         "core/java/android/app/IInstrumentationWatcher.aidl",
         "core/java/android/app/INotificationManager.aidl",
@@ -77,7 +76,6 @@ java_defaults {
         "core/java/android/app/ISearchManager.aidl",
         "core/java/android/app/ISearchManagerCallback.aidl",
         "core/java/android/app/IServiceConnection.aidl",
-        "core/java/android/app/ISmsAppService.aidl",
         "core/java/android/app/IStopUserCallback.aidl",
         "core/java/android/app/job/IJobCallback.aidl",
         "core/java/android/app/job/IJobScheduler.aidl",
@@ -210,6 +208,7 @@ java_defaults {
         "core/java/android/hardware/soundtrigger/IRecognitionStatusCallback.aidl",
         "core/java/android/hardware/usb/IUsbManager.aidl",
         "core/java/android/hardware/usb/IUsbSerialReader.aidl",
+        "core/java/android/net/ICaptivePortal.aidl",
         "core/java/android/net/IConnectivityManager.aidl",
         "core/java/android/hardware/ISensorPrivacyListener.aidl",
         "core/java/android/hardware/ISensorPrivacyManager.aidl",
@@ -288,6 +287,7 @@ java_defaults {
         "core/java/android/service/carrier/ICarrierService.aidl",
         "core/java/android/service/carrier/ICarrierMessagingCallback.aidl",
         "core/java/android/service/carrier/ICarrierMessagingService.aidl",
+        "core/java/android/service/carrier/ICarrierMessagingClientService.aidl",
         "core/java/android/service/contentsuggestions/IContentSuggestionsService.aidl",
         "core/java/android/service/euicc/IDeleteSubscriptionCallback.aidl",
         "core/java/android/service/euicc/IDownloadSubscriptionCallback.aidl",
@@ -602,6 +602,7 @@ java_defaults {
         "telephony/java/com/android/internal/telephony/IOnSubscriptionsChangedListener.aidl",
         "telephony/java/com/android/internal/telephony/IPhoneStateListener.aidl",
         "telephony/java/com/android/internal/telephony/IPhoneSubInfo.aidl",
+        "telephony/java/com/android/internal/telephony/ISetOpportunisticDataCallback.aidl",
         "telephony/java/com/android/internal/telephony/ISms.aidl",
         "telephony/java/com/android/internal/telephony/ISub.aidl",
         "telephony/java/com/android/internal/telephony/IOns.aidl",
@@ -743,10 +744,8 @@ java_defaults {
 
     static_libs: [
         "apex_aidl_interface-java",
-        "networkstack-aidl-interfaces-java",
         "framework-protos",
         "game-driver-protos",
-        "mediaplayer2-protos",
         "android.hidl.base-V1.0-java",
         "android.hardware.cas-V1.1-java",
         "android.hardware.cas-V1.0-java",
@@ -775,8 +774,8 @@ java_defaults {
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.vibrator-V1.3-java",
         "android.hardware.wifi-V1.0-java-constants",
-        "networkstack-aidl-interfaces-java",
-        "netd_aidl_interface-java",
+        "networkstack-aidl-framework-java",
+        "netd_aidl_parcelables-java",
         "devicepolicyprotosnano",
     ],
 
@@ -806,6 +805,7 @@ filegroup {
     srcs: [
         "core/java/android/os/IStatsCompanionService.aidl",
         "core/java/android/os/IStatsManager.aidl",
+        "core/java/android/os/IStatsPullerCallback.aidl",
     ],
 }
 
@@ -847,6 +847,7 @@ java_library_host {
 // specified on the build command line.
 java_library {
     name: "framework-atb-backward-compatibility",
+    installable: true,
     srcs: [
         "core/java/android/content/pm/AndroidTestBaseUpdater.java",
     ],
@@ -895,10 +896,8 @@ aidl_interface {
     srcs: [
         "core/java/android/net/ApfCapabilitiesParcelable.aidl",
         "core/java/android/net/DhcpResultsParcelable.aidl",
-        "core/java/android/net/ICaptivePortal.aidl",
         "core/java/android/net/INetworkMonitor.aidl",
         "core/java/android/net/INetworkMonitorCallbacks.aidl",
-        "core/java/android/net/IIpMemoryStore.aidl",
         "core/java/android/net/INetworkStackConnector.aidl",
         "core/java/android/net/INetworkStackStatusCallback.aidl",
         "core/java/android/net/InitialConfigurationParcelable.aidl",
@@ -911,11 +910,22 @@ aidl_interface {
         "core/java/android/net/ProxyInfoParcelable.aidl",
         "core/java/android/net/RouteInfoParcelable.aidl",
         "core/java/android/net/StaticIpConfigurationParcelable.aidl",
+        "core/java/android/net/TcpKeepalivePacketDataParcelable.aidl",
         "core/java/android/net/dhcp/DhcpServingParamsParcel.aidl",
         "core/java/android/net/dhcp/IDhcpServer.aidl",
         "core/java/android/net/dhcp/IDhcpServerCallbacks.aidl",
         "core/java/android/net/ip/IIpClient.aidl",
         "core/java/android/net/ip/IIpClientCallbacks.aidl",
+    ],
+    api_dir: "aidl/networkstack",
+}
+
+aidl_interface {
+    name: "networkstack-aidl-framework",
+    local_include_dir: "core/java",
+    srcs: [
+        "core/java/android/net/TcpKeepalivePacketDataParcelable.aidl",
+        "core/java/android/net/IIpMemoryStore.aidl",
         "core/java/android/net/ipmemorystore/**/*.aidl",
     ],
     api_dir: "aidl/networkstack",
@@ -1188,58 +1198,21 @@ packages_to_document = [
     "org/apache/http/params",
 ]
 
-// The since flag (-since N.xml API_LEVEL) is used to add API Level information
-// to the reference documentation. Must be in order of oldest to newest.
-//
-// Conscrypt (com.android.org.conscrypt) is an implementation detail and should
-// not be referenced in the documentation.
-framework_docs_args = "-android -manifest $(location core/res/AndroidManifest.xml) " +
-     "-hidePackage com.android.internal " +
-     "-hidePackage com.android.internal.util " +
-     "-hidePackage com.android.okhttp " +
-     "-hidePackage com.android.org.conscrypt " +
-     "-hidePackage com.android.server " +
-     "-since $(location 1/public/api/android.xml) 1 " +
-     "-since $(location 2/public/api/android.xml) 2 " +
-     "-since $(location 3/public/api/android.xml) 3 " +
-     "-since $(location 4/public/api/android.xml) 4 " +
-     "-since $(location 5/public/api/android.xml) 5 " +
-     "-since $(location 6/public/api/android.xml) 6 " +
-     "-since $(location 7/public/api/android.xml) 7 " +
-     "-since $(location 8/public/api/android.xml) 8 " +
-     "-since $(location 9/public/api/android.xml) 9 " +
-     "-since $(location 10/public/api/android.xml) 10 " +
-     "-since $(location 11/public/api/android.xml) 11 " +
-     "-since $(location 12/public/api/android.xml) 12 " +
-     "-since $(location 13/public/api/android.xml) 13 " +
-     "-since $(location 14/public/api/android.txt) 14 " +
-     "-since $(location 15/public/api/android.txt) 15 " +
-     "-since $(location 16/public/api/android.txt) 16 " +
-     "-since $(location 17/public/api/android.txt) 17 " +
-     "-since $(location 18/public/api/android.txt) 18 " +
-     "-since $(location 19/public/api/android.txt) 19 " +
-     "-since $(location 20/public/api/android.txt) 20 " +
-     "-since $(location 21/public/api/android.txt) 21 " +
-     "-since $(location 22/public/api/android.txt) 22 " +
-     "-since $(location 23/public/api/android.txt) 23 " +
-     "-since $(location 24/public/api/android.txt) 24 " +
-     "-since $(location 25/public/api/android.txt) 25 " +
-     "-since $(location 26/public/api/android.txt) 26 " +
-     "-since $(location 27/public/api/android.txt) 27 " +
-     "-since $(location 28/public/api/android.txt) 28 " +
-     "-since $(location api/current.txt) Q " +
-     "-werror -lerror -hide 111 -hide 113 -hide 125 -hide 126 -hide 127 -hide 128 " +
-     "-overview $(location core/java/overview.html) " +
-     // Federate Support Library references against local API file.
-     "-federate SupportLib https://developer.android.com " +
-     "-federationapi SupportLib $(location current/support-api.txt) "
+// Make the api/current.txt file available for use by modules in other
+// directories.
+filegroup {
+    name: "frameworks-base-api-current.txt",
+    srcs: [
+        "api/current.txt",
+    ],
+}
 
 framework_docs_only_args = " -android -manifest $(location core/res/AndroidManifest.xml) " +
      "-werror -lerror -hide 111 -hide 113 -hide 125 -hide 126 -hide 127 -hide 128 " +
      "-overview $(location core/java/overview.html) " +
      // Federate Support Library references against local API file.
      "-federate SupportLib https://developer.android.com " +
-     "-federationapi SupportLib $(location current/support-api.txt) "
+     "-federationapi SupportLib $(location :current-support-api) "
 
 framework_docs_only_libs = [
     "voip-common",
@@ -1295,10 +1268,7 @@ stubs_defaults {
         "test-base/src/**/*.java",
         ":opt-telephony-srcs",
         ":opt-net-voip-srcs",
-        ":openjdk_javadoc_files",
-        ":non_openjdk_javadoc_files",
-        ":android_icu4j_src_files_for_docs",
-        ":conscrypt_public_api_files",
+        ":core_public_api_files",
         ":updatable-media-srcs-without-aidls",
         "test-mock/src/**/*.java",
         "test-runner/src/**/*.java",
@@ -1357,10 +1327,7 @@ stubs_defaults {
     srcs: [
         ":opt-telephony-srcs",
         ":opt-net-voip-srcs",
-        ":openjdk_javadoc_files",
-        ":non_openjdk_javadoc_files",
-        ":android_icu4j_src_files_for_docs",
-        ":conscrypt_public_api_files",
+        ":core_public_api_files",
         ":updatable-media-srcs-without-aidls",
     ],
     srcs_lib: "framework",
@@ -1544,7 +1511,7 @@ droiddoc {
     ],
     proofread_file: "ds-docs-proofrerad.txt",
     args: framework_docs_only_args +
-        " -toroot / -samplegroup Admin " +
+        " -toroot / -yamlV2 -metalavaApiSince -samplegroup Admin " +
         " -samplegroup Background " +
         " -samplegroup Connectivity " +
         " -samplegroup Content " +

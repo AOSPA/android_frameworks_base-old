@@ -41,6 +41,7 @@ import android.system.OsConstants;
 import android.system.StructCapUserData;
 import android.system.StructCapUserHeader;
 import android.text.Hyphenator;
+import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
@@ -84,6 +85,8 @@ public class ZygoteInit {
 
     private static final String PROPERTY_DISABLE_OPENGL_PRELOADING = "ro.zygote.disable_gl_preload";
     private static final String PROPERTY_GFX_DRIVER = "ro.gfx.driver.0";
+    private static final String PROPERTY_USE_APP_IMAGE_STARTUP_CACHE =
+            "persist.device_config.runtime_native.use_app_image_startup_cache";
 
     private static final int LOG_BOOT_PROGRESS_PRELOAD_START = 3020;
     private static final int LOG_BOOT_PROGRESS_PRELOAD_END = 3030;
@@ -705,6 +708,13 @@ public class ZygoteInit {
                 parsedArgs.mRuntimeFlags |= Zygote.PROFILE_SYSTEM_SERVER;
             }
 
+            String use_app_image_cache = SystemProperties.get(
+                    PROPERTY_USE_APP_IMAGE_STARTUP_CACHE, "");
+            // Property defaults to true currently.
+            if (!TextUtils.isEmpty(use_app_image_cache) && !use_app_image_cache.equals("false")) {
+                parsedArgs.mRuntimeFlags |= Zygote.USE_APP_IMAGE_STARTUP_CACHE;
+            }
+
             /* Request to fork the system server process */
             pid = Zygote.forkSystemServer(
                     parsedArgs.mUid, parsedArgs.mGid,
@@ -745,7 +755,7 @@ public class ZygoteInit {
     }
 
     public static void main(String argv[]) {
-        ZygoteServer zygoteServer = new ZygoteServer();
+        ZygoteServer zygoteServer = null;
 
         // Mark zygote start. This ensures that thread creation will throw
         // an error.
@@ -773,7 +783,7 @@ public class ZygoteInit {
             RuntimeInit.enableDdms();
 
             boolean startSystemServer = false;
-            String socketName = "zygote";
+            String zygoteSocketName = "zygote";
             String abiList = null;
             boolean enableLazyPreload = false;
             for (int i = 1; i < argv.length; i++) {
@@ -784,26 +794,19 @@ public class ZygoteInit {
                 } else if (argv[i].startsWith(ABI_LIST_ARG)) {
                     abiList = argv[i].substring(ABI_LIST_ARG.length());
                 } else if (argv[i].startsWith(SOCKET_NAME_ARG)) {
-                    socketName = argv[i].substring(SOCKET_NAME_ARG.length());
+                    zygoteSocketName = argv[i].substring(SOCKET_NAME_ARG.length());
                 } else {
                     throw new RuntimeException("Unknown command line argument: " + argv[i]);
                 }
             }
 
+            final boolean isPrimaryZygote = zygoteSocketName.equals(Zygote.PRIMARY_SOCKET_NAME);
+
             if (abiList == null) {
                 throw new RuntimeException("No ABI list supplied.");
             }
 
-            // TODO (chriswailes): Wrap these three calls in a helper function?
-            final String blastulaSocketName =
-                    socketName.equals(ZygoteProcess.ZYGOTE_SOCKET_NAME)
-                            ? ZygoteProcess.BLASTULA_POOL_SOCKET_NAME
-                            : ZygoteProcess.BLASTULA_POOL_SECONDARY_SOCKET_NAME;
-
-            zygoteServer.createZygoteSocket(socketName);
-            Zygote.createBlastulaSocket(blastulaSocketName);
-
-            Zygote.getSocketFDs(socketName.equals(ZygoteProcess.ZYGOTE_SOCKET_NAME));
+            Zygote.getSocketFDs(isPrimaryZygote);
 
             // In some configurations, we avoid preloading resources and classes eagerly.
             // In such cases, we will preload things prior to our first fork.
@@ -836,8 +839,10 @@ public class ZygoteInit {
 
             ZygoteHooks.stopZygoteNoThreadCreation();
 
+            zygoteServer = new ZygoteServer(isPrimaryZygote);
+
             if (startSystemServer) {
-                Runnable r = forkSystemServer(abiList, socketName, zygoteServer);
+                Runnable r = forkSystemServer(abiList, zygoteSocketName, zygoteServer);
 
                 // {@code r == null} in the parent (zygote) process, and {@code r != null} in the
                 // child (system_server) process.
@@ -847,23 +852,18 @@ public class ZygoteInit {
                 }
             }
 
-            // If the return value is null then this is the zygote process
-            // returning to the normal control flow.  If it returns a Runnable
-            // object then this is a blastula that has finished specializing.
-            caller = Zygote.initBlastulaPool();
+            Log.i(TAG, "Accepting command socket connections");
 
-            if (caller == null) {
-                Log.i(TAG, "Accepting command socket connections");
-
-                // The select loop returns early in the child process after a fork and
-                // loops forever in the zygote.
-                caller = zygoteServer.runSelectLoop(abiList);
-            }
+            // The select loop returns early in the child process after a fork and
+            // loops forever in the zygote.
+            caller = zygoteServer.runSelectLoop(abiList);
         } catch (Throwable ex) {
             Log.e(TAG, "System zygote died with exception", ex);
             throw ex;
         } finally {
-            zygoteServer.closeServerSocket();
+            if (zygoteServer != null) {
+                zygoteServer.closeServerSocket();
+            }
         }
 
         // We're in the child process and have exited the select loop. Proceed to execute the
@@ -884,8 +884,8 @@ public class ZygoteInit {
     }
 
     private static void waitForSecondaryZygote(String socketName) {
-        String otherZygoteName = ZygoteProcess.ZYGOTE_SOCKET_NAME.equals(socketName)
-                ? ZygoteProcess.ZYGOTE_SECONDARY_SOCKET_NAME : ZygoteProcess.ZYGOTE_SOCKET_NAME;
+        String otherZygoteName = Zygote.PRIMARY_SOCKET_NAME.equals(socketName)
+                ? Zygote.SECONDARY_SOCKET_NAME : Zygote.PRIMARY_SOCKET_NAME;
         ZygoteProcess.waitForConnectionToZygote(otherZygoteName);
     }
 

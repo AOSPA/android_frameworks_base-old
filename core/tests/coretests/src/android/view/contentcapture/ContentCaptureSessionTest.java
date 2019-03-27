@@ -155,5 +155,15 @@ public class ContentCaptureSessionTest {
         void internalNotifyViewTextChanged(AutofillId id, CharSequence text) {
             throw new UnsupportedOperationException("should not have been called");
         }
+
+        @Override
+        public void internalNotifyViewTreeEvent(boolean started) {
+            throw new UnsupportedOperationException("should not have been called");
+        }
+
+        @Override
+        public void updateContentCaptureContext(ContentCaptureContext context) {
+            throw new UnsupportedOperationException("should not have been called");
+        }
     }
 }

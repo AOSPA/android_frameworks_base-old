@@ -161,6 +161,7 @@ public final class NotificationRecord {
     private ArrayList<String> mPeopleOverride;
     private ArrayList<SnoozeCriterion> mSnoozeCriteria;
     private boolean mShowBadge;
+    private boolean mAllowBubble;
     private Light mLight;
     /**
      * This list contains system generated smart actions from NAS, app-generated smart actions are
@@ -178,6 +179,7 @@ public final class NotificationRecord {
     private int mNumberOfSmartRepliesAdded;
     private int mNumberOfSmartActionsAdded;
     private boolean mSuggestionsGeneratedByAssistant;
+    private boolean mEditChoicesBeforeSending;
     private boolean mHasSeenSmartReplies;
     /**
      * Whether this notification (and its channels) should be considered user locked. Used in
@@ -993,6 +995,14 @@ public final class NotificationRecord {
         mShowBadge = showBadge;
     }
 
+    public boolean canBubble() {
+        return mAllowBubble;
+    }
+
+    public void setAllowBubble(boolean allow) {
+        mAllowBubble = allow;
+    }
+
     public boolean canShowBadge() {
         return mShowBadge;
     }
@@ -1134,6 +1144,14 @@ public final class NotificationRecord {
 
     public boolean getSuggestionsGeneratedByAssistant() {
         return mSuggestionsGeneratedByAssistant;
+    }
+
+    public boolean getEditChoicesBeforeSending() {
+        return mEditChoicesBeforeSending;
+    }
+
+    public void setEditChoicesBeforeSending(boolean editChoicesBeforeSending) {
+        mEditChoicesBeforeSending = editChoicesBeforeSending;
     }
 
     public boolean hasSeenSmartReplies() {

@@ -50,6 +50,7 @@ cc_defaults {
 
     srcs: [
         ":statsd_aidl",
+        "src/active_config_list.proto",
         "src/statsd_config.proto",
         "src/FieldValue.cpp",
         "src/hash.cpp",
@@ -70,10 +71,12 @@ cc_defaults {
         "src/external/Perfetto.cpp",
         "src/external/Perfprofd.cpp",
         "src/external/StatsPuller.cpp",
+        "src/external/StatsCallbackPuller.cpp",
         "src/external/StatsCompanionServicePuller.cpp",
         "src/external/SubsystemSleepStatePuller.cpp",
         "src/external/PowerStatsPuller.cpp",
         "src/external/ResourceHealthManagerPuller.cpp",
+        "src/external/TrainInfoPuller.cpp",
         "src/external/StatsPullerManager.cpp",
         "src/external/puller_util.cpp",
         "src/logd/LogEvent.cpp",
@@ -214,7 +217,7 @@ cc_test {
         "tests/anomaly/AnomalyTracker_test.cpp",
         "tests/ConfigManager_test.cpp",
         "tests/external/puller_util_test.cpp",
-	"tests/external/StatsPuller_test.cpp",
+        "tests/external/StatsPuller_test.cpp",
         "tests/indexed_priority_queue_test.cpp",
         "tests/LogEntryMatcher_test.cpp",
         "tests/LogEvent_test.cpp",
@@ -236,6 +239,7 @@ cc_test {
         "tests/guardrail/StatsdStats_test.cpp",
         "tests/metrics/metrics_test_helper.cpp",
         "tests/statsd_test_util.cpp",
+        "tests/storage/StorageManager_test.cpp",
         "tests/e2e/WakelockDuration_e2e_test.cpp",
         "tests/e2e/MetricActivation_e2e_test.cpp",
         "tests/e2e/MetricConditionLink_e2e_test.cpp",
@@ -341,4 +345,10 @@ java_library {
     errorprone: {
         javacflags: ["-XepDisableAllChecks"],
     },
+}
+
+// Filegroup for statsd config proto definition.
+filegroup {
+    name: "statsd-config-proto-def",
+    srcs: ["src/statsd_config.proto"],
 }

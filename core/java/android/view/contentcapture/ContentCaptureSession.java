@@ -15,8 +15,8 @@
  */
 package android.view.contentcapture;
 
-import static android.view.contentcapture.ContentCaptureHelper.DEBUG;
-import static android.view.contentcapture.ContentCaptureHelper.VERBOSE;
+import static android.view.contentcapture.ContentCaptureHelper.sDebug;
+import static android.view.contentcapture.ContentCaptureHelper.sVerbose;
 
 import android.annotation.CallSuper;
 import android.annotation.IntDef;
@@ -120,32 +120,36 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      */
     public static final int STATE_INTERNAL_ERROR = 0x100;
 
+    /**
+     * Session is disabled because service didn't whitelist package.
+     *
+     * @hide
+     */
+    public static final int STATE_PACKAGE_NOT_WHITELISTED = 0x200;
+
     private static final int INITIAL_CHILDREN_CAPACITY = 5;
 
     /** @hide */
     public static final int FLUSH_REASON_FULL = 1;
     /** @hide */
-    public static final int FLUSH_REASON_ACTIVITY_PAUSED = 2;
+    public static final int FLUSH_REASON_VIEW_ROOT_ENTERED = 2;
     /** @hide */
-    public static final int FLUSH_REASON_ACTIVITY_RESUMED = 3;
+    public static final int FLUSH_REASON_SESSION_STARTED = 3;
     /** @hide */
-    public static final int FLUSH_REASON_SESSION_STARTED = 4;
+    public static final int FLUSH_REASON_SESSION_FINISHED = 4;
     /** @hide */
-    public static final int FLUSH_REASON_SESSION_FINISHED = 5;
-    /** @hide */
-    public static final int FLUSH_REASON_IDLE_TIMEOUT = 6;
+    public static final int FLUSH_REASON_IDLE_TIMEOUT = 5;
 
     /** @hide */
     @IntDef(prefix = { "FLUSH_REASON_" }, value = {
             FLUSH_REASON_FULL,
-            FLUSH_REASON_ACTIVITY_PAUSED,
-            FLUSH_REASON_ACTIVITY_RESUMED,
+            FLUSH_REASON_VIEW_ROOT_ENTERED,
             FLUSH_REASON_SESSION_STARTED,
             FLUSH_REASON_SESSION_FINISHED,
             FLUSH_REASON_IDLE_TIMEOUT
     })
     @Retention(RetentionPolicy.SOURCE)
-    @interface FlushReason{}
+    public @interface FlushReason{}
 
     private final Object mLock = new Object();
 
@@ -166,6 +170,14 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     private ContentCaptureSessionId mContentCaptureSessionId;
 
     /**
+     * {@link ContentCaptureContext} set by client, or {@code null} when it's the
+     * {@link ContentCaptureManager#getMainContentCaptureSession() default session} for the
+     * context.
+     */
+    @Nullable
+    private ContentCaptureContext mClientContext;
+
+    /**
      * List of children session.
      */
     @Nullable
@@ -181,6 +193,12 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     @VisibleForTesting
     public ContentCaptureSession(@NonNull String id) {
         mId = Preconditions.checkNotNull(id);
+    }
+
+    // Used by ChildCOntentCaptureSession
+    ContentCaptureSession(@NonNull ContentCaptureContext initialContext) {
+        this();
+        mClientContext = Preconditions.checkNotNull(initialContext);
     }
 
     /** @hide */
@@ -204,6 +222,12 @@ public abstract class ContentCaptureSession implements AutoCloseable {
         return mId.hashCode();
     }
 
+    /** @hide */
+    @NonNull
+    public String getId() {
+        return mId;
+    }
+
     /**
      * Creates a new {@link ContentCaptureSession}.
      *
@@ -213,7 +237,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     public final ContentCaptureSession createContentCaptureSession(
             @NonNull ContentCaptureContext context) {
         final ContentCaptureSession child = newChild(context);
-        if (DEBUG) {
+        if (sDebug) {
             Log.d(TAG, "createContentCaptureSession(" + context + ": parent=" + mId + ", child="
                     + child.mId);
         }
@@ -234,6 +258,30 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     abstract void flush(@FlushReason int reason);
 
     /**
+     * Sets the {@link ContentCaptureContext} associated with the session.
+     *
+     * <p>Typically used to change the context associated with the default session from an activity.
+     */
+    public final void setContentCaptureContext(@Nullable ContentCaptureContext context) {
+        mClientContext = context;
+        updateContentCaptureContext(context);
+    }
+
+    abstract void updateContentCaptureContext(@Nullable ContentCaptureContext context);
+
+    /**
+     * Gets the {@link ContentCaptureContext} associated with the session.
+     *
+     * @return context set on constructor or by
+     *         {@link #setContentCaptureContext(ContentCaptureContext)}, or {@code null} if never
+     *         explicitly set.
+     */
+    @Nullable
+    public final ContentCaptureContext getContentCaptureContext() {
+        return mClientContext;
+    }
+
+    /**
      * Destroys this session, flushing out all pending notifications to the service.
      *
      * <p>Once destroyed, any new notification will be dropped.
@@ -241,20 +289,20 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     public final void destroy() {
         synchronized (mLock) {
             if (mDestroyed) {
-                if (DEBUG) Log.d(TAG, "destroy(" + mId + "): already destroyed");
+                if (sDebug) Log.d(TAG, "destroy(" + mId + "): already destroyed");
                 return;
             }
             mDestroyed = true;
 
             // TODO(b/111276913): check state (for example, how to handle if it's waiting for remote
             // id) and send it to the cache of batched commands
-            if (VERBOSE) {
+            if (sVerbose) {
                 Log.v(TAG, "destroy(): state=" + getStateAsString(mState) + ", mId=" + mId);
             }
             // Finish children first
             if (mChildren != null) {
                 final int numberChildren = mChildren.size();
-                if (VERBOSE) Log.v(TAG, "Destroying " + numberChildren + " children first");
+                if (sVerbose) Log.v(TAG, "Destroying " + numberChildren + " children first");
                 for (int i = 0; i < numberChildren; i++) {
                     final ContentCaptureSession child = mChildren.get(i);
                     try {
@@ -362,6 +410,9 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     abstract void internalNotifyViewTextChanged(@NonNull AutofillId id,
             @Nullable CharSequence text);
 
+    /** @hide */
+    public abstract void internalNotifyViewTreeEvent(boolean started);
+
     /**
      * Creates a {@link ViewStructure} for a "standard" view.
      *
@@ -415,6 +466,9 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     @CallSuper
     void dump(@NonNull String prefix, @NonNull PrintWriter pw) {
         pw.print(prefix); pw.print("id: "); pw.println(mId);
+        if (mClientContext != null) {
+            pw.print(prefix); mClientContext.dump(pw); pw.println();
+        }
         synchronized (mLock) {
             pw.print(prefix); pw.print("destroyed: "); pw.println(mDestroyed);
             if (mChildren != null && !mChildren.isEmpty()) {
@@ -443,14 +497,12 @@ public abstract class ContentCaptureSession implements AutoCloseable {
 
     /** @hide */
     @NonNull
-    static String getflushReasonAsString(@FlushReason int reason) {
+    public static String getFlushReasonAsString(@FlushReason int reason) {
         switch (reason) {
             case FLUSH_REASON_FULL:
                 return "FULL";
-            case FLUSH_REASON_ACTIVITY_PAUSED:
-                return "PAUSED";
-            case FLUSH_REASON_ACTIVITY_RESUMED:
-                return "RESUMED";
+            case FLUSH_REASON_VIEW_ROOT_ENTERED:
+                return "VIEW_ROOT";
             case FLUSH_REASON_SESSION_STARTED:
                 return "STARTED";
             case FLUSH_REASON_SESSION_FINISHED:

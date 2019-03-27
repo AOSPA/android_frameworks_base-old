@@ -259,6 +259,8 @@ message GlobalSettingsProto {
         optional SettingProto app = 1;
         // Whether views are allowed to save their attribute data.
         optional SettingProto view_attributes = 2 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        // Which application package is allowed to save view attribute data.
+        optional SettingProto view_attributes_application_package = 3 [ (android.privacy).dest = DEST_AUTOMATIC ];
     }
     optional Debug debug = 37;
 
@@ -446,6 +448,13 @@ message GlobalSettingsProto {
         optional SettingProto game_driver_whitelist = 12;
         // ANGLE - List of Apps that can check ANGLE rules
         optional SettingProto angle_whitelist = 13;
+        // Game Driver - List of blacklists, each blacklist is a blacklist for
+        // a specific Game Driver version
+        optional SettingProto game_driver_blacklists = 14;
+        // ANGLE - Show a dialog box when ANGLE is selected for the currently running PKG
+        optional SettingProto show_angle_in_use_dialog = 15;
+        // Game Driver - List of libraries in sphal accessible by Game Driver
+        optional SettingProto game_driver_sphal_libraries = 16;
     }
     optional Gpu gpu = 59;
 
@@ -913,8 +922,7 @@ message GlobalSettingsProto {
         // Temperature at which the high temperature warning notification should
         // be shown.
         optional SettingProto warning_temperature_level = 2 [ (android.privacy).dest = DEST_AUTOMATIC ];
-        // USB temperature at which the high temperature alarm notification should be shown.
-        optional SettingProto usb_alarm_temperature_level = 3 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        optional SettingProto show_usb_temperature_alarm = 3 [ (android.privacy).dest = DEST_AUTOMATIC ];
     }
     optional TemperatureWarning temperature_warning = 119;
 

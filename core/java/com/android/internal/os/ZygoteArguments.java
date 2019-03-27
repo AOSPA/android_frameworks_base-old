@@ -101,6 +101,12 @@ class ZygoteArguments {
     String mSeInfo;
 
     /**
+     *
+     */
+    boolean mBlastulaPoolEnabled;
+    boolean mBlastulaPoolStatusSpecified = false;
+
+    /**
      * from all --rlimit=r,c,m
      */
     ArrayList<int[]> mRLimits;
@@ -116,8 +122,8 @@ class ZygoteArguments {
     /** from --packages-for-uid */
     String[] mPackagesForUid;
 
-    /** from --visible-vols */
-    String[] mVisibleVolIds;
+    /** from --sandbox-id */
+    String mSandboxId;
 
     /**
      * Any args after and including the first non-option arg (or after a '--')
@@ -214,8 +220,17 @@ class ZygoteArguments {
      * Per security review bug #1112214, duplicate args are disallowed in critical cases to make
      * injection harder.
      */
-    private void parseArgs(String[] args)
-            throws IllegalArgumentException {
+    private void parseArgs(String[] args) throws IllegalArgumentException {
+        /*
+         * See android.os.ZygoteProcess.zygoteSendArgsAndGetResult()
+         * Presently the wire format to the zygote process is:
+         * a) a count of arguments (argc, in essence)
+         * b) a number of newline-separated argument strings equal to count
+         *
+         * After the zygote process reads these it will write the pid of
+         * the child or -1 on failure.
+         */
+
         int curArg = 0;
 
         boolean seenRuntimeArgs = false;
@@ -383,8 +398,15 @@ class ZygoteArguments {
                 mPackageName = arg.substring(arg.indexOf('=') + 1);
             } else if (arg.startsWith("--packages-for-uid=")) {
                 mPackagesForUid = arg.substring(arg.indexOf('=') + 1).split(",");
-            } else if (arg.startsWith("--visible-vols=")) {
-                mVisibleVolIds = arg.substring(arg.indexOf('=') + 1).split(",");
+            } else if (arg.startsWith("--sandbox-id=")) {
+                if (mSandboxId != null) {
+                    throw new IllegalArgumentException("Duplicate arg specified");
+                }
+                mSandboxId = arg.substring(arg.indexOf('=') + 1);
+            } else if (arg.startsWith("--blastula-pool-enabled=")) {
+                mBlastulaPoolStatusSpecified = true;
+                mBlastulaPoolEnabled = Boolean.parseBoolean(arg.substring(arg.indexOf('=') + 1));
+                expectRuntimeArgs = false;
             } else {
                 break;
             }

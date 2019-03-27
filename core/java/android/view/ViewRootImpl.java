@@ -29,6 +29,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
 
 import android.Manifest;
 import android.animation.LayoutTransition;
+import android.annotation.AnyThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UnsupportedAppUsage;
@@ -96,6 +97,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityManager.AccessibilityStateChangeListener;
 import android.view.accessibility.AccessibilityManager.HighTextContrastChangeListener;
+import android.view.accessibility.AccessibilityNodeIdManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityNodeProvider;
@@ -104,7 +106,11 @@ import android.view.accessibility.IAccessibilityInteractionConnection;
 import android.view.accessibility.IAccessibilityInteractionConnectionCallback;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Interpolator;
+import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
+import android.view.contentcapture.ContentCaptureManager;
+import android.view.contentcapture.ContentCaptureSession;
+import android.view.contentcapture.MainContentCaptureSession;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Scroller;
 
@@ -155,6 +161,7 @@ public final class ViewRootImpl implements ViewParent,
     private static final boolean DEBUG_FPS = false;
     private static final boolean DEBUG_INPUT_STAGES = false || LOCAL_LOGV;
     private static final boolean DEBUG_KEEP_SCREEN_ON = false || LOCAL_LOGV;
+    private static final boolean DEBUG_CONTENT_CAPTURE = false || LOCAL_LOGV;
 
     /**
      * Set to false if we do not want to use the multi threaded renderer even though
@@ -181,7 +188,7 @@ public final class ViewRootImpl implements ViewParent,
      * @see #USE_NEW_INSETS_PROPERTY
      * @hide
      */
-    public static final int sNewInsetsMode =
+    public static int sNewInsetsMode =
             SystemProperties.getInt(USE_NEW_INSETS_PROPERTY, 0);
 
     /**
@@ -221,10 +228,25 @@ public final class ViewRootImpl implements ViewParent,
      */
     static final int MAX_TRACKBALL_DELAY = 250;
 
+    /**
+     * Initial value for {@link #mContentCaptureEnabled}.
+     */
+    private static final int CONTENT_CAPTURE_ENABLED_NOT_CHECKED = 0;
+
+    /**
+     * Value for {@link #mContentCaptureEnabled} when it was checked and set to {@code true}.
+     */
+    private static final int CONTENT_CAPTURE_ENABLED_TRUE = 1;
+
+    /**
+     * Value for {@link #mContentCaptureEnabled} when it was checked and set to {@code false}.
+     */
+    private static final int CONTENT_CAPTURE_ENABLED_FALSE = 2;
+
     @UnsupportedAppUsage
     static final ThreadLocal<HandlerActionQueue> sRunQueues = new ThreadLocal<HandlerActionQueue>();
 
-    static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList();
+    static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList<>();
     static boolean sFirstDrawComplete = false;
 
     /**
@@ -416,6 +438,11 @@ public final class ViewRootImpl implements ViewParent,
     boolean mApplyInsetsRequested;
     boolean mLayoutRequested;
     boolean mFirst;
+
+    @Nullable
+    int mContentCaptureEnabled = CONTENT_CAPTURE_ENABLED_NOT_CHECKED;
+    boolean mPerformContentCapture;
+
     boolean mReportNextDraw;
     boolean mFullRedrawNeeded;
     boolean mNewSurfaceNeeded;
@@ -615,6 +642,7 @@ public final class ViewRootImpl implements ViewParent,
         mTransparentRegion = new Region();
         mPreviousTransparentRegion = new Region();
         mFirst = true; // true for the first time the view is added
+        mPerformContentCapture = true; // also true for the first time the view is added
         mAdded = false;
         mAttachInfo = new View.AttachInfo(mWindowSession, mWindow, display, this, mHandler, this,
                 context);
@@ -1042,10 +1070,22 @@ public final class ViewRootImpl implements ViewParent,
         return mHeight;
     }
 
+    /**
+     * Destroys hardware rendering resources for this ViewRootImpl
+     *
+     * May be called on any thread
+     */
+    @AnyThread
     void destroyHardwareResources() {
-        if (mAttachInfo.mThreadedRenderer != null) {
-            mAttachInfo.mThreadedRenderer.destroyHardwareResources(mView);
-            mAttachInfo.mThreadedRenderer.destroy();
+        final ThreadedRenderer renderer = mAttachInfo.mThreadedRenderer;
+        if (renderer != null) {
+            // This is called by WindowManagerGlobal which may or may not be on the right thread
+            if (Looper.myLooper() != mAttachInfo.mHandler.getLooper()) {
+                mAttachInfo.mHandler.postAtFrontOfQueue(this::destroyHardwareResources);
+                return;
+            }
+            renderer.destroyHardwareResources(mView);
+            renderer.destroy();
         }
     }
 
@@ -1604,7 +1644,7 @@ public final class ViewRootImpl implements ViewParent,
         mSurfaceSession = null;
 
         if (mBoundsSurfaceControl != null) {
-            mBoundsSurfaceControl.destroy();
+            mBoundsSurfaceControl.remove();
             mBoundsSurface.release();
             mBoundsSurfaceControl = null;
         }
@@ -1888,7 +1928,7 @@ public final class ViewRootImpl implements ViewParent,
                 mLastWindowInsets = mInsetsController.calculateInsets(
                         mContext.getResources().getConfiguration().isScreenRound(),
                         mAttachInfo.mAlwaysConsumeNavBar, displayCutout,
-                        contentInsets, stableInsets);
+                        contentInsets, stableInsets, mWindowAttributes.softInputMode);
             } else {
                 mLastWindowInsets = new WindowInsets(contentInsets, stableInsets,
                         mContext.getResources().getConfiguration().isScreenRound(),
@@ -2764,7 +2804,54 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
+        if (mAttachInfo.mContentCaptureEvents != null) {
+            notifyContentCatpureEvents();
+        }
+
         mIsInTraversal = false;
+    }
+
+    private void notifyContentCatpureEvents() {
+        Trace.traceBegin(Trace.TRACE_TAG_VIEW, "notifyContentCaptureEvents");
+        try {
+            MainContentCaptureSession mainSession = mAttachInfo.mContentCaptureManager
+                    .getMainContentCaptureSession();
+            for (int i = 0; i < mAttachInfo.mContentCaptureEvents.size(); i++) {
+                String sessionId = mAttachInfo.mContentCaptureEvents
+                        .keyAt(i);
+                mainSession.notifyViewTreeEvent(sessionId, /* started= */ true);
+                ArrayList<Object> events = mAttachInfo.mContentCaptureEvents
+                        .valueAt(i);
+                for_each_event: for (int j = 0; j < events.size(); j++) {
+                    Object event = events.get(j);
+                    if (event instanceof AutofillId) {
+                        mainSession.notifyViewDisappeared(sessionId, (AutofillId) event);
+                    } else if (event instanceof View) {
+                        View view = (View) event;
+                        ContentCaptureSession session = view.getContentCaptureSession();
+                        if (session == null) {
+                            Log.w(mTag, "no content capture session on view: " + view);
+                            continue for_each_event;
+                        }
+                        String actualId = session.getId().toString();
+                        if (!actualId.equals(sessionId)) {
+                            Log.w(mTag, "content capture session mismatch for view (" + view
+                                    + "): was " + sessionId + " before, it's " + actualId + " now");
+                            continue for_each_event;
+                        }
+                        ViewStructure structure = session.newViewStructure(view);
+                        view.onProvideContentCaptureStructure(structure, /* flags= */ 0);
+                        session.notifyViewAppeared(structure);
+                    } else {
+                        Log.w(mTag, "invalid content capture event: " + event);
+                    }
+                }
+                mainSession.notifyViewTreeEvent(sessionId, /* started= */ false);
+            }
+            mAttachInfo.mContentCaptureEvents = null;
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+        }
     }
 
     private void notifySurfaceDestroyed() {
@@ -2897,6 +2984,13 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
         mFirstInputStage.onWindowFocusChanged(hasWindowFocus);
+
+        // NOTE: there's no view visibility (appeared / disapparead) events when the windows focus
+        // is lost, so we don't need to to force a flush - there might be other events such as
+        // text changes, but these should be flushed independently.
+        if (hasWindowFocus) {
+            handleContentCaptureFlush();
+        }
     }
 
     private void fireAccessibilityFocusEventIfHasFocusedNode() {
@@ -3387,21 +3481,25 @@ public final class ViewRootImpl implements ViewParent,
                     .captureFrameCommitCallbacks();
             if (mReportNextDraw) {
                 usingAsyncReport = true;
-                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
-                    // TODO: Use the frame number
-                    pendingDrawFinished();
-                    if (commitCallbacks != null) {
-                        for (int i = 0; i < commitCallbacks.size(); i++) {
-                            commitCallbacks.get(i).run();
-                        }
-                    }
-                });
+                final Handler handler = mAttachInfo.mHandler;
+                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) ->
+                        handler.post(() -> {
+                            // TODO: Use the frame number
+                            pendingDrawFinished();
+                            if (commitCallbacks != null) {
+                                for (int i = 0; i < commitCallbacks.size(); i++) {
+                                    commitCallbacks.get(i).run();
+                                }
+                            }
+                        }));
             } else if (commitCallbacks != null && commitCallbacks.size() > 0) {
-                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
-                    for (int i = 0; i < commitCallbacks.size(); i++) {
-                        commitCallbacks.get(i).run();
-                    }
-                });
+                final Handler handler = mAttachInfo.mHandler;
+                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) ->
+                        handler.post(() -> {
+                            for (int i = 0; i < commitCallbacks.size(); i++) {
+                                commitCallbacks.get(i).run();
+                            }
+                        }));
             }
         }
 
@@ -3458,6 +3556,86 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 pendingDrawFinished();
             }
+        }
+        if (mPerformContentCapture) {
+            performContentCaptureInitialReport();
+        }
+    }
+
+    /**
+     * Checks (and caches) if content capture is enabled for this context.
+     */
+    private boolean isContentCaptureEnabled() {
+        switch (mContentCaptureEnabled) {
+            case CONTENT_CAPTURE_ENABLED_TRUE:
+                return true;
+            case CONTENT_CAPTURE_ENABLED_FALSE:
+                return false;
+            case CONTENT_CAPTURE_ENABLED_NOT_CHECKED:
+                final boolean reallyEnabled = isContentCaptureReallyEnabled();
+                mContentCaptureEnabled = reallyEnabled ? CONTENT_CAPTURE_ENABLED_TRUE
+                        : CONTENT_CAPTURE_ENABLED_FALSE;
+                return reallyEnabled;
+            default:
+                Log.w(TAG, "isContentCaptureEnabled(): invalid state " + mContentCaptureEnabled);
+                return false;
+        }
+
+    }
+
+    /**
+     * Checks (without caching) if content capture is enabled for this context.
+     */
+    private boolean isContentCaptureReallyEnabled() {
+        // First check if context supports it, so it saves a service lookup when it doesn't
+        if (mContext.getContentCaptureOptions() == null) return false;
+
+        final ContentCaptureManager ccm = mAttachInfo.getContentCaptureManager(mContext);
+        // Then check if it's enabled in the contex itself.
+        if (ccm == null || !ccm.isContentCaptureEnabled()) return false;
+
+        return true;
+    }
+
+    private void performContentCaptureInitialReport() {
+        mPerformContentCapture = false; // One-time offer!
+        final View rootView = mView;
+        if (DEBUG_CONTENT_CAPTURE) {
+            Log.v(mTag, "performContentCaptureInitialReport() on " + rootView);
+        }
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
+            Trace.traceBegin(Trace.TRACE_TAG_VIEW, "dispatchContentCapture() for "
+                    + getClass().getSimpleName());
+        }
+        try {
+            if (!isContentCaptureEnabled()) return;
+
+            // Content capture is a go!
+            rootView.dispatchInitialProvideContentCaptureStructure();
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+        }
+    }
+
+    private void handleContentCaptureFlush() {
+        if (DEBUG_CONTENT_CAPTURE) {
+            Log.v(mTag, "handleContentCaptureFlush()");
+        }
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
+            Trace.traceBegin(Trace.TRACE_TAG_VIEW, "flushContentCapture for "
+                    + getClass().getSimpleName());
+        }
+        try {
+            if (!isContentCaptureEnabled()) return;
+
+            final ContentCaptureManager ccm = mAttachInfo.mContentCaptureManager;
+            if (ccm == null) {
+                Log.w(TAG, "No ContentCapture on AttachInfo");
+                return;
+            }
+            ccm.flush(ContentCaptureSession.FLUSH_REASON_VIEW_ROOT_ENTERED);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
         }
     }
 
@@ -5107,11 +5285,8 @@ public final class ViewRootImpl implements ViewParent,
         protected int onProcess(QueuedInputEvent q) {
             if (q.mEvent instanceof KeyEvent) {
                 return processKeyEvent(q);
-            } else {
-                final int source = q.mEvent.getSource();
-                if ((source & InputDevice.SOURCE_CLASS_POINTER) != 0) {
-                    return processPointerEvent(q);
-                }
+            } else if (q.mEvent instanceof MotionEvent) {
+                return processMotionEvent(q);
             }
             return FORWARD;
         }
@@ -5132,6 +5307,23 @@ public final class ViewRootImpl implements ViewParent,
             // Make sure the fallback event policy sees all keys that will be
             // delivered to the view hierarchy.
             mFallbackEventHandler.preDispatchKeyEvent(event);
+            return FORWARD;
+        }
+
+        private int processMotionEvent(QueuedInputEvent q) {
+            final MotionEvent event = (MotionEvent) q.mEvent;
+
+            if (event.isFromSource(InputDevice.SOURCE_CLASS_POINTER)) {
+                return processPointerEvent(q);
+            }
+
+            // If the motion event is from an absolute position device, exit touch mode
+            final int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_SCROLL) {
+                if (event.isFromSource(InputDevice.SOURCE_CLASS_POSITION)) {
+                    ensureTouchMode(false);
+                }
+            }
             return FORWARD;
         }
 
@@ -5475,6 +5667,12 @@ public final class ViewRootImpl implements ViewParent,
 
         private int processGenericMotionEvent(QueuedInputEvent q) {
             final MotionEvent event = (MotionEvent)q.mEvent;
+
+            if (event.isFromSource(InputDevice.SOURCE_TOUCHPAD)) {
+                if (hasPointerCapture() && mView.dispatchCapturedPointerEvent(event)) {
+                    return FINISH_HANDLED;
+                }
+            }
 
             // Deliver the event to the view.
             if (mView.dispatchGenericMotionEvent(event)) {
@@ -6949,7 +7147,7 @@ public final class ViewRootImpl implements ViewParent,
     @Override
     public boolean performHapticFeedback(int effectId, boolean always) {
         try {
-            return mWindowSession.performHapticFeedback(mWindow, effectId, always);
+            return mWindowSession.performHapticFeedback(effectId, always);
         } catch (RemoteException e) {
             return false;
         }
@@ -7046,7 +7244,7 @@ public final class ViewRootImpl implements ViewParent,
         RenderNode renderNode = view.mRenderNode;
         info[0]++;
         if (renderNode != null) {
-            info[1] += renderNode.computeApproximateMemoryUsage();
+            info[1] += (int) renderNode.computeApproximateMemoryUsage();
         }
 
         if (view instanceof ViewGroup) {
@@ -7925,17 +8123,14 @@ public final class ViewRootImpl implements ViewParent,
         // Intercept accessibility focus events fired by virtual nodes to keep
         // track of accessibility focus position in such nodes.
         final int eventType = event.getEventType();
+        final View source = getSourceForAccessibilityEvent(event);
         switch (eventType) {
             case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED: {
-                final long sourceNodeId = event.getSourceNodeId();
-                final int accessibilityViewId = AccessibilityNodeInfo.getAccessibilityViewId(
-                        sourceNodeId);
-                View source = mView.findViewByAccessibilityId(accessibilityViewId);
                 if (source != null) {
                     AccessibilityNodeProvider provider = source.getAccessibilityNodeProvider();
                     if (provider != null) {
                         final int virtualNodeId = AccessibilityNodeInfo.getVirtualDescendantId(
-                                sourceNodeId);
+                                event.getSourceNodeId());
                         final AccessibilityNodeInfo node;
                         node = provider.createAccessibilityNodeInfo(virtualNodeId);
                         setAccessibilityFocus(source, node);
@@ -7943,15 +8138,8 @@ public final class ViewRootImpl implements ViewParent,
                 }
             } break;
             case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED: {
-                final long sourceNodeId = event.getSourceNodeId();
-                final int accessibilityViewId = AccessibilityNodeInfo.getAccessibilityViewId(
-                        sourceNodeId);
-                View source = mView.findViewByAccessibilityId(accessibilityViewId);
-                if (source != null) {
-                    AccessibilityNodeProvider provider = source.getAccessibilityNodeProvider();
-                    if (provider != null) {
-                        setAccessibilityFocus(null, null);
-                    }
+                if (source != null && source.getAccessibilityNodeProvider() != null) {
+                    setAccessibilityFocus(null, null);
                 }
             } break;
 
@@ -7962,6 +8150,13 @@ public final class ViewRootImpl implements ViewParent,
         }
         mAccessibilityManager.sendAccessibilityEvent(event);
         return true;
+    }
+
+    private View getSourceForAccessibilityEvent(AccessibilityEvent event) {
+        final long sourceNodeId = event.getSourceNodeId();
+        final int accessibilityViewId = AccessibilityNodeInfo.getAccessibilityViewId(
+                sourceNodeId);
+        return AccessibilityNodeIdManager.getInstance().findView(accessibilityViewId);
     }
 
     /**

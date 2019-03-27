@@ -268,6 +268,7 @@ struct ResourceFileFlattenerOptions {
   bool update_proguard_spec = false;
   OutputFormat output_format = OutputFormat::kApk;
   std::unordered_set<std::string> extensions_to_not_compress;
+  Maybe<std::regex> regex_to_not_compress;
 };
 
 // A sampling of public framework resource IDs.
@@ -377,8 +378,15 @@ ResourceFileFlattener::ResourceFileFlattener(const ResourceFileFlattenerOptions&
   }
 }
 
+// TODO(rtmitchell): turn this function into a variable that points to a method that retrieves the
+// compression flag
 uint32_t ResourceFileFlattener::GetCompressionFlags(const StringPiece& str) {
   if (options_.do_not_compress_anything) {
+    return 0;
+  }
+
+  if (options_.regex_to_not_compress
+      && std::regex_search(str.to_string(), options_.regex_to_not_compress.value())) {
     return 0;
   }
 
@@ -400,7 +408,8 @@ static bool IsTransitionElement(const std::string& name) {
 
 static bool IsVectorElement(const std::string& name) {
   return name == "vector" || name == "animated-vector" || name == "pathInterpolator" ||
-         name == "objectAnimator" || name == "gradient" || name == "animated-selector";
+         name == "objectAnimator" || name == "gradient" || name == "animated-selector" ||
+         name == "set";
 }
 
 template <typename T>
@@ -708,28 +717,20 @@ static bool LoadStableIdMap(IDiagnostics* diag, const std::string& path,
   return true;
 }
 
-static int32_t FindFrameworkAssetManagerCookie(const android::AssetManager& assets) {
+static android::ApkAssetsCookie FindFrameworkAssetManagerCookie(
+    const android::AssetManager2& assets) {
   using namespace android;
 
   // Find the system package (0x01). AAPT always generates attributes with the type 0x01, so
   // we're looking for the first attribute resource in the system package.
-  const ResTable& table = assets.getResources(true);
-  Res_value val;
-  ssize_t idx = table.getResource(0x01010000, &val, true);
-  if (idx != NO_ERROR) {
-    // Try as a bag.
-    const ResTable::bag_entry* entry;
-    ssize_t cnt = table.lockBag(0x01010000, &entry);
-    if (cnt >= 0) {
-      idx = entry->stringBlock;
-    }
-    table.unlockBag(entry);
-  }
+  Res_value val{};
+  ResTable_config config{};
+  uint32_t type_spec_flags;
+  ApkAssetsCookie idx = assets.GetResource(0x01010000, true /** may_be_bag */,
+                                           0 /** density_override */, &val, &config,
+                                           &type_spec_flags);
 
-  if (idx < 0) {
-    return 0;
-  }
-  return table.getTableCookie(idx);
+  return idx;
 }
 
 class Linker {
@@ -741,17 +742,17 @@ class Linker {
         file_collection_(util::make_unique<io::FileCollection>()) {
   }
 
-  void ExtractCompileSdkVersions(android::AssetManager* assets) {
+  void ExtractCompileSdkVersions(android::AssetManager2* assets) {
     using namespace android;
 
-    int32_t cookie = FindFrameworkAssetManagerCookie(*assets);
-    if (cookie == 0) {
+    android::ApkAssetsCookie cookie = FindFrameworkAssetManagerCookie(*assets);
+    if (cookie == android::kInvalidCookie) {
       // No Framework assets loaded. Not a failure.
       return;
     }
 
     std::unique_ptr<Asset> manifest(
-        assets->openNonAsset(cookie, kAndroidManifestPath, Asset::AccessMode::ACCESS_BUFFER));
+        assets->OpenNonAsset(kAndroidManifestPath, cookie, Asset::AccessMode::ACCESS_BUFFER));
     if (manifest == nullptr) {
       // No errors.
       return;
@@ -1530,7 +1531,11 @@ class Linker {
     for (auto& entry : merged_assets) {
       uint32_t compression_flags = ArchiveEntry::kCompress;
       std::string extension = file::GetExtension(entry.first).to_string();
-      if (options_.extensions_to_not_compress.count(extension) > 0) {
+
+      if (options_.do_not_compress_anything
+          || options_.extensions_to_not_compress.count(extension) > 0
+          || (options_.regex_to_not_compress
+              && std::regex_search(extension, options_.regex_to_not_compress.value()))) {
         compression_flags = 0u;
       }
 
@@ -1558,6 +1563,7 @@ class Linker {
     file_flattener_options.keep_raw_values = keep_raw_values;
     file_flattener_options.do_not_compress_anything = options_.do_not_compress_anything;
     file_flattener_options.extensions_to_not_compress = options_.extensions_to_not_compress;
+    file_flattener_options.regex_to_not_compress = options_.regex_to_not_compress;
     file_flattener_options.no_auto_version = options_.no_auto_version;
     file_flattener_options.no_version_vectors = options_.no_version_vectors;
     file_flattener_options.no_version_transitions = options_.no_version_transitions;
@@ -2162,6 +2168,20 @@ int LinkCommand::Action(const std::vector<std::string>& args) {
     if (!LoadStableIdMap(context.GetDiagnostics(), stable_id_file_path_.value(),
         &options_.stable_id_map)) {
       return 1;
+    }
+  }
+
+  if (no_compress_regex) {
+    std::string regex = no_compress_regex.value();
+    if (util::StartsWith(regex, "@")) {
+      const std::string path = regex.substr(1, regex.size() -1);
+      std::string error;
+      if (!file::AppendSetArgsFromFile(path, &options_.extensions_to_not_compress, &error)) {
+        context.GetDiagnostics()->Error(DiagMessage(path) << error);
+        return 1;
+      }
+    } else {
+      options_.regex_to_not_compress = GetRegularExpression(no_compress_regex.value());
     }
   }
 

@@ -124,6 +124,9 @@ class AssetManager2 {
   // This may be nullptr if the APK represented by `cookie` has no resource table.
   const DynamicRefTable* GetDynamicRefTableForCookie(ApkAssetsCookie cookie) const;
 
+  const std::unordered_map<std::string, std::string>*
+    GetOverlayableMapForPackage(uint32_t package_id) const;
+
   // Sets/resets the configuration for this AssetManager. This will cause all
   // caches that are related to the configuration change to be invalidated.
   void SetConfiguration(const ResTable_config& configuration);
@@ -237,6 +240,8 @@ class AssetManager2 {
   // resource has been resolved yet.
   std::string GetLastResourceResolution() const;
 
+  const std::vector<uint32_t> GetBagResIdStack(uint32_t resid);
+
   // Retrieves the best matching bag/map resource with ID `resid`.
   // This method will resolve all parent references for this bag and merge keys with the child.
   // To iterate over the keys, use the following idiom:
@@ -252,11 +257,12 @@ class AssetManager2 {
   // Creates a new Theme from this AssetManager.
   std::unique_ptr<Theme> NewTheme();
 
-  template <typename Func>
-  void ForEachPackage(Func func) const {
+  void ForEachPackage(const std::function<bool(const std::string&, uint8_t)> func) const {
     for (const PackageGroup& package_group : package_groups_) {
-      func(package_group.packages_.front().loaded_package_->GetPackageName(),
-           package_group.dynamic_ref_table.mAssignedPackageId);
+      if (!func(package_group.packages_.front().loaded_package_->GetPackageName(),
+           package_group.dynamic_ref_table.mAssignedPackageId)) {
+        return;
+      }
     }
   }
 
@@ -277,10 +283,13 @@ class AssetManager2 {
   // care about the value. In this case, the value of `FindEntryResult::type_flags` is incomplete
   // and should not be used.
   //
+  // When `ignore_configuration` is true, FindEntry will return always select the first entry in
+  // for the type seen regardless of its configuration.
+  //
   // NOTE: FindEntry takes care of ensuring that structs within FindEntryResult have been properly
   // bounds-checked. Callers of FindEntry are free to trust the data if this method succeeds.
   ApkAssetsCookie FindEntry(uint32_t resid, uint16_t density_override, bool stop_at_first_match,
-                            FindEntryResult* out_entry) const;
+                            bool ignore_configuration, FindEntryResult* out_entry) const;
 
   // Assigns package IDs to all shared library ApkAssets.
   // Should be called whenever the ApkAssets are changed.
@@ -354,6 +363,10 @@ class AssetManager2 {
   // Cached set of bags. These are cached because they can inherit keys from parent bags,
   // which involves some calculation.
   std::unordered_map<uint32_t, util::unique_cptr<ResolvedBag>> cached_bags_;
+
+  // Cached set of bag resid stacks for each bag. These are cached because they might be requested
+  // a number of times for each view during View inspection.
+  std::unordered_map<uint32_t, std::vector<uint32_t>> cached_bag_resid_stacks_;
 
   // Whether or not to save resource resolution steps
   bool resource_resolution_logging_enabled_ = false;

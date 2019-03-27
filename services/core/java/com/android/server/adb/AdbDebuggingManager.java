@@ -82,6 +82,9 @@ public class AdbDebuggingManager {
     private static final String ADB_DIRECTORY = "misc/adb";
     // This file contains keys that will always be allowed to connect to the device via adb.
     private static final String ADB_KEYS_FILE = "adb_keys";
+    // This file contains keys that will be allowed to connect without user interaction as long
+    // as a subsequent connection occurs within the allowed duration.
+    private static final String ADB_TEMP_KEYS_FILE = "adb_temp_keys.xml";
     private static final int BUFFER_SIZE = 4096;
 
     private final Context mContext;
@@ -263,7 +266,6 @@ public class AdbDebuggingManager {
 
         AdbDebuggingHandler(Looper looper) {
             super(looper);
-            mAdbKeyStore = new AdbKeyStore();
         }
 
         /**
@@ -289,6 +291,7 @@ public class AdbDebuggingManager {
                     mThread = new AdbDebuggingThread();
                     mThread.start();
 
+                    mAdbKeyStore = new AdbKeyStore();
                     break;
 
                 case MESSAGE_ADB_DISABLED:
@@ -303,6 +306,9 @@ public class AdbDebuggingManager {
                         mThread = null;
                     }
 
+                    cancelJobToUpdateAdbKeyStore();
+                    mAdbKeyStore = null;
+                    mConnectedKey = null;
                     break;
 
                 case MESSAGE_ADB_ALLOW: {
@@ -322,6 +328,9 @@ public class AdbDebuggingManager {
                             mConnectedKey = key;
                             mAdbKeyStore.setLastConnectionTime(key, System.currentTimeMillis());
                             scheduleJobToUpdateAdbKeyStore();
+                            // write this key to adb_keys as well so that subsequent connections can
+                            // go through the expected SIGNATURE interaction.
+                            writeKey(key);
                         }
                         logAdbConnectionChanged(key, AdbProtoEnums.USER_ALLOWED, alwaysAllow);
                     }
@@ -354,20 +363,9 @@ public class AdbDebuggingManager {
                         }
                         break;
                     }
-                    // Check if the key should be allowed without user interaction.
-                    if (mAdbKeyStore.isKeyAuthorized(key)) {
-                        if (mThread != null) {
-                            mThread.sendResponse("OK");
-                            mAdbKeyStore.setLastConnectionTime(key, System.currentTimeMillis());
-                            logAdbConnectionChanged(key, AdbProtoEnums.AUTOMATICALLY_ALLOWED, true);
-                            mConnectedKey = key;
-                            scheduleJobToUpdateAdbKeyStore();
-                        }
-                    } else {
-                        logAdbConnectionChanged(key, AdbProtoEnums.AWAITING_USER_APPROVAL, false);
-                        mFingerprints = fingerprints;
-                        startConfirmation(key, mFingerprints);
-                    }
+                    logAdbConnectionChanged(key, AdbProtoEnums.AWAITING_USER_APPROVAL, false);
+                    mFingerprints = fingerprints;
+                    startConfirmation(key, mFingerprints);
                     break;
                 }
 
@@ -532,7 +530,11 @@ public class AdbDebuggingManager {
         return new File(adbDir, fileName);
     }
 
-    private File getUserKeyFile() {
+    File getAdbTempKeysFile() {
+        return getAdbFile(ADB_TEMP_KEYS_FILE);
+    }
+
+    File getUserKeyFile() {
         return getAdbFile(ADB_KEYS_FILE);
     }
 
@@ -668,9 +670,6 @@ public class AdbDebuggingManager {
         private Map<String, Long> mKeyMap;
         private File mKeyFile;
         private AtomicFile mAtomicKeyFile;
-        // This file contains keys that will be allowed to connect without user interaction as long
-        // as a subsequent connection occurs within the allowed duration.
-        private static final String ADB_TEMP_KEYS_FILE = "adb_temp_keys.xml";
         private static final String XML_TAG_ADB_KEY = "adbKey";
         private static final String XML_ATTRIBUTE_KEY = "key";
         private static final String XML_ATTRIBUTE_LAST_CONNECTION = "lastConnection";
@@ -704,9 +703,9 @@ public class AdbDebuggingManager {
          */
         private void initKeyFile() {
             if (mKeyFile == null) {
-                mKeyFile = getAdbFile(ADB_TEMP_KEYS_FILE);
+                mKeyFile = getAdbTempKeysFile();
             }
-            // getAdbFile can return null if the adb file cannot be obtained
+            // getAdbTempKeysFile can return null if the adb file cannot be obtained
             if (mKeyFile != null) {
                 mAtomicKeyFile = new AtomicFile(mKeyFile);
             }
@@ -767,7 +766,8 @@ public class AdbDebuggingManager {
         public void persistKeyStore() {
             // if there is nothing in the key map then ensure any keys left in the key store files
             // are deleted as well.
-            if (mKeyMap.size() == 0) {
+            filterOutOldKeys();
+            if (mKeyMap.isEmpty()) {
                 deleteKeyStore();
                 return;
             }
@@ -784,27 +784,33 @@ public class AdbDebuggingManager {
                 keyStream = mAtomicKeyFile.startWrite();
                 serializer.setOutput(keyStream, StandardCharsets.UTF_8.name());
                 serializer.startDocument(null, true);
-                long allowedTime = getAllowedConnectionTime();
-                long systemTime = System.currentTimeMillis();
-                Iterator keyMapIterator = mKeyMap.entrySet().iterator();
-                while (keyMapIterator.hasNext()) {
-                    Map.Entry<String, Long> keyEntry = (Map.Entry) keyMapIterator.next();
-                    long connectionTime = keyEntry.getValue();
-                    if (systemTime < (connectionTime + allowedTime)) {
-                        serializer.startTag(null, XML_TAG_ADB_KEY);
-                        serializer.attribute(null, XML_ATTRIBUTE_KEY, keyEntry.getKey());
-                        serializer.attribute(null, XML_ATTRIBUTE_LAST_CONNECTION,
-                                String.valueOf(keyEntry.getValue()));
-                        serializer.endTag(null, XML_TAG_ADB_KEY);
-                    } else {
-                        keyMapIterator.remove();
-                    }
+
+                for (Map.Entry<String, Long> keyEntry : mKeyMap.entrySet()) {
+                    serializer.startTag(null, XML_TAG_ADB_KEY);
+                    serializer.attribute(null, XML_ATTRIBUTE_KEY, keyEntry.getKey());
+                    serializer.attribute(null, XML_ATTRIBUTE_LAST_CONNECTION,
+                            String.valueOf(keyEntry.getValue()));
+                    serializer.endTag(null, XML_TAG_ADB_KEY);
                 }
+
                 serializer.endDocument();
                 mAtomicKeyFile.finishWrite(keyStream);
             } catch (IOException e) {
                 Slog.e(TAG, "Caught an exception writing the key map: ", e);
                 mAtomicKeyFile.failWrite(keyStream);
+            }
+        }
+
+        private void filterOutOldKeys() {
+            long allowedTime = getAllowedConnectionTime();
+            long systemTime = System.currentTimeMillis();
+            Iterator<Map.Entry<String, Long>> keyMapIterator = mKeyMap.entrySet().iterator();
+            while (keyMapIterator.hasNext()) {
+                Map.Entry<String, Long> keyEntry = keyMapIterator.next();
+                long connectionTime = keyEntry.getValue();
+                if (allowedTime != 0 && systemTime > (connectionTime + allowedTime)) {
+                    keyMapIterator.remove();
+                }
             }
         }
 

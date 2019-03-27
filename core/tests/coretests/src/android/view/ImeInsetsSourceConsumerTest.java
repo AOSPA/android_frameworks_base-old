@@ -19,11 +19,13 @@ package android.view;
 import static android.view.ImeInsetsSourceConsumer.areEditorsSimilar;
 import static android.view.InsetsState.TYPE_IME;
 
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
 
 import android.content.Context;
 import android.graphics.Insets;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.platform.test.annotations.Presubmit;
@@ -72,7 +74,7 @@ public class ImeInsetsSourceConsumerTest {
                     false,
                     new DisplayCutout(
                             Insets.of(10, 10, 10, 10), rect, rect, rect, rect),
-                    rect, rect);
+                    rect, rect, SOFT_INPUT_ADJUST_RESIZE);
             mImeConsumer = new ImeInsetsSourceConsumer(
                     new InsetsState(), Transaction::new, mController);
         });
@@ -80,7 +82,7 @@ public class ImeInsetsSourceConsumerTest {
 
     @Test
     public void testImeVisibility() {
-        final InsetsSourceControl ime = new InsetsSourceControl(TYPE_IME, mLeash);
+        final InsetsSourceControl ime = new InsetsSourceControl(TYPE_IME, mLeash, new Point());
         mController.onControlsChanged(new InsetsSourceControl[] { ime });
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {

@@ -91,6 +91,7 @@ import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.util.EmergencyDialerConstants;
+import com.android.systemui.util.leak.RotationUtils;
 import com.android.systemui.volume.SystemUIInterpolators.LogAccelerateInterpolator;
 
 import java.util.ArrayList;
@@ -1091,7 +1092,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         protected int getActionLayoutId(Context context) {
-            if (FeatureFlagUtils.isEnabled(context, FeatureFlagUtils.GLOBAL_ACTIONS_GRID_ENABLED)) {
+            if (isGridEnabled(context)) {
                 return com.android.systemui.R.layout.global_actions_grid_item;
             }
             return com.android.systemui.R.layout.global_actions_item;
@@ -1465,7 +1466,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         private final Context mContext;
         private final MyAdapter mAdapter;
-        private final MultiListLayout mGlobalActionsLayout;
+        private MultiListLayout mGlobalActionsLayout;
         private final OnClickListener mClickListener;
         private final OnItemLongClickListener mLongClickListener;
         private final GradientDrawable mGradientDrawable;
@@ -1505,8 +1506,13 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             window.setBackgroundDrawable(mGradientDrawable);
             window.setType(WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY);
 
+            initializeLayout();
 
-            setContentView(getGlobalActionsLayoutId(context));
+            setTitle(R.string.global_actions);
+        }
+
+        private void initializeLayout() {
+            setContentView(getGlobalActionsLayoutId(mContext));
             mGlobalActionsLayout = (MultiListLayout)
                     findViewById(com.android.systemui.R.id.global_actions_view);
             mGlobalActionsLayout.setOutsideTouchListener(view -> dismiss());
@@ -1520,11 +1526,14 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                     return true;
                 }
             });
-            setTitle(R.string.global_actions);
+            mGlobalActionsLayout.setRotationListener(this::onRotate);
         }
 
         private int getGlobalActionsLayoutId(Context context) {
-            if (FeatureFlagUtils.isEnabled(context, FeatureFlagUtils.GLOBAL_ACTIONS_GRID_ENABLED)) {
+            if (isGridEnabled(context)) {
+                if (RotationUtils.getRotation(context) == RotationUtils.ROTATION_SEASCAPE) {
+                    return com.android.systemui.R.layout.global_actions_grid_seascape;
+                }
                 return com.android.systemui.R.layout.global_actions_grid;
             }
             return com.android.systemui.R.layout.global_actions_wrapped;
@@ -1543,10 +1552,20 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 int separatedIndex = separatedActions.indexOf(action);
                 ViewGroup parent;
                 if (separatedIndex != -1) {
-                    parent = mGlobalActionsLayout.getParentView(true, separatedIndex);
+                    parent = mGlobalActionsLayout.getParentView(true, separatedIndex, false);
                 } else {
+                    boolean reverse = false;
+
+                    // If we're using the grid layout and we're in seascape, reverse the order
+                    // of sublists to make sure they render in the correct positions,
+                    // since we can't reverse vertical LinearLayouts through the layout xml.
+
+                    if (isGridEnabled(mContext) && RotationUtils.getRotation(mContext)
+                            == RotationUtils.ROTATION_SEASCAPE) {
+                        reverse = true;
+                    }
                     int listIndex = listActions.indexOf(action);
-                    parent = mGlobalActionsLayout.getParentView(false, listIndex);
+                    parent = mGlobalActionsLayout.getParentView(false, listIndex, reverse);
                 }
                 View v = mAdapter.getView(i, null, parent);
                 final int pos = i;
@@ -1664,5 +1683,19 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         public void setKeyguardShowing(boolean keyguardShowing) {
             mKeyguardShowing = keyguardShowing;
         }
+
+        public void onRotate(int from, int to) {
+            if (mShowing && isGridEnabled(mContext)) {
+                initializeLayout();
+                updateList();
+            }
+        }
+    }
+
+    /**
+     * Determines whether or not the Global Actions Dialog should use the newer grid-style layout.
+     */
+    public static boolean isGridEnabled(Context context) {
+        return FeatureFlagUtils.isEnabled(context, FeatureFlagUtils.GLOBAL_ACTIONS_GRID_ENABLED);
     }
 }

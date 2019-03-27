@@ -33,6 +33,7 @@ import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.annotation.XmlRes;
 import android.app.ActivityManager;
+import android.app.AppDetailsActivity;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
 import android.app.admin.DevicePolicyManager;
@@ -715,7 +716,6 @@ public abstract class PackageManager {
             INSTALL_FORCE_PERMISSION_PROMPT,
             INSTALL_INSTANT_APP,
             INSTALL_DONT_KILL_APP,
-            INSTALL_FORCE_SDK,
             INSTALL_FULL_APP,
             INSTALL_ALLOCATE_AGGRESSIVE,
             INSTALL_VIRTUAL_PRELOAD,
@@ -816,15 +816,6 @@ public abstract class PackageManager {
     public static final int INSTALL_DONT_KILL_APP = 0x00001000;
 
     /**
-     * Flag parameter for {@link #installPackage} to indicate that this package is an
-     * upgrade to a package that refers to the SDK via release letter or is targeting an SDK via
-     * release letter that the current build does not support.
-     *
-     * @hide
-     */
-    public static final int INSTALL_FORCE_SDK = 0x00002000;
-
-    /**
      * Flag parameter for {@link #installPackage} to indicate that this package is
      * to be installed as a heavy weight app. This is fundamentally the opposite of
      * {@link #INSTALL_INSTANT_APP}.
@@ -865,6 +856,14 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_ENABLE_ROLLBACK = 0x00040000;
+
+    /**
+     * Flag parameter for {@link #installPackage} to indicate that package verification should be
+     * disabled for this package.
+     *
+     * @hide
+     */
+    public static final int INSTALL_DISABLE_VERIFICATION = 0x00080000;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "DONT_KILL_APP" }, value = {
@@ -2566,6 +2565,14 @@ public abstract class PackageManager {
     public static final String FEATURE_PC = "android.hardware.type.pc";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: This is a foldable device. Properties such as
+     * the display size may change in response to being folded.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_FOLDABLE = "android.hardware.type.foldable";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
      * The device supports printing.
      */
@@ -2945,6 +2952,7 @@ public abstract class PackageManager {
     * @hide
     */
     @SystemApi
+    @TestApi
     public static final int FLAG_PERMISSION_USER_SET = 1 << 0;
 
     /**
@@ -2955,6 +2963,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final int FLAG_PERMISSION_USER_FIXED =  1 << 1;
 
     /**
@@ -2978,6 +2987,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final int FLAG_PERMISSION_REVOKE_ON_UPGRADE =  1 << 3;
 
     /**
@@ -3007,6 +3017,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final int FLAG_PERMISSION_REVIEW_REQUIRED =  1 << 6;
 
     /**
@@ -3016,6 +3027,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @TestApi
     public static final int FLAG_PERMISSION_REVOKE_WHEN_REQUESTED =  1 << 7;
 
     /**
@@ -3025,6 +3037,13 @@ public abstract class PackageManager {
      */
     @SystemApi
     public static final int MASK_PERMISSION_FLAGS = 0xFF;
+
+    /**
+     * Injected activity in app that forwards user to setting activity of that app.
+     *
+     * @hide
+     */
+    public static final String APP_DETAILS_ACTIVITY_CLASS_NAME = AppDetailsActivity.class.getName();
 
     /**
      * This is a library that contains components apps can invoke. For
@@ -3797,6 +3816,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS,
             android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS
@@ -3817,6 +3837,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS,
             android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS
@@ -5109,7 +5130,10 @@ public abstract class PackageManager {
      * If there is already an application with the given package name installed
      * on the system for other users, also install it for the calling user.
      * @hide
+     *
+     * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @Deprecated
     @SystemApi
     public abstract int installExistingPackage(String packageName) throws NameNotFoundException;
 
@@ -5117,7 +5141,10 @@ public abstract class PackageManager {
      * If there is already an application with the given package name installed
      * on the system for other users, also install it for the calling user.
      * @hide
+     *
+     * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @Deprecated
     @SystemApi
     public abstract int installExistingPackage(String packageName, @InstallReason int installReason)
             throws NameNotFoundException;
@@ -5126,7 +5153,10 @@ public abstract class PackageManager {
      * If there is already an application with the given package name installed
      * on the system for other users, also install it for the specified user.
      * @hide
+     *
+     * @deprecated use {@link PackageInstaller#installExistingPackage()} instead.
      */
+    @Deprecated
     @RequiresPermission(anyOf = {
             Manifest.permission.INSTALL_EXISTING_PACKAGES,
             Manifest.permission.INSTALL_PACKAGES,
@@ -5787,6 +5817,37 @@ public abstract class PackageManager {
             @NonNull ComponentName componentName);
 
     /**
+     * Set the enabled setting for a package app settings activity.
+     *
+     * @param packageName The package name of the app
+     * @param enabled The new enabled state for app details activity
+     *
+     * @hide
+     */
+    @RequiresPermission(value = android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE,
+            conditional = true)
+    @SystemApi
+    public void setAppDetailsActivityEnabled(@NonNull String packageName, boolean enabled) {
+        throw new UnsupportedOperationException(
+                "setAppDetailsActivityEnabled not implemented");
+    }
+
+
+    /**
+     * Return the enabled setting for a package app settings activity.
+     *
+     * @param packageName The package name of the app
+     * @return Returns the current enabled state for app settings activity.
+     *
+     * @hide
+     */
+    @SystemApi
+    public boolean getAppDetailsActivityEnabled(@NonNull String packageName) {
+        throw new UnsupportedOperationException(
+                "getAppDetailsActivityEnabled not implemented");
+    }
+
+    /**
      * Set the enabled setting for an application
      * This setting will override any enabled state which may have been set by the application in
      * its manifest.  It also overrides the enabled state set in the manifest for any of the
@@ -5912,24 +5973,24 @@ public abstract class PackageManager {
     /**
      * Flag to denote no restrictions. This should be used to clear any restrictions that may have
      * been previously set for the package.
-     * @see PackageManager.DistractionRestriction
      * @hide
+     * @see #setDistractingPackageRestrictions(String[], int)
      */
     @SystemApi
     public static final int RESTRICTION_NONE = 0x0;
 
     /**
      * Flag to denote that a package should be hidden from any suggestions to the user.
-     * @see PackageManager.DistractionRestriction
      * @hide
+     * @see #setDistractingPackageRestrictions(String[], int)
      */
     @SystemApi
     public static final int RESTRICTION_HIDE_FROM_SUGGESTIONS = 0x00000001;
 
     /**
      * Flag to denote that a package's notifications should be hidden.
-     * @see PackageManager.DistractionRestriction
      * @hide
+     * @see #setDistractingPackageRestrictions(String[], int)
      */
     @SystemApi
     public static final int RESTRICTION_HIDE_NOTIFICATIONS = 0x00000002;
@@ -5941,7 +6002,6 @@ public abstract class PackageManager {
      * @see #setDistractingPackageRestrictions(String[], int)
      * @hide
      */
-    @SystemApi
     @IntDef(flag = true, prefix = {"RESTRICTION_"}, value = {
             RESTRICTION_NONE,
             RESTRICTION_HIDE_FROM_SUGGESTIONS,
@@ -5959,14 +6019,16 @@ public abstract class PackageManager {
      * <p>The caller must hold {@link android.Manifest.permission#SUSPEND_APPS} to use this API.
      *
      * @param packages Packages to mark as distracting.
-     * @param restrictionFlags Any combination of {@link DistractionRestriction restrictions} to
-     *                         impose on the given packages. {@link #RESTRICTION_NONE} can be used
-     *                         to clear any existing restrictions.
+     * @param restrictionFlags Any combination of restrictions to impose on the given packages.
+     *                         {@link #RESTRICTION_NONE} can be used to clear any existing
+     *                         restrictions.
      * @return A list of packages that could not have the {@code restrictionFlags} set. The system
      * may prevent restricting critical packages to preserve normal device function.
      *
-     * @see DistractionRestriction
      * @hide
+     * @see #RESTRICTION_NONE
+     * @see #RESTRICTION_HIDE_FROM_SUGGESTIONS
+     * @see #RESTRICTION_HIDE_NOTIFICATIONS
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.SUSPEND_APPS)

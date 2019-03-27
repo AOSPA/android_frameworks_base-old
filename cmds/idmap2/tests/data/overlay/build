@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FRAMEWORK_RES_APK="$(gettop)/out/target/common/obj/APPS/framework-res_intermediates/package-export.apk"
+FRAMEWORK_RES_APK="${ANDROID_BUILD_TOP}/out/target/common/obj/APPS/framework-res_intermediates/package-export.apk"
 
 aapt2 compile --dir res -o compiled.flata
 
@@ -21,6 +21,20 @@ aapt2 link \
     -I "$FRAMEWORK_RES_APK" \
     --manifest AndroidManifest.xml \
     -o overlay.apk \
+    compiled.flata
+
+aapt2 link \
+    --no-resource-removal \
+    -I "$FRAMEWORK_RES_APK" \
+    --manifest AndroidManifestNoName.xml \
+    -o overlay-no-name.apk \
+    compiled.flata
+
+aapt2 link \
+    --no-resource-removal \
+    -I "$FRAMEWORK_RES_APK" \
+    --manifest AndroidManifestNoNameStatic.xml \
+    -o overlay-no-name-static.apk \
     compiled.flata
 
 aapt2 link \

@@ -92,14 +92,18 @@ public class PhysicsAnimationLayout extends FrameLayout {
         abstract void onChildAdded(View child, int index);
 
         /**
-         * Called when a child is to be removed from the layout. Controllers can use this
-         * opportunity to animate out the new view before calling the provided callback to actually
-         * remove it.
+         * Called with a child view that has been removed from the layout, from the given index. The
+         * passed view has been removed from the layout and added back as a transient view, which
+         * renders normally, but is not part of the normal view hierarchy and will not be considered
+         * by getChildAt() and getChildCount().
          *
-         * Controllers should be careful to ensure that actuallyRemove is called on all code paths
-         * or child views will never be removed.
+         * The controller can perform animations on the child (either manually, or by using
+         * {@link #animateValueForChild}), and then call finishRemoval when complete.
+         *
+         * finishRemoval must be called by implementations of this method, or transient views will
+         * never be removed.
          */
-        abstract void onChildToBeRemoved(View child, int index, Runnable actuallyRemove);
+        abstract void onChildRemoved(View child, int index, Runnable finishRemoval);
 
         protected PhysicsAnimationLayout mLayout;
 
@@ -111,6 +115,15 @@ public class PhysicsAnimationLayout extends FrameLayout {
 
         protected PhysicsAnimationLayout getLayout() {
             return mLayout;
+        }
+
+        /**
+         * Sets the child's visibility when it moves beyond or within the limits set by a call to
+         * {@link PhysicsAnimationLayout#setMaxRenderedChildren}. This can be overridden to animate
+         * this transition.
+         */
+        protected void setChildVisibility(View child, int index, int visibility) {
+            child.setVisibility(visibility);
         }
     }
 
@@ -174,6 +187,20 @@ public class PhysicsAnimationLayout extends FrameLayout {
     }
 
     /**
+     * Sets an end listener that will be called whenever any of the given properties' animations
+     * end. For example, setting a listener for TRANSLATION_X and TRANSLATION_Y will result in that
+     * listener being called twice - once when all TRANSLATION_X animations end, and again when all
+     * TRANSLATION_Y animations end.
+     */
+    public void setEndListenerForProperties(
+            DynamicAnimation.OnAnimationEndListener endListener,
+            DynamicAnimation.ViewProperty... properties) {
+        for (DynamicAnimation.ViewProperty property : properties) {
+            setEndListenerForProperty(endListener, property);
+        }
+    }
+
+    /**
      * Removes the end listener that would have been called when all child animations for a given
      * property stopped running.
      */
@@ -184,7 +211,6 @@ public class PhysicsAnimationLayout extends FrameLayout {
     @Override
     public void addView(View child, int index, ViewGroup.LayoutParams params) {
         super.addView(child, index, params);
-        setChildrenVisibility();
 
         // Set up animations for the new view, if the controller is set. If it isn't set, we'll be
         // setting up animations for all children when setController is called.
@@ -195,6 +221,8 @@ public class PhysicsAnimationLayout extends FrameLayout {
 
             mController.onChildAdded(child, index);
         }
+
+        setChildrenVisibility();
     }
 
     @Override
@@ -236,7 +264,7 @@ public class PhysicsAnimationLayout extends FrameLayout {
 
             // Tell the controller to animate this view out, and call the callback when it's
             // finished.
-            mController.onChildToBeRemoved(view, index, () -> {
+            mController.onChildRemoved(view, index, () -> {
                 // Done animating, remove the transient view.
                 removeTransientView(view);
 
@@ -281,6 +309,13 @@ public class PhysicsAnimationLayout extends FrameLayout {
         }
     }
 
+    /** Cancels all of the physics animations running on the given view. */
+    public void cancelAnimationsOnView(View view) {
+        for (DynamicAnimation.ViewProperty property : mController.getAnimatedProperties()) {
+            getAnimationFromView(property, view).cancel();
+        }
+    }
+
     /**
      * Animates the property of the given child view, then runs the callback provided when the
      * animation ends.
@@ -305,6 +340,11 @@ public class PhysicsAnimationLayout extends FrameLayout {
                 });
             }
 
+            // Set the start velocity if it's something other than the not-set value.
+            if (startVel != Float.MAX_VALUE) {
+                animation.setStartVelocity(startVel);
+            }
+
             animation.animateToFinalPosition(value);
         }
     }
@@ -322,6 +362,14 @@ public class PhysicsAnimationLayout extends FrameLayout {
             View view,
             float value) {
         animateValueForChild(property, view, value, Float.MAX_VALUE, /* after */ null);
+    }
+
+    protected void animateValueForChild(
+            DynamicAnimation.ViewProperty property,
+            View view,
+            float value,
+            float startVel) {
+        animateValueForChild(property, view, value, startVel, /* after */ null);
     }
 
     /**
@@ -401,7 +449,13 @@ public class PhysicsAnimationLayout extends FrameLayout {
      */
     private SpringAnimation getAnimationAtIndex(
             DynamicAnimation.ViewProperty property, int index) {
-        return (SpringAnimation) getChildAt(index).getTag(getTagIdForProperty(property));
+        return getAnimationFromView(property, getChildAt(index));
+    }
+
+    /** Retrieves the animation of the given property from the view via the view tag system. */
+    private SpringAnimation getAnimationFromView(
+            DynamicAnimation.ViewProperty property, View view) {
+        return (SpringAnimation) view.getTag(getTagIdForProperty(property));
     }
 
     /** Sets up SpringAnimations of the given property for each child view in the layout. */
@@ -457,11 +511,16 @@ public class PhysicsAnimationLayout extends FrameLayout {
     /** Hides children beyond the max rendering count. */
     private void setChildrenVisibility() {
         for (int i = 0; i < getChildCount(); i++) {
-            getChildAt(i).setVisibility(
-                    // Ignore views that are animating out when calculating whether to hide the
-                    // view. That is, if we're supposed to render 5 views, but 4 are animating out
-                    // and will soon be removed, render up to 9 views temporarily.
-                    i < mMaxRenderedChildren ? View.VISIBLE : View.GONE);
+            final int targetVisibility = i < mMaxRenderedChildren ? View.VISIBLE : View.GONE;
+            final View targetView = getChildAt(i);
+
+            if (targetView.getVisibility() != targetVisibility) {
+                if (mController != null) {
+                    mController.setChildVisibility(targetView, i, targetVisibility);
+                } else {
+                    targetView.setVisibility(targetVisibility);
+                }
+            }
         }
     }
 
@@ -509,5 +568,34 @@ public class PhysicsAnimationLayout extends FrameLayout {
                 }
             }
         }
+    }
+
+    /**
+     * One time end listener that waits for every animation on every given property to finish. At
+     * that point, it calls {@link #onAllAnimationsForPropertiesEnd} and then removes itself as an
+     * end listener from each property.
+     */
+    public abstract class OneTimeMultiplePropertyEndListener
+            implements DynamicAnimation.OnAnimationEndListener {
+        final DynamicAnimation.ViewProperty[] mViewProperties;
+
+        OneTimeMultiplePropertyEndListener(DynamicAnimation.ViewProperty... properties) {
+            mViewProperties = properties;
+        }
+
+        @Override
+        public void onAnimationEnd(DynamicAnimation animation, boolean canceled, float value,
+                float velocity) {
+            if (!arePropertiesAnimating(mViewProperties)) {
+                onAllAnimationsForPropertiesEnd();
+
+                for (DynamicAnimation.ViewProperty property : mViewProperties) {
+                    removeEndListenerForProperty(property);
+                }
+            }
+        }
+
+        /** Called when every animation for every property has finished. */
+        abstract void onAllAnimationsForPropertiesEnd();
     }
 }

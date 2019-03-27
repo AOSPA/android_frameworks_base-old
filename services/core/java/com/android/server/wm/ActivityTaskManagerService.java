@@ -26,7 +26,6 @@ import static android.Manifest.permission.REMOVE_TASKS;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.Manifest.permission.STOP_APP_SWITCHES;
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
-import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_PRESERVE_WINDOW;
@@ -151,7 +150,6 @@ import android.app.RemoteAction;
 import android.app.WaitResult;
 import android.app.WindowConfiguration;
 import android.app.admin.DevicePolicyCache;
-import android.app.admin.DevicePolicyManager;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.usage.UsageStatsManagerInternal;
@@ -273,6 +271,10 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.lang.ref.WeakReference;
 import java.text.DateFormat;
 import java.util.ArrayList;
@@ -363,9 +365,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     WindowManagerService mWindowManager;
     private UserManagerService mUserManager;
     private AppOpsService mAppOpsService;
-    private DevicePolicyManager mDpm;
     /** All active uids in the system. */
-    private final SparseArray<Integer> mActiveUids = new SparseArray<>();
+    private final MirrorActiveUids mActiveUids = new MirrorActiveUids();
     private final SparseArray<String> mPendingTempWhitelist = new SparseArray<>();
     /** All processes currently running that might have a window organized by name. */
     final ProcessMap<WindowProcessController> mProcessNames = new ProcessMap<>();
@@ -623,6 +624,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     private FontScaleSettingObserver mFontScaleSettingObserver;
 
+    private String mDeviceOwnerPackageName;
+
     private final class FontScaleSettingObserver extends ContentObserver {
         private final Uri mFontScaleUri = Settings.System.getUriFor(FONT_SCALE);
         private final Uri mHideErrorDialogsUri = Settings.Global.getUriFor(HIDE_ERROR_DIALOGS);
@@ -645,6 +648,17 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
             }
         }
+    }
+
+    /** Indicates that the method may be invoked frequently or is sensitive to performance. */
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.SOURCE)
+    @interface HotPath {
+        int NONE = 0;
+        int OOM_ADJUSTMENT = 1;
+        int LRU_UPDATE = 2;
+        int PROCESS_CHANGE = 3;
+        int caller() default NONE;
     }
 
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
@@ -836,13 +850,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mAppOpsService = (AppOpsService) IAppOpsService.Stub.asInterface(b);
         }
         return mAppOpsService;
-    }
-
-    DevicePolicyManager getDevicePolicyManager() {
-        if (mDpm == null) {
-            mDpm = mContext.getSystemService(DevicePolicyManager.class);
-        }
-        return mDpm;
     }
 
     boolean hasUserRestriction(String restriction, int userId) {
@@ -1383,6 +1390,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 .setProfilerInfo(profilerInfo)
                 .setActivityOptions(bOptions)
                 .setMayWait(userId)
+                .setAllowBackgroundActivityStart(true)
                 .execute();
     }
 
@@ -1398,6 +1406,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 .setResolvedType(resolvedType)
                 .setActivityOptions(bOptions)
                 .setMayWait(userId)
+                .setAllowBackgroundActivityStart(true)
                 .execute();
     }
 
@@ -1718,7 +1727,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (r == null) {
                 return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
             }
-            return r.getRequestedOrientation();
+            return r.getOrientation();
         }
     }
 
@@ -2450,6 +2459,40 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    @Override
+    public void offsetPinnedStackBounds(int stackId, Rect compareBounds, int xOffset, int yOffset,
+            int animationDuration) {
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "offsetPinnedStackBounds()");
+
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                if (xOffset == 0 && yOffset == 0) {
+                    return;
+                }
+                final ActivityStack stack = mRootActivityContainer.getStack(stackId);
+                if (stack == null) {
+                    Slog.w(TAG, "offsetPinnedStackBounds: stackId " + stackId + " not found.");
+                    return;
+                }
+                if (stack.getWindowingMode() != WINDOWING_MODE_PINNED) {
+                    throw new IllegalArgumentException("Stack: " + stackId
+                            + " doesn't support animated resize.");
+                }
+                final Rect destBounds = new Rect();
+                stack.getAnimationOrCurrentBounds(destBounds);
+                if (destBounds.isEmpty() || !destBounds.equals(compareBounds)) {
+                    Slog.w(TAG, "The current stack bounds does not matched! It may be obsolete.");
+                    return;
+                }
+                destBounds.offset(xOffset, yOffset);
+                stack.animateResizePinnedStack(null /* sourceHintBounds */, destBounds,
+                        animationDuration, false /* fromFullscreen */);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
     /**
      * Moves the specified task to the primary-split-screen stack.
      *
@@ -2734,7 +2777,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 r.setTaskDescription(td);
                 final TaskRecord task = r.getTaskRecord();
                 task.updateTaskDescription();
-                mTaskChangeNotificationController.notifyTaskDescriptionChanged(task.taskId, td);
+                mTaskChangeNotificationController.notifyTaskDescriptionChanged(task.getTaskInfo());
             }
         }
     }
@@ -3055,8 +3098,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public void setLockScreenShown(boolean keyguardShowing, boolean aodShowing,
-            int[] secondaryDisplaysShowing) {
+    public void setLockScreenShown(boolean keyguardShowing, boolean aodShowing) {
         if (checkCallingPermission(android.Manifest.permission.DEVICE_POWER)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Requires permission "
@@ -3073,8 +3115,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mH.sendMessage(msg);
             }
             try {
-                mKeyguardController.setKeyguardShown(keyguardShowing, aodShowing,
-                        secondaryDisplaysShowing);
+                mKeyguardController.setKeyguardShown(keyguardShowing, aodShowing);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -3173,23 +3214,34 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public void exitFreeformMode(IBinder token) {
+    public void toggleFreeformWindowingMode(IBinder token) {
         synchronized (mGlobalLock) {
             long ident = Binder.clearCallingIdentity();
             try {
                 final ActivityRecord r = ActivityRecord.forTokenLocked(token);
                 if (r == null) {
                     throw new IllegalArgumentException(
-                            "exitFreeformMode: No activity record matching token=" + token);
+                            "toggleFreeformWindowingMode: No activity record matching token="
+                                    + token);
                 }
 
                 final ActivityStack stack = r.getActivityStack();
-                if (stack == null || !stack.inFreeformWindowingMode()) {
-                    throw new IllegalStateException(
-                            "exitFreeformMode: You can only go fullscreen from freeform.");
+                if (stack == null) {
+                    throw new IllegalStateException("toggleFreeformWindowingMode: the activity "
+                            + "doesn't have a stack");
                 }
 
-                stack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+                if (!stack.inFreeformWindowingMode()
+                        && stack.getWindowingMode() != WINDOWING_MODE_FULLSCREEN) {
+                    throw new IllegalStateException("toggleFreeformWindowingMode: You can only "
+                            + "toggle between fullscreen and freeform.");
+                }
+
+                if (stack.inFreeformWindowingMode()) {
+                    stack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+                } else {
+                    stack.setWindowingMode(WINDOWING_MODE_FREEFORM);
+                }
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -5666,13 +5718,38 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return null;
     }
 
-    int getUidStateLocked(int uid) {
-        return mActiveUids.get(uid, PROCESS_STATE_NONEXISTENT);
+    WindowProcessController getProcessController(int pid, int uid) {
+        final ArrayMap<String, SparseArray<WindowProcessController>> pmap = mProcessNames.getMap();
+        for (int i = pmap.size()-1; i >= 0; i--) {
+            final SparseArray<WindowProcessController> procs = pmap.valueAt(i);
+            for (int j = procs.size() - 1; j >= 0; j--) {
+                final WindowProcessController proc = procs.valueAt(j);
+                if (UserHandle.isApp(uid) && proc.getPid() == pid && proc.mUid == uid) {
+                    return proc;
+                }
+            }
+        }
+        return null;
+    }
+
+    int getUidState(int uid) {
+        return mActiveUids.getUidState(uid);
     }
 
     boolean isUidForeground(int uid) {
-        return (getUidStateLocked(uid) == ActivityManager.PROCESS_STATE_TOP)
+        return (getUidState(uid) == ActivityManager.PROCESS_STATE_TOP)
                 || mWindowManager.mRoot.isAnyNonToastWindowVisibleForUid(uid);
+    }
+
+    boolean isDeviceOwner(String packageName) {
+        if (packageName == null) {
+            return false;
+        }
+        return packageName.equals(mDeviceOwnerPackageName);
+    }
+
+    void setDeviceOwnerPackageName(String deviceOwnerPkg) {
+        mDeviceOwnerPackageName = deviceOwnerPkg;
     }
 
     /**
@@ -5869,14 +5946,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 Binder.restoreCallingIdentity(ident);
             }
 
-            synchronized (mGlobalLock) {
-                return getActivityStartController().startActivitiesInPackage(
-                        packageUid, packageName,
-                        intents, resolvedTypes, null /* resultTo */,
-                        SafeActivityOptions.fromBundle(bOptions), userId,
-                        false /* validateIncomingUser */, null /* originatingPendingIntent */,
-                        false /* allowBackgroundActivityStart */);
-            }
+            return getActivityStartController().startActivitiesInPackage(
+                    packageUid, packageName,
+                    intents, resolvedTypes, null /* resultTo */,
+                    SafeActivityOptions.fromBundle(bOptions), userId,
+                    false /* validateIncomingUser */, null /* originatingPendingIntent */,
+                    false /* allowBackgroundActivityStart */);
         }
 
         @Override
@@ -6055,23 +6130,26 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public void onProcessAdded(WindowProcessController proc) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mProcessNames.put(proc.mName, proc.mUid, proc);
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public void onProcessRemoved(String name, int uid) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mProcessNames.remove(name, uid);
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public void onCleanUpApplicationRecord(WindowProcessController proc) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 if (proc == mHomeProcess) {
                     mHomeProcess = null;
                 }
@@ -6081,23 +6159,26 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public int getTopProcessState() {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 return mTopProcessState;
             }
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public boolean isHeavyWeightProcess(WindowProcessController proc) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 return proc == mHeavyWeightProcess;
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public void clearHeavyWeightProcessIfEquals(WindowProcessController proc) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 ActivityTaskManagerService.this.clearHeavyWeightProcessIfEquals(proc);
             }
         }
@@ -6113,9 +6194,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public boolean isSleeping() {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 return isSleepingLocked();
             }
         }
@@ -6359,9 +6441,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public boolean isFactoryTestProcess(WindowProcessController wpc) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 if (mFactoryTest == FACTORY_TEST_OFF) {
                     return false;
                 }
@@ -6414,10 +6497,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public void handleAppDied(WindowProcessController wpc, boolean restarting,
                 Runnable finishInstrumentationCallback) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 // Remove this application's activities from active lists.
                 boolean hasVisibleActivities = mRootActivityContainer.handleAppDied(wpc);
 
@@ -6516,16 +6600,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public void preBindApplication(WindowProcessController wpc) {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 mStackSupervisor.getActivityMetricsLogger().notifyBindApplication(wpc.mInfo);
             }
         }
 
+        @HotPath(caller = HotPath.PROCESS_CHANGE)
         @Override
         public boolean attachApplication(WindowProcessController wpc) throws RemoteException {
-            synchronized (mGlobalLock) {
+            synchronized (mGlobalLockWithoutBoost) {
                 return mRootActivityContainer.attachApplication(wpc);
             }
         }
@@ -6753,8 +6839,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         pw.println("  mController=" + mController
                                 + " mControllerIsAMonkey=" + mControllerIsAMonkey);
                     }
-                    pw.println("  mGoingToSleep=" + mStackSupervisor.mGoingToSleep);
-                    pw.println("  mLaunchingActivity=" + mStackSupervisor.mLaunchingActivity);
+                    pw.println("  mGoingToSleepWakeLock=" + mStackSupervisor.mGoingToSleepWakeLock);
+                    pw.println("  mLaunchingActivityWakeLock="
+                            + mStackSupervisor.mLaunchingActivityWakeLock);
                 }
 
                 return needSep;
@@ -6786,8 +6873,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         proto.write(IS_A_MONKEY, mControllerIsAMonkey);
                         proto.end(token);
                     }
-                    mStackSupervisor.mGoingToSleep.writeToProto(proto, GOING_TO_SLEEP);
-                    mStackSupervisor.mLaunchingActivity.writeToProto(proto, LAUNCHING_ACTIVITY);
+                    mStackSupervisor.mGoingToSleepWakeLock.writeToProto(proto, GOING_TO_SLEEP);
+                    mStackSupervisor.mLaunchingActivityWakeLock.writeToProto(proto,
+                            LAUNCHING_ACTIVITY);
                 }
 
                 if (mHomeProcess != null && (dumpPackage == null
@@ -6853,6 +6941,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public WindowProcessController getTopApp() {
             synchronized (mGlobalLockWithoutBoost) {
@@ -6861,6 +6950,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public void rankTaskLayersIfNeeded() {
             synchronized (mGlobalLockWithoutBoost) {
@@ -6905,34 +6995,28 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public void onUidActive(int uid, int procState) {
-            synchronized (mGlobalLockWithoutBoost) {
-                mActiveUids.put(uid, procState);
-            }
+            mActiveUids.onUidActive(uid, procState);
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public void onUidInactive(int uid) {
-            synchronized (mGlobalLockWithoutBoost) {
-                mActiveUids.remove(uid);
-            }
+            mActiveUids.onUidInactive(uid);
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public void onActiveUidsCleared() {
-            synchronized (mGlobalLockWithoutBoost) {
-                mActiveUids.clear();
-            }
+            mActiveUids.onActiveUidsCleared();
         }
 
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public void onUidProcStateChanged(int uid, int procState) {
-            synchronized (mGlobalLockWithoutBoost) {
-                if (mActiveUids.get(uid) != null) {
-                    mActiveUids.put(uid, procState);
-                }
-            }
+            mActiveUids.onUidProcStateChanged(uid, procState);
         }
 
         @Override
@@ -7090,6 +7174,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public boolean isUidForeground(int uid) {
             synchronized (mGlobalLock) {
                 return ActivityTaskManagerService.this.isUidForeground(uid);
+            }
+        }
+
+        @Override
+        public void setDeviceOwnerPackageName(String deviceOwnerPkg) {
+            synchronized (mGlobalLock) {
+                ActivityTaskManagerService.this.setDeviceOwnerPackageName(deviceOwnerPkg);
             }
         }
     }

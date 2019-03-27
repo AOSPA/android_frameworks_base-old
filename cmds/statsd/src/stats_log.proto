@@ -367,6 +367,8 @@ message StatsdStatsReport {
             optional int32 field_int32 = 2;
         }
         repeated Annotation annotation = 18;
+        repeated int32 activation_time_sec = 22;
+        repeated int32 deactivation_time_sec = 23;
     }
 
     repeated ConfigStats config_stats = 3;
@@ -407,6 +409,8 @@ message StatsdStatsReport {
         optional int64 stats_companion_pull_failed = 13;
         optional int64 stats_companion_pull_binder_transaction_failed = 14;
         optional int64 empty_data = 15;
+        optional int64 registered_count = 16;
+        optional int64 unregistered_count = 17;
     }
     repeated PulledAtomStats pulled_atom_stats = 10;
 
@@ -417,6 +421,12 @@ message StatsdStatsReport {
       optional int64 skipped_forward_buckets = 4;
       optional int64 bad_value_type = 5;
       optional int64 condition_change_in_next_bucket = 6;
+      optional int64 invalidated_bucket = 7;
+      optional int64 bucket_dropped = 8;
+      optional int64 min_bucket_boundary_delay_ns = 9;
+      optional int64 max_bucket_boundary_delay_ns = 10;
+      optional int64 bucket_unknown_condition = 11;
+      optional int64 bucket_count = 12;
     }
     repeated AtomMetricStats atom_metric_stats = 17;
 
@@ -447,4 +457,18 @@ message StatsdStatsReport {
         optional int32 last_error = 3;
     }
     repeated LogLossStats detected_log_loss = 16;
+}
+
+message AlertTriggerDetails {
+    message MetricValue {
+        optional int64 metric_id = 1;
+        optional DimensionsValue dimension_in_what = 2;
+        optional DimensionsValue dimension_in_condition = 3;
+        optional int64 value = 4;
+    }
+    oneof value {
+        MetricValue trigger_metric = 1;
+        EventMetricData trigger_event = 2;
+    }
+    optional UidMapping.PackageInfoSnapshot package_info = 3;
 }

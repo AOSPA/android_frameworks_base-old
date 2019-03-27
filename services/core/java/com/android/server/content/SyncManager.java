@@ -916,15 +916,17 @@ public class SyncManager {
             extras = new Bundle();
         }
         extras.size(); // Force unpacel.
-        mLogger.log("scheduleSync: account=", requestedAccount,
-                " u", userId,
-                " authority=", requestedAuthority,
-                " reason=", reason,
-                " extras=", extras,
-                " cuid=", callingUid, " cpid=", callingPid, " cpkg=", callingPackage,
-                " mdm=", minDelayMillis,
-                " ciar=", checkIfAccountReady,
-                " sef=", syncExemptionFlag);
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+            mLogger.log("scheduleSync: account=", requestedAccount,
+                    " u", userId,
+                    " authority=", requestedAuthority,
+                    " reason=", reason,
+                    " extras=", extras,
+                    " cuid=", callingUid, " cpid=", callingPid, " cpkg=", callingPackage,
+                    " mdm=", minDelayMillis,
+                    " ciar=", checkIfAccountReady,
+                    " sef=", syncExemptionFlag);
+        }
 
         AccountAndUser[] accounts = null;
         if (requestedAccount != null) {
@@ -3261,7 +3263,7 @@ public class SyncManager {
                     if (Log.isLoggable(TAG, Log.DEBUG)) {
                         Log.d(TAG, "Account " + aau.account + " added, checking sync restore data");
                     }
-                    AccountSyncSettingsBackupHelper.accountAdded(mContext);
+                    AccountSyncSettingsBackupHelper.accountAdded(mContext, syncTargets.userId);
                     break;
                 }
             }

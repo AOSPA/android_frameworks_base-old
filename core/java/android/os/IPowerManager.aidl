@@ -42,7 +42,7 @@ interface IPowerManager
     boolean isWakeLockLevelSupported(int level);
 
     void userActivity(long time, int event, int flags);
-    void wakeUp(long time, String reason, String opPackageName);
+    void wakeUp(long time, int reason, String details, String opPackageName);
     void goToSleep(long time, int reason, int flags);
     void nap(long time);
     boolean isInteractive();
@@ -74,4 +74,7 @@ interface IPowerManager
 
     // controls whether PowerManager should doze after the screen turns off or not
     void setDozeAfterScreenOff(boolean on);
+
+    // Forces the system to suspend even if there are held wakelocks.
+    boolean forceSuspend();
 }

@@ -16,21 +16,24 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import android.hardware.display.ColorDisplayManager;
+import android.hardware.display.NightDisplayListener;
 import android.os.Handler;
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 
-import com.android.internal.app.ColorDisplayController;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.qs.AutoAddTracker;
 import com.android.systemui.qs.QSTileHost;
+import com.android.systemui.statusbar.policy.CastController;
+import com.android.systemui.statusbar.policy.CastController.CastDevice;
 import com.android.systemui.statusbar.policy.DataSaverController;
 import com.android.systemui.statusbar.policy.HotspotController;
 
@@ -40,6 +43,9 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.Collections;
+import java.util.Set;
+
 @RunWith(AndroidTestingRunner.class)
 @RunWithLooper
 @SmallTest
@@ -47,6 +53,7 @@ public class AutoTileManagerTest extends SysuiTestCase {
 
     @Mock private QSTileHost mQsTileHost;
     @Mock private AutoAddTracker mAutoAddTracker;
+    @Mock private CastController mCastController;
 
     private AutoTileManager mAutoTileManager;
 
@@ -58,7 +65,8 @@ public class AutoTileManagerTest extends SysuiTestCase {
                 mock(HotspotController.class),
                 mock(DataSaverController.class),
                 mock(ManagedProfileController.class),
-                mock(ColorDisplayController.class));
+                mock(NightDisplayListener.class),
+                mCastController);
     }
 
     @Test
@@ -66,7 +74,7 @@ public class AutoTileManagerTest extends SysuiTestCase {
         if (!ColorDisplayManager.isNightDisplayAvailable(mContext)) {
             return;
         }
-        mAutoTileManager.mColorDisplayCallback.onActivated(true);
+        mAutoTileManager.mNightDisplayCallback.onActivated(true);
         verify(mQsTileHost).addTile("night");
     }
 
@@ -75,7 +83,7 @@ public class AutoTileManagerTest extends SysuiTestCase {
         if (!ColorDisplayManager.isNightDisplayAvailable(mContext)) {
             return;
         }
-        mAutoTileManager.mColorDisplayCallback.onActivated(false);
+        mAutoTileManager.mNightDisplayCallback.onActivated(false);
         verify(mQsTileHost, never()).addTile("night");
     }
 
@@ -84,7 +92,7 @@ public class AutoTileManagerTest extends SysuiTestCase {
         if (!ColorDisplayManager.isNightDisplayAvailable(mContext)) {
             return;
         }
-        mAutoTileManager.mColorDisplayCallback.onAutoModeChanged(
+        mAutoTileManager.mNightDisplayCallback.onAutoModeChanged(
                 ColorDisplayManager.AUTO_MODE_TWILIGHT);
         verify(mQsTileHost).addTile("night");
     }
@@ -94,7 +102,7 @@ public class AutoTileManagerTest extends SysuiTestCase {
         if (!ColorDisplayManager.isNightDisplayAvailable(mContext)) {
             return;
         }
-        mAutoTileManager.mColorDisplayCallback.onAutoModeChanged(
+        mAutoTileManager.mNightDisplayCallback.onAutoModeChanged(
                 ColorDisplayManager.AUTO_MODE_CUSTOM_TIME);
         verify(mQsTileHost).addTile("night");
     }
@@ -104,8 +112,28 @@ public class AutoTileManagerTest extends SysuiTestCase {
         if (!ColorDisplayManager.isNightDisplayAvailable(mContext)) {
             return;
         }
-        mAutoTileManager.mColorDisplayCallback.onAutoModeChanged(
+        mAutoTileManager.mNightDisplayCallback.onAutoModeChanged(
                 ColorDisplayManager.AUTO_MODE_DISABLED);
         verify(mQsTileHost, never()).addTile("night");
+    }
+
+    private static Set<CastDevice> buildFakeCastDevice(boolean isCasting) {
+        CastDevice cd = new CastDevice();
+        cd.state = isCasting ? CastDevice.STATE_CONNECTED : CastDevice.STATE_DISCONNECTED;
+        return Collections.singleton(cd);
+    }
+
+    @Test
+    public void castTileAdded_whenDeviceIsCasting() {
+        doReturn(buildFakeCastDevice(true)).when(mCastController).getCastDevices();
+        mAutoTileManager.mCastCallback.onCastDevicesChanged();
+        verify(mQsTileHost).addTile("cast");
+    }
+
+    @Test
+    public void castTileNotAdded_whenDeviceIsNotCasting() {
+        doReturn(buildFakeCastDevice(false)).when(mCastController).getCastDevices();
+        mAutoTileManager.mCastCallback.onCastDevicesChanged();
+        verify(mQsTileHost, never()).addTile("cast");
     }
 }

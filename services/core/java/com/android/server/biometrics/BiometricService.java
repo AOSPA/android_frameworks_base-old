@@ -273,15 +273,12 @@ public class BiometricService extends SystemService {
          */
         private static final int STATE_AUTH_STARTED = 2;
         /**
-         * Authentication is paused, waiting for the user to press "try again" button. Since the
-         * try again button requires us to cancel authentication, this represents the state where
-         * ERROR_CANCELED is not received yet.
+         * Authentication is paused, waiting for the user to press "try again" button. Only
+         * passive modalities such as Face or Iris should have this state. Note that for passive
+         * modalities, the HAL enters the idle state after onAuthenticated(false) which differs from
+         * fingerprint.
          */
         private static final int STATE_AUTH_PAUSED = 3;
-        /**
-         * Same as above, except the ERROR_CANCELED has been received.
-         */
-        private static final int STATE_AUTH_PAUSED_CANCELED = 4;
         /**
          * Authentication is successful, but we're waiting for the user to press "confirm" button.
          */
@@ -391,10 +388,11 @@ public class BiometricService extends SystemService {
         private final Random mRandom = new Random();
 
         // TODO(b/123378871): Remove when moved.
-        // When BiometricPrompt#setEnableFallback is set to true, we need to store the client (app)
-        // receiver. BiometricService internally launches CDCA which invokes BiometricService to
-        // start authentication (normal path). When auth is success/rejected, CDCA will use an aidl
-        // method to poke BiometricService - the result will then be forwarded to this receiver.
+        // When BiometricPrompt#setAllowDeviceCredentials is set to true, we need to store the
+        // client (app) receiver. BiometricService internally launches CDCA which invokes
+        // BiometricService to start authentication (normal path). When auth is success/rejected,
+        // CDCA will use an aidl method to poke BiometricService - the result will then be forwarded
+        // to this receiver.
         private IBiometricServiceReceiver mConfirmDeviceCredentialReceiver;
 
         // The current authentication session, null if idle/done. We need to track both the current
@@ -456,11 +454,6 @@ public class BiometricService extends SystemService {
                         // Pause authentication. onBiometricAuthenticated(false) causes the
                         // dialog to show a "try again" button for passive modalities.
                         mCurrentAuthSession.mState = STATE_AUTH_PAUSED;
-                        // Cancel authentication. Skip the token/package check since we are
-                        // cancelling from system server. The interface is permission protected so
-                        // this is fine.
-                        cancelInternal(null /* token */, null /* package */,
-                                false /* fromClient */);
                     }
 
                     mCurrentAuthSession.mClientReceiver.onAuthenticationFailed();
@@ -506,24 +499,15 @@ public class BiometricService extends SystemService {
                                     }
                                 }, BiometricPrompt.HIDE_DIALOG_DELAY);
                             }
-                        } else if (mCurrentAuthSession.mState == STATE_AUTH_PAUSED
-                                || mCurrentAuthSession.mState == STATE_AUTH_PAUSED_CANCELED) {
-                            if (mCurrentAuthSession.mState == STATE_AUTH_PAUSED
-                                    && error == BiometricConstants.BIOMETRIC_ERROR_CANCELED) {
-                                // Skip the first ERROR_CANCELED message when this happens, since
-                                // "try again" requires us to cancel authentication but keep
-                                // the prompt showing.
-                                mCurrentAuthSession.mState = STATE_AUTH_PAUSED_CANCELED;
-                            } else {
-                                // In the "try again" state, we should forward canceled errors to
-                                // the client and and clean up.
-                                mCurrentAuthSession.mClientReceiver.onError(error, message);
-                                mStatusBarService.onBiometricError(message);
-                                mActivityTaskManager.unregisterTaskStackListener(
-                                        mTaskStackListener);
-                                mCurrentAuthSession.mState = STATE_AUTH_IDLE;
-                                mCurrentAuthSession = null;
-                            }
+                        } else if (mCurrentAuthSession.mState == STATE_AUTH_PAUSED) {
+                            // In the "try again" state, we should forward canceled errors to
+                            // the client and and clean up.
+                            mCurrentAuthSession.mClientReceiver.onError(error, message);
+                            mStatusBarService.onBiometricError(message);
+                            mActivityTaskManager.unregisterTaskStackListener(
+                                    mTaskStackListener);
+                            mCurrentAuthSession.mState = STATE_AUTH_IDLE;
+                            mCurrentAuthSession = null;
                         } else {
                             Slog.e(TAG, "Impossible session error state: "
                                     + mCurrentAuthSession.mState);
@@ -704,8 +688,7 @@ public class BiometricService extends SystemService {
 
             if (mPendingAuthSession.mModalitiesWaiting.isEmpty()) {
                 final boolean continuing = mCurrentAuthSession != null &&
-                        (mCurrentAuthSession.mState == STATE_AUTH_PAUSED
-                                || mCurrentAuthSession.mState == STATE_AUTH_PAUSED_CANCELED);
+                        (mCurrentAuthSession.mState == STATE_AUTH_PAUSED);
 
                 mCurrentAuthSession = mPendingAuthSession;
                 mPendingAuthSession = null;
@@ -803,11 +786,21 @@ public class BiometricService extends SystemService {
             // we can't get activity results. Store the receiver somewhere so we can forward the
             // result back to the client.
             // TODO(b/123378871): Remove when moved.
-            if (bundle.getBoolean(BiometricPrompt.KEY_ENABLE_FALLBACK)) {
+            if (bundle.getBoolean(BiometricPrompt.KEY_ALLOW_DEVICE_CREDENTIAL)) {
                 mHandler.post(() -> {
-                    mConfirmDeviceCredentialReceiver = receiver;
                     final KeyguardManager kgm = getContext().getSystemService(
                             KeyguardManager.class);
+                    if (!kgm.isDeviceSecure()) {
+                        try {
+                            receiver.onError(BiometricConstants.BIOMETRIC_ERROR_NO_DEVICE_CREDENTIAL,
+                                    getContext().getString(
+                                            R.string.biometric_error_device_not_secured));
+                        } catch (RemoteException e) {
+                            Slog.e(TAG, "Remote exception", e);
+                        }
+                        return;
+                    }
+                    mConfirmDeviceCredentialReceiver = receiver;
                     // Use this so we don't need to duplicate logic..
                     final Intent intent = kgm.createConfirmDeviceCredentialIntent(null /* title */,
                             null /* description */);
@@ -1018,7 +1011,7 @@ public class BiometricService extends SystemService {
         }
 
         @Override // Binder call
-        public void resetTimeout(byte[] token) {
+        public void resetLockout(byte[] token) {
             checkInternalPermission();
             final long ident = Binder.clearCallingIdentity();
             try {
@@ -1026,7 +1019,7 @@ public class BiometricService extends SystemService {
                     mFingerprintService.resetTimeout(token);
                 }
                 if (mFaceService != null) {
-                    mFaceService.resetTimeout(token);
+                    mFaceService.resetLockout(token);
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Remote exception", e);

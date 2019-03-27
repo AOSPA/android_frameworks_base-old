@@ -610,6 +610,45 @@ enum Action {
     // CATEGORY: SETTINGS
     // OS: Q
     ACTION_SET_NEW_PARENT_PROFILE_PASSWORD = 1646;
+
+    // ACTION: An interaction with a Slice or other component in the Panel.
+    // CATEGORY: SETTINGS
+    // OS: Q
+    ACTION_PANEL_INTERACTION = 1658;
+
+    // ACTION: Show Contextual homepage, log latency in loading cards
+    ACTION_CONTEXTUAL_HOME_SHOW = 1662;
+
+    // ACTION: Contextual card displays
+    ACTION_CONTEXTUAL_CARD_SHOW = 1663;
+
+    // ACTION: Contextual cards are eligible to be shown, but don't rank high
+    ACTION_CONTEXTUAL_CARD_NOT_SHOW = 1664;
+
+    // ACTION: Settings > long press a card, and click dismiss
+    // Contextual card is dismissed
+    ACTION_CONTEXTUAL_CARD_DISMISS = 1665;
+
+    // ACTION: Settings > click a card
+    // Contextual card is clicked
+    ACTION_CONTEXTUAL_CARD_CLICK = 1666;
+
+    // Mapping: go/at-mapping
+    ACTION_ATSG = 1674;
+
+    ACTION_ATPG = 1675;
+
+    ACTION_ATCLPB = 1676;
+
+    ACTION_ATCGIB = 1677;
+
+    ACTION_ATCPAB = 1678;
+
+    ACTION_ATCSAUC = 1679;
+
+    ACTION_ATCSCUC = 1680;
+
+    ACTION_ATCHNUC = 1681;
 }
 
 /**
@@ -1617,6 +1656,10 @@ enum PageId {
     // OPEN: Settings > Apps > Default Apps > Default sms
     DEFAULT_SMS_PICKER = 789;
 
+    // OPEN: Settings > Apps > Notification > Notification Assistant
+    DEFAULT_NOTIFICATION_ASSISTANT = 790;
+
+
     // OPEN: Settings > Apps > Default Apps > Warning dialog to confirm selection
     DEFAULT_APP_PICKER_CONFIRMATION_DIALOG = 791;
 
@@ -2214,4 +2257,31 @@ enum PageId {
     // CATEGORY: SETTINGS
     // OS: Q
     SET_NEW_PASSWORD_ACTIVITY = 1644;
+
+    // Panel for Internet Connectivity
+    PANEL_INTERNET_CONNECTIVITY = 1654;
+
+    // Panel for Volume
+    PANEL_VOLUME = 1655;
+
+    // Panel for NFC
+    PANEL_NFC = 1656;
+
+    // Panel for Media Output
+    PANEL_MEDIA_OUTPUT = 1657;
+
+    // Mapping: go/at-mapping
+    PAGE_ATSSI = 1667;
+
+    PAGE_ATSII = 1668;
+
+    PAGE_ATUS = 1669;
+
+    PAGE_ATSSP = 1670;
+
+    PAGE_ATSAP = 1671;
+
+    PAGE_ATSCP = 1672;
+
+    PAGE_ATHNP = 1673;
 }

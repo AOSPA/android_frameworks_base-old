@@ -372,7 +372,7 @@ public final class ImageDecoder implements AutoCloseable {
             }
             mResources = res;
             mInputStream = is;
-            mInputDensity = res != null ? inputDensity : Bitmap.DENSITY_NONE;
+            mInputDensity = inputDensity;
         }
 
         final Resources mResources;
@@ -1556,12 +1556,9 @@ public final class ImageDecoder implements AutoCloseable {
      * decoder will pick either the color space embedded in the image or the
      * {@link ColorSpace} best suited for the requested image configuration
      * (for instance {@link ColorSpace.Named#SRGB sRGB} for the
-     * {@link Bitmap.Config#ARGB_8888} configuration).</p>
-     *
-     * <p>{@link Bitmap.Config#RGBA_F16} always uses the
-     * {@link ColorSpace.Named#LINEAR_EXTENDED_SRGB scRGB} color space.
-     * Bitmaps in other configurations without an embedded color space are
-     * assumed to be in the {@link ColorSpace.Named#SRGB sRGB} color space.</p>
+     * {@link Bitmap.Config#ARGB_8888} configuration and
+     * {@link ColorSpace.Named#EXTENDED_SRGB EXTENDED_SRGB} for
+     * {@link Bitmap.Config#RGBA_F16}).</p>
      *
      * <p class="note">Only {@link ColorSpace.Model#RGB} color spaces are
      * currently supported. An <code>IllegalArgumentException</code> will
@@ -1644,12 +1641,17 @@ public final class ImageDecoder implements AutoCloseable {
     @NonNull
     private Bitmap decodeBitmapInternal() throws IOException {
         checkState();
-        long colorSpacePtr = mDesiredColorSpace == null ? 0 :
-                mDesiredColorSpace.getNativeInstance();
+        long colorSpacePtr = 0;
+        boolean extended = false;
+        if (mDesiredColorSpace != null) {
+            colorSpacePtr = mDesiredColorSpace.getNativeInstance();
+            extended = mDesiredColorSpace == ColorSpace.get(ColorSpace.Named.EXTENDED_SRGB)
+                || mDesiredColorSpace == ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
+        }
         return nDecodeBitmap(mNativePtr, this, mPostProcessor != null,
                 mDesiredWidth, mDesiredHeight, mCropRect,
                 mMutable, mAllocator, mUnpremultipliedRequired,
-                mConserveMemory, mDecodeAsAlphaMask, colorSpacePtr);
+                mConserveMemory, mDecodeAsAlphaMask, colorSpacePtr, extended);
     }
 
     private void callHeaderDecoded(@Nullable OnHeaderDecodedListener listener,
@@ -1937,7 +1939,7 @@ public final class ImageDecoder implements AutoCloseable {
             @Nullable Rect cropRect, boolean mutable,
             int allocator, boolean unpremulRequired,
             boolean conserveMemory, boolean decodeAsAlphaMask,
-            long desiredColorSpace)
+            long desiredColorSpace, boolean extended)
         throws IOException;
     private static native Size nGetSampledSize(long nativePtr,
                                                int sampleSize);

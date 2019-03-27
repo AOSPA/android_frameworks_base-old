@@ -109,11 +109,6 @@ public abstract class StorageManagerInternal {
             @Nullable String sharedUserId, int userId);
 
     /**
-     * @return Labels of storage volumes that are visible to the given userId.
-     */
-    public abstract String[] getVisibleVolumesForUser(int userId);
-
-    /**
      * A listener for reset events in the StorageManagerService.
      */
     public interface ResetListener {
@@ -132,4 +127,9 @@ public abstract class StorageManagerInternal {
      * @param listener The listener that will be notified on reset events.
      */
     public abstract void addResetListener(ResetListener listener);
+
+    /**
+     * Return the sandboxId for the given package on external storage.
+     */
+    public abstract String getSandboxId(String packageName);
 }

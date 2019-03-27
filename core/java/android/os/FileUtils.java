@@ -85,7 +85,7 @@ import java.util.zip.CheckedInputStream;
 /**
  * Utility methods useful for working with files.
  */
-public class FileUtils {
+public final class FileUtils {
     private static final String TAG = "FileUtils";
 
     /** {@hide} */ public static final int S_IRWXU = 00700;
@@ -309,6 +309,7 @@ public class FileUtils {
      * kernel before falling back to a userspace copy as a last resort.
      *
      * @return number of bytes copied.
+     * @hide
      */
     public static long copy(@NonNull File from, @NonNull File to) throws IOException {
         return copy(from, to, null, null, null);
@@ -324,6 +325,7 @@ public class FileUtils {
      * @param executor that listener events should be delivered via.
      * @param listener to be periodically notified as the copy progresses.
      * @return number of bytes copied.
+     * @hide
      */
     public static long copy(@NonNull File from, @NonNull File to,
             @Nullable CancellationSignal signal, @Nullable Executor executor,
@@ -1091,6 +1093,12 @@ public class FileUtils {
             throws FileNotFoundException {
         final String[] parts = splitFileName(mimeType, displayName);
         return buildUniqueFileWithExtension(parent, parts[0], parts[1]);
+    }
+
+    /** {@hide} */
+    public static File buildNonUniqueFile(File parent, String mimeType, String displayName) {
+        final String[] parts = splitFileName(mimeType, displayName);
+        return buildFile(parent, parts[0], parts[1]);
     }
 
     /**

@@ -273,7 +273,11 @@ public class Editor {
     boolean mDiscardNextActionUp;
     boolean mIgnoreActionUpEvent;
 
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769485)
+    /**
+     * To set a custom cursor, you should use {@link TextView#setTextCursorDrawable(Drawable)}
+     * or {@link TextView#setTextCursorDrawable(int)}.
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private long mShowCursor;
     private boolean mRenderCursorRegardlessTiming;
     private Blink mBlink;
@@ -1943,7 +1947,7 @@ public class Editor {
 
             // Rebuild display list if it is invalid
             if (blockDisplayListIsInvalid) {
-                final RecordingCanvas recordingCanvas = blockDisplayList.start(
+                final RecordingCanvas recordingCanvas = blockDisplayList.beginRecording(
                         right - left, bottom - top);
                 try {
                     // drawText is always relative to TextView's origin, this translation
@@ -1954,7 +1958,7 @@ public class Editor {
                     // No need to untranslate, previous context is popped after
                     // drawDisplayList
                 } finally {
-                    blockDisplayList.end(recordingCanvas);
+                    blockDisplayList.endRecording();
                     // Same as drawDisplayList below, handled by our TextView's parent
                     blockDisplayList.setClipToBounds(false);
                 }
@@ -3656,7 +3660,7 @@ public class Editor {
                     intent.putExtra(USER_DICTIONARY_EXTRA_LOCALE,
                             mTextView.getTextServicesLocale().toString());
                     intent.setFlags(intent.getFlags() | Intent.FLAG_ACTIVITY_NEW_TASK);
-                    mTextView.getContext().startActivity(intent);
+                    mTextView.startActivityAsTextOperationUserIfNecessary(intent);
                     // There is no way to know if the word was indeed added. Re-check.
                     // TODO The ExtractEditText should remove the span in the original text instead
                     editable.removeSpan(mMisspelledSpanInfo.mSuggestionSpan);
@@ -6016,9 +6020,6 @@ public class Editor {
                     }
 
                     updateSelection(event);
-                    if (mTextView.hasSelection() && mEndHandle != null) {
-                        mEndHandle.updateMagnifier(event);
-                    }
                     break;
 
                 case MotionEvent.ACTION_UP:
@@ -6026,9 +6027,6 @@ public class Editor {
                         break;
                     }
                     updateSelection(event);
-                    if (mEndHandle != null) {
-                        mEndHandle.dismissMagnifier();
-                    }
 
                     // No longer dragging to select text, let the parent intercept events.
                     mTextView.getParent().requestDisallowInterceptTouchEvent(false);

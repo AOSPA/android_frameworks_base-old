@@ -18,24 +18,25 @@ package com.android.server.display.whitebalance;
 
 import android.annotation.NonNull;
 import android.util.Slog;
+import android.util.Spline;
 
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
-import com.android.server.display.ColorDisplayService.ColorDisplayServiceInternal;
+import com.android.server.display.color.ColorDisplayService.ColorDisplayServiceInternal;
 import com.android.server.display.utils.History;
 
 import java.io.PrintWriter;
 
 /**
  * The DisplayWhiteBalanceController drives display white-balance (automatically correcting the
- * screen color temperature depending on the ambient color temperature).
+ * display color temperature depending on the ambient color temperature).
  *
  * The DisplayWhiteBalanceController:
  * - Uses the AmbientColorTemperatureSensor to detect changes in the ambient color temperature;
  * - Uses the AmbientColorTemperatureFilter to average these changes over time, filter out the
  *   noise, and arrive at an estimate of the actual ambient color temperature;
- * - Uses the DisplayWhiteBalanceThrottler to decide whether the screen color tempearture should be
- *   updated, suppressing changes that are too frequent or too minor.
+ * - Uses the DisplayWhiteBalanceThrottler to decide whether the display color tempearture should
+ *   be updated, suppressing changes that are too frequent or too minor.
  */
 public class DisplayWhiteBalanceController implements
         AmbientSensor.AmbientBrightnessSensor.Callbacks,
@@ -75,6 +76,9 @@ public class DisplayWhiteBalanceController implements
     // Override the ambient color temperature for debugging purposes.
     private float mAmbientColorTemperatureOverride;
 
+    // A piecewise linear relationship between ambient and display color temperatures.
+    private Spline.LinearSpline mAmbientToDisplayColorTemperatureSpline;
+
     /**
      * @param brightnessSensor
      *      The sensor used to detect changes in the ambient brightness.
@@ -87,7 +91,7 @@ public class DisplayWhiteBalanceController implements
      *      The filter used to average ambient color temperature changes over time, filter out the
      *      noise and arrive at an estimate of the actual ambient color temperature.
      * @param throttler
-     *      The throttler used to determine whether the new screen color temperature should be
+     *      The throttler used to determine whether the new display color temperature should be
      *      updated or not.
      * @param lowLightAmbientBrightnessThreshold
      *      The ambient brightness threshold beneath which we fall back to a fixed ambient color
@@ -95,6 +99,12 @@ public class DisplayWhiteBalanceController implements
      * @param lowLightAmbientColorTemperature
      *      The ambient color temperature to which we fall back when the ambient brightness drops
      *      beneath a certain threshold.
+     * @param ambientColorTemperatures
+     *      The ambient color tempeartures used to map the ambient color temperature to the display
+     *      color temperature (or null if no mapping is necessary).
+     * @param displayColorTemperatures
+     *      The display color temperatures used to map the ambient color temperature to the display
+     *      color temperature (or null if no mapping is necessary).
      *
      * @throws NullPointerException
      *      - brightnessSensor is null;
@@ -109,7 +119,8 @@ public class DisplayWhiteBalanceController implements
             @NonNull AmbientSensor.AmbientColorTemperatureSensor colorTemperatureSensor,
             @NonNull AmbientFilter colorTemperatureFilter,
             @NonNull DisplayWhiteBalanceThrottler throttler,
-            float lowLightAmbientBrightnessThreshold, float lowLightAmbientColorTemperature) {
+            float lowLightAmbientBrightnessThreshold, float lowLightAmbientColorTemperature,
+            float[] ambientColorTemperatures, float[] displayColorTemperatures) {
         validateArguments(brightnessSensor, brightnessFilter, colorTemperatureSensor,
                 colorTemperatureFilter, throttler);
         mLoggingEnabled = false;
@@ -127,6 +138,14 @@ public class DisplayWhiteBalanceController implements
         mLastAmbientColorTemperature = -1.0f;
         mAmbientColorTemperatureHistory = new History(HISTORY_SIZE);
         mAmbientColorTemperatureOverride = -1.0f;
+
+        try {
+            mAmbientToDisplayColorTemperatureSpline = new Spline.LinearSpline(
+                    ambientColorTemperatures, displayColorTemperatures);
+        } catch (Exception e) {
+            mAmbientToDisplayColorTemperatureSpline = null;
+        }
+
         mColorDisplayServiceInternal = LocalServices.getService(ColorDisplayServiceInternal.class);
     }
 
@@ -147,7 +166,7 @@ public class DisplayWhiteBalanceController implements
     }
 
     /**
-     * Set an object to call back to when the screen color temperature should be updated.
+     * Set an object to call back to when the display color temperature should be updated.
      *
      * @param callbacks
      *      The object to call back to.
@@ -188,7 +207,7 @@ public class DisplayWhiteBalanceController implements
      *
      * This is only applied when the ambient color temperature changes or is updated (in which case
      * it overrides the ambient color temperature estimate); in other words, it doesn't necessarily
-     * change the screen color temperature immediately.
+     * change the display color temperature immediately.
      *
      * @param ambientColorTemperatureOverride
      *      The ambient color temperature override.
@@ -227,6 +246,8 @@ public class DisplayWhiteBalanceController implements
         writer.println("  mLastAmbientColorTemperature=" + mLastAmbientColorTemperature);
         writer.println("  mAmbientColorTemperatureHistory=" + mAmbientColorTemperatureHistory);
         writer.println("  mAmbientColorTemperatureOverride=" + mAmbientColorTemperatureOverride);
+        writer.println("  mAmbientToDisplayColorTemperatureSpline="
+                + mAmbientToDisplayColorTemperatureSpline);
     }
 
     @Override // AmbientSensor.AmbientBrightnessSensor.Callbacks
@@ -250,6 +271,11 @@ public class DisplayWhiteBalanceController implements
         final long time = System.currentTimeMillis();
         float ambientColorTemperature = mColorTemperatureFilter.getEstimate(time);
 
+        if (mAmbientToDisplayColorTemperatureSpline != null) {
+            ambientColorTemperature =
+                mAmbientToDisplayColorTemperatureSpline.interpolate(ambientColorTemperature);
+        }
+
         final float ambientBrightness = mBrightnessFilter.getEstimate(time);
         if (ambientBrightness < mLowLightAmbientBrightnessThreshold) {
             if (mLoggingEnabled) {
@@ -269,7 +295,7 @@ public class DisplayWhiteBalanceController implements
             ambientColorTemperature = mAmbientColorTemperatureOverride;
         }
 
-        // When the screen color temperature needs to be updated, we call DisplayPowerController to
+        // When the display color temperature needs to be updated, we call DisplayPowerController to
         // call our updateColorTemperature. The reason we don't call it directly is that we want
         // all changes to the system to happen in a predictable order in DPC's main loop
         // (updatePowerState).
@@ -287,9 +313,9 @@ public class DisplayWhiteBalanceController implements
     }
 
     /**
-     * Updates the screen color temperature.
+     * Updates the display color temperature.
      */
-    public void updateScreenColorTemperature() {
+    public void updateDisplayColorTemperature() {
         float ambientColorTemperature = -1.0f;
 
         // If both the pending and the current ambient color temperatures are -1, it means the DWBC
@@ -332,7 +358,7 @@ public class DisplayWhiteBalanceController implements
          * Called whenever the display white-balance state has changed.
          *
          * Usually, this means the estimated ambient color temperature has changed enough, and the
-         * screen color temperature should be updated; but it is also called by
+         * display color temperature should be updated; but it is also called if settings change.
          */
         void updateWhiteBalance();
     }

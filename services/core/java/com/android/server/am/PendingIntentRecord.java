@@ -384,6 +384,9 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
             final boolean allowTrampoline = uid != callingUid
                     && controller.mAtmInternal.isUidForeground(callingUid);
 
+            // note: we on purpose don't pass in the information about the PendingIntent's creator,
+            // like pid or ProcessRecord, to the ActivityTaskManagerInternal calls below, because
+            // it's not unusual for the creator's process to not be alive at this time
             switch (key.type) {
                 case ActivityManager.INTENT_SENDER_ACTIVITY:
                     try {
@@ -420,9 +423,9 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                         // If a completion callback has been requested, require
                         // that the broadcast be delivered synchronously
                         int sent = controller.mAmInternal.broadcastIntentInPackage(key.packageName,
-                                uid, finalIntent, resolvedType, finishedReceiver, code, null, null,
-                                requiredPermission, options, (finishedReceiver != null),
-                                false, userId,
+                                uid, callingUid, callingPid, finalIntent, resolvedType,
+                                finishedReceiver, code, null, null, requiredPermission, options,
+                                (finishedReceiver != null), false, userId,
                                 mAllowBgActivityStartsForBroadcastSender.contains(whitelistToken)
                                 || allowTrampoline);
                         if (sent == ActivityManager.BROADCAST_SUCCESS) {

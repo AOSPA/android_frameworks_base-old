@@ -71,6 +71,7 @@ import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.SurfaceControl;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.DividerSnapAlgorithm;
 import com.android.internal.policy.DividerSnapAlgorithm.SnapTarget;
 import com.android.internal.policy.DockedDividerUtils;
@@ -787,6 +788,14 @@ public class TaskStack extends WindowContainer<Task> implements
         return 0;
     }
 
+    @Override
+    void getRelativeDisplayedPosition(Point outPos) {
+        super.getRelativeDisplayedPosition(outPos);
+        final int outset = getStackOutset();
+        outPos.x -= outset;
+        outPos.y -= outset;
+    }
+
     private void updateSurfaceSize(SurfaceControl.Transaction transaction) {
         if (mSurfaceControl == null) {
             return;
@@ -807,6 +816,11 @@ public class TaskStack extends WindowContainer<Task> implements
         mLastSurfaceSize.set(width, height);
     }
 
+    @VisibleForTesting
+    Point getLastSurfaceSize() {
+        return mLastSurfaceSize;
+    }
+
     @Override
     void onDisplayChanged(DisplayContent dc) {
         if (mDisplayContent != null && mDisplayContent != dc) {
@@ -818,7 +832,7 @@ public class TaskStack extends WindowContainer<Task> implements
 
         updateSurfaceBounds();
         if (mAnimationBackgroundSurface == null) {
-            mAnimationBackgroundSurface = makeChildSurface(null).setColorLayer(true)
+            mAnimationBackgroundSurface = makeChildSurface(null).setColorLayer()
                     .setName("animation background stackId=" + mStackId)
                     .build();
         }
@@ -1006,7 +1020,7 @@ public class TaskStack extends WindowContainer<Task> implements
         EventLog.writeEvent(EventLogTags.WM_STACK_REMOVED, mStackId);
 
         if (mAnimationBackgroundSurface != null) {
-            mAnimationBackgroundSurface.destroy();
+            mAnimationBackgroundSurface.remove();
             mAnimationBackgroundSurface = null;
         }
 
@@ -1163,6 +1177,14 @@ public class TaskStack extends WindowContainer<Task> implements
     }
 
     private boolean adjustForIME(final WindowState imeWin) {
+        // To prevent task stack resize animation may flicking when playing app transition
+        // animation & IME window enter animation in parallel, we need to make sure app
+        // transition is done and then adjust task size for IME, skip the new adjusted frame when
+        // app transition is still running.
+        if (getDisplayContent().mAppTransition.isRunning()) {
+            return false;
+        }
+
         final int dockedSide = getDockSide();
         final boolean dockedTopOrBottom = dockedSide == DOCKED_TOP || dockedSide == DOCKED_BOTTOM;
         if (imeWin == null || !dockedTopOrBottom) {

@@ -37,12 +37,23 @@ namespace statsd {
 // If the metric has no activation requirement, it will be active once the metric producer is
 // created.
 // If the metric needs to be activated by atoms, the metric producer will start
-// with kNotActive state, turn to kActive when the activation event arrives, become kNotActive
-// when it reaches the duration limit (timebomb). If the activation event arrives again before
-// or after it expires, the event producer will be re-activated and ttl will be reset.
+// with kNotActive state, turn to kActive or kActiveOnBoot when the activation event arrives, become
+// kNotActive when it reaches the duration limit (timebomb). If the activation event arrives again
+// before or after it expires, the event producer will be re-activated and ttl will be reset.
 enum ActivationState {
     kNotActive = 0,
     kActive = 1,
+    kActiveOnBoot = 2,
+};
+
+enum DumpLatency {
+    // In some cases, we only have a short time range to do the dump, e.g. statsd is being killed.
+    // We might be able to return all the data in this mode. For instance, pull metrics might need
+    // to be pulled when the current bucket is requested.
+    FAST = 1,
+    // In other cases, it is fine for a dump to take more than a few milliseconds, e.g. config
+    // updates.
+    NO_TIME_CONSTRAINTS = 2
 };
 
 // A MetricProducer is responsible for compute one single metrics, creating stats log report, and
@@ -58,7 +69,7 @@ public:
           mTimeBaseNs(timeBaseNs),
           mCurrentBucketStartTimeNs(timeBaseNs),
           mCurrentBucketNum(0),
-          mCondition(conditionIndex >= 0 ? false : true),
+          mCondition(conditionIndex >= 0 ? ConditionState::kUnknown : ConditionState::kTrue),
           mConditionSliced(false),
           mWizard(wizard),
           mConditionTrackerIndex(conditionIndex),
@@ -86,8 +97,7 @@ public:
             flushIfNeededLocked(eventTimeNs);
         }
         // Now flush a partial bucket.
-        flushCurrentBucketLocked(eventTimeNs);
-        mCurrentBucketStartTimeNs = eventTimeNs;
+        flushCurrentBucketLocked(eventTimeNs, eventTimeNs);
         // Don't update the current bucket number so that the anomaly tracker knows this bucket
         // is a partial bucket and can merge it with the previous bucket.
     };
@@ -134,11 +144,12 @@ public:
     void onDumpReport(const int64_t dumpTimeNs,
                       const bool include_current_partial_bucket,
                       const bool erase_data,
+                      const DumpLatency dumpLatency,
                       std::set<string> *str_set,
                       android::util::ProtoOutputStream* protoOutput) {
         std::lock_guard<std::mutex> lock(mMutex);
         return onDumpReportLocked(dumpTimeNs, include_current_partial_bucket, erase_data,
-                str_set, protoOutput);
+                dumpLatency, str_set, protoOutput);
     }
 
     void clearPastBuckets(const int64_t dumpTimeNs) {
@@ -179,8 +190,19 @@ public:
         mBucketSizeNs = bucketSize;
     }
 
-    inline const int64_t& getMetricId() {
+    inline const int64_t& getMetricId() const {
         return mMetricId;
+    }
+
+    int64_t getRemainingTtlNs(int64_t currentTimeNs) const {
+        std::lock_guard<std::mutex> lock(mMutex);
+        return getRemainingTtlNsLocked(currentTimeNs);
+    }
+
+    // Set metric to active for ttlNs.
+    void setActive(int64_t currentTimeNs, int64_t remainingTtlNs) {
+        std::lock_guard<std::mutex> lock(mMutex);
+        setActiveLocked(currentTimeNs, remainingTtlNs);
     }
 
     // Let MetricProducer drop in-memory data to save memory.
@@ -202,7 +224,21 @@ public:
         activateLocked(activationTrackerIndex, elapsedTimestampNs);
     }
 
+    bool isActive() const {
+        std::lock_guard<std::mutex> lock(mMutex);
+        return isActiveLocked();
+    }
+
+    void prepActiveForBootIfNecessary(int64_t currentTimeNs) {
+        std::lock_guard<std::mutex> lock(mMutex);
+        prepActiveForBootIfNecessaryLocked(currentTimeNs);
+    }
+
     void addActivation(int activationTrackerIndex, int64_t ttl_seconds);
+
+    inline void setActivationType(const MetricActivation::ActivationType& activationType) {
+        mActivationType = activationType;
+    }
 
     void flushIfExpire(int64_t elapsedTimestampNs);
 
@@ -213,6 +249,7 @@ protected:
     virtual void onDumpReportLocked(const int64_t dumpTimeNs,
                                     const bool include_current_partial_bucket,
                                     const bool erase_data,
+                                    const DumpLatency dumpLatency,
                                     std::set<string> *str_set,
                                     android::util::ProtoOutputStream* protoOutput) = 0;
     virtual void clearPastBucketsLocked(const int64_t dumpTimeNs) = 0;
@@ -227,6 +264,12 @@ protected:
         return mIsActive;
     }
 
+    void prepActiveForBootIfNecessaryLocked(int64_t currentTimeNs);
+
+    int64_t getRemainingTtlNsLocked(int64_t currentTimeNs) const;
+
+    void setActiveLocked(int64_t currentTimeNs, int64_t remainingTtlNs);
+
     /**
      * Flushes the current bucket if the eventTime is after the current bucket's end time. This will
        also flush the current partial bucket in memory.
@@ -238,7 +281,7 @@ protected:
      */
     virtual void flushLocked(const int64_t& eventTimeNs) {
         flushIfNeededLocked(eventTimeNs);
-        flushCurrentBucketLocked(eventTimeNs);
+        flushCurrentBucketLocked(eventTimeNs, eventTimeNs);
     };
 
     /**
@@ -251,7 +294,8 @@ protected:
      * flushIfNeededLocked or the app upgrade handler; the caller MUST update the bucket timestamp
      * and bucket number as needed.
      */
-    virtual void flushCurrentBucketLocked(const int64_t& eventTimeNs){};
+    virtual void flushCurrentBucketLocked(const int64_t& eventTimeNs,
+                                          const int64_t& nextBucketStartTimeNs) {};
 
     // Convenience to compute the current bucket's end time, which is always aligned with the
     // start time of the metric.
@@ -283,7 +327,7 @@ protected:
 
     int64_t mBucketSizeNs;
 
-    bool mCondition;
+    ConditionState mCondition;
 
     bool mConditionSliced;
 
@@ -347,7 +391,12 @@ protected:
 
     bool mIsActive;
 
+    MetricActivation::ActivationType mActivationType;
+
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetric);
+
+    FRIEND_TEST(StatsLogProcessorTest, TestActiveConfigMetricDiskWriteRead);
+    FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBoot);
 };
 
 }  // namespace statsd

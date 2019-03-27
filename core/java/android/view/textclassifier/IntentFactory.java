@@ -32,7 +32,7 @@ public interface IntentFactory {
     /**
      * Return a list of LabeledIntent from the classification result.
      */
-    List<TextClassifierImpl.LabeledIntent> create(
+    List<LabeledIntent> create(
             Context context,
             String text,
             boolean foreignText,
@@ -43,14 +43,16 @@ public interface IntentFactory {
      * Inserts translate action to the list if it is a foreign text.
      */
     static void insertTranslateAction(
-            List<TextClassifierImpl.LabeledIntent> actions, Context context, String text) {
-        actions.add(new TextClassifierImpl.LabeledIntent(
+            List<LabeledIntent> actions, Context context, String text) {
+        actions.add(new LabeledIntent(
                 context.getString(com.android.internal.R.string.translate),
+                /* titleWithEntity */ null,
                 context.getString(com.android.internal.R.string.translate_desc),
                 new Intent(Intent.ACTION_TRANSLATE)
                         // TODO: Probably better to introduce a "translate" scheme instead of
                         // using EXTRA_TEXT.
-                        .putExtra(Intent.EXTRA_TEXT, text),
+                        .putExtra(Intent.EXTRA_TEXT, text)
+                        .putExtra(TextClassifier.EXTRA_FROM_TEXT_CLASSIFIER, true),
                 text.hashCode()));
     }
 }

@@ -21,6 +21,7 @@ import static android.view.contentcapture.ContentCaptureSession.STATE_DISABLED;
 import static android.view.contentcapture.ContentCaptureSession.STATE_DUPLICATED_ID;
 import static android.view.contentcapture.ContentCaptureSession.STATE_INTERNAL_ERROR;
 import static android.view.contentcapture.ContentCaptureSession.STATE_NO_SERVICE;
+import static android.view.contentcapture.ContentCaptureSession.STATE_PACKAGE_NOT_WHITELISTED;
 
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_CONTENT;
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_DATA;
@@ -34,6 +35,7 @@ import android.app.AppGlobals;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.content.ComponentName;
+import android.content.ContentCaptureOptions;
 import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -43,11 +45,12 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.service.contentcapture.ContentCaptureService;
 import android.service.contentcapture.IContentCaptureServiceCallback;
 import android.service.contentcapture.SnapshotData;
 import android.util.ArrayMap;
-import android.util.Log;
+import android.util.ArraySet;
 import android.util.Slog;
 import android.view.contentcapture.UserDataRemovalRequest;
 
@@ -87,6 +90,12 @@ final class ContentCapturePerUserService
     private final ContentCaptureServiceRemoteCallback mRemoteServiceCallback =
             new ContentCaptureServiceRemoteCallback();
 
+    /**
+     * List of packages that are whitelisted to be content captured.
+     */
+    @GuardedBy("mLock")
+    private final ArraySet<String> mWhitelistedPackages = new ArraySet<>();
+
     // TODO(b/111276913): add mechanism to prune stale sessions, similar to Autofill's
 
     ContentCapturePerUserService(@NonNull ContentCaptureManagerService master,
@@ -117,7 +126,7 @@ final class ContentCapturePerUserService
             mRemoteService = new RemoteContentCaptureService(mMaster.getContext(),
                     ContentCaptureService.SERVICE_INTERFACE, serviceComponentName,
                     mRemoteServiceCallback, mUserId, this, mMaster.isBindInstantServiceAllowed(),
-                    mMaster.verbose);
+                    mMaster.verbose, mMaster.mDevCfgIdleUnbindTimeoutMs);
         }
     }
 
@@ -185,15 +194,19 @@ final class ContentCapturePerUserService
         final int taskId = activityPresentationInfo.taskId;
         final int displayId = activityPresentationInfo.displayId;
         final ComponentName componentName = activityPresentationInfo.componentName;
+        final boolean whitelisted = isWhitelistedLocked(componentName);
         final ComponentName serviceComponentName = getServiceComponentName();
         final boolean enabled = isEnabledLocked();
-        final String historyItem =
-                "id=" + sessionId + " uid=" + uid
-                + " a=" + ComponentName.flattenToShortString(componentName)
-                + " t=" + taskId + " d=" + displayId
-                + " s=" + ComponentName.flattenToShortString(serviceComponentName)
-                + " u=" + mUserId + " f=" + flags + (enabled ? "" : " (disabled)");
-        mMaster.logRequestLocked(historyItem);
+        if (mMaster.mRequestsHistory != null) {
+            final String historyItem =
+                    "id=" + sessionId + " uid=" + uid
+                    + " a=" + ComponentName.flattenToShortString(componentName)
+                    + " t=" + taskId + " d=" + displayId
+                    + " s=" + ComponentName.flattenToShortString(serviceComponentName)
+                    + " u=" + mUserId + " f=" + flags + (enabled ? "" : " (disabled)")
+                    + " w=" + whitelisted;
+            mMaster.mRequestsHistory.log(historyItem);
+        }
 
         if (!enabled) {
             // TODO: it would be better to split in differet reasons, like
@@ -209,6 +222,16 @@ final class ContentCapturePerUserService
             if (mMaster.debug) {
                 Slog.d(TAG, "startSession(" + activityToken + "): hold your horses");
             }
+            return;
+        }
+
+        if (!whitelisted) {
+            if (mMaster.debug) {
+                Slog.d(TAG, "startSession(" + componentName + "): not whitelisted");
+            }
+            // TODO(b/122595322): need to return STATE_ACTIVITY_NOT_WHITELISTED as well
+            setClientState(clientReceiver, STATE_DISABLED | STATE_PACKAGE_NOT_WHITELISTED,
+                    /* binder= */ null);
             return;
         }
 
@@ -243,6 +266,26 @@ final class ContentCapturePerUserService
         }
         mSessions.put(sessionId, newSession);
         newSession.notifySessionStartedLocked(clientReceiver);
+    }
+
+    @GuardedBy("mLock")
+    private boolean isWhitelistedLocked(@NonNull ComponentName componentName) {
+        // TODO(b/122595322): need to check whitelisted activities as well.
+        final String packageName = componentName.getPackageName();
+        return mWhitelistedPackages.contains(packageName);
+    }
+
+    private void whitelistPackages(@NonNull List<String> packages) {
+        // TODO(b/122595322): add CTS test for when it's null
+        synchronized (mLock) {
+            if (packages == null) {
+                if (mMaster.verbose) Slog.v(TAG, "clearing all whitelisted packages");
+                mWhitelistedPackages.clear();
+            } else {
+                if (mMaster.verbose) Slog.v(TAG, "whitelisting packages: " + packages);
+                mWhitelistedPackages.addAll(packages);
+            }
+        }
     }
 
     // TODO(b/119613670): log metrics
@@ -366,6 +409,27 @@ final class ContentCapturePerUserService
         }
     }
 
+    @GuardedBy("mLock")
+    ContentCaptureOptions getOptionsForPackageLocked(@NonNull String packageName) {
+        if (!mWhitelistedPackages.contains(packageName)) {
+            if (mMaster.verbose) {
+                Slog.v(mTag, "getOptionsForPackage(" + packageName + "): not whitelisted");
+            }
+            return null;
+        }
+
+        // TODO(b/122595322): need to check whitelisted activities as well.
+        final ArraySet<ComponentName> whitelistedComponents = null;
+        ContentCaptureOptions options = new ContentCaptureOptions(mMaster.mDevCfgLoggingLevel,
+                mMaster.mDevCfgMaxBufferSize, mMaster.mDevCfgIdleFlushingFrequencyMs,
+                mMaster.mDevCfgTextChangeFlushingFrequencyMs, mMaster.mDevCfgLogHistorySize,
+                whitelistedComponents);
+        if (mMaster.verbose) {
+            Slog.v(mTag, "getOptionsForPackage(" + packageName + "): " + options);
+        }
+        return options;
+    }
+
     @Override
     protected void dumpLocked(String prefix, PrintWriter pw) {
         super.dumpLocked(prefix, pw);
@@ -376,15 +440,23 @@ final class ContentCapturePerUserService
             mRemoteService.dump(prefix2, pw);
         }
 
+        final int whitelistSize = mWhitelistedPackages.size();
+        pw.print(prefix); pw.print("Whitelisted packages: "); pw.println(whitelistSize);
+        for (int i = 0; i < whitelistSize; i++) {
+            final String whitelistedPkg = mWhitelistedPackages.valueAt(i);
+            pw.print(prefix2); pw.print(i + 1); pw.print(": "); pw.println(whitelistedPkg);
+        }
+
         if (mSessions.isEmpty()) {
             pw.print(prefix); pw.println("no sessions");
         } else {
-            final int size = mSessions.size();
-            pw.print(prefix); pw.print("number sessions: "); pw.println(size);
-            for (int i = 0; i < size; i++) {
-                pw.print(prefix); pw.print("session@"); pw.println(i);
+            final int sessionsSize = mSessions.size();
+            pw.print(prefix); pw.print("number sessions: "); pw.println(sessionsSize);
+            for (int i = 0; i < sessionsSize; i++) {
+                pw.print(prefix); pw.print("#"); pw.println(i);
                 final ContentCaptureServerSession session = mSessions.valueAt(i);
                 session.dumpLocked(prefix2, pw);
+                pw.println();
             }
         }
     }
@@ -410,11 +482,26 @@ final class ContentCapturePerUserService
         public void setContentCaptureWhitelist(List<String> packages,
                 List<ComponentName> activities) {
             if (mMaster.verbose) {
-                Log.v(TAG, "setContentCaptureWhitelist(packages=" + packages + ", activities="
+                Slog.v(TAG, "setContentCaptureWhitelist(packages=" + packages + ", activities="
                         + activities + ")");
             }
-            // TODO(b/122595322): implement
+            whitelistPackages(packages);
+
+            // TODO(b/122595322): whitelist activities as well
             // TODO(b/119613670): log metrics
+        }
+
+        @Override
+        public void disableSelf() {
+            if (mMaster.verbose) Slog.v(TAG, "disableSelf()");
+
+            final long token = Binder.clearCallingIdentity();
+            try {
+                Settings.Secure.putStringForUser(getContext().getContentResolver(),
+                        Settings.Secure.CONTENT_CAPTURE_ENABLED, "false", mUserId);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
     }
 }

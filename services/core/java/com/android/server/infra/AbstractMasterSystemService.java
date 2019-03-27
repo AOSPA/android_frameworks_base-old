@@ -133,7 +133,8 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
      * {@link com.android.internal.infra.AbstractRemoteService} instances, or
      * {@code null} when the service doesn't bind to remote services.
      * @param disallowProperty when not {@code null}, defines a {@link UserManager} restriction that
-     *        disables the service.
+     *        disables the service. <b>NOTE: </b> you'll also need to add it to
+     *        {@code UserRestrictionsUtils.USER_RESTRICTIONS}.
      */
     protected AbstractMasterSystemService(@NonNull Context context,
             @Nullable ServiceNameResolver serviceNameResolver,
@@ -282,6 +283,46 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
 
             // Must update the service on cache so its initialization code is triggered
             updateCachedServiceLocked(userId);
+        }
+    }
+
+    /**
+     * Sets whether the default service should be used.
+     *
+     * <p>Typically used during CTS tests to make sure only the default service doesn't interfere
+     * with the test results.
+     *
+     * @throws SecurityException if caller is not allowed to manage this service's settings.
+     */
+    public final void setDefaultServiceEnabled(@UserIdInt int userId, boolean enabled) {
+        Slog.i(mTag, "setDefaultServiceEnabled() for userId " + userId + ": " + enabled);
+        enforceCallingPermissionForManagement();
+
+        synchronized (mLock) {
+            final S oldService = peekServiceForUserLocked(userId);
+            if (oldService != null) {
+                oldService.removeSelfFromCacheLocked();
+            }
+            mServiceNameResolver.setDefaultServiceEnabled(userId, enabled);
+
+            // Must update the service on cache so its initialization code is triggered
+            updateCachedServiceLocked(userId);
+        }
+    }
+
+    /**
+     * Checks whether the default service should be used.
+     *
+     * <p>Typically used during CTS tests to make sure only the default service doesn't interfere
+     * with the test results.
+     *
+     * @throws SecurityException if caller is not allowed to manage this service's settings.
+     */
+    public final boolean isDefaultServiceEnabled(@UserIdInt int userId) {
+        enforceCallingPermissionForManagement();
+
+        synchronized (mLock) {
+            return mServiceNameResolver.isDefaultServiceEnabled(userId);
         }
     }
 

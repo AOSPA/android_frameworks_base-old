@@ -34,6 +34,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.inspector.InspectableProperty;
 
 import com.android.internal.R;
 
@@ -106,6 +107,8 @@ public abstract class AbsSeekBar extends ProgressBar {
 
         final TypedArray a = context.obtainStyledAttributes(
                 attrs, R.styleable.SeekBar, defStyleAttr, defStyleRes);
+        saveAttributeDataForStyleable(context, R.styleable.SeekBar, attrs, a, defStyleAttr,
+                defStyleRes);
 
         final Drawable thumb = a.getDrawable(R.styleable.SeekBar_thumb);
         setThumb(thumb);
@@ -252,6 +255,7 @@ public abstract class AbsSeekBar extends ProgressBar {
      * @attr ref android.R.styleable#SeekBar_thumbTint
      * @see #setThumbTintList(ColorStateList)
      */
+    @InspectableProperty(name = "thumbTint")
     @Nullable
     public ColorStateList getThumbTintList() {
         return mThumbTintList;
@@ -284,6 +288,7 @@ public abstract class AbsSeekBar extends ProgressBar {
      * @attr ref android.R.styleable#SeekBar_thumbTintMode
      * @see #setThumbTintMode(PorterDuff.Mode)
      */
+    @InspectableProperty
     @Nullable
     public PorterDuff.Mode getThumbTintMode() {
         return mThumbTintMode;
@@ -406,6 +411,7 @@ public abstract class AbsSeekBar extends ProgressBar {
      * @attr ref android.R.styleable#SeekBar_tickMarkTint
      * @see #setTickMarkTintList(ColorStateList)
      */
+    @InspectableProperty(name = "tickMarkTint")
     @Nullable
     public ColorStateList getTickMarkTintList() {
         return mTickMarkTintList;
@@ -438,6 +444,7 @@ public abstract class AbsSeekBar extends ProgressBar {
      * @attr ref android.R.styleable#SeekBar_tickMarkTintMode
      * @see #setTickMarkTintMode(PorterDuff.Mode)
      */
+    @InspectableProperty
     @Nullable
     public PorterDuff.Mode getTickMarkTintMode() {
         return mTickMarkTintMode;

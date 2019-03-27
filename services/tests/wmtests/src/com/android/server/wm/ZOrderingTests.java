@@ -23,14 +23,19 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ABOVE_SUB_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA_OVERLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_PANEL;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY;
+
+import static com.android.server.wm.WindowStateAnimator.PRESERVED_SURFACE_LAYER;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -44,6 +49,7 @@ import androidx.test.filters.SmallTest;
 import org.junit.After;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 
@@ -51,9 +57,8 @@ import java.util.LinkedList;
  * Tests for the {@link DisplayContent#assignChildLayers(SurfaceControl.Transaction)} method.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:ZOrderingTests
+ *  atest WmTests:ZOrderingTests
  */
-@FlakyTest(bugId = 74078662)
 @SmallTest
 @Presubmit
 public class ZOrderingTests extends WindowTestsBase {
@@ -207,6 +212,7 @@ public class ZOrderingTests extends WindowTestsBase {
         return createWindow(null, TYPE_BASE_APPLICATION, mDisplayContent, name);
     }
 
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testAssignWindowLayers_ForImeWithNoTarget() {
         mDisplayContent.mInputMethodTarget = null;
@@ -224,6 +230,7 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mImeDialogWindow, mImeWindow);
     }
 
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testAssignWindowLayers_ForImeWithAppTarget() {
         final WindowState imeAppTarget = createWindow("imeAppTarget");
@@ -243,6 +250,7 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mImeDialogWindow, mImeWindow);
     }
 
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testAssignWindowLayers_ForImeWithAppTargetWithChildWindows() {
         final WindowState imeAppTarget = createWindow("imeAppTarget");
@@ -269,6 +277,7 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mImeDialogWindow, mImeWindow);
     }
 
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testAssignWindowLayers_ForImeWithAppTargetAndAppAbove() {
         final WindowState appBelowImeTarget = createWindow("appBelowImeTarget");
@@ -292,6 +301,7 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mImeDialogWindow, mImeWindow);
     }
 
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testAssignWindowLayers_ForImeNonAppImeTarget() {
         final WindowState imeSystemOverlayTarget = createWindow(null, TYPE_SYSTEM_OVERLAY,
@@ -319,6 +329,7 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mImeDialogWindow, mImeWindow);
     }
 
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testAssignWindowLayers_ForStatusBarImeTarget() {
         mDisplayContent.mInputMethodTarget = mStatusBarWindow;
@@ -333,6 +344,7 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mImeDialogWindow, mImeWindow);
     }
 
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testStackLayers() {
         final WindowState anyWindow1 = createWindow("anyWindow");
@@ -398,6 +410,29 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mediaOverlayChild, child);
     }
 
+    @Test
+    public void testAssignWindowLayers_ForPostivelyZOrderedSubtype() {
+        final WindowState anyWindow = createWindow("anyWindow");
+        final ArrayList<WindowState> childList = new ArrayList<>();
+        childList.add(createWindow(anyWindow, TYPE_APPLICATION_PANEL, mDisplayContent,
+                "TypeApplicationPanelChild"));
+        childList.add(createWindow(anyWindow, TYPE_APPLICATION_SUB_PANEL, mDisplayContent,
+                "TypeApplicationSubPanelChild"));
+        childList.add(createWindow(anyWindow, TYPE_APPLICATION_ATTACHED_DIALOG, mDisplayContent,
+                "TypeApplicationAttachedDialogChild"));
+        childList.add(createWindow(anyWindow, TYPE_APPLICATION_ABOVE_SUB_PANEL, mDisplayContent,
+                "TypeApplicationAboveSubPanelPanelChild"));
+
+        final LayerRecordingTransaction t = mTransaction;
+        mDisplayContent.assignChildLayers(t);
+
+        for (int i = childList.size() - 1; i >= 0; i--) {
+            assertThat(t.getLayer(childList.get(i).getSurfaceControl()))
+                    .isGreaterThan(PRESERVED_SURFACE_LAYER);
+        }
+    }
+
+    @FlakyTest(bugId = 124088319)
     @Test
     public void testDockedDividerPosition() {
         final WindowState pinnedStackWindow = createWindowOnStack(null, WINDOWING_MODE_PINNED,

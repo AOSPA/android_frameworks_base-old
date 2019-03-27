@@ -221,6 +221,12 @@ public class Assistant extends NotificationAssistantService {
     }
 
     @Override
+    public Adjustment onNotificationEnqueued(StatusBarNotification sbn) {
+        // we use the version with channel, so this is never called.
+        return null;
+    }
+
+    @Override
     public Adjustment onNotificationEnqueued(StatusBarNotification sbn,
             NotificationChannel channel) {
         if (DEBUG) Log.i(TAG, "ENQUEUED " + sbn.getKey() + " on " + channel.getId());
@@ -230,6 +236,10 @@ public class Assistant extends NotificationAssistantService {
         NotificationEntry entry =
                 new NotificationEntry(mPackageManager, sbn, channel, mSmsHelper);
         SmartActionsHelper.SmartSuggestions suggestions = mSmartActionsHelper.suggest(entry);
+        if (DEBUG) {
+            Log.d(TAG, String.format("Creating Adjustment for %s, with %d actions, and %d replies.",
+                    sbn.getKey(), suggestions.actions.size(), suggestions.replies.size()));
+        }
         return createEnqueuedNotificationAdjustment(
                 entry, suggestions.actions, suggestions.replies);
     }

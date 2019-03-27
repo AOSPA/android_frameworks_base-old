@@ -30,17 +30,15 @@ class ImageRevealHelper {
     private static final String TAG = ImageRevealHelper.class.getSimpleName();
     private static final float MAX_REVEAL = 0f;
     private static final float MIN_REVEAL = 1f;
-    private static final int REVEAL_DURATION = 1000;
 
     private final ValueAnimator mAnimator;
     private final RevealStateListener mRevealListener;
-    private float mReveal = MIN_REVEAL;
+    private float mReveal = MAX_REVEAL;
     private boolean mAwake = false;
 
     ImageRevealHelper(RevealStateListener listener) {
         mRevealListener = listener;
         mAnimator = ValueAnimator.ofFloat();
-        mAnimator.setDuration(REVEAL_DURATION);
         mAnimator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
         mAnimator.addUpdateListener(animator -> {
             mReveal = (float) animator.getAnimatedValue();
@@ -80,14 +78,10 @@ class ImageRevealHelper {
         return mAwake;
     }
 
-    void updateAwake(boolean awake) {
+    void updateAwake(boolean awake, long duration) {
         mAwake = awake;
+        mAnimator.setDuration(duration);
         animate();
-    }
-
-    void sleep() {
-        mReveal = MIN_REVEAL;
-        mAwake = false;
     }
 
     /**

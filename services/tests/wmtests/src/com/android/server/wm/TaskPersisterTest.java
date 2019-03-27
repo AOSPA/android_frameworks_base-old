@@ -29,8 +29,6 @@ import android.os.UserManager;
 import android.platform.test.annotations.Presubmit;
 import android.util.SparseBooleanArray;
 
-import androidx.test.filters.FlakyTest;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,7 +39,6 @@ import org.junit.Test;
  * Build/Install/Run:
  *  atest WmTests:TaskPersisterTest
  */
-@FlakyTest(detail = "Promote to presubmit if stable")
 @Presubmit
 public class TaskPersisterTest {
     private static final String TEST_USER_NAME = "AM-Test-User";

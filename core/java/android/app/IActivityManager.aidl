@@ -204,6 +204,7 @@ interface IActivityManager {
     void setProcessImportant(in IBinder token, int pid, boolean isForeground, String reason);
     void setServiceForeground(in ComponentName className, in IBinder token,
             int id, in Notification notification, int flags, int foregroundServiceType);
+    int getForegroundServiceType(in ComponentName className, in IBinder token);
     boolean moveActivityTaskToBack(in IBinder token, boolean nonRoot);
     void getMemoryInfo(out ActivityManager.MemoryInfo outInfo);
     List<ActivityManager.ProcessErrorStateInfo> getProcessesInErrorState();
@@ -486,4 +487,13 @@ interface IActivityManager {
      * started from the shell.
      */
     void stopDelegateShellPermissionIdentity();
+
+    /** Returns a file descriptor that'll be closed when the system server process dies. */
+    ParcelFileDescriptor getLifeMonitor();
+
+    /**
+     * Start user, if it us not already running, and bring it to foreground.
+     * unlockProgressListener can be null if monitoring progress is not necessary.
+     */
+    boolean startUserInForegroundWithListener(int userid, IProgressListener unlockProgressListener);
 }

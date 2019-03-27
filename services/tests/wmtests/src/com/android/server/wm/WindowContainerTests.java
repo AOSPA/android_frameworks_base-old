@@ -47,10 +47,10 @@ import android.platform.test.annotations.Presubmit;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.util.Comparator;
 
@@ -58,11 +58,10 @@ import java.util.Comparator;
  * Test class for {@link WindowContainer}.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:WindowContainerTests
+ *  atest WmTests:WindowContainerTests
  */
 @SmallTest
 @Presubmit
-@FlakyTest(bugId = 74078662)
 public class WindowContainerTests extends WindowTestsBase {
 
     @Test
@@ -737,6 +736,18 @@ public class WindowContainerTests extends WindowTestsBase {
 
         child.setOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED, binder, activityRecord);
         verify(root).onDescendantOrientationChanged(binder, activityRecord);
+    }
+
+    @Test
+    public void testHandlesOrientationChangeFromDescendantProgation() {
+        final TestWindowContainerBuilder builder = new TestWindowContainerBuilder(mWm);
+        final TestWindowContainer root = spy(builder.build());
+
+        final TestWindowContainer child = root.addChildWindow();
+        assertFalse(child.handlesOrientationChangeFromDescendant());
+
+        Mockito.doReturn(true).when(root).handlesOrientationChangeFromDescendant();
+        assertTrue(child.handlesOrientationChangeFromDescendant());
     }
 
     /* Used so we can gain access to some protected members of the {@link WindowContainer} class */

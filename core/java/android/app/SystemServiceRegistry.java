@@ -41,6 +41,7 @@ import android.bluetooth.BluetoothManager;
 import android.companion.CompanionDeviceManager;
 import android.companion.ICompanionDeviceManager;
 import android.content.ClipboardManager;
+import android.content.ContentCaptureOptions;
 import android.content.Context;
 import android.content.IRestrictionsManager;
 import android.content.RestrictionsManager;
@@ -101,13 +102,11 @@ import android.net.IConnectivityManager;
 import android.net.IEthernetManager;
 import android.net.IIpMemoryStore;
 import android.net.IIpSecService;
-import android.net.INetd;
 import android.net.INetworkPolicyManager;
 import android.net.IpMemoryStore;
 import android.net.IpSecManager;
 import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
-import android.net.NetworkStack;
 import android.net.NetworkWatchlistManager;
 import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
@@ -330,20 +329,12 @@ final class SystemServiceRegistry {
                 return new ConnectivityManager(context, service);
             }});
 
-        registerService(Context.NETD_SERVICE, INetd.class, new StaticServiceFetcher<INetd>() {
+        registerService(Context.NETD_SERVICE, IBinder.class, new StaticServiceFetcher<IBinder>() {
             @Override
-            public INetd createService() throws ServiceNotFoundException {
-                return INetd.Stub.asInterface(
-                        ServiceManager.getServiceOrThrow(Context.NETD_SERVICE));
+            public IBinder createService() throws ServiceNotFoundException {
+                return ServiceManager.getServiceOrThrow(Context.NETD_SERVICE);
             }
         });
-
-        registerService(Context.NETWORK_STACK_SERVICE, NetworkStack.class,
-                new StaticServiceFetcher<NetworkStack>() {
-                    @Override
-                    public NetworkStack createService() {
-                        return new NetworkStack();
-                    }});
 
         registerService(Context.IP_MEMORY_STORE_SERVICE, IpMemoryStore.class,
                 new CachedServiceFetcher<IpMemoryStore>() {
@@ -1135,12 +1126,19 @@ final class SystemServiceRegistry {
                     throws ServiceNotFoundException {
                 // Get the services without throwing as this is an optional feature
                 Context outerContext = ctx.getOuterContext();
-                if (outerContext.isContentCaptureSupported()) {
+                ContentCaptureOptions options = outerContext.getContentCaptureOptions();
+                // Options is null when the service didn't whitelist the activity or package
+                if (options != null) {
                     IBinder b = ServiceManager
                             .getService(Context.CONTENT_CAPTURE_MANAGER_SERVICE);
                     IContentCaptureManager service = IContentCaptureManager.Stub.asInterface(b);
-                    return new ContentCaptureManager(outerContext, service);
+                    // Service is null when not provided by OEM or disabled by kill-switch.
+                    if (service != null) {
+                        return new ContentCaptureManager(outerContext, service, options);
+                    }
                 }
+                // When feature is disabled or app / package not whitelisted, we return a null
+                // manager to apps so the performance impact is practically zero
                 return null;
             }});
 

@@ -24,6 +24,7 @@
 #include <android/choreographer.h>
 #include <androidfw/DisplayEventDispatcher.h>
 #include <gui/ISurfaceComposer.h>
+#include <gui/SurfaceComposerClient.h>
 #include <utils/Looper.h>
 #include <utils/Mutex.h>
 #include <utils/Timers.h>
@@ -67,8 +68,10 @@ private:
     explicit Choreographer(const sp<Looper>& looper);
     Choreographer(const Choreographer&) = delete;
 
-    virtual void dispatchVsync(nsecs_t timestamp, int32_t id, uint32_t count);
-    virtual void dispatchHotplug(nsecs_t timestamp, int32_t id, bool connected);
+    void dispatchVsync(nsecs_t timestamp, PhysicalDisplayId displayId, uint32_t count) override;
+    void dispatchHotplug(nsecs_t timestamp, PhysicalDisplayId displayId, bool connected) override;
+    void dispatchConfigChanged(nsecs_t timestamp, PhysicalDisplayId displayId,
+                               int32_t configId) override;
 
     void scheduleCallbacks();
 
@@ -139,13 +142,10 @@ void Choreographer::scheduleCallbacks() {
     }
 }
 
-
-void Choreographer::dispatchVsync(nsecs_t timestamp, int32_t id, uint32_t) {
-    if (id != ISurfaceComposer::eDisplayIdMain) {
-        ALOGV("choreographer %p ~ ignoring vsync signal for non-main display (id=%d)", this, id);
-        scheduleVsync();
-        return;
-    }
+// TODO(b/74619554): The PhysicalDisplayId is ignored because SF only emits VSYNC events for the
+// internal display and DisplayEventReceiver::requestNextVsync only allows requesting VSYNC for
+// the internal display implicitly.
+void Choreographer::dispatchVsync(nsecs_t timestamp, PhysicalDisplayId, uint32_t) {
     std::vector<FrameCallback> callbacks{};
     {
         AutoMutex _l{mLock};
@@ -160,9 +160,17 @@ void Choreographer::dispatchVsync(nsecs_t timestamp, int32_t id, uint32_t) {
     }
 }
 
-void Choreographer::dispatchHotplug(nsecs_t, int32_t id, bool connected) {
-    ALOGV("choreographer %p ~ received hotplug event (id=%" PRId32 ", connected=%s), ignoring.",
-            this, id, toString(connected));
+void Choreographer::dispatchHotplug(nsecs_t, PhysicalDisplayId displayId, bool connected) {
+    ALOGV("choreographer %p ~ received hotplug event (displayId=%"
+            ANDROID_PHYSICAL_DISPLAY_ID_FORMAT ", connected=%s), ignoring.",
+            this, displayId, toString(connected));
+}
+
+void Choreographer::dispatchConfigChanged(nsecs_t, PhysicalDisplayId displayId,
+                                          int32_t configId) {
+    ALOGV("choreographer %p ~ received config changed event (displayId=%"
+            ANDROID_PHYSICAL_DISPLAY_ID_FORMAT ", configId=%s), ignoring.",
+            this, displayId, toString(configId));
 }
 
 void Choreographer::handleMessage(const Message& message) {

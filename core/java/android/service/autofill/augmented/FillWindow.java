@@ -63,10 +63,8 @@ import java.io.PrintWriter;
  */
 @SystemApi
 @TestApi
-//TODO(b/122654591): @TestApi is needed because CtsAutoFillServiceTestCases hosts the service
-//in the same package as the test, and that module is compiled with SDK=test_current
 public final class FillWindow implements AutoCloseable {
-    private static final String TAG = "FillWindow";
+    private static final String TAG = FillWindow.class.getSimpleName();
 
     private final Object mLock = new Object();
     private final CloseGuard mCloseGuard = CloseGuard.get();
@@ -83,6 +81,8 @@ public final class FillWindow implements AutoCloseable {
     @GuardedBy("mLock")
     private Rect mBounds;
 
+    @GuardedBy("mLock")
+    private boolean mUpdateCalled;
     @GuardedBy("mLock")
     private boolean mDestroyed;
 
@@ -105,6 +105,7 @@ public final class FillWindow implements AutoCloseable {
         }
         // TODO(b/123100712): add test case for null
         Preconditions.checkNotNull(area);
+        Preconditions.checkNotNull(area.proxy);
         Preconditions.checkNotNull(rootView);
         // TODO(b/123100712): must check the area is a valid object returned by
         // SmartSuggestionParams, throw IAE if not
@@ -151,6 +152,7 @@ public final class FillWindow implements AutoCloseable {
             if (DEBUG) {
                 Log.d(TAG, "Created FillWindow: params= " + smartSuggestion + " view=" + rootView);
             }
+            mUpdateCalled = true;
             mDestroyed = false;
             mProxy.setFillWindow(this);
             return true;
@@ -239,8 +241,10 @@ public final class FillWindow implements AutoCloseable {
         }
         synchronized (mLock) {
             if (mDestroyed) return;
-            hide();
-            mProxy.report(AutofillProxy.REPORT_EVENT_UI_DESTROYED);
+            if (mUpdateCalled) {
+                hide();
+                mProxy.report(AutofillProxy.REPORT_EVENT_UI_DESTROYED);
+            }
             mDestroyed = true;
             mCloseGuard.close();
         }
@@ -268,6 +272,7 @@ public final class FillWindow implements AutoCloseable {
     public void dump(@NonNull String prefix, @NonNull PrintWriter pw) {
         synchronized (this) {
             pw.print(prefix); pw.print("destroyed: "); pw.println(mDestroyed);
+            pw.print(prefix); pw.print("updateCalled: "); pw.println(mUpdateCalled);
             if (mFillView != null) {
                 pw.print(prefix); pw.print("fill window: ");
                 pw.println(mShowing ? "shown" : "hidden");

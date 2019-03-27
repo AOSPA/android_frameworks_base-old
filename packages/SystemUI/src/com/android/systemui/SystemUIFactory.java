@@ -31,16 +31,18 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.classifier.FalsingManager;
+import com.android.systemui.dock.DockManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
+import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.ScrimView;
-import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
@@ -140,7 +142,7 @@ public class SystemUIFactory {
             StatusBar statusBar, StatusBarStateController statusBarStateController,
             NotificationListener listener) {
         return new NotificationIconAreaController(context, statusBar, statusBarStateController,
-                listener);
+                listener, Dependency.get(NotificationMediaManager.class));
     }
 
     public KeyguardIndicationController createKeyguardIndicationController(Context context,
@@ -216,6 +218,16 @@ public class SystemUIFactory {
     @Provides
     public ShadeController provideShadeController(Context context) {
         return SysUiServiceProvider.getComponent(context, StatusBar.class);
+    }
+
+    /**
+     * Provides DockManager.
+     */
+    @Singleton
+    @Provides
+    @Nullable
+    public DockManager providesDockManager(Context context) {
+        return SysUiServiceProvider.getComponent(context, DockManager.class);
     }
 
     @Module

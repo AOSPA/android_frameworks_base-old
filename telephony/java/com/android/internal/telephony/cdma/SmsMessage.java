@@ -21,7 +21,6 @@ import android.os.SystemProperties;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.SmsCbLocation;
 import android.telephony.SmsCbMessage;
-import android.telephony.TelephonyManager;
 import android.telephony.cdma.CdmaSmsCbProgramData;
 import android.telephony.Rlog;
 import android.util.Log;
@@ -602,19 +601,22 @@ public class SmsMessage extends SmsMessageBase {
 
                             } else if (addr.numberMode == CdmaSmsAddress.NUMBER_MODE_DATA_NETWORK) {
                                 if (numberType == 2)
-                                    Rlog.e(LOG_TAG, "TODO: Originating Addr is email id");
+                                    Rlog.e(LOG_TAG, "TODO: Addr is email id");
                                 else
                                     Rlog.e(LOG_TAG,
-                                          "TODO: Originating Addr is data network address");
+                                          "TODO: Addr is data network address");
                             } else {
-                                Rlog.e(LOG_TAG, "Originating Addr is of incorrect type");
+                                Rlog.e(LOG_TAG, "Addr is of incorrect type");
                             }
                         } else {
                             Rlog.e(LOG_TAG, "Incorrect Digit mode");
                         }
                         addr.origBytes = data;
-                        Rlog.i(LOG_TAG, "Originating Addr=" + addr.toString());
+                        Rlog.pii(LOG_TAG, "Addr=" + addr.toString());
+                        mOriginatingAddress = addr;
                         if (parameterId == DESTINATION_ADDRESS) {
+                            // Original address awlays indicates one sender's address for 3GPP2
+                            // Here add recipient address support along with 3GPP
                             env.destAddress = addr;
                             mRecipientAddress = addr;
                         }
@@ -672,7 +674,7 @@ public class SmsMessage extends SmsMessageBase {
     }
 
     /**
-     * Parses a SMS message from its BearerData stream. (mobile-terminated only)
+     * Parses a SMS message from its BearerData stream.
      */
     public void parseSms() {
         // Message Waiting Info Record defined in 3GPP2 C.S-0005, 3.7.5.6
@@ -702,14 +704,13 @@ public class SmsMessage extends SmsMessageBase {
         }
 
         if (mOriginatingAddress != null) {
-            mOriginatingAddress.address = new String(mOriginatingAddress.origBytes);
-            if (mOriginatingAddress.ton == CdmaSmsAddress.TON_INTERNATIONAL_OR_IP) {
-                if (mOriginatingAddress.address.charAt(0) != '+') {
-                    mOriginatingAddress.address = "+" + mOriginatingAddress.address;
-                }
-            }
+            decodeSmsDisplayAddress(mOriginatingAddress);
             if (VDBG) Rlog.v(LOG_TAG, "SMS originating address: "
                     + mOriginatingAddress.address);
+        }
+
+        if (mRecipientAddress != null) {
+            decodeSmsDisplayAddress(mRecipientAddress);
         }
 
         if (mBearerData.msgCenterTimeStamp != null) {
@@ -749,10 +750,22 @@ public class SmsMessage extends SmsMessageBase {
         }
     }
 
+    private void decodeSmsDisplayAddress(SmsAddress addr) {
+        addr.address = new String(addr.origBytes);
+        if (addr.ton == CdmaSmsAddress.TON_INTERNATIONAL_OR_IP) {
+            if (addr.address.charAt(0) != '+') {
+                addr.address = "+" + addr.address;
+            }
+        }
+        Rlog.pii(LOG_TAG, " decodeSmsDisplayAddress = " + addr.address);
+    }
+
     /**
      * Parses a broadcast SMS, possibly containing a CMAS alert.
+     *
+     * @param plmn the PLMN for a broadcast SMS
      */
-    public SmsCbMessage parseBroadcastSms() {
+    public SmsCbMessage parseBroadcastSms(String plmn) {
         BearerData bData = BearerData.decode(mEnvelope.bearerData, mEnvelope.serviceCategory);
         if (bData == null) {
             Rlog.w(LOG_TAG, "BearerData.decode() returned null");
@@ -763,7 +776,6 @@ public class SmsMessage extends SmsMessageBase {
             Rlog.d(LOG_TAG, "MT raw BearerData = " + HexDump.toHexString(mEnvelope.bearerData));
         }
 
-        String plmn = TelephonyManager.getDefault().getNetworkOperator();
         SmsCbLocation location = new SmsCbLocation(plmn);
 
         return new SmsCbMessage(SmsCbMessage.MESSAGE_FORMAT_3GPP2,
@@ -863,11 +875,11 @@ public class SmsMessage extends SmsMessageBase {
         bearerData.userData = userData;
 
         byte[] encodedBearerData = BearerData.encode(bearerData);
+        if (encodedBearerData == null) return null;
         if (Rlog.isLoggable(LOGGABLE_TAG, Log.VERBOSE)) {
             Rlog.d(LOG_TAG, "MO (encoded) BearerData = " + bearerData);
             Rlog.d(LOG_TAG, "MO raw BearerData = '" + HexDump.toHexString(encodedBearerData) + "'");
         }
-        if (encodedBearerData == null) return null;
 
         int teleservice = (bearerData.hasUserDataHeader
                 && userData.msgEncoding != UserData.ENCODING_7BIT_ASCII)

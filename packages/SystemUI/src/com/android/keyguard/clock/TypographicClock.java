@@ -17,9 +17,14 @@ package com.android.keyguard.clock;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.text.Annotation;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.SpannedString;
+import android.text.TextUtils;
 import android.text.format.DateFormat;
+import android.text.style.ForegroundColorSpan;
 import android.util.AttributeSet;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.android.keyguard.R;
@@ -31,14 +36,15 @@ import java.util.TimeZone;
 /**
  * Clock that presents the time in words.
  */
-public class TypographicClock extends LinearLayout {
+public class TypographicClock extends TextView {
 
+    private static final String ANNOTATION_COLOR = "color";
+
+    private final Resources mResources;
     private final String[] mHours;
     private final String[] mMinutes;
-    private TextView mHeaderText;
-    private TextView mHourText;
-    private TextView mMinuteText;
-    private Calendar mTime;
+    private int mAccentColor;
+    private final Calendar mTime = Calendar.getInstance(TimeZone.getDefault());
     private String mDescFormat;
     private TimeZone mTimeZone;
 
@@ -52,11 +58,11 @@ public class TypographicClock extends LinearLayout {
 
     public TypographicClock(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        mTime = Calendar.getInstance();
         mDescFormat = ((SimpleDateFormat) DateFormat.getTimeFormat(context)).toLocalizedPattern();
-        Resources res = context.getResources();
-        mHours = res.getStringArray(R.array.type_clock_hours);
-        mMinutes = res.getStringArray(R.array.type_clock_minutes);
+        mResources = context.getResources();
+        mHours = mResources.getStringArray(R.array.type_clock_hours);
+        mMinutes = mResources.getStringArray(R.array.type_clock_minutes);
+        mAccentColor = mResources.getColor(R.color.typeClockAccentColor, null);
     }
 
     /**
@@ -65,11 +71,28 @@ public class TypographicClock extends LinearLayout {
     public void onTimeChanged() {
         mTime.setTimeInMillis(System.currentTimeMillis());
         setContentDescription(DateFormat.format(mDescFormat, mTime));
-        final int hour = mTime.get(Calendar.HOUR);
-        mHourText.setText(mHours[hour % 12]);
-        final int minute = mTime.get(Calendar.MINUTE);
-        mMinuteText.setText(mMinutes[minute % 60]);
-        invalidate();
+        final int hour = mTime.get(Calendar.HOUR) % 12;
+        final int minute = mTime.get(Calendar.MINUTE) % 60;
+
+        // Get the quantity based on the hour for languages like Portuguese and Czech.
+        SpannedString typeTemplate = (SpannedString) mResources.getQuantityText(
+                R.plurals.type_clock_header, hour);
+
+        // Find the "color" annotation and set the foreground color to the accent color.
+        Annotation[] annotations = typeTemplate.getSpans(0, typeTemplate.length(),
+                Annotation.class);
+        SpannableString spanType = new SpannableString(typeTemplate);
+        for (int i = 0; i < annotations.length; i++) {
+            Annotation annotation = annotations[i];
+            String key = annotation.getValue();
+            if (ANNOTATION_COLOR.equals(key)) {
+                spanType.setSpan(new ForegroundColorSpan(mAccentColor),
+                        spanType.getSpanStart(annotation), spanType.getSpanEnd(annotation),
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+
+        setText(TextUtils.expandTemplate(spanType, mHours[hour], mMinutes[minute]));
     }
 
     /**
@@ -83,28 +106,17 @@ public class TypographicClock extends LinearLayout {
     }
 
     /**
-     * Set the color of the text used to display the time.
-     *
-     * This is necessary when the wallpaper shown behind the clock on the
-     * lock screen changes.
+     * Sets the accent color used on the clock face.
      */
-    public void setTextColor(int color) {
-        mHourText.setTextColor(color);
-        mMinuteText.setTextColor(color);
-    }
-
-    @Override
-    protected void onFinishInflate() {
-        super.onFinishInflate();
-        mHeaderText = findViewById(R.id.header);
-        mHourText = findViewById(R.id.hour);
-        mMinuteText = findViewById(R.id.minute);
+    public void setClockColor(int color) {
+        mAccentColor = color;
+        onTimeChanged();
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        mTime = Calendar.getInstance(mTimeZone != null ? mTimeZone : TimeZone.getDefault());
+        mTime.setTimeZone(mTimeZone != null ? mTimeZone : TimeZone.getDefault());
         onTimeChanged();
     }
 }

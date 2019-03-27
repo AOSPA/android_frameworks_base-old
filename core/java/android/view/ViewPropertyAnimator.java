@@ -985,7 +985,7 @@ public class ViewPropertyAnimator {
                 renderNode.setTranslationZ(value);
                 break;
             case ROTATION:
-                renderNode.setRotation(value);
+                renderNode.setRotationZ(value);
                 break;
             case ROTATION_X:
                 renderNode.setRotationX(value);
@@ -1031,7 +1031,7 @@ public class ViewPropertyAnimator {
             case TRANSLATION_Z:
                 return node.getTranslationZ();
             case ROTATION:
-                return node.getRotation();
+                return node.getRotationZ();
             case ROTATION_X:
                 return node.getRotationX();
             case ROTATION_Y:
@@ -1139,12 +1139,6 @@ public class ViewPropertyAnimator {
 
             boolean hardwareAccelerated = mView.isHardwareAccelerated();
 
-            // alpha requires slightly different treatment than the other (transform) properties.
-            // The logic in setAlpha() is not simply setting mAlpha, plus the invalidation
-            // logic is dependent on how the view handles an internal call to onSetAlpha().
-            // We track what kinds of properties are set, and how alpha is handled when it is
-            // set, and perform the invalidation steps appropriately.
-            boolean alphaHandled = false;
             if (!hardwareAccelerated) {
                 mView.invalidateParentCaches();
             }
@@ -1159,11 +1153,7 @@ public class ViewPropertyAnimator {
                 for (int i = 0; i < count; ++i) {
                     NameValuesHolder values = valueList.get(i);
                     float value = values.mFromValue + fraction * values.mDeltaValue;
-                    if (values.mNameConstant == ALPHA) {
-                        alphaHandled = mView.setAlphaNoInvalidation(value);
-                    } else {
-                        setValue(values.mNameConstant, value);
-                    }
+                    setValue(values.mNameConstant, value);
                 }
             }
             if ((propertyMask & TRANSFORM_MASK) != 0) {
@@ -1171,13 +1161,8 @@ public class ViewPropertyAnimator {
                     mView.mPrivateFlags |= View.PFLAG_DRAWN; // force another invalidation
                 }
             }
-            // invalidate(false) in all cases except if alphaHandled gets set to true
-            // via the call to setAlphaNoInvalidation(), above
-            if (alphaHandled) {
-                mView.invalidate(true);
-            } else {
-                mView.invalidateViewProperty(false, false);
-            }
+
+            mView.invalidateViewProperty(false, false);
             if (mUpdateListener != null) {
                 mUpdateListener.onAnimationUpdate(animation);
             }

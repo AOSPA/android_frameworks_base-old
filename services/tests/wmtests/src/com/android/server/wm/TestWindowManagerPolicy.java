@@ -28,6 +28,7 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.PowerManager.WakeReason;
 import android.os.RemoteException;
 import android.util.proto.ProtoOutputStream;
 import android.view.IWindow;
@@ -155,7 +156,8 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public int interceptMotionBeforeQueueingNonInteractive(long whenNanos, int policyFlags) {
+    public int interceptMotionBeforeQueueingNonInteractive(int displayId, long whenNanos,
+            int policyFlags) {
         return 0;
     }
 
@@ -182,11 +184,11 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void startedWakingUp() {
+    public void startedWakingUp(@WakeReason int reason) {
     }
 
     @Override
-    public void finishedWakingUp() {
+    public void finishedWakingUp(@WakeReason int reason) {
     }
 
     @Override
@@ -311,8 +313,8 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public boolean performHapticFeedbackLw(WindowState win, int effectId, boolean always,
-            String reason) {
+    public boolean performHapticFeedback(int uid, String packageName, int effectId,
+            boolean always, String reason) {
         return false;
     }
 

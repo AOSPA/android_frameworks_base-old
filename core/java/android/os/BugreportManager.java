@@ -24,7 +24,8 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.content.Context;
-import android.os.IBinder.DeathRecipient;
+
+import com.android.internal.util.Preconditions;
 
 import java.io.FileDescriptor;
 import java.lang.annotation.Retention;
@@ -58,7 +59,8 @@ public class BugreportManager {
                 BUGREPORT_ERROR_INVALID_INPUT,
                 BUGREPORT_ERROR_RUNTIME,
                 BUGREPORT_ERROR_USER_DENIED_CONSENT,
-                BUGREPORT_ERROR_USER_CONSENT_TIMED_OUT
+                BUGREPORT_ERROR_USER_CONSENT_TIMED_OUT,
+                BUGREPORT_ERROR_ANOTHER_REPORT_IN_PROGRESS
         })
 
         /** Possible error codes taking a bugreport can encounter */
@@ -80,6 +82,10 @@ public class BugreportManager {
         public static final int BUGREPORT_ERROR_USER_CONSENT_TIMED_OUT =
                 IDumpstateListener.BUGREPORT_ERROR_USER_CONSENT_TIMED_OUT;
 
+        /** There is currently a bugreport running. The caller should try again later. */
+        public static final int BUGREPORT_ERROR_ANOTHER_REPORT_IN_PROGRESS =
+                IDumpstateListener.BUGREPORT_ERROR_ANOTHER_REPORT_IN_PROGRESS;
+
         /**
          * Called when there is a progress update.
          * @param progress the progress in [0.0, 100.0]
@@ -95,6 +101,9 @@ public class BugreportManager {
          * <p>If {@code BUGREPORT_ERROR_USER_CONSENT_TIMED_OUT} is passed, then the consent timed
          * out, but the bugreport could be available in the internal directory of dumpstate for
          * manual retrieval.
+         *
+         * <p> If {@code BUGREPORT_ERROR_ANOTHER_REPORT_IN_PROGRESS} is passed, then the
+         * caller should try later, as only one bugreport can be in progress at a time.
          */
         public void onError(@BugreportErrorCode int errorCode) {}
 
@@ -127,13 +136,16 @@ public class BugreportManager {
             @NonNull BugreportParams params,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull BugreportCallback callback) {
-        // TODO(b/111441001): Enforce android.Manifest.permission.DUMP if necessary.
+        Preconditions.checkNotNull(bugreportFd);
+        Preconditions.checkNotNull(params);
+        Preconditions.checkNotNull(executor);
+        Preconditions.checkNotNull(callback);
         DumpstateListener dsListener = new DumpstateListener(executor, callback);
         try {
             // Note: mBinder can get callingUid from the binder transaction.
             mBinder.startBugreport(-1 /* callingUid */,
                     mContext.getOpPackageName(),
-                    (bugreportFd != null ? bugreportFd.getFileDescriptor() : new FileDescriptor()),
+                    bugreportFd.getFileDescriptor(),
                     (screenshotFd != null
                             ? screenshotFd.getFileDescriptor() : new FileDescriptor()),
                     params.getMode(), dsListener);
@@ -154,19 +166,13 @@ public class BugreportManager {
         }
     }
 
-    private final class DumpstateListener extends IDumpstateListener.Stub
-            implements DeathRecipient {
+    private final class DumpstateListener extends IDumpstateListener.Stub {
         private final Executor mExecutor;
         private final BugreportCallback mCallback;
 
         DumpstateListener(Executor executor, @Nullable BugreportCallback callback) {
             mExecutor = executor;
             mCallback = callback;
-        }
-
-        @Override
-        public void binderDied() {
-            // TODO(b/111441001): implement
         }
 
         @Override

@@ -18,14 +18,12 @@ package com.android.systemui.statusbar.phone;
 
 import static com.android.systemui.statusbar.phone.NavBarTintController.DEFAULT_COLOR_ADAPT_TRANSITION_TIME;
 import static com.android.systemui.statusbar.phone.NavBarTintController.MIN_COLOR_ADAPT_TRANSITION_TIME;
-import static com.android.systemui.statusbar.phone.NavBarTintController.NAV_COLOR_TRANSITION_TIME_SETTING;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
-import android.provider.Settings;
 import android.util.MathUtils;
 import android.util.TimeUtils;
 
@@ -33,9 +31,9 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.Interpolators;
 import com.android.systemui.SysUiServiceProvider;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
-import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 
 import java.io.FileDescriptor;
@@ -167,9 +165,7 @@ public class LightBarTransitionsController implements Dumpable, Callbacks,
 
     public long getTintAnimationDuration() {
         if (NavBarTintController.isEnabled(mContext)) {
-            return Math.max(Settings.Global.getInt(mContext.getContentResolver(),
-                    NAV_COLOR_TRANSITION_TIME_SETTING, DEFAULT_COLOR_ADAPT_TRANSITION_TIME),
-                    MIN_COLOR_ADAPT_TRANSITION_TIME);
+            return Math.max(DEFAULT_COLOR_ADAPT_TRANSITION_TIME, MIN_COLOR_ADAPT_TRANSITION_TIME);
         }
         return DEFAULT_TINT_ANIMATION_DURATION;
     }

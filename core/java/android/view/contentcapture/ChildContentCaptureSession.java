@@ -20,10 +20,6 @@ import android.annotation.Nullable;
 import android.view.autofill.AutofillId;
 import android.view.contentcapture.ViewNode.ViewStructureImpl;
 
-import com.android.internal.util.Preconditions;
-
-import java.io.PrintWriter;
-
 /**
  * A session that is explicitly created by the app (and hence is a descendant of
  * {@link MainContentCaptureSession}).
@@ -35,21 +31,11 @@ final class ChildContentCaptureSession extends ContentCaptureSession {
     @NonNull
     private final ContentCaptureSession mParent;
 
-    /**
-     * {@link ContentCaptureContext} set by client, or {@code null} when it's the
-     * {@link ContentCaptureManager#getMainContentCaptureSession() default session} for the
-     * context.
-     *
-     * @hide
-     */
-    @NonNull
-    private final ContentCaptureContext mClientContext;
-
     /** @hide */
     protected ChildContentCaptureSession(@NonNull ContentCaptureSession parent,
             @NonNull ContentCaptureContext clientContext) {
+        super(clientContext);
         mParent = parent;
-        mClientContext = Preconditions.checkNotNull(clientContext);
     }
 
     @Override
@@ -73,6 +59,11 @@ final class ChildContentCaptureSession extends ContentCaptureSession {
     }
 
     @Override
+    public void updateContentCaptureContext(@Nullable ContentCaptureContext context) {
+        getMainCaptureSession().notifyContextUpdated(mId, context);
+    }
+
+    @Override
     void onDestroy() {
         getMainCaptureSession().notifyChildSessionFinished(mParent.mId, mId);
     }
@@ -93,16 +84,12 @@ final class ChildContentCaptureSession extends ContentCaptureSession {
     }
 
     @Override
-    boolean isContentCaptureEnabled() {
-        return getMainCaptureSession().isContentCaptureEnabled();
+    public void internalNotifyViewTreeEvent(boolean started) {
+        getMainCaptureSession().notifyViewTreeEvent(mId, started);
     }
 
     @Override
-    void dump(String prefix, PrintWriter pw) {
-        if (mClientContext != null) {
-            // NOTE: we don't dump clientContent because it could have PII
-            pw.print(prefix); pw.println("hasClientContext");
-        }
-        super.dump(prefix, pw);
+    boolean isContentCaptureEnabled() {
+        return getMainCaptureSession().isContentCaptureEnabled();
     }
 }

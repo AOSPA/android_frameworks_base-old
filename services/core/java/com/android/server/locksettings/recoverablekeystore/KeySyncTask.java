@@ -20,6 +20,7 @@ import static android.security.keystore.recovery.KeyChainProtectionParams.TYPE_L
 
 import android.annotation.Nullable;
 import android.content.Context;
+import android.os.RemoteException;
 import android.security.Scrypt;
 import android.security.keystore.recovery.KeyChainProtectionParams;
 import android.security.keystore.recovery.KeyChainSnapshot;
@@ -37,7 +38,6 @@ import com.android.server.locksettings.recoverablekeystore.storage.RecoverySnaps
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
@@ -50,6 +50,7 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertPath;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -84,7 +85,7 @@ public class KeySyncTask implements Runnable {
     private final RecoverableKeyStoreDb mRecoverableKeyStoreDb;
     private final int mUserId;
     private final int mCredentialType;
-    private final String mCredential;
+    private final byte[] mCredential;
     private final boolean mCredentialUpdated;
     private final PlatformKeyManager mPlatformKeyManager;
     private final RecoverySnapshotStorage mRecoverySnapshotStorage;
@@ -99,7 +100,7 @@ public class KeySyncTask implements Runnable {
             RecoverySnapshotListenersStorage recoverySnapshotListenersStorage,
             int userId,
             int credentialType,
-            String credential,
+            byte[] credential,
             boolean credentialUpdated
     ) throws NoSuchAlgorithmException, KeyStoreException, InsecureUserException {
         return new KeySyncTask(
@@ -133,7 +134,7 @@ public class KeySyncTask implements Runnable {
             RecoverySnapshotListenersStorage recoverySnapshotListenersStorage,
             int userId,
             int credentialType,
-            String credential,
+            byte[] credential,
             boolean credentialUpdated,
             PlatformKeyManager platformKeyManager,
             TestOnlyInsecureCertificateHelper testOnlyInsecureCertificateHelper,
@@ -162,7 +163,7 @@ public class KeySyncTask implements Runnable {
         }
     }
 
-    private void syncKeys() {
+    private void syncKeys() throws RemoteException {
         if (mCredentialType == LockPatternUtils.CREDENTIAL_TYPE_NONE) {
             // Application keys for the user will not be available for sync.
             Log.w(TAG, "Credentials are not set for user " + mUserId);
@@ -195,7 +196,7 @@ public class KeySyncTask implements Runnable {
             && mCredentialType != LockPatternUtils.CREDENTIAL_TYPE_PASSWORD;
     }
 
-    private void syncKeysForAgent(int recoveryAgentUid) throws IOException {
+    private void syncKeysForAgent(int recoveryAgentUid) throws IOException, RemoteException {
         boolean shouldRecreateCurrentVersion = false;
         if (!shouldCreateSnapshot(recoveryAgentUid)) {
             shouldRecreateCurrentVersion =
@@ -412,7 +413,7 @@ public class KeySyncTask implements Runnable {
     private Map<String, Pair<SecretKey, byte[]>> getKeysToSync(int recoveryAgentUid)
             throws InsecureUserException, KeyStoreException, UnrecoverableKeyException,
             NoSuchAlgorithmException, NoSuchPaddingException, BadPlatformKeyException,
-            InvalidKeyException, InvalidAlgorithmParameterException, IOException {
+            InvalidKeyException, InvalidAlgorithmParameterException, IOException, RemoteException {
         PlatformDecryptionKey decryptKey = mPlatformKeyManager.getDecryptKey(mUserId);;
         Map<String, WrappedKey> wrappedKeys = mRecoverableKeyStoreDb.getAllKeys(
                 mUserId, recoveryAgentUid, decryptKey.getGenerationId());
@@ -449,7 +450,7 @@ public class KeySyncTask implements Runnable {
      */
     @VisibleForTesting
     @KeyChainProtectionParams.LockScreenUiFormat static int getUiFormat(
-            int credentialType, String credential) {
+            int credentialType, byte[] credential) {
         if (credentialType == LockPatternUtils.CREDENTIAL_TYPE_PATTERN) {
             return KeyChainProtectionParams.UI_FORMAT_PATTERN;
         } else if (isPin(credential)) {
@@ -474,13 +475,13 @@ public class KeySyncTask implements Runnable {
      * Returns {@code true} if {@code credential} looks like a pin.
      */
     @VisibleForTesting
-    static boolean isPin(@Nullable String credential) {
+    static boolean isPin(@Nullable byte[] credential) {
         if (credential == null) {
             return false;
         }
-        int length = credential.length();
+        int length = credential.length;
         for (int i = 0; i < length; i++) {
-            if (!Character.isDigit(credential.charAt(i))) {
+            if (!Character.isDigit((char) credential[i])) {
                 return false;
             }
         }
@@ -493,8 +494,7 @@ public class KeySyncTask implements Runnable {
      * @return The SHA-256 hash.
      */
     @VisibleForTesting
-    static byte[] hashCredentialsBySaltedSha256(byte[] salt, String credentials) {
-        byte[] credentialsBytes = credentials.getBytes(StandardCharsets.UTF_8);
+    static byte[] hashCredentialsBySaltedSha256(byte[] salt, byte[] credentialsBytes) {
         ByteBuffer byteBuffer = ByteBuffer.allocate(
                 salt.length + credentialsBytes.length + LENGTH_PREFIX_BYTES * 2);
         byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
@@ -505,17 +505,19 @@ public class KeySyncTask implements Runnable {
         byte[] bytes = byteBuffer.array();
 
         try {
-            return MessageDigest.getInstance(LOCK_SCREEN_HASH_ALGORITHM).digest(bytes);
+            byte[] hash = MessageDigest.getInstance(LOCK_SCREEN_HASH_ALGORITHM).digest(bytes);
+            Arrays.fill(bytes, (byte) 0);
+            return hash;
         } catch (NoSuchAlgorithmException e) {
             // Impossible, SHA-256 must be supported on Android.
             throw new RuntimeException(e);
         }
     }
 
-    private byte[] hashCredentialsByScrypt(byte[] salt, String credentials) {
+    private byte[] hashCredentialsByScrypt(byte[] salt, byte[] credentials) {
         return mScrypt.scrypt(
-                credentials.getBytes(StandardCharsets.UTF_8), salt,
-                SCRYPT_PARAM_N, SCRYPT_PARAM_R, SCRYPT_PARAM_P, SCRYPT_PARAM_OUTLEN_BYTES);
+                credentials, salt, SCRYPT_PARAM_N, SCRYPT_PARAM_R, SCRYPT_PARAM_P,
+                SCRYPT_PARAM_OUTLEN_BYTES);
     }
 
     private static SecretKey generateRecoveryKey() throws NoSuchAlgorithmException {

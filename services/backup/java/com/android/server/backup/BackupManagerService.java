@@ -41,6 +41,7 @@ import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.util.Slog;
 import android.util.SparseArray;
 
@@ -433,8 +434,56 @@ public class BackupManagerService {
                 getServiceForUserIfCallerHasPermission(userId, "getConfigurationIntent()");
 
         return userBackupManagerService == null
-                ? null
-                : userBackupManagerService.getConfigurationIntent(transportName);
+            ? null
+            : userBackupManagerService.getConfigurationIntent(transportName);
+    }
+
+    /**
+     * Sets the ancestral work profile for the calling user.
+     *
+     * <p> The ancestral work profile corresponds to the profile that was used to restore to the
+     * callers profile.
+     */
+    public void setAncestralSerialNumber(long ancestralSerialNumber) {
+        UserBackupManagerService userBackupManagerService =
+                getServiceForUserIfCallerHasPermission(
+                        Binder.getCallingUserHandle().getIdentifier(),
+                        "setAncestralSerialNumber()");
+
+        if (userBackupManagerService != null) {
+            userBackupManagerService.setAncestralSerialNumber(ancestralSerialNumber);
+        }
+    }
+
+    /**
+     * Returns a {@link UserHandle} for the user that has {@code ancestralSerialNumber} as the
+     * serial number of the its ancestral work profile.
+     *
+     * <p> The ancestral work profile is set by {@link #setAncestralSerialNumber(long)}
+     * and it corresponds to the profile that was used to restore to the callers profile.
+     */
+    @Nullable
+    public UserHandle getUserForAncestralSerialNumber(long ancestralSerialNumber) {
+        int callingUserId = Binder.getCallingUserHandle().getIdentifier();
+        long oldId = Binder.clearCallingIdentity();
+        int[] userIds;
+        try {
+            userIds = mContext.getSystemService(UserManager.class).getProfileIds(callingUserId,
+                    false);
+        } finally {
+            Binder.restoreCallingIdentity(oldId);
+        }
+
+        for (int userId : userIds) {
+            UserBackupManagerService userBackupManagerService = getServiceUsers().get(userId);
+            if (userBackupManagerService != null) {
+                if (userBackupManagerService.getAncestralSerialNumber() == ancestralSerialNumber) {
+                    return UserHandle.of(userId);
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

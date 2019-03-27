@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-#define DEBUG false // STOPSHIP if true
+#define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 #include "statslog.h"
 
 #include <android-base/file.h>
 #include <dirent.h>
+#include <frameworks/base/cmds/statsd/src/active_config_list.pb.h>
 #include "StatsLogProcessor.h"
-#include "stats_log_util.h"
 #include "android-base/stringprintf.h"
+#include "external/StatsPullerManager.h"
 #include "guardrail/StatsdStats.h"
 #include "metrics/CountMetricProducer.h"
-#include "external/StatsPullerManager.h"
+#include "stats_log_util.h"
 #include "stats_util.h"
 #include "storage/StorageManager.h"
 
@@ -67,9 +68,17 @@ const int FIELD_ID_CURRENT_REPORT_WALL_CLOCK_NANOS = 6;
 const int FIELD_ID_DUMP_REPORT_REASON = 8;
 const int FIELD_ID_STRINGS = 9;
 
+const int FIELD_ID_ACTIVE_CONFIG_LIST = 1;
+const int FIELD_ID_CONFIG_ID = 1;
+const int FIELD_ID_CONFIG_UID = 2;
+const int FIELD_ID_ACTIVE_METRIC = 3;
+const int FIELD_ID_METRIC_ID = 1;
+const int FIELD_ID_TIME_TO_LIVE_NANOS = 2;
+
 #define NS_PER_HOUR 3600 * NS_PER_SEC
 
 #define STATS_DATA_DIR "/data/misc/stats-data"
+#define STATS_ACTIVE_METRIC_DIR "/data/misc/stats-active-metric"
 
 // Cool down period for writing data to disk to avoid overwriting files.
 #define WRITE_DATA_COOL_DOWN_SEC 5
@@ -79,12 +88,15 @@ StatsLogProcessor::StatsLogProcessor(const sp<UidMap>& uidMap,
                                      const sp<AlarmMonitor>& anomalyAlarmMonitor,
                                      const sp<AlarmMonitor>& periodicAlarmMonitor,
                                      const int64_t timeBaseNs,
-                                     const std::function<bool(const ConfigKey&)>& sendBroadcast)
+                                     const std::function<bool(const ConfigKey&)>& sendBroadcast,
+                                     const std::function<bool(
+                                            const int&, const vector<int64_t>&)>& activateBroadcast)
     : mUidMap(uidMap),
       mPullerManager(pullerManager),
       mAnomalyAlarmMonitor(anomalyAlarmMonitor),
       mPeriodicAlarmMonitor(periodicAlarmMonitor),
       mSendBroadcast(sendBroadcast),
+      mSendActivationBroadcast(activateBroadcast),
       mTimeBaseNs(timeBaseNs),
       mLargestTimestampSeen(0),
       mLastTimestampSeen(0) {
@@ -214,17 +226,79 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event) {
         mapIsolatedUidToHostUidIfNecessaryLocked(event);
     }
 
+    std::unordered_set<int> uidsWithActiveConfigsChanged;
+    std::unordered_map<int, std::vector<int64_t>> activeConfigsPerUid;
     // pass the event to metrics managers.
     for (auto& pair : mMetricsManagers) {
+        int uid = pair.first.GetUid();
+        int64_t configId = pair.first.GetId();
+        bool isPrevActive = pair.second->isActive();
         pair.second->onLogEvent(*event);
+        bool isCurActive = pair.second->isActive();
+        // Map all active configs by uid.
+        if (isCurActive) {
+            auto activeConfigs = activeConfigsPerUid.find(uid);
+            if (activeConfigs != activeConfigsPerUid.end()) {
+                activeConfigs->second.push_back(configId);
+            } else {
+                vector<int64_t> newActiveConfigs;
+                newActiveConfigs.push_back(configId);
+                activeConfigsPerUid[uid] = newActiveConfigs;
+            }
+        }
+        // The activation state of this config changed.
+        if (isPrevActive != isCurActive) {
+            VLOG("Active status changed for uid  %d", uid);
+            uidsWithActiveConfigsChanged.insert(uid);
+            StatsdStats::getInstance().noteActiveStatusChanged(pair.first, isCurActive);
+        }
         flushIfNecessaryLocked(event->GetElapsedTimestampNs(), pair.first, *(pair.second));
+    }
+
+    for (int uid : uidsWithActiveConfigsChanged) {
+        // Send broadcast so that receivers can pull data.
+        auto lastBroadcastTime = mLastActivationBroadcastTimes.find(uid);
+        if (lastBroadcastTime != mLastActivationBroadcastTimes.end()) {
+            if (currentTimestampNs - lastBroadcastTime->second <
+                    StatsdStats::kMinActivationBroadcastPeriodNs) {
+                VLOG("StatsD would've sent an activation broadcast but the rate limit stopped us.");
+                return;
+            }
+        }
+        auto activeConfigs = activeConfigsPerUid.find(uid);
+        if (activeConfigs != activeConfigsPerUid.end()) {
+            if (mSendActivationBroadcast(uid, activeConfigs->second)) {
+                VLOG("StatsD sent activation notice for uid %d", uid);
+                mLastActivationBroadcastTimes[uid] = currentTimestampNs;
+            }
+        } else {
+            std::vector<int64_t> emptyActiveConfigs;
+            if (mSendActivationBroadcast(uid, emptyActiveConfigs)) {
+                VLOG("StatsD sent EMPTY activation notice for uid %d", uid);
+                mLastActivationBroadcastTimes[uid] = currentTimestampNs;
+            }
+        }
+    }
+}
+
+void StatsLogProcessor::GetActiveConfigs(const int uid, vector<int64_t>& outActiveConfigs) {
+    std::lock_guard<std::mutex> lock(mMetricsMutex);
+    GetActiveConfigsLocked(uid, outActiveConfigs);
+}
+
+void StatsLogProcessor::GetActiveConfigsLocked(const int uid, vector<int64_t>& outActiveConfigs) {
+    outActiveConfigs.clear();
+    for (auto& pair : mMetricsManagers) {
+        if (pair.first.GetUid() == uid && pair.second->isActive()) {
+            outActiveConfigs.push_back(pair.first.GetId());
+        }
     }
 }
 
 void StatsLogProcessor::OnConfigUpdated(const int64_t timestampNs, const ConfigKey& key,
                                         const StatsdConfig& config) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
-    WriteDataToDiskLocked(key, timestampNs, CONFIG_UPDATED);
+    WriteDataToDiskLocked(key, timestampNs, CONFIG_UPDATED, NO_TIME_CONSTRAINTS);
     OnConfigUpdatedLocked(timestampNs, key, config);
 }
 
@@ -281,6 +355,7 @@ void StatsLogProcessor::onDumpReport(const ConfigKey& key, const int64_t dumpTim
                                      const bool include_current_partial_bucket,
                                      const bool erase_data,
                                      const DumpReportReason dumpReportReason,
+                                     const DumpLatency dumpLatency,
                                      ProtoOutputStream* proto) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
 
@@ -304,8 +379,10 @@ void StatsLogProcessor::onDumpReport(const ConfigKey& key, const int64_t dumpTim
         // Start of ConfigMetricsReport (reports).
         uint64_t reportsToken =
                 proto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_REPORTS);
-        onConfigMetricsReportLocked(key, dumpTimeStampNs, include_current_partial_bucket,
-                                    erase_data, dumpReportReason, proto);
+        onConfigMetricsReportLocked(key, dumpTimeStampNs,
+                                    include_current_partial_bucket,
+                                    erase_data, dumpReportReason,
+                                    dumpLatency, proto);
         proto->end(reportsToken);
         // End of ConfigMetricsReport (reports).
     } else {
@@ -320,10 +397,11 @@ void StatsLogProcessor::onDumpReport(const ConfigKey& key, const int64_t dumpTim
                                      const bool include_current_partial_bucket,
                                      const bool erase_data,
                                      const DumpReportReason dumpReportReason,
+                                     const DumpLatency dumpLatency,
                                      vector<uint8_t>* outData) {
     ProtoOutputStream proto;
     onDumpReport(key, dumpTimeStampNs, include_current_partial_bucket, erase_data,
-                 dumpReportReason, &proto);
+                 dumpReportReason, dumpLatency, &proto);
 
     if (outData != nullptr) {
         outData->clear();
@@ -349,6 +427,7 @@ void StatsLogProcessor::onConfigMetricsReportLocked(const ConfigKey& key,
                                                     const bool include_current_partial_bucket,
                                                     const bool erase_data,
                                                     const DumpReportReason dumpReportReason,
+                                                    const DumpLatency dumpLatency,
                                                     ProtoOutputStream* proto) {
     // We already checked whether key exists in mMetricsManagers in
     // WriteDataToDisk.
@@ -364,7 +443,7 @@ void StatsLogProcessor::onConfigMetricsReportLocked(const ConfigKey& key,
     // First, fill in ConfigMetricsReport using current data on memory, which
     // starts from filling in StatsLogReport's.
     it->second->onDumpReport(dumpTimeStampNs, include_current_partial_bucket,
-                             erase_data, &str_set, proto);
+                             erase_data, dumpLatency, &str_set, proto);
 
     // Fill in UidMap if there is at least one metric to report.
     // This skips the uid map if it's an empty config.
@@ -418,7 +497,7 @@ void StatsLogProcessor::resetIfConfigTtlExpiredLocked(const int64_t timestampNs)
         }
     }
     if (configKeysTtlExpired.size() > 0) {
-        WriteDataToDiskLocked(CONFIG_RESET);
+        WriteDataToDiskLocked(CONFIG_RESET, NO_TIME_CONSTRAINTS);
         resetConfigsLocked(timestampNs, configKeysTtlExpired);
     }
 }
@@ -427,13 +506,26 @@ void StatsLogProcessor::OnConfigRemoved(const ConfigKey& key) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
     auto it = mMetricsManagers.find(key);
     if (it != mMetricsManagers.end()) {
-        WriteDataToDiskLocked(key, getElapsedRealtimeNs(), CONFIG_REMOVED);
+        WriteDataToDiskLocked(key, getElapsedRealtimeNs(), CONFIG_REMOVED, 
+                              NO_TIME_CONSTRAINTS);
         mMetricsManagers.erase(it);
         mUidMap->OnConfigRemoved(key);
     }
     StatsdStats::getInstance().noteConfigRemoved(key);
 
     mLastBroadcastTimes.erase(key);
+
+    int uid = key.GetUid();
+    bool lastConfigForUid = true;
+    for (auto it : mMetricsManagers) {
+        if (it.first.GetUid() == uid) {
+            lastConfigForUid = false;
+            break;
+        }
+    }
+    if (lastConfigForUid) {
+        mLastActivationBroadcastTimes.erase(uid);
+    }
 
     if (mMetricsManagers.empty()) {
         mPullerManager->ForceClearPullerCache();
@@ -486,14 +578,15 @@ void StatsLogProcessor::flushIfNecessaryLocked(
 
 void StatsLogProcessor::WriteDataToDiskLocked(const ConfigKey& key,
                                               const int64_t timestampNs,
-                                              const DumpReportReason dumpReportReason) {
+                                              const DumpReportReason dumpReportReason,
+                                              const DumpLatency dumpLatency) {
     if (mMetricsManagers.find(key) == mMetricsManagers.end() ||
         !mMetricsManagers.find(key)->second->shouldWriteToDisk()) {
         return;
     }
     ProtoOutputStream proto;
     onConfigMetricsReportLocked(key, timestampNs, true /* include_current_partial_bucket*/,
-                                true /* erase_data */, dumpReportReason, &proto);
+                                true /* erase_data */, dumpReportReason, dumpLatency, &proto);
     string file_name = StringPrintf("%s/%ld_%d_%lld", STATS_DATA_DIR,
          (long)getWallClockSec(), key.GetUid(), (long long)key.GetId());
     android::base::unique_fd fd(open(file_name.c_str(),
@@ -507,7 +600,73 @@ void StatsLogProcessor::WriteDataToDiskLocked(const ConfigKey& key,
     mOnDiskDataConfigs.insert(key);
 }
 
-void StatsLogProcessor::WriteDataToDiskLocked(const DumpReportReason dumpReportReason) {
+void StatsLogProcessor::WriteMetricsActivationToDisk(int64_t currentTimeNs) {
+    std::lock_guard<std::mutex> lock(mMetricsMutex);
+    ProtoOutputStream proto;
+
+    for (const auto& pair : mMetricsManagers) {
+        uint64_t activeConfigListToken = proto.start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED |
+                                                     FIELD_ID_ACTIVE_CONFIG_LIST);
+        proto.write(FIELD_TYPE_INT64 | FIELD_ID_CONFIG_ID, (long long)pair.first.GetId());
+        proto.write(FIELD_TYPE_INT32 | FIELD_ID_CONFIG_UID, pair.first.GetUid());
+
+        vector<MetricProducer*> activeMetrics;
+        pair.second->prepForShutDown(currentTimeNs);
+        pair.second->getActiveMetrics(activeMetrics);
+        for (MetricProducer* metric : activeMetrics) {
+            if (metric->isActive()) {
+                uint64_t metricToken = proto.start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED |
+                                                   FIELD_ID_ACTIVE_METRIC);
+                proto.write(FIELD_TYPE_INT64 | FIELD_ID_METRIC_ID,
+                            (long long)metric->getMetricId());
+                proto.write(FIELD_TYPE_INT64 | FIELD_ID_TIME_TO_LIVE_NANOS,
+                            (long long)metric->getRemainingTtlNs(currentTimeNs));
+                proto.end(metricToken);
+            }
+        }
+        proto.end(activeConfigListToken);
+    }
+
+    string file_name = StringPrintf("%s/active_metrics", STATS_ACTIVE_METRIC_DIR);
+    StorageManager::deleteFile(file_name.c_str());
+    android::base::unique_fd fd(
+            open(file_name.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR));
+    if (fd == -1) {
+        ALOGE("Attempt to write %s but failed", file_name.c_str());
+        return;
+    }
+    proto.flush(fd.get());
+}
+
+void StatsLogProcessor::LoadMetricsActivationFromDisk() {
+    string file_name = StringPrintf("%s/active_metrics", STATS_ACTIVE_METRIC_DIR);
+    int fd = open(file_name.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd != -1) {
+        string content;
+        if (android::base::ReadFdToString(fd, &content)) {
+            ActiveConfigList activeConfigList;
+            if (activeConfigList.ParseFromString(content)) {
+                for (int i = 0; i < activeConfigList.active_config_size(); i++) {
+                    const auto& config = activeConfigList.active_config(i);
+                    ConfigKey key(config.uid(), config.config_id());
+                    auto it = mMetricsManagers.find(key);
+                    if (it == mMetricsManagers.end()) {
+                        ALOGE("No config found for config %s", key.ToString().c_str());
+                        continue;
+                    }
+                    VLOG("Setting active config %s", key.ToString().c_str());
+                    it->second->setActiveMetrics(config, mTimeBaseNs);
+                }
+            }
+            VLOG("Successfully loaded %d active configs.", activeConfigList.active_config_size());
+        }
+        close(fd);
+    }
+    StorageManager::deleteFile(file_name.c_str());
+}
+
+void StatsLogProcessor::WriteDataToDiskLocked(const DumpReportReason dumpReportReason,
+                                              const DumpLatency dumpLatency) {
     const int64_t timeNs = getElapsedRealtimeNs();
     // Do not write to disk if we already have in the last few seconds.
     // This is to avoid overwriting files that would have the same name if we
@@ -520,13 +679,14 @@ void StatsLogProcessor::WriteDataToDiskLocked(const DumpReportReason dumpReportR
     }
     mLastWriteTimeNs = timeNs;
     for (auto& pair : mMetricsManagers) {
-        WriteDataToDiskLocked(pair.first, timeNs, dumpReportReason);
+        WriteDataToDiskLocked(pair.first, timeNs, dumpReportReason, dumpLatency);
     }
 }
 
-void StatsLogProcessor::WriteDataToDisk(const DumpReportReason dumpReportReason) {
+void StatsLogProcessor::WriteDataToDisk(const DumpReportReason dumpReportReason, 
+                                        const DumpLatency dumpLatency) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
-    WriteDataToDiskLocked(dumpReportReason);
+    WriteDataToDiskLocked(dumpReportReason, dumpLatency);
 }
 
 void StatsLogProcessor::informPullAlarmFired(const int64_t timestampNs) {

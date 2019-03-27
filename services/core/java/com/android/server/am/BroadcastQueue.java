@@ -307,9 +307,6 @@ public final class BroadcastQueue {
         r.curApp = app;
         app.curReceivers.add(r);
         app.forceProcessStateUpTo(ActivityManager.PROCESS_STATE_RECEIVER);
-        if (r.allowBackgroundActivityStarts) {
-            app.addAllowBackgroundActivityStartsToken(r);
-        }
         mService.mProcessList.updateLruProcessLocked(app, false, null);
         if (!skipOomAdj) {
             mService.updateOomAdjLocked();
@@ -451,8 +448,25 @@ public final class BroadcastQueue {
             Slog.w(TAG, "finishReceiver [" + mQueueName + "] called but state is IDLE");
         }
         if (r.allowBackgroundActivityStarts && r.curApp != null) {
-            r.curApp.removeAllowBackgroundActivityStartsToken(r);
-         }
+            if (elapsed > mConstants.ALLOW_BG_ACTIVITY_START_TIMEOUT) {
+                // if the receiver has run for more than allowed bg activity start timeout,
+                // just remove the token for this process now and we're done
+                r.curApp.removeAllowBackgroundActivityStartsToken(r);
+            } else {
+                // the receiver had run for less than allowed bg activity start timeout,
+                // so allow the process to still start activities from bg for some more time
+                String msgToken = (r.curApp.toShortString() + r.toString()).intern();
+                // first, if there exists a past scheduled request to remove this token, drop
+                // that request - we don't want the token to be swept from under our feet...
+                mHandler.removeCallbacksAndMessages(msgToken);
+                // ...then schedule the removal of the token after the extended timeout
+                mHandler.postAtTime(() -> {
+                    if (r.curApp != null) {
+                        r.curApp.removeAllowBackgroundActivityStartsToken(r);
+                    }
+                }, msgToken, (r.receiverTime + mConstants.ALLOW_BG_ACTIVITY_START_TIMEOUT));
+            }
+        }
         // If we're abandoning this broadcast before any receivers were actually spun up,
         // nextReceiver is zero; in which case time-to-process bookkeeping doesn't apply.
         if (r.nextReceiver > 0) {
@@ -551,7 +565,8 @@ public final class BroadcastQueue {
 
     void performReceiveLocked(ProcessRecord app, IIntentReceiver receiver,
             Intent intent, int resultCode, String data, Bundle extras,
-            boolean ordered, boolean sticky, int sendingUser) throws RemoteException {
+            boolean ordered, boolean sticky, int sendingUser)
+            throws RemoteException {
         // Send the intent to the receiver asynchronously using one-way binder calls.
         if (app != null) {
             if (app.thread != null) {
@@ -781,6 +796,10 @@ public final class BroadcastQueue {
                     skipReceiverLocked(r);
                 }
             } else {
+                if (r.receiverTime == 0) {
+                    r.receiverTime = SystemClock.uptimeMillis();
+                }
+                maybeAddAllowBackgroundActivityStartsToken(filter.receiverList.app, r);
                 performReceiveLocked(filter.receiverList.app, filter.receiverList.receiver,
                         new Intent(r.intent), r.resultCode, r.resultData,
                         r.resultExtras, r.ordered, r.initialSticky, r.userId);
@@ -885,6 +904,11 @@ public final class BroadcastQueue {
         for (int i = perms.length-1; i >= 0; i--) {
             try {
                 PermissionInfo pi = pm.getPermissionInfo(perms[i], "android", 0);
+                if (pi == null) {
+                    // a required permission that no package has actually
+                    // defined cannot be signature-required.
+                    return false;
+                }
                 if ((pi.protectionLevel & (PermissionInfo.PROTECTION_MASK_BASE
                         | PermissionInfo.PROTECTION_FLAG_PRIVILEGED))
                         != PermissionInfo.PROTECTION_SIGNATURE) {
@@ -910,8 +934,8 @@ public final class BroadcastQueue {
 
         if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "processNextBroadcast ["
                 + mQueueName + "]: "
-                + mParallelBroadcasts.size() + " parallel broadcasts, "
-                + mDispatcher.totalUndelivered() + " ordered broadcasts");
+                + mParallelBroadcasts.size() + " parallel broadcasts; "
+                + mDispatcher.describeStateLocked());
 
         mService.updateCpuStats();
 
@@ -1237,6 +1261,9 @@ public final class BroadcastQueue {
                 r.state = BroadcastRecord.IDLE;
                 scheduleBroadcastsLocked();
             } else {
+                if (filter.receiverList != null) {
+                    maybeAddAllowBackgroundActivityStartsToken(filter.receiverList.app, r);
+                }
                 if (brOptions != null && brOptions.getTemporaryAppWhitelistDuration() > 0) {
                     scheduleTempWhitelistLocked(filter.owningUid,
                             brOptions.getTemporaryAppWhitelistDuration(), r);
@@ -1543,6 +1570,7 @@ public final class BroadcastQueue {
             try {
                 app.addPackage(info.activityInfo.packageName,
                         info.activityInfo.applicationInfo.versionCode, mService.mProcessStats);
+                maybeAddAllowBackgroundActivityStartsToken(app, r);
                 processCurBroadcastLocked(r, app, skipOomAdj);
                 return;
             } catch (RemoteException e) {
@@ -1593,8 +1621,21 @@ public final class BroadcastQueue {
             return;
         }
 
+        maybeAddAllowBackgroundActivityStartsToken(r.curApp, r);
         mPendingBroadcast = r;
         mPendingBroadcastRecvIndex = recIdx;
+    }
+
+    private void maybeAddAllowBackgroundActivityStartsToken(ProcessRecord proc, BroadcastRecord r) {
+        if (r == null || proc == null || !r.allowBackgroundActivityStarts) {
+            return;
+        }
+        String msgToken = (proc.toShortString() + r.toString()).intern();
+        // first, if there exists a past scheduled request to remove this token, drop
+        // that request - we don't want the token to be swept from under our feet...
+        mHandler.removeCallbacksAndMessages(msgToken);
+        // ...then add the token
+        proc.addAllowBackgroundActivityStartsToken(r);
     }
 
     final void setBroadcastTimeoutLocked(long timeoutTime) {
@@ -1809,9 +1850,22 @@ public final class BroadcastQueue {
                 record.intent == null ? "" : record.intent.getAction());
     }
 
-    final boolean isIdle() {
+    boolean isIdle() {
         return mParallelBroadcasts.isEmpty() && mDispatcher.isEmpty()
                 && (mPendingBroadcast == null);
+    }
+
+    // Used by wait-for-broadcast-idle : fast-forward all current deferrals to
+    // be immediately deliverable.
+    void cancelDeferrals() {
+        mDispatcher.cancelDeferrals();
+    }
+
+    String describeState() {
+        synchronized (mService) {
+            return mParallelBroadcasts.size() + " parallel; "
+                    + mDispatcher.describeStateLocked();
+        }
     }
 
     void writeToProto(ProtoOutputStream proto, long fieldId) {

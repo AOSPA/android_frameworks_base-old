@@ -38,7 +38,9 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.Signature;
+import android.database.ContentObserver;
 import android.database.CursorWindow;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -49,6 +51,7 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManagerInternal;
+import android.provider.Settings;
 import android.service.sms.FinancialSmsService;
 import android.telephony.IFinancialSmsCallback;
 import android.text.TextUtils;
@@ -108,7 +111,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
     /** @see #getRoleHolders(String, int) */
     public interface RoleHoldersResolver {
         /** @return a list of packages that hold a given role for a given user */
-        List<String> getRoleHolders(String roleName, int userId);
+        @NonNull
+        List<String> getRoleHolders(@NonNull String roleName, @UserIdInt int userId);
     }
 
     /**
@@ -151,6 +155,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         PackageManagerInternal packageManagerInternal = LocalServices.getService(
                 PackageManagerInternal.class);
         packageManagerInternal.setDefaultBrowserProvider(new DefaultBrowserProvider());
+        packageManagerInternal.setDefaultHomeProvider(new DefaultHomeProvider());
 
         registerUserRemovedReceiver();
     }
@@ -191,7 +196,24 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                 }
                 performInitialGrantsIfNecessary(userId);
             }
-        }, UserHandle.SYSTEM, intentFilter, null /* broadcastPermission */, null /* handler */);
+        }, UserHandle.ALL, intentFilter, null, null);
+
+        getContext().getContentResolver().registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED), false,
+                new ContentObserver(getContext().getMainThreadHandler()) {
+                    @Override
+                    public void onChange(boolean selfChange, Uri uri, int userId) {
+                        boolean killSwitchEnabled = Settings.Global.getInt(
+                                getContext().getContentResolver(),
+                                Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED, 0) == 1;
+                        for (int user : mUserManagerInternal.getUserIds()) {
+                            if (mUserManagerInternal.isUserRunning(user)) {
+                                getOrCreateControllerService(user)
+                                        .onSmsKillSwitchToggled(killSwitchEnabled);
+                            }
+                        }
+                    }
+                }, UserHandle.USER_ALL);
     }
 
     @Override
@@ -215,6 +237,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             migrateRoleIfNecessary(RoleManager.ROLE_SMS, userId);
             migrateRoleIfNecessary(RoleManager.ROLE_ASSISTANT, userId);
             migrateRoleIfNecessary(RoleManager.ROLE_DIALER, userId);
+            migrateRoleIfNecessary(RoleManager.ROLE_EMERGENCY, userId);
 
             // Some vital packages state has changed since last role grant
             // Run grants again
@@ -435,7 +458,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
 
         @Override
         public void addRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
-                @UserIdInt int userId, @NonNull IRoleManagerCallback callback) {
+                @RoleManager.ManageHoldersFlags int flags, @UserIdInt int userId,
+                @NonNull IRoleManagerCallback callback) {
             Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
             Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             Preconditions.checkNotNull(callback, "callback cannot be null");
@@ -447,12 +471,14 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "addRoleHolderAsUser");
 
-            getOrCreateControllerService(userId).onAddRoleHolder(roleName, packageName, callback);
+            getOrCreateControllerService(userId).onAddRoleHolder(roleName, packageName, flags,
+                    callback);
         }
 
         @Override
         public void removeRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
-                @UserIdInt int userId, @NonNull IRoleManagerCallback callback) {
+                @RoleManager.ManageHoldersFlags int flags, @UserIdInt int userId,
+                @NonNull IRoleManagerCallback callback) {
             Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
             Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             Preconditions.checkNotNull(callback, "callback cannot be null");
@@ -464,12 +490,13 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "removeRoleHolderAsUser");
 
-            getOrCreateControllerService(userId).onRemoveRoleHolder(roleName, packageName,
+            getOrCreateControllerService(userId).onRemoveRoleHolder(roleName, packageName, flags,
                     callback);
         }
 
         @Override
-        public void clearRoleHoldersAsUser(@NonNull String roleName, @UserIdInt int userId,
+        public void clearRoleHoldersAsUser(@NonNull String roleName,
+                @RoleManager.ManageHoldersFlags int flags, @UserIdInt int userId,
                 @NonNull IRoleManagerCallback callback) {
             Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
             Preconditions.checkNotNull(callback, "callback cannot be null");
@@ -481,7 +508,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "clearRoleHoldersAsUser");
 
-            getOrCreateControllerService(userId).onClearRoleHolders(roleName, callback);
+            getOrCreateControllerService(userId).onClearRoleHolders(roleName, flags, callback);
         }
 
         @Override
@@ -703,9 +730,9 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             };
             if (packageName != null) {
                 getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
-                        packageName, callback);
+                        packageName, 0, callback);
             } else {
-                getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER,
+                getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
                         callback);
             }
             try {
@@ -714,6 +741,35 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 Slog.e(LOG_TAG, "Exception while setting default browser: " + packageName, e);
                 return false;
+            }
+        }
+    }
+
+    private class DefaultHomeProvider implements PackageManagerInternal.DefaultHomeProvider {
+
+        @Nullable
+        @Override
+        public String getDefaultHome(@UserIdInt int userId) {
+            return CollectionUtils.firstOrNull(getOrCreateUserState(userId).getRoleHolders(
+                    RoleManager.ROLE_HOME));
+        }
+
+        @Override
+        public void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId) {
+            IRoleManagerCallback callback = new IRoleManagerCallback.Stub() {
+                @Override
+                public void onSuccess() {}
+                @Override
+                public void onFailure() {
+                    Slog.e(LOG_TAG, "Failed to set default home: " + packageName);
+                }
+            };
+            if (packageName != null) {
+                getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_HOME,
+                        packageName, 0, callback);
+            } else {
+                getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_HOME, 0,
+                        callback);
             }
         }
     }

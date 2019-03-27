@@ -18,6 +18,7 @@
 #include "Log.h"
 
 #include <android/os/IStatsCompanionService.h>
+#include <android/os/IStatsPullerCallback.h>
 #include <cutils/log.h>
 #include <math.h>
 #include <stdint.h>
@@ -28,9 +29,11 @@
 #include "../statscompanion_util.h"
 #include "PowerStatsPuller.h"
 #include "ResourceHealthManagerPuller.h"
+#include "StatsCallbackPuller.h"
 #include "StatsCompanionServicePuller.h"
 #include "StatsPullerManager.h"
 #include "SubsystemSleepStatePuller.h"
+#include "TrainInfoPuller.h"
 #include "statslog.h"
 
 #include <iostream>
@@ -49,7 +52,7 @@ namespace statsd {
 // Values smaller than this may require to update the alarm.
 const int64_t NO_ALARM_UPDATE = INT64_MAX;
 
-const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
+std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // wifi_bytes_transfer
         {android::util::WIFI_BYTES_TRANSFER,
          {.additiveFields = {2, 3, 4, 5},
@@ -150,7 +153,7 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
                   new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_HIGH_WATER_MARK)}},
         // temperature
         {android::util::TEMPERATURE,
-          {.puller = new StatsCompanionServicePuller(android::util::TEMPERATURE)}},
+         {.puller = new StatsCompanionServicePuller(android::util::TEMPERATURE)}},
         // binder_calls
         {android::util::BINDER_CALLS,
          {.additiveFields = {4, 5, 6, 8, 12},
@@ -174,9 +177,12 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // Size of specific categories of files. Eg. Music.
         {android::util::CATEGORY_SIZE,
          {.puller = new StatsCompanionServicePuller(android::util::CATEGORY_SIZE)}},
-        // Number of fingerprints registered to each user.
+        // Number of fingerprints enrolled for each user.
         {android::util::NUM_FINGERPRINTS_ENROLLED,
          {.puller = new StatsCompanionServicePuller(android::util::NUM_FINGERPRINTS_ENROLLED)}},
+        // Number of faces enrolled for each user.
+        {android::util::NUM_FACES_ENROLLED,
+         {.puller = new StatsCompanionServicePuller(android::util::NUM_FACES_ENROLLED)}},
         // ProcStats.
         {android::util::PROC_STATS,
          {.puller = new StatsCompanionServicePuller(android::util::PROC_STATS)}},
@@ -226,6 +232,14 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // PermissionState.
         {android::util::DANGEROUS_PERMISSION_STATE,
          {.puller = new StatsCompanionServicePuller(android::util::DANGEROUS_PERMISSION_STATE)}},
+        // TrainInfo.
+        {android::util::TRAIN_INFO, {.puller = new TrainInfoPuller()}},
+        // TimeZoneDataInfo.
+        {android::util::TIME_ZONE_DATA_INFO,
+         {.puller = new StatsCompanionServicePuller(android::util::TIME_ZONE_DATA_INFO)}},
+        // SDCardInfo
+        {android::util::SDCARD_INFO,
+         {.puller = new StatsCompanionServicePuller(android::util::SDCARD_INFO)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {
@@ -358,12 +372,13 @@ void StatsPullerManager::OnAlarmFired(int64_t elapsedTimeNs) {
 
     for (const auto& pullInfo : needToPull) {
         vector<shared_ptr<LogEvent>> data;
-        if (!Pull(pullInfo.first, &data)) {
+        bool pullSuccess = Pull(pullInfo.first, &data);
+        if (pullSuccess) {
+            StatsdStats::getInstance().notePullDelay(
+                    pullInfo.first, getElapsedRealtimeNs() - elapsedTimeNs);
+        } else {
             VLOG("pull failed at %lld, will try again later", (long long)elapsedTimeNs);
-            continue;
         }
-        StatsdStats::getInstance().notePullDelay(pullInfo.first,
-                                                 getElapsedRealtimeNs() - elapsedTimeNs);
 
         // Convention is to mark pull atom timestamp at request time.
         // If we pull at t0, puller starts at t1, finishes at t2, and send back
@@ -380,8 +395,8 @@ void StatsPullerManager::OnAlarmFired(int64_t elapsedTimeNs) {
         for (const auto& receiverInfo : pullInfo.second) {
             sp<PullDataReceiver> receiverPtr = receiverInfo->receiver.promote();
             if (receiverPtr != nullptr) {
-                receiverPtr->onDataPulled(data);
-                // we may have just come out of a coma, compute next pull time
+                receiverPtr->onDataPulled(data, pullSuccess, elapsedTimeNs);
+                // We may have just come out of a coma, compute next pull time.
                 int numBucketsAhead =
                         (elapsedTimeNs - receiverInfo->nextPullTimeNs) / receiverInfo->intervalNs;
                 receiverInfo->nextPullTimeNs += (numBucketsAhead + 1) * receiverInfo->intervalNs;
@@ -414,6 +429,30 @@ int StatsPullerManager::ClearPullerCacheIfNecessary(int64_t timestampNs) {
         totalCleared += pulledAtom.second.puller->ClearCacheIfNecessary(timestampNs);
     }
     return totalCleared;
+}
+
+void StatsPullerManager::RegisterPullerCallback(int32_t atomTag,
+        const sp<IStatsPullerCallback>& callback) {
+    AutoMutex _l(mLock);
+    // Platform pullers cannot be changed.
+    if (atomTag < StatsdStats::kMaxPlatformAtomTag) {
+        VLOG("RegisterPullerCallback: atom tag %d is less than min tag %d",
+                atomTag, StatsdStats::kMaxPlatformAtomTag);
+        return;
+    }
+    VLOG("RegisterPullerCallback: adding puller for tag %d", atomTag);
+    StatsdStats::getInstance().notePullerCallbackRegistrationChanged(atomTag, /*registered=*/true);
+    kAllPullAtomInfo[atomTag] = {.puller = new StatsCallbackPuller(atomTag, callback)};
+}
+
+void StatsPullerManager::UnregisterPullerCallback(int32_t atomTag) {
+    AutoMutex _l(mLock);
+    // Platform pullers cannot be changed.
+    if (atomTag < StatsdStats::kMaxPlatformAtomTag) {
+        return;
+    }
+    StatsdStats::getInstance().notePullerCallbackRegistrationChanged(atomTag, /*registered=*/false);
+    kAllPullAtomInfo.erase(atomTag);
 }
 
 }  // namespace statsd

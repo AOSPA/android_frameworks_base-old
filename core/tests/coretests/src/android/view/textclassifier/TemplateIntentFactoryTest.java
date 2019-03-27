@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package android.view.textclassifier;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -21,18 +20,15 @@ import static com.google.common.truth.Truth.assertThat;
 import android.content.Intent;
 import android.net.Uri;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.google.android.textclassifier.AnnotatorModel;
 import com.google.android.textclassifier.NamedVariant;
 import com.google.android.textclassifier.RemoteActionTemplate;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.List;
@@ -42,7 +38,8 @@ import java.util.List;
 public class TemplateIntentFactoryTest {
 
     private static final String TEXT = "text";
-    private static final String TITLE = "Map";
+    private static final String TITLE_WITHOUT_ENTITY = "Map";
+    private static final String TITLE_WITH_ENTITY = "Map NW14D1";
     private static final String DESCRIPTION = "Check the map";
     private static final String ACTION = Intent.ACTION_VIEW;
     private static final String DATA = Uri.parse("http://www.android.com").toString();
@@ -62,20 +59,19 @@ public class TemplateIntentFactoryTest {
     };
     private static final Integer REQUEST_CODE = 10;
 
-    @Mock
-    private IntentFactory mFallback;
     private TemplateIntentFactory mTemplateIntentFactory;
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        mTemplateIntentFactory = new TemplateIntentFactory(mFallback);
+        mTemplateIntentFactory = new TemplateIntentFactory();
     }
 
     @Test
     public void create_full() {
         RemoteActionTemplate remoteActionTemplate = new RemoteActionTemplate(
-                TITLE,
+                TITLE_WITHOUT_ENTITY,
+                TITLE_WITH_ENTITY,
                 DESCRIPTION,
                 ACTION,
                 DATA,
@@ -87,49 +83,101 @@ public class TemplateIntentFactoryTest {
                 REQUEST_CODE
         );
 
-        AnnotatorModel.ClassificationResult classificationResult =
-                new AnnotatorModel.ClassificationResult(
-                        TextClassifier.TYPE_ADDRESS,
-                        1.0f,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        new RemoteActionTemplate[]{remoteActionTemplate});
-
-        List<TextClassifierImpl.LabeledIntent> intents = mTemplateIntentFactory.create(
-                InstrumentationRegistry.getContext(),
-                TEXT,
-                false,
-                null,
-                classificationResult);
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[]{remoteActionTemplate});
 
         assertThat(intents).hasSize(1);
-        TextClassifierImpl.LabeledIntent labeledIntent = intents.get(0);
-        assertThat(labeledIntent.getTitle()).isEqualTo(TITLE);
-        assertThat(labeledIntent.getDescription()).isEqualTo(DESCRIPTION);
-        assertThat(labeledIntent.getRequestCode()).isEqualTo(REQUEST_CODE);
-        Intent intent = labeledIntent.getIntent();
+        LabeledIntent labeledIntent = intents.get(0);
+        assertThat(labeledIntent.titleWithoutEntity).isEqualTo(TITLE_WITHOUT_ENTITY);
+        assertThat(labeledIntent.titleWithEntity).isEqualTo(TITLE_WITH_ENTITY);
+        assertThat(labeledIntent.description).isEqualTo(DESCRIPTION);
+        assertThat(labeledIntent.requestCode).isEqualTo(REQUEST_CODE);
+        Intent intent = labeledIntent.intent;
         assertThat(intent.getAction()).isEqualTo(ACTION);
         assertThat(intent.getData().toString()).isEqualTo(DATA);
         assertThat(intent.getType()).isEqualTo(TYPE);
         assertThat(intent.getFlags()).isEqualTo(FLAG);
         assertThat(intent.getCategories()).containsExactly((Object[]) CATEGORY);
         assertThat(intent.getPackage()).isNull();
-        assertThat(
-                intent.getStringExtra(KEY_ONE)).isEqualTo(VALUE_ONE);
+        assertThat(intent.getStringExtra(KEY_ONE)).isEqualTo(VALUE_ONE);
         assertThat(intent.getIntExtra(KEY_TWO, 0)).isEqualTo(VALUE_TWO);
-        assertThat(
-                intent.getBooleanExtra(TextClassifier.EXTRA_FROM_TEXT_CLASSIFIER, false)).isTrue();
+        assertThat(intent.hasExtra(TextClassifier.EXTRA_FROM_TEXT_CLASSIFIER)).isTrue();
     }
 
     @Test
-    public void create_pacakgeIsNotNull() {
+    public void normalizesScheme() {
         RemoteActionTemplate remoteActionTemplate = new RemoteActionTemplate(
-                TITLE,
+                TITLE_WITHOUT_ENTITY,
+                TITLE_WITH_ENTITY,
+                DESCRIPTION,
+                ACTION,
+                "HTTp://www.android.com",
+                TYPE,
+                FLAG,
+                CATEGORY,
+                /* packageName */ null,
+                NAMED_VARIANTS,
+                REQUEST_CODE
+        );
+
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[] {remoteActionTemplate});
+
+        String data = intents.get(0).intent.getData().toString();
+        assertThat(data).isEqualTo("http://www.android.com");
+    }
+
+    @Test
+    public void create_minimal() {
+        RemoteActionTemplate remoteActionTemplate = new RemoteActionTemplate(
+                TITLE_WITHOUT_ENTITY,
+                null,
+                DESCRIPTION,
+                ACTION,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[]{remoteActionTemplate});
+
+        assertThat(intents).hasSize(1);
+        LabeledIntent labeledIntent = intents.get(0);
+        assertThat(labeledIntent.titleWithoutEntity).isEqualTo(TITLE_WITHOUT_ENTITY);
+        assertThat(labeledIntent.titleWithEntity).isNull();
+        assertThat(labeledIntent.description).isEqualTo(DESCRIPTION);
+        assertThat(labeledIntent.requestCode).isEqualTo(
+                LabeledIntent.DEFAULT_REQUEST_CODE);
+        Intent intent = labeledIntent.intent;
+        assertThat(intent.getAction()).isEqualTo(ACTION);
+        assertThat(intent.getData()).isNull();
+        assertThat(intent.getType()).isNull();
+        assertThat(intent.getFlags()).isEqualTo(0);
+        assertThat(intent.getCategories()).isNull();
+        assertThat(intent.getPackage()).isNull();
+        assertThat(intent.hasExtra(TextClassifier.EXTRA_FROM_TEXT_CLASSIFIER)).isTrue();
+    }
+
+    @Test
+    public void invalidTemplate_nullTemplate() {
+        RemoteActionTemplate remoteActionTemplate = null;
+
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[] {remoteActionTemplate});
+
+        assertThat(intents).isEmpty();
+    }
+
+    @Test
+    public void invalidTemplate_nonEmptyPackageName() {
+        RemoteActionTemplate remoteActionTemplate = new RemoteActionTemplate(
+                TITLE_WITHOUT_ENTITY,
+                TITLE_WITH_ENTITY,
                 DESCRIPTION,
                 ACTION,
                 DATA,
@@ -141,34 +189,62 @@ public class TemplateIntentFactoryTest {
                 REQUEST_CODE
         );
 
-        AnnotatorModel.ClassificationResult classificationResult =
-                new AnnotatorModel.ClassificationResult(
-                        TextClassifier.TYPE_ADDRESS,
-                        1.0f,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        new RemoteActionTemplate[]{remoteActionTemplate});
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[] {remoteActionTemplate});
 
-        List<TextClassifierImpl.LabeledIntent> intents = mTemplateIntentFactory.create(
-                InstrumentationRegistry.getContext(),
-                TEXT,
-                false,
-                null,
-                classificationResult);
-
-        assertThat(intents).hasSize(0);
+        assertThat(intents).isEmpty();
     }
 
     @Test
-    public void create_minimal() {
+    public void invalidTemplate_emptyTitle() {
         RemoteActionTemplate remoteActionTemplate = new RemoteActionTemplate(
                 null,
                 null,
+                DESCRIPTION,
+                ACTION,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[] {remoteActionTemplate});
+
+        assertThat(intents).isEmpty();
+    }
+
+    @Test
+    public void invalidTemplate_emptyDescription() {
+        RemoteActionTemplate remoteActionTemplate = new RemoteActionTemplate(
+                TITLE_WITHOUT_ENTITY,
+                TITLE_WITH_ENTITY,
+                null,
+                ACTION,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[] {remoteActionTemplate});
+
+        assertThat(intents).isEmpty();
+    }
+
+    @Test
+    public void invalidTemplate_emptyIntentAction() {
+        RemoteActionTemplate remoteActionTemplate = new RemoteActionTemplate(
+                TITLE_WITHOUT_ENTITY,
+                TITLE_WITH_ENTITY,
+                DESCRIPTION,
                 null,
                 null,
                 null,
@@ -179,40 +255,9 @@ public class TemplateIntentFactoryTest {
                 null
         );
 
-        AnnotatorModel.ClassificationResult classificationResult =
-                new AnnotatorModel.ClassificationResult(
-                        TextClassifier.TYPE_ADDRESS,
-                        1.0f,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        new RemoteActionTemplate[]{remoteActionTemplate});
+        List<LabeledIntent> intents =
+                mTemplateIntentFactory.create(new RemoteActionTemplate[] {remoteActionTemplate});
 
-        List<TextClassifierImpl.LabeledIntent> intents = mTemplateIntentFactory.create(
-                InstrumentationRegistry.getContext(),
-                TEXT,
-                false,
-                null,
-                classificationResult);
-
-        assertThat(intents).hasSize(1);
-        TextClassifierImpl.LabeledIntent labeledIntent = intents.get(0);
-        assertThat(labeledIntent.getTitle()).isNull();
-        assertThat(labeledIntent.getDescription()).isNull();
-        assertThat(labeledIntent.getRequestCode()).isEqualTo(
-                TextClassifierImpl.LabeledIntent.DEFAULT_REQUEST_CODE);
-        Intent intent = labeledIntent.getIntent();
-        assertThat(intent.getAction()).isNull();
-        assertThat(intent.getData()).isNull();
-        assertThat(intent.getType()).isNull();
-        assertThat(intent.getFlags()).isEqualTo(0);
-        assertThat(intent.getCategories()).isNull();
-        assertThat(intent.getPackage()).isNull();
-        assertThat(
-                intent.getBooleanExtra(TextClassifier.EXTRA_FROM_TEXT_CLASSIFIER, false)).isTrue();
+        assertThat(intents).isEmpty();
     }
 }

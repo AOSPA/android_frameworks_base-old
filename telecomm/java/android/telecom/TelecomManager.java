@@ -22,6 +22,7 @@ import android.annotation.SuppressAutoDoc;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.role.RoleManagerCallback;
 import android.content.ComponentName;
@@ -301,6 +302,19 @@ public class TelecomManager {
             "android.telecom.extra.OUTGOING_CALL_EXTRAS";
 
     /**
+     * An optional boolean extra on {@link android.content.Intent#ACTION_CALL_EMERGENCY} to tell
+     * whether the user's dial intent is emergency; this is required to specify when the dialed
+     * number is ambiguous, identified as both emergency number and any other non-emergency number;
+     * e.g. in some situation, 611 could be both an emergency number in a country and a
+     * non-emergency number of a carrier's customer service hotline.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_IS_USER_INTENT_EMERGENCY_CALL =
+            "android.telecom.extra.IS_USER_INTENT_EMERGENCY_CALL";
+
+    /**
      * @hide
      */
     public static final String EXTRA_UNKNOWN_CALL_HANDLE =
@@ -570,6 +584,7 @@ public class TelecomManager {
      *
      * @hide
      */
+    @TestApi
     @SystemApi
     public static final int TTY_MODE_OFF = 0;
 
@@ -579,6 +594,7 @@ public class TelecomManager {
      *
      * @hide
      */
+    @TestApi
     @SystemApi
     public static final int TTY_MODE_FULL = 1;
 
@@ -589,6 +605,7 @@ public class TelecomManager {
      *
      * @hide
      */
+    @TestApi
     @SystemApi
     public static final int TTY_MODE_HCO = 2;
 
@@ -599,6 +616,7 @@ public class TelecomManager {
      *
      * @hide
      */
+    @TestApi
     @SystemApi
     public static final int TTY_MODE_VCO = 3;
 
@@ -837,6 +855,7 @@ public class TelecomManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @TestApi
     @SystemApi
     public void setUserSelectedOutgoingPhoneAccount(PhoneAccountHandle accountHandle) {
         try {
@@ -1539,6 +1558,7 @@ public class TelecomManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public @TtyMode int getCurrentTtyMode() {
         try {
@@ -1987,6 +2007,7 @@ public class TelecomManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public boolean isInEmergencyCall() {
         try {

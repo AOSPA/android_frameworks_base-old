@@ -119,6 +119,7 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_OEM_UNLOCK,
             UserManager.DISALLOW_UNMUTE_DEVICE,
             UserManager.DISALLOW_AUTOFILL,
+            UserManager.DISALLOW_CONTENT_CAPTURE,
             UserManager.DISALLOW_USER_SWITCH,
             UserManager.DISALLOW_UNIFIED_PASSWORD,
             UserManager.DISALLOW_CONFIG_LOCATION,
@@ -743,6 +744,9 @@ public class UserRestrictionsUtils {
 
             case android.provider.Settings.Global.PRIVATE_DNS_MODE:
             case android.provider.Settings.Global.PRIVATE_DNS_SPECIFIER:
+                if (callingUid == Process.SYSTEM_UID) {
+                    return false;
+                }
                 restriction = UserManager.DISALLOW_CONFIG_PRIVATE_DNS;
                 break;
             default:

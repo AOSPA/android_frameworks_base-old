@@ -61,6 +61,7 @@ import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.autofill.AutofillValue;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.inspector.InspectableProperty;
 import android.view.textclassifier.TextClassifier;
 import android.widget.AbsoluteLayout;
 
@@ -759,7 +760,7 @@ public class WebView extends AbsoluteLayout
      * <p>
      * The {@code encoding} parameter specifies whether the data is base64 or URL
      * encoded. If the data is base64 encoded, the value of the encoding
-     * parameter must be 'base64'. HTML can be encoded with {@link
+     * parameter must be {@code "base64"}. HTML can be encoded with {@link
      * android.util.Base64#encodeToString(byte[],int)} like so:
      * <pre>
      * String unencodedHtml =
@@ -767,11 +768,15 @@ public class WebView extends AbsoluteLayout
      * String encodedHtml = Base64.encodeToString(unencodedHtml.getBytes(), Base64.NO_PADDING);
      * webView.loadData(encodedHtml, "text/html", "base64");
      * </pre>
-     * <p>
+     * <p class="note">
      * For all other values of {@code encoding} (including {@code null}) it is assumed that the
      * data uses ASCII encoding for octets inside the range of safe URL characters and use the
      * standard %xx hex encoding of URLs for octets outside that range. See <a
      * href="https://tools.ietf.org/html/rfc3986#section-2.2">RFC 3986</a> for more information.
+     * Applications targeting {@link android.os.Build.VERSION_CODES#Q} or later must either use
+     * base64 or encode any {@code #} characters in the content as {@code %23}, otherwise they
+     * will be treated as the end of the content and the remaining text used as a document
+     * fragment identifier.
      * <p>
      * The {@code mimeType} parameter specifies the format of the data.
      * If WebView can't handle the specified MIME type, it will download the data.
@@ -819,7 +824,8 @@ public class WebView extends AbsoluteLayout
      * <p>
      * If the base URL uses the data scheme, this method is equivalent to
      * calling {@link #loadData(String,String,String) loadData()} and the
-     * historyUrl is ignored, and the data will be treated as part of a data: URL.
+     * historyUrl is ignored, and the data will be treated as part of a data: URL,
+     * including the requirement that the content be URL-encoded or base64 encoded.
      * If the base URL uses any other scheme, then the data will be loaded into
      * the WebView as a plain string (i.e. not part of a data URL) and any URL-encoded
      * entities in the string will not be decoded.
@@ -1239,6 +1245,7 @@ public class WebView extends AbsoluteLayout
      *
      * @return the URL for the current page
      */
+    @InspectableProperty(hasAttributeId = false)
     @ViewDebug.ExportedProperty(category = "webview")
     public String getUrl() {
         checkThread();
@@ -1254,6 +1261,7 @@ public class WebView extends AbsoluteLayout
      *
      * @return the URL that was originally requested for the current page
      */
+    @InspectableProperty(hasAttributeId = false)
     @ViewDebug.ExportedProperty(category = "webview")
     public String getOriginalUrl() {
         checkThread();
@@ -1266,6 +1274,7 @@ public class WebView extends AbsoluteLayout
      *
      * @return the title for the current page
      */
+    @InspectableProperty(hasAttributeId = false)
     @ViewDebug.ExportedProperty(category = "webview")
     public String getTitle() {
         checkThread();
@@ -1278,6 +1287,7 @@ public class WebView extends AbsoluteLayout
      *
      * @return the favicon for the current page
      */
+    @InspectableProperty(hasAttributeId = false)
     public Bitmap getFavicon() {
         checkThread();
         return mProvider.getFavicon();
@@ -1300,6 +1310,7 @@ public class WebView extends AbsoluteLayout
      *
      * @return the progress for the current page between 0 and 100
      */
+    @InspectableProperty(hasAttributeId = false)
     public int getProgress() {
         checkThread();
         return mProvider.getProgress();
@@ -1310,6 +1321,7 @@ public class WebView extends AbsoluteLayout
      *
      * @return the height of the HTML content
      */
+    @InspectableProperty(hasAttributeId = false)
     @ViewDebug.ExportedProperty(category = "webview")
     public int getContentHeight() {
         checkThread();
@@ -2276,6 +2288,11 @@ public class WebView extends AbsoluteLayout
      *
      * @return the requested renderer priority policy.
      */
+    @InspectableProperty(hasAttributeId = false, enumMapping = {
+            @InspectableProperty.EnumMap(name = "waived", value = RENDERER_PRIORITY_WAIVED),
+            @InspectableProperty.EnumMap(name = "bound", value = RENDERER_PRIORITY_BOUND),
+            @InspectableProperty.EnumMap(name = "important", value = RENDERER_PRIORITY_IMPORTANT)
+    })
     @RendererPriority
     public int getRendererRequestedPriority() {
         return mProvider.getRendererRequestedPriority();
@@ -2288,6 +2305,7 @@ public class WebView extends AbsoluteLayout
      * @return whether this WebView requests a priority of
      * {@link #RENDERER_PRIORITY_WAIVED} when not visible.
      */
+    @InspectableProperty(hasAttributeId = false)
     public boolean getRendererPriorityWaivedWhenNotVisible() {
         return mProvider.getRendererPriorityWaivedWhenNotVisible();
     }

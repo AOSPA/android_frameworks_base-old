@@ -734,10 +734,13 @@ public class UserManager {
     public static final String DISALLOW_SYSTEM_ERROR_DIALOGS = "no_system_error_dialogs";
 
     /**
-     * Specifies if what is copied in the clipboard of this profile can
-     * be pasted in related profiles. Does not restrict if the clipboard of related profiles can be
-     * pasted in this profile.
-     * The default value is <code>false</code>.
+     * Specifies if the clipboard contents can be exported by pasting the data into other users or
+     * profiles. This restriction doesn't prevent import, such as someone pasting clipboard data
+     * from other profiles or users. The default value is {@code false}.
+     *
+     * <p><strong>Note</strong>: Because it's possible to extract data from screenshots using
+     * optical character recognition (OCR), we strongly recommend combining this user restriction
+     * with {@link DevicePolicyManager#setScreenCaptureDisabled(ComponentName, boolean)}.
      *
      * <p>Key for user restrictions.
      * <p>Type: Boolean
@@ -2694,6 +2697,19 @@ public class UserManager {
     }
 
     /**
+     * Updates the calling user's name.
+     * Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
+     *
+     * @param name the new name for the user
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public void setUserName(String name) {
+        setUserName(getUserHandle(), name);
+    }
+
+    /**
      * Sets the user's photo.
      * @param userHandle the user for whom to change the photo.
      * @param icon the bitmap to set as the photo.
@@ -2705,6 +2721,19 @@ public class UserManager {
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Sets the calling user's photo.
+     * Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
+     *
+     * @param icon the bitmap to set as the photo.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public void setUserIcon(Bitmap icon) {
+        setUserIcon(getUserHandle(), icon);
     }
 
     /**
@@ -2731,6 +2760,20 @@ public class UserManager {
             throw re.rethrowFromSystemServer();
         }
         return null;
+    }
+
+    /**
+     * Returns a Bitmap for the calling user's photo.
+     * Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
+     *
+     * @return a {@link Bitmap} of the user's photo, or null if there's no photo.
+     * @see com.android.internal.util.UserIcons#getDefaultUserIcon for a default.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public Bitmap getUserIcon() {
+        return getUserIcon(getUserHandle());
     }
 
     /**

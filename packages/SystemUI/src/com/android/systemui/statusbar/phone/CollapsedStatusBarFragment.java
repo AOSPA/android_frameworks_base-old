@@ -33,8 +33,8 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.SysUiServiceProvider;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.StatusBarIconController.DarkIconManager;
 import com.android.systemui.statusbar.policy.EncryptionHelper;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
@@ -191,7 +191,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     }
 
     protected int adjustDisableFlags(int state) {
-        if (!mStatusBarComponent.isLaunchTransitionFadingAway()
+        if (!mKeyguardMonitor.isLaunchTransitionFadingAway()
                 && !mKeyguardMonitor.isKeyguardFadingAway()
                 && shouldHideNotificationIcons()) {
             state |= DISABLE_NOTIFICATION_ICONS;

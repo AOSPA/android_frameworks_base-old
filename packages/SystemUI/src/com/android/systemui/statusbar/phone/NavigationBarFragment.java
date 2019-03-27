@@ -85,6 +85,7 @@ import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentHostManager.FragmentListener;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
@@ -92,7 +93,6 @@ import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 import com.android.systemui.statusbar.phone.ContextualButton.ContextButtonListener;
 import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
@@ -445,8 +445,11 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         // Respect the disabled flag, no need for action as flag change callback will handle hiding
         if (rotateSuggestionsDisabled) return;
 
-        mNavigationBarView.getRotateSuggestionButton()
-                .onRotationProposal(rotation, winRotation, isValid);
+        View rotationButton = mNavigationBarView.getRotateSuggestionButton().getCurrentView();
+        if (rotationButton != null && rotationButton.isAttachedToWindow()) {
+            mNavigationBarView.getRotateSuggestionButton()
+                    .onRotationProposal(rotation, winRotation, isValid);
+        }
     }
 
     /**

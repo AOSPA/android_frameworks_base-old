@@ -344,7 +344,7 @@ package android.os {
   public final class PowerManager {
     method public void goToSleep(long);
     method @Deprecated public void userActivity(long, boolean);
-    method public void wakeUp(long);
+    method @Deprecated public void wakeUp(long);
   }
 
   public class RecoverySystem {
@@ -507,6 +507,19 @@ package android.provider {
     field @Deprecated public static final String TIMESTAMP = "timestamp";
   }
 
+  public final class MediaStore {
+    method @Deprecated @NonNull public static android.net.Uri setIncludeTrashed(@NonNull android.net.Uri);
+    method @Deprecated public static void trash(@NonNull android.content.Context, @NonNull android.net.Uri);
+    method @Deprecated public static void trash(@NonNull android.content.Context, @NonNull android.net.Uri, long);
+    method @Deprecated public static void untrash(@NonNull android.content.Context, @NonNull android.net.Uri);
+  }
+
+  public static interface MediaStore.MediaColumns extends android.provider.BaseColumns {
+    field @Deprecated public static final String DATE_EXPIRES = "date_expires";
+    field @Deprecated public static final String HASH = "_hash";
+    field @Deprecated public static final String IS_TRASHED = "is_trashed";
+  }
+
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {
     field @Deprecated public static final String CONTACT_METADATA_SYNC = "contact_metadata_sync";
   }
@@ -545,7 +558,7 @@ package android.telephony {
 
   public class TelephonyManager {
     method @Deprecated @RequiresPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) public java.util.List<android.telephony.NeighboringCellInfo> getNeighboringCellInfo();
-    method @Deprecated @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public android.telephony.NetworkScan requestNetworkScan(android.telephony.NetworkScanRequest, android.telephony.TelephonyScanManager.NetworkScanCallback);
+    method @Deprecated @RequiresPermission(allOf={android.Manifest.permission.MODIFY_PHONE_STATE, android.Manifest.permission.ACCESS_FINE_LOCATION}) public android.telephony.NetworkScan requestNetworkScan(android.telephony.NetworkScanRequest, android.telephony.TelephonyScanManager.NetworkScanCallback);
   }
 
 }

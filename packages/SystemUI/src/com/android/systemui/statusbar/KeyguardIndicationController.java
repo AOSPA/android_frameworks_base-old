@@ -47,7 +47,8 @@ import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.StatusBarStateController.StateListener;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.phone.KeyguardIndicationTextView;
 import com.android.systemui.statusbar.phone.LockIcon;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -129,7 +130,7 @@ public class KeyguardIndicationController implements StateListener {
                 mTextView.getTextColors() : ColorStateList.valueOf(Color.WHITE);
         mDisclosure = indicationArea.findViewById(R.id.keyguard_indication_enterprise_disclosure);
         mLockIcon = lockIcon;
-        mWakeLock = new SettableWakeLock(wakeLock);
+        mWakeLock = new SettableWakeLock(wakeLock, TAG);
 
         Resources res = context.getResources();
         mSlowThreshold = res.getInteger(R.integer.config_chargingSlowlyThreshold);
@@ -423,22 +424,28 @@ public class KeyguardIndicationController implements StateListener {
         final boolean hasChargingTime = chargingTimeRemaining > 0;
 
         int chargingId;
-        switch (mChargingSpeed) {
-            case KeyguardUpdateMonitor.BatteryStatus.CHARGING_FAST:
-                chargingId = hasChargingTime
-                        ? R.string.keyguard_indication_charging_time_fast
-                        : R.string.keyguard_plugged_in_charging_fast;
-                break;
-            case KeyguardUpdateMonitor.BatteryStatus.CHARGING_SLOWLY:
-                chargingId = hasChargingTime
-                        ? R.string.keyguard_indication_charging_time_slowly
-                        : R.string.keyguard_plugged_in_charging_slowly;
-                break;
-            default:
-                chargingId = hasChargingTime
-                        ? R.string.keyguard_indication_charging_time
-                        : R.string.keyguard_plugged_in;
-                break;
+        if (mPowerPluggedInWired) {
+            switch (mChargingSpeed) {
+                case KeyguardUpdateMonitor.BatteryStatus.CHARGING_FAST:
+                    chargingId = hasChargingTime
+                            ? R.string.keyguard_indication_charging_time_fast
+                            : R.string.keyguard_plugged_in_charging_fast;
+                    break;
+                case KeyguardUpdateMonitor.BatteryStatus.CHARGING_SLOWLY:
+                    chargingId = hasChargingTime
+                            ? R.string.keyguard_indication_charging_time_slowly
+                            : R.string.keyguard_plugged_in_charging_slowly;
+                    break;
+                default:
+                    chargingId = hasChargingTime
+                            ? R.string.keyguard_indication_charging_time
+                            : R.string.keyguard_plugged_in;
+                    break;
+            }
+        } else {
+            chargingId = hasChargingTime
+                    ? R.string.keyguard_indication_charging_time_wireless
+                    : R.string.keyguard_plugged_in_wireless;
         }
 
         String percentage = NumberFormat.getPercentInstance()
