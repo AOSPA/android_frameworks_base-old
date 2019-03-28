@@ -228,8 +228,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
-import android.os.AsyncTask;
-
 /**
  * An entry in the history stack, representing an activity.
  */
@@ -391,7 +389,6 @@ public final class ActivityRecord extends ConfigurationContainer {
     IVoiceInteractionSession voiceSession;  // Voice interaction session for this activity
 
     public BoostFramework mPerf = null;
-    public BoostFramework mUxPerf = new BoostFramework();
     public BoostFramework mPerf_iop = null;
 
     // A hint to override the window specified rotation animation, or -1
@@ -863,30 +860,6 @@ public final class ActivityRecord extends ConfigurationContainer {
         }
 
         mAppWindowToken.setWillCloseOrEnterPip(willCloseOrEnterPip);
-    }
-
-    private class PreferredAppsTask extends AsyncTask<Void, Void, Void> {
-        @Override
-        protected Void doInBackground(Void... params) {
-            String res = null;
-            if (mUxPerf != null) {
-                res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
-                if (res == null)
-                    return null;
-                String[] p_apps = res.split("/");
-                if (p_apps.length != 0) {
-                    ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
-                    Bundle bParams = new Bundle();
-                    if (bParams == null)
-                        return null;
-                    bParams.putStringArrayList("start_empty_apps", apps_l);
-                    // TODO(b/120845511)
-                    // service.mAm.startActivityAsUserEmpty(null, null, intent, null,
-                    //               null, null, 0, 0, null, bParams, 0);
-                }
-            }
-            return null;
-        }
     }
 
     static class Token extends IApplicationToken.Stub {
@@ -2198,12 +2171,11 @@ public final class ActivityRecord extends ConfigurationContainer {
 
         if (isActivityTypeHome()) {
             mStackSupervisor.updateHomeProcess(task.mActivities.get(0).app);
-            // TODO(b/120845511)
-            // try {
-            //     new PreferredAppsTask().execute();
-            // } catch (Exception e) {
-            //     Log.v (TAG, "Exception: " + e);
-            // }
+            try {
+                mStackSupervisor.new PreferredAppsTask().execute();
+            } catch (Exception e) {
+                Slog.v (TAG, "Exception: " + e);
+            }
         }
         if (nowVisible) {
             mStackSupervisor.stopWaitingForActivityVisible(this);

@@ -173,6 +173,7 @@ class ActivityMetricsLogger {
     private final StringBuilder mStringBuilder = new StringBuilder();
 
     public static BoostFramework mPerfFirstDraw = null;
+    public static BoostFramework mUxPerf = new BoostFramework();
     private static ActivityRecord mLaunchedActivity;
 
     /**
@@ -783,15 +784,15 @@ class ActivityMetricsLogger {
         sb.append(": ");
         TimeUtils.formatDuration(info.windowsDrawnDelayMs, sb);
 
-        if (mLaunchedActivity.mUxPerf != null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
+        if (mUxPerf != null) {
+            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
         }
 
         Log.i(TAG, sb.toString());
 
         int isGame = mLaunchedActivity.isAppInfoGame();
-        if (mLaunchedActivity.mUxPerf !=  null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
+        if (mUxPerf !=  null) {
+            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
         }
 
         if (mPerfFirstDraw == null) {
