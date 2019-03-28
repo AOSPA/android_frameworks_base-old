@@ -1359,33 +1359,6 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            if (enableWigig) {
-                try {
-                    Slog.i(TAG, "Wigig Service");
-                    String wigigClassPath =
-                        "/system/framework/wigig-service.jar" + ":" +
-                        "/system/framework/vendor.qti.hardware.wigig.supptunnel-V1.0-java.jar" + ":" +
-                        "/system/framework/vendor.qti.hardware.wigig.netperftuner-V1.0-java.jar";
-                    PathClassLoader wigigClassLoader =
-                            new PathClassLoader(wigigClassPath, getClass().getClassLoader());
-                    Class wigigP2pClass = wigigClassLoader.loadClass(
-                        "com.qualcomm.qti.server.wigig.p2p.WigigP2pServiceImpl");
-                    Constructor<Class> ctor = wigigP2pClass.getConstructor(Context.class);
-                    wigigP2pService = ctor.newInstance(context);
-                    Slog.i(TAG, "Successfully loaded WigigP2pServiceImpl class");
-                    ServiceManager.addService("wigigp2p", (IBinder) wigigP2pService);
-
-                    Class wigigClass = wigigClassLoader.loadClass(
-                        "com.qualcomm.qti.server.wigig.WigigService");
-                    ctor = wigigClass.getConstructor(Context.class);
-                    wigigService = ctor.newInstance(context);
-                    Slog.i(TAG, "Successfully loaded WigigService class");
-                    ServiceManager.addService("wigig", (IBinder) wigigService);
-                } catch (Throwable e) {
-                    reportWtf("starting WigigService", e);
-                }
-            }
-
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_ETHERNET) ||
                     mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
                 traceBeginAndSlog("StartEthernet");
@@ -1413,6 +1386,34 @@ public final class SystemServer {
                 reportWtf("starting Network Stack", e);
             }
             traceEnd();
+
+            if (enableWigig) {
+                try {
+                    Slog.i(TAG, "Wigig Service");
+                    String wigigClassPath =
+                        "/system/framework/wigig-service.jar" + ":" +
+                        "/system/product/framework/vendor.qti.hardware.wigig.supptunnel-V1.0-java.jar" + ":" +
+                        "/system/product/framework/vendor.qti.hardware.wigig.netperftuner-V1.0-java.jar" + ":" +
+                        "/system/product/framework/vendor.qti.hardware.capabilityconfigstore-V1.0-java.jar";
+                    PathClassLoader wigigClassLoader =
+                            new PathClassLoader(wigigClassPath, getClass().getClassLoader());
+                    Class wigigP2pClass = wigigClassLoader.loadClass(
+                        "com.qualcomm.qti.server.wigig.p2p.WigigP2pServiceImpl");
+                    Constructor<Class> ctor = wigigP2pClass.getConstructor(Context.class);
+                    wigigP2pService = ctor.newInstance(context);
+                    Slog.i(TAG, "Successfully loaded WigigP2pServiceImpl class");
+                    ServiceManager.addService("wigigp2p", (IBinder) wigigP2pService);
+
+                    Class wigigClass = wigigClassLoader.loadClass(
+                        "com.qualcomm.qti.server.wigig.WigigService");
+                    ctor = wigigClass.getConstructor(Context.class);
+                    wigigService = ctor.newInstance(context);
+                    Slog.i(TAG, "Successfully loaded WigigService class");
+                    ServiceManager.addService("wigig", (IBinder) wigigService);
+                } catch (Throwable e) {
+                    reportWtf("starting WigigService", e);
+                }
+            }
 
             traceBeginAndSlog("StartNsdService");
             try {
