@@ -65,6 +65,7 @@ import android.opengl.GLES10;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.IProgressListener;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteCallback;
 import android.os.RemoteCallback.OnResultListener;
@@ -103,6 +104,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javax.microedition.khronos.egl.EGL10;
 import javax.microedition.khronos.egl.EGLConfig;
@@ -113,6 +115,8 @@ import javax.microedition.khronos.egl.EGLSurface;
 final class ActivityManagerShellCommand extends ShellCommand {
     public static final String NO_CLASS_ERROR_CODE = "Error type 3";
     private static final String SHELL_PACKAGE_NAME = "com.android.shell";
+
+    private static final int USER_OPERATION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 
     // IPC interface to activity manager -- don't need to do additional security checks.
     final IActivityManager mInterface;
@@ -377,6 +381,30 @@ final class ActivityManagerShellCommand extends ShellCommand {
         });
     }
 
+    private class ProgressWaiter extends IProgressListener.Stub {
+        private final CountDownLatch mFinishedLatch = new CountDownLatch(1);
+
+        @Override
+        public void onStarted(int id, Bundle extras) {}
+
+        @Override
+        public void onProgress(int id, int progress, Bundle extras) {}
+
+        @Override
+        public void onFinished(int id, Bundle extras) {
+            mFinishedLatch.countDown();
+        }
+
+        public boolean waitForFinish(long timeoutMillis) {
+            try {
+                return mFinishedLatch.await(timeoutMillis, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                System.err.println("Thread interrupted unexpectedly.");
+                return false;
+            }
+        }
+    }
+
     int runStartActivity(PrintWriter pw) throws RemoteException {
         Intent intent;
         try {
@@ -492,7 +520,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
             final long endTime = SystemClock.uptimeMillis();
             PrintWriter out = mWaitOption ? pw : getErrPrintWriter();
             boolean launched = false;
-            boolean hotLaunch = false;
             switch (res) {
                 case ActivityManager.START_SUCCESS:
                     launched = true;
@@ -518,8 +545,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     break;
                 case ActivityManager.START_TASK_TO_FRONT:
                     launched = true;
-                    //TODO(b/120981435) remove special case
-                    hotLaunch = true;
                     out.println(
                             "Warning: Activity not started, its current "
                                     + "task has been brought to the front");
@@ -567,9 +592,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     result.who = intent.getComponent();
                 }
                 pw.println("Status: " + (result.timeout ? "timeout" : "ok"));
-                final @WaitResult.LaunchState int launchState =
-                        hotLaunch ? WaitResult.LAUNCH_STATE_HOT : result.launchState;
-                pw.println("LaunchState: " + launchStateToString(launchState));
+                pw.println("LaunchState: " + launchStateToString(result.launchState));
                 if (result.who != null) {
                     pw.println("Activity: " + result.who.flattenToShortString());
                 }
@@ -1679,8 +1702,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
     int runSwitchUser(PrintWriter pw) throws RemoteException {
         UserManager userManager = mInternal.mContext.getSystemService(UserManager.class);
-        if (!userManager.canSwitchUsers()) {
-            getErrPrintWriter().println("Error: disallowed switching user");
+        final int userSwitchable = userManager.getUserSwitchability();
+        if (userSwitchable != UserManager.SWITCHABILITY_STATUS_OK) {
+            getErrPrintWriter().println("Error: " + userSwitchable);
             return -1;
         }
         String user = getNextArgRequired();
@@ -1696,8 +1720,24 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     int runStartUser(PrintWriter pw) throws RemoteException {
-        String user = getNextArgRequired();
-        boolean success = mInterface.startUserInBackground(Integer.parseInt(user));
+        boolean wait = false;
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            if ("-w".equals(opt)) {
+                wait = true;
+            } else {
+                getErrPrintWriter().println("Error: unknown option: " + opt);
+                return -1;
+            }
+        }
+        int userId = Integer.parseInt(getNextArgRequired());
+
+        final ProgressWaiter waiter = wait ? new ProgressWaiter() : null;
+        boolean success = mInterface.startUserInBackgroundWithListener(userId, waiter);
+        if (wait && success) {
+            success = waiter.waitForFinish(USER_OPERATION_TIMEOUT_MS);
+        }
+
         if (success) {
             pw.println("Success: user started");
         } else {
@@ -3027,9 +3067,10 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      execution of that user if it is currently stopped.");
             pw.println("  get-current-user");
             pw.println("      Returns id of the current foreground user.");
-            pw.println("  start-user <USER_ID>");
+            pw.println("  start-user [-w] <USER_ID>");
             pw.println("      Start USER_ID in background if it is currently stopped;");
-            pw.println("      use switch-user if you want to start the user in foreground");
+            pw.println("      use switch-user if you want to start the user in foreground.");
+            pw.println("      -w: wait for start-user to complete and the user to be unlocked.");
             pw.println("  unlock-user <USER_ID> [TOKEN_HEX]");
             pw.println("      Attempt to unlock the given user using the given authorization token.");
             pw.println("  stop-user [-w] [-f] <USER_ID>");

@@ -20,18 +20,17 @@ import static android.service.contentcapture.ContentCaptureService.setClientStat
 import static android.view.contentcapture.ContentCaptureSession.STATE_DISABLED;
 import static android.view.contentcapture.ContentCaptureSession.STATE_DUPLICATED_ID;
 import static android.view.contentcapture.ContentCaptureSession.STATE_INTERNAL_ERROR;
+import static android.view.contentcapture.ContentCaptureSession.STATE_NOT_WHITELISTED;
 import static android.view.contentcapture.ContentCaptureSession.STATE_NO_SERVICE;
-import static android.view.contentcapture.ContentCaptureSession.STATE_PACKAGE_NOT_WHITELISTED;
 
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_CONTENT;
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_DATA;
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_STRUCTURE;
 
-import android.Manifest;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
-import android.app.AppGlobals;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.content.ComponentName;
@@ -41,12 +40,15 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.service.contentcapture.ActivityEvent;
+import android.service.contentcapture.ActivityEvent.ActivityEventType;
 import android.service.contentcapture.ContentCaptureService;
+import android.service.contentcapture.ContentCaptureServiceInfo;
 import android.service.contentcapture.IContentCaptureServiceCallback;
 import android.service.contentcapture.SnapshotData;
 import android.util.ArrayMap;
@@ -55,6 +57,7 @@ import android.util.Slog;
 import android.view.contentcapture.UserDataRemovalRequest;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.infra.WhitelistHelper;
 import com.android.internal.os.IResultReceiver;
 import com.android.server.LocalServices;
 import com.android.server.contentcapture.RemoteContentCaptureService.ContentCaptureServiceCallbacks;
@@ -72,7 +75,7 @@ final class ContentCapturePerUserService
         AbstractPerUserSystemService<ContentCapturePerUserService, ContentCaptureManagerService>
         implements ContentCaptureServiceCallbacks {
 
-    private static final String TAG = ContentCaptureManagerService.class.getSimpleName();
+    private static final String TAG = ContentCapturePerUserService.class.getSimpleName();
 
     @GuardedBy("mLock")
     private final ArrayMap<String, ContentCaptureServerSession> mSessions =
@@ -85,7 +88,8 @@ final class ContentCapturePerUserService
      * master's cache (for example, because a temporary service was set).
      */
     @GuardedBy("mLock")
-    private RemoteContentCaptureService mRemoteService;
+    @Nullable
+    RemoteContentCaptureService mRemoteService;
 
     private final ContentCaptureServiceRemoteCallback mRemoteServiceCallback =
             new ContentCaptureServiceRemoteCallback();
@@ -94,7 +98,17 @@ final class ContentCapturePerUserService
      * List of packages that are whitelisted to be content captured.
      */
     @GuardedBy("mLock")
-    private final ArraySet<String> mWhitelistedPackages = new ArraySet<>();
+    private final WhitelistHelper mWhitelistHelper = new WhitelistHelper();
+
+    /**
+     * When {@code true}, remote service died but service state is kept so it's restored after
+     * the system re-binds to it.
+     */
+    @GuardedBy("mLock")
+    private boolean mZombie;
+
+    @GuardedBy("mLock")
+    private ContentCaptureServiceInfo mInfo;
 
     // TODO(b/111276913): add mechanism to prune stale sessions, similar to Autofill's
 
@@ -123,6 +137,10 @@ final class ContentCapturePerUserService
         }
 
         if (!disabled) {
+            if (mMaster.debug) {
+                Slog.d(TAG, "updateRemoteService(): creating new remote service for "
+                        + serviceComponentName);
+            }
             mRemoteService = new RemoteContentCaptureService(mMaster.getContext(),
                     ContentCaptureService.SERVICE_INTERFACE, serviceComponentName,
                     mRemoteServiceCallback, mUserId, this, mMaster.isBindInstantServiceAllowed(),
@@ -133,33 +151,9 @@ final class ContentCapturePerUserService
     @Override // from PerUserSystemService
     protected ServiceInfo newServiceInfoLocked(@NonNull ComponentName serviceComponent)
             throws NameNotFoundException {
-
-        int flags = PackageManager.GET_META_DATA;
-        final boolean isTemp = isTemporaryServiceSetLocked();
-        if (!isTemp) {
-            flags |= PackageManager.MATCH_SYSTEM_ONLY;
-        }
-
-        ServiceInfo si;
-        try {
-            si = AppGlobals.getPackageManager().getServiceInfo(serviceComponent, flags, mUserId);
-        } catch (RemoteException e) {
-            Slog.w(TAG, "Could not get service for " + serviceComponent + ": " + e);
-            return null;
-        }
-        if (si == null) {
-            Slog.w(TAG, "Could not get serviceInfo for " + (isTemp ? " (temp)" : "(default system)")
-                    + " " + serviceComponent.flattenToShortString());
-            return null;
-        }
-        if (!Manifest.permission.BIND_CONTENT_CAPTURE_SERVICE.equals(si.permission)) {
-            Slog.w(TAG, "ContentCaptureService from '" + si.packageName
-                    + "' does not require permission "
-                    + Manifest.permission.BIND_CONTENT_CAPTURE_SERVICE);
-            throw new SecurityException("Service does not require permission "
-                    + Manifest.permission.BIND_CONTENT_CAPTURE_SERVICE);
-        }
-        return si;
+        mInfo = new ContentCaptureServiceInfo(getContext(), serviceComponent,
+                isTemporaryServiceSetLocked(), mUserId);
+        return mInfo.getServiceInfo();
     }
 
     @Override // from PerUserSystemService
@@ -173,10 +167,59 @@ final class ContentCapturePerUserService
 
     @Override // from ContentCaptureServiceCallbacks
     public void onServiceDied(@NonNull RemoteContentCaptureService service) {
-        if (mMaster.debug) Slog.d(TAG, "remote service died: " + service);
+        // Don't do anything; eventually the system will bind to it again...
+        Slog.w(TAG, "remote service died: " + service);
         synchronized (mLock) {
-            removeSelfFromCacheLocked();
+            mZombie = true;
         }
+    }
+
+    /**
+     * Called after the remote service connected, it's used to restore state from a 'zombie'
+     * service (i.e., after it died).
+     */
+    void onConnected() {
+        synchronized (mLock) {
+            if (mZombie) {
+                // Sanity check - shouldn't happen
+                if (mRemoteService == null) {
+                    Slog.w(TAG, "Cannot ressurect sessions because remote service is null");
+                    return;
+                }
+
+                mZombie = false;
+                resurrectSessionsLocked();
+            }
+        }
+    }
+
+    private void resurrectSessionsLocked() {
+        final int numSessions = mSessions.size();
+        if (mMaster.debug) {
+            Slog.d(TAG, "Ressurrecting remote service (" + mRemoteService + ") on "
+                    + numSessions + " sessions");
+        }
+
+        for (int i = 0; i < numSessions; i++) {
+            final ContentCaptureServerSession session = mSessions.valueAt(i);
+            session.resurrectLocked();
+        }
+    }
+
+    void onPackageUpdatingLocked() {
+        final int numSessions = mSessions.size();
+        if (mMaster.debug) {
+            Slog.d(TAG, "Pausing " + numSessions + " sessions while package is updating");
+        }
+        for (int i = 0; i < numSessions; i++) {
+            final ContentCaptureServerSession session = mSessions.valueAt(i);
+            session.pauseLocked();
+        }
+    }
+
+    void onPackageUpdatedLocked() {
+        updateRemoteServiceLocked(!isEnabledLocked());
+        resurrectSessionsLocked();
     }
 
     // TODO(b/119613670): log metrics
@@ -194,7 +237,7 @@ final class ContentCapturePerUserService
         final int taskId = activityPresentationInfo.taskId;
         final int displayId = activityPresentationInfo.displayId;
         final ComponentName componentName = activityPresentationInfo.componentName;
-        final boolean whitelisted = isWhitelistedLocked(componentName);
+        final boolean whiteListed = isWhitelistedLocked(componentName);
         final ComponentName serviceComponentName = getServiceComponentName();
         final boolean enabled = isEnabledLocked();
         if (mMaster.mRequestsHistory != null) {
@@ -204,7 +247,7 @@ final class ContentCapturePerUserService
                     + " t=" + taskId + " d=" + displayId
                     + " s=" + ComponentName.flattenToShortString(serviceComponentName)
                     + " u=" + mUserId + " f=" + flags + (enabled ? "" : " (disabled)")
-                    + " w=" + whitelisted;
+                    + " w=" + whiteListed;
             mMaster.mRequestsHistory.log(historyItem);
         }
 
@@ -225,12 +268,12 @@ final class ContentCapturePerUserService
             return;
         }
 
-        if (!whitelisted) {
+        if (!whiteListed) {
             if (mMaster.debug) {
-                Slog.d(TAG, "startSession(" + componentName + "): not whitelisted");
+                Slog.d(TAG, "startSession(" + componentName + "): package or component "
+                        + "not whitelisted");
             }
-            // TODO(b/122595322): need to return STATE_ACTIVITY_NOT_WHITELISTED as well
-            setClientState(clientReceiver, STATE_DISABLED | STATE_PACKAGE_NOT_WHITELISTED,
+            setClientState(clientReceiver, STATE_DISABLED | STATE_NOT_WHITELISTED,
                     /* binder= */ null);
             return;
         }
@@ -257,9 +300,12 @@ final class ContentCapturePerUserService
             return;
         }
 
+        // Make sure service is bound, just in case the initial connection failed somehow
+        mRemoteService.ensureBoundLocked();
+
         final ContentCaptureServerSession newSession = new ContentCaptureServerSession(
-                activityToken, this, mRemoteService, componentName, taskId,
-                displayId, sessionId, uid, flags);
+                activityToken, this, componentName, clientReceiver, taskId, displayId, sessionId,
+                uid, flags);
         if (mMaster.verbose) {
             Slog.v(TAG, "startSession(): new session for "
                     + ComponentName.flattenToShortString(componentName) + " and id " + sessionId);
@@ -270,22 +316,7 @@ final class ContentCapturePerUserService
 
     @GuardedBy("mLock")
     private boolean isWhitelistedLocked(@NonNull ComponentName componentName) {
-        // TODO(b/122595322): need to check whitelisted activities as well.
-        final String packageName = componentName.getPackageName();
-        return mWhitelistedPackages.contains(packageName);
-    }
-
-    private void whitelistPackages(@NonNull List<String> packages) {
-        // TODO(b/122595322): add CTS test for when it's null
-        synchronized (mLock) {
-            if (packages == null) {
-                if (mMaster.verbose) Slog.v(TAG, "clearing all whitelisted packages");
-                mWhitelistedPackages.clear();
-            } else {
-                if (mMaster.verbose) Slog.v(TAG, "whitelisting packages: " + packages);
-                mWhitelistedPackages.addAll(packages);
-            }
-        }
+        return mWhitelistHelper.isWhitelisted(componentName);
     }
 
     // TODO(b/119613670): log metrics
@@ -313,6 +344,18 @@ final class ContentCapturePerUserService
         }
         assertCallerLocked(request.getPackageName());
         mRemoteService.onUserDataRemovalRequest(request);
+    }
+
+    @GuardedBy("mLock")
+    @Nullable
+    public ComponentName getServiceSettingsActivityLocked() {
+        if (mInfo == null) return null;
+
+        final String activityName = mInfo.getSettingsActivity();
+        if (activityName == null) return null;
+
+        final String packageName = mInfo.getServiceInfo().packageName;
+        return new ComponentName(packageName, activityName);
     }
 
     /**
@@ -387,6 +430,9 @@ final class ContentCapturePerUserService
     @GuardedBy("mLock")
     public void destroyLocked() {
         if (mMaster.debug) Slog.d(TAG, "destroyLocked()");
+        if (mRemoteService != null) {
+            mRemoteService.destroy();
+        }
         destroySessionsLocked();
     }
 
@@ -410,16 +456,29 @@ final class ContentCapturePerUserService
     }
 
     @GuardedBy("mLock")
+    @Nullable
     ContentCaptureOptions getOptionsForPackageLocked(@NonNull String packageName) {
-        if (!mWhitelistedPackages.contains(packageName)) {
+        if (!mWhitelistHelper.isWhitelisted(packageName)) {
+            if (packageName.equals(getServicePackageName())) {
+                if (mMaster.verbose) Slog.v(mTag, "getOptionsForPackage() lite for " + packageName);
+                return new ContentCaptureOptions(mMaster.mDevCfgLoggingLevel);
+            }
             if (mMaster.verbose) {
                 Slog.v(mTag, "getOptionsForPackage(" + packageName + "): not whitelisted");
             }
             return null;
         }
 
-        // TODO(b/122595322): need to check whitelisted activities as well.
-        final ArraySet<ComponentName> whitelistedComponents = null;
+        final ArraySet<ComponentName> whitelistedComponents = mWhitelistHelper
+                .getWhitelistedComponents(packageName);
+        if (Build.IS_USER && isTemporaryServiceSetLocked()) {
+            final String servicePackageName = getServicePackageName();
+            if (!packageName.equals(servicePackageName)) {
+                Slog.w(mTag, "Ignoring package " + packageName
+                        + " while using temporary service " + servicePackageName);
+                return null;
+            }
+        }
         ContentCaptureOptions options = new ContentCaptureOptions(mMaster.mDevCfgLoggingLevel,
                 mMaster.mDevCfgMaxBufferSize, mMaster.mDevCfgIdleFlushingFrequencyMs,
                 mMaster.mDevCfgTextChangeFlushingFrequencyMs, mMaster.mDevCfgLogHistorySize,
@@ -430,22 +489,39 @@ final class ContentCapturePerUserService
         return options;
     }
 
+    @GuardedBy("mLock")
+    void onActivityEventLocked(@NonNull ComponentName componentName, @ActivityEventType int type) {
+        if (mRemoteService == null) {
+            if (mMaster.debug) Slog.d(mTag, "onActivityEvent(): no remote service");
+            return;
+        }
+        final ActivityEvent event = new ActivityEvent(componentName, type);
+
+        if (mMaster.verbose) Slog.v(mTag, "onActivityEvent(): " + event);
+
+        mRemoteService.onActivityLifecycleEvent(event);
+    }
+
     @Override
     protected void dumpLocked(String prefix, PrintWriter pw) {
         super.dumpLocked(prefix, pw);
 
         final String prefix2 = prefix + "  ";
+        pw.print(prefix); pw.print("Service Info: ");
+        if (mInfo == null) {
+            pw.println("N/A");
+        } else {
+            pw.println();
+            mInfo.dump(prefix2, pw);
+        }
+        pw.print(prefix); pw.print("Zombie: "); pw.println(mZombie);
+
         if (mRemoteService != null) {
             pw.print(prefix); pw.println("remote service:");
             mRemoteService.dump(prefix2, pw);
         }
 
-        final int whitelistSize = mWhitelistedPackages.size();
-        pw.print(prefix); pw.print("Whitelisted packages: "); pw.println(whitelistSize);
-        for (int i = 0; i < whitelistSize; i++) {
-            final String whitelistedPkg = mWhitelistedPackages.valueAt(i);
-            pw.print(prefix2); pw.print(i + 1); pw.print(": "); pw.println(whitelistedPkg);
-        }
+        mWhitelistHelper.dump(prefix, "Whitelist", pw);
 
         if (mSessions.isEmpty()) {
             pw.print(prefix); pw.println("no sessions");
@@ -481,13 +557,16 @@ final class ContentCapturePerUserService
         @Override
         public void setContentCaptureWhitelist(List<String> packages,
                 List<ComponentName> activities) {
+            // TODO(b/122595322): add CTS test for when it's null
             if (mMaster.verbose) {
-                Slog.v(TAG, "setContentCaptureWhitelist(packages=" + packages + ", activities="
-                        + activities + ")");
+                Slog.v(TAG, "setContentCaptureWhitelist(" + (packages == null
+                        ? "null_packages" : packages.size() + " packages")
+                        + ", " + (activities == null
+                        ? "null_activities" : activities.size() + " activities") + ")");
             }
-            whitelistPackages(packages);
-
-            // TODO(b/122595322): whitelist activities as well
+            synchronized (mLock) {
+                mWhitelistHelper.setWhitelist(packages, activities);
+            }
             // TODO(b/119613670): log metrics
         }
 
@@ -498,7 +577,7 @@ final class ContentCapturePerUserService
             final long token = Binder.clearCallingIdentity();
             try {
                 Settings.Secure.putStringForUser(getContext().getContentResolver(),
-                        Settings.Secure.CONTENT_CAPTURE_ENABLED, "false", mUserId);
+                        Settings.Secure.CONTENT_CAPTURE_ENABLED, "0", mUserId);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }

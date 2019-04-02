@@ -40,15 +40,19 @@ import android.service.notification.ZenModeConfig;
 /** {@hide} */
 interface INotificationManager
 {
+    @UnsupportedAppUsage
     void cancelAllNotifications(String pkg, int userId);
 
     void clearData(String pkg, int uid, boolean fromApp);
+    @UnsupportedAppUsage
     void enqueueToast(String pkg, ITransientNotification callback, int duration, int displayId);
+    @UnsupportedAppUsage
     void cancelToast(String pkg, ITransientNotification callback);
     void finishToken(String pkg, ITransientNotification callback);
 
     void enqueueNotificationWithTag(String pkg, String opPkg, String tag, int id,
             in Notification notification, int userId);
+    @UnsupportedAppUsage
     void cancelNotificationWithTag(String pkg, String tag, int id, int userId);
 
     void setShowBadge(String pkg, int uid, boolean showBadge);
@@ -61,9 +65,14 @@ interface INotificationManager
      */
     void setNotificationsEnabledWithImportanceLockForPackage(String pkg, int uid, boolean enabled);
 
+    @UnsupportedAppUsage
     boolean areNotificationsEnabledForPackage(String pkg, int uid);
     boolean areNotificationsEnabled(String pkg);
     int getPackageImportance(String pkg);
+
+    List<String> getAllowedAssistantCapabilities(String pkg);
+    void allowAssistantCapability(String adjustmentType);
+    void disallowAssistantCapability(String adjustmentType);
 
     boolean shouldHideSilentStatusIcons(String callingPkg);
     void setHideSilentStatusIcons(boolean hide);
@@ -81,10 +90,10 @@ interface INotificationManager
     NotificationChannelGroup getPopulatedNotificationChannelGroupForPackage(String pkg, int uid, String groupId, boolean includeDeleted);
     void updateNotificationChannelGroupForPackage(String pkg, int uid, in NotificationChannelGroup group);
     void updateNotificationChannelForPackage(String pkg, int uid, in NotificationChannel channel);
-    NotificationChannel getNotificationChannel(String pkg, String channelId);
+    NotificationChannel getNotificationChannel(String callingPkg, int userId, String pkg, String channelId);
     NotificationChannel getNotificationChannelForPackage(String pkg, int uid, String channelId, boolean includeDeleted);
     void deleteNotificationChannel(String pkg, String channelId);
-    ParceledListSlice getNotificationChannels(String pkg);
+    ParceledListSlice getNotificationChannels(String callingPkg, String targetPkg, int userId);
     ParceledListSlice getNotificationChannelsForPackage(String pkg, int uid, boolean includeDeleted);
     int getNumNotificationChannelsForPackage(String pkg, int uid, boolean includeDeleted);
     int getDeletedChannelCount(String pkg, int uid);
@@ -102,7 +111,9 @@ interface INotificationManager
 
     // TODO: Remove this when callers have been migrated to the equivalent
     // INotificationListener method.
+    @UnsupportedAppUsage
     StatusBarNotification[] getActiveNotifications(String callingPkg);
+    @UnsupportedAppUsage
     StatusBarNotification[] getHistoricalNotifications(String callingPkg, int count);
 
     void registerListener(in INotificationListener listener, in ComponentName component, int userid);
@@ -157,7 +168,9 @@ interface INotificationManager
     ComponentName getAllowedNotificationAssistantForUser(int userId);
     ComponentName getAllowedNotificationAssistant();
 
+    @UnsupportedAppUsage
     int getZenMode();
+    @UnsupportedAppUsage
     ZenModeConfig getZenModeConfig();
     NotificationManager.Policy getConsolidatedNotificationPolicy();
     oneway void setZenMode(int mode, in Uri conditionId, String reason);
@@ -183,9 +196,8 @@ interface INotificationManager
     ParceledListSlice getAppActiveNotifications(String callingPkg, int userId);
 
     void setNotificationDelegate(String callingPkg, String delegate);
-    void revokeNotificationDelegate(String callingPkg);
     String getNotificationDelegate(String callingPkg);
-    boolean canNotifyAsPackage(String callingPkg, String targetPkg);
+    boolean canNotifyAsPackage(String callingPkg, String targetPkg, int userId);
 
     void setPrivateNotificationsAllowed(boolean allow);
     boolean getPrivateNotificationsAllowed();

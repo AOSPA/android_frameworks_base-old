@@ -67,7 +67,6 @@ import android.os.IRemoteCallback;
 import android.os.IUserManager;
 import android.os.Looper;
 import android.os.Message;
-import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
@@ -335,14 +334,6 @@ class UserController implements Handler.Callback {
                 return;
             }
         }
-        // Inform checkpointing systems of success
-        try {
-            getStorageManager().commitChanges();
-        } catch (Exception e) {
-            PowerManager pm = (PowerManager)
-                     mInjector.getContext().getSystemService(Context.POWER_SERVICE);
-            pm.reboot("Checkpoint commit failed");
-        }
 
         // We always walk through all the user lifecycle states to send
         // consistent developer events. We step into RUNNING_LOCKED here,
@@ -398,14 +389,14 @@ class UserController implements Handler.Callback {
      * Step from {@link UserState#STATE_RUNNING_LOCKED} to
      * {@link UserState#STATE_RUNNING_UNLOCKING}.
      */
-    private void finishUserUnlocking(final UserState uss) {
+    private boolean finishUserUnlocking(final UserState uss) {
         final int userId = uss.mHandle.getIdentifier();
         // Only keep marching forward if user is actually unlocked
-        if (!StorageManager.isUserKeyUnlocked(userId)) return;
+        if (!StorageManager.isUserKeyUnlocked(userId)) return false;
         synchronized (mLock) {
             // Do not proceed if unexpected state or a stale user
             if (mStartedUsers.get(userId) != uss || uss.state != STATE_RUNNING_LOCKED) {
-                return;
+                return false;
             }
         }
         uss.mUnlockProgress.start();
@@ -436,6 +427,7 @@ class UserController implements Handler.Callback {
             mHandler.obtainMessage(SYSTEM_USER_UNLOCK_MSG, userId, 0, uss)
                     .sendToTarget();
         });
+        return true;
     }
 
     /**
@@ -938,6 +930,7 @@ class UserController implements Handler.Callback {
      *
      * @param userId ID of the user to start
      * @param foreground true if user should be brought to the foreground
+     * @param unlockListener Listener to be informed when the user has started and unlocked.
      * @return true if the user has been successfully started
      */
     boolean startUser(
@@ -962,6 +955,15 @@ class UserController implements Handler.Callback {
         try {
             final int oldUserId = getCurrentUserId();
             if (oldUserId == userId) {
+                final UserState state = getStartedUserState(userId);
+                if (state != null && state.state == STATE_RUNNING_UNLOCKED) {
+                    // We'll skip all later code, so we must tell listener it's already unlocked.
+                    try {
+                        unlockListener.onFinished(userId, null);
+                    } catch (RemoteException ignore) {
+                        // Ignore.
+                    }
+                }
                 return true;
             }
 
@@ -1208,7 +1210,10 @@ class UserController implements Handler.Callback {
             return false;
         }
 
-        finishUserUnlocking(uss);
+        if (!finishUserUnlocking(uss)) {
+            notifyFinished(userId, listener);
+            return false;
+        }
 
         // We just unlocked a user, so let's now attempt to unlock any
         // managed profiles under that user.
@@ -1547,8 +1552,8 @@ class UserController implements Handler.Callback {
                     }
                     builder.append(" asks to run as user ");
                     builder.append(userId);
-                    builder.append(" but is calling from user ");
-                    builder.append(UserHandle.getUserId(callingUid));
+                    builder.append(" but is calling from uid ");
+                    UserHandle.formatUid(builder, callingUid);
                     builder.append("; this requires ");
                     builder.append(INTERACT_ACROSS_USERS_FULL);
                     if (allowMode != ALLOW_FULL_ONLY) {

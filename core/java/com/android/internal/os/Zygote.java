@@ -369,17 +369,8 @@ public final class Zygote {
      * @param appInfo ApplicationInfo of the application
      */
     protected static void allowAppFilesAcrossFork(ApplicationInfo appInfo) {
-        Zygote.nativeAllowFileAcrossFork(appInfo.sourceDir);
-        if (appInfo.splitSourceDirs != null) {
-            for (String path : appInfo.splitSourceDirs) {
-                Zygote.nativeAllowFileAcrossFork(path);
-            }
-        }
-        // As well as its shared libs
-        if (appInfo.sharedLibraryFiles != null) {
-            for (String path : appInfo.sharedLibraryFiles) {
-                Zygote.nativeAllowFileAcrossFork(path);
-            }
+        for (String path : appInfo.getAllApkPaths()) {
+            Zygote.nativeAllowFileAcrossFork(path);
         }
     }
 
@@ -417,11 +408,11 @@ public final class Zygote {
      * TODO (chriswailes): Cache the system property location in native code and then write a JNI
      *                     function to fetch it.
      */
-    public static String getSystemProperty(String propertyName, String defaultValue) {
+    public static String getConfigurationProperty(String propertyName, String defaultValue) {
         return SystemProperties.get(
                 String.join(".",
                         "persist.device_config",
-                        DeviceConfig.RuntimeNative.NAMESPACE,
+                        DeviceConfig.NAMESPACE_RUNTIME_NATIVE,
                         propertyName),
                 defaultValue);
     }
@@ -442,12 +433,14 @@ public final class Zygote {
      *
      * TODO (chriswailes): Cache the system property location in native code and then write a JNI
      *                     function to fetch it.
+     * TODO (chriswailes): Move into ZygoteConfig.java once the necessary CL lands (go/ag/6580627)
      */
-    public static boolean getSystemPropertyBoolean(String propertyName, Boolean defaultValue) {
+    public static boolean getConfigurationPropertyBoolean(
+            String propertyName, Boolean defaultValue) {
         return SystemProperties.getBoolean(
                 String.join(".",
                         "persist.device_config",
-                        DeviceConfig.RuntimeNative.NAMESPACE,
+                        DeviceConfig.NAMESPACE_RUNTIME_NATIVE,
                         propertyName),
                 defaultValue);
     }

@@ -1068,6 +1068,12 @@ public class IPackageManagerStub implements IPackageManager {
     }
 
     @Override
+    public ParceledListSlice getDeclaredSharedLibraries(String packageName, int flags, int userId)
+            throws RemoteException {
+        return null;
+    }
+
+    @Override
     public boolean canRequestPackageInstalls(String packageName, int userId)
         throws RemoteException {
         return false;
@@ -1138,7 +1144,7 @@ public class IPackageManagerStub implements IPackageManager {
     }
 
     @Override
-    public String getContentCaptureServicePackageName() throws RemoteException {
+    public String getSystemCaptionsServicePackageName() throws RemoteException {
         return null;
     }
 

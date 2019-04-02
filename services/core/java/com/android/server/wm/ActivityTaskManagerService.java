@@ -748,6 +748,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mWindowManager.setSupportsPictureInPicture(mSupportsPictureInPicture);
             mWindowManager.setSupportsFreeformWindowManagement(mSupportsFreeformWindowManagement);
             mWindowManager.setIsPc(isPc);
+            mWindowManager.mRoot.onSettingsRetrieved();
             // This happens before any activities are started, so we can change global configuration
             // in-place.
             updateConfigurationLocked(configuration, null, true);
@@ -774,6 +775,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     public WindowManagerGlobalLock getGlobalLock() {
         return mGlobalLock;
+    }
+
+    /** For test purpose only. */
+    @VisibleForTesting
+    public ActivityTaskManagerInternal getAtmInternal() {
+        return mInternal;
     }
 
     public void initialize(IntentFirewall intentFirewall, PendingIntentController intentController,
@@ -948,7 +955,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         @Override
         public void onUnlockUser(int userId) {
             synchronized (mService.getGlobalLock()) {
-                mService.mStackSupervisor.mLaunchParamsPersister.onUnlockUser(userId);
+                mService.mStackSupervisor.onUserUnlocked(userId);
             }
         }
 
@@ -1666,13 +1673,32 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         final long origId = Binder.clearCallingIdentity();
 
+        String restartingName = null;
+        int restartingUid = 0;
+        final ActivityRecord r;
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            r = ActivityRecord.isInStackLocked(token);
             if (r != null) {
+                if (r.attachedToProcess()
+                        && r.isState(ActivityStack.ActivityState.RESTARTING_PROCESS)) {
+                    // The activity was requested to restart from
+                    // {@link #restartActivityProcessIfVisible}.
+                    restartingName = r.app.mName;
+                    restartingUid = r.app.mUid;
+                }
                 r.activityStoppedLocked(icicle, persistentState, description);
             }
         }
 
+        if (restartingName != null) {
+            // In order to let the foreground activity can be restarted with its saved state from
+            // {@link android.app.Activity#onSaveInstanceState}, the kill operation is postponed
+            // until the activity reports stopped with the state. And the activity record will be
+            // kept because the record state is restarting, then the activity will be restarted
+            // immediately if it is still the top one.
+            mStackSupervisor.removeRestartTimeouts(r);
+            mAmInternal.killProcess(restartingName, restartingUid, "restartActivityProcess");
+        }
         mAmInternal.trimApplications();
 
         Binder.restoreCallingIdentity(origId);
@@ -2007,6 +2033,23 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 if (r != null && r.moveFocusableActivityToTop("setFocusedTask")) {
                     mRootActivityContainer.resumeFocusedStacksTopActivities();
                 }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
+    }
+
+    @Override
+    public void restartActivityProcessIfVisible(IBinder activityToken) {
+        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "restartActivityProcess()");
+        final long callingId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final ActivityRecord r = ActivityRecord.isInStackLocked(activityToken);
+                if (r == null) {
+                    return;
+                }
+                r.restartProcessIfVisible();
             }
         } finally {
             Binder.restoreCallingIdentity(callingId);
@@ -6444,6 +6487,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public boolean startHomeActivity(int userId, String reason) {
             synchronized (mGlobalLock) {
                 return mRootActivityContainer.startHomeOnDisplay(userId, reason, DEFAULT_DISPLAY);
+            }
+        }
+
+        @Override
+        public boolean startHomeOnDisplay(int userId, String reason, int displayId,
+                boolean allowInstrumenting, boolean fromHomeKey) {
+            synchronized (mGlobalLock) {
+                return mRootActivityContainer.startHomeOnDisplay(userId, reason, displayId,
+                        allowInstrumenting, fromHomeKey);
             }
         }
 

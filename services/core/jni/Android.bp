@@ -38,6 +38,7 @@ cc_library_static {
         "com_android_server_SerialService.cpp",
         "com_android_server_storage_AppFuseBridge.cpp",
         "com_android_server_SystemServer.cpp",
+        "com_android_server_TestNetworkService.cpp",
         "com_android_server_tv_TvUinputBridge.cpp",
         "com_android_server_tv_TvInputHal.cpp",
         "com_android_server_vr_VrManagerService.cpp",
@@ -49,6 +50,7 @@ cc_library_static {
         "com_android_server_VibratorService.cpp",
         "com_android_server_PersistentDataBlockService.cpp",
         "com_android_server_GraphicsStatsService.cpp",
+        "com_android_server_am_AppCompactor.cpp",
         "onload.cpp",
     ],
 
@@ -108,6 +110,7 @@ cc_defaults {
         "android.hardware.gnss@1.0",
         "android.hardware.gnss@1.1",
         "android.hardware.gnss@2.0",
+        "android.hardware.gnss.measurement_corrections@1.0",
         "android.hardware.gnss.visibility_control@1.0",
         "android.hardware.input.classifier@1.0",
         "android.hardware.ir@1.0",

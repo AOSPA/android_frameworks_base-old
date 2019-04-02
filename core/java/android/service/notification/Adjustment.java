@@ -16,12 +16,16 @@
 package android.service.notification;
 
 import android.annotation.NonNull;
+import android.annotation.StringDef;
 import android.annotation.SystemApi;
 import android.app.Notification;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Ranking updates from the Assistant.
@@ -32,13 +36,24 @@ import android.os.UserHandle;
  * realizes on the notification rankings.
  *
  * Notifications affected by the Adjustment will be re-ranked if necessary.
+ *
+ * @hide
  */
+@SystemApi
 public final class Adjustment implements Parcelable {
     private final String mPackage;
     private final String mKey;
     private final CharSequence mExplanation;
     private final Bundle mSignals;
     private final int mUser;
+
+    /** @hide */
+    @StringDef (prefix = { "KEY_" }, value = {
+            KEY_CONTEXTUAL_ACTIONS, KEY_GROUP_KEY, KEY_IMPORTANCE, KEY_PEOPLE, KEY_SNOOZE_CRITERIA,
+            KEY_TEXT_REPLIES, KEY_USER_SENTIMENT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Keys {}
 
     /**
      * Data type: ArrayList of {@code String}, where each is a representation of a

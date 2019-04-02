@@ -15,6 +15,12 @@
  */
 package com.android.server.contentcapture;
 
+import static android.service.contentcapture.ContentCaptureService.setClientState;
+import static android.view.contentcapture.ContentCaptureSession.STATE_ACTIVE;
+import static android.view.contentcapture.ContentCaptureSession.STATE_DISABLED;
+import static android.view.contentcapture.ContentCaptureSession.STATE_SERVICE_RESURRECTED;
+import static android.view.contentcapture.ContentCaptureSession.STATE_SERVICE_UPDATING;
+
 import android.annotation.NonNull;
 import android.content.ComponentName;
 import android.os.IBinder;
@@ -37,11 +43,16 @@ final class ContentCaptureServerSession {
 
     final IBinder mActivityToken;
     private final ContentCapturePerUserService mService;
-    private final RemoteContentCaptureService mRemoteService;
 
     // NOTE: this is the "internal" context (like package and taskId), not the explicit content
     // set by apps - those are only send to the ContentCaptureService.
     private final ContentCaptureContext mContentCaptureContext;
+
+    /**
+     * Reference to the binder object help at the client-side process and used to set its state.
+     */
+    @NonNull
+    private final IResultReceiver mSessionStateReceiver;
 
     /**
      * Canonical session id.
@@ -54,17 +65,16 @@ final class ContentCaptureServerSession {
     private final int mUid;
 
     ContentCaptureServerSession(@NonNull IBinder activityToken,
-            @NonNull ContentCapturePerUserService service,
-            @NonNull RemoteContentCaptureService remoteService,
-            @NonNull ComponentName appComponentName,
+            @NonNull ContentCapturePerUserService service, @NonNull ComponentName appComponentName,
+            @NonNull IResultReceiver sessionStateReceiver,
             int taskId, int displayId, @NonNull String sessionId, int uid, int flags) {
         mActivityToken = activityToken;
         mService = service;
         mId = Preconditions.checkNotNull(sessionId);
         mUid = uid;
-        mRemoteService = remoteService;
         mContentCaptureContext = new ContentCaptureContext(/* clientContext= */ null,
                 appComponentName, taskId, displayId, flags);
+        mSessionStateReceiver = sessionStateReceiver;
     }
 
     /**
@@ -79,7 +89,12 @@ final class ContentCaptureServerSession {
      */
     @GuardedBy("mLock")
     public void notifySessionStartedLocked(@NonNull IResultReceiver clientReceiver) {
-        mRemoteService.onSessionStarted(mContentCaptureContext, mId, mUid, clientReceiver);
+        if (mService.mRemoteService == null) {
+            Slog.w(TAG, "notifySessionStartedLocked(): no remote service");
+            return;
+        }
+        mService.mRemoteService.onSessionStarted(mContentCaptureContext, mId, mUid, clientReceiver,
+                STATE_ACTIVE);
     }
 
     /**
@@ -92,7 +107,11 @@ final class ContentCaptureServerSession {
             logHistory.log("snapshot: id=" + mId);
         }
 
-        mRemoteService.onActivitySnapshotRequest(mId, snapshotData);
+        if (mService.mRemoteService == null) {
+            Slog.w(TAG, "sendActivitySnapshotLocked(): no remote service");
+            return;
+        }
+        mService.mRemoteService.onActivitySnapshotRequest(mId, snapshotData);
     }
 
     /**
@@ -125,8 +144,40 @@ final class ContentCaptureServerSession {
         }
         // TODO(b/111276913): must call client to set session as FINISHED_BY_SERVER
         if (notifyRemoteService) {
-            mRemoteService.onSessionFinished(mId);
+            if (mService.mRemoteService == null) {
+                Slog.w(TAG, "destroyLocked(): no remote service");
+                return;
+            }
+            mService.mRemoteService.onSessionFinished(mId);
         }
+    }
+
+    /**
+     * Called to restore the active state of a session that was paused while the service died.
+     */
+    @GuardedBy("mLock")
+    public void resurrectLocked() {
+        final RemoteContentCaptureService remoteService = mService.mRemoteService;
+        if (remoteService == null) {
+            Slog.w(TAG, "destroyLocked(: no remote service");
+            return;
+        }
+        if (mService.isVerbose()) {
+            Slog.v(TAG, "resurrecting " + mActivityToken + " on " + remoteService);
+        }
+        remoteService.onSessionStarted(new ContentCaptureContext(mContentCaptureContext,
+                ContentCaptureContext.FLAG_RECONNECTED), mId, mUid, mSessionStateReceiver,
+                STATE_ACTIVE | STATE_SERVICE_RESURRECTED);
+    }
+
+    /**
+     * Called to pause the session while the service is being updated.
+     */
+    @GuardedBy("mLock")
+    public void pauseLocked() {
+        if (mService.isVerbose()) Slog.v(TAG, "pausing " + mActivityToken);
+        setClientState(mSessionStateReceiver, STATE_DISABLED | STATE_SERVICE_UPDATING,
+                /* binder= */ null);
     }
 
     @GuardedBy("mLock")

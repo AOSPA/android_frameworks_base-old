@@ -129,6 +129,14 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
         p.style = Paint.Style.FILL_AND_STROKE
     }
 
+    private val errorPaint = Paint(Paint.ANTI_ALIAS_FLAG).also { p ->
+        p.color = Utils.getColorErrorDefaultColor(context)
+        p.alpha = 255
+        p.isDither = true
+        p.strokeWidth = 0f
+        p.style = Paint.Style.FILL_AND_STROKE
+    }
+
     // Only used if dualTone is set to true
     private val dualToneBackgroundFill = Paint(Paint.ANTI_ALIAS_FLAG).also { p ->
         p.color = frameColor
@@ -179,7 +187,7 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
 
         // The perimeter should never change
         unifiedPath.addPath(scaledPerimeter)
-        // IF drawing dual tone, the level is used only to clip the whole drawable path
+        // If drawing dual tone, the level is used only to clip the whole drawable path
         if (!dualTone) {
             unifiedPath.op(levelPath, Path.Op.UNION)
         }
@@ -196,9 +204,7 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
         } else if (powerSaveEnabled) {
             // Clip out the plus shape
             unifiedPath.op(scaledPlus, Path.Op.DIFFERENCE)
-            if (!invertFillIcon) {
-                c.drawPath(scaledPlus, fillPaint)
-            }
+            c.drawPath(scaledPlus, errorPaint)
         }
 
         if (dualTone) {
@@ -235,12 +241,12 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
                 c.drawPath(scaledBolt, fillColorStrokeProtection)
             }
         } else if (powerSaveEnabled) {
+            // If power save is enabled draw the perimeter path with colorError
+            c.drawPath(scaledPerimeter, errorPaint)
+
+            // But always put path protection around the plus sign
             c.clipOutPath(scaledPlus)
-            if (invertFillIcon) {
-                c.drawPath(scaledPlus, fillColorStrokePaint)
-            } else {
-                c.drawPath(scaledPlus, fillColorStrokeProtection)
-            }
+            c.drawPath(scaledPlus, fillColorStrokeProtection)
         }
     }
 
@@ -405,8 +411,8 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
         private const val CRITICAL_LEVEL = 15
         // On a 12x20 grid, how wide to make the fill protection stroke.
         // Scales when our size changes
-        private const val PROTECTION_STROKE_WIDTH = 1.4f
+        private const val PROTECTION_STROKE_WIDTH = 3f
         // Arbitrarily chosen for visibility at small sizes
-        private const val PROTECTION_MIN_STROKE_WIDTH = 5f
+        private const val PROTECTION_MIN_STROKE_WIDTH = 6f
     }
 }

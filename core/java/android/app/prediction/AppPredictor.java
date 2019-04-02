@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * TODO (b/111701043) : Add java doc
+ * Class that represents an App Prediction client.
  *
  * <p>
  * Usage: <pre> {@code
@@ -49,14 +49,20 @@ import java.util.function.Consumer;
  *
  *    void onCreate() {
  *         mClient = new AppPredictor(...)
+ *         mClient.registerPredictionUpdates(...)
  *    }
  *
  *    void onStart() {
- *        mClient.requestPredictionUpdate();
+ *        mClient.requestPredictionUpdate()
+ *    }
+ *
+ *    void onClick(...) {
+ *        mClient.notifyAppTargetEvent(...)
  *    }
  *
  *    void onDestroy() {
- *        mClient.close();
+ *        mClient.unregisterPredictionUpdates()
+ *        mClient.close()
  *    }
  *
  * }</pre>
@@ -83,7 +89,8 @@ public final class AppPredictor {
      * The caller should call {@link AppPredictor#destroy()} to dispose the client once it
      * no longer used.
      *
-     * @param predictionContext The prediction context
+     * @param context The {@link Context} of the user of this {@link AppPredictor}.
+     * @param predictionContext The prediction context.
      */
     AppPredictor(@NonNull Context context, @NonNull AppPredictionContext predictionContext) {
         IBinder b = ServiceManager.getService(Context.APP_PREDICTION_SERVICE);
@@ -94,7 +101,7 @@ public final class AppPredictor {
             mPredictionManager.createPredictionSession(predictionContext, mSessionId);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to create predictor", e);
-            return;
+            e.rethrowAsRuntimeException();
         }
 
         mCloseGuard.open("close");
@@ -102,6 +109,8 @@ public final class AppPredictor {
 
     /**
      * Notifies the prediction service of an app target event.
+     *
+     * @param event The {@link AppTargetEvent} that represents the app target event.
      */
     public void notifyAppTargetEvent(@NonNull AppTargetEvent event) {
         if (mIsClosed.get()) {
@@ -112,23 +121,28 @@ public final class AppPredictor {
             mPredictionManager.notifyAppTargetEvent(mSessionId, event);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to notify app target event", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
     /**
      * Notifies the prediction service when the targets in a launch location are shown to the user.
+     *
+     * @param launchLocation The launch location where the targets are shown to the user.
+     * @param targetIds List of {@link AppTargetId}s that are shown to the user.
      */
-    public void notifyLocationShown(@NonNull String launchLocation,
+    public void notifyLaunchLocationShown(@NonNull String launchLocation,
             @NonNull List<AppTargetId> targetIds) {
         if (mIsClosed.get()) {
             throw new IllegalStateException("This client has already been destroyed.");
         }
 
         try {
-            mPredictionManager.notifyLocationShown(mSessionId, launchLocation,
+            mPredictionManager.notifyLaunchLocationShown(mSessionId, launchLocation,
                     new ParceledListSlice<>(targetIds));
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to notify location shown event", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
@@ -136,7 +150,10 @@ public final class AppPredictor {
      * Requests the prediction service provide continuous updates of App predictions via the
      * provided callback, until the given callback is unregistered.
      *
-     * @see Callback#onTargetsAvailable(List)
+     * @see Callback#onTargetsAvailable(List).
+     *
+     * @param callbackExecutor The callback executor to use when calling the callback.
+     * @param callback The Callback to be called when updates of App predictions are available.
      */
     public void registerPredictionUpdates(@NonNull @CallbackExecutor Executor callbackExecutor,
             @NonNull AppPredictor.Callback callback) {
@@ -155,12 +172,17 @@ public final class AppPredictor {
             mRegisteredCallbacks.put(callback, callbackWrapper);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to register for prediction updates", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
     /**
      * Requests the prediction service to stop providing continuous updates to the provided
      * callback until the callback is re-registered.
+     *
+     * @see {@link AppPredictor#registerPredictionUpdates(Executor, Callback)}.
+     *
+     * @param callback The callback to be unregistered.
      */
     public void unregisterPredictionUpdates(@NonNull AppPredictor.Callback callback) {
         if (mIsClosed.get()) {
@@ -176,6 +198,7 @@ public final class AppPredictor {
             mPredictionManager.unregisterPredictionUpdates(mSessionId, callbackWrapper);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to unregister for prediction updates", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
@@ -183,7 +206,7 @@ public final class AppPredictor {
      * Requests the prediction service to dispatch a new set of App predictions via the provided
      * callback.
      *
-     * @see Callback#onTargetsAvailable(List)
+     * @see Callback#onTargetsAvailable(List).
      */
     public void requestPredictionUpdate() {
         if (mIsClosed.get()) {
@@ -194,12 +217,17 @@ public final class AppPredictor {
             mPredictionManager.requestPredictionUpdate(mSessionId);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to request prediction update", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
     /**
      * Returns a new list of AppTargets sorted based on prediction rank or {@code null} if the
      * ranker is not available.
+     *
+     * @param targets List of app targets to be sorted.
+     * @param callbackExecutor The callback executor to use when calling the callback.
+     * @param callback The callback to return the sorted list of app targets.
      */
     @Nullable
     public void sortTargets(@NonNull List<AppTarget> targets,
@@ -213,14 +241,13 @@ public final class AppPredictor {
                     new CallbackWrapper(callbackExecutor, callback));
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to sort targets", e);
+            e.rethrowAsRuntimeException();
         }
     }
 
     /**
      * Destroys the client and unregisters the callback. Any method on this class after this call
      * with throw {@link IllegalStateException}.
-     *
-     * TODO(b/111701043): Add state check in other methods.
      */
     public void destroy() {
         if (!mIsClosed.getAndSet(true)) {
@@ -231,6 +258,7 @@ public final class AppPredictor {
                 mPredictionManager.onDestroyPredictionSession(mSessionId);
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to notify app target event", e);
+                e.rethrowAsRuntimeException();
             }
         } else {
             throw new IllegalStateException("This client has already been destroyed.");
@@ -250,7 +278,7 @@ public final class AppPredictor {
     }
 
     /**
-     * TODO(b/123591863): Add java docs
+     * Returns the id of this prediction session.
      *
      * @hide
      */
@@ -266,7 +294,7 @@ public final class AppPredictor {
 
         /**
          * Called when a new set of predicted app targets are available.
-         * @param targets Sorted list of predicted targets
+         * @param targets Sorted list of predicted targets.
          */
         void onTargetsAvailable(@NonNull List<AppTarget> targets);
     }

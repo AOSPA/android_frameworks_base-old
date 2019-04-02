@@ -40,6 +40,7 @@ import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
 import android.view.RemoteAnimationAdapter;
 import android.view.IRotationWatcher;
+import android.view.ISystemGestureExclusionListener;
 import android.view.IWallpaperVisibilityListener;
 import android.view.IWindowSession;
 import android.view.IWindowSessionCallback;
@@ -129,7 +130,7 @@ interface IWindowManager
     @UnsupportedAppUsage
     boolean isKeyguardLocked();
     @UnsupportedAppUsage
-    boolean isKeyguardSecure();
+    boolean isKeyguardSecure(int userId);
     void dismissKeyguard(IKeyguardDismissCallback callback, CharSequence message);
 
     // Requires INTERACT_ACROSS_USERS_FULL permission
@@ -281,6 +282,18 @@ interface IWindowManager
         int displayId);
 
     /**
+     * Registers a system gesture exclusion listener for a given display.
+     */
+    void registerSystemGestureExclusionListener(ISystemGestureExclusionListener listener,
+        int displayId);
+
+    /**
+     * Unregisters a system gesture exclusion listener for a given display.
+     */
+    void unregisterSystemGestureExclusionListener(ISystemGestureExclusionListener listener,
+        int displayId);
+
+    /**
      * Used only for assist -- request a screenshot of the current application.
      */
     boolean requestAssistScreenshot(IAssistDataReceiver receiver);
@@ -289,6 +302,16 @@ interface IWindowManager
      * Called by the status bar to notify Views of changes to System UI visiblity.
      */
     oneway void statusBarVisibilityChanged(int displayId, int visibility);
+
+    /**
+    * When set to {@code true} the system bars will always be shown. This is true even if an app
+    * requests to be fullscreen by setting the system ui visibility flags. The
+    * functionality was added for the automotive case as a way to guarantee required content stays
+    * on screen at all times.
+    *
+    * @hide
+    */
+    oneway void setForceShowSystemBars(boolean show);
 
     /**
      * Called by System UI to notify of changes to the visibility of Recents.

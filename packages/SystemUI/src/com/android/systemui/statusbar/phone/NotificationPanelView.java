@@ -92,6 +92,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcher;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 import com.android.systemui.statusbar.policy.ZenModeController;
+import com.android.systemui.util.InjectionInflationController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -141,6 +142,7 @@ public class NotificationPanelView extends PanelView implements
     private static final AnimationProperties CLOCK_ANIMATION_PROPERTIES = new AnimationProperties()
             .setDuration(StackStateAnimator.ANIMATION_DURATION_STANDARD);
 
+    private final InjectionInflationController mInjectionInflationController;
     private final PowerManager mPowerManager;
     private final AccessibilityManager mAccessibilityManager;
     private final NotificationWakeUpCoordinator mWakeUpCoordinator;
@@ -192,7 +194,6 @@ public class NotificationPanelView extends PanelView implements
     protected int mQsMinExpansionHeight;
     protected int mQsMaxExpansionHeight;
     private int mQsPeekHeight;
-    private int mBouncerTop;
     private boolean mStackScrollerOverscrolling;
     private boolean mQsExpansionFromOverscroll;
     private float mLastOverscroll;
@@ -325,13 +326,24 @@ public class NotificationPanelView extends PanelView implements
     private final ShadeController mShadeController =
             Dependency.get(ShadeController.class);
     private int mDisplayId;
+    private KeyguardBouncer mBouncer;
+
+    /**
+     * Cache the resource id of the theme to avoid unnecessary work in onThemeChanged.
+     *
+     * onThemeChanged is forced when the theme might not have changed. So, to avoid unncessary
+     * work, check the current id with the cached id.
+     */
+    private int mThemeResId;
 
     @Inject
     public NotificationPanelView(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
+            InjectionInflationController injectionInflationController,
             NotificationWakeUpCoordinator coordinator,
             PulseExpansionHandler pulseExpansionHandler) {
         super(context, attrs);
         setWillNotDraw(!DEBUG);
+        mInjectionInflationController = injectionInflationController;
         mFalsingManager = FalsingManager.getInstance(context);
         mPowerManager = context.getSystemService(PowerManager.class);
         mWakeUpCoordinator = coordinator;
@@ -342,6 +354,7 @@ public class NotificationPanelView extends PanelView implements
         mCommandQueue = getComponent(context, CommandQueue.class);
         mDisplayId = context.getDisplayId();
         mPulseExpansionHandler = pulseExpansionHandler;
+        mThemeResId = context.getThemeResId();
     }
 
     /**
@@ -390,6 +403,9 @@ public class NotificationPanelView extends PanelView implements
         Dependency.get(StatusBarStateController.class).addCallback(this);
         Dependency.get(ZenModeController.class).addCallback(this);
         Dependency.get(ConfigurationController.class).addCallback(this);
+        // Theme might have changed between inflating this view and attaching it to the window, so
+        // force a call to onThemeChanged
+        onThemeChanged();
     }
 
     @Override
@@ -452,15 +468,22 @@ public class NotificationPanelView extends PanelView implements
 
     @Override
     public void onThemeChanged() {
+        final int themeResId = getContext().getThemeResId();
+        if (mThemeResId == themeResId) {
+            return;
+        }
+        mThemeResId = themeResId;
+
         updateShowEmptyShadeView();
 
         // Re-inflate the status view group.
         int index = indexOfChild(mKeyguardStatusView);
         removeView(mKeyguardStatusView);
-        mKeyguardStatusView = (KeyguardStatusView) LayoutInflater.from(mContext).inflate(
-                R.layout.keyguard_status_view,
-                this,
-                false);
+        mKeyguardStatusView = (KeyguardStatusView) mInjectionInflationController
+                .injectable(LayoutInflater.from(mContext)).inflate(
+                    R.layout.keyguard_status_view,
+                    this,
+                    false);
         addView(mKeyguardStatusView, index);
 
         // Re-associate the clock container with the keyguard clock switch.
@@ -472,10 +495,11 @@ public class NotificationPanelView extends PanelView implements
         index = indexOfChild(mKeyguardBottomArea);
         removeView(mKeyguardBottomArea);
         KeyguardBottomAreaView oldBottomArea = mKeyguardBottomArea;
-        mKeyguardBottomArea = (KeyguardBottomAreaView) LayoutInflater.from(mContext).inflate(
-                R.layout.keyguard_bottom_area,
-                this,
-                false);
+        mKeyguardBottomArea = (KeyguardBottomAreaView) mInjectionInflationController
+                .injectable(LayoutInflater.from(mContext)).inflate(
+                    R.layout.keyguard_bottom_area,
+                    this,
+                    false);
         mKeyguardBottomArea.initFrom(oldBottomArea);
         addView(mKeyguardBottomArea, index);
         initBottomArea();
@@ -670,11 +694,6 @@ public class NotificationPanelView extends PanelView implements
             }
         }
         return count;
-    }
-
-    public void setBouncerTop(int bouncerTop) {
-        mBouncerTop = bouncerTop;
-        positionClockAndNotifications();
     }
 
     private void updateClock() {
@@ -1217,6 +1236,12 @@ public class NotificationPanelView extends PanelView implements
         setQsExpansion(height);
         requestPanelHeightUpdate();
         mNotificationStackScroller.checkSnoozeLeavebehind();
+
+        // When expanding QS, let's authenticate the user if possible,
+        // this will speed up notification actions.
+        if (height == 0) {
+            mStatusBar.requestFaceAuth();
+        }
     }
 
     private void setQsExpanded(boolean expanded) {
@@ -1717,7 +1742,6 @@ public class NotificationPanelView extends PanelView implements
         }
         updateExpandedHeight(expandedHeight);
         updateHeader();
-        updateUnlockIcon();
         updateNotificationTranslucency();
         updatePanelExpanded();
         if (DEBUG) {
@@ -1810,19 +1834,6 @@ public class NotificationPanelView extends PanelView implements
         return mNotificationStackScroller.getCurrentOverScrolledPixels(true /* top */);
     }
 
-    private void updateUnlockIcon() {
-        if (mBarState == StatusBarState.KEYGUARD
-                || mBarState == StatusBarState.SHADE_LOCKED) {
-            boolean active = getMaxPanelHeight() - getExpandedHeight() > mUnlockMoveDistance;
-            KeyguardAffordanceView lockIcon = mKeyguardBottomArea.getLockIcon();
-            if (active != mUnlockIconActive && mTracking) {
-                lockIcon.setImageAlpha(lockIcon.getRestingAlpha(), true, 150,
-                        Interpolators.FAST_OUT_LINEAR_IN, null);
-            }
-            mUnlockIconActive = active;
-        }
-    }
-
     /**
      * Hides the header when notifications are colliding with it.
      */
@@ -1889,7 +1900,7 @@ public class NotificationPanelView extends PanelView implements
                         ? 0 : KeyguardBouncer.ALPHA_EXPANSION_THRESHOLD, 1f,
                 0f, 1f, getExpandedFraction());
         float alpha = Math.min(expansionAlpha, 1 - getQsExpansionFraction());
-        mKeyguardBottomArea.setAlpha(alpha);
+        mKeyguardBottomArea.setAffordanceAlpha(alpha);
         mKeyguardBottomArea.setImportantForAccessibility(alpha == 0f
                 ? IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 : IMPORTANT_FOR_ACCESSIBILITY_AUTO);
@@ -2036,11 +2047,6 @@ public class NotificationPanelView extends PanelView implements
             if (!mHintAnimationRunning) {
                 mAffordanceHelper.reset(true);
             }
-        }
-        if (!expand && (mBarState == StatusBarState.KEYGUARD
-                || mBarState == StatusBarState.SHADE_LOCKED)) {
-            KeyguardAffordanceView lockIcon = mKeyguardBottomArea.getLockIcon();
-            lockIcon.setImageAlpha(0.0f, true, 100, Interpolators.FAST_OUT_LINEAR_IN, null);
         }
     }
 
@@ -2191,22 +2197,6 @@ public class NotificationPanelView extends PanelView implements
             return;
         }
         super.startUnlockHintAnimation();
-        startHighlightIconAnimation(getCenterIcon());
-    }
-
-    /**
-     * Starts the highlight (making it fully opaque) animation on an icon.
-     */
-    private void startHighlightIconAnimation(final KeyguardAffordanceView icon) {
-        icon.setImageAlpha(1.0f, true, KeyguardAffordanceHelper.HINT_PHASE1_DURATION,
-                Interpolators.FAST_OUT_SLOW_IN, new Runnable() {
-                    @Override
-                    public void run() {
-                        icon.setImageAlpha(icon.getRestingAlpha(),
-                                true /* animate */, KeyguardAffordanceHelper.HINT_PHASE1_DURATION,
-                                Interpolators.FAST_OUT_SLOW_IN, null);
-                    }
-                });
     }
 
     @Override
@@ -2945,6 +2935,7 @@ public class NotificationPanelView extends PanelView implements
     public void onBouncerPreHideAnimation() {
         setKeyguardStatusViewVisibility(mBarState, true /* keyguardFadingAway */,
                 false /* goingToFullShade */);
+        updateLockIcon();
     }
 
     @Override
@@ -3033,5 +3024,55 @@ public class NotificationPanelView extends PanelView implements
 
     public void showTransientIndication(int id) {
         mKeyguardBottomArea.showTransientIndication(id);
+    }
+
+    /**
+     * Sets the reference to the {@link KeyguardBouncer}.
+     */
+    public void setBouncer(KeyguardBouncer bouncer) {
+        mBouncer = bouncer;
+        updateLockIcon();
+    }
+
+    public void updateLockIcon() {
+        if (mBouncer == null) {
+            return;
+        }
+
+        ViewGroup bouncerContainer = mBouncer.getLockIconContainer();
+        LockIcon lockIcon = mKeyguardBottomArea.getLockIcon();
+
+        if (mBouncer.isAnimatingAway()) {
+            if (!lockIcon.isAnimatingAlpha() && lockIcon.getAlpha() != 0) {
+                lockIcon.setImageAlpha(0, true /* animate */);
+            }
+            // Let's not re-apply the translation if the bouncer is animating, its
+            // animation also includes translation and transition would be jarring.
+            return;
+        }
+
+        float translation = 0;
+        if (bouncerContainer != null) {
+            float bottomAreaContainerY = getCommonTop(lockIcon);
+            float bouncerLockY = getCommonTop(bouncerContainer);
+            if (bouncerLockY < bottomAreaContainerY) {
+                translation = bouncerLockY - bottomAreaContainerY;
+            }
+        }
+        lockIcon.setTranslationY(translation);
+
+        if (lockIcon.getAlpha() != 1) {
+            lockIcon.setImageAlpha(1, false /* animate */);
+        }
+    }
+
+    private static float getCommonTop(View view) {
+        float y = view.getTop();
+        ViewGroup parent = (ViewGroup) view.getParent();
+        while (!(parent instanceof StatusBarWindowView)) {
+            y += parent.getY();
+            parent = (ViewGroup) parent.getParent();
+        }
+        return y;
     }
 }

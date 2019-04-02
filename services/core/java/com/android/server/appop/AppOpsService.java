@@ -1132,7 +1132,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                 .build();
         Preconditions.checkNotNull(callback, "callback cannot be null");
 
-        mContext.enforcePermission(android.Manifest.permission.GET_APP_OPS_STATS,
+        mContext.enforcePermission(Manifest.permission.MANAGE_APPOPS,
                 Binder.getCallingPid(), Binder.getCallingUid(), "getHistoricalOps");
 
         final String[] opNamesArray = (opNames != null)
@@ -1141,6 +1141,14 @@ public class AppOpsService extends IAppOpsService.Stub {
         // Must not hold the appops lock
         mHistoricalRegistry.getHistoricalOpsFromDiskRaw(uid, packageName, opNamesArray,
                 beginTimeMillis, endTimeMillis, flags, callback);
+    }
+
+    @Override
+    public void reloadNonHistoricalState() {
+        mContext.enforcePermission(Manifest.permission.MANAGE_APPOPS,
+                Binder.getCallingPid(), Binder.getCallingUid(), "reloadNonHistoricalState");
+        writeState();
+        readState();
     }
 
     @Override
@@ -1249,6 +1257,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                 }
                 scheduleWriteLocked();
             }
+            uidState.evalForegroundOps(mOpModeWatchers);
         }
 
         String[] uidPackageNames = getPackagesForUid(uid);
@@ -1742,10 +1751,31 @@ public class AppOpsService extends IAppOpsService.Stub {
         return checkOperationUnchecked(code, uid, resolvedPackageName, raw);
     }
 
-    private int checkOperationUnchecked(int code, int uid, String packageName,
-                boolean raw) {
+    /**
+     * @see #checkOperationUnchecked(int, int, String, boolean, boolean)
+     */
+    private @Mode int checkOperationUnchecked(int code, int uid, @NonNull String packageName,
+            boolean raw) {
+        return checkOperationUnchecked(code, uid, packageName, raw, true);
+    }
+
+    /**
+     * Get the mode of an app-op.
+     *
+     * @param code The code of the op
+     * @param uid The uid of the package the op belongs to
+     * @param packageName The package the op belongs to
+     * @param raw If the raw state of eval-ed state should be checked.
+     * @param verify If the code should check the package belongs to the uid
+     *
+     * @return The mode of the op
+     */
+    private @Mode int checkOperationUnchecked(int code, int uid, @NonNull String packageName,
+                boolean raw, boolean verify) {
         synchronized (this) {
-            checkPackage(uid, packageName);
+            if (verify) {
+                checkPackage(uid, packageName);
+            }
             if (isOpRestrictedLocked(uid, code, packageName)) {
                 return AppOpsManager.MODE_IGNORED;
             }
@@ -1756,7 +1786,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                 final int rawMode = uidState.opModes.get(code);
                 return raw ? rawMode : uidState.evalMode(code, rawMode);
             }
-            Op op = getOpLocked(code, uid, packageName, false, true, false);
+            Op op = getOpLocked(code, uid, packageName, false, verify, false);
             if (op == null) {
                 return AppOpsManager.opToDefaultMode(code);
             }
@@ -2359,7 +2389,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         throw new IllegalArgumentException("Bad operation #" + op);
     }
 
-    private @NonNull UidState getUidStateLocked(int uid, boolean edit) {
+    private @Nullable UidState getUidStateLocked(int uid, boolean edit) {
         UidState uidState = mUidStates.get(uid);
         if (uidState == null) {
             if (!edit) {
@@ -2385,8 +2415,6 @@ public class AppOpsService extends IAppOpsService.Stub {
     private void commitUidPendingStateLocked(UidState uidState) {
         final boolean lastForeground = uidState.state <= UID_STATE_MAX_LAST_NON_RESTRICTED;
         final boolean nowForeground = uidState.pendingState <= UID_STATE_MAX_LAST_NON_RESTRICTED;
-        uidState.state = uidState.pendingState;
-        uidState.pendingStateCommitTime = 0;
         if (uidState.hasForegroundWatchers && lastForeground != nowForeground) {
             for (int fgi = uidState.foregroundOps.size() - 1; fgi >= 0; fgi--) {
                 if (!uidState.foregroundOps.valueAt(fgi)) {
@@ -2395,11 +2423,10 @@ public class AppOpsService extends IAppOpsService.Stub {
                 final int code = uidState.foregroundOps.keyAt(fgi);
                 // For location ops we consider fg state only if the fg service
                 // is of location type, for all other ops any fg service will do.
-                final long resolvedLastRestrictedUidState = resolveFirstUnrestrictedUidState(code);
-                final boolean resolvedLastFg = uidState.state <= resolvedLastRestrictedUidState;
-                final boolean resolvedNowBg = uidState.pendingState
-                        <= resolvedLastRestrictedUidState;
-                if (resolvedLastFg == resolvedNowBg) {
+                final long firstUnrestrictedUidState = resolveFirstUnrestrictedUidState(code);
+                final boolean resolvedLastFg = uidState.state <= firstUnrestrictedUidState;
+                final boolean resolvedNowFg = uidState.pendingState <= firstUnrestrictedUidState;
+                if (resolvedLastFg == resolvedNowFg) {
                     continue;
                 }
                 final ArraySet<ModeCallback> callbacks = mOpModeWatchers.get(code);
@@ -2431,6 +2458,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                 }
             }
         }
+        uidState.state = uidState.pendingState;
+        uidState.pendingStateCommitTime = 0;
     }
 
     private Ops getOpsRawLocked(int uid, String packageName, boolean edit,
@@ -2977,6 +3006,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
                             final LongSparseArray keys = op.collectKeys();
                             if (keys == null || keys.size() <= 0) {
+                                out.endTag(null, "op");
                                 continue;
                             }
 
@@ -4534,6 +4564,11 @@ public class AppOpsService extends IAppOpsService.Stub {
         @Override
         public void setAllPkgModesToDefault(int code, int uid) {
             AppOpsService.this.setAllPkgModesToDefault(code, uid);
+        }
+
+        @Override
+        public @Mode int checkOperationUnchecked(int code, int uid, @NonNull String packageName) {
+            return AppOpsService.this.checkOperationUnchecked(code, uid, packageName, true, false);
         }
     }
 }

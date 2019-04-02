@@ -468,6 +468,11 @@ public class KeyguardStatusBarView extends RelativeLayout
     }
 
     @Override
+    public void onDensityOrFontScaleChanged() {
+        loadDimens();
+    }
+
+    @Override
     public void onOverlayChanged() {
         mCarrierLabel.setTextAppearance(
                 Utils.getThemeAttr(mContext, com.android.internal.R.attr.textAppearanceSmall));
@@ -483,7 +488,9 @@ public class KeyguardStatusBarView extends RelativeLayout
                 R.color.light_mode_icon_color_single_tone);
         float intensity = textColor == Color.WHITE ? 0 : 1;
         mCarrierLabel.setTextColor(iconColor);
-        mIconManager.setTint(iconColor);
+        if (mIconManager != null) {
+            mIconManager.setTint(iconColor);
+        }
 
         applyDarkness(R.id.battery, mEmptyRect, intensity * (1f - mDarkAmount), iconColor);
         applyDarkness(R.id.clock, mEmptyRect, intensity, iconColor);
@@ -512,6 +519,8 @@ public class KeyguardStatusBarView extends RelativeLayout
             return;
         }
         mDozing = dozing;
+        setClipChildren(!dozing);
+        setClipToPadding(!dozing);
         updateVisibilities();
     }
 

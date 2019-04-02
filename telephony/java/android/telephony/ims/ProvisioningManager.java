@@ -19,10 +19,13 @@ package android.telephony.ims;
 import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.WorkerThread;
 import android.content.Context;
+import android.content.pm.IPackageManager;
+import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -153,7 +156,7 @@ public class ProvisioningManager {
          * @param item the IMS provisioning key constant, as defined by the OEM.
          * @param value the new String value of the IMS configuration constant.
          */
-        public void onProvisioningStringChanged(int item, String value) {
+        public void onProvisioningStringChanged(int item, @NonNull String value) {
             // Base Implementation
         }
 
@@ -177,7 +180,7 @@ public class ProvisioningManager {
      * @see android.telephony.SubscriptionManager#getActiveSubscriptionInfoList()
      * @throws IllegalArgumentException if the subscription is invalid.
      */
-    public static ProvisioningManager createForSubscriptionId(int subId) {
+    public static @NonNull ProvisioningManager createForSubscriptionId(int subId) {
         if (!SubscriptionManager.isValidSubscriptionId(subId)) {
             throw new IllegalArgumentException("Invalid subscription ID");
         }
@@ -206,14 +209,16 @@ public class ProvisioningManager {
      * reason.
      */
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public void registerProvisioningChangedCallback(@CallbackExecutor Executor executor,
+    public void registerProvisioningChangedCallback(@NonNull @CallbackExecutor Executor executor,
             @NonNull Callback callback) throws ImsException {
+        if (!isImsAvailableOnDevice()) {
+            throw new ImsException("IMS not available on device.",
+                    ImsException.CODE_ERROR_UNSUPPORTED_OPERATION);
+        }
         callback.setExecutor(executor);
         try {
             getITelephony().registerImsProvisioningChangedCallback(mSubId, callback.getBinder());
-        } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
-        }  catch (IllegalStateException e) {
+        } catch (RemoteException | IllegalStateException e) {
             throw new ImsException(e.getMessage(), ImsException.CODE_ERROR_SERVICE_UNAVAILABLE);
         }
     }
@@ -231,8 +236,7 @@ public class ProvisioningManager {
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public void unregisterProvisioningChangedCallback(@NonNull Callback callback) {
         try {
-            getITelephony().unregisterImsProvisioningChangedCallback(mSubId,
-                    callback.getBinder());
+            getITelephony().unregisterImsProvisioningChangedCallback(mSubId, callback.getBinder());
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }
@@ -271,7 +275,7 @@ public class ProvisioningManager {
      */
     @WorkerThread
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public String getProvisioningStringValue(int key) {
+    public @Nullable String getProvisioningStringValue(int key) {
         try {
             return getITelephony().getImsProvisioningString(mSubId, key);
         } catch (RemoteException e) {
@@ -313,7 +317,7 @@ public class ProvisioningManager {
     @WorkerThread
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     public @ImsConfigImplBase.SetConfigResult int setProvisioningStringValue(int key,
-            String value) {
+            @NonNull String value) {
         try {
             return getITelephony().setImsProvisioningString(mSubId, key, value);
         } catch (RemoteException e) {
@@ -370,6 +374,22 @@ public class ProvisioningManager {
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }
+    }
+
+    private static boolean isImsAvailableOnDevice() {
+        IPackageManager pm = IPackageManager.Stub.asInterface(ServiceManager.getService("package"));
+        if (pm == null) {
+            // For some reason package manger is not available.. This will fail internally anyways,
+            // so do not throw error and allow.
+            return true;
+        }
+        try {
+            return pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_IMS, 0);
+        } catch (RemoteException e) {
+            // For some reason package manger is not available.. This will fail internally anyways,
+            // so do not throw error and allow.
+        }
+        return true;
     }
 
     private static ITelephony getITelephony() {

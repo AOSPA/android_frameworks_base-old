@@ -714,6 +714,8 @@ interface IPackageManager {
 
     ParceledListSlice getSharedLibraries(in String packageName, int flags, int userId);
 
+    ParceledListSlice getDeclaredSharedLibraries(in String packageName, int flags, int userId);
+
     boolean canRequestPackageInstalls(String packageName, int userId);
 
     void deletePreloadsFileCache();
@@ -742,7 +744,7 @@ interface IPackageManager {
 
     String getAppPredictionServicePackageName();
 
-    String getContentCaptureServicePackageName();
+    String getSystemCaptionsServicePackageName();
 
     String getIncidentReportApproverPackageName();
 

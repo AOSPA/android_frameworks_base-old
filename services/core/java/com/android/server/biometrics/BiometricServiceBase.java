@@ -43,6 +43,7 @@ import android.os.IBinder;
 import android.os.IHwBinder;
 import android.os.IRemoteCallback;
 import android.os.PowerManager;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -958,6 +959,10 @@ public abstract class BiometricServiceBase extends SystemService
             int pid, int userId) {
         checkUseBiometricPermission();
 
+
+        if (Binder.getCallingUid() == Process.SYSTEM_UID) {
+            return true; // System process (BiometricService, etc) is always allowed
+        }
         if (isKeyguard(opPackageName)) {
             return true; // Keyguard is always allowed
         }
@@ -1218,6 +1223,9 @@ public abstract class BiometricServiceBase extends SystemService
                     BiometricsProtoEnums.ISSUE_UNKNOWN_TEMPLATE_ENROLLED_HAL);
         } else {
             clearEnumerateState();
+            if (mPendingClient != null) {
+                startClient(mPendingClient, false /* initiatedByClient */);
+            }
         }
     }
 
@@ -1243,8 +1251,6 @@ public abstract class BiometricServiceBase extends SystemService
         if (getCurrentClient() instanceof InternalRemovalClient
                 || getCurrentClient() instanceof InternalEnumerateClient) {
             Slog.w(getTag(), "User switched while performing cleanup");
-            removeClient(getCurrentClient());
-            clearEnumerateState();
         }
         updateActiveGroup(userId, null);
         doTemplateCleanupForUser(userId);

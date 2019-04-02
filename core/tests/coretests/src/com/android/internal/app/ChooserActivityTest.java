@@ -97,9 +97,12 @@ public class ChooserActivityTest {
         when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
                 Mockito.anyBoolean(),
                 Mockito.isA(List.class))).thenReturn(resolvedComponentInfos);
-        mActivityRule.launchActivity(Intent.createChooser(viewIntent, "chooser test"));
+        final ChooserWrapperActivity activity = mActivityRule.launchActivity(
+                Intent.createChooser(viewIntent, "chooser test"));
 
         waitForIdle();
+        assertThat(activity.getAdapter().getCount(), is(2));
+        assertThat(activity.getAdapter().getServiceTargetCount(), is(0));
         onView(withId(R.id.title)).check(matches(withText("chooser test")));
     }
 
@@ -632,10 +635,6 @@ public class ChooserActivityTest {
                 is(MetricsEvent.ACTION_SHARE_WITH_PREVIEW));
         assertThat(logMakerCaptor.getAllValues().get(1).getSubtype(),
                 is(CONTENT_PREVIEW_IMAGE));
-        assertThat(logMakerCaptor.getAllValues().get(2).getCategory(),
-                is(MetricsEvent.ACTION_SHARE_WITH_PREVIEW));
-        assertThat(logMakerCaptor.getAllValues().get(2).getSubtype(),
-                is(CONTENT_PREVIEW_IMAGE));
     }
 
     @Test
@@ -740,6 +739,7 @@ public class ChooserActivityTest {
         Intent sendIntent = new Intent();
         sendIntent.setAction(Intent.ACTION_SEND);
         sendIntent.putExtra(Intent.EXTRA_TEXT, "testing intent sending");
+        sendIntent.setType("text/plain");
         return sendIntent;
     }
 

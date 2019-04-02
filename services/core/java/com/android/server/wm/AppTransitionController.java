@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
+import static android.view.WindowManager.TRANSIT_ACTIVITY_RELAUNCH;
 import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
@@ -513,8 +514,11 @@ public class AppTransitionController {
         // Given no app transition pass it through instead of a wallpaper transition.
         // Never convert the crashing transition.
         // Never update the transition for the wallpaper if we are just docking from recents
+        // Never convert a change transition since the top activity isn't changing and will likely
+        // still be above an opening wallpaper.
         if (transit == TRANSIT_NONE || transit == TRANSIT_CRASHING_ACTIVITY_CLOSE
-                || transit == TRANSIT_DOCK_TASK_FROM_RECENTS) {
+                || transit == TRANSIT_DOCK_TASK_FROM_RECENTS
+                || AppTransition.isChangeTransit(transit)) {
             return transit;
         }
 
@@ -601,6 +605,10 @@ public class AppTransitionController {
      */
     @VisibleForTesting
     int maybeUpdateTransitToTranslucentAnim(int transit) {
+        if (AppTransition.isChangeTransit(transit)) {
+            // There's no special animation to handle change animations with translucent apps
+            return transit;
+        }
         final boolean taskOrActivity = AppTransition.isTaskTransit(transit)
                 || AppTransition.isActivityTransit(transit);
         boolean allOpeningVisible = true;
@@ -629,6 +637,39 @@ public class AppTransitionController {
             return TRANSIT_TRANSLUCENT_ACTIVITY_OPEN;
         }
         return transit;
+    }
+
+    /**
+     * Identifies whether the current transition occurs within a single task or not. This is used
+     * to determine whether animations should be clipped to the task bounds instead of stack bounds.
+     */
+    @VisibleForTesting
+    boolean isTransitWithinTask(int transit, Task task) {
+        if (task == null
+                || !mDisplayContent.mChangingApps.isEmpty()) {
+            // if there is no task, then we can't constrain to the task.
+            // if anything is changing, it can animate outside its task.
+            return false;
+        }
+        if (!(transit == TRANSIT_ACTIVITY_OPEN
+                || transit == TRANSIT_ACTIVITY_CLOSE
+                || transit == TRANSIT_ACTIVITY_RELAUNCH)) {
+            // only activity-level transitions will be within-task.
+            return false;
+        }
+        // check that all components are in the task.
+        for (AppWindowToken activity : mDisplayContent.mOpeningApps) {
+            Task activityTask = activity.getTask();
+            if (activityTask != task) {
+                return false;
+            }
+        }
+        for (AppWindowToken activity : mDisplayContent.mClosingApps) {
+            if (activity.getTask() != task) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean canBeWallpaperTarget(ArraySet<AppWindowToken> apps) {

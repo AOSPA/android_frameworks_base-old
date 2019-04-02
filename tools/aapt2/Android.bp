@@ -141,6 +141,7 @@ cc_library_host_static {
         "ResourceValues.cpp",
         "SdkConstants.cpp",
         "StringPool.cpp",
+        "trace/TraceBuffer.cpp",
         "xml/XmlActionExecutor.cpp",
         "xml/XmlDom.cpp",
         "xml/XmlPullParser.cpp",
@@ -196,4 +197,23 @@ cc_binary_host {
     srcs: ["Main.cpp"] + toolSources,
     static_libs: ["libaapt2"],
     defaults: ["aapt2_defaults"],
+}
+
+// ==========================================================
+// Dist the protos
+// ==========================================================
+genrule {
+    name: "aapt2-protos",
+    tools: [":soong_zip"],
+    srcs: [
+        "Configuration.proto",
+        "Resources.proto",
+    ],
+    out: ["aapt2-protos.zip"],
+    cmd: "mkdir $(genDir)/protos && " +
+        "cp $(in) $(genDir)/protos && " +
+        "$(location :soong_zip) -o $(out) -C $(genDir)/protos -D $(genDir)/protos",
+    dist: {
+        targets: ["sdk_repo"],
+    },
 }
