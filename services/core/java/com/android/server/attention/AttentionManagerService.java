@@ -16,12 +16,13 @@
 
 package com.android.server.attention;
 
-import static android.provider.DeviceConfig.AttentionManagerService.COMPONENT_NAME;
-import static android.provider.DeviceConfig.AttentionManagerService.NAMESPACE;
-import static android.provider.DeviceConfig.AttentionManagerService.SERVICE_ENABLED;
+import static android.provider.DeviceConfig.NAMESPACE_ATTENTION_MANAGER_SERVICE;
+import static android.provider.Settings.System.ADAPTIVE_SLEEP;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.attention.AttentionManagerInternal;
@@ -45,6 +46,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.DeviceConfig;
+import android.provider.Settings;
 import android.service.attention.AttentionService;
 import android.service.attention.AttentionService.AttentionFailureCodes;
 import android.service.attention.IAttentionCallback;
@@ -61,6 +63,7 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.server.SystemService;
 
+import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
 /**
@@ -71,6 +74,15 @@ import java.io.PrintWriter;
 public class AttentionManagerService extends SystemService {
     private static final String LOG_TAG = "AttentionManagerService";
 
+    /**
+     * DeviceConfig flag name, allows a CTS to inject a fake implementation.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String COMPONENT_NAME = "component_name";
+
+
     /** Default value in absence of {@link DeviceConfig} override. */
     private static final boolean DEFAULT_SERVICE_ENABLED = true;
 
@@ -80,6 +92,8 @@ public class AttentionManagerService extends SystemService {
     /** If the check attention called within that period - cached value will be returned. */
     private static final long STALE_AFTER_MILLIS = 5_000;
 
+    /** DeviceConfig flag name, if {@code true}, enables AttentionManagerService features. */
+    private static final String SERVICE_ENABLED = "service_enabled";
     private final Context mContext;
     private final PowerManager mPowerManager;
     private final Object mLock;
@@ -99,12 +113,18 @@ public class AttentionManagerService extends SystemService {
 
     @Override
     public void onStart() {
+        publishBinderService(Context.ATTENTION_SERVICE, new BinderService());
         publishLocalService(AttentionManagerInternal.class, new LocalService());
     }
 
     @Override
     public void onSwitchUser(int userId) {
         cancelAndUnbindLocked(peekUserStateLocked(userId));
+    }
+
+    /** Returns {@code true} if attention service is configured on this device. */
+    public static boolean isServiceConfigured(Context context) {
+        return !TextUtils.isEmpty(getServiceConfig(context));
     }
 
     /** Resolves and sets up the attention service if it had not been done yet. */
@@ -122,13 +142,13 @@ public class AttentionManagerService extends SystemService {
     /**
      * Returns {@code true} if attention service is supported on this device.
      */
-    public boolean isAttentionServiceSupported() {
+    private boolean isAttentionServiceSupported() {
         return isServiceEnabled() && isServiceAvailable();
     }
 
     private boolean isServiceEnabled() {
-        final String enabled = DeviceConfig.getProperty(NAMESPACE, SERVICE_ENABLED);
-        return enabled == null ? DEFAULT_SERVICE_ENABLED : "true".equals(enabled);
+        return DeviceConfig.getBoolean(NAMESPACE_ATTENTION_MANAGER_SERVICE, SERVICE_ENABLED,
+                DEFAULT_SERVICE_ENABLED);
     }
 
     /**
@@ -136,7 +156,7 @@ public class AttentionManagerService extends SystemService {
      *
      * @return {@code true} if the framework was able to send the provided callback to the service
      */
-    public boolean checkAttention(int requestCode, long timeout,
+    private boolean checkAttention(int requestCode, long timeout,
             AttentionCallbackInternal callback) {
         Preconditions.checkNotNull(callback);
 
@@ -214,7 +234,7 @@ public class AttentionManagerService extends SystemService {
     }
 
     /** Cancels the specified attention check. */
-    public void cancelAttentionCheck(int requestCode) {
+    private void cancelAttentionCheck(int requestCode) {
         synchronized (mLock) {
             final UserState userState = peekCurrentUserStateLocked();
             if (userState == null) {
@@ -232,6 +252,16 @@ public class AttentionManagerService extends SystemService {
             } catch (RemoteException e) {
                 Slog.e(LOG_TAG, "Cannot call into the AttentionService");
             }
+        }
+    }
+
+    /** Disables service dependants. */
+    private void disableSelf() {
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Settings.System.putInt(mContext.getContentResolver(), ADAPTIVE_SLEEP, 0);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
     }
 
@@ -279,16 +309,19 @@ public class AttentionManagerService extends SystemService {
         return mUserStates.get(userId);
     }
 
+    private static String getServiceConfig(Context context) {
+        return context.getString(R.string.config_defaultAttentionService);
+    }
+
     /**
      * Provides attention service component name at runtime, making sure it's provided by the
      * system.
      */
     private static ComponentName resolveAttentionService(Context context) {
-        final String flag = DeviceConfig.getProperty(NAMESPACE, COMPONENT_NAME);
+        final String flag = DeviceConfig.getProperty(NAMESPACE_ATTENTION_MANAGER_SERVICE,
+                COMPONENT_NAME);
 
-        final String componentNameString = flag != null ? flag : context.getString(
-                R.string.config_defaultAttentionService);
-
+        final String componentNameString = flag != null ? flag : getServiceConfig(context);
         if (TextUtils.isEmpty(componentNameString)) {
             return null;
         }
@@ -324,17 +357,15 @@ public class AttentionManagerService extends SystemService {
         return null;
     }
 
-    private void dumpInternal(PrintWriter pw) {
-        if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
-        IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
-        ipw.println("Attention Manager Service (dumpsys attention)\n");
+    private void dumpInternal(IndentingPrintWriter ipw) {
+        ipw.println("Attention Manager Service (dumpsys attention) state:\n");
 
         ipw.printPair("context", mContext);
-        pw.println();
+        ipw.println();
         synchronized (mLock) {
             int size = mUserStates.size();
             ipw.print("Number user states: ");
-            pw.println(size);
+            ipw.println(size);
             if (size > 0) {
                 ipw.increaseIndent();
                 for (int i = 0; i < size; i++) {
@@ -364,6 +395,11 @@ public class AttentionManagerService extends SystemService {
         @Override
         public void cancelAttentionCheck(int requestCode) {
             AttentionManagerService.this.cancelAttentionCheck(requestCode);
+        }
+
+        @Override
+        public void disableSelf() {
+            AttentionManagerService.this.disableSelf();
         }
     }
 
@@ -548,8 +584,8 @@ public class AttentionManagerService extends SystemService {
         }
     }
 
-    private void cancel(UserState userState, @AttentionFailureCodes int failureCode) {
-        if (userState != null && userState.mService != null) {
+    private void cancel(@NonNull UserState userState, @AttentionFailureCodes int failureCode) {
+        if (userState.mService != null) {
             try {
                 userState.mService.cancelAttentionCheck(
                         userState.mCurrentAttentionCheckRequestCode);
@@ -566,6 +602,9 @@ public class AttentionManagerService extends SystemService {
     @GuardedBy("mLock")
     private void cancelAndUnbindLocked(UserState userState) {
         synchronized (mLock) {
+            if (userState == null) {
+                return;
+            }
             cancel(userState, AttentionService.ATTENTION_FAILURE_UNKNOWN);
 
             mContext.unbindService(userState.mConnection);
@@ -584,6 +623,17 @@ public class AttentionManagerService extends SystemService {
             if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
                 cancelAndUnbindLocked(peekCurrentUserStateLocked());
             }
+        }
+    }
+
+    private final class BinderService extends Binder {
+        @Override
+        protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) {
+                return;
+            }
+
+            dumpInternal(new IndentingPrintWriter(pw, "  "));
         }
     }
 }

@@ -17,6 +17,7 @@
 package com.android.server.pm;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.apex.ApexInfo;
 import android.apex.ApexInfoList;
 import android.apex.ApexSessionInfo;
@@ -35,6 +36,7 @@ import android.content.pm.PackageParser.SigningDetails.SignatureSchemeVersion;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.Signature;
 import android.content.rollback.IRollbackManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -67,7 +69,6 @@ public class StagingManager {
     private static final String TAG = "StagingManager";
 
     private final PackageInstallerService mPi;
-    private final PackageManagerService mPm;
     private final ApexManager mApexManager;
     private final PowerManager mPowerManager;
     private final Handler mBgHandler;
@@ -75,9 +76,7 @@ public class StagingManager {
     @GuardedBy("mStagedSessions")
     private final SparseArray<PackageInstallerSession> mStagedSessions = new SparseArray<>();
 
-    StagingManager(PackageManagerService pm, PackageInstallerService pi, ApexManager am,
-            Context context) {
-        mPm = pm;
+    StagingManager(PackageInstallerService pi, ApexManager am, Context context) {
         mPi = pi;
         mApexManager = am;
         mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -117,9 +116,11 @@ public class StagingManager {
         final PackageInfo packageInfo = mApexManager.getActivePackage(packageName);
 
         if (packageInfo == null) {
-            // TODO: What is the right thing to do here ? This implies there's no active package
-            // with the given name. This should never be the case in production (where we only
-            // accept updates to existing APEXes) but may be required for testing.
+            // Only allow installing new apexes if on a debuggable build.
+            if (!Build.IS_DEBUGGABLE) {
+                Slog.w(TAG, "Attempted to install new apex " + packageName + " on user build");
+                return false;
+            }
             return true;
         }
 
@@ -481,6 +482,27 @@ public class StagingManager {
         mBgHandler.post(() -> preRebootVerification(session));
     }
 
+    @Nullable
+    PackageInstallerSession getActiveSession() {
+        synchronized (mStagedSessions) {
+            for (int i = 0; i < mStagedSessions.size(); i++) {
+                final PackageInstallerSession session = mStagedSessions.valueAt(i);
+                if (!session.isCommitted()) {
+                    continue;
+                }
+                if (session.hasParentSessionId()) {
+                    // Staging manager will finalize only parent session. Ignore child sessions
+                    // picking the active.
+                    continue;
+                }
+                if (!session.isStagedSessionApplied() && !session.isStagedSessionFailed()) {
+                    return session;
+                }
+            }
+        }
+        return null;
+    }
+
     void createSession(@NonNull PackageInstallerSession sessionInfo) {
         synchronized (mStagedSessions) {
             mStagedSessions.append(sessionInfo.sessionId, sessionInfo);
@@ -495,22 +517,24 @@ public class StagingManager {
 
     void abortCommittedSession(@NonNull PackageInstallerSession session) {
         if (session.isStagedSessionApplied()) {
-            Slog.w(TAG, "Cannot abort applied session!");
+            Slog.w(TAG, "Cannot abort applied session : " + session.sessionId);
             return;
         }
-        if (isStagedSessionFinalized(session.sessionId)) {
-            Slog.w(TAG, "Cannot abort session because it is not active or APEXD is not reachable");
-            return;
-        }
-
-        mApexManager.abortActiveSession();
-
         abortSession(session);
+
+        boolean hasApex = sessionContainsApex(session);
+        if (hasApex) {
+            ApexSessionInfo apexSession = mApexManager.getStagedSessionInfo(session.sessionId);
+            if (apexSession == null || isApexSessionFinalized(apexSession)) {
+                Slog.w(TAG,
+                        "Cannot abort session because it is not active or APEXD is not reachable");
+                return;
+            }
+            mApexManager.abortActiveSession();
+        }
     }
 
-    private boolean isStagedSessionFinalized(int sessionId) {
-        ApexSessionInfo session = mApexManager.getStagedSessionInfo(sessionId);
-
+    private boolean isApexSessionFinalized(ApexSessionInfo session) {
         /* checking if the session is in a final state, i.e., not active anymore */
         return session.isUnknown || session.isActivationFailed || session.isSuccess
                 || session.isRolledBack;
@@ -569,6 +593,10 @@ public class StagingManager {
     }
 
     private void checkStateAndResume(@NonNull PackageInstallerSession session) {
+        if (!session.isCommitted()) {
+            // Session hasn't been committed yet, ignore.
+            return;
+        }
         // Check the state of the session and decide what to do next.
         if (session.isStagedSessionFailed() || session.isStagedSessionApplied()) {
             // Final states, nothing to do.

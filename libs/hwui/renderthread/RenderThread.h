@@ -24,6 +24,7 @@
 #include "TimeLord.h"
 #include "thread/ThreadBase.h"
 #include "WebViewFunctorManager.h"
+#include "utils/TimeUtils.h"
 
 #include <GrContext.h>
 #include <SkBitmap.h>
@@ -40,6 +41,7 @@
 namespace android {
 
 class Bitmap;
+class AutoBackendTextureRelease;
 
 namespace uirenderer {
 
@@ -134,6 +136,7 @@ private:
     friend class DispatchFrameCallbacks;
     friend class RenderProxy;
     friend class DummyVsyncSource;
+    friend class android::AutoBackendTextureRelease;
     friend class android::uirenderer::TestUtils;
     friend class android::uirenderer::WebViewFunctor;
     friend class android::uirenderer::skiapipeline::VkFunctorDrawHandler;
@@ -164,6 +167,7 @@ private:
     bool mFrameCallbackTaskPending;
 
     TimeLord mTimeLord;
+    nsecs_t mDispatchFrameDelay = 4_ms;
     RenderState* mRenderState;
     EglManager* mEglManager;
     WebViewFunctorManager& mFunctorManager;

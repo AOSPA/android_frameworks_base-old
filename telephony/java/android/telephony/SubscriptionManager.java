@@ -50,11 +50,12 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelUuid;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.telephony.euicc.EuiccManager;
 import android.telephony.ims.ImsMmTelManager;
-import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
@@ -1752,6 +1753,10 @@ public class SubscriptionManager {
         Rlog.d(LOG_TAG, msg);
     }
 
+    private static void loge(String msg) {
+        Rlog.e(LOG_TAG, msg);
+    }
+
     /**
      * Returns the system's default subscription id.
      *
@@ -1991,39 +1996,27 @@ public class SubscriptionManager {
     }
 
     /**
-     * If a default is set to subscription which is not active, this will reset that default back to
-     * an invalid subscription id, i.e. < 0.
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public void clearDefaultsForInactiveSubIds() {
-        if (VDBG) logd("clearDefaultsForInactiveSubIds");
-        try {
-            ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
-            if (iSub != null) {
-                iSub.clearDefaultsForInactiveSubIds();
-            }
-        } catch (RemoteException ex) {
-            // ignore it
-        }
-    }
-
-    /**
-     * Checks if the supplied subscription ID is valid.
-     * Note: a valid subscription ID does not necessarily correspond to an active subscription.
+     * Check if the supplied subscription ID is valid.
+     *
+     * <p>A valid subscription ID is not necessarily an active subscription ID
+     * (see {@link #isActiveSubscriptionId(int)}) or an usable subscription ID
+     * (see {@link #isUsableSubscriptionId(int)}). Unless specifically noted, subscription
+     * APIs work with a valid subscription ID.
      *
      * @param subscriptionId The subscription ID.
-     * @return true if the supplied subscriptionId is valid; false otherwise.
+     * @return {@code true} if the supplied subscriptionId is valid; {@code false} otherwise.
      */
     public static boolean isValidSubscriptionId(int subscriptionId) {
         return subscriptionId > INVALID_SUBSCRIPTION_ID;
     }
 
     /**
-     * Check if the subscription ID is usable.
+     * Check if the supplied subscription ID is usable.
      *
-     * A usable subscription ID has a valid value except some special values such as
-     * {@link #DEFAULT_SUBSCRIPTION_ID}. It can be used for subscription functions.
+     * <p>A usable subscription ID is a valid subscription ID, but not necessarily an active
+     * subscription ID (see {@link #isActiveSubscriptionId(int)}). Some subscription APIs
+     * require a usable subscription ID, and this is noted in their documentation; otherwise, a
+     * subscription ID does not need to be usable for subscription functions, only valid.
      *
      * @param subscriptionId the subscription ID
      * @return {@code true} if the subscription ID is usable; {@code false} otherwise.
@@ -2281,7 +2274,8 @@ public class SubscriptionManager {
     }
 
     /**
-     * Checks if the supplied subscription ID corresponds to an active subscription.
+     * Checks if the supplied subscription ID corresponds to a subscription which is actively in
+     * use on the device. An active subscription ID is a valid and usable subscription ID.
      *
      * @param subscriptionId the subscription ID.
      * @return {@code true} if the supplied subscription ID corresponds to an active subscription;
@@ -2588,7 +2582,9 @@ public class SubscriptionManager {
      *              {@link SubscriptionManager#DEFAULT_SUBSCRIPTION_ID}, it means
      *              it's unset and {@link SubscriptionManager#getDefaultDataSubscriptionId()}
      *              is used to determine which modem is preferred.
-     * @param needValidation whether validation is needed before switch happens.
+     * @param needValidation whether Telephony will wait until the network is validated by
+     *              connectivity service before switching data to it. More details see
+     *              {@link NetworkCapabilities#NET_CAPABILITY_VALIDATED}.
      * @param executor The executor of where the callback will execute.
      * @param callback Callback will be triggered once it succeeds or failed.
      *                 See {@link TelephonyManager.SetOpportunisticSubscriptionResult}
@@ -2706,7 +2702,8 @@ public class SubscriptionManager {
      *  1) Even if it's active, it will be dormant most of the time. The modem will not try
      *     to scan or camp until it knows an available network is nearby to save power.
      *  2) Telephony relies on system app or carrier input to notify nearby available networks.
-     *     See {@link TelephonyManager#updateAvailableNetworks(List)} for more information.
+     *     See {@link TelephonyManager#updateAvailableNetworks(List, Executor, Consumer)}
+     *     for more information.
      *  3) In multi-SIM devices, when the network is nearby and camped, system may automatically
      *     switch internet data between it and default data subscription, based on carrier
      *     recommendation and its signal strength and metered-ness, etc.
@@ -2730,11 +2727,20 @@ public class SubscriptionManager {
 
     /**
      * Inform SubscriptionManager that subscriptions in the list are bundled
-     * as a group. Typically it's a primary subscription and an opportunistic
-     * subscription. It should only affect multi-SIM scenarios where primary
-     * and opportunistic subscriptions can be activated together.
-     * Being in the same group means they might be activated or deactivated
-     * together, some of them may be invisible to the users, etc.
+     * as a group. It can be multiple primary (non-opportunistic) subscriptions,
+     * or one or more primary plus one or more opportunistic subscriptions.
+     *
+     * This API will always create a new immutable group and assign group UUID to all the
+     * subscriptions, regardless whether they are in a group already or not.
+     *
+     * Grouped subscriptions will have below behaviors:
+     * 1) They will share the same user settings.
+     * 2) The opportunistic subscriptions in the group is considered invisible and will not
+     *    return from {@link #getActiveSubscriptionInfoList()}, unless caller has carrier
+     *    privilege permission of the subscriptions.
+     * 3) The opportunistic subscriptions in the group can't be active by itself. If all other
+     *    non-opportunistic ones are deactivated (unplugged or disabled in Settings),
+     *    the opportunistic ones will be deactivated automatically.
      *
      * Caller will either have {@link android.Manifest.permission#MODIFY_PHONE_STATE}
      * permission or had carrier privilege permission on the subscriptions:
@@ -2745,34 +2751,42 @@ public class SubscriptionManager {
      *             outlined above.
      *
      * @param subIdList list of subId that will be in the same group
-     * @return groupUUID a UUID assigned to the subscription group. It returns
-     * null if fails.
+     * @return groupUUID a UUID assigned to the subscription group.
      *
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public @Nullable String setSubscriptionGroup(@NonNull int[] subIdList) {
+    public @NonNull ParcelUuid createSubscriptionGroup(@NonNull List<Integer> subIdList) {
+        Preconditions.checkNotNull(subIdList, "can't create group for null subId list");
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         if (VDBG) {
-            logd("[setSubscriptionGroup]+ subIdList:" + Arrays.toString(subIdList));
+            logd("[createSubscriptionGroup]");
         }
 
-        String groupUUID = null;
+        ParcelUuid groupUuid = null;
+        int[] subIdArray = subIdList.stream().mapToInt(i->i).toArray();
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
             if (iSub != null) {
-                groupUUID = iSub.setSubscriptionGroup(subIdList, pkgForDebug);
+                groupUuid = iSub.createSubscriptionGroup(subIdArray, pkgForDebug);
+            } else {
+                if (!isSystemProcess()) {
+                    throw new IllegalStateException("telephony service is null.");
+                }
             }
         } catch (RemoteException ex) {
-            // ignore it
+            loge("createSubscriptionGroup RemoteException " + ex);
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
         }
 
-        return groupUUID;
+        return groupUuid;
     }
 
     /**
-     * Remove a list of subscriptions from their subscription group.
-     * See {@link #setSubscriptionGroup(int[])} for more details.
+     * Add a list of subscriptions into a group.
+     * See {@link #createSubscriptionGroup(List)} for more details.
      *
      * Caller will either have {@link android.Manifest.permission#MODIFY_PHONE_STATE}
      * permission or had carrier privilege permission on the subscriptions:
@@ -2781,34 +2795,97 @@ public class SubscriptionManager {
      *
      * @throws SecurityException if the caller doesn't meet the requirements
      *             outlined above.
+     * @throws IllegalArgumentException if the some subscriptions in the list doesn't exist,
+     *             or the groupUuid doesn't exist.
      *
-     * @param subIdList list of subId that need removing from their groups.
-     * @return whether the operation succeeds.
+     * @param subIdList list of subId that need adding into the group
+     * @param groupUuid the groupUuid the subscriptions are being added to.
      *
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean removeSubscriptionsFromGroup(@NonNull int[] subIdList) {
+    public void addSubscriptionsIntoGroup(@NonNull List<Integer> subIdList,
+            @NonNull ParcelUuid groupUuid) {
+        Preconditions.checkNotNull(subIdList, "subIdList can't be null.");
+        Preconditions.checkNotNull(groupUuid, "groupUuid can't be null.");
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         if (VDBG) {
-            logd("[removeSubscriptionsFromGroup]+ subIdList:" + Arrays.toString(subIdList));
+            logd("[addSubscriptionsIntoGroup]");
         }
+
+        int[] subIdArray = subIdList.stream().mapToInt(i->i).toArray();
 
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
             if (iSub != null) {
-                return iSub.removeSubscriptionsFromGroup(subIdList, pkgForDebug);
+                iSub.addSubscriptionsIntoGroup(subIdArray, groupUuid, pkgForDebug);
+            } else {
+                if (!isSystemProcess()) {
+                    throw new IllegalStateException("telephony service is null.");
+                }
             }
         } catch (RemoteException ex) {
-            // ignore it
+            loge("addSubscriptionsIntoGroup RemoteException " + ex);
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+    }
+
+    private boolean isSystemProcess() {
+        return Process.myUid() == Process.SYSTEM_UID;
+    }
+
+    /**
+     * Remove a list of subscriptions from their subscription group.
+     * See {@link #createSubscriptionGroup(List)} for more details.
+     *
+     * Caller will either have {@link android.Manifest.permission#MODIFY_PHONE_STATE}
+     * permission or had carrier privilege permission on the subscriptions:
+     * {@link TelephonyManager#hasCarrierPrivileges()} or
+     * {@link #canManageSubscription(SubscriptionInfo)}
+     *
+     * @throws SecurityException if the caller doesn't meet the requirements
+     *             outlined above.
+     * @throws IllegalArgumentException if the some subscriptions in the list doesn't belong
+     *             the specified group.
+     *
+     * @param subIdList list of subId that need removing from their groups.
+     *
+     */
+    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
+    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
+    public void removeSubscriptionsFromGroup(@NonNull List<Integer> subIdList,
+            @NonNull ParcelUuid groupUuid) {
+        Preconditions.checkNotNull(subIdList, "subIdList can't be null.");
+        Preconditions.checkNotNull(groupUuid, "groupUuid can't be null.");
+        String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
+        if (VDBG) {
+            logd("[removeSubscriptionsFromGroup]");
         }
 
-        return false;
+        int[] subIdArray = subIdList.stream().mapToInt(i->i).toArray();
+
+        try {
+            ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
+            if (iSub != null) {
+                iSub.removeSubscriptionsFromGroup(subIdArray, groupUuid, pkgForDebug);
+            } else {
+                if (!isSystemProcess()) {
+                    throw new IllegalStateException("telephony service is null.");
+                }
+            }
+        } catch (RemoteException ex) {
+            loge("removeSubscriptionsFromGroup RemoteException " + ex);
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
     }
 
     /**
      * Get subscriptionInfo list of subscriptions that are in the same group of given subId.
-     * See {@link #setSubscriptionGroup(int[])} for more details.
+     * See {@link #createSubscriptionGroup(List)} for more details.
      *
      * Caller will either have {@link android.Manifest.permission#READ_PHONE_STATE}
      * permission or had carrier privilege permission on the subscription.
@@ -2817,54 +2894,38 @@ public class SubscriptionManager {
      * @throws SecurityException if the caller doesn't meet the requirements
      *             outlined above.
      *
-     * @param subId of which list of subInfo from the same group will be returned.
+     * @param groupUuid of which list of subInfo will be returned.
      * @return list of subscriptionInfo that belong to the same group, including the given
-     * subscription itself. It will return null if the subscription doesn't exist or it
-     * doesn't belong to any group.
+     * subscription itself. It will return an empty list if no subscription belongs to the group.
      *
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
-    public @Nullable List<SubscriptionInfo> getSubscriptionsInGroup(int subId) {
+    public @NonNull List<SubscriptionInfo> getSubscriptionsInGroup(@NonNull ParcelUuid groupUuid) {
+        Preconditions.checkNotNull(groupUuid, "groupUuid can't be null");
         String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
         if (VDBG) {
-            logd("[getSubscriptionsInGroup]+ subId:" + subId);
+            logd("[getSubscriptionsInGroup]+ groupUuid:" + groupUuid);
         }
 
         List<SubscriptionInfo> result = null;
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
             if (iSub != null) {
-                result = iSub.getSubscriptionsInGroup(subId, pkgForDebug);
+                result = iSub.getSubscriptionsInGroup(groupUuid, pkgForDebug);
+            } else {
+                if (!isSystemProcess()) {
+                    throw new IllegalStateException("telephony service is null.");
+                }
             }
         } catch (RemoteException ex) {
-            // ignore it
+            loge("removeSubscriptionsFromGroup RemoteException " + ex);
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
         }
 
         return result;
-    }
-
-    /**
-     * Set if a subscription is metered or not. Similar to Wi-Fi, metered means
-     * user may be charged more if more data is used.
-     *
-     * By default all Cellular networks are considered metered. System or carrier privileged apps
-     * can set a subscription un-metered which will be considered when system switches data between
-     * primary subscription and opportunistic subscription.
-     *
-     * Caller will either have {@link android.Manifest.permission#MODIFY_PHONE_STATE} or carrier
-     * privilege permission of the subscription.
-     *
-     * @param isMetered whether it’s a metered subscription.
-     * @param subId the unique SubscriptionInfo index in database
-     * @return {@code true} if the operation is succeed, {@code false} otherwise.
-     */
-    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public boolean setMetered(boolean isMetered, int subId) {
-        if (VDBG) logd("[setIsMetered]+ isMetered:" + isMetered + " subId:" + subId);
-        return setSubscriptionPropertyHelper(subId, "setIsMetered",
-                (iSub)-> iSub.setMetered(isMetered, subId, mContext.getOpPackageName())) == 1;
     }
 
     /**
@@ -2881,7 +2942,7 @@ public class SubscriptionManager {
         if (info == null) return false;
 
         // If subscription is NOT grouped opportunistic subscription, it's visible.
-        if (TextUtils.isEmpty(info.getGroupUuid()) || !info.isOpportunistic()) return true;
+        if (info.getGroupUuid() == null || !info.isOpportunistic()) return true;
 
         // If the caller is the carrier app and owns the subscription, it should be visible
         // to the caller.
@@ -2911,14 +2972,14 @@ public class SubscriptionManager {
             // It should be the current active primary subscription if any, or any
             // primary subscription.
             List<SubscriptionInfo> selectableList = new ArrayList<>();
-            Map<String, SubscriptionInfo> groupMap = new HashMap<>();
+            Map<ParcelUuid, SubscriptionInfo> groupMap = new HashMap<>();
 
             for (SubscriptionInfo info : availableList) {
                 // Opportunistic subscriptions are considered invisible
                 // to users so they should never be returned.
                 if (!isSubscriptionVisible(info)) continue;
 
-                String groupUuid = info.getGroupUuid();
+                ParcelUuid groupUuid = info.getGroupUuid();
                 if (groupUuid == null) {
                     // Doesn't belong to any group. Add in the list.
                     selectableList.add(info);
@@ -2938,7 +2999,7 @@ public class SubscriptionManager {
     }
 
     /**
-     * Enabled or disable a subscription. This is currently used in the settings page.
+     * Enables or disables a subscription. This is currently used in the settings page.
      *
      * <p>
      * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required

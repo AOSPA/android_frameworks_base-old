@@ -24,6 +24,7 @@ import static android.net.ConnectivityManager.EXTRA_CAPTIVE_PORTAL_URL;
 import static android.net.ConnectivityManager.TYPE_MOBILE;
 import static android.net.ConnectivityManager.TYPE_WIFI;
 import static android.net.INetworkMonitor.NETWORK_TEST_RESULT_INVALID;
+import static android.net.INetworkMonitor.NETWORK_TEST_RESULT_PARTIAL_CONNECTIVITY;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
@@ -32,6 +33,7 @@ import static android.net.metrics.ValidationProbeEvent.DNS_SUCCESS;
 import static android.net.metrics.ValidationProbeEvent.PROBE_FALLBACK;
 import static android.net.metrics.ValidationProbeEvent.PROBE_PRIVDNS;
 import static android.net.util.NetworkStackUtils.isEmpty;
+import static android.provider.Settings.Global.DATA_STALL_EVALUATION_TYPE_DNS;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -70,7 +72,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.CellSignalStrength;
-import android.telephony.NetworkRegistrationState;
+import android.telephony.NetworkRegistrationInfo;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.TelephonyManager;
@@ -128,9 +130,8 @@ public class NetworkMonitor extends StateMachine {
     private static final int DEFAULT_DATA_STALL_MIN_EVALUATE_TIME_MS = 60 * 1000;
     private static final int DEFAULT_DATA_STALL_VALID_DNS_TIME_THRESHOLD_MS = 30 * 60 * 1000;
 
-    private static final int DATA_STALL_EVALUATION_TYPE_DNS = 1;
     private static final int DEFAULT_DATA_STALL_EVALUATION_TYPES =
-            (1 << DATA_STALL_EVALUATION_TYPE_DNS);
+            DATA_STALL_EVALUATION_TYPE_DNS;
     // Reevaluate it as intending to increase the number. Larger log size may cause statsd
     // log buffer bust and have stats log lost.
     private static final int DEFAULT_DNS_LOG_SIZE = 20;
@@ -227,6 +228,12 @@ public class NetworkMonitor extends StateMachine {
      */
     public static final int EVENT_DNS_NOTIFICATION = 17;
 
+    /**
+     * ConnectivityService notifies NetworkMonitor that the user accepts partial connectivity and
+     * NetworkMonitor should ignore the https probe.
+     */
+    public static final int EVENT_ACCEPT_PARTIAL_CONNECTIVITY = 18;
+
     // Start mReevaluateDelayMs at this value and double.
     private static final int INITIAL_REEVALUATE_DELAY_MS = 1000;
     private static final int MAX_REEVALUATE_DELAY_MS = 10 * 60 * 1000;
@@ -312,7 +319,8 @@ public class NetworkMonitor extends StateMachine {
     private final DnsStallDetector mDnsStallDetector;
     private long mLastProbeTime;
     // Set to true if data stall is suspected and reset to false after metrics are sent to statsd.
-    private boolean mCollectDataStallMetrics = false;
+    private boolean mCollectDataStallMetrics;
+    private boolean mAcceptPartialConnectivity;
 
     public NetworkMonitor(Context context, INetworkMonitorCallbacks cb, Network network,
             SharedLog validationLog) {
@@ -376,6 +384,15 @@ public class NetworkMonitor extends StateMachine {
         // TODO: Delete ASAP.
         mLinkProperties = new LinkProperties();
         mNetworkCapabilities = new NetworkCapabilities(null);
+    }
+
+    /**
+     * ConnectivityService notifies NetworkMonitor that the user already accepted partial
+     * connectivity previously, so NetworkMonitor can validate the network even if it has partial
+     * connectivity.
+     */
+    public void setAcceptPartialConnectivity() {
+        sendMessage(EVENT_ACCEPT_PARTIAL_CONNECTIVITY);
     }
 
     /**
@@ -636,6 +653,12 @@ public class NetworkMonitor extends StateMachine {
                 case EVENT_DNS_NOTIFICATION:
                     mDnsStallDetector.accumulateConsecutiveDnsTimeoutCount(message.arg1);
                     break;
+                // Set mAcceptPartialConnectivity to true and if network start evaluating or
+                // re-evaluating and get the result of partial connectivity, ProbingState will
+                // disable HTTPS probe and transition to EvaluatingPrivateDnsState.
+                case EVENT_ACCEPT_PARTIAL_CONNECTIVITY:
+                    mAcceptPartialConnectivity = true;
+                    break;
                 default:
                     break;
             }
@@ -830,6 +853,14 @@ public class NetworkMonitor extends StateMachine {
                     // ignore any re-evaluation requests. After, restart the
                     // evaluation process via EvaluatingState#enter.
                     return (mEvaluateAttempts < IGNORE_REEVALUATE_ATTEMPTS) ? HANDLED : NOT_HANDLED;
+                // Disable HTTPS probe and transition to EvaluatingPrivateDnsState because:
+                // 1. Network is connected and finish the network validation.
+                // 2. NetworkMonitor detects network is partial connectivity and user accepts it.
+                case EVENT_ACCEPT_PARTIAL_CONNECTIVITY:
+                    mAcceptPartialConnectivity = true;
+                    mUseHttps = false;
+                    transitionTo(mEvaluatingPrivateDnsState);
+                    return HANDLED;
                 default:
                     return NOT_HANDLED;
             }
@@ -1058,6 +1089,16 @@ public class NetworkMonitor extends StateMachine {
                         notifyNetworkTested(NETWORK_TEST_RESULT_INVALID, probeResult.redirectUrl);
                         mLastPortalProbeResult = probeResult;
                         transitionTo(mCaptivePortalState);
+                    } else if (probeResult.isPartialConnectivity()) {
+                        logNetworkEvent(NetworkEvent.NETWORK_PARTIAL_CONNECTIVITY);
+                        notifyNetworkTested(NETWORK_TEST_RESULT_PARTIAL_CONNECTIVITY,
+                                probeResult.redirectUrl);
+                        if (mAcceptPartialConnectivity) {
+                            mUseHttps = false;
+                            transitionTo(mEvaluatingPrivateDnsState);
+                        } else {
+                            transitionTo(mWaitingForNextProbeState);
+                        }
                     } else {
                         logNetworkEvent(NetworkEvent.NETWORK_VALIDATION_FAILED);
                         notifyNetworkTested(NETWORK_TEST_RESULT_INVALID, probeResult.redirectUrl);
@@ -1065,7 +1106,8 @@ public class NetworkMonitor extends StateMachine {
                     }
                     return HANDLED;
                 case EVENT_DNS_NOTIFICATION:
-                    // Leave the event to DefaultState to record correct dns timestamp.
+                case EVENT_ACCEPT_PARTIAL_CONNECTIVITY:
+                    // Leave the event to DefaultState.
                     return NOT_HANDLED;
                 default:
                     // Wait for probe result and defer events to next state by default.
@@ -1504,10 +1546,11 @@ public class NetworkMonitor extends StateMachine {
         // If we have new-style probe specs, use those. Otherwise, use the fallback URLs.
         final CaptivePortalProbeSpec probeSpec = nextFallbackSpec();
         final URL fallbackUrl = (probeSpec != null) ? probeSpec.getUrl() : nextFallbackUrl();
+        CaptivePortalProbeResult fallbackProbeResult = null;
         if (fallbackUrl != null) {
-            CaptivePortalProbeResult result = sendHttpProbe(fallbackUrl, PROBE_FALLBACK, probeSpec);
-            if (result.isPortal()) {
-                return result;
+            fallbackProbeResult = sendHttpProbe(fallbackUrl, PROBE_FALLBACK, probeSpec);
+            if (fallbackProbeResult.isPortal()) {
+                return fallbackProbeResult;
             }
         }
         // Otherwise wait until http and https probes completes and use their results.
@@ -1517,6 +1560,12 @@ public class NetworkMonitor extends StateMachine {
                 return httpProbe.result();
             }
             httpsProbe.join();
+            final boolean isHttpSuccessful =
+                    (httpProbe.result().isSuccessful()
+                    || (fallbackProbeResult != null && fallbackProbeResult.isSuccessful()));
+            if (httpsProbe.result().isFailed() && isHttpSuccessful) {
+                return CaptivePortalProbeResult.PARTIAL;
+            }
             return httpsProbe.result();
         } catch (InterruptedException e) {
             validationLog("Error: http or https probe wait interrupted!");
@@ -1583,12 +1632,12 @@ public class NetworkMonitor extends StateMachine {
                 return;
             }
             // See if the data sub is registered for PS services on cell.
-            final NetworkRegistrationState nrs = dataSs.getNetworkRegistrationState(
-                    NetworkRegistrationState.DOMAIN_PS,
-                    AccessNetworkConstants.TransportType.WWAN);
+            final NetworkRegistrationInfo nri = dataSs.getNetworkRegistrationInfo(
+                    NetworkRegistrationInfo.DOMAIN_PS,
+                    AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
             latencyBroadcast.putExtra(
                     NetworkMonitorUtils.EXTRA_CELL_ID,
-                    nrs == null ? null : nrs.getCellIdentity());
+                    nri == null ? null : nri.getCellIdentity());
             latencyBroadcast.putExtra(NetworkMonitorUtils.EXTRA_CONNECTIVITY_TYPE, TYPE_MOBILE);
         } else {
             return;
@@ -1772,7 +1821,7 @@ public class NetworkMonitor extends StateMachine {
     }
 
     private boolean dataStallEvaluateTypeEnabled(int type) {
-        return (mDataStallEvaluationType & (1 << type)) != 0;
+        return (mDataStallEvaluationType & type) != 0;
     }
 
     @VisibleForTesting
@@ -1792,7 +1841,7 @@ public class NetworkMonitor extends StateMachine {
         }
 
         // Check dns signal. Suspect it may be a data stall if both :
-        // 1. The number of consecutive DNS query timeouts > mConsecutiveDnsTimeoutThreshold.
+        // 1. The number of consecutive DNS query timeouts >= mConsecutiveDnsTimeoutThreshold.
         // 2. Those consecutive DNS queries happened in the last mValidDataStallDnsTimeThreshold ms.
         if (dataStallEvaluateTypeEnabled(DATA_STALL_EVALUATION_TYPE_DNS)) {
             if (mDnsStallDetector.isDataStallSuspected(mConsecutiveDnsTimeoutThreshold,

@@ -288,6 +288,11 @@ package android.location {
     method @Deprecated public void removeVerticalAccuracy();
   }
 
+  public class LocationManager {
+    method @Deprecated @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public boolean addNmeaListener(android.location.GpsStatus.NmeaListener);
+    method @Deprecated public void removeNmeaListener(android.location.GpsStatus.NmeaListener);
+  }
+
 }
 
 package android.media {
@@ -519,6 +524,8 @@ package android.provider {
   public static interface MediaStore.MediaColumns extends android.provider.BaseColumns {
     field @Deprecated public static final String HASH = "_hash";
     field @Deprecated public static final String IS_TRASHED = "is_trashed";
+    field @Deprecated public static final String PRIMARY_DIRECTORY = "primary_directory";
+    field @Deprecated public static final String SECONDARY_DIRECTORY = "secondary_directory";
   }
 
   @Deprecated public static class MediaStore.PendingParams {

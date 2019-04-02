@@ -425,8 +425,9 @@ public abstract class NotificationListenerService extends Service {
      * @hide
      */
     @TestApi
-    public void onNotificationRemoved(StatusBarNotification sbn, RankingMap rankingMap,
-            NotificationStats stats, int reason) {
+    @SystemApi
+    public void onNotificationRemoved(@NonNull StatusBarNotification sbn,
+            @NonNull RankingMap rankingMap, @NonNull NotificationStats stats, int reason) {
         onNotificationRemoved(sbn, rankingMap, reason);
     }
 
@@ -475,7 +476,7 @@ public abstract class NotificationListenerService extends Service {
      * @param hideSilentStatusIcons whether or not status bar icons should be hidden for silent
      *                              notifications
      */
-    public void onStatusBarIconsBehaviorChanged(boolean hideSilentStatusIcons) {
+    public void onSilentStatusBarIconsVisibilityChanged(boolean hideSilentStatusIcons) {
         // optional
     }
 
@@ -2254,7 +2255,7 @@ public abstract class NotificationListenerService extends Service {
                 } break;
 
                 case MSG_ON_STATUS_BAR_ICON_BEHAVIOR_CHANGED: {
-                    onStatusBarIconsBehaviorChanged((Boolean) msg.obj);
+                    onSilentStatusBarIconsVisibilityChanged((Boolean) msg.obj);
                 } break;
             }
         }

@@ -844,7 +844,7 @@ class SettingsProtoDumpUtil {
                 Settings.Global.LOW_POWER_MODE_TRIGGER_LEVEL_MAX,
                 GlobalSettingsProto.LowPowerMode.TRIGGER_LEVEL_MAX);
         dumpSetting(s, p,
-                Settings.Global.AUTOMATIC_POWER_SAVER_MODE,
+                Settings.Global.AUTOMATIC_POWER_SAVE_MODE,
                 GlobalSettingsProto.LowPowerMode.AUTOMATIC_POWER_SAVER_MODE);
         dumpSetting(s, p,
                 Settings.Global.LOW_POWER_MODE_STICKY,
@@ -1385,6 +1385,9 @@ class SettingsProtoDumpUtil {
                 Settings.Global.TEXT_CLASSIFIER_CONSTANTS,
                 GlobalSettingsProto.TEXT_CLASSIFIER_CONSTANTS);
         dumpSetting(s, p,
+                Settings.Global.TEXT_CLASSIFIER_ACTION_MODEL_PARAMS,
+                GlobalSettingsProto.TEXT_CLASSIFIER_ACTION_MODEL_PARAMS);
+        dumpSetting(s, p,
                 Settings.Global.THEATER_MODE_ON,
                 GlobalSettingsProto.THEATER_MODE_ON);
         dumpSetting(s, p,
@@ -1919,6 +1922,36 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ENHANCED_VOICE_PRIVACY_ENABLED,
                 SecureSettingsProto.ENHANCED_VOICE_PRIVACY_ENABLED);
+
+        final long gestureToken = p.start(SecureSettingsProto.GESTURE);
+        dumpSetting(s, p,
+                Settings.Secure.AWARE_ENABLED,
+                SecureSettingsProto.Gesture.AWARE_ENABLED);
+
+        dumpSetting(s, p,
+                Settings.Secure.SILENCE_ALARMS_GESTURE_COUNT,
+                SecureSettingsProto.Gesture.SILENCE_ALARMS_COUNT);
+        dumpSetting(s, p,
+                Settings.Secure.SILENCE_CALL_GESTURE_COUNT,
+                SecureSettingsProto.Gesture.SILENCE_CALLS_COUNT);
+        dumpSetting(s, p,
+                Settings.Secure.SILENCE_GESTURE,
+                SecureSettingsProto.Gesture.SILENCE_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.SILENCE_NOTIFICATION_GESTURE_COUNT,
+                SecureSettingsProto.Gesture.SILENCE_NOTIFICATION_COUNT);
+        dumpSetting(s, p,
+                Settings.Secure.SILENCE_TIMER_GESTURE_COUNT,
+                SecureSettingsProto.Gesture.SILENCE_TIMER_COUNT);
+
+        dumpSetting(s, p,
+                Settings.Secure.SKIP_GESTURE_COUNT,
+                SecureSettingsProto.Gesture.SKIP_COUNT);
+        dumpSetting(s, p,
+                Settings.Secure.SKIP_GESTURE,
+                SecureSettingsProto.Gesture.SKIP_ENABLED);
+        p.end(gestureToken);
+
         dumpSetting(s, p,
                 Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS,
                 SecureSettingsProto.IMMERSIVE_MODE_CONFIRMATIONS);
@@ -1977,6 +2010,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.LOCATION_CHANGER,
                 SecureSettingsProto.Location.CHANGER);
+        dumpSetting(s, p,
+                Settings.Secure.LOCATION_PERMISSIONS_UPGRADE_TO_Q_MODE,
+                SecureSettingsProto.Location.PERMISSIONS_UPGRADE_TO_Q_MODE);
         p.end(locationToken);
 
         final long locationAccessCheckToken = p.start(SecureSettingsProto.LOCATION_ACCESS_CHECK);
@@ -2281,6 +2317,9 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED,
                 SecureSettingsProto.SYSTEM_NAVIGATION_KEYS_ENABLED);
         dumpSetting(s, p,
+                Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
+                SecureSettingsProto.THEME_CUSTOMIZATION_OVERLAY_PACKAGES);
+        dumpSetting(s, p,
                 Settings.Secure.TRUST_AGENTS_INITIALIZED,
                 SecureSettingsProto.TRUST_AGENTS_INITIALIZED);
 
@@ -2397,22 +2436,6 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ZEN_SETTINGS_SUGGESTION_VIEWED,
                 SecureSettingsProto.Zen.SETTINGS_SUGGESTION_VIEWED);
         p.end(zenToken);
-
-        dumpSetting(s, p,
-                Settings.Secure.SKIP_GESTURE,
-                SecureSettingsProto.SKIP_GESTURE_ENABLED);
-
-        dumpSetting(s, p,
-                Settings.Secure.SILENCE_GESTURE,
-                SecureSettingsProto.SILENCE_GESTURE_ENABLED);
-
-        dumpSetting(s, p,
-                Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
-                SecureSettingsProto.THEME_CUSTOMIZATION_OVERLAY_PACKAGES);
-
-        dumpSetting(s, p,
-                Settings.Secure.AWARE_ENABLED,
-                SecureSettingsProto.AWARE_ENABLED);
 
         // Please insert new settings using the same order as in SecureSettingsProto.
         p.end(token);

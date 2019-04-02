@@ -136,7 +136,7 @@ public final class AutomaticZenRule implements Parcelable {
      * Returns the {@link ComponentName} of the activity that shows configuration options
      * for this rule.
      */
-    public ComponentName getConfigurationActivity() {
+    public @Nullable ComponentName getConfigurationActivity() {
         return configurationActivity;
     }
 
@@ -231,15 +231,16 @@ public final class AutomaticZenRule implements Parcelable {
      * Sets the zen policy.
      */
     public void setZenPolicy(ZenPolicy zenPolicy) {
-        this.mZenPolicy = zenPolicy;
+        this.mZenPolicy = (zenPolicy == null ? null : zenPolicy.copy());
     }
 
     /**
      * Sets the configuration activity - an activity that handles
      * {@link NotificationManager#ACTION_AUTOMATIC_ZEN_RULE} that shows the user more information
-     * about this rule and/or allows them to configure it.
+     * about this rule and/or allows them to configure it. This is required to be non-null for rules
+     * that are not backed by {@link android.service.notification.ConditionProviderService}.
      */
-    public void setConfigurationActivity(ComponentName componentName) {
+    public void setConfigurationActivity(@Nullable ComponentName componentName) {
         this.configurationActivity = componentName;
     }
 

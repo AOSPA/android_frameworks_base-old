@@ -402,6 +402,10 @@ public final class ColorDisplayService extends SystemService {
         cr.registerContentObserver(Secure.getUriFor(Secure.DISPLAY_WHITE_BALANCE_ENABLED),
                 false /* notifyForDescendants */, mContentObserver, mCurrentUser);
 
+        // Apply the accessibility settings first, since they override most other settings.
+        onAccessibilityInversionChanged();
+        onAccessibilityDaltonizerChanged();
+
         // Set the color mode, if valid, and immediately apply the updated tint matrix based on the
         // existing activated state. This ensures consistency of tint across the color mode change.
         onDisplayColorModeChanged(getColorModeInternal());
@@ -1276,11 +1280,17 @@ public final class ColorDisplayService extends SystemService {
         }
 
         boolean isActivatedSetting() {
+            if (mCurrentUser == UserHandle.USER_NULL) {
+                return false;
+            }
             return Secure.getIntForUser(getContext().getContentResolver(),
                     Secure.NIGHT_DISPLAY_ACTIVATED, 0, mCurrentUser) == 1;
         }
 
         int getColorTemperatureSetting() {
+            if (mCurrentUser == UserHandle.USER_NULL) {
+                return NOT_SET;
+            }
             return clampNightDisplayColorTemperature(Secure.getIntForUser(
                     getContext().getContentResolver(), Secure.NIGHT_DISPLAY_COLOR_TEMPERATURE,
                     NOT_SET,
@@ -1407,7 +1417,7 @@ public final class ColorDisplayService extends SystemService {
                 mCurrentColorTemperature = cct;
 
                 // Adapt the display's nominal white point to match the requested CCT value
-                mCurrentColorTemperatureXYZ = ColorSpace.cctToIlluminantdXyz(cct);
+                mCurrentColorTemperatureXYZ = ColorSpace.cctToXyz(cct);
 
                 mChromaticAdaptationMatrix =
                         ColorSpace.chromaticAdaptation(ColorSpace.Adaptation.BRADFORD,

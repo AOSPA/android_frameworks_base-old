@@ -42,7 +42,7 @@ interface ILockSettings {
     long getLong(in String key, in long defaultValue, in int userId);
     @UnsupportedAppUsage
     String getString(in String key, in String defaultValue, in int userId);
-    void setLockCredential(in byte[] credential, int type, in byte[] savedCredential, int requestedQuality, int userId);
+    void setLockCredential(in byte[] credential, int type, in byte[] savedCredential, int requestedQuality, int userId, boolean allowUntrustedChange);
     void resetKeyStore(int userId);
     VerifyCredentialResponse checkCredential(in byte[] credential, int type, int userId,
             in ICheckCredentialProgressCallback progressCallback);
@@ -62,6 +62,7 @@ interface ILockSettings {
     void systemReady();
     void userPresent(int userId);
     int getStrongAuthForUser(int userId);
+    boolean hasPendingEscrowToken(int userId);
 
     // Keystore RecoveryController methods.
     // {@code ServiceSpecificException} may be thrown to signal an error, which caller can

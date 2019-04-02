@@ -187,6 +187,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     public BoostFramework mPerfBoost = null;
 
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
+    static final int RESTART_ACTIVITY_PROCESS_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 13;
     static final int REPORT_MULTI_WINDOW_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 14;
     static final int REPORT_PIP_MODE_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 15;
     static final int REPORT_HOME_CHANGED_MSG = FIRST_SUPERVISOR_STACK_MSG + 16;
@@ -457,8 +458,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void onSystemReady() {
-        mPersisterQueue.startPersisting();
         mLaunchParamsPersister.onSystemReady();
+    }
+
+    void onUserUnlocked(int userId) {
+        // Only start persisting when the first user is unlocked. The method call is
+        // idempotent so there is no side effect to call it again when the second user is
+        // unlocked.
+        mPersisterQueue.startPersisting();
+        mLaunchParamsPersister.onUnlockUser(userId);
     }
 
     public ActivityMetricsLogger getActivityMetricsLogger() {
@@ -2431,6 +2439,16 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         mHandler.sendEmptyMessageDelayed(SLEEP_TIMEOUT_MSG, SLEEP_TIMEOUT);
     }
 
+    void removeRestartTimeouts(ActivityRecord r) {
+        mHandler.removeMessages(RESTART_ACTIVITY_PROCESS_TIMEOUT_MSG, r);
+    }
+
+    final void scheduleRestartTimeout(ActivityRecord r) {
+        removeRestartTimeouts(r);
+        mHandler.sendMessageDelayed(mHandler.obtainMessage(RESTART_ACTIVITY_PROCESS_TIMEOUT_MSG, r),
+                WindowManagerService.WINDOW_FREEZE_TIMEOUT_DURATION);
+    }
+
     void handleNonResizableTaskIfNeeded(TaskRecord task, int preferredWindowingMode,
             int preferredDisplayId, ActivityStack actualStack) {
         handleNonResizableTaskIfNeeded(task, preferredWindowingMode, preferredDisplayId,
@@ -2461,62 +2479,59 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             final boolean singleTaskInstance = preferredDisplay != null
                     && preferredDisplay.isSingleTaskInstance();
 
-            if (singleTaskInstance) {
+            if (preferredDisplayId != actualDisplayId) {
                 // Suppress the warning toast if the preferredDisplay was set to singleTask.
                 // The singleTaskInstance displays will only contain one task and any attempt to
                 // launch new task will re-route to the default display.
-                mService.getTaskChangeNotificationController()
-                        .notifyActivityLaunchOnSecondaryDisplayRerouted(task.getTaskInfo(),
-                                preferredDisplayId);
-                return;
-            }
+                if (singleTaskInstance) {
+                    mService.getTaskChangeNotificationController()
+                            .notifyActivityLaunchOnSecondaryDisplayRerouted(task.getTaskInfo(),
+                                    preferredDisplayId);
+                    return;
+                }
 
-            if (preferredDisplayId != actualDisplayId) {
                 Slog.w(TAG, "Failed to put " + task + " on display " + preferredDisplayId);
                 // Display a warning toast that we failed to put a task on a secondary display.
                 mService.getTaskChangeNotificationController()
                         .notifyActivityLaunchOnSecondaryDisplayFailed(task.getTaskInfo(),
                                 preferredDisplayId);
-                return;
-            } else if (!forceNonResizable && handleForcedResizableTask(task,
-                    FORCED_RESIZEABLE_REASON_SECONDARY_DISPLAY)) {
-                return;
+            } else if (!forceNonResizable) {
+                handleForcedResizableTaskIfNeeded(task, FORCED_RESIZEABLE_REASON_SECONDARY_DISPLAY);
             }
+            // The information about not support secondary display should already be notified, we
+            // don't want to show another message on default display about split-screen. And it may
+            // be the case that a resizable activity is launched on a non-resizable task.
+            return;
         }
 
         if (!task.supportsSplitScreenWindowingMode() || forceNonResizable) {
-            // Display a warning toast that we tried to put an app that doesn't support split-screen
-            // in split-screen.
-            mService.getTaskChangeNotificationController().notifyActivityDismissingDockedStack();
-
             // Dismiss docked stack. If task appeared to be in docked stack but is not resizable -
             // we need to move it to top of fullscreen stack, otherwise it will be covered.
 
             final ActivityStack dockedStack =
                     task.getStack().getDisplay().getSplitScreenPrimaryStack();
             if (dockedStack != null) {
+                // Display a warning toast that we tried to put an app that doesn't support
+                // split-screen in split-screen.
+                mService.getTaskChangeNotificationController()
+                        .notifyActivityDismissingDockedStack();
                 moveTasksToFullscreenStackLocked(dockedStack, actualStack == dockedStack);
             }
             return;
         }
 
-        handleForcedResizableTask(task, FORCED_RESIZEABLE_REASON_SPLIT_SCREEN);
+        handleForcedResizableTaskIfNeeded(task, FORCED_RESIZEABLE_REASON_SPLIT_SCREEN);
     }
 
-    /**
-     * @return {@code true} if the top activity of the task is forced to be resizable and the user
-     *         was notified about activity being forced resized.
-     */
-    private boolean handleForcedResizableTask(TaskRecord task, int reason) {
+    /** Notifies that the top activity of the task is forced to be resizeable. */
+    private void handleForcedResizableTaskIfNeeded(TaskRecord task, int reason) {
         final ActivityRecord topActivity = task.getTopActivity();
-        if (topActivity != null && topActivity.isNonResizableOrForcedResizable()
-                && !topActivity.noDisplay) {
-            final String packageName = topActivity.appInfo.packageName;
-            mService.getTaskChangeNotificationController().notifyActivityForcedResizable(
-                    task.taskId, reason, packageName);
-            return true;
+        if (topActivity == null || topActivity.noDisplay
+                || !topActivity.isNonResizableOrForcedResizable()) {
+            return;
         }
-        return false;
+        mService.getTaskChangeNotificationController().notifyActivityForcedResizable(
+                task.taskId, reason, topActivity.appInfo.packageName);
     }
 
     void activityRelaunchedLocked(IBinder token) {
@@ -2697,6 +2712,22 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         }
                     }
                 } break;
+                case RESTART_ACTIVITY_PROCESS_TIMEOUT_MSG: {
+                    final ActivityRecord r = (ActivityRecord) msg.obj;
+                    String processName = null;
+                    int uid = 0;
+                    synchronized (mService.mGlobalLock) {
+                        if (r.attachedToProcess()
+                                && r.isState(ActivityStack.ActivityState.RESTARTING_PROCESS)) {
+                            processName = r.app.mName;
+                            uid = r.app.mUid;
+                        }
+                    }
+                    if (processName != null) {
+                        mService.mAmInternal.killProcess(processName, uid,
+                                "restartActivityProcessTimeout");
+                    }
+                } break;
                 case REPORT_HOME_CHANGED_MSG: {
                     synchronized (mService.mGlobalLock) {
                         mHandler.removeMessages(REPORT_HOME_CHANGED_MSG);
@@ -2744,6 +2775,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         if (activityOptions != null) {
             activityType = activityOptions.getLaunchActivityType();
             windowingMode = activityOptions.getLaunchWindowingMode();
+            if (activityOptions.freezeRecentTasksReordering()) {
+                mRecentTasks.setFreezeTaskListReordering();
+            }
         }
         if (activityType == ACTIVITY_TYPE_HOME || activityType == ACTIVITY_TYPE_RECENTS) {
             throw new IllegalArgumentException("startActivityFromRecents: Task "

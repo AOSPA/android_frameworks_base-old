@@ -22,7 +22,6 @@ import android.net.LocalServerSocket;
 import android.net.LocalSocket;
 import android.os.SystemClock;
 import android.os.Trace;
-import android.provider.DeviceConfig;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.StructPollfd;
@@ -242,52 +241,55 @@ class ZygoteServer {
 
     private void fetchUsapPoolPolicyProps() {
         if (mUsapPoolSupported) {
-            final String usapPoolSizeMaxPropString =
-                    Zygote.getSystemProperty(
-                            DeviceConfig.RuntimeNative.USAP_POOL_SIZE_MAX,
-                            USAP_POOL_SIZE_MAX_DEFAULT);
+            final String usapPoolSizeMaxPropString = Zygote.getConfigurationProperty(
+                    ZygoteConfig.USAP_POOL_SIZE_MAX, USAP_POOL_SIZE_MAX_DEFAULT);
 
             if (!usapPoolSizeMaxPropString.isEmpty()) {
-                mUsapPoolSizeMax =
-                        Integer.min(
-                                Integer.parseInt(usapPoolSizeMaxPropString),
-                                USAP_POOL_SIZE_MAX_LIMIT);
+                mUsapPoolSizeMax = Integer.min(Integer.parseInt(
+                        usapPoolSizeMaxPropString), USAP_POOL_SIZE_MAX_LIMIT);
             }
 
-            final String usapPoolSizeMinPropString =
-                    Zygote.getSystemProperty(
-                            DeviceConfig.RuntimeNative.USAP_POOL_SIZE_MIN,
-                            USAP_POOL_SIZE_MIN_DEFAULT);
+            final String usapPoolSizeMinPropString = Zygote.getConfigurationProperty(
+                    ZygoteConfig.USAP_POOL_SIZE_MIN, USAP_POOL_SIZE_MIN_DEFAULT);
 
             if (!usapPoolSizeMinPropString.isEmpty()) {
-                mUsapPoolSizeMin =
-                        Integer.max(
-                                Integer.parseInt(usapPoolSizeMinPropString),
-                                USAP_POOL_SIZE_MIN_LIMIT);
+                mUsapPoolSizeMin = Integer.max(
+                        Integer.parseInt(usapPoolSizeMinPropString), USAP_POOL_SIZE_MIN_LIMIT);
             }
 
-            final String usapPoolRefillThresholdPropString =
-                    Zygote.getSystemProperty(
-                            DeviceConfig.RuntimeNative.USAP_POOL_REFILL_THRESHOLD,
-                            Integer.toString(mUsapPoolSizeMax / 2));
+            final String usapPoolRefillThresholdPropString = Zygote.getConfigurationProperty(
+                    ZygoteConfig.USAP_POOL_REFILL_THRESHOLD,
+                    Integer.toString(mUsapPoolSizeMax / 2));
 
             if (!usapPoolRefillThresholdPropString.isEmpty()) {
-                mUsapPoolRefillThreshold =
-                        Integer.min(
-                                Integer.parseInt(usapPoolRefillThresholdPropString),
-                                mUsapPoolSizeMax);
+                mUsapPoolRefillThreshold = Integer.min(
+                        Integer.parseInt(usapPoolRefillThresholdPropString),
+                        mUsapPoolSizeMax);
+            }
+
+            // Sanity check
+            if (mUsapPoolSizeMin >= mUsapPoolSizeMax) {
+                Log.w(TAG, "The max size of the USAP pool must be greater than the minimum size."
+                        + "  Restoring default values.");
+
+                mUsapPoolSizeMax = Integer.parseInt(USAP_POOL_SIZE_MAX_DEFAULT);
+                mUsapPoolSizeMin = Integer.parseInt(USAP_POOL_SIZE_MIN_DEFAULT);
+                mUsapPoolRefillThreshold = mUsapPoolSizeMax / 2;
             }
         }
     }
 
+    private boolean mIsFirstPropertyCheck = true;
     private long mLastPropCheckTimestamp = 0;
 
     private void fetchUsapPoolPolicyPropsWithMinInterval() {
         final long currentTimestamp = SystemClock.elapsedRealtime();
 
-        if (currentTimestamp - mLastPropCheckTimestamp >= Zygote.PROPERTY_CHECK_INTERVAL) {
-            fetchUsapPoolPolicyProps();
+        if (mIsFirstPropertyCheck
+                || (currentTimestamp - mLastPropCheckTimestamp >= Zygote.PROPERTY_CHECK_INTERVAL)) {
+            mIsFirstPropertyCheck = false;
             mLastPropCheckTimestamp = currentTimestamp;
+            fetchUsapPoolPolicyProps();
         }
     }
 
@@ -303,6 +305,9 @@ class ZygoteServer {
 
     Runnable fillUsapPool(int[] sessionSocketRawFDs) {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Zygote:FillUsapPool");
+
+        // Ensure that the pool properties have been fetched.
+        fetchUsapPoolPolicyPropsWithMinInterval();
 
         int usapPoolCount = Zygote.getUsapPoolCount();
         int numUsapsToSpawn = mUsapPoolSizeMax - usapPoolCount;
@@ -347,6 +352,8 @@ class ZygoteServer {
         } else if (mUsapPoolEnabled == newStatus) {
             return null;
         }
+
+        Log.i(TAG, "USAP Pool status change: " + (newStatus ? "ENABLED" : "DISABLED"));
 
         mUsapPoolEnabled = newStatus;
 

@@ -193,8 +193,8 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     DisplayContent getTopFocusedDisplayContent() {
-        return getDisplayContent(mTopFocusedDisplayId == INVALID_DISPLAY
-                ? DEFAULT_DISPLAY : mTopFocusedDisplayId);
+        final DisplayContent dc = getDisplayContent(mTopFocusedDisplayId);
+        return dc != null ? dc : getDisplayContent(DEFAULT_DISPLAY);
     }
 
     @Override
@@ -243,6 +243,34 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
         mWmService.reconfigureDisplayLocked(dc);
 
         return dc;
+    }
+
+    /**
+     * Called when DisplayWindowSettings values may change.
+     */
+    void onSettingsRetrieved() {
+        final int numDisplays = mChildren.size();
+        for (int displayNdx = 0; displayNdx < numDisplays; ++displayNdx) {
+            final DisplayContent displayContent = mChildren.get(displayNdx);
+            final boolean changed = mWmService.mDisplayWindowSettings.updateSettingsForDisplay(
+                    displayContent);
+            if (!changed) {
+                continue;
+            }
+
+            displayContent.initializeDisplayOverrideConfiguration();
+            mWmService.reconfigureDisplayLocked(displayContent);
+
+            // We need to update global configuration as well if config of default display has
+            // changed. Do it inline because ATMS#retrieveSettings() will soon update the
+            // configuration inline, which will overwrite the new windowing mode.
+            if (displayContent.isDefaultDisplay) {
+                final Configuration newConfig = mWmService.computeNewConfiguration(
+                        displayContent.getDisplayId());
+                mWmService.mAtmService.updateConfigurationLocked(newConfig, null /* starting */,
+                        false /* initLocale */);
+            }
+        }
     }
 
     boolean isLayoutNeeded() {
@@ -654,6 +682,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
         // Finally update all input windows now that the window changes have stabilized.
         forAllDisplays(dc -> {
             dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
+            dc.updateSystemGestureExclusion();
         });
 
         mWmService.setHoldScreenLocked(mHoldScreen);
@@ -1043,6 +1072,15 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     @Override
     void scheduleAnimation() {
         mWmService.scheduleAnimationLocked();
+    }
+
+    @Override
+    protected void removeChild(DisplayContent dc) {
+        super.removeChild(dc);
+        if (mTopFocusedDisplayId == dc.getDisplayId()) {
+            mWmService.updateFocusedWindowLocked(
+                    UPDATE_FOCUS_NORMAL, true /* updateInputWindows */);
+        }
     }
 
     /**

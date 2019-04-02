@@ -7,7 +7,7 @@ import static org.mockito.Mockito.when;
 
 import android.net.NetworkCapabilities;
 import android.os.Looper;
-import android.telephony.NetworkRegistrationState;
+import android.telephony.NetworkRegistrationInfo;
 import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
 import android.test.suitebuilder.annotation.SmallTest;
@@ -117,7 +117,7 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
     }
 
     @Test
-    public void testNoInternetIcon() {
+    public void testNoInternetIcon_withDefaultSub() {
         setupNetworkController();
         when(mMockTm.getDataEnabled(mSubId)).thenReturn(false);
         setupDefaultSignal();
@@ -127,11 +127,11 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
         // Verify that a SignalDrawable with a cut out is used to display data disabled.
         verifyLastMobileDataIndicators(true, DEFAULT_SIGNAL_STRENGTH, 0,
                 true, DEFAULT_QS_SIGNAL_STRENGTH, 0, false,
-                false, true);
+                false, true, NO_DATA_STRING);
     }
 
     @Test
-    public void testDataDisabledIcon() {
+    public void testDataDisabledIcon_withDefaultSub() {
         setupNetworkController();
         when(mMockTm.getDataEnabled(mSubId)).thenReturn(false);
         setupDefaultSignal();
@@ -141,7 +141,37 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
         // Verify that a SignalDrawable with a cut out is used to display data disabled.
         verifyLastMobileDataIndicators(true, DEFAULT_SIGNAL_STRENGTH, 0,
                 true, DEFAULT_QS_SIGNAL_STRENGTH, 0, false,
-                false, true);
+                false, true, NO_DATA_STRING);
+    }
+
+    @Test
+    public void testNoInternetIcon_withoutDefaultSub() {
+        setupNetworkController();
+        when(mMockTm.getDataEnabled(mSubId)).thenReturn(false);
+        setupDefaultSignal();
+        setDefaultSubId(mSubId + 1);
+        updateDataConnectionState(TelephonyManager.DATA_CONNECTED, 0);
+        setConnectivityViaBroadcast(NetworkCapabilities.TRANSPORT_CELLULAR, false, false);
+
+        // Verify that a SignalDrawable with a cut out is used to display data disabled.
+        verifyLastMobileDataIndicators(true, DEFAULT_SIGNAL_STRENGTH, 0,
+                true, DEFAULT_QS_SIGNAL_STRENGTH, 0, false,
+                false, true, NOT_DEFAULT_DATA_STRING);
+    }
+
+    @Test
+    public void testDataDisabledIcon_withoutDefaultSub() {
+        setupNetworkController();
+        when(mMockTm.getDataEnabled(mSubId)).thenReturn(false);
+        setupDefaultSignal();
+        setDefaultSubId(mSubId + 1);
+        updateDataConnectionState(TelephonyManager.DATA_DISCONNECTED, 0);
+        setConnectivityViaBroadcast(NetworkCapabilities.TRANSPORT_CELLULAR, false, false);
+
+        // Verify that a SignalDrawable with a cut out is used to display data disabled.
+        verifyLastMobileDataIndicators(true, DEFAULT_SIGNAL_STRENGTH, 0,
+                true, DEFAULT_QS_SIGNAL_STRENGTH, 0, false,
+                false, true, NOT_DEFAULT_DATA_STRING);
     }
 
     @Test
@@ -151,7 +181,7 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
         updateDataConnectionState(TelephonyManager.DATA_CONNECTED,
                 TelephonyManager.NETWORK_TYPE_LTE);
         ServiceState ss = Mockito.mock(ServiceState.class);
-        doReturn(NetworkRegistrationState.NR_STATUS_CONNECTED).when(ss).getNrStatus();
+        doReturn(NetworkRegistrationInfo.NR_STATE_CONNECTED).when(ss).getNrState();
         doReturn(ServiceState.FREQUENCY_RANGE_HIGH).when(ss).getNrFrequencyRange();
         mPhoneStateListener.onServiceStateChanged(ss);
 
@@ -165,7 +195,7 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
         updateDataConnectionState(TelephonyManager.DATA_CONNECTED,
                 TelephonyManager.NETWORK_TYPE_LTE);
         ServiceState ss = Mockito.mock(ServiceState.class);
-        doReturn(NetworkRegistrationState.NR_STATUS_CONNECTED).when(ss).getNrStatus();
+        doReturn(NetworkRegistrationInfo.NR_STATE_CONNECTED).when(ss).getNrState();
         doReturn(ServiceState.FREQUENCY_RANGE_MMWAVE).when(ss).getNrFrequencyRange();
         mPhoneStateListener.onServiceStateChanged(ss);
 
@@ -179,7 +209,7 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
         updateDataConnectionState(TelephonyManager.DATA_CONNECTED,
                 TelephonyManager.NETWORK_TYPE_LTE);
         ServiceState ss = Mockito.mock(ServiceState.class);
-        doReturn(NetworkRegistrationState.NR_STATUS_RESTRICTED).when(ss).getNrStatus();
+        doReturn(NetworkRegistrationInfo.NR_STATE_RESTRICTED).when(ss).getNrState();
         mPhoneStateListener.onServiceStateChanged(mServiceState);
 
         verifyDataIndicators(TelephonyIcons.ICON_LTE);

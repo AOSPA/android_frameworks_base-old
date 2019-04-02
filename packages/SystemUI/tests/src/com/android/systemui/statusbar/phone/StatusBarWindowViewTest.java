@@ -22,6 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.os.SystemClock;
+import android.testing.TestableLooper;
 import android.view.MotionEvent;
 
 import androidx.test.filters.SmallTest;
@@ -39,6 +40,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 @RunWith(AndroidJUnit4.class)
+@TestableLooper.RunWithLooper
 @SmallTest
 public class StatusBarWindowViewTest extends SysuiTestCase {
 

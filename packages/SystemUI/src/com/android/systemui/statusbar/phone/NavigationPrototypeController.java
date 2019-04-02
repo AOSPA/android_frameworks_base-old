@@ -43,10 +43,11 @@ public class NavigationPrototypeController extends ContentObserver {
     private final String GESTURE_MATCH_SETTING = "quickstepcontroller_gesture_match_map";
     public static final String NAV_COLOR_ADAPT_ENABLE_SETTING = "navbar_color_adapt_enable";
     public static final String SHOW_HOME_HANDLE_SETTING = "quickstepcontroller_showhandle";
+    public static final String ENABLE_ASSISTANT_GESTURE = "ENABLE_ASSISTANT_GESTURE";
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({ACTION_DEFAULT, ACTION_QUICKSTEP, ACTION_QUICKSCRUB, ACTION_BACK,
-            ACTION_QUICKSWITCH, ACTION_NOTHING, ACTION_ASSISTANT, ACTION_EXPAND_NOTIFICATION})
+            ACTION_QUICKSWITCH, ACTION_NOTHING, ACTION_ASSISTANT})
     @interface GestureAction {}
     static final int ACTION_DEFAULT = 0;
     static final int ACTION_QUICKSTEP = 1;
@@ -55,7 +56,6 @@ public class NavigationPrototypeController extends ContentObserver {
     static final int ACTION_QUICKSWITCH = 4;
     static final int ACTION_NOTHING = 5;
     static final int ACTION_ASSISTANT = 6;
-    static final int ACTION_EXPAND_NOTIFICATION = 7;
 
     private OnPrototypeChangedListener mListener;
 
@@ -67,8 +67,8 @@ public class NavigationPrototypeController extends ContentObserver {
 
     private final Context mContext;
 
-    public NavigationPrototypeController(Handler handler, Context context) {
-        super(handler);
+    public NavigationPrototypeController(Context context) {
+        super(new Handler());
         mContext = context;
         updateSwipeLTRBackSetting();
     }
@@ -87,6 +87,7 @@ public class NavigationPrototypeController extends ContentObserver {
         registerObserver(NAV_COLOR_ADAPT_ENABLE_SETTING);
         registerObserver(EDGE_SENSITIVITY_WIDTH_SETTING);
         registerObserver(SHOW_HOME_HANDLE_SETTING);
+        registerObserver(ENABLE_ASSISTANT_GESTURE);
     }
 
     /**
@@ -119,6 +120,8 @@ public class NavigationPrototypeController extends ContentObserver {
                         getEdgeSensitivityHeight());
             } else if (path.endsWith(SHOW_HOME_HANDLE_SETTING)) {
                 mListener.onHomeHandleVisiblilityChanged(showHomeHandle());
+            } else if (path.endsWith(ENABLE_ASSISTANT_GESTURE)) {
+                mListener.onAssistantGestureEnabled(isAssistantGestureEnabled());
             }
         }
     }
@@ -162,6 +165,11 @@ public class NavigationPrototypeController extends ContentObserver {
         return getGlobalBool(SHOW_HOME_HANDLE_SETTING, false /* default */);
     }
 
+    boolean isAssistantGestureEnabled() {
+        return getGlobalBool(ENABLE_ASSISTANT_GESTURE, false /* default */);
+    }
+
+
     /**
      * Since Settings.Global cannot pass arrays, use a string to represent each character as a
      * gesture map to actions corresponding to {@see GestureAction}. The number is represented as:
@@ -201,5 +209,6 @@ public class NavigationPrototypeController extends ContentObserver {
         void onHomeHandleVisiblilityChanged(boolean visible);
         void onColorAdaptChanged(boolean enabled);
         void onEdgeSensitivityChanged(int width, int height);
+        void onAssistantGestureEnabled(boolean enabled);
     }
 }

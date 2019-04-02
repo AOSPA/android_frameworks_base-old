@@ -16,9 +16,12 @@
 
 package android.app;
 
+import static android.graphics.drawable.Icon.TYPE_BITMAP;
+
 import static com.android.internal.util.ContrastColorUtil.satisfiesTextContrast;
 
 import android.annotation.ColorInt;
+import android.annotation.DimenRes;
 import android.annotation.DrawableRes;
 import android.annotation.IdRes;
 import android.annotation.IntDef;
@@ -31,6 +34,7 @@ import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
+import android.content.LocusId;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -77,6 +81,7 @@ import android.view.Gravity;
 import android.view.NotificationHeaderView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.contentcapture.ContentCaptureContext;
 import android.widget.ProgressBar;
 import android.widget.RemoteViews;
 
@@ -1201,7 +1206,7 @@ public class Notification implements Parcelable
 
     /**
      * {@link #extras} key: whether the notification should be colorized as
-     * supplied to {@link Builder#setColorized(boolean)}}.
+     * supplied to {@link Builder#setColorized(boolean)}.
      */
     public static final String EXTRA_COLORIZED = "android.colorized";
 
@@ -1271,6 +1276,7 @@ public class Notification implements Parcelable
     private long mTimeout;
 
     private String mShortcutId;
+    private LocusId mLocusId;
     private CharSequence mSettingsText;
 
     private BubbleMetadata mBubbleMetadata;
@@ -1355,7 +1361,7 @@ public class Notification implements Parcelable
          *
          * This is intended for {@link RemoteInput}s that only accept data, meaning
          * {@link RemoteInput#getAllowFreeFormInput} is false, {@link RemoteInput#getChoices}
-         * is null or empty, and {@link RemoteInput#getAllowedDataTypes is non-null and not
+         * is null or empty, and {@link RemoteInput#getAllowedDataTypes} is non-null and not
          * empty. These {@link RemoteInput}s will be ignored by devices that do not
          * support non-text-based {@link RemoteInput}s. See {@link Builder#build}.
          *
@@ -1566,12 +1572,12 @@ public class Notification implements Parcelable
          * Builder class for {@link Action} objects.
          */
         public static final class Builder {
-            private final Icon mIcon;
-            private final CharSequence mTitle;
-            private final PendingIntent mIntent;
+            @Nullable private final Icon mIcon;
+            @Nullable private final CharSequence mTitle;
+            @Nullable private final PendingIntent mIntent;
             private boolean mAllowGeneratedReplies = true;
-            private final Bundle mExtras;
-            private ArrayList<RemoteInput> mRemoteInputs;
+            @NonNull private final Bundle mExtras;
+            @Nullable private ArrayList<RemoteInput> mRemoteInputs;
             private @SemanticAction int mSemanticAction;
             private boolean mIsContextual;
 
@@ -1607,9 +1613,10 @@ public class Notification implements Parcelable
                         action.getAllowGeneratedReplies(), action.getSemanticAction());
             }
 
-            private Builder(Icon icon, CharSequence title, PendingIntent intent, Bundle extras,
-                    RemoteInput[] remoteInputs, boolean allowGeneratedReplies,
-                            @SemanticAction int semanticAction) {
+            private Builder(@Nullable Icon icon, @Nullable CharSequence title,
+                    @Nullable PendingIntent intent, @NonNull Bundle extras,
+                    @Nullable RemoteInput[] remoteInputs, boolean allowGeneratedReplies,
+                    @SemanticAction int semanticAction) {
                 mIcon = icon;
                 mTitle = title;
                 mIntent = intent;
@@ -1642,6 +1649,7 @@ public class Notification implements Parcelable
              *
              * <p>The returned Bundle is shared with this Builder.
              */
+            @NonNull
             public Bundle getExtras() {
                 return mExtras;
             }
@@ -2274,6 +2282,10 @@ public class Notification implements Parcelable
             mShortcutId = parcel.readString();
         }
 
+        if (parcel.readInt() != 0) {
+            mLocusId = LocusId.CREATOR.createFromParcel(parcel);
+        }
+
         mBadgeIcon = parcel.readInt();
 
         if (parcel.readInt() != 0) {
@@ -2397,6 +2409,7 @@ public class Notification implements Parcelable
         that.mChannelId = this.mChannelId;
         that.mTimeout = this.mTimeout;
         that.mShortcutId = this.mShortcutId;
+        that.mLocusId = this.mLocusId;
         that.mBadgeIcon = this.mBadgeIcon;
         that.mSettingsText = this.mSettingsText;
         that.mGroupAlertBehavior = this.mGroupAlertBehavior;
@@ -2708,6 +2721,13 @@ public class Notification implements Parcelable
         if (mShortcutId != null) {
             parcel.writeInt(1);
             parcel.writeString(mShortcutId);
+        } else {
+            parcel.writeInt(0);
+        }
+
+        if (mLocusId != null) {
+            parcel.writeInt(1);
+            mLocusId.writeToParcel(parcel, 0);
         } else {
             parcel.writeInt(0);
         }
@@ -3025,6 +3045,10 @@ public class Notification implements Parcelable
             sb.append(" publicVersion=");
             sb.append(publicVersion.toString());
         }
+        if (this.mLocusId != null) {
+            sb.append(" locusId=");
+            sb.append(this.mLocusId); // LocusId.toString() is PII safe.
+        }
         sb.append(")");
         return sb.toString();
     }
@@ -3127,6 +3151,16 @@ public class Notification implements Parcelable
         return mShortcutId;
     }
 
+    /**
+     * Gets the {@link LocusId} associated with this notification.
+     *
+     * <p>Used by the device's intelligence services to correlate objects (such as
+     * {@link ShortcutInfo} and {@link ContentCaptureContext}) that are correlated.
+     */
+    @Nullable
+    public LocusId getLocusId() {
+        return mLocusId;
+    }
 
     /**
      * Returns the settings text provided to {@link Builder#setSettingsText(CharSequence)}.
@@ -3148,6 +3182,7 @@ public class Notification implements Parcelable
      * Returns the bubble metadata that will be used to display app content in a floating window
      * over the existing foreground activity.
      */
+    @Nullable
     public BubbleMetadata getBubbleMetadata() {
         return mBubbleMetadata;
     }
@@ -3485,6 +3520,19 @@ public class Notification implements Parcelable
         }
 
         /**
+         * Sets the {@link LocusId} associated with this notification.
+         *
+         * <p>This method should be called when the {@link LocusId} is used in other places (such
+         * as {@link ShortcutInfo} and {@link ContentCaptureContext}) so the device's intelligence
+         * services can correlate them.
+         */
+        @NonNull
+        public Builder setLocusId(@Nullable LocusId locusId) {
+            mN.mLocusId = locusId;
+            return this;
+        }
+
+        /**
          * Sets which icon to display as a badge for this notification.
          *
          * Must be one of {@link #BADGE_ICON_NONE}, {@link #BADGE_ICON_SMALL},
@@ -3526,7 +3574,7 @@ public class Notification implements Parcelable
          * collapsed state, the bubble intent will be invoked and displayed.</b>
          */
         @NonNull
-        public Builder setBubbleMetadata(BubbleMetadata data) {
+        public Builder setBubbleMetadata(@Nullable BubbleMetadata data) {
             mN.mBubbleMetadata = data;
             return this;
         }
@@ -8474,6 +8522,7 @@ public class Notification implements Parcelable
         private PendingIntent mDeleteIntent;
         private Icon mIcon;
         private int mDesiredHeight;
+        @DimenRes private int mDesiredHeightResId;
         private int mFlags;
 
         /**
@@ -8500,10 +8549,11 @@ public class Notification implements Parcelable
         private static final int FLAG_SUPPRESS_INITIAL_NOTIFICATION = 0x00000002;
 
         private BubbleMetadata(PendingIntent expandIntent, PendingIntent deleteIntent,
-                Icon icon, int height) {
+                Icon icon, int height, @DimenRes int heightResId) {
             mPendingIntent = expandIntent;
             mIcon = icon;
             mDesiredHeight = height;
+            mDesiredHeightResId = heightResId;
             mDeleteIntent = deleteIntent;
         }
 
@@ -8515,11 +8565,13 @@ public class Notification implements Parcelable
             if (in.readInt() != 0) {
                 mDeleteIntent = PendingIntent.CREATOR.createFromParcel(in);
             }
+            mDesiredHeightResId = in.readInt();
         }
 
         /**
          * @return the pending intent used to populate the floating window for this bubble.
          */
+        @NonNull
         public PendingIntent getIntent() {
             return mPendingIntent;
         }
@@ -8527,33 +8579,34 @@ public class Notification implements Parcelable
         /**
          * @return the pending intent to send when the bubble is dismissed by a user, if one exists.
          */
+        @Nullable
         public PendingIntent getDeleteIntent() {
             return mDeleteIntent;
         }
 
         /**
-         * @return the title that will appear along with the app content defined by
-         * {@link #getIntent()} for this bubble.
-         *
-         * @deprecated titles are no longer required or shown.
-         */
-        @Deprecated
-        public CharSequence getTitle() {
-            return "";
-        }
-        /**
          * @return the icon that will be displayed for this bubble when it is collapsed.
          */
+        @NonNull
         public Icon getIcon() {
             return mIcon;
         }
 
         /**
-         * @return the ideal height for the floating window that app content defined by
+         * @return the ideal height, in DPs, for the floating window that app content defined by
          * {@link #getIntent()} for this bubble.
          */
         public int getDesiredHeight() {
             return mDesiredHeight;
+        }
+
+        /**
+         * @return the resId of ideal height for the floating window that app content defined by
+         * {@link #getIntent()} for this bubble.
+         */
+        @DimenRes
+        public int getDesiredHeightResId() {
+            return mDesiredHeightResId;
         }
 
         /**
@@ -8603,6 +8656,7 @@ public class Notification implements Parcelable
             if (mDeleteIntent != null) {
                 mDeleteIntent.writeToParcel(out, 0);
             }
+            out.writeInt(mDesiredHeightResId);
         }
 
         private void setFlags(int flags) {
@@ -8612,11 +8666,12 @@ public class Notification implements Parcelable
         /**
          * Builder to construct a {@link BubbleMetadata} object.
          */
-        public static class Builder {
+        public static final class Builder {
 
             private PendingIntent mPendingIntent;
             private Icon mIcon;
             private int mDesiredHeight;
+            @DimenRes private int mDesiredHeightResId;
             private int mFlags;
             private PendingIntent mDeleteIntent;
 
@@ -8630,24 +8685,12 @@ public class Notification implements Parcelable
              * Sets the intent that will be used when the bubble is expanded. This will display the
              * app content in a floating window over the existing foreground activity.
              */
-            public BubbleMetadata.Builder setIntent(PendingIntent intent) {
+            @NonNull
+            public BubbleMetadata.Builder setIntent(@NonNull PendingIntent intent) {
                 if (intent == null) {
                     throw new IllegalArgumentException("Bubble requires non-null pending intent");
                 }
                 mPendingIntent = intent;
-                return this;
-            }
-
-            /**
-             * Sets the title that will appear along with the app content for this bubble.
-             *
-             * <p>A title is required and should expect to fit on a single line and make sense when
-             * shown with the content defined by {@link #setIntent(PendingIntent)}.</p>
-             *
-             * @deprecated titles are no longer required or shown.
-             */
-            @Deprecated
-            public BubbleMetadata.Builder setTitle(CharSequence title) {
                 return this;
             }
 
@@ -8657,22 +8700,59 @@ public class Notification implements Parcelable
              * <p>An icon is required and should be representative of the content within the bubble.
              * If your app produces multiple bubbles, the image should be unique for each of them.
              * </p>
+             *
+             * <p>The shape of a bubble icon is adaptive and can match the device theme.
+             *
+             * If your icon is bitmap-based, you should create it using
+             * {@link Icon#createWithAdaptiveBitmap(Bitmap)}, otherwise this method will throw.
+             *
+             * If your icon is not bitmap-based, you should expect that the icon will be tinted.
+             * </p>
              */
-            public BubbleMetadata.Builder setIcon(Icon icon) {
+            @NonNull
+            public BubbleMetadata.Builder setIcon(@NonNull Icon icon) {
                 if (icon == null) {
                     throw new IllegalArgumentException("Bubbles require non-null icon");
+                }
+                if (icon.getType() == TYPE_BITMAP) {
+                    throw new IllegalArgumentException("When using bitmap based icons, Bubbles "
+                            + "require TYPE_ADAPTIVE_BITMAP, please use"
+                            + " Icon#createWithAdaptiveBitmap instead");
                 }
                 mIcon = icon;
                 return this;
             }
 
             /**
-             * Sets the desired height for the app content defined by
+             * Sets the desired height in DPs for the app content defined by
              * {@link #setIntent(PendingIntent)}, this height may not be respected if there is not
              * enough space on the screen or if the provided height is too small to be useful.
+             * <p>
+             * If {@link #setDesiredHeightResId(int)} was previously called on this builder, the
+             * previous value set will be cleared after calling this method, and this value will
+             * be used instead.
              */
+            @NonNull
             public BubbleMetadata.Builder setDesiredHeight(int height) {
                 mDesiredHeight = Math.max(height, 0);
+                mDesiredHeightResId = 0;
+                return this;
+            }
+
+
+            /**
+             * Sets the desired height via resId for the app content defined by
+             * {@link #setIntent(PendingIntent)}, this height may not be respected if there is not
+             * enough space on the screen or if the provided height is too small to be useful.
+             * <p>
+             * If {@link #setDesiredHeight(int)} was previously called on this builder, the
+             * previous value set will be cleared after calling this method, and this value will
+             * be used instead.
+             */
+            @NonNull
+            public BubbleMetadata.Builder setDesiredHeightResId(@DimenRes int heightResId) {
+                mDesiredHeightResId = heightResId;
+                mDesiredHeight = 0;
                 return this;
             }
 
@@ -8687,6 +8767,7 @@ public class Notification implements Parcelable
              * <p>Generally this flag should only be set if the user has performed an action to
              * request or create a bubble.</p>
              */
+            @NonNull
             public BubbleMetadata.Builder setAutoExpandBubble(boolean shouldExpand) {
                 setFlag(FLAG_AUTO_EXPAND_BUBBLE, shouldExpand);
                 return this;
@@ -8703,6 +8784,7 @@ public class Notification implements Parcelable
              * <p>Generally this flag should only be set if the user has performed an action to
              * request or create a bubble.</p>
              */
+            @NonNull
             public BubbleMetadata.Builder setSuppressInitialNotification(
                     boolean shouldSupressNotif) {
                 setFlag(FLAG_SUPPRESS_INITIAL_NOTIFICATION, shouldSupressNotif);
@@ -8712,7 +8794,8 @@ public class Notification implements Parcelable
             /**
              * Sets an optional intent to send when this bubble is explicitly removed by the user.
              */
-            public BubbleMetadata.Builder setDeleteIntent(PendingIntent deleteIntent) {
+            @NonNull
+            public BubbleMetadata.Builder setDeleteIntent(@Nullable PendingIntent deleteIntent) {
                 mDeleteIntent = deleteIntent;
                 return this;
             }
@@ -8722,6 +8805,7 @@ public class Notification implements Parcelable
              * <p>Will throw {@link IllegalStateException} if required fields have not been set
              * on this builder.</p>
              */
+            @NonNull
             public BubbleMetadata build() {
                 if (mPendingIntent == null) {
                     throw new IllegalStateException("Must supply pending intent to bubble");
@@ -8730,7 +8814,7 @@ public class Notification implements Parcelable
                     throw new IllegalStateException("Must supply an icon for the bubble");
                 }
                 BubbleMetadata data = new BubbleMetadata(mPendingIntent, mDeleteIntent,
-                        mIcon, mDesiredHeight);
+                        mIcon, mDesiredHeight, mDesiredHeightResId);
                 data.setFlags(mFlags);
                 return data;
             }

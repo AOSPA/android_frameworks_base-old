@@ -484,6 +484,10 @@ public class AppTransition implements Dump {
         mListeners.add(listener);
     }
 
+    void unregisterListener(AppTransitionListener listener) {
+        mListeners.remove(listener);
+    }
+
     public void notifyAppTransitionFinishedLocked(IBinder token) {
         for (int i = 0; i < mListeners.size(); i++) {
             mListeners.get(i).onAppTransitionFinishedLocked(token);
@@ -2235,6 +2239,10 @@ public class AppTransition implements Dump {
         return transit == TRANSIT_ACTIVITY_OPEN
                 || transit == TRANSIT_ACTIVITY_CLOSE
                 || transit == TRANSIT_ACTIVITY_RELAUNCH;
+    }
+
+    static boolean isChangeTransit(int transit) {
+        return transit == TRANSIT_TASK_CHANGE_WINDOWING_MODE;
     }
 
     /**

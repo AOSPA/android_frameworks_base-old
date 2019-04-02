@@ -16,13 +16,10 @@
 
 package android.net.ip;
 
-import static android.net.shared.LinkPropertiesParcelableUtil.fromStableParcelable;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.eq;
@@ -34,6 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.AlarmManager;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.net.ConnectivityManager;
@@ -46,16 +44,14 @@ import android.net.RouteInfo;
 import android.net.shared.InitialConfiguration;
 import android.net.shared.ProvisioningConfiguration;
 import android.net.util.InterfaceParams;
-import android.provider.Settings;
-import android.test.mock.MockContentResolver;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.R;
-import com.android.internal.util.test.FakeSettingsProvider;
 import com.android.server.NetworkObserver;
 import com.android.server.NetworkObserverRegistry;
+import com.android.server.NetworkStackService;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -94,7 +90,8 @@ public class IpClientTest {
     @Mock private IIpClientCallbacks mCb;
     @Mock private AlarmManager mAlarm;
     @Mock private IpClient.Dependencies mDependencies;
-    private MockContentResolver mContentResolver;
+    @Mock private ContentResolver mContentResolver;
+    @Mock private NetworkStackService.NetworkStackServiceManager mNetworkStackServiceManager;
 
     private NetworkObserver mObserver;
     private InterfaceParams mIfParams;
@@ -109,9 +106,6 @@ public class IpClientTest {
         when(mDependencies.getNetd(any())).thenReturn(mNetd);
         when(mResources.getInteger(R.integer.config_networkAvoidBadWifi))
                 .thenReturn(DEFAULT_AVOIDBADWIFI_CONFIG_VALUE);
-
-        mContentResolver = new MockContentResolver();
-        mContentResolver.addProvider(Settings.AUTHORITY, new FakeSettingsProvider());
         when(mContext.getContentResolver()).thenReturn(mContentResolver);
 
         mIfParams = null;
@@ -126,7 +120,8 @@ public class IpClientTest {
 
     private IpClient makeIpClient(String ifname) throws Exception {
         setTestInterfaceParams(ifname);
-        final IpClient ipc = new IpClient(mContext, ifname, mCb, mObserverRegistry, mDependencies);
+        final IpClient ipc = new IpClient(mContext, ifname, mCb, mObserverRegistry,
+                mNetworkStackServiceManager, mDependencies);
         verify(mNetd, timeout(TEST_TIMEOUT_MS).times(1)).interfaceSetEnableIPv6(ifname, false);
         verify(mNetd, timeout(TEST_TIMEOUT_MS).times(1)).interfaceClearAddrs(ifname);
         ArgumentCaptor<NetworkObserver> arg = ArgumentCaptor.forClass(NetworkObserver.class);
@@ -150,8 +145,8 @@ public class IpClientTest {
     public void testNullInterfaceNameMostDefinitelyThrows() throws Exception {
         setTestInterfaceParams(null);
         try {
-            final IpClient ipc = new IpClient(
-                    mContext, null, mCb, mObserverRegistry, mDependencies);
+            final IpClient ipc = new IpClient(mContext, null, mCb, mObserverRegistry,
+                    mNetworkStackServiceManager, mDependencies);
             ipc.shutdown();
             fail();
         } catch (NullPointerException npe) {
@@ -164,8 +159,8 @@ public class IpClientTest {
         final String ifname = "lo";
         setTestInterfaceParams(ifname);
         try {
-            final IpClient ipc = new IpClient(
-                    mContext, ifname, null, mObserverRegistry, mDependencies);
+            final IpClient ipc = new IpClient(mContext, ifname, null, mObserverRegistry,
+                    mNetworkStackServiceManager, mDependencies);
             ipc.shutdown();
             fail();
         } catch (NullPointerException npe) {
@@ -176,16 +171,16 @@ public class IpClientTest {
     @Test
     public void testInvalidInterfaceDoesNotThrow() throws Exception {
         setTestInterfaceParams(TEST_IFNAME);
-        final IpClient ipc = new IpClient(
-                mContext, TEST_IFNAME, mCb, mObserverRegistry, mDependencies);
+        final IpClient ipc = new IpClient(mContext, TEST_IFNAME, mCb, mObserverRegistry,
+                mNetworkStackServiceManager, mDependencies);
         ipc.shutdown();
     }
 
     @Test
     public void testInterfaceNotFoundFailsImmediately() throws Exception {
         setTestInterfaceParams(null);
-        final IpClient ipc = new IpClient(
-                mContext, TEST_IFNAME, mCb, mObserverRegistry, mDependencies);
+        final IpClient ipc = new IpClient(mContext, TEST_IFNAME, mCb, mObserverRegistry,
+                mNetworkStackServiceManager, mDependencies);
         ipc.startProvisioning(new ProvisioningConfiguration());
         verify(mCb, times(1)).onProvisioningFailure(any());
         ipc.shutdown();
@@ -212,8 +207,7 @@ public class IpClientTest {
         verify(mNetd, timeout(TEST_TIMEOUT_MS).times(1)).interfaceSetEnableIPv6(iface, false);
         verify(mNetd, timeout(TEST_TIMEOUT_MS).times(1)).interfaceClearAddrs(iface);
         verify(mCb, timeout(TEST_TIMEOUT_MS).times(1))
-                .onLinkPropertiesChange(argThat(
-                        lp -> fromStableParcelable(lp).equals(makeEmptyLinkProperties(iface))));
+                .onLinkPropertiesChange(makeEmptyLinkProperties(iface));
     }
 
     @Test
@@ -258,15 +252,13 @@ public class IpClientTest {
         mObserver.onInterfaceAddressUpdated(new LinkAddress(addresses[lastAddr]), iface);
         LinkProperties want = linkproperties(links(addresses), routes(prefixes));
         want.setInterfaceName(iface);
-        verify(mCb, timeout(TEST_TIMEOUT_MS).times(1)).onProvisioningSuccess(argThat(
-                lp -> fromStableParcelable(lp).equals(want)));
+        verify(mCb, timeout(TEST_TIMEOUT_MS).times(1)).onProvisioningSuccess(want);
 
         ipc.shutdown();
         verify(mNetd, timeout(TEST_TIMEOUT_MS).times(1)).interfaceSetEnableIPv6(iface, false);
         verify(mNetd, timeout(TEST_TIMEOUT_MS).times(1)).interfaceClearAddrs(iface);
         verify(mCb, timeout(TEST_TIMEOUT_MS).times(1))
-                .onLinkPropertiesChange(argThat(
-                        lp -> fromStableParcelable(lp).equals(makeEmptyLinkProperties(iface))));
+                .onLinkPropertiesChange(makeEmptyLinkProperties(iface));
     }
 
     @Test

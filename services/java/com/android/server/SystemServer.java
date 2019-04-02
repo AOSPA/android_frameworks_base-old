@@ -88,6 +88,7 @@ import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.connectivity.IpConnectivityMetrics;
+import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.coverage.CoverageService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
 import com.android.server.display.DisplayManagerService;
@@ -108,7 +109,6 @@ import com.android.server.media.MediaSessionService;
 import com.android.server.media.projection.MediaProjectionManagerService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
-import com.android.server.net.ipmemorystore.IpMemoryStoreService;
 import com.android.server.net.watchlist.NetworkWatchlistService;
 import com.android.server.notification.NotificationManagerService;
 import com.android.server.oemlock.OemLockService;
@@ -853,7 +853,7 @@ public final class SystemServer {
     private void startOtherServices() {
         final Context context = mSystemContext;
         VibratorService vibrator = null;
-        DynamicAndroidService dynamicAndroid = null;
+        DynamicSystemService dynamicSystem = null;
         IStorageManager storageManager = null;
         NetworkManagementService networkManagement = null;
         IpSecService ipSecService = null;
@@ -975,9 +975,9 @@ public final class SystemServer {
             ServiceManager.addService("vibrator", vibrator);
             traceEnd();
 
-            traceBeginAndSlog("StartDynamicAndroidService");
-            dynamicAndroid = new DynamicAndroidService(context);
-            ServiceManager.addService("dynamic_android", dynamicAndroid);
+            traceBeginAndSlog("StartDynamicSystemService");
+            dynamicSystem = new DynamicSystemService(context);
+            ServiceManager.addService("dynamic_system", dynamicSystem);
             traceEnd();
 
             if (!isWatch) {
@@ -1237,6 +1237,7 @@ public final class SystemServer {
             }
 
             startContentCaptureService(context);
+            startAttentionService(context);
 
             // App prediction manager service
             traceBeginAndSlog("StartAppPredictionService");
@@ -1253,6 +1254,14 @@ public final class SystemServer {
             mSystemServiceManager.startService(ClipboardService.class);
             traceEnd();
 
+            traceBeginAndSlog("InitNetworkStackClient");
+            try {
+                NetworkStackClient.getInstance().init();
+            } catch (Throwable e) {
+                reportWtf("initializing NetworkStackClient", e);
+            }
+            traceEnd();
+
             traceBeginAndSlog("StartNetworkManagementService");
             try {
                 networkManagement = NetworkManagementService.create(context);
@@ -1262,14 +1271,6 @@ public final class SystemServer {
             }
             traceEnd();
 
-            traceBeginAndSlog("StartIpMemoryStoreService");
-            try {
-                ServiceManager.addService(Context.IP_MEMORY_STORE_SERVICE,
-                        new IpMemoryStoreService(context));
-            } catch (Throwable e) {
-                reportWtf("starting IP Memory Store Service", e);
-            }
-            traceEnd();
 
             traceBeginAndSlog("StartIpSecService");
             try {
@@ -1290,10 +1291,6 @@ public final class SystemServer {
                         .startService(TextClassificationManagerService.Lifecycle.class);
                 traceEnd();
             }
-
-            traceBeginAndSlog("StartAttentionManagerService");
-            mSystemServiceManager.startService(AttentionManagerService.class);
-            traceEnd();
 
             traceBeginAndSlog("StartNetworkScoreService");
             mSystemServiceManager.startService(NetworkScoreService.Lifecycle.class);
@@ -1376,14 +1373,6 @@ public final class SystemServer {
                 networkPolicy.bindConnectivityManager(connectivity);
             } catch (Throwable e) {
                 reportWtf("starting Connectivity Service", e);
-            }
-            traceEnd();
-
-            traceBeginAndSlog("StartNetworkStack");
-            try {
-                NetworkStackClient.getInstance().start(context);
-            } catch (Throwable e) {
-                reportWtf("starting Network Stack", e);
             }
             traceEnd();
 
@@ -2197,6 +2186,14 @@ public final class SystemServer {
                     SystemService.PHASE_THIRD_PARTY_APPS_CAN_START);
             traceEnd();
 
+            traceBeginAndSlog("StartNetworkStack");
+            try {
+                NetworkStackClient.getInstance().start(context);
+            } catch (Throwable e) {
+                reportWtf("starting Network Stack", e);
+            }
+            traceEnd();
+
             traceBeginAndSlog("MakeLocationServiceReady");
             try {
                 if (locationF != null) {
@@ -2305,6 +2302,24 @@ public final class SystemServer {
 
         traceBeginAndSlog("StartContentCaptureService");
         mSystemServiceManager.startService(CONTENT_CAPTURE_MANAGER_SERVICE_CLASS);
+
+        ContentCaptureManagerInternal ccmi =
+                LocalServices.getService(ContentCaptureManagerInternal.class);
+        if (ccmi != null && mActivityManagerService != null) {
+            mActivityManagerService.setContentCaptureManager(ccmi);
+        }
+
+        traceEnd();
+    }
+
+    private void startAttentionService(@NonNull Context context) {
+        if (!AttentionManagerService.isServiceConfigured(context)) {
+            Slog.d(TAG, "AttentionService is not configured on this device");
+            return;
+        }
+
+        traceBeginAndSlog("StartAttentionManagerService");
+        mSystemServiceManager.startService(AttentionManagerService.class);
         traceEnd();
     }
 

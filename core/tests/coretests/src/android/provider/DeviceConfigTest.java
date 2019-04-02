@@ -16,6 +16,7 @@
 
 package android.provider;
 
+import static android.provider.DeviceConfig.OnPropertiesChangedListener;
 import static android.provider.DeviceConfig.OnPropertyChangedListener;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -30,6 +31,7 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -59,10 +61,36 @@ public class DeviceConfigTest {
     }
 
     @Test
+    public void getProperty_nullNamespace() {
+        try {
+            DeviceConfig.getProperty(null, sKey);
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void getProperty_nullName() {
+        try {
+            DeviceConfig.getProperty(sNamespace, null);
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
     public void getString_empty() {
         final String default_value = "default_value";
         final String result = DeviceConfig.getString(sNamespace, sKey, default_value);
         assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void getString_nullDefault() {
+        final String result = DeviceConfig.getString(sNamespace, sKey, null);
+        assertThat(result).isNull();
     }
 
     @Test
@@ -73,6 +101,26 @@ public class DeviceConfigTest {
 
         final String result = DeviceConfig.getString(sNamespace, sKey, default_value);
         assertThat(result).isEqualTo(value);
+    }
+
+    @Test
+    public void getString_nullNamespace() {
+        try {
+            DeviceConfig.getString(null, sKey, "default_value");
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void getString_nullName() {
+        try {
+            DeviceConfig.getString(sNamespace, null, "default_value");
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
     }
 
     @Test
@@ -103,6 +151,26 @@ public class DeviceConfigTest {
     }
 
     @Test
+    public void getBoolean_nullNamespace() {
+        try {
+            DeviceConfig.getBoolean(null, sKey, false);
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void getBoolean_nullName() {
+        try {
+            DeviceConfig.getBoolean(sNamespace, null, false);
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
     public void getInt_empty() {
         final int default_value = 999;
         final int result = DeviceConfig.getInt(sNamespace, sKey, default_value);
@@ -127,6 +195,26 @@ public class DeviceConfigTest {
         final int result = DeviceConfig.getInt(sNamespace, sKey, default_value);
         // Failure to parse results in using the default value
         assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void getInt_nullNamespace() {
+        try {
+            DeviceConfig.getInt(null, sKey, 0);
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void getInt_nullName() {
+        try {
+            DeviceConfig.getInt(sNamespace, null, 0);
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
     }
 
     @Test
@@ -157,6 +245,26 @@ public class DeviceConfigTest {
     }
 
     @Test
+    public void getLong_nullNamespace() {
+        try {
+            DeviceConfig.getLong(null, sKey, 0);
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void getLong_nullName() {
+        try {
+            DeviceConfig.getLong(sNamespace, null, 0);
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
     public void getFloat_empty() {
         final float default_value = 123.456f;
         final float result = DeviceConfig.getFloat(sNamespace, sKey, default_value);
@@ -181,6 +289,46 @@ public class DeviceConfigTest {
         final float result = DeviceConfig.getFloat(sNamespace, sKey, default_value);
         // Failure to parse results in using the default value
         assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void getFloat_nullNamespace() {
+        try {
+            DeviceConfig.getFloat(null, sKey, 0);
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void getFloat_nullName() {
+        try {
+            DeviceConfig.getFloat(sNamespace, null, 0);
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void setProperty_nullNamespace() {
+        try {
+            DeviceConfig.setProperty(null, sKey, sValue, false);
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void setProperty_nullName() {
+        try {
+            DeviceConfig.setProperty(sNamespace, null, sValue, false);
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
     }
 
     @Test
@@ -223,7 +371,31 @@ public class DeviceConfigTest {
     }
 
     @Test
-    public void testListener() throws InterruptedException {
+    public void testOnPropertiesChangedListener() throws InterruptedException {
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
+
+        OnPropertiesChangedListener changeListener = (properties) -> {
+            assertThat(properties.getNamespace()).isEqualTo(sNamespace);
+            assertThat(properties.getKeyset()).contains(sKey);
+            assertThat(properties.getString(sKey, "default_value")).isEqualTo(sValue);
+            countDownLatch.countDown();
+        };
+
+        try {
+            DeviceConfig.addOnPropertiesChangedListener(sNamespace,
+                    ActivityThread.currentApplication().getMainExecutor(), changeListener);
+            DeviceConfig.setProperty(sNamespace, sKey, sValue, false);
+            assertThat(countDownLatch.await(
+                    WAIT_FOR_PROPERTY_CHANGE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)).isTrue();
+        } catch (InterruptedException e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            DeviceConfig.removeOnPropertiesChangedListener(changeListener);
+        }
+    }
+
+    @Test
+    public void testOnPropertyChangedListener() throws InterruptedException {
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
         OnPropertyChangedListener changeListener = (namespace, name, value) -> {
@@ -239,6 +411,8 @@ public class DeviceConfigTest {
             DeviceConfig.setProperty(sNamespace, sKey, sValue, false);
             assertThat(countDownLatch.await(
                     WAIT_FOR_PROPERTY_CHANGE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)).isTrue();
+        } catch (InterruptedException e) {
+            Assert.fail(e.getMessage());
         } finally {
             DeviceConfig.removeOnPropertyChangedListener(changeListener);
         }

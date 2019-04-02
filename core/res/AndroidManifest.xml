@@ -424,10 +424,8 @@
 
     <protected-broadcast android:name="android.intent.action.SUB_DEFAULT_CHANGED" />
 
-    <protected-broadcast android:name="android.location.GPS_ENABLED_CHANGE" />
     <protected-broadcast android:name="android.location.PROVIDERS_CHANGED" />
     <protected-broadcast android:name="android.location.MODE_CHANGED" />
-    <protected-broadcast android:name="android.location.GPS_FIX_CHANGE" />
     <protected-broadcast android:name="android.net.proxy.PAC_REFRESH" />
 
     <protected-broadcast android:name="android.telecom.action.DEFAULT_DIALER_CHANGED" />
@@ -852,8 +850,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_sdcardRead"
         android:description="@string/permdesc_sdcardRead"
-        android:protectionLevel="dangerous"
-        android:permissionFlags="removed" />
+        android:protectionLevel="dangerous" />
 
     <!-- Allows an application to write to external storage.
          <p class="note"><strong>Note:</strong> If <em>both</em> your <a
@@ -874,8 +871,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_sdcardWrite"
         android:description="@string/permdesc_sdcardWrite"
-        android:protectionLevel="dangerous"
-        android:permissionFlags="removed" />
+        android:protectionLevel="dangerous" />
 
     <!-- Runtime permission controlling access to the user's shared aural media
          collection. -->
@@ -900,6 +896,7 @@
         android:label="@string/permgrouplab_visual"
         android:description="@string/permgroupdesc_visual"
         android:request="@string/permgrouprequest_visual"
+        android:requestDetail="@string/permgrouprequestdetail_visual"
         android:priority="920" />
 
     <!-- Allows an application to read the user's shared images collection. -->
@@ -1554,6 +1551,13 @@
     <permission android:name="android.permission.MANAGE_IPSEC_TUNNELS"
         android:protectionLevel="signature|appop" />
 
+    <!-- @hide Allows apps to create and manage Test Networks.
+         <p>Granted only to shell. CTS tests will use
+         UiAutomation.AdoptShellPermissionIdentity() to gain access.
+    -->
+    <permission android:name="android.permission.MANAGE_TEST_NETWORKS"
+        android:protectionLevel="signature" />
+
     <!-- @SystemApi @hide Allows applications to read Wi-Fi credential.
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.READ_WIFI_CREDENTIAL"
@@ -1881,8 +1885,8 @@
     <permission android:name="android.permission.HARDWARE_TEST"
         android:protectionLevel="signature" />
 
-    <!-- @hide Allows an application to manage DynamicAndroid image -->
-    <permission android:name="android.permission.MANAGE_DYNAMIC_ANDROID"
+    <!-- @hide Allows an application to manage DynamicSystem image -->
+    <permission android:name="android.permission.MANAGE_DYNAMIC_SYSTEM"
         android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows access to Broadcast Radio
@@ -2019,6 +2023,12 @@
          <p>Protection level: signature|privileged
     -->
     <permission android:name="android.permission.BIND_INCALL_SERVICE"
+        android:protectionLevel="signature|privileged" />
+
+    <!-- Allows the app to request network scans from telephony.
+         <p>Not for use by third-party applications.
+         @SystemApi @hide-->
+    <permission android:name="android.permission.NETWORK_SCAN"
         android:protectionLevel="signature|privileged" />
 
     <!-- Must be required by a link {@link android.telephony.VisualVoicemailService} to ensure that
@@ -2190,9 +2200,9 @@
      screen lock to a certain complexity level.
      <p>Protection level: normal
     -->
-    <permission android:name="android.permission.REQUEST_SCREEN_LOCK_COMPLEXITY"
-                android:label="@string/permlab_requestScreenLockComplexity"
-                android:description="@string/permdesc_requestScreenLockComplexity"
+    <permission android:name="android.permission.REQUEST_PASSWORD_COMPLEXITY"
+                android:label="@string/permlab_requestPasswordComplexity"
+                android:description="@string/permdesc_requestPasswordComplexity"
                 android:protectionLevel="normal" />
 
     <!-- ================================== -->
@@ -2562,7 +2572,7 @@
     <permission android:name="android.permission.WRITE_GSERVICES"
         android:protectionLevel="signature|privileged" />
 
-    <!-- @SystemApi @hide Allows an application to modify config settings.
+    <!-- @SystemApi @TestApi @hide Allows an application to modify config settings.
     <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.WRITE_DEVICE_CONFIG"
         android:protectionLevel="signature|configurator"/>
@@ -3085,12 +3095,6 @@
     <!-- Must be required by the CompanionDeviceManager to ensure that only the system can bind to it.
          @hide -->
     <permission android:name="android.permission.BIND_COMPANION_DEVICE_MANAGER_SERVICE"
-        android:protectionLevel="signature" />
-
-    <!-- Must be required by the RoleControllerService to ensure that only the system can bind to
-         it.
-         @hide -->
-    <permission android:name="android.permission.BIND_ROLE_CONTROLLER_SERVICE"
         android:protectionLevel="signature" />
 
     <!-- @SystemApi Must be required by the RuntimePermissionPresenterService to ensure
@@ -3961,9 +3965,13 @@
     <permission android:name="android.permission.PACKAGE_ROLLBACK_AGENT"
         android:protectionLevel="signature" />
 
-    <!-- @SystemApi @hide Allows managing apk level rollbacks. -->
+    <!-- @SystemApi @TestApi @hide Allows managing apk level rollbacks. -->
     <permission android:name="android.permission.MANAGE_ROLLBACKS"
         android:protectionLevel="signature|verifier" />
+
+    <!-- @TestApi @hide Allows testing apk level rollbacks. -->
+    <permission android:name="android.permission.TEST_MANAGE_ROLLBACKS"
+        android:protectionLevel="signature" />
 
     <!-- @SystemApi @hide Allows an application to mark other applications as harmful -->
     <permission android:name="android.permission.SET_HARMFUL_APP_WARNINGS"
@@ -4001,6 +4009,13 @@
          @hide -->
     <permission android:name="android.permission.UPDATE_LOCK"
         android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows an application the opportunity to become a
+         {@link android.service.notification.NotificationAssistantService}.
+         User permission is still required before access is granted.
+         @hide -->
+    <permission android:name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE"
+                android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi @TestApi Allows an application to read the current set of notifications, including
          any metadata and intents attached.
@@ -4510,6 +4525,11 @@
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.SUBSTITUTE_SHARE_TARGET_APP_NAME_AND_ICON"
                 android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows an application to access shared libraries.
+         @hide -->
+    <permission android:name="android.permission.ACCESS_SHARED_LIBRARIES"
+                android:protectionLevel="signature|installer" />
 
     <application android:process="system"
                  android:persistent="true"

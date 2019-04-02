@@ -19,6 +19,12 @@ package com.android.providers.settings;
 import static android.os.Process.ROOT_UID;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_2BUTTON;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_2BUTTON_OVERLAY;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY;
 
 import android.Manifest;
 import android.annotation.NonNull;
@@ -33,6 +39,8 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.om.IOverlayManager;
+import android.content.om.OverlayInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
@@ -1103,9 +1111,7 @@ public class SettingsProvider extends ContentProvider {
 
     private boolean mutateConfigSetting(String name, String value, String prefix,
             boolean makeDefault, int operation, int mode) {
-
-        // TODO(b/117663715): Ensure the caller can access the setting.
-        // enforceReadPermission(WRITE_DEVICE_CONFIG);
+        enforceWritePermission(Manifest.permission.WRITE_DEVICE_CONFIG);
 
         // Perform the mutation.
         synchronized (mLock) {
@@ -3237,7 +3243,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 174;
+            private static final int SETTINGS_VERSION = 177;
 
             private final int mUserId;
 
@@ -4279,6 +4285,100 @@ public class SettingsProvider extends ContentProvider {
 
                     currentVersion = 174;
                 }
+
+                if (currentVersion == 174) {
+                    // Version 174: Set the default value for Global Settings: APPLY_RAMPING_RINGER
+
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+
+                    Setting currentRampingRingerSetting = globalSettings.getSettingLocked(
+                            Settings.Global.APPLY_RAMPING_RINGER);
+                    if (currentRampingRingerSetting.isNull()) {
+                        globalSettings.insertSettingLocked(
+                                Settings.Global.APPLY_RAMPING_RINGER,
+                                getContext().getResources().getBoolean(
+                                        R.bool.def_apply_ramping_ringer) ? "1" : "0", null,
+                                true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+
+                    currentVersion = 175;
+                }
+
+                if (currentVersion == 175) {
+                    // Version 175: Set the default value for System Settings:
+                    // RING_VIBRATION_INTENSITY. If the notification vibration intensity has been
+                    // set and ring vibration intensity hasn't, the ring vibration intensity should
+                    // followed notification vibration intensity.
+
+                    final SettingsState systemSettings = getSystemSettingsLocked(userId);
+
+                    Setting notificationVibrationIntensity = systemSettings.getSettingLocked(
+                            Settings.System.NOTIFICATION_VIBRATION_INTENSITY);
+
+                    Setting ringVibrationIntensity = systemSettings.getSettingLocked(
+                            Settings.System.RING_VIBRATION_INTENSITY);
+
+                    if (!notificationVibrationIntensity.isNull()
+                            && ringVibrationIntensity.isNull()) {
+                        systemSettings.insertSettingLocked(
+                                Settings.System.RING_VIBRATION_INTENSITY,
+                                notificationVibrationIntensity.getValue(),
+                                null , true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+
+                    currentVersion = 176;
+                }
+
+                if (currentVersion == 176) {
+                    // Version 176: Migrate the existing swipe up setting into the resource overlay
+                    //              for the navigation bar interaction mode.
+
+                    final IOverlayManager overlayManager = IOverlayManager.Stub.asInterface(
+                            ServiceManager.getService(Context.OVERLAY_SERVICE));
+                    int navBarMode = -1;
+
+                    // Migrate the swipe up setting only if it is set
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    final Setting swipeUpSetting = secureSettings.getSettingLocked(
+                            Secure.SWIPE_UP_TO_SWITCH_APPS_ENABLED);
+                    if (swipeUpSetting != null && !swipeUpSetting.isNull()) {
+                        navBarMode = swipeUpSetting.getValue().equals("1")
+                                ? NAV_BAR_MODE_2BUTTON
+                                : NAV_BAR_MODE_3BUTTON;
+                    }
+
+                    // Temporary: Only for migration for dogfooders, to be removed
+                    try {
+                        final OverlayInfo info = overlayManager.getOverlayInfo(
+                                "com.android.internal.experiment.navbar.type.inset",
+                                UserHandle.USER_CURRENT);
+                        if (info != null && info.isEnabled()) {
+                            navBarMode = NAV_BAR_MODE_GESTURAL;
+                        }
+                    } catch (RemoteException e) {
+                        // Ingore, fall through
+                    }
+
+                    if (navBarMode != -1) {
+                        try {
+                            overlayManager.setEnabled(NAV_BAR_MODE_3BUTTON_OVERLAY,
+                                    navBarMode == NAV_BAR_MODE_3BUTTON,
+                                    UserHandle.USER_CURRENT);
+                            overlayManager.setEnabled(NAV_BAR_MODE_2BUTTON_OVERLAY,
+                                    navBarMode == NAV_BAR_MODE_2BUTTON,
+                                    UserHandle.USER_CURRENT);
+                            overlayManager.setEnabled(NAV_BAR_MODE_GESTURAL_OVERLAY,
+                                    navBarMode == NAV_BAR_MODE_GESTURAL,
+                                    UserHandle.USER_CURRENT);
+                        } catch (RemoteException e) {
+                            throw new IllegalStateException(
+                                    "Failed to set nav bar interaction mode overlay");
+                        }
+                    }
+
+                    currentVersion = 177;
+                }
+
 
                 // vXXX: Add new settings above this point.
 

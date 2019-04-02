@@ -178,7 +178,7 @@ private:
 
     void pullAndMatchEventsLocked(const int64_t timestampNs, ConditionState condition);
 
-    void accumulateEvents(const std::vector<std::shared_ptr<LogEvent>>& allData, 
+    void accumulateEvents(const std::vector<std::shared_ptr<LogEvent>>& allData,
                           int64_t originalPullTimeNs, int64_t eventElapsedTimeNs,
                           ConditionState condition);
 
@@ -244,6 +244,7 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestEmptyDataResetsBase_onDataPulled);
     FRIEND_TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestFirstBucket);
+    FRIEND_TEST(ValueMetricProducerTest, TestFullBucketResetWhenLastBucketInvalid);
     FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenGuardRailHit);
     FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenInitialPullFailed);
     FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenLastPullFailed);

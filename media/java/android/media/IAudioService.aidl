@@ -37,6 +37,7 @@ import android.media.audiopolicy.AudioProductStrategies;
 import android.media.audiopolicy.AudioVolumeGroups;
 import android.media.audiopolicy.IAudioPolicyCallback;
 import android.media.projection.IMediaProjection;
+import android.net.Uri;
 
 /**
  * {@hide}
@@ -171,7 +172,7 @@ interface IAudioService {
 
     void handleBluetoothA2dpDeviceConfigChange(in BluetoothDevice device);
 
-    int handleBluetoothA2dpActiveDeviceChange(in BluetoothDevice device,
+    void handleBluetoothA2dpActiveDeviceChange(in BluetoothDevice device,
             int state, int profile, boolean suppressNoisyIntent, int a2dpVolume);
 
     @UnsupportedAppUsage
@@ -195,9 +196,12 @@ interface IAudioService {
 
     String registerAudioPolicy(in AudioPolicyConfig policyConfig,
             in IAudioPolicyCallback pcb, boolean hasFocusListener, boolean isFocusPolicy,
+            boolean isTestFocusPolicy,
             boolean isVolumeController, in IMediaProjection projection);
 
     oneway void unregisterAudioPolicyAsync(in IAudioPolicyCallback pcb);
+
+    void unregisterAudioPolicy(in IAudioPolicyCallback pcb);
 
     int addMixForPolicy(in AudioPolicyConfig policyConfig, in IAudioPolicyCallback pcb);
 
@@ -247,6 +251,8 @@ interface IAudioService {
              in String[] deviceAddresses);
 
     int removeUidDeviceAffinity(in IAudioPolicyCallback pcb, in int uid);
+
+    boolean hasHapticChannels(in Uri uri);
 
     // WARNING: read warning at top of file, new methods that need to be used by native
     // code via IAudioManager.h need to be added to the top section.

@@ -23,7 +23,9 @@ import android.view.InflateException;
 import android.view.LayoutInflater;
 import android.view.View;
 
+import com.android.keyguard.KeyguardClockSwitch;
 import com.android.systemui.SystemUIFactory;
+import com.android.systemui.qs.QSCarrierGroup;
 import com.android.systemui.qs.QSFooterImpl;
 import com.android.systemui.qs.QuickStatusBarHeader;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
@@ -124,6 +126,16 @@ public class InjectionInflationController {
          * Creates the NotificationPanelView.
          */
         NotificationPanelView createPanelView();
+
+        /**
+         * Creates the QSCarrierGroup
+         */
+        QSCarrierGroup createQSCarrierGroup();
+
+        /**
+         * Creates the KeyguardClockSwitch.
+         */
+        KeyguardClockSwitch createKeyguardClockSwitch();
     }
 
     /**

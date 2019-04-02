@@ -28,6 +28,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.hardware.display.AmbientDisplayConfiguration;
+import android.metrics.LogMaker;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -35,7 +36,10 @@ import android.text.format.Formatter;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.Preconditions;
+import com.android.systemui.Dependency;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.util.Assert;
@@ -79,6 +83,7 @@ public class DozeTriggers implements DozeMachine.Part {
     private long mNotificationPulseTime;
     private boolean mPulsePending;
 
+    private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
 
     public DozeTriggers(Context context, DozeMachine machine, DozeHost dozeHost,
             AlarmManager alarmManager, AmbientDisplayConfiguration config,
@@ -159,9 +164,9 @@ public class DozeTriggers implements DozeMachine.Part {
                     if (screenX != -1 && screenY != -1) {
                         mDozeHost.onSlpiTap(screenX, screenY);
                     }
-                    mMachine.wakeUp();
+                    gentleWakeUp(pulseReason);
                 } else if (isPickup) {
-                    mMachine.wakeUp();
+                    gentleWakeUp(pulseReason);
                 } else {
                     mDozeHost.extendPulse();
                 }
@@ -178,7 +183,29 @@ public class DozeTriggers implements DozeMachine.Part {
         }
     }
 
+    private void gentleWakeUp(int reason) {
+        // Log screen wake up reason (lift/pickup, tap, double-tap)
+        mMetricsLogger.write(new LogMaker(MetricsEvent.DOZING)
+                .setType(MetricsEvent.TYPE_UPDATE)
+                .setSubtype(reason));
+        if (mDozeParameters.getDisplayNeedsBlanking()) {
+            // Let's prepare the display to wake-up by drawing black.
+            // This will cover the hardware wake-up sequence, where the display
+            // becomes black for a few frames.
+            mDozeHost.setAodDimmingScrim(255f);
+        }
+        mMachine.wakeUp();
+    }
+
     private void onProximityFar(boolean far) {
+        // Proximity checks are asynchronous and the user might have interacted with the phone
+        // when a new event is arriving. This means that a state transition might have happened
+        // and the proximity check is now obsolete.
+        if (mMachine.isExecutingTransition()) {
+            Log.w(TAG, "onProximityFar called during transition. Ignoring sensor response.");
+            return;
+        }
+
         final boolean near = !far;
         final DozeMachine.State state = mMachine.getState();
         final boolean paused = (state == DozeMachine.State.DOZE_AOD_PAUSED);
@@ -298,6 +325,10 @@ public class DozeTriggers implements DozeMachine.Part {
                 continuePulseRequest(reason);
             }
         }, !mDozeParameters.getProxCheckBeforePulse() || performedProxCheck, reason);
+
+        // Logs request pulse reason on AOD screen.
+        mMetricsLogger.write(new LogMaker(MetricsEvent.DOZING)
+                .setType(MetricsEvent.TYPE_UPDATE).setSubtype(reason));
     }
 
     private boolean canPulse() {
