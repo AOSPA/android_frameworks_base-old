@@ -96,6 +96,8 @@ public class KeyguardStatusBarView extends RelativeLayout
     private ViewGroup mStatusIconArea;
     private int mLayoutState = LAYOUT_NONE;
 
+    private boolean mShowMultiUserIconOnKeyguard;
+
     /**
      * Draw this many pixels into the left/right side of the cutout to optimally use the space
      */
@@ -174,6 +176,8 @@ public class KeyguardStatusBarView extends RelativeLayout
                 R.dimen.display_cutout_margin_consumption);
         mShowPercentAvailable = getContext().getResources().getBoolean(
                 com.android.internal.R.bool.config_battery_percentage_setting_available);
+        mShowMultiUserIconOnKeyguard = getContext().getResources().getBoolean(
+                com.android.internal.R.bool.config_showMultiuserIconKeyguard);
     }
 
     private void updateVisibilities() {
@@ -189,7 +193,7 @@ public class KeyguardStatusBarView extends RelativeLayout
             // If we have no keyguard switcher, the screen width is under 600dp. In this case,
             // we only show the multi-user switch if it's enabled through UserManager as well as
             // by the user.
-            if (mMultiUserSwitch.isMultiUserEnabled()) {
+            if (mShowMultiUserIconOnKeyguard && mMultiUserSwitch.isMultiUserEnabled()) {
                 mMultiUserSwitch.setVisibility(View.VISIBLE);
             } else {
                 mMultiUserSwitch.setVisibility(View.GONE);
