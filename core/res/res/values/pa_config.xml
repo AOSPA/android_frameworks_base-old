@@ -291,4 +291,8 @@
     -->
     <integer name="config_longPressOnAssistBehaviorHwkeys">4</integer>
 
+    <!-- Whether to show multiuser icon on keyguard -->
+    <bool name="config_showMultiuserIconKeyguard">true</bool>
+
 </resources>
+
