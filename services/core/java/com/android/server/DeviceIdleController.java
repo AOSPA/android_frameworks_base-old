@@ -115,7 +115,8 @@ import java.util.stream.Collectors;
  *
  * Test: atest com.android.server.DeviceIdleControllerTest
  *
- * Current idling state machine (as of Android 9 Pie). This can be visualized using Graphviz:
+ * Current idling state machine (as of Android Q). This can be visualized using Graphviz:
+   <pre>
 
    digraph {
      subgraph deep {
@@ -259,6 +260,7 @@ import java.util.stream.Collectors;
        ]
      }
    }
+   </pre>
  */
 public class DeviceIdleController extends SystemService
         implements AnyMotionDetector.DeviceIdleCallback {
@@ -1132,7 +1134,7 @@ public class DeviceIdleController extends SystemService
                         KEY_SMS_TEMP_APP_WHITELIST_DURATION, 20 * 1000L);
                 NOTIFICATION_WHITELIST_DURATION = mParser.getDurationMillis(
                         KEY_NOTIFICATION_WHITELIST_DURATION, 30 * 1000L);
-                WAIT_FOR_UNLOCK = mParser.getBoolean(KEY_WAIT_FOR_UNLOCK, false);
+                WAIT_FOR_UNLOCK = mParser.getBoolean(KEY_WAIT_FOR_UNLOCK, true);
                 PRE_IDLE_FACTOR_LONG = mParser.getFloat(KEY_PRE_IDLE_FACTOR_LONG, 1.67f);
                 PRE_IDLE_FACTOR_SHORT = mParser.getFloat(KEY_PRE_IDLE_FACTOR_SHORT, 0.33f);
             }

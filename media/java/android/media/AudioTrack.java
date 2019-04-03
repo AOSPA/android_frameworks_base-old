@@ -22,6 +22,7 @@ import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.os.Binder;
 import android.os.Build;
@@ -913,8 +914,9 @@ public class AudioTrack extends PlayerBase
         /**
          * Sets whether this track will play through the offloaded audio path.
          * When set to true, at build time, the audio format will be checked against
-         * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat)} to verify the audio format
-         * used by this track is supported on the device's offload path (if any).
+         * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat,AudioAttributes)}
+         * to verify the audio format used by this track is supported on the device's offload
+         * path (if any).
          * <br>Offload is only supported for media audio streams, and therefore requires that
          * the usage be {@link AudioAttributes#USAGE_MEDIA}.
          * @param offload true to require the offload path for playback.
@@ -978,7 +980,7 @@ public class AudioTrack extends PlayerBase
                     throw new UnsupportedOperationException(
                             "Cannot create AudioTrack, offload requires USAGE_MEDIA");
                 }
-                if (!AudioSystem.isOffloadSupported(mFormat)) {
+                if (!AudioSystem.isOffloadSupported(mFormat, mAttributes)) {
                     throw new UnsupportedOperationException(
                             "Cannot create AudioTrack, offload format not supported");
                 }
@@ -1013,9 +1015,9 @@ public class AudioTrack extends PlayerBase
      * frame indicates the number of samples per channel, e.g. 100 frames for a stereo compressed
      * stream corresponds to 200 decoded interleaved PCM samples.
      * @param delayInFrames number of frames to be ignored at the beginning of the stream. A value
-     *     of 0 indicates no padding is to be applied.
-     * @param paddingInFrames number of frames to be ignored at the end of the stream. A value of 0
      *     of 0 indicates no delay is to be applied.
+     * @param paddingInFrames number of frames to be ignored at the end of the stream. A value of 0
+     *     of 0 indicates no padding is to be applied.
      */
     public void setOffloadDelayPadding(@IntRange(from = 0) int delayInFrames,
             @IntRange(from = 0) int paddingInFrames) {
@@ -3176,7 +3178,8 @@ public class AudioTrack extends PlayerBase
      * Registers a callback for the notification of stream events.
      * This callback can only be registered for instances operating in offloaded mode
      * (see {@link AudioTrack.Builder#setOffloadedPlayback(boolean)} and
-     * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat)} for more details).
+     * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat,AudioAttributes)} for
+     * more details).
      * @param executor {@link Executor} to handle the callbacks.
      * @param eventCallback the callback to receive the stream event notifications.
      */
@@ -3580,41 +3583,103 @@ public class AudioTrack extends PlayerBase
     {
         private MetricsConstants() {}
 
-        /**
-         * Key to extract the Stream Type for this track
-         * from the {@link AudioTrack#getMetrics} return value.
-         * The value is a String.
-         */
-        public static final String STREAMTYPE = "android.media.audiotrack.streamtype";
+        // MM_PREFIX is slightly different than TAG, used to avoid cut-n-paste errors.
+        private static final String MM_PREFIX = "android.media.audiotrack.";
 
         /**
-         * Key to extract the Content Type for this track
+         * Key to extract the stream type for this track
          * from the {@link AudioTrack#getMetrics} return value.
-         * The value is a String.
+         * This value may not exist in API level {@link android.os.Build.VERSION_CODES#P}.
+         * The value is a {@code String}.
          */
-        public static final String CONTENTTYPE = "android.media.audiotrack.type";
+        public static final String STREAMTYPE = MM_PREFIX + "streamtype";
 
         /**
-         * Key to extract the Content Type for this track
+         * Key to extract the attribute content type for this track
          * from the {@link AudioTrack#getMetrics} return value.
-         * The value is a String.
+         * The value is a {@code String}.
          */
-        public static final String USAGE = "android.media.audiotrack.usage";
+        public static final String CONTENTTYPE = MM_PREFIX + "type";
+
+        /**
+         * Key to extract the attribute usage for this track
+         * from the {@link AudioTrack#getMetrics} return value.
+         * The value is a {@code String}.
+         */
+        public static final String USAGE = MM_PREFIX + "usage";
 
         /**
          * Key to extract the sample rate for this track in Hz
          * from the {@link AudioTrack#getMetrics} return value.
-         * The value is an integer.
+         * The value is an {@code int}.
+         * @deprecated This does not work. Use {@link AudioTrack#getSampleRate()} instead.
          */
+        @Deprecated
         public static final String SAMPLERATE = "android.media.audiorecord.samplerate";
 
         /**
-         * Key to extract the channel mask information for this track
+         * Key to extract the native channel mask information for this track
          * from the {@link AudioTrack#getMetrics} return value.
          *
-         * The value is a Long integer.
+         * The value is a {@code long}.
+         * @deprecated This does not work. Use {@link AudioTrack#getFormat()} and read from
+         * the returned format instead.
          */
+        @Deprecated
         public static final String CHANNELMASK = "android.media.audiorecord.channelmask";
 
+        /**
+         * Use for testing only. Do not expose.
+         * The current sample rate.
+         * The value is an {@code int}.
+         * @hide
+         */
+        @TestApi
+        public static final String SAMPLE_RATE = MM_PREFIX + "sampleRate";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The native channel mask.
+         * The value is a {@code long}.
+         * @hide
+         */
+        @TestApi
+        public static final String CHANNEL_MASK = MM_PREFIX + "channelMask";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The output audio data encoding.
+         * The value is a {@code String}.
+         * @hide
+         */
+        @TestApi
+        public static final String ENCODING = MM_PREFIX + "encoding";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The port id of this track port in audioserver.
+         * The value is an {@code int}.
+         * @hide
+         */
+        @TestApi
+        public static final String PORT_ID = MM_PREFIX + "portId";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The buffer frameCount.
+         * The value is an {@code int}.
+         * @hide
+         */
+        @TestApi
+        public static final String FRAME_COUNT = MM_PREFIX + "frameCount";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The actual track attributes used.
+         * The value is a {@code String}.
+         * @hide
+         */
+        @TestApi
+        public static final String ATTRIBUTES = MM_PREFIX + "attributes";
     }
 }

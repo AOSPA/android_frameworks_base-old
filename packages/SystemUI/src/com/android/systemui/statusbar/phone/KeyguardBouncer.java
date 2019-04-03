@@ -88,6 +88,7 @@ public class KeyguardBouncer {
     private int mBouncerPromptReason;
     private boolean mIsAnimatingAway;
     private boolean mIsScrimmed;
+    private ViewGroup mLockIconContainer;
 
     public KeyguardBouncer(Context context, ViewMediatorCallback callback,
             LockPatternUtils lockPatternUtils, ViewGroup container,
@@ -136,7 +137,7 @@ public class KeyguardBouncer {
         if (resetSecuritySelection) {
             // showPrimarySecurityScreen() updates the current security method. This is needed in
             // case we are already showing and the current security method changed.
-            mKeyguardView.showPrimarySecurityScreen();
+            showPrimarySecurityScreen();
         }
         if (mRoot.getVisibility() == View.VISIBLE || mShowingSoon) {
             return;
@@ -169,6 +170,10 @@ public class KeyguardBouncer {
 
     public boolean isShowingScrimmed() {
         return isShowing() && mIsScrimmed;
+    }
+
+    public ViewGroup getLockIconContainer() {
+        return mRoot == null || mRoot.getVisibility() != View.VISIBLE ? null : mLockIconContainer;
     }
 
     /**
@@ -339,9 +344,18 @@ public class KeyguardBouncer {
         boolean wasInitialized = mRoot != null;
         ensureView();
         if (wasInitialized) {
-            mKeyguardView.showPrimarySecurityScreen();
+            showPrimarySecurityScreen();
         }
         mBouncerPromptReason = mCallback.getBouncerPromptReason();
+    }
+
+    private void showPrimarySecurityScreen() {
+        mKeyguardView.showPrimarySecurityScreen();
+        KeyguardSecurityView keyguardSecurityView = mKeyguardView.getCurrentSecurityView();
+        if (keyguardSecurityView != null) {
+            mLockIconContainer = ((ViewGroup) keyguardSecurityView)
+                    .findViewById(R.id.lock_icon_container);
+        }
     }
 
     /**
@@ -408,6 +422,8 @@ public class KeyguardBouncer {
         mStatusBarHeight = mRoot.getResources().getDimensionPixelOffset(
                 com.android.systemui.R.dimen.status_bar_height);
         mRoot.setVisibility(View.INVISIBLE);
+        mRoot.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight,
+                oldBottom) -> mExpansionCallback.onLayout());
         mRoot.setAccessibilityPaneTitle(mKeyguardView.getAccessibilityTitleForCurrentMode());
 
         final WindowInsets rootInsets = mRoot.getRootWindowInsets();
@@ -488,5 +504,6 @@ public class KeyguardBouncer {
         void onFullyShown();
         void onStartingToHide();
         void onFullyHidden();
+        void onLayout();
     }
 }

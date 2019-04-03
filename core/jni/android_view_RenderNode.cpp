@@ -31,6 +31,7 @@
 #include <renderthread/CanvasContext.h>
 #include <TreeInfo.h>
 #include <hwui/Paint.h>
+#include <utils/TraceUtils.h>
 
 #include "core_jni_helpers.h"
 
@@ -336,6 +337,19 @@ static jboolean android_view_RenderNode_offsetTopAndBottom(jlong renderNodePtr, 
 static jboolean android_view_RenderNode_hasOverlappingRendering(jlong renderNodePtr) {
     RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
     return renderNode->stagingProperties().hasOverlappingRendering();
+}
+
+static jboolean android_view_RenderNode_getAnimationMatrix(jlong renderNodePtr, jlong outMatrixPtr) {
+    RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
+    SkMatrix* outMatrix = reinterpret_cast<SkMatrix*>(outMatrixPtr);
+
+    const SkMatrix* animationMatrix = renderNode->stagingProperties().getAnimationMatrix();
+
+    if (animationMatrix) {
+        *outMatrix = *animationMatrix;
+        return JNI_TRUE;
+    }
+    return JNI_FALSE;
 }
 
 static jboolean android_view_RenderNode_getClipToBounds(jlong renderNodePtr) {
@@ -649,6 +663,7 @@ static const JNINativeMethod gMethods[] = {
     { "nSetLayerPaint",        "(JJ)Z",  (void*) android_view_RenderNode_setLayerPaint },
     { "nSetStaticMatrix",      "(JJ)Z",  (void*) android_view_RenderNode_setStaticMatrix },
     { "nSetAnimationMatrix",   "(JJ)Z",  (void*) android_view_RenderNode_setAnimationMatrix },
+    { "nGetAnimationMatrix",   "(JJ)Z",  (void*) android_view_RenderNode_getAnimationMatrix },
     { "nSetClipToBounds",      "(JZ)Z",  (void*) android_view_RenderNode_setClipToBounds },
     { "nGetClipToBounds",      "(J)Z",   (void*) android_view_RenderNode_getClipToBounds },
     { "nSetClipBounds",        "(JIIII)Z", (void*) android_view_RenderNode_setClipBounds },

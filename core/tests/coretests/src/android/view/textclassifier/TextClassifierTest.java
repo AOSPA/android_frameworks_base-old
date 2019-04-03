@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import android.app.RemoteAction;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.LocaleList;
 import android.text.Spannable;
@@ -31,6 +32,9 @@ import android.text.SpannableString;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
+
+import com.google.common.truth.Truth;
 
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
@@ -38,7 +42,6 @@ import org.hamcrest.Matcher;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -50,22 +53,10 @@ import java.util.List;
  * Tests are skipped if such a textclassifier does not exist.
  */
 @SmallTest
-@RunWith(Parameterized.class)
+@RunWith(AndroidJUnit4.class)
 public class TextClassifierTest {
-    private static final String LOCAL = "local";
-    private static final String SYSTEM = "system";
 
-    @Parameterized.Parameters(name = "{0}")
-    public static Iterable<Object> textClassifierTypes() {
-        return Arrays.asList(LOCAL);
-
-        // TODO: The following will fail on any device that specifies a no-op TextClassifierService.
-        // Enable when we can set a specified TextClassifierService for testing.
-        // return Arrays.asList(LOCAL, SYSTEM);
-    }
-
-    @Parameterized.Parameter
-    public String mTextClassifierType;
+    // TODO: Implement TextClassifierService testing.
 
     private static final TextClassificationConstants TC_CONSTANTS =
             TextClassificationConstants.loadFromString("");
@@ -80,8 +71,7 @@ public class TextClassifierTest {
     public void setup() {
         mContext = InstrumentationRegistry.getTargetContext();
         mTcm = mContext.getSystemService(TextClassificationManager.class);
-        mClassifier = mTcm.getTextClassifier(
-                mTextClassifierType.equals(LOCAL) ? TextClassifier.LOCAL : TextClassifier.SYSTEM);
+        mClassifier = mTcm.getTextClassifier(TextClassifier.LOCAL);
     }
 
     @Test
@@ -275,6 +265,8 @@ public class TextClassifierTest {
         assertEquals("ja", ExtrasUtils.getEntityType(foreignLanguageInfo));
         assertTrue(ExtrasUtils.getScore(foreignLanguageInfo) >= 0);
         assertTrue(ExtrasUtils.getScore(foreignLanguageInfo) <= 1);
+        assertTrue(intent.hasExtra(TextClassifier.EXTRA_FROM_TEXT_CLASSIFIER));
+        assertEquals("ja", ExtrasUtils.getTopLanguage(intent).getLanguage());
 
         LocaleList.setDefault(originalLocales);
     }
@@ -403,7 +395,6 @@ public class TextClassifierTest {
 
         ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
         assertTrue(conversationActions.getConversationActions().size() > 0);
-        assertTrue(conversationActions.getConversationActions().size() == 1);
         for (ConversationAction conversationAction :
                 conversationActions.getConversationActions()) {
             assertThat(conversationAction,
@@ -438,6 +429,62 @@ public class TextClassifierTest {
         }
     }
 
+    @Test
+    public void testSuggestConversationActions_openUrl() {
+        if (isTextClassifierDisabled()) return;
+        ConversationActions.Message message =
+                new ConversationActions.Message.Builder(
+                        ConversationActions.Message.PERSON_USER_OTHERS)
+                        .setText("Check this out: https://www.android.com")
+                        .build();
+        TextClassifier.EntityConfig typeConfig =
+                new TextClassifier.EntityConfig.Builder().includeTypesFromTextClassifier(false)
+                        .setIncludedTypes(
+                                Collections.singletonList(ConversationAction.TYPE_OPEN_URL))
+                        .build();
+        ConversationActions.Request request =
+                new ConversationActions.Request.Builder(Collections.singletonList(message))
+                        .setMaxSuggestions(1)
+                        .setTypeConfig(typeConfig)
+                        .build();
+
+        ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
+        Truth.assertThat(conversationActions.getConversationActions()).hasSize(1);
+        ConversationAction conversationAction = conversationActions.getConversationActions().get(0);
+        Truth.assertThat(conversationAction.getType()).isEqualTo(ConversationAction.TYPE_OPEN_URL);
+        Intent actionIntent = ExtrasUtils.getActionIntent(conversationAction.getExtras());
+        Truth.assertThat(actionIntent.getAction()).isEqualTo(Intent.ACTION_VIEW);
+        Truth.assertThat(actionIntent.getData()).isEqualTo(Uri.parse("https://www.android.com"));
+    }
+
+    @Test
+    public void testSuggestConversationActions_copy() {
+        if (isTextClassifierDisabled()) return;
+        ConversationActions.Message message =
+                new ConversationActions.Message.Builder(
+                        ConversationActions.Message.PERSON_USER_OTHERS)
+                        .setText("Authentication code: 12345")
+                        .build();
+        TextClassifier.EntityConfig typeConfig =
+                new TextClassifier.EntityConfig.Builder().includeTypesFromTextClassifier(false)
+                        .setIncludedTypes(
+                                Collections.singletonList(ConversationAction.TYPE_COPY))
+                        .build();
+        ConversationActions.Request request =
+                new ConversationActions.Request.Builder(Collections.singletonList(message))
+                        .setMaxSuggestions(1)
+                        .setTypeConfig(typeConfig)
+                        .build();
+
+        ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
+        Truth.assertThat(conversationActions.getConversationActions()).hasSize(1);
+        ConversationAction conversationAction = conversationActions.getConversationActions().get(0);
+        Truth.assertThat(conversationAction.getType()).isEqualTo(ConversationAction.TYPE_COPY);
+        Truth.assertThat(conversationAction.getTextReply()).isAnyOf(null, "");
+        Truth.assertThat(conversationAction.getAction()).isNull();
+        String code = ExtrasUtils.getCopyText(conversationAction.getExtras());
+        Truth.assertThat(code).isEqualTo("12345");
+    }
 
     private boolean isTextClassifierDisabled() {
         return mClassifier == null || mClassifier == TextClassifier.NO_OP;

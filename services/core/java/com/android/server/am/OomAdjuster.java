@@ -38,7 +38,6 @@ import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_PSS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_UID_OBSERVERS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_USAGE_STATS;
 import static com.android.server.am.ActivityManagerService.DISPATCH_OOM_ADJ_OBSERVER_MSG;
-import static com.android.server.am.ActivityManagerService.DISPATCH_PROCESSES_CHANGED_UI_MSG;
 import static com.android.server.am.ActivityManagerService.IDLE_UIDS_MSG;
 import static com.android.server.am.ActivityManagerService.TAG_BACKUP;
 import static com.android.server.am.ActivityManagerService.TAG_LRU;
@@ -1346,6 +1345,11 @@ public final class OomAdjuster {
                                         ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND;
                             }
                         }
+                        if (schedGroup < ProcessList.SCHED_GROUP_TOP_APP
+                                && (cr.flags & Context.BIND_SCHEDULE_LIKE_TOP_APP) != 0) {
+                            schedGroup = ProcessList.SCHED_GROUP_TOP_APP;
+                        }
+
                         if (!trackedProcState) {
                             cr.trackProcState(clientProcState, mAdjSeq, now);
                         }
@@ -1734,9 +1738,10 @@ public final class OomAdjuster {
 
         int changes = 0;
 
-        if (app.curAdj != app.setAdj) {
-            // don't compact during bootup
-            if (mAppCompact.useCompaction() && mService.mBooted) {
+        // don't compact during bootup
+        if (mAppCompact.useCompaction() && mService.mBooted) {
+            // Cached and prev/home compaction
+            if (app.curAdj != app.setAdj) {
                 // Perform a minor compaction when a perceptible app becomes the prev/home app
                 // Perform a major compaction when any app enters cached
                 // reminder: here, setAdj is previous state, curAdj is upcoming state
@@ -1750,7 +1755,23 @@ public final class OomAdjuster {
                         && app.curAdj <= ProcessList.CACHED_APP_MAX_ADJ) {
                     mAppCompact.compactAppFull(app);
                 }
+            } else if (mService.mWakefulness != PowerManagerInternal.WAKEFULNESS_AWAKE
+                    && app.setAdj < ProcessList.FOREGROUND_APP_ADJ
+                    // Because these can fire independent of oom_adj/procstate changes, we need
+                    // to throttle the actual dispatch of these requests in addition to the
+                    // processing of the requests. As a result, there is throttling both here
+                    // and in AppCompactor.
+                    && mAppCompact.shouldCompactPersistent(app, now)) {
+                mAppCompact.compactAppPersistent(app);
+            } else if (mService.mWakefulness != PowerManagerInternal.WAKEFULNESS_AWAKE
+                    && app.getCurProcState()
+                        == ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
+                    && mAppCompact.shouldCompactBFGS(app, now)) {
+                mAppCompact.compactAppBfgs(app);
             }
+        }
+
+        if (app.curAdj != app.setAdj) {
             ProcessList.setOomAdj(app.pid, app.uid, app.curAdj);
             if (DEBUG_SWITCH || DEBUG_OOM_ADJ || mService.mCurOomAdjUid == app.info.uid) {
                 String msg = "Set " + app.pid + " " + app.processName + " adj "
@@ -1968,41 +1989,9 @@ public final class OomAdjuster {
         if (changes != 0) {
             if (DEBUG_PROCESS_OBSERVERS) Slog.i(TAG_PROCESS_OBSERVERS,
                     "Changes in " + app + ": " + changes);
-            int i = mService.mPendingProcessChanges.size()-1;
-            ActivityManagerService.ProcessChangeItem item = null;
-            while (i >= 0) {
-                item = mService.mPendingProcessChanges.get(i);
-                if (item.pid == app.pid) {
-                    if (DEBUG_PROCESS_OBSERVERS) Slog.i(TAG_PROCESS_OBSERVERS,
-                            "Re-using existing item: " + item);
-                    break;
-                }
-                i--;
-            }
-            if (i < 0) {
-                // No existing item in pending changes; need a new one.
-                final int NA = mService.mAvailProcessChanges.size();
-                if (NA > 0) {
-                    item = mService.mAvailProcessChanges.remove(NA-1);
-                    if (DEBUG_PROCESS_OBSERVERS) Slog.i(TAG_PROCESS_OBSERVERS,
-                            "Retrieving available item: " + item);
-                } else {
-                    item = new ActivityManagerService.ProcessChangeItem();
-                    if (DEBUG_PROCESS_OBSERVERS) Slog.i(TAG_PROCESS_OBSERVERS,
-                            "Allocating new item: " + item);
-                }
-                item.changes = 0;
-                item.pid = app.pid;
-                item.uid = app.info.uid;
-                if (mService.mPendingProcessChanges.size() == 0) {
-                    if (DEBUG_PROCESS_OBSERVERS) Slog.i(TAG_PROCESS_OBSERVERS,
-                            "*** Enqueueing dispatch processes changed!");
-                    mService.mUiHandler.obtainMessage(DISPATCH_PROCESSES_CHANGED_UI_MSG)
-                            .sendToTarget();
-                }
-                mService.mPendingProcessChanges.add(item);
-            }
-            item.changes |= changes;
+            ActivityManagerService.ProcessChangeItem item =
+                    mService.enqueueProcessChangeItemLocked(app.pid, app.info.uid);
+            item.changes = changes;
             item.foregroundActivities = app.repForegroundActivities;
             if (DEBUG_PROCESS_OBSERVERS) Slog.i(TAG_PROCESS_OBSERVERS,
                     "Item " + Integer.toHexString(System.identityHashCode(item))

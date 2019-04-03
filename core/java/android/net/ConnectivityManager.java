@@ -38,7 +38,6 @@ import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.INetworkActivityListener;
 import android.os.INetworkManagementService;
@@ -56,6 +55,7 @@ import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseIntArray;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.util.Preconditions;
@@ -74,6 +74,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Class that answers queries about the state of network connectivity. It also
@@ -424,6 +427,16 @@ public class ConnectivityManager {
      */
     public static final String ACTION_PROMPT_LOST_VALIDATION =
             "android.net.conn.PROMPT_LOST_VALIDATION";
+
+    /**
+     * Action used to display a dialog that asks the user whether to stay connected to a network
+     * that has not validated. This intent is used to start the dialog in settings via
+     * startActivity.
+     *
+     * @hide
+     */
+    public static final String ACTION_PROMPT_PARTIAL_CONNECTIVITY =
+            "android.net.conn.PROMPT_PARTIAL_CONNECTIVITY";
 
     /**
      * Invalid tethering type.
@@ -1809,23 +1822,26 @@ public class ConnectivityManager {
         public static final int MIN_INTERVAL = 10;
 
         private final Network mNetwork;
-        private final PacketKeepaliveCallback mCallback;
-        private final Looper mLooper;
-        private final Messenger mMessenger;
+        private final ISocketKeepaliveCallback mCallback;
+        private final ExecutorService mExecutor;
 
         private volatile Integer mSlot;
-
-        void stopLooper() {
-            mLooper.quit();
-        }
 
         @UnsupportedAppUsage
         public void stop() {
             try {
-                mService.stopKeepalive(mNetwork, mSlot);
-            } catch (RemoteException e) {
-                Log.e(TAG, "Error stopping packet keepalive: ", e);
-                stopLooper();
+                mExecutor.execute(() -> {
+                    try {
+                        if (mSlot != null) {
+                            mService.stopKeepalive(mNetwork, mSlot);
+                        }
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Error stopping packet keepalive: ", e);
+                        throw e.rethrowFromSystemServer();
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                // The internal executor has already stopped due to previous event.
             }
         }
 
@@ -1833,40 +1849,43 @@ public class ConnectivityManager {
             Preconditions.checkNotNull(network, "network cannot be null");
             Preconditions.checkNotNull(callback, "callback cannot be null");
             mNetwork = network;
-            mCallback = callback;
-            HandlerThread thread = new HandlerThread(TAG);
-            thread.start();
-            mLooper = thread.getLooper();
-            mMessenger = new Messenger(new Handler(mLooper) {
+            mExecutor = Executors.newSingleThreadExecutor();
+            mCallback = new ISocketKeepaliveCallback.Stub() {
                 @Override
-                public void handleMessage(Message message) {
-                    switch (message.what) {
-                        case NetworkAgent.EVENT_SOCKET_KEEPALIVE:
-                            int error = message.arg2;
-                            try {
-                                if (error == SUCCESS) {
-                                    if (mSlot == null) {
-                                        mSlot = message.arg1;
-                                        mCallback.onStarted();
-                                    } else {
-                                        mSlot = null;
-                                        stopLooper();
-                                        mCallback.onStopped();
-                                    }
-                                } else {
-                                    stopLooper();
-                                    mCallback.onError(error);
-                                }
-                            } catch (Exception e) {
-                                Log.e(TAG, "Exception in keepalive callback(" + error + ")", e);
-                            }
-                            break;
-                        default:
-                            Log.e(TAG, "Unhandled message " + Integer.toHexString(message.what));
-                            break;
-                    }
+                public void onStarted(int slot) {
+                    Binder.withCleanCallingIdentity(() ->
+                            mExecutor.execute(() -> {
+                                mSlot = slot;
+                                callback.onStarted();
+                            }));
                 }
-            });
+
+                @Override
+                public void onStopped() {
+                    Binder.withCleanCallingIdentity(() ->
+                            mExecutor.execute(() -> {
+                                mSlot = null;
+                                callback.onStopped();
+                            }));
+                    mExecutor.shutdown();
+                }
+
+                @Override
+                public void onError(int error) {
+                    Binder.withCleanCallingIdentity(() ->
+                            mExecutor.execute(() -> {
+                                mSlot = null;
+                                callback.onError(error);
+                            }));
+                    mExecutor.shutdown();
+                }
+
+                @Override
+                public void onDataReceived() {
+                    // PacketKeepalive is only used for Nat-T keepalive and as such does not invoke
+                    // this callback when data is received.
+                }
+            };
         }
     }
 
@@ -1883,12 +1902,11 @@ public class ConnectivityManager {
             InetAddress srcAddr, int srcPort, InetAddress dstAddr) {
         final PacketKeepalive k = new PacketKeepalive(network, callback);
         try {
-            mService.startNattKeepalive(network, intervalSeconds, k.mMessenger, new Binder(),
+            mService.startNattKeepalive(network, intervalSeconds, k.mCallback,
                     srcAddr.getHostAddress(), srcPort, dstAddr.getHostAddress());
         } catch (RemoteException e) {
             Log.e(TAG, "Error starting packet keepalive: ", e);
-            k.stopLooper();
-            return null;
+            throw e.rethrowFromSystemServer();
         }
         return k;
     }
@@ -2549,6 +2567,94 @@ public class ConnectivityManager {
     }
 
     /**
+     * Callback for use with {@link registerTetheringEventCallback} to find out tethering
+     * upstream status.
+     *
+     *@hide
+     */
+    @SystemApi
+    public abstract static class OnTetheringEventCallback {
+
+        /**
+         * Called when tethering upstream changed. This can be called multiple times and can be
+         * called any time.
+         *
+         * @param network the {@link Network} of tethering upstream. Null means tethering doesn't
+         * have any upstream.
+         */
+        public void onUpstreamChanged(@Nullable Network network) {}
+    }
+
+    @GuardedBy("mTetheringEventCallbacks")
+    private final ArrayMap<OnTetheringEventCallback, ITetheringEventCallback>
+            mTetheringEventCallbacks = new ArrayMap<>();
+
+    /**
+     * Start listening to tethering change events. Any new added callback will receive the last
+     * tethering status right away. If callback is registered when tethering loses its upstream or
+     * disabled, {@link OnTetheringEventCallback#onUpstreamChanged} will immediately be called
+     * with a null argument. The same callback object cannot be registered twice.
+     *
+     * @param executor the executor on which callback will be invoked.
+     * @param callback the callback to be called when tethering has change events.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED)
+    public void registerTetheringEventCallback(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull final OnTetheringEventCallback callback) {
+        Preconditions.checkNotNull(callback, "OnTetheringEventCallback cannot be null.");
+
+        synchronized (mTetheringEventCallbacks) {
+            Preconditions.checkArgument(!mTetheringEventCallbacks.containsKey(callback),
+                    "callback was already registered.");
+            ITetheringEventCallback remoteCallback = new ITetheringEventCallback.Stub() {
+                @Override
+                public void onUpstreamChanged(Network network) throws RemoteException {
+                    Binder.withCleanCallingIdentity(() ->
+                            executor.execute(() -> {
+                                callback.onUpstreamChanged(network);
+                            }));
+                }
+            };
+            try {
+                String pkgName = mContext.getOpPackageName();
+                Log.i(TAG, "registerTetheringUpstreamCallback:" + pkgName);
+                mService.registerTetheringEventCallback(remoteCallback, pkgName);
+                mTetheringEventCallbacks.put(callback, remoteCallback);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Remove tethering event callback previously registered with
+     * {@link #registerTetheringEventCallback}.
+     *
+     * @param callback previously registered callback.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED)
+    public void unregisterTetheringEventCallback(
+            @NonNull final OnTetheringEventCallback callback) {
+        synchronized (mTetheringEventCallbacks) {
+            ITetheringEventCallback remoteCallback = mTetheringEventCallbacks.remove(callback);
+            Preconditions.checkNotNull(remoteCallback, "callback was not registered.");
+            try {
+                String pkgName = mContext.getOpPackageName();
+                Log.i(TAG, "unregisterTetheringEventCallback:" + pkgName);
+                mService.unregisterTetheringEventCallback(remoteCallback, pkgName);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+
+    /**
      * Get the list of regular expressions that define any tetherable
      * USB network interfaces.  If USB tethering is not supported by the
      * device, this list should be empty.
@@ -2688,22 +2794,32 @@ public class ConnectivityManager {
         }
     }
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            TETHER_ERROR_NO_ERROR,
+            TETHER_ERROR_PROVISION_FAILED,
+            TETHER_ERROR_ENTITLEMENT_UNKONWN,
+    })
+    public @interface EntitlementResultCode {
+    }
+
     /**
-     * Callback for use with {@link #getLatestTetheringEntitlementValue} to find out whether
+     * Callback for use with {@link #getLatestTetheringEntitlementResult} to find out whether
      * entitlement succeeded.
      * @hide
      */
     @SystemApi
-    public abstract static class TetheringEntitlementValueListener  {
+    public interface OnTetheringEntitlementResultListener  {
         /**
          * Called to notify entitlement result.
          *
-         * @param resultCode a int value of entitlement result. It may be one of
+         * @param resultCode an int value of entitlement result. It may be one of
          *         {@link #TETHER_ERROR_NO_ERROR},
          *         {@link #TETHER_ERROR_PROVISION_FAILED}, or
          *         {@link #TETHER_ERROR_ENTITLEMENT_UNKONWN}.
          */
-        public void onEntitlementResult(int resultCode) {}
+        void onTetheringEntitlementResult(@EntitlementResultCode int resultCode);
     }
 
     /**
@@ -2719,28 +2835,32 @@ public class ConnectivityManager {
      *         {@link #TETHERING_USB}, or
      *         {@link #TETHERING_BLUETOOTH}.
      * @param showEntitlementUi a boolean indicating whether to run UI-based entitlement check.
-     * @param listener an {@link TetheringEntitlementValueListener} which will be called to notify
-     *         the caller of the result of entitlement check. The listener may be called zero or
-     *         one time.
-     * @param handler {@link Handler} to specify the thread upon which the listener will be invoked.
+     * @param executor the executor on which callback will be invoked.
+     * @param listener an {@link OnTetheringEntitlementResultListener} which will be called to
+     *         notify the caller of the result of entitlement check. The listener may be called zero
+     *         or one time.
      * {@hide}
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED)
-    public void getLatestTetheringEntitlementValue(int type, boolean showEntitlementUi,
-            @NonNull final TetheringEntitlementValueListener listener, @Nullable Handler handler) {
-        Preconditions.checkNotNull(listener, "TetheringEntitlementValueListener cannot be null.");
-        ResultReceiver wrappedListener = new ResultReceiver(handler) {
+    public void getLatestTetheringEntitlementResult(int type, boolean showEntitlementUi,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull final OnTetheringEntitlementResultListener listener) {
+        Preconditions.checkNotNull(listener, "TetheringEntitlementResultListener cannot be null.");
+        ResultReceiver wrappedListener = new ResultReceiver(null) {
             @Override
             protected void onReceiveResult(int resultCode, Bundle resultData) {
-                listener.onEntitlementResult(resultCode);
+                Binder.withCleanCallingIdentity(() ->
+                            executor.execute(() -> {
+                                listener.onTetheringEntitlementResult(resultCode);
+                            }));
             }
         };
 
         try {
             String pkgName = mContext.getOpPackageName();
-            Log.i(TAG, "getLatestTetheringEntitlementValue:" + pkgName);
-            mService.getLatestTetheringEntitlementValue(type, wrappedListener,
+            Log.i(TAG, "getLatestTetheringEntitlementResult:" + pkgName);
+            mService.getLatestTetheringEntitlementResult(type, wrappedListener,
                     showEntitlementUi, pkgName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -3896,10 +4016,33 @@ public class ConnectivityManager {
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.CONNECTIVITY_INTERNAL)
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
     public void setAcceptUnvalidated(Network network, boolean accept, boolean always) {
         try {
             mService.setAcceptUnvalidated(network, accept, always);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Informs the system whether it should consider the network as validated even if it only has
+     * partial connectivity. If {@code accept} is true, then the network will be considered as
+     * validated even if connectivity is only partial. If {@code always} is true, then the choice
+     * is remembered, so that the next time the user connects to this network, the system will
+     * switch to it.
+     *
+     * @param network The network to accept.
+     * @param accept Whether to consider the network as validated even if it has partial
+     *               connectivity.
+     * @param always Whether to remember this choice in the future.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
+    public void setAcceptPartialConnectivity(Network network, boolean accept, boolean always) {
+        try {
+            mService.setAcceptPartialConnectivity(network, accept, always);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3915,7 +4058,7 @@ public class ConnectivityManager {
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.CONNECTIVITY_INTERNAL)
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
     public void setAvoidUnvalidated(Network network) {
         try {
             mService.setAvoidUnvalidated(network);
@@ -3952,7 +4095,7 @@ public class ConnectivityManager {
     @SystemApi
     @TestApi
     @RequiresPermission(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK)
-    public void startCaptivePortalApp(Network network, Bundle appExtras) {
+    public void startCaptivePortalApp(@NonNull Network network, @NonNull Bundle appExtras) {
         try {
             mService.startCaptivePortalAppInternal(network, appExtras);
         } catch (RemoteException e) {
@@ -3965,9 +4108,12 @@ public class ConnectivityManager {
      * @hide
      */
     @SystemApi
-    public boolean getAvoidBadWifi() {
+    @RequiresPermission(anyOf = {
+            NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
+            android.Manifest.permission.NETWORK_STACK})
+    public boolean shouldAvoidBadWifi() {
         try {
-            return mService.getAvoidBadWifi();
+            return mService.shouldAvoidBadWifi();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

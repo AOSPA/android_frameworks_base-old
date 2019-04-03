@@ -32,9 +32,12 @@ import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 import android.widget.LinearLayout;
 
+import com.android.systemui.globalactions.GlobalActionsDialog;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 import com.android.systemui.util.leak.RotationUtils;
+
+import java.util.ArrayList;
 
 /**
  * Layout for placing two containers at a specific physical position on the device, relative to the
@@ -86,15 +89,6 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         }
         if (mSeparatedView != null) {
             mSeparatedView.removeAllViews();
-        }
-    }
-
-    @Override
-    public ViewGroup getParentView(boolean separated, int index, int rotation) {
-        if (separated) {
-            return getSeparatedView();
-        } else {
-            return getListView();
         }
     }
 
@@ -221,7 +215,7 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         } else {
             rotateLeft();
         }
-        if (mHasSeparatedView) {
+        if (mAdapter.hasSeparatedItems()) {
             if (from == ROTATION_SEASCAPE || to == ROTATION_SEASCAPE) {
                 // Separated view has top margin, so seascape separated view need special rotation,
                 // not a full left or right rotation.
@@ -258,6 +252,31 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
                 swapDimens(mList);
                 swapDimens(mSeparatedView);
             }
+        }
+    }
+
+    @Override
+    public void onUpdateList() {
+        super.onUpdateList();
+        ArrayList<GlobalActionsDialog.Action> separatedActions =
+                mAdapter.getSeparatedItems();
+        ArrayList<GlobalActionsDialog.Action> listActions = mAdapter.getListItems();
+
+        for (int i = 0; i < mAdapter.getCount(); i++) {
+            Object action = mAdapter.getItem(i);
+            int separatedIndex = separatedActions.indexOf(action);
+            ViewGroup parent;
+            if (separatedIndex != -1) {
+                parent = getSeparatedView();
+            } else {
+                int listIndex = listActions.indexOf(action);
+                parent = getListView();
+            }
+            View v = mAdapter.getView(i, null, parent);
+            final int pos = i;
+            v.setOnClickListener(view -> mAdapter.onClickItem(pos));
+            v.setOnLongClickListener(view -> mAdapter.onLongClickItem(pos));
+            parent.addView(v);
         }
     }
 
@@ -442,8 +461,9 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         if (mList == null) return;
         // If got separated button, setRotatedBackground to false,
         // all items won't get white background.
-        mListBackground.setRotatedBackground(mHasSeparatedView);
-        mSeparatedViewBackground.setRotatedBackground(mHasSeparatedView);
+        boolean separated = mAdapter.hasSeparatedItems();
+        mListBackground.setRotatedBackground(separated);
+        mSeparatedViewBackground.setRotatedBackground(separated);
         if (mDivision != null && mDivision.getVisibility() == VISIBLE) {
             int index = mRotatedBackground ? 0 : 1;
             mDivision.getLocationOnScreen(mTmp2);
@@ -489,26 +509,27 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         int screenHeight;
         int totalHeight;
         int targetGravity;
+        boolean separated = mAdapter.hasSeparatedItems();
         MarginLayoutParams params = (MarginLayoutParams) mSeparatedView.getLayoutParams();
         switch (RotationUtils.getRotation(getContext())) {
             case RotationUtils.ROTATION_LANDSCAPE:
                 defaultTopPadding = getPaddingLeft();
                 viewsTotalHeight = mList.getMeasuredWidth() + mSeparatedView.getMeasuredWidth();
-                separatedViewTopMargin = mHasSeparatedView ? params.leftMargin : 0;
+                separatedViewTopMargin = separated ? params.leftMargin : 0;
                 screenHeight = getMeasuredWidth();
                 targetGravity = Gravity.CENTER_HORIZONTAL|Gravity.TOP;
                 break;
             case RotationUtils.ROTATION_SEASCAPE:
                 defaultTopPadding = getPaddingRight();
                 viewsTotalHeight = mList.getMeasuredWidth() + mSeparatedView.getMeasuredWidth();
-                separatedViewTopMargin = mHasSeparatedView ? params.leftMargin : 0;
+                separatedViewTopMargin = separated ? params.leftMargin : 0;
                 screenHeight = getMeasuredWidth();
                 targetGravity = Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM;
                 break;
             default: // Portrait
                 defaultTopPadding = getPaddingTop();
                 viewsTotalHeight = mList.getMeasuredHeight() + mSeparatedView.getMeasuredHeight();
-                separatedViewTopMargin = mHasSeparatedView ? params.topMargin : 0;
+                separatedViewTopMargin = separated ? params.topMargin : 0;
                 screenHeight = getMeasuredHeight();
                 targetGravity = Gravity.CENTER_VERTICAL|Gravity.RIGHT;
                 break;

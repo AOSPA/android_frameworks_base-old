@@ -28,6 +28,7 @@ import android.view.IWindowManager;
 import android.view.MotionEvent;
 import android.view.View;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dependency;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.statusbar.CommandQueue;
@@ -48,8 +49,10 @@ public class AutoHideController implements CommandQueue.Callbacks {
     private StatusBar mStatusBar;
     private NavigationBarFragment mNavigationBar;
 
-    private int mDisplayId;
-    private int mSystemUiVisibility;
+    @VisibleForTesting
+    int mDisplayId;
+    @VisibleForTesting
+    int mSystemUiVisibility;
     // last value sent to window manager
     private int mLastDispatchedSystemUiVisibility = ~View.SYSTEM_UI_FLAG_VISIBLE;
 
@@ -73,6 +76,13 @@ public class AutoHideController implements CommandQueue.Callbacks {
         mWindowManagerService = Dependency.get(IWindowManager.class);
 
         mDisplayId = context.getDisplayId();
+    }
+
+    @Override
+    public void onDisplayRemoved(int displayId) {
+        if (displayId == mDisplayId) {
+            mCommandQueue.removeCallback(this);
+        }
     }
 
     void setStatusBar(StatusBar statusBar) {
@@ -116,7 +126,8 @@ public class AutoHideController implements CommandQueue.Callbacks {
         }
     }
 
-    private void notifySystemUiVisibilityChanged(int vis) {
+    @VisibleForTesting
+    void notifySystemUiVisibilityChanged(int vis) {
         try {
             if (mLastDispatchedSystemUiVisibility != vis) {
                 mWindowManagerService.statusBarVisibilityChanged(mDisplayId, vis);
@@ -206,11 +217,12 @@ public class AutoHideController implements CommandQueue.Callbacks {
         return mask;
     }
 
-    private boolean hasNavigationBar() {
+    boolean hasNavigationBar() {
         return mNavigationBar != null;
     }
 
-    private boolean hasStatusBar() {
+    @VisibleForTesting
+    boolean hasStatusBar() {
         return mStatusBar != null;
     }
 }

@@ -25,7 +25,6 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
-import android.app.role.RoleManagerCallback;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -494,12 +493,6 @@ public class TelecomManager {
      */
     public static final String EXTRA_START_CALL_WITH_RTT =
             "android.telecom.extra.START_CALL_WITH_RTT";
-
-    /**
-     * A boolean extra set to indicate whether an app is eligible to be bound to when there are
-     * ongoing calls on the device.
-     */
-    public static final String EXTRA_IS_ENABLED = "android.telecom.extra.IS_ENABLED";
 
     /**
      * A boolean meta-data value indicating whether an {@link InCallService} implements an
@@ -1239,8 +1232,8 @@ public class TelecomManager {
      *
      * @hide
      * @deprecated Use
-     * {@link android.app.role.RoleManager#addRoleHolderAsUser(String, String, UserHandle, Executor,
-     * RoleManagerCallback)} instead.
+     * {@link android.app.role.RoleManager#addRoleHolderAsUser(String, String, int, UserHandle,
+     * Executor, java.util.function.Consumer)} instead.
      */
     @SystemApi
     @Deprecated
@@ -1614,7 +1607,7 @@ public class TelecomManager {
                                 Build.VERSION_CODES.O_MR1) {
                     Log.e("TAG", "addNewIncomingCall failed. Use public api " +
                             "acceptHandover for API > O-MR1");
-                    // TODO add "return" after DUO team adds support for new handover API
+                    return;
                 }
                 getTelecomService().addNewIncomingCall(
                         phoneAccount, extras == null ? new Bundle() : extras);

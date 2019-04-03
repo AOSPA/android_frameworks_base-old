@@ -48,7 +48,6 @@ import android.util.LongSparseLongArray;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
-
 import com.android.internal.annotations.Immutable;
 import com.android.internal.app.IAppOpsActiveCallback;
 import com.android.internal.app.IAppOpsCallback;
@@ -1098,6 +1097,8 @@ public class AppOpsManager {
     /** @hide Write media of image type. */
     public static final String OPSTR_WRITE_MEDIA_IMAGES = "android:write_media_images";
     /** @hide Has a legacy (non-isolated) view of storage. */
+    @TestApi
+    @SystemApi
     public static final String OPSTR_LEGACY_STORAGE = "android:legacy_storage";
     /** @hide Interact with accessibility. */
     @SystemApi
@@ -2153,6 +2154,7 @@ public class AppOpsManager {
      *
      * @hide
      */
+    @TestApi
     @SystemApi
     public static int opToDefaultMode(@NonNull String appOp) {
         return opToDefaultMode(strOpToOp(appOp));
@@ -2214,7 +2216,7 @@ public class AppOpsManager {
         /**
          * @return The ops of the package.
          */
-        public List<OpEntry> getOps() {
+        public @NonNull List<OpEntry> getOps() {
             return mEntries;
         }
 
@@ -4371,7 +4373,8 @@ public class AppOpsManager {
     @Deprecated
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
-    public List<PackageOps> getOpsForPackage(int uid, String packageName, int[] ops) {
+    public @NonNull List<PackageOps> getOpsForPackage(int uid, @NonNull String packageName,
+            @Nullable int[] ops) {
         try {
             return mService.getOpsForPackage(uid, packageName, ops);
         } catch (RemoteException e) {
@@ -4464,7 +4467,7 @@ public class AppOpsManager {
      * @hide
      */
     @TestApi
-    @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
+    @RequiresPermission(Manifest.permission.MANAGE_APPOPS)
     public void getHistoricalOpsFromDiskRaw(@NonNull HistoricalOpsRequest request,
             @Nullable Executor executor, @NonNull Consumer<HistoricalOps> callback) {
         Preconditions.checkNotNull(executor, "executor cannot be null");
@@ -4481,6 +4484,21 @@ public class AppOpsManager {
                     Binder.restoreCallingIdentity(identity);
                 }
             }));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Reloads the non historical state to allow testing the read/write path.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.MANAGE_APPOPS)
+    public void reloadNonHistoricalState() {
+        try {
+            mService.reloadNonHistoricalState();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4569,6 +4587,7 @@ public class AppOpsManager {
      * be changed.
      * @hide
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setMode(String op, int uid, String packageName, @Mode int mode) {
@@ -4639,8 +4658,8 @@ public class AppOpsManager {
      * @param packageName The name of the application to monitor.
      * @param callback Where to report changes.
      */
-    public void startWatchingMode(String op, String packageName,
-            final OnOpChangedListener callback) {
+    public void startWatchingMode(@NonNull String op, @Nullable String packageName,
+            @NonNull final OnOpChangedListener callback) {
         startWatchingMode(strOpToOp(op), packageName, callback);
     }
 
@@ -4653,8 +4672,8 @@ public class AppOpsManager {
      * @param flags Option flags: any combination of {@link #WATCH_FOREGROUND_CHANGES} or 0.
      * @param callback Where to report changes.
      */
-    public void startWatchingMode(String op, String packageName, int flags,
-            final OnOpChangedListener callback) {
+    public void startWatchingMode(@NonNull String op, @Nullable String packageName, int flags,
+            @NonNull final OnOpChangedListener callback) {
         startWatchingMode(strOpToOp(op), packageName, flags, callback);
     }
 
@@ -4716,7 +4735,7 @@ public class AppOpsManager {
      * Stop monitoring that was previously started with {@link #startWatchingMode}.  All
      * monitoring associated with this callback will be removed.
      */
-    public void stopWatchingMode(OnOpChangedListener callback) {
+    public void stopWatchingMode(@NonNull OnOpChangedListener callback) {
         synchronized (mModeWatchers) {
             IAppOpsCallback cb = mModeWatchers.remove(callback);
             if (cb != null) {
@@ -4875,7 +4894,7 @@ public class AppOpsManager {
      * {@hide}
      */
     @TestApi
-    public static int strOpToOp(String op) {
+    public static int strOpToOp(@NonNull String op) {
         Integer val = sOpStrToOp.get(op);
         if (val == null) {
             throw new IllegalArgumentException("Unknown operation string: " + op);
@@ -4910,7 +4929,7 @@ public class AppOpsManager {
      * causing the app to crash).
      * @throws SecurityException If the app has been configured to crash on this op.
      */
-    public int unsafeCheckOp(String op, int uid, String packageName) {
+    public int unsafeCheckOp(@NonNull String op, int uid, @NonNull String packageName) {
         return checkOp(strOpToOp(op), uid, packageName);
     }
 
@@ -4918,7 +4937,7 @@ public class AppOpsManager {
      * @deprecated Renamed to {@link #unsafeCheckOp(String, int, String)}.
      */
     @Deprecated
-    public int checkOp(String op, int uid, String packageName) {
+    public int checkOp(@NonNull String op, int uid, @NonNull String packageName) {
         return checkOp(strOpToOp(op), uid, packageName);
     }
 
@@ -4926,7 +4945,7 @@ public class AppOpsManager {
      * Like {@link #checkOp} but instead of throwing a {@link SecurityException} it
      * returns {@link #MODE_ERRORED}.
      */
-    public int unsafeCheckOpNoThrow(String op, int uid, String packageName) {
+    public int unsafeCheckOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
         return checkOpNoThrow(strOpToOp(op), uid, packageName);
     }
 
@@ -4934,7 +4953,7 @@ public class AppOpsManager {
      * @deprecated Renamed to {@link #unsafeCheckOpNoThrow(String, int, String)}.
      */
     @Deprecated
-    public int checkOpNoThrow(String op, int uid, String packageName) {
+    public int checkOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
         return checkOpNoThrow(strOpToOp(op), uid, packageName);
     }
 
@@ -4942,7 +4961,7 @@ public class AppOpsManager {
      * Like {@link #checkOp} but returns the <em>raw</em> mode associated with the op.
      * Does not throw a security exception, does not translate {@link #MODE_FOREGROUND}.
      */
-    public int unsafeCheckOpRaw(@NonNull String op, int uid, String packageName) {
+    public int unsafeCheckOpRaw(@NonNull String op, int uid, @NonNull String packageName) {
         try {
             return mService.checkOperationRaw(strOpToOp(op), uid, packageName);
         } catch (RemoteException e) {
@@ -4977,7 +4996,7 @@ public class AppOpsManager {
      * causing the app to crash).
      * @throws SecurityException If the app has been configured to crash on this op.
      */
-    public int noteOp(String op, int uid, String packageName) {
+    public int noteOp(@NonNull String op, int uid, @NonNull String packageName) {
         return noteOp(strOpToOp(op), uid, packageName);
     }
 
@@ -4985,7 +5004,7 @@ public class AppOpsManager {
      * Like {@link #noteOp} but instead of throwing a {@link SecurityException} it
      * returns {@link #MODE_ERRORED}.
      */
-    public int noteOpNoThrow(String op, int uid, String packageName) {
+    public int noteOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
         return noteOpNoThrow(strOpToOp(op), uid, packageName);
     }
 
@@ -5004,7 +5023,7 @@ public class AppOpsManager {
      * causing the app to crash).
      * @throws SecurityException If the app has been configured to crash on this op.
      */
-    public int noteProxyOp(String op, String proxiedPackageName) {
+    public int noteProxyOp(@NonNull String op, @NonNull String proxiedPackageName) {
         return noteProxyOp(strOpToOp(op), proxiedPackageName);
     }
 
@@ -5015,7 +5034,7 @@ public class AppOpsManager {
      * <p>This API requires the package with the {@code proxiedPackageName} to belongs to
      * {@link Binder#getCallingUid()}.
      */
-    public int noteProxyOpNoThrow(String op, String proxiedPackageName) {
+    public int noteProxyOpNoThrow(@NonNull String op, @NonNull String proxiedPackageName) {
         return noteProxyOpNoThrow(strOpToOp(op), proxiedPackageName);
     }
 
@@ -5051,7 +5070,7 @@ public class AppOpsManager {
      * causing the app to crash).
      * @throws SecurityException If the app has been configured to crash on this op.
      */
-    public int startOp(String op, int uid, String packageName) {
+    public int startOp(@NonNull String op, int uid, @NonNull String packageName) {
         return startOp(strOpToOp(op), uid, packageName);
     }
 
@@ -5059,7 +5078,7 @@ public class AppOpsManager {
      * Like {@link #startOp} but instead of throwing a {@link SecurityException} it
      * returns {@link #MODE_ERRORED}.
      */
-    public int startOpNoThrow(String op, int uid, String packageName) {
+    public int startOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
         return startOpNoThrow(strOpToOp(op), uid, packageName);
     }
 
@@ -5069,7 +5088,7 @@ public class AppOpsManager {
      * or result; the parameters supplied here must be the exact same ones previously passed
      * in when starting the operation.
      */
-    public void finishOp(String op, int uid, String packageName) {
+    public void finishOp(@NonNull String op, int uid, @NonNull String packageName) {
         finishOp(strOpToOp(op), uid, packageName);
     }
 
@@ -5135,7 +5154,7 @@ public class AppOpsManager {
      * @throws SecurityException if the package name doesn't belong to the given
      *             UID, or if ownership cannot be verified.
      */
-    public void checkPackage(int uid, String packageName) {
+    public void checkPackage(int uid, @NonNull String packageName) {
         try {
             if (mService.checkPackage(uid, packageName) != MODE_ALLOWED) {
                 throw new SecurityException(

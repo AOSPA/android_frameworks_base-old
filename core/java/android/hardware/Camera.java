@@ -1256,6 +1256,7 @@ public class Camera {
     {
         private final Camera mCamera;
 
+        @UnsupportedAppUsage
         public EventHandler(Camera c, Looper looper) {
             super(looper);
             mCamera = c;

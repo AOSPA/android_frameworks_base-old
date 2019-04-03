@@ -553,6 +553,20 @@ interface ITelephony {
     void setCellInfoListRate(int rateInMillis);
 
     /**
+     * Opens a logical channel to the ICC card using the physical slot index.
+     *
+     * Input parameters equivalent to TS 27.007 AT+CCHO command.
+     *
+     * @param slotIndex The physical slot index of the target ICC card
+     * @param callingPackage the name of the package making the call.
+     * @param AID Application id. See ETSI 102.221 and 101.220.
+     * @param p2 P2 parameter (described in ISO 7816-4).
+     * @return an IccOpenLogicalChannelResponse object.
+     */
+    IccOpenLogicalChannelResponse iccOpenLogicalChannelBySlot(
+            int slotIndex, String callingPackage, String AID, int p2);
+
+    /**
      * Opens a logical channel to the ICC card.
      *
      * Input parameters equivalent to TS 27.007 AT+CCHO command.
@@ -567,12 +581,24 @@ interface ITelephony {
             int subId, String callingPackage, String AID, int p2);
 
     /**
+     * Closes a previously opened logical channel to the ICC card using the physical slot index.
+     *
+     * Input parameters equivalent to TS 27.007 AT+CCHC command.
+     *
+     * @param slotIndex The physical slot index of the target ICC card
+     * @param channel is the channel id to be closed as returned by a
+     *            successful iccOpenLogicalChannel.
+     * @return true if the channel was closed successfully.
+     */
+    boolean iccCloseLogicalChannelBySlot(int slotIndex, int channel);
+
+    /**
      * Closes a previously opened logical channel to the ICC card.
      *
      * Input parameters equivalent to TS 27.007 AT+CCHC command.
      *
      * @param subId The subscription to use.
-     * @param channel is the channel id to be closed as retruned by a
+     * @param channel is the channel id to be closed as returned by a
      *            successful iccOpenLogicalChannel.
      * @return true if the channel was closed successfully.
      */
@@ -580,12 +606,33 @@ interface ITelephony {
     boolean iccCloseLogicalChannel(int subId, int channel);
 
     /**
+     * Transmit an APDU to the ICC card over a logical channel using the physical slot index.
+     *
+     * Input parameters equivalent to TS 27.007 AT+CGLA command.
+     *
+     * @param slotIndex The physical slot index of the target ICC card
+     * @param channel is the channel id to be closed as returned by a
+     *            successful iccOpenLogicalChannel.
+     * @param cla Class of the APDU command.
+     * @param instruction Instruction of the APDU command.
+     * @param p1 P1 value of the APDU command.
+     * @param p2 P2 value of the APDU command.
+     * @param p3 P3 value of the APDU command. If p3 is negative a 4 byte APDU
+     *            is sent to the SIM.
+     * @param data Data to be sent with the APDU.
+     * @return The APDU response from the ICC card with the status appended at
+     *            the end.
+     */
+    String iccTransmitApduLogicalChannelBySlot(int slotIndex, int channel, int cla, int instruction,
+            int p1, int p2, int p3, String data);
+
+    /**
      * Transmit an APDU to the ICC card over a logical channel.
      *
      * Input parameters equivalent to TS 27.007 AT+CGLA command.
      *
      * @param subId The subscription to use.
-     * @param channel is the channel id to be closed as retruned by a
+     * @param channel is the channel id to be closed as returned by a
      *            successful iccOpenLogicalChannel.
      * @param cla Class of the APDU command.
      * @param instruction Instruction of the APDU command.
@@ -600,6 +647,26 @@ interface ITelephony {
     @UnsupportedAppUsage
     String iccTransmitApduLogicalChannel(int subId, int channel, int cla, int instruction,
             int p1, int p2, int p3, String data);
+
+    /**
+     * Transmit an APDU to the ICC card over the basic channel using the physical slot index.
+     *
+     * Input parameters equivalent to TS 27.007 AT+CSIM command.
+     *
+     * @param slotIndex The physical slot index of the target ICC card
+     * @param callingPackage the name of the package making the call.
+     * @param cla Class of the APDU command.
+     * @param instruction Instruction of the APDU command.
+     * @param p1 P1 value of the APDU command.
+     * @param p2 P2 value of the APDU command.
+     * @param p3 P3 value of the APDU command. If p3 is negative a 4 byte APDU
+     *            is sent to the SIM.
+     * @param data Data to be sent with the APDU.
+     * @return The APDU response from the ICC card with the status appended at
+     *            the end.
+     */
+    String iccTransmitApduBasicChannelBySlot(int slotIndex, String callingPackage, int cla,
+            int instruction, int p1, int p2, int p3, String data);
 
     /**
      * Transmit an APDU to the ICC card over the basic channel.
@@ -1369,7 +1436,7 @@ interface ITelephony {
     /**
      * Returns fine-grained carrier id of the current subscription.
      *
-     * <p>The precise carrier id can be used to further differentiate a carrier by different
+     * <p>The specific carrier id can be used to further differentiate a carrier by different
      * networks, by prepaid v.s.postpaid or even by 4G v.s.3G plan. Each carrier has a unique
      * carrier id {@link #getSimCarrierId()} but can have multiple precise carrier id. e.g,
      * {@link #getSimCarrierId()} will always return Tracfone (id 2022) for a Tracfone SIM, while
@@ -1383,19 +1450,19 @@ interface ITelephony {
      * be identified.
      * @hide
      */
-    int getSubscriptionPreciseCarrierId(int subId);
+    int getSubscriptionSpecificCarrierId(int subId);
 
     /**
      * Similar like {@link #getSimCarrierIdName()}, returns user-facing name of the
-     * precise carrier id {@link #getSimPreciseCarrierId()}
+     * specific carrier id {@link #getSimSpecificCarrierId()}
      *
      * <p>The returned name is unlocalized.
      *
-     * @return user-facing name of the subscription precise carrier id. Return {@code null} if the
+     * @return user-facing name of the subscription specific carrier id. Return {@code null} if the
      * subscription is unavailable or the carrier cannot be identified.
      * @hide
      */
-    String getSubscriptionPreciseCarrierName(int subId);
+    String getSubscriptionSpecificCarrierName(int subId);
 
     /**
      * Returns carrier id based on MCCMNC only. This will return a MNO carrier id used for fallback
@@ -1616,7 +1683,7 @@ interface ITelephony {
      * (also any country or carrier overlays) to be loaded when using a test SIM with a call box.
      */
     void setCarrierTestOverride(int subId, String mccmnc, String imsi, String iccid, String gid1,
-            String gid2, String plmn, String spn);
+            String gid2, String plmn, String spn, String carrierPrivilegeRules, String apn);
 
     /**
      * A test API to return installed carrier id list version.
@@ -1639,6 +1706,11 @@ interface ITelephony {
      * Return the network selection mode on the subscription with id {@code subId}.
      */
      int getNetworkSelectionMode(int subId);
+
+     /**
+     * Return true if the device is in emergency sms mode, false otherwise.
+     */
+     boolean isInEmergencySmsMode();
 
     /**
      * Get a list of SMS apps on a user.
@@ -1773,12 +1845,12 @@ interface ITelephony {
     /**
      * Return the emergency number list from all the active subscriptions.
      */
-    Map getCurrentEmergencyNumberList(String callingPackage);
+    Map getEmergencyNumberList(String callingPackage);
 
     /**
      * Identify if the number is emergency number, based on all the active subscriptions.
      */
-    boolean isCurrentEmergencyNumber(String number, boolean exactMatch);
+    boolean isEmergencyNumber(String number, boolean exactMatch);
 
     /**
      * Return a list of certs in hex string from loaded carrier privileges access rules.
@@ -1852,15 +1924,18 @@ interface ITelephony {
      * Indicate if the enablement of multi SIM functionality is restricted.
      * @hide
      */
-    void setMultisimCarrierRestriction(boolean isMultisimCarrierRestricted);
+    void setMultiSimCarrierRestriction(boolean isMultiSimCarrierRestricted);
 
     /**
      * Returns if the usage of multiple SIM cards at the same time is supported.
      *
      * @param callingPackage The package making the call.
-     * @return true if multisim is supported, false otherwise.
+     * @return {@link #MULTISIM_ALLOWED} if the device supports multiple SIMs.
+     * {@link #MULTISIM_NOT_SUPPORTED_BY_HARDWARE} if the device does not support multiple SIMs.
+     * {@link #MULTISIM_NOT_SUPPORTED_BY_CARRIER} in the device supports multiple SIMs, but the
+     * functionality is restricted by the carrier.
      */
-    boolean isMultisimSupported(String callingPackage);
+    int isMultiSimSupported(String callingPackage);
 
     /**
      * Switch configs to enable multi-sim or switch back to single-sim

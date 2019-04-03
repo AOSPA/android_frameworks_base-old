@@ -30,6 +30,7 @@
 #include "idmap2/FileUtils.h"
 #include "idmap2/Idmap.h"
 #include "idmap2/ResourceUtils.h"
+#include "idmap2/Result.h"
 #include "idmap2/SysTrace.h"
 #include "idmap2/Xml.h"
 #include "idmap2/ZipFile.h"
@@ -37,11 +38,16 @@
 #include "Commands.h"
 
 using android::idmap2::CommandLineOptions;
+using android::idmap2::Error;
 using android::idmap2::Idmap;
-using android::idmap2::PoliciesToBitmask;
+using android::idmap2::kPolicyProduct;
+using android::idmap2::kPolicyPublic;
+using android::idmap2::kPolicySystem;
+using android::idmap2::kPolicyVendor;
 using android::idmap2::PolicyBitmask;
 using android::idmap2::PolicyFlags;
 using android::idmap2::Result;
+using android::idmap2::Unit;
 using android::idmap2::utils::ExtractOverlayManifestInfo;
 using android::idmap2::utils::FindFiles;
 using android::idmap2::utils::OverlayManifestInfo;
@@ -66,8 +72,8 @@ bool VendorIsQOrLater() {
   return version == "Q" || version == "q";
 }
 
-std::unique_ptr<std::vector<std::string>> FindApkFiles(const std::vector<std::string>& dirs,
-                                                       bool recursive, std::ostream& out_error) {
+Result<std::unique_ptr<std::vector<std::string>>> FindApkFiles(const std::vector<std::string>& dirs,
+                                                               bool recursive) {
   SYSTRACE << "FindApkFiles " << dirs << " " << recursive;
   const auto predicate = [](unsigned char type, const std::string& path) -> bool {
     static constexpr size_t kExtLen = 4;  // strlen(".apk")
@@ -79,33 +85,34 @@ std::unique_ptr<std::vector<std::string>> FindApkFiles(const std::vector<std::st
   for (const auto& dir : dirs) {
     const auto apk_paths = FindFiles(dir, recursive, predicate);
     if (!apk_paths) {
-      out_error << "error: failed to open directory " << dir << std::endl;
-      return nullptr;
+      return Error("failed to open directory %s", dir.c_str());
     }
     paths.insert(apk_paths->cbegin(), apk_paths->cend());
   }
   return std::make_unique<std::vector<std::string>>(paths.cbegin(), paths.cend());
 }
 
-PolicyBitmask PolicyForPath(const std::string& apk_path) {
-  static const std::vector<std::pair<std::string, PolicyBitmask>> values = {
-      {"/product/", PolicyFlags::POLICY_PRODUCT_PARTITION},
-      {"/system/", PolicyFlags::POLICY_SYSTEM_PARTITION},
-      {"/vendor/", PolicyFlags::POLICY_VENDOR_PARTITION},
+std::vector<std::string> PoliciesForPath(const std::string& apk_path) {
+  static const std::vector<std::pair<std::string, std::string>> values = {
+      {"/product/", kPolicyProduct},
+      {"/system/", kPolicySystem},
+      {"/vendor/", kPolicyVendor},
   };
 
+  std::vector<std::string> fulfilled_policies = {kPolicyPublic};
   for (auto const& pair : values) {
     if (apk_path.compare(0, pair.first.size(), pair.first) == 0) {
-      return pair.second | PolicyFlags::POLICY_PUBLIC;
+      fulfilled_policies.emplace_back(pair.second);
+      break;
     }
   }
 
-  return PolicyFlags::POLICY_PUBLIC;
+  return fulfilled_policies;
 }
 
 }  // namespace
 
-bool Scan(const std::vector<std::string>& args, std::ostream& out_error) {
+Result<Unit> Scan(const std::vector<std::string>& args) {
   SYSTRACE << "Scan " << args;
   std::vector<std::string> input_directories;
   std::string target_package_name;
@@ -130,22 +137,22 @@ bool Scan(const std::vector<std::string>& args, std::ostream& out_error) {
               "input: an overlayable policy this overlay fulfills "
               "(if none or supplied, the overlays will not have their policies overriden",
               &override_policies);
-  if (!opts.Parse(args, out_error)) {
-    return false;
+  const auto opts_ok = opts.Parse(args);
+  if (!opts_ok) {
+    return opts_ok.GetError();
   }
 
-  const auto apk_paths = FindApkFiles(input_directories, recursive, out_error);
+  const auto apk_paths = FindApkFiles(input_directories, recursive);
   if (!apk_paths) {
-    return false;
+    return Error(apk_paths.GetError(), "failed to find apk files");
   }
 
   std::vector<InputOverlay> interesting_apks;
-  for (const std::string& path : *apk_paths) {
+  for (const std::string& path : **apk_paths) {
     Result<OverlayManifestInfo> overlay_info =
         ExtractOverlayManifestInfo(path, /* assert_overlay */ false);
     if (!overlay_info) {
-      out_error << "error: " << overlay_info.GetErrorMessage() << std::endl;
-      return false;
+      return overlay_info.GetError();
     }
 
     if (!overlay_info->is_static) {
@@ -161,21 +168,17 @@ bool Scan(const std::vector<std::string>& args, std::ostream& out_error) {
       continue;
     }
 
-    PolicyBitmask fulfilled_policies;
+    std::vector<std::string> fulfilled_policies;
     if (!override_policies.empty()) {
-      auto conv_result = PoliciesToBitmask(override_policies);
-      if (conv_result) {
-        fulfilled_policies = *conv_result;
-      } else {
-        out_error << "error: " << conv_result.GetErrorMessage() << std::endl;
-        return false;
-      }
+      fulfilled_policies = override_policies;
     } else {
-      fulfilled_policies = PolicyForPath(path);
+      fulfilled_policies = PoliciesForPath(path);
     }
 
     bool ignore_overlayable = false;
-    if ((fulfilled_policies & PolicyFlags::POLICY_VENDOR_PARTITION) != 0 && !VendorIsQOrLater()) {
+    if (std::find(fulfilled_policies.begin(), fulfilled_policies.end(), kPolicyVendor) !=
+            fulfilled_policies.end() &&
+        !VendorIsQOrLater()) {
       // If the overlay is on a pre-Q vendor partition, do not enforce overlayable
       // restrictions on this overlay because the pre-Q platform has no understanding of
       // overlayable.
@@ -185,7 +188,7 @@ bool Scan(const std::vector<std::string>& args, std::ostream& out_error) {
     std::string idmap_path = Idmap::CanonicalIdmapPathFor(output_directory, path);
 
     // Sort the static overlays in ascending priority order
-    InputOverlay input{path, idmap_path, overlay_info->priority, override_policies,
+    InputOverlay input{path, idmap_path, overlay_info->priority, fulfilled_policies,
                        ignore_overlayable};
     interesting_apks.insert(
         std::lower_bound(interesting_apks.begin(), interesting_apks.end(), input), input);
@@ -193,16 +196,7 @@ bool Scan(const std::vector<std::string>& args, std::ostream& out_error) {
 
   std::stringstream stream;
   for (const auto& overlay : interesting_apks) {
-    // Create the idmap for the overlay if it currently does not exist or if it is not up to date.
-    std::stringstream dev_null;
-
-    std::vector<std::string> verify_args = {"--idmap-path", overlay.idmap_path};
-    for (const std::string& policy : overlay.policies) {
-      verify_args.emplace_back("--policy");
-      verify_args.emplace_back(policy);
-    }
-
-    if (!Verify(std::vector<std::string>(verify_args), dev_null)) {
+    if (!Verify(std::vector<std::string>({"--idmap-path", overlay.idmap_path}))) {
       std::vector<std::string> create_args = {"--target-apk-path",  target_apk_path,
                                               "--overlay-apk-path", overlay.apk_path,
                                               "--idmap-path",       overlay.idmap_path};
@@ -211,12 +205,13 @@ bool Scan(const std::vector<std::string>& args, std::ostream& out_error) {
       }
 
       for (const std::string& policy : overlay.policies) {
-        verify_args.emplace_back("--policy");
-        verify_args.emplace_back(policy);
+        create_args.emplace_back("--policy");
+        create_args.emplace_back(policy);
       }
 
-      if (!Create(create_args, out_error)) {
-        return false;
+      const auto create_ok = Create(create_args);
+      if (!create_ok) {
+        return Error(create_ok.GetError(), "failed to create idmap");
       }
     }
 
@@ -225,5 +220,5 @@ bool Scan(const std::vector<std::string>& args, std::ostream& out_error) {
 
   std::cout << stream.str();
 
-  return true;
+  return Unit{};
 }

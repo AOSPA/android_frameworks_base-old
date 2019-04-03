@@ -161,6 +161,11 @@ public class CarStatusBar extends StatusBar implements
         }
 
         buildNavBarContent();
+        // If the UI was rebuilt (day/night change) while the keyguard was up we need to
+        // correctly respect that state.
+        if (mIsKeyguard) {
+            updateNavBarForKeyguardContent();
+        }
     }
 
     private void addTemperatureViewToController(View v) {
@@ -211,6 +216,13 @@ public class CarStatusBar extends StatusBar implements
     @Override
     public void showKeyguard() {
         super.showKeyguard();
+        updateNavBarForKeyguardContent();
+    }
+
+    /**
+     * Switch to the keyguard applicable content contained in the nav bars
+     */
+    private void updateNavBarForKeyguardContent() {
         getComponent(NotificationsUI.class).closeCarNotifications(0);
         if (mNavigationBarView != null) {
             mNavigationBarView.showKeyguardButtons();
@@ -606,4 +618,8 @@ public class CarStatusBar extends StatusBar implements
         getComponent(NotificationsUI.class).toggleShowingCarNotifications();
     }
 
+    @Override
+    public void maybeEscalateHeadsUp() {
+        // Never send full screen intent in car.
+    }
 }

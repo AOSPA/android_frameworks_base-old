@@ -16,20 +16,24 @@
 
 package android.net.apf;
 
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.content.Context;
+import android.os.Parcel;
+import android.os.Parcelable;
 
 import com.android.internal.R;
 
 /**
  * APF program support capabilities.
  *
+ * This class is immutable.
  * @hide
  */
 @SystemApi
 @TestApi
-public class ApfCapabilities {
+public final class ApfCapabilities implements Parcelable {
     /**
      * Version of APF instruction set supported for packet filtering. 0 indicates no support for
      * packet filtering using APF programs.
@@ -52,6 +56,37 @@ public class ApfCapabilities {
         this.maximumApfProgramSize = maximumApfProgramSize;
         this.apfPacketFormat = apfPacketFormat;
     }
+
+    private ApfCapabilities(Parcel in) {
+        apfVersionSupported = in.readInt();
+        maximumApfProgramSize = in.readInt();
+        apfPacketFormat = in.readInt();
+    }
+
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeInt(apfVersionSupported);
+        dest.writeInt(maximumApfProgramSize);
+        dest.writeInt(apfPacketFormat);
+    }
+
+    public static final Creator<ApfCapabilities> CREATOR = new Creator<ApfCapabilities>() {
+        @Override
+        public ApfCapabilities createFromParcel(Parcel in) {
+            return new ApfCapabilities(in);
+        }
+
+        @Override
+        public ApfCapabilities[] newArray(int size) {
+            return new ApfCapabilities[size];
+        }
+    };
 
     @Override
     public String toString() {
@@ -81,14 +116,14 @@ public class ApfCapabilities {
     /**
      * @return Whether the APF Filter in the device should filter out IEEE 802.3 Frames.
      */
-    public static boolean getApfDrop8023Frames(Context context) {
+    public static boolean getApfDrop8023Frames(@NonNull Context context) {
         return context.getResources().getBoolean(R.bool.config_apfDrop802_3Frames);
     }
 
     /**
      * @return An array of blacklisted EtherType, packets with EtherTypes within it will be dropped.
      */
-    public static int[] getApfEthTypeBlackList(Context context) {
+    public static @NonNull int[] getApfEthTypeBlackList(@NonNull Context context) {
         return context.getResources().getIntArray(R.array.config_apfEthTypeBlackList);
     }
 }

@@ -19,6 +19,7 @@ package android.net;
 import android.app.PendingIntent;
 import android.net.ConnectionInfo;
 import android.net.LinkProperties;
+import android.net.ITetheringEventCallback;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
@@ -26,6 +27,7 @@ import android.net.NetworkMisc;
 import android.net.NetworkQuotaInfo;
 import android.net.NetworkRequest;
 import android.net.NetworkState;
+import android.net.ISocketKeepaliveCallback;
 import android.net.ProxyInfo;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -175,11 +177,12 @@ interface IConnectivityManager
     void releaseNetworkRequest(in NetworkRequest networkRequest);
 
     void setAcceptUnvalidated(in Network network, boolean accept, boolean always);
+    void setAcceptPartialConnectivity(in Network network, boolean accept, boolean always);
     void setAvoidUnvalidated(in Network network);
     void startCaptivePortalApp(in Network network);
     void startCaptivePortalAppInternal(in Network network, in Bundle appExtras);
 
-    boolean getAvoidBadWifi();
+    boolean shouldAvoidBadWifi();
     int getMultipathPreference(in Network Network);
 
     NetworkRequest getDefaultRequest();
@@ -192,15 +195,15 @@ interface IConnectivityManager
 
     void factoryReset();
 
-    void startNattKeepalive(in Network network, int intervalSeconds, in Messenger messenger,
-            in IBinder binder, String srcAddr, int srcPort, String dstAddr);
+    void startNattKeepalive(in Network network, int intervalSeconds,
+            in ISocketKeepaliveCallback cb, String srcAddr, int srcPort, String dstAddr);
 
     void startNattKeepaliveWithFd(in Network network, in FileDescriptor fd, int resourceId,
-            int intervalSeconds, in Messenger messenger, in IBinder binder, String srcAddr,
+            int intervalSeconds, in ISocketKeepaliveCallback cb, String srcAddr,
             String dstAddr);
 
     void startTcpKeepalive(in Network network, in FileDescriptor fd, int intervalSeconds,
-            in Messenger messenger, in IBinder binder);
+            in ISocketKeepaliveCallback cb);
 
     void stopKeepalive(in Network network, int slot);
 
@@ -212,6 +215,11 @@ interface IConnectivityManager
     boolean isCallerCurrentAlwaysOnVpnApp();
     boolean isCallerCurrentAlwaysOnVpnLockdownApp();
 
-    void getLatestTetheringEntitlementValue(int type, in ResultReceiver receiver,
+    void getLatestTetheringEntitlementResult(int type, in ResultReceiver receiver,
             boolean showEntitlementUi, String callerPkg);
+
+    void registerTetheringEventCallback(ITetheringEventCallback callback, String callerPkg);
+    void unregisterTetheringEventCallback(ITetheringEventCallback callback, String callerPkg);
+
+    IBinder startOrGetTestNetworkService();
 }

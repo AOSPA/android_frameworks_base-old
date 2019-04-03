@@ -85,8 +85,7 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
          *
          * @hide
          */
-        @UnsupportedAppUsage
-        public Key(@NonNull String name, @NonNull String fallbackName, @NonNull Class<T> type) {
+        public Key(String name, String fallbackName, Class<T> type) {
             mKey = new CameraMetadataNative.Key<T>(name,  fallbackName, type);
         }
 
@@ -98,7 +97,7 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
          * they may be useful for testing purposes and for defining custom camera
          * characteristics.</p>
          */
-        public Key(String name, Class<T> type) {
+        public Key(@NonNull String name, @NonNull Class<T> type) {
             mKey = new CameraMetadataNative.Key<T>(name,  type);
         }
 
@@ -337,6 +336,7 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
      * <li>{@link RecommendedStreamConfigurationMap#USECASE_SNAPSHOT}</li>
      * <li>{@link RecommendedStreamConfigurationMap#USECASE_RAW}</li>
      * <li>{@link RecommendedStreamConfigurationMap#USECASE_ZSL}</li>
+     * <li>{@link RecommendedStreamConfigurationMap#USECASE_LOW_LATENCY_SNAPSHOT}</li>
      * </ul>
      * </p>
      *
@@ -401,7 +401,7 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
     public @Nullable RecommendedStreamConfigurationMap getRecommendedStreamConfigurationMap(
             @RecommendedStreamConfigurationMap.RecommendedUsecase int usecase) {
         if (((usecase >= RecommendedStreamConfigurationMap.USECASE_PREVIEW) &&
-                (usecase <= RecommendedStreamConfigurationMap.USECASE_RAW)) ||
+                (usecase <= RecommendedStreamConfigurationMap.USECASE_LOW_LATENCY_SNAPSHOT)) ||
                 ((usecase >= RecommendedStreamConfigurationMap.USECASE_VENDOR_START) &&
                 (usecase < RecommendedStreamConfigurationMap.MAX_USECASE_COUNT))) {
             if (mRecommendedConfigurations == null) {

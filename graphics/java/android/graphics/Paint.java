@@ -58,13 +58,11 @@ public class Paint {
     private long mNativeShader;
     private long mNativeColorFilter;
 
-    // The approximate size of a native paint object.
-    private static final long NATIVE_PAINT_SIZE = 98;
-
     // Use a Holder to allow static initialization of Paint in the boot image.
     private static class NoImagePreloadHolder {
-        public static final NativeAllocationRegistry sRegistry = new NativeAllocationRegistry(
-                Paint.class.getClassLoader(), nGetNativeFinalizer(), NATIVE_PAINT_SIZE);
+        public static final NativeAllocationRegistry sRegistry =
+                NativeAllocationRegistry.createMalloced(
+                Paint.class.getClassLoader(), nGetNativeFinalizer());
     }
 
     @ColorLong private long mColor;
@@ -231,7 +229,8 @@ public class Paint {
     public static final int VERTICAL_TEXT_FLAG = 0x1000;
 
     // These flags are always set on a new/reset paint, even if flags 0 is passed.
-    static final int HIDDEN_DEFAULT_PAINT_FLAGS = DEV_KERN_TEXT_FLAG | EMBEDDED_BITMAP_TEXT_FLAG;
+    static final int HIDDEN_DEFAULT_PAINT_FLAGS = DEV_KERN_TEXT_FLAG | EMBEDDED_BITMAP_TEXT_FLAG
+            | FILTER_BITMAP_FLAG;
 
     /**
      * Font hinter option that disables font hinting.
@@ -364,19 +363,79 @@ public class Paint {
      */
     private static final int CURSOR_OPT_MAX_VALUE = CURSOR_AT;
 
-    /**
-     * Mask for hyphen edits that happen at the end of a line. Keep in sync with the definition in
-     * Minikin's Hyphenator.h.
-     * @hide
-     */
-    public static final int HYPHENEDIT_MASK_END_OF_LINE = 0x07;
+    /** @hide */
+    @IntDef(prefix = { "START_HYPHEN_EDIT_" }, value = {
+        START_HYPHEN_EDIT_NO_EDIT,
+        START_HYPHEN_EDIT_INSERT_HYPHEN,
+        START_HYPHEN_EDIT_INSERT_ZWJ
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface StartHyphenEdit {}
 
     /**
-     * Mask for hyphen edits that happen at the start of a line. Keep in sync with the definition in
-     * Minikin's Hyphenator.h.
-     * @hide
+     * An integer representing the starting of the line has no modification for hyphenation.
      */
-    public static final int HYPHENEDIT_MASK_START_OF_LINE = 0x03 << 3;
+    public static final int START_HYPHEN_EDIT_NO_EDIT = 0x00;
+
+    /**
+     * An integer representing the starting of the line has normal hyphen character (U+002D).
+     */
+    public static final int START_HYPHEN_EDIT_INSERT_HYPHEN = 0x01;
+
+    /**
+     * An integer representing the starting of the line has Zero-Width-Joiner (U+200D).
+     */
+    public static final int START_HYPHEN_EDIT_INSERT_ZWJ = 0x02;
+
+    /** @hide */
+    @IntDef(prefix = { "END_HYPHEN_EDIT_" }, value = {
+        END_HYPHEN_EDIT_NO_EDIT,
+        END_HYPHEN_EDIT_REPLACE_WITH_HYPHEN,
+        END_HYPHEN_EDIT_INSERT_HYPHEN,
+        END_HYPHEN_EDIT_INSERT_ARMENIAN_HYPHEN,
+        END_HYPHEN_EDIT_INSERT_MAQAF,
+        END_HYPHEN_EDIT_INSERT_UCAS_HYPHEN,
+        END_HYPHEN_EDIT_INSERT_ZWJ_AND_HYPHEN
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface EndHyphenEdit {}
+
+    /**
+     * An integer representing the end of the line has no modification for hyphenation.
+     */
+    public static final int END_HYPHEN_EDIT_NO_EDIT = 0x00;
+
+    /**
+     * An integer representing the character at the end of the line is replaced with hyphen
+     * character (U+002D).
+     */
+    public static final int END_HYPHEN_EDIT_REPLACE_WITH_HYPHEN = 0x01;
+
+    /**
+     * An integer representing the end of the line has normal hyphen character (U+002D).
+     */
+    public static final int END_HYPHEN_EDIT_INSERT_HYPHEN = 0x02;
+
+    /**
+     * An integer representing the end of the line has Armentian hyphen (U+058A).
+     */
+    public static final int END_HYPHEN_EDIT_INSERT_ARMENIAN_HYPHEN = 0x03;
+
+    /**
+     * An integer representing the end of the line has maqaf (Hebrew hyphen, U+05BE).
+     */
+    public static final int END_HYPHEN_EDIT_INSERT_MAQAF = 0x04;
+
+    /**
+     * An integer representing the end of the line has Canadian Syllabics hyphen (U+1400).
+     */
+    public static final int END_HYPHEN_EDIT_INSERT_UCAS_HYPHEN = 0x05;
+
+    /**
+     * An integer representing the end of the line has Zero-Width-Joiner (U+200D) followed by normal
+     * hyphen character (U+002D).
+     */
+    public static final int END_HYPHEN_EDIT_INSERT_ZWJ_AND_HYPHEN = 0x06;
 
     /**
      * The Style specifies if the primitive being drawn is filled, stroked, or
@@ -988,7 +1047,8 @@ public class Paint {
      * @param color The new color (including alpha) to set in the paint.
      */
     public void setColor(@ColorInt int color) {
-        setColor(Color.pack(color));
+        nSetColor(mNativePaint, color);
+        mColor = Color.pack(color);
     }
 
     /**
@@ -1005,12 +1065,8 @@ public class Paint {
      */
     public void setColor(@ColorLong long color) {
         ColorSpace cs = Color.colorSpace(color);
-        float r = Color.red(color);
-        float g = Color.green(color);
-        float b = Color.blue(color);
-        float a = Color.alpha(color);
 
-        nSetColor(mNativePaint, cs.getNativeInstance(), r, g, b, a);
+        nSetColor(mNativePaint, cs.getNativeInstance(), color);
         mColor = color;
     }
 
@@ -1440,11 +1496,7 @@ public class Paint {
      */
     public void setShadowLayer(float radius, float dx, float dy, @ColorLong long shadowColor) {
         ColorSpace cs = Color.colorSpace(shadowColor);
-        float r = Color.red(shadowColor);
-        float g = Color.green(shadowColor);
-        float b = Color.blue(shadowColor);
-        float a = Color.alpha(shadowColor);
-        nSetShadowLayer(mNativePaint, radius, dx, dy, cs.getNativeInstance(), r, g, b, a);
+        nSetShadowLayer(mNativePaint, radius, dx, dy, cs.getNativeInstance(), shadowColor);
 
         mShadowLayerRadius = radius;
         mShadowLayerDx = dx;
@@ -1472,6 +1524,7 @@ public class Paint {
     /**
      * Returns the blur radius of the shadow layer.
      * @see #setShadowLayer(float,float,float,int)
+     * @see #setShadowLayer(float,float,float,long)
      */
     public float getShadowLayerRadius() {
         return mShadowLayerRadius;
@@ -1480,6 +1533,7 @@ public class Paint {
     /**
      * Returns the x offset of the shadow layer.
      * @see #setShadowLayer(float,float,float,int)
+     * @see #setShadowLayer(float,float,float,long)
      */
     public float getShadowLayerDx() {
         return mShadowLayerDx;
@@ -1488,6 +1542,7 @@ public class Paint {
     /**
      * Returns the y offset of the shadow layer.
      * @see #setShadowLayer(float,float,float,int)
+     * @see #setShadowLayer(float,float,float,long)
      */
     public float getShadowLayerDy() {
         return mShadowLayerDy;
@@ -1733,7 +1788,7 @@ public class Paint {
      * @return the paint's extra word-spacing for drawing text in pixels.
      * @see #setWordSpacing(float)
      */
-    public float getWordSpacing() {
+    public @Px float getWordSpacing() {
         return nGetWordSpacing(mNativePaint);
     }
 
@@ -1746,7 +1801,7 @@ public class Paint {
      * @param wordSpacing set the paint's extra word-spacing for drawing text in pixels.
      * @see #getWordSpacing()
      */
-    public void setWordSpacing(float wordSpacing) {
+    public void setWordSpacing(@Px float wordSpacing) {
         nSetWordSpacing(mNativePaint, wordSpacing);
     }
 
@@ -1873,54 +1928,80 @@ public class Paint {
     }
 
     /**
-     * Get the current value of packed hyphen edit.
+     * Get the current value of start hyphen edit.
      *
-     * You can extract start hyphen edit and end hyphen edit by using
-     * {@link android.text.Hyphenator#unpackStartHyphenEdit(int)} and
-     * {@link android.text.Hyphenator#unpackEndHyphenEdit(int)}.
+     * The default value is 0 which is equivalent to {@link #START_HYPHEN_EDIT_NO_EDIT}.
      *
-     * The default value is 0 which is equivalent to packed value of
-     * {@link android.text.Hyphenator#START_HYPHEN_EDIT_NO_EDIT} and
-     * {@link android.text.Hyphenator#END_HYPHEN_EDIT_NO_EDIT}.
-     *
-     * @return the current hyphen edit value
-     * @see #setHyphenEdit(int)
+     * @return the current starting hyphen edit value
+     * @see #setStartHyphenEdit(int)
      */
-    public int getHyphenEdit() {
-        return nGetHyphenEdit(mNativePaint);
+    public @StartHyphenEdit int getStartHyphenEdit() {
+        return nGetStartHyphenEdit(mNativePaint);
     }
 
     /**
-     * Set a packed hyphen edit on the paint.
+     * Get the current value of end hyphen edit.
      *
-     * By setting hyphen edit, the measurement and drawing is performed with modifying hyphenation
-     * at the start of line and end of line. For example, by passing
-     * {@link android.text.Hyphenator#END_HYPHEN_EDIT_INSERT_HYPHEN} like as follows, HYPHEN(U+2010)
+     * The default value is 0 which is equivalent to {@link #END_HYPHEN_EDIT_NO_EDIT}.
+     *
+     * @return the current starting hyphen edit value
+     * @see #setStartHyphenEdit(int)
+     */
+    public @EndHyphenEdit int getEndHyphenEdit() {
+        return nGetEndHyphenEdit(mNativePaint);
+    }
+
+    /**
+     * Set a start hyphen edit on the paint.
+     *
+     * By setting start hyphen edit, the measurement and drawing is performed with modifying
+     * hyphenation at the start of line. For example, by passing
+     * {@link #START_HYPHEN_EDIT_INSERT_HYPHEN} like as follows, HYPHEN(U+2010)
+     * character is appended at the start of line.
+     *
+     * <pre>
+     * <code>
+     *   Paint paint = new Paint();
+     *   paint.setStartHyphenEdit(Paint.START_HYPHEN_EDIT_INSERT_HYPHEN);
+     *   paint.measureText("abc", 0, 3);  // Returns the width of "‐abc"
+     *   Canvas.drawText("abc", 0, 3, 0f, 0f, paint);  // Draws "‐abc"
+     * </code>
+     * </pre>
+     *
+     * The default value is 0 which is equivalent to
+     * {@link #START_HYPHEN_EDIT_NO_EDIT}.
+     *
+     * @param startHyphen a start hyphen edit value.
+     * @see #getStartHyphenEdit()
+     */
+    public void setStartHyphenEdit(@StartHyphenEdit int startHyphen) {
+        nSetStartHyphenEdit(mNativePaint, startHyphen);
+    }
+
+    /**
+     * Set a end hyphen edit on the paint.
+     *
+     * By setting end hyphen edit, the measurement and drawing is performed with modifying
+     * hyphenation at the end of line. For example, by passing
+     * {@link #END_HYPHEN_EDIT_INSERT_HYPHEN} like as follows, HYPHEN(U+2010)
      * character is appended at the end of line.
      *
      * <pre>
      * <code>
      *   Paint paint = new Paint();
-     *   paint.setHyphenEdit(Hyphenator.packHyphenEdit(
-     *       Hyphenator.START_HYPHEN_EDIT_NO_EDIT,
-     *       Hyphenator.END_HYPHEN_EDIT_INSERT_HYPHEN));
+     *   paint.setEndHyphenEdit(Paint.END_HYPHEN_EDIT_INSERT_HYPHEN);
      *   paint.measureText("abc", 0, 3);  // Returns the width of "abc‐"
      *   Canvas.drawText("abc", 0, 3, 0f, 0f, paint);  // Draws "abc‐"
      * </code>
      * </pre>
      *
-     * You can pack start hyphen edit and end hyphen edit by
-     * {@link android.text.Hyphenator#packHyphenEdit(int,int)}
+     * The default value is 0 which is equivalent to {@link #END_HYPHEN_EDIT_NO_EDIT}.
      *
-     * The default value is 0 which is equivalent to packed value of
-     * {@link android.text.Hyphenator#START_HYPHEN_EDIT_NO_EDIT} and
-     * {@link android.text.Hyphenator#END_HYPHEN_EDIT_NO_EDIT}.
-     *
-     * @param hyphen a packed hyphen edit value.
-     * @see #getHyphenEdit()
+     * @param endHyphen a end hyphen edit value.
+     * @see #getEndHyphenEdit()
      */
-    public void setHyphenEdit(int hyphen) {
-        nSetHyphenEdit(mNativePaint, hyphen);
+    public void setEndHyphenEdit(@EndHyphenEdit int endHyphen) {
+        nSetEndHyphenEdit(mNativePaint, endHyphen);
     }
 
     /**
@@ -2706,6 +2787,8 @@ public class Paint {
     }
 
     /**
+     * Retrieve the text boundary box and store to bounds.
+     *
      * Return in bounds (allocated by the caller) the smallest rectangle that
      * encloses all of the characters, with an implied origin at (0,0).
      *
@@ -2725,6 +2808,8 @@ public class Paint {
     }
 
     /**
+     * Retrieve the text boundary box and store to bounds.
+     *
      * Return in bounds (allocated by the caller) the smallest rectangle that
      * encloses all of the characters, with an implied origin at (0,0).
      *
@@ -2736,7 +2821,8 @@ public class Paint {
      * @param end 1 past the last char in the text to measure
      * @param bounds returns the unioned bounds of all the text. Must be allocated by the caller
      */
-    public void getTextBounds(CharSequence text, int start, int end, Rect bounds) {
+    public void getTextBounds(@NonNull CharSequence text, int start, int end,
+            @NonNull Rect bounds) {
         if ((start | end | (end - start) | (text.length() - end)) < 0) {
             throw new IndexOutOfBoundsException();
         }
@@ -3046,7 +3132,7 @@ public class Paint {
     @CriticalNative
     private static native void nSetShadowLayer(long paintPtr,
             float radius, float dx, float dy, long colorSpaceHandle,
-            float r, float g, float b, float a);
+            @ColorLong long shadowColor);
     @CriticalNative
     private static native boolean nHasShadowLayer(long paintPtr);
     @CriticalNative
@@ -3058,9 +3144,13 @@ public class Paint {
     @CriticalNative
     private static native void nSetWordSpacing(long paintPtr, float wordSpacing);
     @CriticalNative
-    private static native int nGetHyphenEdit(long paintPtr);
+    private static native int nGetStartHyphenEdit(long paintPtr);
     @CriticalNative
-    private static native void nSetHyphenEdit(long paintPtr, int hyphen);
+    private static native int nGetEndHyphenEdit(long paintPtr);
+    @CriticalNative
+    private static native void nSetStartHyphenEdit(long paintPtr, int hyphen);
+    @CriticalNative
+    private static native void nSetEndHyphenEdit(long paintPtr, int hyphen);
     @CriticalNative
     private static native void nSetStrokeMiter(long paintPtr, float miter);
     @CriticalNative
@@ -3095,7 +3185,9 @@ public class Paint {
     private static native void nSetFilterBitmap(long paintPtr, boolean filter);
     @CriticalNative
     private static native void nSetColor(long paintPtr, long colorSpaceHandle,
-            float r, float g, float b, float a);
+            @ColorLong long color);
+    @CriticalNative
+    private static native void nSetColor(long paintPtr, @ColorInt int color);
     @CriticalNative
     private static native void nSetStrikeThruText(long paintPtr, boolean strikeThruText);
     @CriticalNative

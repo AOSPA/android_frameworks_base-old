@@ -25,9 +25,9 @@ import android.net.NetworkCapabilities;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings.Global;
-import android.telephony.NetworkRegistrationState;
 import android.telephony.ims.ImsMmTelManager;
 import android.telephony.ims.feature.MmTelFeature;
+import android.telephony.NetworkRegistrationInfo;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
@@ -311,7 +311,8 @@ public class MobileSignalController extends SignalController<
             }
 
             boolean dataDisabled = mCurrentState.userSetup
-                    && mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED;
+                    && (mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
+                    || mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA);
             boolean noInternet = mCurrentState.inetCondition == 0;
             boolean cutOut = dataDisabled || noInternet;
             if (mConfig.hideNoInternetState) {
@@ -400,7 +401,8 @@ public class MobileSignalController extends SignalController<
     @Override
     public void notifyListeners(SignalCallback callback) {
         MobileIconGroup icons = getIcons();
-        final boolean dataDisabled = mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
+        final boolean dataDisabled = (mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
+                || mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA)
                 && mCurrentState.userSetup;
 
         if ( is5GConnected() ) {
@@ -648,9 +650,13 @@ public class MobileSignalController extends SignalController<
         mCurrentState.roaming = isRoaming();
         if (isCarrierNetworkChangeActive()) {
             mCurrentState.iconGroup = TelephonyIcons.CARRIER_NETWORK_CHANGE;
-        } else if (isDataDisabled() && !mConfig.alwaysShowDataRatIcon
-                && !mConfig.alwaysShowNetworkTypeIcon) {
-            mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
+        } else if (isDataDisabled() && !mConfig.alwaysShowDataRatIcon) {
+            if (mSubscriptionInfo.getSubscriptionId()
+                    != mDefaults.getDefaultDataSubId()) {
+                mCurrentState.iconGroup = TelephonyIcons.NOT_DEFAULT_DATA;
+            } else {
+                mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
+            }
         }
         if (isEmergencyOnly() != mCurrentState.isEmergency) {
             mCurrentState.isEmergency = isEmergencyOnly();
@@ -668,8 +674,8 @@ public class MobileSignalController extends SignalController<
     private MobileIconGroup getNr5GIconGroup() {
         if (mServiceState == null) return null;
 
-        int nrStatus = mServiceState.getNrStatus();
-        if (nrStatus == NetworkRegistrationState.NR_STATUS_CONNECTED) {
+        int nrState = mServiceState.getNrState();
+        if (nrState == NetworkRegistrationInfo.NR_STATE_CONNECTED) {
             // Check if the NR 5G is using millimeter wave and the icon is config.
             if (mServiceState.getNrFrequencyRange() == ServiceState.FREQUENCY_RANGE_MMWAVE) {
                 if (mConfig.nr5GIconMap.containsKey(Config.NR_CONNECTED_MMWAVE)) {
@@ -682,11 +688,11 @@ public class MobileSignalController extends SignalController<
             if (mConfig.nr5GIconMap.containsKey(Config.NR_CONNECTED)) {
                 return mConfig.nr5GIconMap.get(Config.NR_CONNECTED);
             }
-        } else if (nrStatus == NetworkRegistrationState.NR_STATUS_NOT_RESTRICTED) {
+        } else if (nrState == NetworkRegistrationInfo.NR_STATE_NOT_RESTRICTED) {
             if (mConfig.nr5GIconMap.containsKey(Config.NR_NOT_RESTRICTED)) {
                 return mConfig.nr5GIconMap.get(Config.NR_NOT_RESTRICTED);
             }
-        } else if (nrStatus == NetworkRegistrationState.NR_STATUS_RESTRICTED) {
+        } else if (nrState == NetworkRegistrationInfo.NR_STATE_RESTRICTED) {
             if (mConfig.nr5GIconMap.containsKey(Config.NR_RESTRICTED)) {
                 return mConfig.nr5GIconMap.get(Config.NR_RESTRICTED);
             }

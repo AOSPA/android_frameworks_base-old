@@ -22,8 +22,10 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
+import android.annotation.SystemApi;
 import android.app.Notification;
 import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -60,7 +62,9 @@ import java.util.List;
  * <p>
  *     All callbacks are called on the main thread.
  * </p>
+ * @hide
  */
+@SystemApi
 public abstract class NotificationAssistantService extends NotificationListenerService {
     private static final String TAG = "NotificationAssistants";
 
@@ -112,8 +116,8 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param sbn the notification to snooze
      * @param snoozeCriterionId the {@link SnoozeCriterion#getId()} representing a device context.
      */
-    abstract public void onNotificationSnoozedUntilContext(StatusBarNotification sbn,
-            String snoozeCriterionId);
+    abstract public void onNotificationSnoozedUntilContext(@NonNull StatusBarNotification sbn,
+            @NonNull String snoozeCriterionId);
 
     /**
      * A notification was posted by an app. Called before post.
@@ -124,7 +128,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param sbn the new notification
      * @return an adjustment or null to take no action, within 100ms.
      */
-    abstract public Adjustment onNotificationEnqueued(StatusBarNotification sbn);
+    abstract public @Nullable Adjustment onNotificationEnqueued(@NonNull StatusBarNotification sbn);
 
     /**
      * A notification was posted by an app. Called before post.
@@ -137,7 +141,6 @@ public abstract class NotificationAssistantService extends NotificationListenerS
             @NonNull NotificationChannel channel) {
         return onNotificationEnqueued(sbn);
     }
-
 
     /**
      * Implement this method to learn when notifications are removed, how they were interacted with
@@ -213,6 +216,15 @@ public abstract class NotificationAssistantService extends NotificationListenerS
     }
 
     /**
+     * Implement this to know when a user has changed which features of
+     * their notifications the assistant can modify.
+     * <p> Query {@link NotificationManager#getAllowedAssistantCapabilities()} to see what
+     * {@link Adjustment adjustments} you are currently allowed to make.</p>
+     */
+    public void onCapabilitiesChanged() {
+    }
+
+    /**
      * Updates a notification.  N.B. this won’t cause
      * an existing notification to alert, but might allow a future update to
      * this notification to alert.
@@ -255,7 +267,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * notification.
      * @param key The key of the notification to snooze
      */
-    public final void unsnoozeNotification(String key) {
+    public final void unsnoozeNotification(@NonNull String key) {
         if (!isBound()) return;
         try {
             getNotificationInterface().unsnoozeNotificationFromAssistant(mWrapper, key);
@@ -370,7 +382,10 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                     args.recycle();
                     Adjustment adjustment = onNotificationEnqueued(sbn, channel);
                     if (adjustment != null) {
-                        if (!isBound()) return;
+                        if (!isBound()) {
+                            Log.w(TAG, "MSG_ON_NOTIFICATION_ENQUEUED: service not bound, skip.");
+                            return;
+                        }
                         try {
                             getNotificationInterface().applyEnqueuedAdjustmentFromAssistant(
                                     mWrapper, adjustment);
