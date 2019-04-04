@@ -42,6 +42,7 @@ import android.system.StructRlimit;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
+import android.util.StatsLog;
 
 import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.server.am.ActivityManagerService;
@@ -597,6 +598,7 @@ public class Watchdog extends Thread {
                         mActivity.addErrorToDropBox(
                                 "watchdog", null, "system_server", null, null, null,
                                 subject, null, finalStack, null);
+                        StatsLog.write(StatsLog.SYSTEM_SERVER_WATCHDOG_OCCURRED, subject);
                     }
             };
             dropboxThread.start();
