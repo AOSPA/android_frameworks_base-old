@@ -100,4 +100,18 @@ interface IStatusBarService
     void onFingerprintError(String error);
     // Used to hide the fingerprint dialog when the authenticationclient is stopped
     void hideFingerprintDialog();
+<<<<<<< HEAD
+=======
+    void handleInDisplayFingerprintView(boolean show, boolean isEnrolling);
+
+    void toggleCameraFlash();
+
+    void toggleNavigationBar(boolean enable);
+
+    void toggleRecentApps();
+    void toggleSplitScreen();
+    void preloadRecentApps();
+    void cancelPreloadRecentApps();
+    void startAssist(in Bundle args);
+>>>>>>> ffc0c799ac1... Initial support for OnePlus in-display fingerprint sensor
 }
