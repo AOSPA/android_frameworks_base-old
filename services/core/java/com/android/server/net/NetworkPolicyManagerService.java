@@ -1333,11 +1333,9 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         final CharSequence body;
         switch (type) {
             case TYPE_WARNING: {
-                Formatter.BytesResult bres = Formatter.formatBytes(res, totalBytes,
-                          Formatter.FLAG_CALCULATE_ROUNDED | Formatter.FLAG_IEC_UNITS);
                 title = res.getText(R.string.data_usage_warning_title);
                 body = res.getString(R.string.data_usage_warning_body,
-                        String.format("%s %s", bres.value, bres.units));
+                        Formatter.formatFileSize(mContext, totalBytes, Formatter.FLAG_IEC_UNITS));
 
                 builder.setSmallIcon(R.drawable.stat_notify_error);
 
@@ -1384,10 +1382,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                         return;
                 }
                 final long overBytes = totalBytes - policy.limitBytes;
-                Formatter.BytesResult bres = Formatter.formatBytes(res, totalBytes,
-                          Formatter.FLAG_CALCULATE_ROUNDED | Formatter.FLAG_IEC_UNITS);
                 body = res.getString(R.string.data_usage_limit_snoozed_body,
-                        String.format("%s %s", bres.value, bres.units));
+                        Formatter.formatFileSize(mContext, overBytes, Formatter.FLAG_IEC_UNITS));
 
                 builder.setOngoing(true);
                 builder.setSmallIcon(R.drawable.stat_notify_error);

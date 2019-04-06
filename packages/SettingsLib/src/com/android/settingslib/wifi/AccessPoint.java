@@ -53,6 +53,7 @@ import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.Pair;
 
 import androidx.annotation.NonNull;
 
@@ -65,8 +66,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -208,6 +211,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
     public static final String KEY_PREFIX_OSU = "OSU:";
 
     private final Context mContext;
+
+    private WifiManager mWifiManager;
+    private WifiManager.ActionListener mConnectListener;
 
     private String ssid;
     private String bssid;
@@ -1224,8 +1230,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
     /**
      * Starts the OSU Provisioning flow.
      */
-    public void startOsuProvisioning() {
-        mContext.getSystemService(WifiManager.class).startSubscriptionProvisioning(
+    public void startOsuProvisioning(@Nullable WifiManager.ActionListener connectListener) {
+        mConnectListener = connectListener;
+
+        getWifiManager().startSubscriptionProvisioning(
                 mOsuProvider,
                 mContext.getMainExecutor(),
                 new AccessPointProvisioningCallback()
@@ -1716,12 +1724,20 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return string;
     }
 
+    private WifiManager getWifiManager() {
+        if (mWifiManager == null) {
+            mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+        }
+        return mWifiManager;
+    }
+
     /**
      * Callbacks relaying changes to the AccessPoint representation.
      *
      * <p>All methods are invoked on the Main Thread.
      */
     public interface AccessPointListener {
+
         /**
          * Indicates a change to the externally visible state of the AccessPoint trigger by an
          * update of ScanResults, saved configuration state, connection state, or score
@@ -1738,7 +1754,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
          *                    changed
          */
         @MainThread void onAccessPointChanged(AccessPoint accessPoint);
-
         /**
          * Indicates the "wifi pie signal level" has changed, retrieved via calls to
          * {@link AccessPoint#getLevel()}.
@@ -1820,11 +1835,46 @@ public class AccessPoint implements Comparable<AccessPoint> {
             mOsuProvisioningComplete = true;
             mOsuFailure = null;
             mOsuStatus = null;
+
             ThreadUtils.postOnMainThread(() -> {
                 if (mAccessPointListener != null) {
                     mAccessPointListener.onAccessPointChanged(AccessPoint.this);
                 }
             });
+
+            // Connect to the freshly provisioned network.
+            WifiManager wifiManager = getWifiManager();
+
+            PasspointConfiguration passpointConfig = wifiManager
+                    .getMatchingPasspointConfigsForOsuProviders(Collections.singleton(mOsuProvider))
+                    .get(mOsuProvider);
+            if (passpointConfig == null) {
+                Log.e(TAG, "Missing PasspointConfiguration for newly provisioned network!");
+                if (mConnectListener != null) {
+                    mConnectListener.onFailure(0);
+                }
+                return;
+            }
+
+            String fqdn = passpointConfig.getHomeSp().getFqdn();
+            for (Pair<WifiConfiguration, Map<Integer, List<ScanResult>>> pairing :
+                    wifiManager.getAllMatchingWifiConfigs(wifiManager.getScanResults())) {
+                WifiConfiguration config = pairing.first;
+                if (TextUtils.equals(config.FQDN, fqdn)) {
+                    List<ScanResult> homeScans =
+                            pairing.second.get(WifiManager.PASSPOINT_HOME_NETWORK);
+                    List<ScanResult> roamingScans =
+                            pairing.second.get(WifiManager.PASSPOINT_ROAMING_NETWORK);
+
+                    AccessPoint connectionAp =
+                            new AccessPoint(mContext, config, homeScans, roamingScans);
+                    wifiManager.connect(connectionAp.getConfig(), mConnectListener);
+                    return;
+                }
+            }
+            if (mConnectListener != null) {
+                mConnectListener.onFailure(0);
+            }
         }
     }
 }

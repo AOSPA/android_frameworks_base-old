@@ -112,13 +112,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
         esimButton.setVisibility(isEsimLocked ? View.VISIBLE : View.GONE);
     }
 
-    private void showDefaultMessage() {
-        if (mRemainingAttempts >= 0) {
-            mSecurityMessageDisplay.setMessage(getPinPasswordErrorMessage(
-                    mRemainingAttempts, true));
-            return;
-        }
-
+    private void setLockedSimMessage() {
         mSlotId = SubscriptionManager.getSlotIndex(mSubId) + 1;
         boolean isEsimLocked = KeyguardEsimArea.isEsimLocked(mContext, mSubId);
         int count = TelephonyManager.getDefault().getSimCount();
@@ -136,13 +130,20 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
                 color = info.getIconTint();
             }
         }
-
         if (isEsimLocked) {
             msg = rez.getString(R.string.kg_sim_lock_esim_instructions, msg);
         }
 
         mSecurityMessageDisplay.setMessage(msg);
         mSimImageView.setImageTintList(ColorStateList.valueOf(color));
+    }
+
+    private void showDefaultMessage() {
+        setLockedSimMessage();
+        if (mRemainingAttempts >= 0) {
+            return;
+        }
+
 
         // Sending empty PIN here to query the number of remaining PIN attempts
         new CheckSimPin("", mSubId) {
@@ -151,8 +152,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
                         " attemptsRemaining=" + attemptsRemaining);
                 if (attemptsRemaining >= 0) {
                     mRemainingAttempts = attemptsRemaining;
-                    mSecurityMessageDisplay.setMessage(
-                            getPinPasswordErrorMessage(attemptsRemaining, true));
+                    setLockedSimMessage();
                 }
             }
         }.start();
