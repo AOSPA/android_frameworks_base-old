@@ -154,6 +154,14 @@ public class BtHelper {
         }
     }
 
+    /*package*/ @NonNull static String getName(@NonNull BluetoothDevice device) {
+        final String deviceName = device.getName();
+        if (deviceName == null) {
+            return "";
+        }
+        return deviceName;
+    }
+
     //----------------------------------------------------------------------
     // Interface for AudioDeviceBroker
 
@@ -615,13 +623,28 @@ public class BtHelper {
             return true;
         }
         String address = btDevice.getAddress();
+        BluetoothClass btClass = btDevice.getBluetoothClass();
         int inDevice = AudioSystem.DEVICE_IN_BLUETOOTH_SCO_HEADSET;
         int[] outDeviceTypes = {
                 AudioSystem.DEVICE_OUT_BLUETOOTH_SCO,
                 AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET,
                 AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT
         };
-        String btDeviceName = "";
+        if (btClass != null) {
+            switch (btClass.getDeviceClass()) {
+                case BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET:
+                case BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE:
+                    outDeviceTypes = new int[] { AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET };
+                    break;
+                case BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO:
+                    outDeviceTypes = new int[] { AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT };
+                    break;
+            }
+        }
+        if (!BluetoothAdapter.checkBluetoothAddress(address)) {
+            address = "";
+        }
+        String btDeviceName =  getName(btDevice);
         boolean result = false;
         if (isActive) {
             result |= mDeviceBroker.handleDeviceConnection(

@@ -318,6 +318,7 @@ java_defaults {
         "core/java/android/service/vr/IVrListener.aidl",
         "core/java/android/service/vr/IVrManager.aidl",
         "core/java/android/service/vr/IVrStateCallbacks.aidl",
+        "core/java/android/service/watchdog/IExplicitHealthCheckService.aidl",
         "core/java/android/print/ILayoutResultCallback.aidl",
         "core/java/android/print/IPrinterDiscoveryObserver.aidl",
         "core/java/android/print/IPrintDocumentAdapter.aidl",
@@ -374,6 +375,7 @@ java_defaults {
         "core/java/android/view/IDisplayFoldListener.aidl",
         "core/java/android/view/IGraphicsStats.aidl",
         "core/java/android/view/IGraphicsStatsCallback.aidl",
+        "core/java/android/view/IInputMonitorHost.aidl",
         "core/java/android/view/IInputFilter.aidl",
         "core/java/android/view/IInputFilterHost.aidl",
         "core/java/android/view/IOnKeyguardExitResult.aidl",
@@ -475,7 +477,10 @@ java_defaults {
         "media/java/android/media/IMediaHTTPConnection.aidl",
         "media/java/android/media/IMediaHTTPService.aidl",
         "media/java/android/media/IMediaResourceMonitor.aidl",
+        "media/java/android/media/IMediaRoute2Callback.aidl",
+        "media/java/android/media/IMediaRoute2Provider.aidl",
         "media/java/android/media/IMediaRouterClient.aidl",
+        "media/java/android/media/IMediaRouter2ManagerClient.aidl",
         "media/java/android/media/IMediaRouterService.aidl",
         "media/java/android/media/IMediaScannerListener.aidl",
         "media/java/android/media/IMediaScannerService.aidl",
@@ -719,6 +724,7 @@ java_defaults {
             "frameworks/av/camera/aidl",
             "frameworks/av/media/libaudioclient/aidl",
             "frameworks/native/aidl/gui",
+            "frameworks/native/libs/incidentcompanion/binder",
             "system/core/storaged/binder",
             "system/vold/binder",
             "system/gsid/aidl",
@@ -966,7 +972,10 @@ java_library {
         output_params: ["store_unknown_fields=true"],
         include_dirs: ["external/protobuf/src"],
     },
-
+    exclude_srcs: [
+        "core/proto/android/privacy.proto",
+        "core/proto/android/section.proto",
+    ],
     sdk_version: "current",
     srcs: [
         "core/proto/**/*.proto",
@@ -986,6 +995,10 @@ java_library {
         "core/proto/**/*.proto",
         "libs/incident/proto/android/os/**/*.proto",
     ],
+    exclude_srcs: [
+        "core/proto/android/privacy.proto",
+        "core/proto/android/section.proto",
+    ],
     // Protos have lots of MissingOverride and similar.
     errorprone: {
         javacflags: ["-XepDisableAllChecks"],
@@ -993,9 +1006,9 @@ java_library {
 }
 
 // ====  c++ proto device library  ==============================
-cc_library {
-    name: "libplatformprotos",
-    host_supported: true,
+cc_defaults {
+    name: "libplatformprotos-defaults",
+
     proto: {
         export_proto_headers: true,
         include_dirs: ["external/protobuf/src"],
@@ -1009,8 +1022,13 @@ cc_library {
 
     srcs: [
         "core/proto/**/*.proto",
-        "libs/incident/**/*.proto",
     ],
+}
+
+cc_library {
+    name: "libplatformprotos",
+    defaults: ["libplatformprotos-defaults"],
+    host_supported: true,
 
     target: {
         host: {
@@ -1022,12 +1040,35 @@ cc_library {
             proto: {
                 type: "lite",
             },
+            shared_libs: [
+                "libprotobuf-cpp-lite",
+            ],
             shared: {
                 enabled: false,
             },
         },
     },
 }
+
+// This is the full proto version of libplatformprotos. It may only
+// be used by test code that is not shipped on the device.
+cc_library {
+    name: "libplatformprotos-test",
+    defaults: ["libplatformprotos-defaults"],
+    host_supported: false,
+
+    target: {
+        android: {
+            proto: {
+                type: "full",
+            },
+            shared: {
+                enabled: false,
+            },
+        },
+    },
+}
+
 
 gensrcs {
     name: "gen-platform-proto-constants",
@@ -1065,6 +1106,7 @@ gensrcs {
 
     output_extension: "proto.h",
 }
+
 
 subdirs = [
     "cmds/*",
@@ -1628,6 +1670,7 @@ droidstubs {
         ":openjdk_java_files",
         ":non_openjdk_java_files",
         ":opt-telephony-common-srcs",
+        "core/java/**/*.java",
     ],
     arg_files: [
         "core/res/AndroidManifest.xml",

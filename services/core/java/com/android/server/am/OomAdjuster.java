@@ -16,10 +16,19 @@
 
 package com.android.server.am;
 
+import static android.app.ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
+import static android.app.ActivityManager.PROCESS_STATE_BOUND_TOP;
 import static android.app.ActivityManager.PROCESS_STATE_CACHED_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_STATE_CACHED_EMPTY;
+import static android.app.ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
+import static android.app.ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION;
+import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND;
+import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_LAST_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
+import static android.app.ActivityManager.PROCESS_STATE_SERVICE;
+import static android.app.ActivityManager.PROCESS_STATE_TOP;
+import static android.app.ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND;
 import static android.os.Process.SCHED_OTHER;
 import static android.os.Process.THREAD_GROUP_BG_NONINTERACTIVE;
 import static android.os.Process.THREAD_GROUP_DEFAULT;
@@ -53,6 +62,7 @@ import android.app.usage.UsageEvents;
 import android.content.Context;
 import android.os.Binder;
 import android.os.Debug;
+import android.os.IBinder;
 import android.os.PowerManagerInternal;
 import android.os.Process;
 import android.os.RemoteException;
@@ -60,6 +70,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -454,7 +465,7 @@ public final class OomAdjuster {
                             app.kill("cached #" + numCached, true);
                         }
                         break;
-                    case ActivityManager.PROCESS_STATE_CACHED_EMPTY:
+                    case PROCESS_STATE_CACHED_EMPTY:
                         if (numEmpty > mConstants.CUR_TRIM_EMPTY_PROCESSES
                                 && app.lastActivityTime < oldTime) {
                             app.kill("empty for "
@@ -768,7 +779,7 @@ public final class OomAdjuster {
         if (app.thread == null) {
             app.adjSeq = mAdjSeq;
             app.setCurrentSchedulingGroup(ProcessList.SCHED_GROUP_BACKGROUND);
-            app.setCurProcState(ActivityManager.PROCESS_STATE_CACHED_EMPTY);
+            app.setCurProcState(PROCESS_STATE_CACHED_EMPTY);
             app.curAdj = ProcessList.CACHED_APP_MAX_ADJ;
             app.setCurRawAdj(ProcessList.CACHED_APP_MAX_ADJ);
             app.completedAdjSeq = app.adjSeq;
@@ -823,7 +834,7 @@ public final class OomAdjuster {
                     app.setCurrentSchedulingGroup(ProcessList.SCHED_GROUP_TOP_APP);
                 } else {
                     // screen off, restrict UI scheduling
-                    app.setCurProcState(ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
+                    app.setCurProcState(PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
                     app.setCurrentSchedulingGroup(ProcessList.SCHED_GROUP_RESTRICTED);
                 }
             }
@@ -847,7 +858,7 @@ public final class OomAdjuster {
 
         boolean foregroundActivities = false;
         mTmpBroadcastQueue.clear();
-        if (PROCESS_STATE_CUR_TOP == ActivityManager.PROCESS_STATE_TOP && app == TOP_APP) {
+        if (PROCESS_STATE_CUR_TOP == PROCESS_STATE_TOP && app == TOP_APP) {
             // The last app on the list is the foreground app.
             adj = ProcessList.FOREGROUND_APP_ADJ;
             schedGroup = ProcessList.SCHED_GROUP_TOP_APP;
@@ -870,7 +881,7 @@ public final class OomAdjuster {
             adj = ProcessList.FOREGROUND_APP_ADJ;
             schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
             app.adjType = "instrumentation";
-            procState = ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
+            procState = PROCESS_STATE_FOREGROUND_SERVICE;
             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                 reportOomAdjMessageLocked(TAG_OOM_ADJ, "Making instrumentation: " + app);
             }
@@ -894,7 +905,7 @@ public final class OomAdjuster {
             schedGroup = app.execServicesFg ?
                     ProcessList.SCHED_GROUP_DEFAULT : ProcessList.SCHED_GROUP_BACKGROUND;
             app.adjType = "exec-service";
-            procState = ActivityManager.PROCESS_STATE_SERVICE;
+            procState = PROCESS_STATE_SERVICE;
             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                 reportOomAdjMessageLocked(TAG_OOM_ADJ, "Making exec-service: " + app);
             }
@@ -914,7 +925,7 @@ public final class OomAdjuster {
             // At this point we don't actually know the adjustment.  Use the cached adj
             // value that the caller wants us to.
             adj = cachedAdj;
-            procState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
+            procState = PROCESS_STATE_CACHED_EMPTY;
             app.cached = true;
             app.empty = true;
             app.adjType = "cch-empty";
@@ -949,23 +960,28 @@ public final class OomAdjuster {
         }
 
         if (adj > ProcessList.PERCEPTIBLE_APP_ADJ
-                || procState > ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION) {
+                || procState > PROCESS_STATE_FOREGROUND_SERVICE_LOCATION) {
             if (app.hasForegroundServices()) {
                 // The user is aware of this app, so make it visible.
                 adj = ProcessList.PERCEPTIBLE_APP_ADJ;
-                procState = app.hasLocationForegroundServices()
-                        ? ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION
-                        : ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
+                if (app.hasLocationForegroundServices()) {
+                    procState = PROCESS_STATE_FOREGROUND_SERVICE_LOCATION;
+                    app.adjType = "fg-service-location";
+
+                } else {
+                    procState = PROCESS_STATE_FOREGROUND_SERVICE;
+                    app.adjType = "fg-service";
+                }
                 app.cached = false;
-                app.adjType = "fg-service";
                 schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
                 if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
-                    reportOomAdjMessageLocked(TAG_OOM_ADJ, "Raise to fg service: " + app);
+                    reportOomAdjMessageLocked(TAG_OOM_ADJ, "Raise to " + app.adjType + ": "
+                            + app + " ");
                 }
             } else if (app.hasOverlayUi()) {
                 // The process is display an overlay UI.
                 adj = ProcessList.PERCEPTIBLE_APP_ADJ;
-                procState = ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
+                procState = PROCESS_STATE_IMPORTANT_FOREGROUND;
                 app.cached = false;
                 app.adjType = "has-overlay-ui";
                 schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
@@ -980,7 +996,7 @@ public final class OomAdjuster {
         // services so that it can finish performing any persistence/processing of in-memory state.
         if (app.hasForegroundServices() && adj > ProcessList.PERCEPTIBLE_RECENT_FOREGROUND_APP_ADJ
                 && (app.lastTopTime + mConstants.TOP_TO_FGS_GRACE_DURATION > now
-                || app.setProcState <= ActivityManager.PROCESS_STATE_TOP)) {
+                || app.setProcState <= PROCESS_STATE_TOP)) {
             adj = ProcessList.PERCEPTIBLE_RECENT_FOREGROUND_APP_ADJ;
             app.adjType = "fg-service-act";
             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
@@ -989,13 +1005,13 @@ public final class OomAdjuster {
         }
 
         if (adj > ProcessList.PERCEPTIBLE_APP_ADJ
-                || procState > ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND) {
+                || procState > PROCESS_STATE_TRANSIENT_BACKGROUND) {
             if (app.forcingToImportant != null) {
                 // This is currently used for toasts...  they are not interactive, and
                 // we don't want them to cause the app to become fully foreground (and
                 // thus out of background check), so we yes the best background level we can.
                 adj = ProcessList.PERCEPTIBLE_APP_ADJ;
-                procState = ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND;
+                procState = PROCESS_STATE_TRANSIENT_BACKGROUND;
                 app.cached = false;
                 app.adjType = "force-imp";
                 app.adjSource = app.forcingToImportant;
@@ -1091,8 +1107,8 @@ public final class OomAdjuster {
             if (adj > ProcessList.BACKUP_APP_ADJ) {
                 if (DEBUG_BACKUP) Slog.v(TAG_BACKUP, "oom BACKUP_APP_ADJ for " + app);
                 adj = ProcessList.BACKUP_APP_ADJ;
-                if (procState > ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND) {
-                    procState = ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND;
+                if (procState > PROCESS_STATE_TRANSIENT_BACKGROUND) {
+                    procState = PROCESS_STATE_TRANSIENT_BACKGROUND;
                 }
                 app.adjType = "backup";
                 if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
@@ -1109,21 +1125,16 @@ public final class OomAdjuster {
             }
         }
 
-        boolean mayBeTop = false;
-        String mayBeTopType = null;
-        Object mayBeTopSource = null;
-        Object mayBeTopTarget = null;
-
         for (int is = app.services.size() - 1;
                 is >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
                         || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
-                        || procState > ActivityManager.PROCESS_STATE_TOP);
+                        || procState > PROCESS_STATE_TOP);
                 is--) {
             ServiceRecord s = app.services.valueAt(is);
             if (s.startRequested) {
                 app.hasStartedServices = true;
-                if (procState > ActivityManager.PROCESS_STATE_SERVICE) {
-                    procState = ActivityManager.PROCESS_STATE_SERVICE;
+                if (procState > PROCESS_STATE_SERVICE) {
+                    procState = PROCESS_STATE_SERVICE;
                     app.adjType = "started-services";
                     if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                         reportOomAdjMessageLocked(TAG_OOM_ADJ,
@@ -1162,16 +1173,17 @@ public final class OomAdjuster {
                 }
             }
 
-            for (int conni = s.connections.size() - 1;
+            ArrayMap<IBinder, ArrayList<ConnectionRecord>> serviceConnections = s.getConnections();
+            for (int conni = serviceConnections.size() - 1;
                     conni >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
                             || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
-                            || procState > ActivityManager.PROCESS_STATE_TOP);
+                            || procState > PROCESS_STATE_TOP);
                     conni--) {
-                ArrayList<ConnectionRecord> clist = s.connections.valueAt(conni);
+                ArrayList<ConnectionRecord> clist = serviceConnections.valueAt(conni);
                 for (int i = 0;
                         i < clist.size() && (adj > ProcessList.FOREGROUND_APP_ADJ
                                 || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
-                                || procState > ActivityManager.PROCESS_STATE_TOP);
+                                || procState > PROCESS_STATE_TOP);
                         i++) {
                     // XXX should compute this based on the max of
                     // all connected clients.
@@ -1197,7 +1209,7 @@ public final class OomAdjuster {
                             // If the other app is cached for any reason, for purposes here
                             // we are going to consider it empty.  The specific cached state
                             // doesn't propagate except under certain conditions.
-                            clientProcState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
+                            clientProcState = PROCESS_STATE_CACHED_EMPTY;
                         }
                         String adjType = null;
                         if ((cr.flags&Context.BIND_ALLOW_OOM_MANAGEMENT) != 0) {
@@ -1268,6 +1280,7 @@ public final class OomAdjuster {
                                     newAdj = clientAdj;
                                 } else {
                                     if (adj > ProcessList.VISIBLE_APP_ADJ) {
+                                        // TODO: Is this too limiting for apps bound from TOP?
                                         newAdj = Math.max(clientAdj, ProcessList.VISIBLE_APP_ADJ);
                                     } else {
                                         newAdj = adj;
@@ -1296,55 +1309,50 @@ public final class OomAdjuster {
                                     schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
                                 }
                             }
-                            if (clientProcState <= ActivityManager.PROCESS_STATE_TOP) {
-                                if (clientProcState == ActivityManager.PROCESS_STATE_TOP) {
-                                    // Special handling of clients who are in the top state.
-                                    // We *may* want to consider this process to be in the
-                                    // top state as well, but only if there is not another
-                                    // reason for it to be running.  Being on the top is a
-                                    // special state, meaning you are specifically running
-                                    // for the current top app.  If the process is already
-                                    // running in the background for some other reason, it
-                                    // is more important to continue considering it to be
-                                    // in the background state.
-                                    mayBeTop = true;
-                                    mayBeTopType = "service";
-                                    mayBeTopSource = cr.binding.client;
-                                    mayBeTopTarget = s.instanceName;
-                                    clientProcState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
+                            if (clientProcState < PROCESS_STATE_TOP) {
+                                // Special handling for above-top states (persistent
+                                // processes).  These should not bring the current process
+                                // into the top state, since they are not on top.  Instead
+                                // give them the best bound state after that.
+                                if ((cr.flags & Context.BIND_FOREGROUND_SERVICE) != 0) {
+                                    clientProcState =
+                                            PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
+                                } else if (mService.mWakefulness
+                                        == PowerManagerInternal.WAKEFULNESS_AWAKE
+                                        && (cr.flags & Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE)
+                                                != 0) {
+                                    clientProcState =
+                                            PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
                                 } else {
-                                    // Special handling for above-top states (persistent
-                                    // processes).  These should not bring the current process
-                                    // into the top state, since they are not on top.  Instead
-                                    // give them the best state after that.
-                                    if ((cr.flags&Context.BIND_FOREGROUND_SERVICE) != 0) {
-                                        clientProcState =
-                                                ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
-                                    } else if (mService.mWakefulness
-                                            == PowerManagerInternal.WAKEFULNESS_AWAKE &&
-                                            (cr.flags&Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE)
-                                                    != 0) {
-                                        clientProcState =
-                                                ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
-                                    } else {
-                                        clientProcState =
-                                                ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
-                                    }
+                                    clientProcState =
+                                            PROCESS_STATE_IMPORTANT_FOREGROUND;
+                                }
+                            } else if (clientProcState == PROCESS_STATE_TOP) {
+                                if (cr.notHasFlag(Context.BIND_INCLUDE_CAPABILITIES)) {
+                                    // Go at most to BOUND_TOP, unless requested to elevate
+                                    // to client's state.
+                                    clientProcState = PROCESS_STATE_BOUND_TOP;
+                                }
+                            } else if (clientProcState
+                                    <= PROCESS_STATE_FOREGROUND_SERVICE) {
+                                if (cr.notHasFlag(Context.BIND_INCLUDE_CAPABILITIES)) {
+                                    clientProcState = PROCESS_STATE_FOREGROUND_SERVICE;
                                 }
                             }
                         } else if ((cr.flags & Context.BIND_IMPORTANT_BACKGROUND) == 0) {
                             if (clientProcState <
-                                    ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND) {
+                                    PROCESS_STATE_TRANSIENT_BACKGROUND) {
                                 clientProcState =
-                                        ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND;
+                                        PROCESS_STATE_TRANSIENT_BACKGROUND;
                             }
                         } else {
                             if (clientProcState <
-                                    ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND) {
+                                    PROCESS_STATE_IMPORTANT_BACKGROUND) {
                                 clientProcState =
-                                        ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND;
+                                        PROCESS_STATE_IMPORTANT_BACKGROUND;
                             }
                         }
+
                         if (schedGroup < ProcessList.SCHED_GROUP_TOP_APP
                                 && (cr.flags & Context.BIND_SCHEDULE_LIKE_TOP_APP) != 0) {
                             schedGroup = ProcessList.SCHED_GROUP_TOP_APP;
@@ -1353,6 +1361,7 @@ public final class OomAdjuster {
                         if (!trackedProcState) {
                             cr.trackProcState(clientProcState, mAdjSeq, now);
                         }
+
                         if (procState > clientProcState) {
                             procState = clientProcState;
                             app.setCurRawProcState(procState);
@@ -1360,7 +1369,7 @@ public final class OomAdjuster {
                                 adjType = "service";
                             }
                         }
-                        if (procState < ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND
+                        if (procState < PROCESS_STATE_IMPORTANT_BACKGROUND
                                 && (cr.flags & Context.BIND_SHOWING_UI) != 0) {
                             app.setPendingUiClean(true);
                         }
@@ -1415,13 +1424,13 @@ public final class OomAdjuster {
         for (int provi = app.pubProviders.size() - 1;
                 provi >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
                         || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
-                        || procState > ActivityManager.PROCESS_STATE_TOP);
+                        || procState > PROCESS_STATE_TOP);
                 provi--) {
             ContentProviderRecord cpr = app.pubProviders.valueAt(provi);
             for (int i = cpr.connections.size() - 1;
                     i >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
                             || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
-                            || procState > ActivityManager.PROCESS_STATE_TOP);
+                            || procState > PROCESS_STATE_TOP);
                     i--) {
                 ContentProviderConnection conn = cpr.connections.get(i);
                 ProcessRecord client = conn.client;
@@ -1441,7 +1450,7 @@ public final class OomAdjuster {
                 if (clientProcState >= PROCESS_STATE_CACHED_ACTIVITY) {
                     // If the other app is cached for any reason, for purposes here
                     // we are going to consider it empty.
-                    clientProcState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
+                    clientProcState = PROCESS_STATE_CACHED_EMPTY;
                 }
                 String adjType = null;
                 if (adj > clientAdj) {
@@ -1456,34 +1465,18 @@ public final class OomAdjuster {
                     }
                     app.cached &= client.cached;
                 }
-                if (clientProcState <= ActivityManager.PROCESS_STATE_TOP) {
-                    if (clientProcState == ActivityManager.PROCESS_STATE_TOP) {
-                        // Special handling of clients who are in the top state.
-                        // We *may* want to consider this process to be in the
-                        // top state as well, but only if there is not another
-                        // reason for it to be running.  Being on the top is a
-                        // special state, meaning you are specifically running
-                        // for the current top app.  If the process is already
-                        // running in the background for some other reason, it
-                        // is more important to continue considering it to be
-                        // in the background state.
-                        mayBeTop = true;
-                        clientProcState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
-                        mayBeTopType = adjType = "provider-top";
-                        mayBeTopSource = client;
-                        mayBeTopTarget = cpr.name;
+
+                if (clientProcState <= PROCESS_STATE_FOREGROUND_SERVICE) {
+                    if (adjType == null) {
+                        adjType = "provider";
+                    }
+                    if (clientProcState == PROCESS_STATE_TOP) {
+                        clientProcState = PROCESS_STATE_BOUND_TOP;
                     } else {
-                        // Special handling for above-top states (persistent
-                        // processes).  These should not bring the current process
-                        // into the top state, since they are not on top.  Instead
-                        // give them the best state after that.
-                        clientProcState =
-                                ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
-                        if (adjType == null) {
-                            adjType = "provider";
-                        }
+                        clientProcState = PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
                     }
                 }
+
                 conn.trackProcState(clientProcState, mAdjSeq, now);
                 if (procState > clientProcState) {
                     procState = clientProcState;
@@ -1523,8 +1516,8 @@ public final class OomAdjuster {
                                 "Raise adj to external provider: " + app);
                     }
                 }
-                if (procState > ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND) {
-                    procState = ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
+                if (procState > PROCESS_STATE_IMPORTANT_FOREGROUND) {
+                    procState = PROCESS_STATE_IMPORTANT_FOREGROUND;
                     app.setCurRawProcState(procState);
                     if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                         reportOomAdjMessageLocked(TAG_OOM_ADJ,
@@ -1556,53 +1549,7 @@ public final class OomAdjuster {
             }
         }
 
-        if (mayBeTop && procState > ActivityManager.PROCESS_STATE_TOP) {
-            // A client of one of our services or providers is in the top state.  We
-            // *may* want to be in the top state, but not if we are already running in
-            // the background for some other reason.  For the decision here, we are going
-            // to pick out a few specific states that we want to remain in when a client
-            // is top (states that tend to be longer-term) and otherwise allow it to go
-            // to the top state.
-            switch (procState) {
-                case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
-                case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
-                case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
-                    // Something else is keeping it at this level, just leave it.
-                    break;
-                case ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND:
-                case ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND:
-                case ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND:
-                case ActivityManager.PROCESS_STATE_SERVICE:
-                    // These all are longer-term states, so pull them up to the top
-                    // of the background states, but not all the way to the top state.
-                    procState = ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
-                    app.adjType = mayBeTopType;
-                    app.adjSource = mayBeTopSource;
-                    app.adjTarget = mayBeTopTarget;
-                    if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
-                        reportOomAdjMessageLocked(TAG_OOM_ADJ, "May be top raise to " + mayBeTopType
-                                + ": " + app + ", due to " + mayBeTopSource
-                                + " adj=" + adj + " procState="
-                                + ProcessList.makeProcStateString(procState));
-                    }
-                    break;
-                default:
-                    // Otherwise, top is a better choice, so take it.
-                    procState = ActivityManager.PROCESS_STATE_TOP;
-                    app.adjType = mayBeTopType;
-                    app.adjSource = mayBeTopSource;
-                    app.adjTarget = mayBeTopTarget;
-                    if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
-                        reportOomAdjMessageLocked(TAG_OOM_ADJ, "May be top raise to " + mayBeTopType
-                                + ": " + app + ", due to " + mayBeTopSource
-                                + " adj=" + adj + " procState="
-                                + ProcessList.makeProcStateString(procState));
-                    }
-                    break;
-            }
-        }
-
-        if (procState >= ActivityManager.PROCESS_STATE_CACHED_EMPTY) {
+        if (procState >= PROCESS_STATE_CACHED_EMPTY) {
             if (app.hasClientActivities()) {
                 // This is a cached process, but with client activities.  Mark it so.
                 procState = ActivityManager.PROCESS_STATE_CACHED_ACTIVITY_CLIENT;
@@ -1656,8 +1603,8 @@ public final class OomAdjuster {
 
         // Put bound foreground services in a special sched group for additional
         // restrictions on screen off
-        if (procState >= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE &&
-                mService.mWakefulness != PowerManagerInternal.WAKEFULNESS_AWAKE) {
+        if (procState >= PROCESS_STATE_BOUND_FOREGROUND_SERVICE
+                && mService.mWakefulness != PowerManagerInternal.WAKEFULNESS_AWAKE) {
             if (schedGroup > ProcessList.SCHED_GROUP_RESTRICTED) {
                 schedGroup = ProcessList.SCHED_GROUP_RESTRICTED;
             }
@@ -1954,8 +1901,8 @@ public final class OomAdjuster {
                         + " (" + app.getCurProcState() + ")" + ": " + app.adjType;
                 reportOomAdjMessageLocked(TAG_OOM_ADJ, msg);
             }
-            boolean setImportant = app.setProcState < ActivityManager.PROCESS_STATE_SERVICE;
-            boolean curImportant = app.getCurProcState() < ActivityManager.PROCESS_STATE_SERVICE;
+            boolean setImportant = app.setProcState < PROCESS_STATE_SERVICE;
+            boolean curImportant = app.getCurProcState() < PROCESS_STATE_SERVICE;
             if (setImportant && !curImportant) {
                 // This app is no longer something we consider important enough to allow to use
                 // arbitrary amounts of battery power. Note its current CPU time to later know to
@@ -2018,10 +1965,11 @@ public final class OomAdjuster {
         // To avoid some abuse patterns, we are going to be careful about what we consider
         // to be an app interaction.  Being the top activity doesn't count while the display
         // is sleeping, nor do short foreground services.
-        if (app.getCurProcState() <= ActivityManager.PROCESS_STATE_TOP) {
+        if (app.getCurProcState() <= PROCESS_STATE_TOP
+                || app.getCurProcState() == PROCESS_STATE_BOUND_TOP) {
             isInteraction = true;
             app.setFgInteractionTime(0);
-        } else if (app.getCurProcState() <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
+        } else if (app.getCurProcState() <= PROCESS_STATE_FOREGROUND_SERVICE) {
             if (app.getFgInteractionTime() == 0) {
                 app.setFgInteractionTime(nowElapsed);
                 isInteraction = false;
@@ -2031,7 +1979,7 @@ public final class OomAdjuster {
             }
         } else {
             isInteraction =
-                    app.getCurProcState() <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
+                    app.getCurProcState() <= PROCESS_STATE_IMPORTANT_FOREGROUND;
             app.setFgInteractionTime(0);
         }
         if (isInteraction
@@ -2053,8 +2001,8 @@ public final class OomAdjuster {
     }
 
     private void maybeUpdateLastTopTime(ProcessRecord app, long nowUptime) {
-        if (app.setProcState <= ActivityManager.PROCESS_STATE_TOP
-                && app.getCurProcState() > ActivityManager.PROCESS_STATE_TOP) {
+        if (app.setProcState <= PROCESS_STATE_TOP
+                && app.getCurProcState() > PROCESS_STATE_TOP) {
             app.lastTopTime = nowUptime;
         }
     }

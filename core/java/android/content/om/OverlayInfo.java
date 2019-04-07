@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.annotation.UserIdInt;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -44,8 +45,9 @@ public final class OverlayInfo implements Parcelable {
             STATE_DISABLED,
             STATE_ENABLED,
             STATE_ENABLED_STATIC,
-            STATE_TARGET_UPGRADING,
-            STATE_OVERLAY_UPGRADING,
+            // @Deprecated STATE_TARGET_UPGRADING,
+            STATE_TARGET_IS_BEING_REPLACED,
+            STATE_OVERLAY_IS_BEING_REPLACED,
     })
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -93,18 +95,25 @@ public final class OverlayInfo implements Parcelable {
     public static final int STATE_ENABLED = 3;
 
     /**
-     * The target package is currently being upgraded; the state will change
-     * once the package installation has finished.
+     * The target package is currently being upgraded or downgraded; the state
+     * will change once the package installation has finished.
      * @hide
+     *
+     * @deprecated No longer used. Caused invalid transitions from enabled -> upgrading -> enabled,
+     * where an update is propagated when nothing has changed. Can occur during --dont-kill
+     * installs when code and resources are hot swapped and the Activity should not be relaunched.
+     * In all other cases, the process and therefore Activity is killed, so the state loop is
+     * irrelevant.
      */
-    public static final int STATE_TARGET_UPGRADING = 4;
+    @Deprecated
+    public static final int STATE_TARGET_IS_BEING_REPLACED = 4;
 
     /**
-     * The overlay package is currently being upgraded; the state will change
-     * once the package installation has finished.
+     * The overlay package is currently being upgraded or downgraded; the state
+     * will change once the package installation has finished.
      * @hide
      */
-    public static final int STATE_OVERLAY_UPGRADING = 5;
+    public static final int STATE_OVERLAY_IS_BEING_REPLACED = 5;
 
     /**
      * The overlay package is currently enabled because it is marked as
@@ -128,7 +137,6 @@ public final class OverlayInfo implements Parcelable {
      *
      * @hide
      */
-    @SystemApi
     public final String packageName;
 
     /**
@@ -136,7 +144,6 @@ public final class OverlayInfo implements Parcelable {
      *
      * @hide
      */
-    @SystemApi
     public final String targetPackageName;
 
     /**
@@ -144,7 +151,6 @@ public final class OverlayInfo implements Parcelable {
      *
      * @hide
      */
-    @SystemApi
     public final String targetOverlayableName;
 
     /**
@@ -152,7 +158,6 @@ public final class OverlayInfo implements Parcelable {
      *
      * @hide
      */
-    @SystemApi
     public final String category;
 
     /**
@@ -171,7 +176,6 @@ public final class OverlayInfo implements Parcelable {
      * User handle for which this overlay applies
      * @hide
      */
-    @SystemApi
     public final int userId;
 
     /**
@@ -236,6 +240,56 @@ public final class OverlayInfo implements Parcelable {
         ensureValidState();
     }
 
+    /**
+     * Returns package name of the current overlay.
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public String getPackageName() {
+        return packageName;
+    }
+
+    /**
+     * Returns the target package name of the current overlay.
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public String getTargetPackageName() {
+        return targetPackageName;
+    }
+
+    /**
+     * Returns the category of the current overlay.
+     * @hide\
+     */
+    @SystemApi
+    @Nullable
+    public String getCategory() {
+        return category;
+    }
+
+    /**
+     * Returns user handle for which this overlay applies to.
+     * @hide
+     */
+    @SystemApi
+    @UserIdInt
+    public int getUserId() {
+        return userId;
+    }
+
+    /**
+     * Returns name of the target overlayable declaration.
+     * @hide
+     */
+    @SystemApi
+    @Nullable
+    public String getTargetOverlayableName() {
+        return targetOverlayableName;
+    }
+
     private void ensureValidState() {
         if (packageName == null) {
             throw new IllegalArgumentException("packageName must not be null");
@@ -253,8 +307,8 @@ public final class OverlayInfo implements Parcelable {
             case STATE_DISABLED:
             case STATE_ENABLED:
             case STATE_ENABLED_STATIC:
-            case STATE_TARGET_UPGRADING:
-            case STATE_OVERLAY_UPGRADING:
+            case STATE_TARGET_IS_BEING_REPLACED:
+            case STATE_OVERLAY_IS_BEING_REPLACED:
                 break;
             default:
                 throw new IllegalArgumentException("State " + state + " is not a valid state");
@@ -333,10 +387,10 @@ public final class OverlayInfo implements Parcelable {
                 return "STATE_ENABLED";
             case STATE_ENABLED_STATIC:
                 return "STATE_ENABLED_STATIC";
-            case STATE_TARGET_UPGRADING:
-                return "STATE_TARGET_UPGRADING";
-            case STATE_OVERLAY_UPGRADING:
-                return "STATE_OVERLAY_UPGRADING";
+            case STATE_TARGET_IS_BEING_REPLACED:
+                return "STATE_TARGET_IS_BEING_REPLACED";
+            case STATE_OVERLAY_IS_BEING_REPLACED:
+                return "STATE_OVERLAY_IS_BEING_REPLACED";
             default:
                 return "<unknown state>";
         }

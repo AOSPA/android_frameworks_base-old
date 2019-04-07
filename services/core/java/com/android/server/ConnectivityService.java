@@ -65,6 +65,7 @@ import android.net.ConnectionInfo;
 import android.net.ConnectivityManager;
 import android.net.ICaptivePortal;
 import android.net.IConnectivityManager;
+import android.net.IDnsResolver;
 import android.net.IIpConnectivityMetrics;
 import android.net.INetd;
 import android.net.INetdEventCallback;
@@ -299,6 +300,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private INetworkManagementService mNMS;
     @VisibleForTesting
+    protected IDnsResolver mDnsResolver;
+    @VisibleForTesting
     protected INetd mNetd;
     private INetworkStatsService mStatsService;
     private INetworkPolicyManager mPolicyManager;
@@ -530,6 +533,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private static String eventName(int what) {
         return sMagicDecoderRing.get(what, Integer.toString(what));
+    }
+
+    private static IDnsResolver getDnsResolver() {
+        return IDnsResolver.Stub
+                .asInterface(ServiceManager.getService("dnsresolver"));
     }
 
     /** Handler thread used for both of the handlers below. */
@@ -818,13 +826,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     public ConnectivityService(Context context, INetworkManagementService netManager,
             INetworkStatsService statsService, INetworkPolicyManager policyManager) {
-        this(context, netManager, statsService, policyManager, new IpConnectivityLog());
+        this(context, netManager, statsService, policyManager,
+            getDnsResolver(), new IpConnectivityLog());
     }
 
     @VisibleForTesting
     protected ConnectivityService(Context context, INetworkManagementService netManager,
             INetworkStatsService statsService, INetworkPolicyManager policyManager,
-            IpConnectivityLog logger) {
+            IDnsResolver dnsresolver, IpConnectivityLog logger) {
         if (DBG) log("ConnectivityService starting up");
 
         mSystemProperties = getSystemProperties();
@@ -862,6 +871,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mPolicyManagerInternal = checkNotNull(
                 LocalServices.getService(NetworkPolicyManagerInternal.class),
                 "missing NetworkPolicyManagerInternal");
+        mDnsResolver = checkNotNull(dnsresolver, "missing IDnsResolver");
         mProxyTracker = makeProxyTracker();
 
         mNetd = NetdService.getInstance();
@@ -951,7 +961,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         mTethering = makeTethering();
 
-        mPermissionMonitor = new PermissionMonitor(mContext, mNMS);
+        mPermissionMonitor = new PermissionMonitor(mContext, mNMS, mNetd);
 
         // Set up the listener for user state for creating user VPNs.
         // Should run on mHandler to avoid any races.
@@ -1016,7 +1026,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         mMultipathPolicyTracker = new MultipathPolicyTracker(mContext, mHandler);
 
-        mDnsManager = new DnsManager(mContext, mNMS, mSystemProperties);
+        mDnsManager = new DnsManager(mContext, mDnsResolver, mSystemProperties);
         registerPrivateDnsSettingsCallbacks();
     }
 
@@ -1892,6 +1902,15 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return false;
     }
 
+    private boolean checkAnyPermissionOf(int pid, int uid, String... permissions) {
+        for (String permission : permissions) {
+            if (mContext.checkPermission(permission, pid, uid) == PERMISSION_GRANTED) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void enforceAnyPermissionOf(String... permissions) {
         if (!checkAnyPermissionOf(permissions)) {
             throw new SecurityException("Requires one of the following permissions: "
@@ -1963,6 +1982,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private boolean checkNetworkStackPermission() {
         return checkAnyPermissionOf(
                 android.Manifest.permission.NETWORK_STACK,
+                NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
+    }
+
+    private boolean checkNetworkSignalStrengthWakeupPermission(int pid, int uid) {
+        return checkAnyPermissionOf(pid, uid,
+                android.Manifest.permission.NETWORK_SIGNAL_STRENGTH_WAKEUP,
                 NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
     }
 
@@ -3044,9 +3069,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // NetworkFactories, so network traffic isn't interrupted for an unnecessarily
             // long time.
             try {
-                mNMS.removeNetwork(nai.network.netId);
-            } catch (Exception e) {
-                loge("Exception removing network: " + e);
+                mNetd.networkDestroy(nai.network.netId);
+            } catch (RemoteException | ServiceSpecificException e) {
+                loge("Exception destroying network: " + e);
             }
             mDnsManager.removeNetwork(nai.network);
         }
@@ -3755,16 +3780,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 }
                 case EVENT_SYSTEM_READY: {
-                    for (NetworkAgentInfo nai : mNetworkAgentInfos.values()) {
-                        // Might have been called already in handleRegisterNetworkAgent since
-                        // mSystemReady is set before sending EVENT_SYSTEM_READY, but calling
-                        // this several times is fine.
-                        try {
-                            nai.networkMonitor().notifySystemReady();
-                        } catch (RemoteException e) {
-                            e.rethrowFromSystemServer();
-                        }
-                    }
                     mMultipathPolicyTracker.start();
                     NetPluginDelegate.registerHandler(mHandler);
                     break;
@@ -4983,12 +4998,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    // This checks that the passed capabilities either do not request a specific SSID, or the
-    // calling app has permission to do so.
+    // This checks that the passed capabilities either do not request a specific SSID/SignalStrength
+    // , or the calling app has permission to do so.
     private void ensureSufficientPermissionsForRequest(NetworkCapabilities nc,
             int callerPid, int callerUid) {
         if (null != nc.getSSID() && !checkSettingsPermission(callerPid, callerUid)) {
             throw new SecurityException("Insufficient permissions to request a specific SSID");
+        }
+
+        if (nc.hasSignalStrength()
+                && !checkNetworkSignalStrengthWakeupPermission(callerPid, callerUid)) {
+            throw new SecurityException(
+                    "Insufficient permissions to request a specific signal strength");
         }
     }
 
@@ -5403,10 +5424,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final NetworkCapabilities nc = new NetworkCapabilities(networkCapabilities);
         final NetworkAgentInfo nai = new NetworkAgentInfo(messenger, new AsyncChannel(),
                 new Network(reserveNetId()), new NetworkInfo(networkInfo), lp, nc, currentScore,
-                mContext, mTrackerHandler, new NetworkMisc(networkMisc), this, mNetd, mNMS,
-                factorySerialNumber);
+                mContext, mTrackerHandler, new NetworkMisc(networkMisc), this, mNetd, mDnsResolver,
+                mNMS, factorySerialNumber);
         // Make sure the network capabilities reflect what the agent info says.
-        nai.networkCapabilities = mixInCapabilities(nai, nc);
+        nai.setNetworkCapabilities(mixInCapabilities(nai, nc));
         final String extraInfo = networkInfo.getExtraInfo();
         final String name = TextUtils.isEmpty(extraInfo)
                 ? nai.networkCapabilities.getSSID() : extraInfo;
@@ -5436,15 +5457,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mNetworkAgentInfos.put(nai.messenger, nai);
         synchronized (mNetworkForNetId) {
             mNetworkForNetId.put(nai.network.netId, nai);
-        }
-        synchronized (this) {
-            if (mSystemReady) {
-                try {
-                    networkMonitor.notifySystemReady();
-                } catch (RemoteException e) {
-                    e.rethrowFromSystemServer();
-                }
-            }
         }
 
         try {
@@ -5499,12 +5511,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // Start or stop DNS64 detection and 464xlat according to network state.
             networkAgent.clatd.update();
             notifyIfacesChangedForNetworkStats();
+            try {
+                networkAgent.networkMonitor().notifyLinkPropertiesChanged(newLp);
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
             if (networkAgent.everConnected) {
-                try {
-                    networkAgent.networkMonitor().notifyLinkPropertiesChanged();
-                } catch (RemoteException e) {
-                    e.rethrowFromSystemServer();
-                }
                 notifyNetworkCallbacks(networkAgent, ConnectivityManager.CALLBACK_IP_CHANGED);
             }
         }
@@ -5732,7 +5744,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final NetworkCapabilities prevNc;
         synchronized (nai) {
             prevNc = nai.networkCapabilities;
-            nai.networkCapabilities = newNc;
+            nai.setNetworkCapabilities(newNc);
         }
 
         updateUids(nai, prevNc, newNc);
@@ -5747,11 +5759,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // If the requestable capabilities have changed or the score changed, we can't have been
             // called by rematchNetworkAndRequests, so it's safe to start a rematch.
             rematchAllNetworksAndRequests(nai, oldScore);
-            try {
-                nai.networkMonitor().notifyNetworkCapabilitiesChanged();
-            } catch (RemoteException e) {
-                e.rethrowFromSystemServer();
-            }
             notifyNetworkCallbacks(nai, ConnectivityManager.CALLBACK_CAP_CHANGED);
         }
 
@@ -6010,11 +6017,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         if (capabilitiesChanged) {
-            try {
-                nai.networkMonitor().notifyNetworkCapabilitiesChanged();
-            } catch (RemoteException e) {
-                e.rethrowFromSystemServer();
-            }
             notifyNetworkCallbacks(nai, ConnectivityManager.CALLBACK_CAP_CHANGED);
         }
 
@@ -6445,6 +6447,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 Slog.wtf(TAG, networkAgent.name() + " connected with null LinkProperties");
             }
 
+            // NetworkCapabilities need to be set before sending the private DNS config to
+            // NetworkMonitor, otherwise NetworkMonitor cannot determine if validation is required.
+            synchronized (networkAgent) {
+                networkAgent.setNetworkCapabilities(networkAgent.networkCapabilities);
+            }
             handlePerNetworkPrivateDnsConfig(networkAgent, mDnsManager.getPrivateDnsConfig());
             updateLinkProperties(networkAgent, new LinkProperties(networkAgent.linkProperties),
                     null);
@@ -6457,7 +6464,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 if (networkAgent.networkMisc.acceptPartialConnectivity) {
                     networkAgent.networkMonitor().setAcceptPartialConnectivity();
                 }
-                networkAgent.networkMonitor().notifyNetworkConnected();
+                networkAgent.networkMonitor().notifyNetworkConnected(
+                        networkAgent.linkProperties, networkAgent.networkCapabilities);
             } catch (RemoteException e) {
                 e.rethrowFromSystemServer();
             }
@@ -6757,7 +6765,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @Override
     public String getCaptivePortalServerUrl() {
         enforceConnectivityInternalPermission();
-        return NetworkMonitorUtils.getCaptivePortalServerHttpUrl(mContext);
+        final String defaultUrl = mContext.getResources().getString(
+                R.string.config_networkDefaultCaptivePortalServerUrl);
+        return NetworkMonitorUtils.getCaptivePortalServerHttpUrl(mContext, defaultUrl);
     }
 
     @Override
