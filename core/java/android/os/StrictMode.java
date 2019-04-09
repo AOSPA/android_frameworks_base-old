@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.IActivityManager;
@@ -421,6 +422,7 @@ public final class StrictMode {
         /** The default, lax policy which doesn't catch anything. */
         public static final ThreadPolicy LAX = new ThreadPolicy(0, null, null);
 
+        @UnsupportedAppUsage
         final @ThreadPolicyMask int mask;
         final OnThreadViolationListener mListener;
         final Executor mCallbackExecutor;
@@ -482,7 +484,7 @@ public final class StrictMode {
              * <p>As of the Gingerbread release this includes network and disk operations but will
              * likely expand in future releases.
              */
-            public Builder detectAll() {
+            public @NonNull Builder detectAll() {
                 detectDiskReads();
                 detectDiskWrites();
                 detectNetwork();
@@ -501,52 +503,52 @@ public final class StrictMode {
             }
 
             /** Disable the detection of everything. */
-            public Builder permitAll() {
+            public @NonNull Builder permitAll() {
                 return disable(DETECT_THREAD_ALL);
             }
 
             /** Enable detection of network operations. */
-            public Builder detectNetwork() {
+            public @NonNull Builder detectNetwork() {
                 return enable(DETECT_THREAD_NETWORK);
             }
 
             /** Disable detection of network operations. */
-            public Builder permitNetwork() {
+            public @NonNull Builder permitNetwork() {
                 return disable(DETECT_THREAD_NETWORK);
             }
 
             /** Enable detection of disk reads. */
-            public Builder detectDiskReads() {
+            public @NonNull Builder detectDiskReads() {
                 return enable(DETECT_THREAD_DISK_READ);
             }
 
             /** Disable detection of disk reads. */
-            public Builder permitDiskReads() {
+            public @NonNull Builder permitDiskReads() {
                 return disable(DETECT_THREAD_DISK_READ);
             }
 
             /** Enable detection of slow calls. */
-            public Builder detectCustomSlowCalls() {
+            public @NonNull Builder detectCustomSlowCalls() {
                 return enable(DETECT_THREAD_CUSTOM);
             }
 
             /** Disable detection of slow calls. */
-            public Builder permitCustomSlowCalls() {
+            public @NonNull Builder permitCustomSlowCalls() {
                 return disable(DETECT_THREAD_CUSTOM);
             }
 
             /** Disable detection of mismatches between defined resource types and getter calls. */
-            public Builder permitResourceMismatches() {
+            public @NonNull Builder permitResourceMismatches() {
                 return disable(DETECT_THREAD_RESOURCE_MISMATCH);
             }
 
             /** Detect unbuffered input/output operations. */
-            public Builder detectUnbufferedIo() {
+            public @NonNull Builder detectUnbufferedIo() {
                 return enable(DETECT_THREAD_UNBUFFERED_IO);
             }
 
             /** Disable detection of unbuffered input/output operations. */
-            public Builder permitUnbufferedIo() {
+            public @NonNull Builder permitUnbufferedIo() {
                 return disable(DETECT_THREAD_UNBUFFERED_IO);
             }
 
@@ -562,17 +564,17 @@ public final class StrictMode {
              * call will return a value without crashing; however, the developer should format the
              * resource as an integer to avoid unnecessary type conversion.
              */
-            public Builder detectResourceMismatches() {
+            public @NonNull Builder detectResourceMismatches() {
                 return enable(DETECT_THREAD_RESOURCE_MISMATCH);
             }
 
             /** Enable detection of disk writes. */
-            public Builder detectDiskWrites() {
+            public @NonNull Builder detectDiskWrites() {
                 return enable(DETECT_THREAD_DISK_WRITE);
             }
 
             /** Disable detection of disk writes. */
-            public Builder permitDiskWrites() {
+            public @NonNull Builder permitDiskWrites() {
                 return disable(DETECT_THREAD_DISK_WRITE);
             }
 
@@ -582,7 +584,7 @@ public final class StrictMode {
              * @hide
              */
             @TestApi
-            public Builder detectExplicitGc() {
+            public @NonNull Builder detectExplicitGc() {
                 // TODO(b/3400644): Un-hide this for next API update
                 // TODO(b/3400644): Un-hide ExplicitGcViolation for next API update
                 // TODO(b/3400644): Make DETECT_EXPLICIT_GC a @TestApi for next API update
@@ -595,7 +597,7 @@ public final class StrictMode {
              *
              * @hide
              */
-            public Builder permitExplicitGc() {
+            public @NonNull Builder permitExplicitGc() {
                 // TODO(b/3400644): Un-hide this for next API update
                 return disable(DETECT_THREAD_EXPLICIT_GC);
             }
@@ -604,7 +606,7 @@ public final class StrictMode {
              * Show an annoying dialog to the developer on detected violations, rate-limited to be
              * only a little annoying.
              */
-            public Builder penaltyDialog() {
+            public @NonNull Builder penaltyDialog() {
                 return enable(PENALTY_DIALOG);
             }
 
@@ -616,7 +618,7 @@ public final class StrictMode {
              * <p>Unlike {@link #penaltyDeathOnNetwork}, this applies to disk reads, disk writes,
              * and network usage if their corresponding detect flags are set.
              */
-            public Builder penaltyDeath() {
+            public @NonNull Builder penaltyDeath() {
                 return enable(PENALTY_DEATH);
             }
 
@@ -627,17 +629,17 @@ public final class StrictMode {
              *
              * <p>In the Honeycomb or later SDKs, this is on by default.
              */
-            public Builder penaltyDeathOnNetwork() {
+            public @NonNull Builder penaltyDeathOnNetwork() {
                 return enable(PENALTY_DEATH_ON_NETWORK);
             }
 
             /** Flash the screen during a violation. */
-            public Builder penaltyFlashScreen() {
+            public @NonNull Builder penaltyFlashScreen() {
                 return enable(PENALTY_FLASH);
             }
 
             /** Log detected violations to the system log. */
-            public Builder penaltyLog() {
+            public @NonNull Builder penaltyLog() {
                 return enable(PENALTY_LOG);
             }
 
@@ -646,7 +648,7 @@ public final class StrictMode {
              * android.os.DropBoxManager DropBox} on policy violation. Intended mostly for platform
              * integrators doing beta user field data collection.
              */
-            public Builder penaltyDropBox() {
+            public @NonNull Builder penaltyDropBox() {
                 return enable(PENALTY_DROPBOX);
             }
 
@@ -654,7 +656,7 @@ public final class StrictMode {
              * Call #{@link OnThreadViolationListener#onThreadViolation(Violation)} on specified
              * executor every violation.
              */
-            public Builder penaltyListener(
+            public @NonNull Builder penaltyListener(
                     @NonNull Executor executor, @NonNull OnThreadViolationListener listener) {
                 if (executor == null) {
                     throw new NullPointerException("executor must not be null");
@@ -665,7 +667,7 @@ public final class StrictMode {
             }
 
             /** @removed */
-            public Builder penaltyListener(
+            public @NonNull Builder penaltyListener(
                     @NonNull OnThreadViolationListener listener, @NonNull Executor executor) {
                 return penaltyListener(executor, listener);
             }
@@ -713,6 +715,7 @@ public final class StrictMode {
         /** The default, lax policy which doesn't catch anything. */
         public static final VmPolicy LAX = new VmPolicy(0, EMPTY_CLASS_LIMIT_MAP, null, null);
 
+        @UnsupportedAppUsage
         final @VmPolicyMask int mask;
         final OnVmViolationListener mListener;
         final Executor mCallbackExecutor;
@@ -758,6 +761,7 @@ public final class StrictMode {
          * </pre>
          */
         public static final class Builder {
+            @UnsupportedAppUsage
             private @VmPolicyMask int mMask;
             private OnVmViolationListener mListener;
             private Executor mExecutor;
@@ -782,7 +786,7 @@ public final class StrictMode {
              * Set an upper bound on how many instances of a class can be in memory at once. Helps
              * to prevent object leaks.
              */
-            public Builder setClassInstanceLimit(Class klass, int instanceLimit) {
+            public @NonNull Builder setClassInstanceLimit(Class klass, int instanceLimit) {
                 if (klass == null) {
                     throw new NullPointerException("klass == null");
                 }
@@ -803,12 +807,12 @@ public final class StrictMode {
             }
 
             /** Detect leaks of {@link android.app.Activity} subclasses. */
-            public Builder detectActivityLeaks() {
+            public @NonNull Builder detectActivityLeaks() {
                 return enable(DETECT_VM_ACTIVITY_LEAKS);
             }
 
             /** @hide */
-            public Builder permitActivityLeaks() {
+            public @NonNull Builder permitActivityLeaks() {
                 return disable(DETECT_VM_ACTIVITY_LEAKS);
             }
 
@@ -819,7 +823,7 @@ public final class StrictMode {
              * enabled may not be detected. To ensure that all such API accesses are detected,
              * you should apply this policy as early as possible after process creation.
              */
-            public Builder detectNonSdkApiUsage() {
+            public @NonNull Builder detectNonSdkApiUsage() {
                 return enable(DETECT_VM_NON_SDK_API_USAGE);
             }
 
@@ -829,7 +833,7 @@ public final class StrictMode {
              * continue to restrict or warn on access to methods that are not part of the
              * public SDK.
              */
-            public Builder permitNonSdkApiUsage() {
+            public @NonNull Builder permitNonSdkApiUsage() {
                 return disable(DETECT_VM_NON_SDK_API_USAGE);
             }
 
@@ -839,7 +843,7 @@ public final class StrictMode {
              * <p>In the Honeycomb release this includes leaks of SQLite cursors, Activities, and
              * other closable objects but will likely expand in future releases.
              */
-            public Builder detectAll() {
+            public @NonNull Builder detectAll() {
                 detectLeakedSqlLiteObjects();
 
                 final int targetSdk = VMRuntime.getRuntime().getTargetSdkVersion();
@@ -881,7 +885,7 @@ public final class StrictMode {
              * <p>You always want to explicitly close your SQLite cursors to avoid unnecessary
              * database contention and temporary memory leaks.
              */
-            public Builder detectLeakedSqlLiteObjects() {
+            public @NonNull Builder detectLeakedSqlLiteObjects() {
                 return enable(DETECT_VM_CURSOR_LEAKS);
             }
 
@@ -892,7 +896,7 @@ public final class StrictMode {
              * <p>You always want to explicitly close such objects to avoid unnecessary resources
              * leaks.
              */
-            public Builder detectLeakedClosableObjects() {
+            public @NonNull Builder detectLeakedClosableObjects() {
                 return enable(DETECT_VM_CLOSABLE_LEAKS);
             }
 
@@ -900,7 +904,7 @@ public final class StrictMode {
              * Detect when a {@link BroadcastReceiver} or {@link ServiceConnection} is leaked during
              * {@link Context} teardown.
              */
-            public Builder detectLeakedRegistrationObjects() {
+            public @NonNull Builder detectLeakedRegistrationObjects() {
                 return enable(DETECT_VM_REGISTRATION_LEAKS);
             }
 
@@ -919,7 +923,7 @@ public final class StrictMode {
              * @see android.support.v4.content.FileProvider
              * @see Intent#FLAG_GRANT_READ_URI_PERMISSION
              */
-            public Builder detectFileUriExposure() {
+            public @NonNull Builder detectFileUriExposure() {
                 return enable(DETECT_VM_FILE_URI_EXPOSURE);
             }
 
@@ -938,7 +942,7 @@ public final class StrictMode {
              * <p>This inspects both IPv4/IPv6 and TCP/UDP network traffic, but it may be subject to
              * false positives, such as when STARTTLS protocols or HTTP proxies are used.
              */
-            public Builder detectCleartextNetwork() {
+            public @NonNull Builder detectCleartextNetwork() {
                 return enable(DETECT_VM_CLEARTEXT_NETWORK);
             }
 
@@ -954,7 +958,7 @@ public final class StrictMode {
              * @see Intent#FLAG_GRANT_READ_URI_PERMISSION
              * @see Intent#FLAG_GRANT_WRITE_URI_PERMISSION
              */
-            public Builder detectContentUriWithoutPermission() {
+            public @NonNull Builder detectContentUriWithoutPermission() {
                 return enable(DETECT_VM_CONTENT_URI_WITHOUT_PERMISSION);
             }
 
@@ -969,12 +973,12 @@ public final class StrictMode {
              * @see TrafficStats#tagSocket(java.net.Socket)
              * @see TrafficStats#tagDatagramSocket(java.net.DatagramSocket)
              */
-            public Builder detectUntaggedSockets() {
+            public @NonNull Builder detectUntaggedSockets() {
                 return enable(DETECT_VM_UNTAGGED_SOCKET);
             }
 
             /** @hide */
-            public Builder permitUntaggedSockets() {
+            public @NonNull Builder permitUntaggedSockets() {
                 return disable(DETECT_VM_UNTAGGED_SOCKET);
             }
 
@@ -992,12 +996,12 @@ public final class StrictMode {
              * <li>{@link PackageManager#MATCH_DIRECT_BOOT_AUTO}
              * </ul>
              */
-            public Builder detectImplicitDirectBoot() {
+            public @NonNull Builder detectImplicitDirectBoot() {
                 return enable(DETECT_VM_IMPLICIT_DIRECT_BOOT);
             }
 
             /** @hide */
-            public Builder permitImplicitDirectBoot() {
+            public @NonNull Builder permitImplicitDirectBoot() {
                 return disable(DETECT_VM_IMPLICIT_DIRECT_BOOT);
             }
 
@@ -1014,12 +1018,12 @@ public final class StrictMode {
              * @see Context#createCredentialProtectedStorageContext()
              * @see Context#createDeviceProtectedStorageContext()
              */
-            public Builder detectCredentialProtectedWhileLocked() {
+            public @NonNull Builder detectCredentialProtectedWhileLocked() {
                 return enable(DETECT_VM_CREDENTIAL_PROTECTED_WHILE_LOCKED);
             }
 
             /** @hide */
-            public Builder permitCredentialProtectedWhileLocked() {
+            public @NonNull Builder permitCredentialProtectedWhileLocked() {
                 return disable(DETECT_VM_CREDENTIAL_PROTECTED_WHILE_LOCKED);
             }
 
@@ -1028,7 +1032,7 @@ public final class StrictMode {
              * penalties so you'll still get your logging or other violations before the process
              * dies.
              */
-            public Builder penaltyDeath() {
+            public @NonNull Builder penaltyDeath() {
                 return enable(PENALTY_DEATH);
             }
 
@@ -1037,7 +1041,7 @@ public final class StrictMode {
              *
              * @see #detectCleartextNetwork()
              */
-            public Builder penaltyDeathOnCleartextNetwork() {
+            public @NonNull Builder penaltyDeathOnCleartextNetwork() {
                 return enable(PENALTY_DEATH_ON_CLEARTEXT_NETWORK);
             }
 
@@ -1047,12 +1051,12 @@ public final class StrictMode {
              *
              * @see #detectFileUriExposure()
              */
-            public Builder penaltyDeathOnFileUriExposure() {
+            public @NonNull Builder penaltyDeathOnFileUriExposure() {
                 return enable(PENALTY_DEATH_ON_FILE_URI_EXPOSURE);
             }
 
             /** Log detected violations to the system log. */
-            public Builder penaltyLog() {
+            public @NonNull Builder penaltyLog() {
                 return enable(PENALTY_LOG);
             }
 
@@ -1061,14 +1065,14 @@ public final class StrictMode {
              * android.os.DropBoxManager DropBox} on policy violation. Intended mostly for platform
              * integrators doing beta user field data collection.
              */
-            public Builder penaltyDropBox() {
+            public @NonNull Builder penaltyDropBox() {
                 return enable(PENALTY_DROPBOX);
             }
 
             /**
              * Call #{@link OnVmViolationListener#onVmViolation(Violation)} on every violation.
              */
-            public Builder penaltyListener(
+            public @NonNull Builder penaltyListener(
                     @NonNull Executor executor, @NonNull OnVmViolationListener listener) {
                 if (executor == null) {
                     throw new NullPointerException("executor must not be null");
@@ -1079,7 +1083,7 @@ public final class StrictMode {
             }
 
             /** @removed */
-            public Builder penaltyListener(
+            public @NonNull Builder penaltyListener(
                     @NonNull OnVmViolationListener listener, @NonNull Executor executor) {
                 return penaltyListener(executor, listener);
             }
@@ -1208,6 +1212,7 @@ public final class StrictMode {
      * @return the bitmask of all the DETECT_* and PENALTY_* bits currently enabled
      * @hide
      */
+    @UnsupportedAppUsage
     public static @ThreadPolicyMask int getThreadPolicyMask() {
         final BlockGuard.Policy policy = BlockGuard.getThreadPolicy();
         if (policy instanceof AndroidBlockGuardPolicy) {
@@ -1412,6 +1417,7 @@ public final class StrictMode {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static void enableDeathOnFileUriExposure() {
         sVmPolicy =
                 new VmPolicy(
@@ -1429,6 +1435,7 @@ public final class StrictMode {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static void disableDeathOnFileUriExposure() {
         sVmPolicy =
                 new VmPolicy(
@@ -1440,6 +1447,7 @@ public final class StrictMode {
                         sVmPolicy.mCallbackExecutor);
     }
 
+    @UnsupportedAppUsage
     private static final ThreadLocal<ArrayList<ViolationInfo>> violationsBeingTimed =
             new ThreadLocal<ArrayList<ViolationInfo>>() {
                 @Override
@@ -2051,6 +2059,7 @@ public final class StrictMode {
     }
 
     /** @hide */
+    @UnsupportedAppUsage
     public static void onWebViewMethodCalledOnWrongThread(Throwable originStack) {
         onVmPolicyViolation(new WebViewMethodCalledOnWrongThreadViolation(originStack));
     }
@@ -2155,6 +2164,7 @@ public final class StrictMode {
     }
 
     // Map from VM violation fingerprint to uptime millis.
+    @UnsupportedAppUsage
     private static final HashMap<Integer, Long> sLastVmViolationTime = new HashMap<>();
 
     /** @hide */
@@ -2280,6 +2290,7 @@ public final class StrictMode {
      * Binder for its current (native) thread-local policy value and synchronize it to libcore's
      * (Java) thread-local policy value.
      */
+    @UnsupportedAppUsage
     private static void onBinderStrictModePolicyChange(@ThreadPolicyMask int newPolicy) {
         setBlockGuardPolicy(newPolicy);
     }
@@ -2316,6 +2327,7 @@ public final class StrictMode {
          *
          * @hide
          */
+        @UnsupportedAppUsage
         public void finish() {
             ThreadSpanState state = mContainerState;
             synchronized (state) {
@@ -2387,6 +2399,7 @@ public final class StrictMode {
                 }
             };
 
+    @UnsupportedAppUsage
     private static Singleton<IWindowManager> sWindowManager =
             new Singleton<IWindowManager>() {
                 protected IWindowManager create() {
@@ -2407,6 +2420,7 @@ public final class StrictMode {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static Span enterCriticalSpan(String name) {
         if (Build.IS_USER) {
             return NO_OP_SPAN;
@@ -2516,6 +2530,7 @@ public final class StrictMode {
     }
 
     /** @hide */
+    @UnsupportedAppUsage
     public static void incrementExpectedActivityCount(Class klass) {
         if (klass == null) {
             return;
@@ -2853,7 +2868,7 @@ public final class StrictMode {
             return 0;
         }
 
-        public static final Parcelable.Creator<ViolationInfo> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<ViolationInfo> CREATOR =
                 new Parcelable.Creator<ViolationInfo>() {
                     @Override
                     public ViolationInfo createFromParcel(Parcel in) {

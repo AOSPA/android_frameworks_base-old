@@ -18,13 +18,16 @@ package android.service.attention;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.app.Service;
+import android.attention.AttentionManagerInternal;
 import android.content.Intent;
 import android.os.IBinder;
 import android.os.RemoteException;
 
 import com.android.internal.util.Preconditions;
+import com.android.server.LocalServices;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -64,14 +67,20 @@ public abstract class AttentionService extends Service {
     /** Attention is present. */
     public static final int ATTENTION_SUCCESS_PRESENT = 1;
 
+    /** Unknown reasons for failing to determine the attention. */
+    public static final int ATTENTION_FAILURE_UNKNOWN = 2;
+
+    /** Request has been cancelled. */
+    public static final int ATTENTION_FAILURE_CANCELLED = 3;
+
     /** Preempted by other client. */
-    public static final int ATTENTION_FAILURE_PREEMPTED = 2;
+    public static final int ATTENTION_FAILURE_PREEMPTED = 4;
 
     /** Request timed out. */
-    public static final int ATTENTION_FAILURE_TIMED_OUT = 3;
+    public static final int ATTENTION_FAILURE_TIMED_OUT = 5;
 
-    /** Unknown reasons for failing to determine the attention. */
-    public static final int ATTENTION_FAILURE_UNKNOWN = 4;
+    /** Camera permission is not granted. */
+    public static final int ATTENTION_FAILURE_CAMERA_PERMISSION_ABSENT = 6;
 
     /**
      * Result codes for when attention check was successful.
@@ -89,8 +98,9 @@ public abstract class AttentionService extends Service {
      *
      * @hide
      */
-    @IntDef(prefix = {"ATTENTION_FAILURE_"}, value = {ATTENTION_FAILURE_PREEMPTED,
-            ATTENTION_FAILURE_TIMED_OUT, ATTENTION_FAILURE_UNKNOWN})
+    @IntDef(prefix = {"ATTENTION_FAILURE_"}, value = {ATTENTION_FAILURE_UNKNOWN,
+            ATTENTION_FAILURE_CANCELLED, ATTENTION_FAILURE_PREEMPTED, ATTENTION_FAILURE_TIMED_OUT,
+            ATTENTION_FAILURE_CAMERA_PERMISSION_ABSENT})
     @Retention(RetentionPolicy.SOURCE)
     public @interface AttentionFailureCodes {
     }
@@ -111,12 +121,26 @@ public abstract class AttentionService extends Service {
         }
     };
 
+    @Nullable
     @Override
-    public final IBinder onBind(Intent intent) {
+    public final IBinder onBind(@NonNull Intent intent) {
         if (SERVICE_INTERFACE.equals(intent.getAction())) {
             return mBinder;
         }
         return null;
+    }
+
+    /**
+     * Disables the dependants.
+     *
+     * Example: called if the service does not have sufficient permissions to perform the task.
+     */
+    public final void disableSelf() {
+        AttentionManagerInternal attentionManager = LocalServices.getService(
+                AttentionManagerInternal.class);
+        if (attentionManager != null) {
+            attentionManager.disableSelf();
+        }
     }
 
     /**
@@ -129,7 +153,6 @@ public abstract class AttentionService extends Service {
 
     /** Cancels the attention check for a given request code. */
     public abstract void onCancelAttentionCheck(int requestCode);
-
 
     /** Callbacks for AttentionService results. */
     public static final class AttentionCallback {

@@ -27,6 +27,7 @@
 #include "../logd/LogEvent.h"
 #include "../stats_log_util.h"
 #include "../statscompanion_util.h"
+#include "GpuStatsPuller.h"
 #include "PowerStatsPuller.h"
 #include "ResourceHealthManagerPuller.h"
 #include "StatsCallbackPuller.h"
@@ -147,10 +148,14 @@ std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         {android::util::NATIVE_PROCESS_MEMORY_STATE,
          {.additiveFields = {3, 4, 5, 6},
           .puller = new StatsCompanionServicePuller(android::util::NATIVE_PROCESS_MEMORY_STATE)}},
+        // process_memory_high_water_mark
         {android::util::PROCESS_MEMORY_HIGH_WATER_MARK,
          {.additiveFields = {3},
           .puller =
                   new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_HIGH_WATER_MARK)}},
+        // system_ion_heap_size
+        {android::util::SYSTEM_ION_HEAP_SIZE,
+         {.puller = new StatsCompanionServicePuller(android::util::SYSTEM_ION_HEAP_SIZE)}},
         // temperature
         {android::util::TEMPERATURE,
          {.puller = new StatsCompanionServicePuller(android::util::TEMPERATURE)}},
@@ -237,9 +242,15 @@ std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // TimeZoneDataInfo.
         {android::util::TIME_ZONE_DATA_INFO,
          {.puller = new StatsCompanionServicePuller(android::util::TIME_ZONE_DATA_INFO)}},
-        // SDCardInfo
-        {android::util::SDCARD_INFO,
-         {.puller = new StatsCompanionServicePuller(android::util::SDCARD_INFO)}},
+        // ExternalStorageInfo
+        {android::util::EXTERNAL_STORAGE_INFO,
+         {.puller = new StatsCompanionServicePuller(android::util::EXTERNAL_STORAGE_INFO)}},
+        // GpuStatsGlobalInfo
+        {android::util::GPU_STATS_GLOBAL_INFO,
+         {.puller = new GpuStatsPuller(android::util::GPU_STATS_GLOBAL_INFO)}},
+        // GpuStatsAppInfo
+        {android::util::GPU_STATS_APP_INFO,
+         {.puller = new GpuStatsPuller(android::util::GPU_STATS_APP_INFO)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {

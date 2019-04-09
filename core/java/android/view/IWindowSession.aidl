@@ -32,6 +32,8 @@ import android.view.InsetsState;
 import android.view.Surface;
 import android.view.SurfaceControl;
 
+import java.util.List;
+
 /**
  * System private per-application interface to the window manager.
  *
@@ -46,6 +48,7 @@ interface IWindowSession {
     int addToDisplayWithoutInputChannel(IWindow window, int seq, in WindowManager.LayoutParams attrs,
             in int viewVisibility, in int layerStackId, out Rect outContentInsets,
             out Rect outStableInsets, out InsetsState insetsState);
+    @UnsupportedAppUsage
     void remove(IWindow window);
 
     /**
@@ -122,6 +125,7 @@ interface IWindowSession {
      * completely transparent, allowing it to work with the surface flinger
      * to optimize compositing of this part of the window.
      */
+    @UnsupportedAppUsage
     void setTransparentRegion(IWindow window, in Region region);
 
     /**
@@ -143,11 +147,15 @@ interface IWindowSession {
      */
     void getDisplayFrame(IWindow window, out Rect outDisplayFrame);
 
+    @UnsupportedAppUsage
     void finishDrawing(IWindow window);
 
+    @UnsupportedAppUsage
     void setInTouchMode(boolean showFocus);
+    @UnsupportedAppUsage
     boolean getInTouchMode();
 
+    @UnsupportedAppUsage
     boolean performHapticFeedback(int effectId, boolean always);
 
     /**
@@ -166,6 +174,7 @@ interface IWindowSession {
      * @param data Data transferred by drag and drop
      * @return Token of drag operation which will be passed to cancelDragAndDrop.
      */
+    @UnsupportedAppUsage
     IBinder performDrag(IWindow window, int flags, in SurfaceControl surface, int touchSource,
             float touchX, float touchY, float thumbCenterX, float thumbCenterY, in ClipData data);
 
@@ -199,6 +208,7 @@ interface IWindowSession {
      */
     void setWallpaperPosition(IBinder windowToken, float x, float y, float xstep, float ystep);
 
+    @UnsupportedAppUsage
     void wallpaperOffsetsComplete(IBinder window);
 
     /**
@@ -209,6 +219,7 @@ interface IWindowSession {
     Bundle sendWallpaperCommand(IBinder window, String action, int x, int y,
             int z, in Bundle extras, boolean sync);
 
+    @UnsupportedAppUsage
     void wallpaperCommandComplete(IBinder window, in Bundle result);
 
     /**
@@ -256,4 +267,10 @@ interface IWindowSession {
      * that new state.
      */
     void insetsModified(IWindow window, in InsetsState state);
+
+
+    /**
+     * Called when the system gesture exclusion has changed.
+     */
+    void reportSystemGestureExclusionChanged(IWindow window, in List<Rect> exclusionRects);
 }

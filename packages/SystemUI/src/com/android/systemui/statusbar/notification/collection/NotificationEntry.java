@@ -543,14 +543,6 @@ public final class NotificationEntry {
         return row == null || row.isRemoved();
     }
 
-    /**
-     * @return {@code true} if the row is null or dismissed
-     */
-    public boolean isDismissed() {
-        //TODO: recycling
-        return row == null || row.isDismissed();
-    }
-
     public boolean isRowPinned() {
         return row != null && row.isPinned();
     }
@@ -570,6 +562,12 @@ public final class NotificationEntry {
     public void setHeadsUp(boolean shouldHeadsUp) {
         if (row != null) row.setHeadsUp(shouldHeadsUp);
     }
+
+
+    public void setAmbientGoingAway(boolean goingAway) {
+        if (row != null) row.setAmbientGoingAway(goingAway);
+    }
+
 
     public boolean mustStayOnScreen() {
         return row != null && row.mustStayOnScreen();

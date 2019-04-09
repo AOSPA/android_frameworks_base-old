@@ -24,7 +24,7 @@ import android.content.pm.UserInfo
 import android.os.Handler
 import android.os.UserHandle
 import android.os.UserManager
-import android.support.test.filters.SmallTest
+import androidx.test.filters.SmallTest
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import android.testing.TestableLooper.RunWithLooper
@@ -264,7 +264,8 @@ class PrivacyItemControllerTest : SysuiTestCase() {
         val list = listOf(PrivacyItem(PrivacyType.TYPE_CAMERA,
                 PrivacyApplication("", TEST_UID, mContext)))
         privacyItemController.privacyList = list
-        assertEquals(list, privacyItemController.privacyList)
-        assertTrue(list !== privacyItemController.privacyList)
+        val privacyList = privacyItemController.privacyList
+        assertEquals(list, privacyList)
+        assertTrue(list !== privacyList)
     }
 }

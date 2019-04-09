@@ -25,18 +25,24 @@ LOCAL_REQUIRED_MODULES := \
 	DisplayCutoutEmulationTallOverlay \
 	FontNotoSerifSourceOverlay \
 	IconPackCircularAndroidOverlay \
+	IconPackCircularLauncherOverlay \
 	IconPackCircularSettingsOverlay \
 	IconPackCircularSystemUIOverlay \
 	IconPackFilledAndroidOverlay \
+	IconPackFilledLauncherOverlay \
 	IconPackFilledSettingsOverlay \
 	IconPackFilledSystemUIOverlay \
 	IconPackRoundedAndroidOverlay \
+	IconPackRoundedLauncherOverlay \
 	IconPackRoundedSettingsOverlay \
 	IconPackRoundedSystemUIOverlay \
 	IconShapeRoundedRectOverlay \
 	IconShapeSquareOverlay \
 	IconShapeSquircleOverlay \
-	IconShapeTeardropOverlay
+	IconShapeTeardropOverlay \
+	NavigationBarMode3ButtonOverlay \
+	NavigationBarMode2ButtonOverlay \
+	NavigationBarModeGesturalOverlay
 
 include $(BUILD_PHONY_PACKAGE)
 include $(CLEAR_VARS)

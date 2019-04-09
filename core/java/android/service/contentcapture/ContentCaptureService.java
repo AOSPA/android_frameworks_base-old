@@ -37,7 +37,6 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.service.autofill.AutofillService;
 import android.util.ArrayMap;
-import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 import android.view.contentcapture.ContentCaptureContext;
@@ -79,6 +78,21 @@ public abstract class ContentCaptureService extends Service {
     public static final String SERVICE_INTERFACE =
             "android.service.contentcapture.ContentCaptureService";
 
+    /**
+     * Name under which a ContentCaptureService component publishes information about itself.
+     *
+     * <p>This meta-data should reference an XML resource containing a
+     * <code>&lt;{@link
+     * android.R.styleable#ContentCaptureService content-capture-service}&gt;</code> tag.
+     *
+     * <p>This is a a sample XML file configuring a ContentCaptureService:
+     * <pre> &lt;content-capture-service
+     *     android:settingsActivity="foo.bar.SettingsActivity"
+     *     . . .
+     * /&gt;</pre>
+     */
+    public static final String SERVICE_META_DATA = "android.content_capture";
+
     private Handler mHandler;
     private IContentCaptureServiceCallback mCallback;
 
@@ -103,9 +117,10 @@ public abstract class ContentCaptureService extends Service {
 
         @Override
         public void onSessionStarted(ContentCaptureContext context, String sessionId, int uid,
-                IResultReceiver clientReceiver) {
+                IResultReceiver clientReceiver, int initialState) {
             mHandler.sendMessage(obtainMessage(ContentCaptureService::handleOnCreateSession,
-                    ContentCaptureService.this, context, sessionId, uid, clientReceiver));
+                    ContentCaptureService.this, context, sessionId, uid, clientReceiver,
+                    initialState));
         }
 
         @Override
@@ -126,6 +141,13 @@ public abstract class ContentCaptureService extends Service {
             mHandler.sendMessage(
                     obtainMessage(ContentCaptureService::handleOnUserDataRemovalRequest,
                             ContentCaptureService.this, request));
+        }
+
+        @Override
+        public void onActivityEvent(ActivityEvent event) {
+            mHandler.sendMessage(obtainMessage(ContentCaptureService::handleOnActivityEvent,
+                    ContentCaptureService.this, event));
+
         }
     };
 
@@ -165,19 +187,6 @@ public abstract class ContentCaptureService extends Service {
         }
         Log.w(TAG, "Tried to bind to wrong intent (should be " + SERVICE_INTERFACE + ": " + intent);
         return null;
-    }
-
-    /**
-     * @deprecated use {@link #setContentCaptureWhitelist(Set, Set)} instead
-     */
-    @Deprecated
-    public final void setContentCaptureWhitelist(@Nullable List<String> packages,
-            @Nullable List<ComponentName> activities) {
-        setContentCaptureWhitelist(toSet(packages), toSet(activities));
-    }
-
-    private <T> ArraySet<T> toSet(@Nullable List<T> set) {
-        return set == null ? null : new ArraySet<T>(set);
     }
 
     /**
@@ -261,7 +270,21 @@ public abstract class ContentCaptureService extends Service {
      * @param snapshotData the data
      */
     public void onActivitySnapshot(@NonNull ContentCaptureSessionId sessionId,
-            @NonNull SnapshotData snapshotData) {}
+            @NonNull SnapshotData snapshotData) {
+        if (sVerbose) Log.v(TAG, "onActivitySnapshot(id=" + sessionId + ")");
+    }
+
+    /**
+     * Notifies the service of an activity-level event that is not associated with a session.
+     *
+     * <p>This method can be used to track some high-level events for all activities, even those
+     * that are not whitelisted for Content Capture.
+     *
+     * @param event high-level activity event
+     */
+    public void onActivityEvent(@NonNull ActivityEvent event) {
+        if (sVerbose) Log.v(TAG, "onActivityEvent(): " + event);
+    }
 
     /**
      * Destroys the content capture session.
@@ -275,12 +298,12 @@ public abstract class ContentCaptureService extends Service {
     /**
      * Disables the Content Capture service for the given user.
      */
-    public final void disableContentCaptureServices() {
-        if (sDebug) Log.d(TAG, "disableContentCaptureServices()");
+    public final void disableSelf() {
+        if (sDebug) Log.d(TAG, "disableSelf()");
 
         final IContentCaptureServiceCallback callback = mCallback;
         if (callback == null) {
-            Log.w(TAG, "disableContentCaptureServices(): no server callback");
+            Log.w(TAG, "disableSelf(): no server callback");
             return;
         }
         try {
@@ -328,7 +351,7 @@ public abstract class ContentCaptureService extends Service {
     // so we don't need to create a temporary InteractionSessionId for each event.
 
     private void handleOnCreateSession(@NonNull ContentCaptureContext context,
-            @NonNull String sessionId, int uid, IResultReceiver clientReceiver) {
+            @NonNull String sessionId, int uid, IResultReceiver clientReceiver, int initialState) {
         mSessionUids.put(sessionId, uid);
         onCreateContentCaptureSession(context, new ContentCaptureSessionId(sessionId));
 
@@ -341,10 +364,9 @@ public abstract class ContentCaptureService extends Service {
             stateFlags |= ContentCaptureSession.STATE_BY_APP;
         }
         if (stateFlags == 0) {
-            stateFlags = ContentCaptureSession.STATE_ACTIVE;
+            stateFlags = initialState;
         } else {
             stateFlags |= ContentCaptureSession.STATE_DISABLED;
-
         }
         setClientState(clientReceiver, stateFlags, mClientInterface.asBinder());
     }
@@ -395,6 +417,10 @@ public abstract class ContentCaptureService extends Service {
 
     private void handleOnUserDataRemovalRequest(@NonNull UserDataRemovalRequest request) {
         onUserDataRemovalRequest(request);
+    }
+
+    private void handleOnActivityEvent(@NonNull ActivityEvent event) {
+        onActivityEvent(event);
     }
 
     /**

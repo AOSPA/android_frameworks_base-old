@@ -7,10 +7,10 @@
     android:orientation="horizontal"
     android:clipToPadding="false"
     android:theme="@style/qs_theme"
-    android:gravity="top|left"
+    android:gravity="top|right"
+    android:paddingRight="@dimen/global_actions_top_padding"
     android:clipChildren="false"
 >
-
     <LinearLayout
         android:layout_height="match_parent"
         android:layout_width="wrap_content"
@@ -37,11 +37,11 @@
             android:gravity="center"
             android:translationZ="@dimen/global_actions_translate"
         />
-
         <!-- Grid of action items -->
         <com.android.systemui.globalactions.ListGridLayout
             android:id="@android:id/list"
             android:layout_gravity="bottom|left"
+            android:gravity="right"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -54,28 +54,22 @@
             android:background="?android:attr/colorBackgroundFloating"
         >
             <LinearLayout
-                android:layout_gravity="bottom"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:visibility="gone"
-                android:layoutDirection="rtl"
-                android:orientation="horizontal"
+                android:layoutDirection="locale"
             />
             <LinearLayout
-                android:layout_gravity="bottom"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:visibility="gone"
-                android:layoutDirection="rtl"
-                android:orientation="horizontal"
+                android:layoutDirection="locale"
             />
             <LinearLayout
-                android:layout_gravity="bottom"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:visibility="gone"
-                android:layoutDirection="rtl"
-                android:orientation="horizontal"
+                android:layoutDirection="locale"
             />
         </com.android.systemui.globalactions.ListGridLayout>
     </LinearLayout>

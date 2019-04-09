@@ -184,6 +184,7 @@ public final class TextSelection implements Parcelable {
          *
          * @return this builder
          */
+        @NonNull
         public Builder setExtras(@Nullable Bundle extras) {
             mExtras = extras;
             return this;
@@ -368,6 +369,7 @@ public final class TextSelection implements Parcelable {
              *
              * @return this builder
              */
+            @NonNull
             public Builder setExtras(@Nullable Bundle extras) {
                 mExtras = extras;
                 return this;
@@ -413,7 +415,7 @@ public final class TextSelection implements Parcelable {
             return request;
         }
 
-        public static final Parcelable.Creator<Request> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<Request> CREATOR =
                 new Parcelable.Creator<Request>() {
                     @Override
                     public Request createFromParcel(Parcel in) {
@@ -441,7 +443,7 @@ public final class TextSelection implements Parcelable {
         dest.writeBundle(mExtras);
     }
 
-    public static final Parcelable.Creator<TextSelection> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<TextSelection> CREATOR =
             new Parcelable.Creator<TextSelection>() {
                 @Override
                 public TextSelection createFromParcel(Parcel in) {

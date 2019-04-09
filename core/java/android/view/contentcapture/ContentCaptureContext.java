@@ -24,7 +24,6 @@ import android.app.TaskInfo;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.LocusId;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -72,10 +71,21 @@ public final class ContentCaptureContext implements Parcelable {
     @TestApi
     public static final int FLAG_DISABLED_BY_FLAG_SECURE = 0x2;
 
+    /**
+     * Flag used when the event is sent because the Android System reconnected to the service (for
+     * example, after its process died).
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final int FLAG_RECONNECTED = 0x4;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "FLAG_" }, value = {
             FLAG_DISABLED_BY_APP,
-            FLAG_DISABLED_BY_FLAG_SECURE
+            FLAG_DISABLED_BY_FLAG_SECURE,
+            FLAG_RECONNECTED
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface ContextCreationFlags{}
@@ -127,6 +137,17 @@ public final class ContentCaptureContext implements Parcelable {
         mDisplayId = Display.INVALID_DISPLAY;
     }
 
+    /** @hide */
+    public ContentCaptureContext(@Nullable ContentCaptureContext original, int extraFlags) {
+        mHasClientContext = original.mHasClientContext;
+        mExtras = original.mExtras;
+        mId = original.mId;
+        mComponentName = original.mComponentName;
+        mTaskId = original.mTaskId;
+        mFlags = original.mFlags | extraFlags;
+        mDisplayId = original.mDisplayId;
+    }
+
     /**
      * Gets the (optional) extras set by the app (through {@link Builder#setExtras(Bundle)}).
      *
@@ -140,7 +161,7 @@ public final class ContentCaptureContext implements Parcelable {
     /**
      * Gets the context id.
      */
-    @NonNull
+    @Nullable
     public LocusId getLocusId() {
         return mId;
     }
@@ -200,8 +221,8 @@ public final class ContentCaptureContext implements Parcelable {
     /**
      * Gets the flags associated with this context.
      *
-     * @return any combination of {@link #FLAG_DISABLED_BY_FLAG_SECURE} and
-     * {@link #FLAG_DISABLED_BY_APP}.
+     * @return any combination of {@link #FLAG_DISABLED_BY_FLAG_SECURE},
+     * {@link #FLAG_DISABLED_BY_APP} and {@link #FLAG_RECONNECTED}.
      *
      * @hide
      */
@@ -212,10 +233,11 @@ public final class ContentCaptureContext implements Parcelable {
     }
 
     /**
-     * Helper that creates a {@link ContentCaptureContext} associated with the given {@code uri}.
+     * Helper that creates a {@link ContentCaptureContext} associated with the given {@code id}.
      */
-    public static ContentCaptureContext forLocusId(@NonNull Uri uri) {
-        return new Builder(new LocusId(uri)).build();
+    @NonNull
+    public static ContentCaptureContext forLocusId(@NonNull String id) {
+        return new Builder(new LocusId(id)).build();
     }
 
     /**
@@ -269,6 +291,7 @@ public final class ContentCaptureContext implements Parcelable {
          *
          * @return the built {@code ContentCaptureContext}
          */
+        @NonNull
         public ContentCaptureContext build() {
             throwIfDestroyed();
             mDestroyed = true;
@@ -351,10 +374,11 @@ public final class ContentCaptureContext implements Parcelable {
         }
     }
 
-    public static final Parcelable.Creator<ContentCaptureContext> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<ContentCaptureContext> CREATOR =
             new Parcelable.Creator<ContentCaptureContext>() {
 
         @Override
+        @NonNull
         public ContentCaptureContext createFromParcel(Parcel parcel) {
             final boolean hasClientContext = parcel.readInt() == 1;
 
@@ -383,6 +407,7 @@ public final class ContentCaptureContext implements Parcelable {
         }
 
         @Override
+        @NonNull
         public ContentCaptureContext[] newArray(int size) {
             return new ContentCaptureContext[size];
         }

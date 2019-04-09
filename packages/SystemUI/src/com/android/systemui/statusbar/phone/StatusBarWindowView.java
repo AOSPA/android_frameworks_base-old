@@ -114,17 +114,19 @@ public class StatusBarWindowView extends FrameLayout {
             if (mSingleTapEnabled) {
                 mService.wakeUpIfDozing(SystemClock.uptimeMillis(), StatusBarWindowView.this,
                         "SINGLE_TAP");
+                return true;
             }
-            return mSingleTapEnabled;
+            return false;
         }
 
         @Override
         public boolean onDoubleTap(MotionEvent e) {
-            if (mDoubleTapEnabled) {
+            if (mDoubleTapEnabled || mSingleTapEnabled) {
                 mService.wakeUpIfDozing(SystemClock.uptimeMillis(), StatusBarWindowView.this,
                         "DOUBLE_TAP");
+                return true;
             }
-            return mDoubleTapEnabled;
+            return false;
         }
     };
     private final TunerService.Tunable mTunable = (key, newValue) -> {
@@ -388,7 +390,8 @@ public class StatusBarWindowView extends FrameLayout {
         if (mNotificationPanel.isFullyExpanded()
                 && stackScrollLayout.getVisibility() == View.VISIBLE
                 && mStatusBarStateController.getState() == StatusBarState.KEYGUARD
-                && !mService.isBouncerShowing()) {
+                && !mService.isBouncerShowing()
+                && !mService.isDozing()) {
             intercept = mDragDownHelper.onInterceptTouchEvent(ev);
         }
         if (!intercept) {

@@ -64,8 +64,8 @@ public final class CellInfoWcdma extends CellInfo implements Parcelable {
     }
 
     /** @hide */
-    public CellInfoWcdma(android.hardware.radio.V1_4.CellInfo ci) {
-        super(ci);
+    public CellInfoWcdma(android.hardware.radio.V1_4.CellInfo ci, long timeStamp) {
+        super(ci, timeStamp);
         final android.hardware.radio.V1_2.CellInfoWcdma ciw = ci.info.wcdma();
         mCellIdentityWcdma = new CellIdentityWcdma(ciw.cellIdentityWcdma);
         mCellSignalStrengthWcdma = new CellSignalStrengthWcdma(ciw.signalStrengthWcdma);
@@ -149,7 +149,7 @@ public final class CellInfoWcdma extends CellInfo implements Parcelable {
     }
 
     /** Implement the Parcelable interface */
-    public static final Creator<CellInfoWcdma> CREATOR = new Creator<CellInfoWcdma>() {
+    public static final @android.annotation.NonNull Creator<CellInfoWcdma> CREATOR = new Creator<CellInfoWcdma>() {
         @Override
         public CellInfoWcdma createFromParcel(Parcel in) {
             in.readInt(); // Skip past token, we know what it is

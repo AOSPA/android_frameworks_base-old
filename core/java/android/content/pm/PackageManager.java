@@ -710,7 +710,7 @@ public abstract class PackageManager {
             INSTALL_INTERNAL,
             INSTALL_FROM_ADB,
             INSTALL_ALL_USERS,
-            INSTALL_ALLOW_DOWNGRADE,
+            INSTALL_REQUEST_DOWNGRADE,
             INSTALL_GRANT_RUNTIME_PERMISSIONS,
             INSTALL_FORCE_VOLUME_UUID,
             INSTALL_FORCE_PERMISSION_PROMPT,
@@ -721,6 +721,7 @@ public abstract class PackageManager {
             INSTALL_VIRTUAL_PRELOAD,
             INSTALL_APEX,
             INSTALL_ENABLE_ROLLBACK,
+            INSTALL_ALLOW_DOWNGRADE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallFlags {}
@@ -767,14 +768,21 @@ public abstract class PackageManager {
     public static final int INSTALL_ALL_USERS = 0x00000040;
 
     /**
-     * Flag parameter for {@link #installPackage} to indicate that it is okay
-     * to install an update to an app where the newly installed app has a lower
-     * version code than the currently installed app. This is permitted only if
-     * the currently installed app is marked debuggable.
+     * Flag parameter for {@link #installPackage} to indicate that an upgrade to a lower version
+     * of a package than currently installed has been requested.
+     *
+     * <p>Note that this flag doesn't guarantee that downgrade will be performed. That decision
+     * depends
+     * on whenever:
+     * <ul>
+     * <li>An app is debuggable.
+     * <li>Or a build is debuggable.
+     * <li>Or {@link #INSTALL_ALLOW_DOWNGRADE} is set.
+     * </ul>
      *
      * @hide
      */
-    public static final int INSTALL_ALLOW_DOWNGRADE = 0x00000080;
+    public static final int INSTALL_REQUEST_DOWNGRADE = 0x00000080;
 
     /**
      * Flag parameter for {@link #installPackage} to indicate that all runtime
@@ -864,6 +872,14 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_DISABLE_VERIFICATION = 0x00080000;
+
+    /**
+     * Flag parameter for {@link #installPackage} to indicate that
+     * {@link #INSTALL_REQUEST_DOWNGRADE} should be allowed.
+     *
+     * @hide
+     */
+    public static final int INSTALL_ALLOW_DOWNGRADE = 0x00100000;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "DONT_KILL_APP" }, value = {
@@ -1372,6 +1388,14 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_FAILED_BAD_SIGNATURE = -118;
+
+    /**
+     * Installation failed return code: a new staged session was attempted to be committed while
+     * there is already one in-progress.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_OTHER_STAGED_SESSION_IN_PROGRESS = -119;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
@@ -2565,14 +2589,6 @@ public abstract class PackageManager {
     public static final String FEATURE_PC = "android.hardware.type.pc";
 
     /**
-     * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature}: This is a foldable device. Properties such as
-     * the display size may change in response to being folded.
-     */
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_FOLDABLE = "android.hardware.type.foldable";
-
-    /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
      * The device supports printing.
      */
@@ -3031,12 +3047,51 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_REVOKE_WHEN_REQUESTED =  1 << 7;
 
     /**
-     * Mask for all permission flags.
+     * Permission flag: The permission's usage should be made highly visible to the user
+     * when granted.
      *
      * @hide
      */
     @SystemApi
+    public static final int FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED =  1 << 8;
+
+    /**
+     * Permission flag: The permission's usage should be made highly visible to the user
+     * when denied.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int FLAG_PERMISSION_USER_SENSITIVE_WHEN_DENIED =  1 << 9;
+
+    /**
+     * Permission flag: The permission should not be shown in the UI.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final int FLAG_PERMISSION_HIDDEN =  1 << 10;
+
+    /**
+     * Mask for all permission flags present in Android P
+     *
+     * @deprecated This constant does not contain useful information and should never have been
+     * exposed. When checking permission flags always flag each flag explicitly and ignore all
+     * flags that do not matter for this particular code.
+     *
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
     public static final int MASK_PERMISSION_FLAGS = 0xFF;
+
+    /**
+     * Mask for all permission flags.
+     *
+     * @hide
+     */
+    public static final int MASK_PERMISSION_FLAGS_ALL = 0x7FF;
 
     /**
      * Injected activity in app that forwards user to setting activity of that app.
@@ -3745,6 +3800,9 @@ public abstract class PackageManager {
             FLAG_PERMISSION_REVOKE_ON_UPGRADE,
             FLAG_PERMISSION_SYSTEM_FIXED,
             FLAG_PERMISSION_GRANTED_BY_DEFAULT,
+            FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED,
+            FLAG_PERMISSION_USER_SENSITIVE_WHEN_DENIED,
+            FLAG_PERMISSION_HIDDEN,
             /*
             FLAG_PERMISSION_REVOKE_WHEN_REQUESED
             */
@@ -3819,7 +3877,8 @@ public abstract class PackageManager {
     @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS,
-            android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS
+            android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS,
+            android.Manifest.permission.GET_RUNTIME_PERMISSIONS
     })
     public abstract @PermissionFlags int getPermissionFlags(String permissionName,
             String packageName, @NonNull UserHandle user);
@@ -4178,6 +4237,24 @@ public abstract class PackageManager {
      */
     public abstract @NonNull List<SharedLibraryInfo> getSharedLibrariesAsUser(
             @InstallFlags int flags, @UserIdInt int userId);
+
+    /**
+     * Get the list of shared libraries declared by a package.
+     *
+     * @param packageName the package name to query
+     * @param flags the flags to filter packages
+     * @return the shared library list
+     *
+     * @hide
+     */
+    @NonNull
+    @RequiresPermission(Manifest.permission.ACCESS_SHARED_LIBRARIES)
+    @SystemApi
+    public List<SharedLibraryInfo> getDeclaredSharedLibraries(@NonNull String packageName,
+            @InstallFlags int flags) {
+        throw new UnsupportedOperationException(
+                "getDeclaredSharedLibraries() not implemented in subclass");
+    }
 
     /**
      * Get the name of the package hosting the services shared library.
@@ -5594,7 +5671,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     public abstract void addPackageToPreferred(String packageName);
@@ -5603,7 +5682,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     public abstract void removePackageFromPreferred(String packageName);
@@ -5620,7 +5701,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     public abstract List<PackageInfo> getPreferredPackages(@PackageInfoFlags int flags);
@@ -5643,7 +5726,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     public abstract void addPreferredActivity(IntentFilter filter, int match,
@@ -5658,7 +5743,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     @UnsupportedAppUsage
@@ -5688,7 +5775,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     @UnsupportedAppUsage
@@ -5714,7 +5803,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     @SystemApi
@@ -5729,7 +5820,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     @UnsupportedAppUsage
@@ -5750,7 +5843,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     public abstract void clearPackagePreferredActivities(String packageName);
@@ -5775,7 +5870,9 @@ public abstract class PackageManager {
      * @deprecated This function no longer does anything. It is the platform's
      * responsibility to assign preferred activities and this cannot be modified
      * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}.
+     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
+     * an app to be responsible for a particular role and to check current role
+     * holders, see {@link android.app.role.RoleManager}.
      */
     @Deprecated
     public abstract int getPreferredActivities(@NonNull List<IntentFilter> outFilters,
@@ -5817,34 +5914,36 @@ public abstract class PackageManager {
             @NonNull ComponentName componentName);
 
     /**
-     * Set the enabled setting for a package app settings activity.
+     * Set whether a synthetic app details activity will be generated if the app has no enabled
+     * launcher activity. Disabling this allows the app to have no launcher icon.
      *
      * @param packageName The package name of the app
-     * @param enabled The new enabled state for app details activity
+     * @param enabled The new enabled state for the synthetic app details activity.
      *
      * @hide
      */
     @RequiresPermission(value = android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE,
             conditional = true)
     @SystemApi
-    public void setAppDetailsActivityEnabled(@NonNull String packageName, boolean enabled) {
+    public void setSyntheticAppDetailsActivityEnabled(@NonNull String packageName,
+            boolean enabled) {
         throw new UnsupportedOperationException(
-                "setAppDetailsActivityEnabled not implemented");
+                "setSyntheticAppDetailsActivityEnabled not implemented");
     }
 
 
     /**
-     * Return the enabled setting for a package app settings activity.
+     * Return whether a synthetic app details activity will be generated if the app has no enabled
+     * launcher activity.
      *
      * @param packageName The package name of the app
-     * @return Returns the current enabled state for app settings activity.
+     * @return Returns the enabled state for the synthetic app details activity.
      *
-     * @hide
+     *
      */
-    @SystemApi
-    public boolean getAppDetailsActivityEnabled(@NonNull String packageName) {
+    public boolean getSyntheticAppDetailsActivityEnabled(@NonNull String packageName) {
         throw new UnsupportedOperationException(
-                "getAppDetailsActivityEnabled not implemented");
+                "getSyntheticAppDetailsActivityEnabled not implemented");
     }
 
     /**
@@ -6532,6 +6631,9 @@ public abstract class PackageManager {
             case FLAG_PERMISSION_USER_FIXED: return "USER_FIXED";
             case FLAG_PERMISSION_REVIEW_REQUIRED: return "REVIEW_REQUIRED";
             case FLAG_PERMISSION_REVOKE_WHEN_REQUESTED: return "REVOKE_WHEN_REQUESTED";
+            case FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED: return "USER_SENSITIVE_WHEN_GRANTED";
+            case FLAG_PERMISSION_USER_SENSITIVE_WHEN_DENIED: return "USER_SENSITIVE_WHEN_DENIED";
+            case FLAG_PERMISSION_HIDDEN: return "HIDDEN";
             default: return Integer.toString(flag);
         }
     }
@@ -6801,9 +6903,9 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    public String getContentCaptureServicePackageName() {
+    public String getSystemCaptionsServicePackageName() {
         throw new UnsupportedOperationException(
-                "getContentCaptureServicePackageName not implemented in subclass");
+                "getSystemCaptionsServicePackageName not implemented in subclass");
     }
 
     /**

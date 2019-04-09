@@ -20,6 +20,7 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertNull;
 
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Mockito.doAnswer;
@@ -32,6 +33,8 @@ import android.view.View;
 
 import androidx.test.filters.LargeTest;
 import androidx.test.runner.AndroidJUnit4;
+
+import com.google.common.base.Throwables;
 
 import org.junit.After;
 import org.junit.Before;
@@ -301,6 +304,26 @@ public class AccessibilityCacheTest {
     }
 
     @Test
+    public void subTreeChangeEventFromUncachedNode_clearsNodeInCache() {
+        AccessibilityNodeInfo nodeInfo = getNodeWithA11yAndWindowId(CHILD_VIEW_ID, WINDOW_ID_1);
+        long id = nodeInfo.getSourceNodeId();
+        mAccessibilityCache.add(nodeInfo);
+        nodeInfo.recycle();
+
+        AccessibilityEvent event = AccessibilityEvent
+                .obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+        event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE);
+        event.setSource(getMockViewWithA11yAndWindowIds(PARENT_VIEW_ID, WINDOW_ID_1));
+
+        mAccessibilityCache.onAccessibilityEvent(event);
+        AccessibilityNodeInfo shouldBeNull = mAccessibilityCache.getNode(WINDOW_ID_1, id);
+        if (shouldBeNull != null) {
+            shouldBeNull.recycle();
+        }
+        assertNull(shouldBeNull);
+    }
+
+    @Test
     public void scrollEvent_clearsNodeAndChild() {
         AccessibilityEvent event = AccessibilityEvent
                 .obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
@@ -565,6 +588,29 @@ public class AccessibilityCacheTest {
         } finally {
             nodeInfo1.recycle();
             nodeInfo2.recycle();
+        }
+    }
+
+    @Test
+    public void addSameParentNodeWithDifferentChildNode_whenOriginalChildHasChild_doesntCrash() {
+        AccessibilityNodeInfo parentNodeInfo = getParentNode();
+        AccessibilityNodeInfo childNodeInfo = getChildNode();
+        childNodeInfo.addChild(getMockViewWithA11yAndWindowIds(CHILD_VIEW_ID + 1, WINDOW_ID_1));
+
+        AccessibilityNodeInfo replacementParentNodeInfo =
+                getNodeWithA11yAndWindowId(PARENT_VIEW_ID, WINDOW_ID_1);
+        replacementParentNodeInfo.addChild(
+                getMockViewWithA11yAndWindowIds(OTHER_CHILD_VIEW_ID, WINDOW_ID_1));
+        try {
+            mAccessibilityCache.add(parentNodeInfo);
+            mAccessibilityCache.add(childNodeInfo);
+            mAccessibilityCache.add(replacementParentNodeInfo);
+        } catch (IllegalStateException e) {
+            fail("recycle A11yNodeInfo twice" + Throwables.getStackTraceAsString(e));
+        } finally {
+            parentNodeInfo.recycle();
+            childNodeInfo.recycle();
+            replacementParentNodeInfo.recycle();
         }
     }
 

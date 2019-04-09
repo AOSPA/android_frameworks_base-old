@@ -231,7 +231,6 @@ public final class Display {
      * bar, navigation bar, home activity or IME.
      * </p>
      *
-     * @see #supportsSystemDecorations
      * @hide
      */
     // TODO (b/114338689): Remove the flag and use IWindowManager#setShouldShowSystemDecors
@@ -907,18 +906,6 @@ public final class Display {
     }
 
     /**
-     * Returns whether this display should support showing system decorations.
-     *
-     * @see #FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
-     * @hide
-     */
-    @TestApi
-    // TODO (b/114338689): Remove the method and use IWindowManager#shouldShowSystemDecors
-    public boolean supportsSystemDecorations() {
-        return (mDisplayInfo.flags & FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS) != 0;
-    }
-
-    /**
      * Returns the display's HDR capabilities.
      *
      * @see #isHdr()
@@ -1110,16 +1097,19 @@ public final class Display {
      * Returns true if the specified UID has access to this display.
      * @hide
      */
+    @TestApi
     public boolean hasAccess(int uid) {
-        return Display.hasAccess(uid, mFlags, mOwnerUid);
+        return hasAccess(uid, mFlags, mOwnerUid, mDisplayId);
     }
 
     /** @hide */
-    public static boolean hasAccess(int uid, int flags, int ownerUid) {
+    public static boolean hasAccess(int uid, int flags, int ownerUid, int displayId) {
         return (flags & Display.FLAG_PRIVATE) == 0
                 || uid == ownerUid
                 || uid == Process.SYSTEM_UID
-                || uid == 0;
+                || uid == 0
+                // Check if the UID is present on given display.
+                || DisplayManagerGlobal.getInstance().isUidPresentOnDisplay(uid, displayId);
     }
 
     /**
@@ -1375,7 +1365,7 @@ public final class Display {
         }
 
         @SuppressWarnings("hiding")
-        public static final Parcelable.Creator<Mode> CREATOR
+        public static final @android.annotation.NonNull Parcelable.Creator<Mode> CREATOR
                 = new Parcelable.Creator<Mode>() {
             @Override
             public Mode createFromParcel(Parcel in) {
@@ -1504,7 +1494,7 @@ public final class Display {
             return hash;
         }
 
-        public static final Creator<HdrCapabilities> CREATOR = new Creator<HdrCapabilities>() {
+        public static final @android.annotation.NonNull Creator<HdrCapabilities> CREATOR = new Creator<HdrCapabilities>() {
             @Override
             public HdrCapabilities createFromParcel(Parcel source) {
                 return new HdrCapabilities(source);

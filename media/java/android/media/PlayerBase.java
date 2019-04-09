@@ -21,8 +21,6 @@ import android.annotation.Nullable;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.content.Context;
-import android.media.VolumeShaper;
-import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -35,7 +33,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsService;
 
-import java.lang.IllegalArgumentException;
 import java.lang.ref.WeakReference;
 import java.util.Objects;
 
@@ -55,6 +52,10 @@ public abstract class PlayerBase {
 
     // parameters of the player that affect AppOps
     protected AudioAttributes mAttributes;
+
+    // volumes of the subclass "player volumes", as seen by the client of the subclass
+    //   (e.g. what was passed in AudioTrack.setVolume(float)). The actual volume applied is
+    //   the combination of the player volume, and the PlayerBase pan and volume multipliers
     protected float mLeftVolume = 1.0f;
     protected float mRightVolume = 1.0f;
     protected float mAuxEffectSendLevel = 0.0f;
@@ -82,6 +83,8 @@ public abstract class PlayerBase {
     private float mPanMultiplierL = 1.0f;
     @GuardedBy("mLock")
     private float mPanMultiplierR = 1.0f;
+    @GuardedBy("mLock")
+    private float mVolMultiplier = 1.0f;
 
     /**
      * Constructor. Must be given audio attributes, as they are required for AppOps.
@@ -202,18 +205,33 @@ public abstract class PlayerBase {
                 mPanMultiplierR = 1.0f + p;
             }
         }
-        baseSetVolume(mLeftVolume, mRightVolume);
+        updatePlayerVolume();
+    }
+
+    private void updatePlayerVolume() {
+        final float finalLeftVol, finalRightVol;
+        final boolean isRestricted;
+        synchronized (mLock) {
+            finalLeftVol = mVolMultiplier * mLeftVolume * mPanMultiplierL;
+            finalRightVol = mVolMultiplier * mRightVolume * mPanMultiplierR;
+            isRestricted = isRestricted_sync();
+        }
+        playerSetVolume(isRestricted /*muting*/, finalLeftVol, finalRightVol);
+    }
+
+    void setVolumeMultiplier(float vol) {
+        synchronized (mLock) {
+            this.mVolMultiplier = vol;
+        }
+        updatePlayerVolume();
     }
 
     void baseSetVolume(float leftVolume, float rightVolume) {
-        final boolean isRestricted;
         synchronized (mLock) {
             mLeftVolume = leftVolume;
             mRightVolume = rightVolume;
-            isRestricted = isRestricted_sync();
         }
-        playerSetVolume(isRestricted/*muting*/,
-                leftVolume * mPanMultiplierL, rightVolume * mPanMultiplierR);
+        updatePlayerVolume();
     }
 
     int baseSetAuxEffectSendLevel(float level) {
@@ -469,7 +487,7 @@ public abstract class PlayerBase {
         public void setVolume(float vol) {
             final PlayerBase pb = mWeakPB.get();
             if (pb != null) {
-                pb.baseSetVolume(vol, vol);
+                pb.setVolumeMultiplier(vol);
             }
         }
 
@@ -535,7 +553,7 @@ public abstract class PlayerBase {
             dest.writeStrongBinder(mIPlayer == null ? null : mIPlayer.asBinder());
         }
 
-        public static final Parcelable.Creator<PlayerIdCard> CREATOR
+        public static final @android.annotation.NonNull Parcelable.Creator<PlayerIdCard> CREATOR
         = new Parcelable.Creator<PlayerIdCard>() {
             /**
              * Rebuilds an PlayerIdCard previously stored with writeToParcel().
@@ -574,13 +592,14 @@ public abstract class PlayerBase {
     // Utilities
 
     /**
+     * @hide
      * Use to generate warning or exception in legacy code paths that allowed passing stream types
      * to qualify audio playback.
      * @param streamType the stream type to check
      * @throws IllegalArgumentException
      */
-    public static void deprecateStreamTypeForPlayback(int streamType, String className,
-            String opName) throws IllegalArgumentException {
+    public static void deprecateStreamTypeForPlayback(int streamType, @NonNull String className,
+            @NonNull String opName) throws IllegalArgumentException {
         // STREAM_ACCESSIBILITY was introduced at the same time the use of stream types
         // for audio playback was deprecated, so it is not allowed at all to qualify a playback
         // use case

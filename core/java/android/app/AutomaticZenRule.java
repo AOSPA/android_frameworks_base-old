@@ -16,18 +16,15 @@
 
 package android.app;
 
-import static android.app.NotificationManager.INTERRUPTION_FILTER_PRIORITY;
-
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.NotificationManager.InterruptionFilter;
 import android.content.ComponentName;
-import android.content.Intent;
 import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.service.notification.ZenPolicy;
 import android.service.notification.Condition;
-
-import com.android.internal.util.Preconditions;
+import android.service.notification.ZenPolicy;
 
 import java.util.Objects;
 
@@ -92,8 +89,9 @@ public final class AutomaticZenRule implements Parcelable {
      *               action ({@link Condition#STATE_TRUE}).
      * @param enabled Whether the rule is enabled.
      */
-    public AutomaticZenRule(String name, ComponentName owner, ComponentName configurationActivity,
-            Uri conditionId, ZenPolicy policy, int interruptionFilter, boolean enabled) {
+    public AutomaticZenRule(@NonNull String name, @Nullable ComponentName owner,
+            @Nullable ComponentName configurationActivity, @NonNull Uri conditionId,
+            @Nullable ZenPolicy policy, int interruptionFilter, boolean enabled) {
         this.name = name;
         this.owner = owner;
         this.configurationActivity = configurationActivity;
@@ -138,7 +136,7 @@ public final class AutomaticZenRule implements Parcelable {
      * Returns the {@link ComponentName} of the activity that shows configuration options
      * for this rule.
      */
-    public ComponentName getConfigurationActivity() {
+    public @Nullable ComponentName getConfigurationActivity() {
         return configurationActivity;
     }
 
@@ -233,15 +231,16 @@ public final class AutomaticZenRule implements Parcelable {
      * Sets the zen policy.
      */
     public void setZenPolicy(ZenPolicy zenPolicy) {
-        this.mZenPolicy = zenPolicy;
+        this.mZenPolicy = (zenPolicy == null ? null : zenPolicy.copy());
     }
 
     /**
      * Sets the configuration activity - an activity that handles
      * {@link NotificationManager#ACTION_AUTOMATIC_ZEN_RULE} that shows the user more information
-     * about this rule and/or allows them to configure it.
+     * about this rule and/or allows them to configure it. This is required to be non-null for rules
+     * that are not backed by {@link android.service.notification.ConditionProviderService}.
      */
-    public void setConfigurationActivity(ComponentName componentName) {
+    public void setConfigurationActivity(@Nullable ComponentName componentName) {
         this.configurationActivity = componentName;
     }
 
@@ -304,7 +303,7 @@ public final class AutomaticZenRule implements Parcelable {
                 configurationActivity, mZenPolicy, mModified, creationTime);
     }
 
-    public static final Parcelable.Creator<AutomaticZenRule> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<AutomaticZenRule> CREATOR
             = new Parcelable.Creator<AutomaticZenRule>() {
         @Override
         public AutomaticZenRule createFromParcel(Parcel source) {

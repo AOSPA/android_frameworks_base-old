@@ -69,6 +69,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.StatsLog;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.location.GpsNetInitiatedHandler;
 import com.android.internal.location.GpsNetInitiatedHandler.GpsNiNotification;
@@ -144,6 +145,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     // these need to match ElapsedRealtimeFlags enum in types.hal
     private static final int ELAPSED_REALTIME_HAS_TIMESTAMP_NS = 1;
+    private static final int ELAPSED_REALTIME_HAS_TIME_UNCERTAINTY_NS = 2;
 
     // IMPORTANT - the GPS_DELETE_* symbols here must match GnssAidingData enum in IGnss.hal
     private static final int GPS_DELETE_EPHEMERIS = 0x0001;
@@ -166,9 +168,15 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private static final int GPS_CAPABILITY_MSA = 0x0000004;
     private static final int GPS_CAPABILITY_SINGLE_SHOT = 0x0000008;
     private static final int GPS_CAPABILITY_ON_DEMAND_TIME = 0x0000010;
-    private static final int GPS_CAPABILITY_GEOFENCING = 0x0000020;
+
+    // The following three capability flags are removed in IGnssCallback.hal@2.0 and their values
+    // are marked reserved and not reused in 2.0 to avoid confusion with prior versions.
+    public static final int GPS_CAPABILITY_GEOFENCING = 0x0000020;
     public static final int GPS_CAPABILITY_MEASUREMENTS = 0x0000040;
-    private static final int GPS_CAPABILITY_NAV_MESSAGES = 0x0000080;
+    public static final int GPS_CAPABILITY_NAV_MESSAGES = 0x0000080;
+
+    private static final int GPS_CAPABILITY_LOW_POWER_MODE = 0x0000100;
+    private static final int GPS_CAPABILITY_SATELLITE_BLACKLIST = 0x0000200;
 
     // The AGPS SUPL mode
     private static final int AGPS_SUPL_MODE_MSA = 0x02;
@@ -333,7 +341,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private boolean mStarted;
 
     // capabilities of the GPS engine
-    private int mEngineCapabilities;
+    private volatile int mEngineCapabilities;
 
     // true if XTRA is supported
     private boolean mSupportsXtra;
@@ -372,6 +380,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private final LocationExtras mLocationExtras = new LocationExtras();
     private final GnssStatusListenerHelper mGnssStatusListenerHelper;
     private final GnssMeasurementsProvider mGnssMeasurementsProvider;
+    private final GnssMeasurementCorrectionsProvider mGnssMeasurementCorrectionsProvider;
     private final GnssNavigationMessageProvider mGnssNavigationMessageProvider;
     private final LocationChangeListener mNetworkLocationListener = new NetworkLocationListener();
     private final LocationChangeListener mFusedLocationListener = new FusedLocationListener();
@@ -435,6 +444,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     public GnssMeasurementsProvider getGnssMeasurementsProvider() {
         return mGnssMeasurementsProvider;
+    }
+
+    public GnssMeasurementCorrectionsProvider getGnssMeasurementCorrectionsProvider() {
+        return mGnssMeasurementCorrectionsProvider;
     }
 
     public GnssNavigationMessageProvider getGnssNavigationMessageProvider() {
@@ -602,12 +615,11 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         // while IO initialization and registration is delegated to our internal handler
         // this approach is just fine because events are posted to our handler anyway
         mGnssConfiguration = new GnssConfiguration(mContext);
-        sendMessage(INITIALIZE_HANDLER, 0, null);
-
-        // Create a GPS net-initiated handler.
+        // Create a GPS net-initiated handler (also needed by handleInitialize)
         mNIHandler = new GpsNetInitiatedHandler(context,
                 mNetInitiatedListener,
                 mSuplEsEnabled);
+        sendMessage(INITIALIZE_HANDLER, 0, null);
 
         mGnssStatusListenerHelper = new GnssStatusListenerHelper(mContext, mHandler) {
             @Override
@@ -627,6 +639,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 return isEnabled();
             }
         };
+
+        mGnssMeasurementCorrectionsProvider = new GnssMeasurementCorrectionsProvider(mHandler);
 
         mGnssNavigationMessageProvider = new GnssNavigationMessageProvider(mContext, mHandler) {
             @Override
@@ -689,7 +703,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
     }
 
-    private void handleRequestLocation(boolean independentFromGnss) {
+    private void handleRequestLocation(boolean independentFromGnss, boolean isUserEmergency) {
         if (isRequestLocationRateLimited()) {
             if (DEBUG) {
                 Log.d(TAG, "RequestLocation is denied due to too frequent requests.");
@@ -725,9 +739,17 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 String.format(
                         "GNSS HAL Requesting location updates from %s provider for %d millis.",
                         provider, durationMillis));
+
+        LocationRequest locationRequest = LocationRequest.createFromDeprecatedProvider(provider,
+                LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS, /* minDistance= */ 0,
+                /* singleShot= */ false);
+
+        // Ignore location settings if in emergency mode.
+        if (isUserEmergency && mNIHandler.getInEmergency()) {
+            locationRequest.setLocationSettingsIgnored(true);
+        }
         try {
-            locationManager.requestLocationUpdates(provider,
-                    LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS, /*minDistance=*/ 0,
+            locationManager.requestLocationUpdates(locationRequest,
                     locationListener, mHandler.getLooper());
             locationListener.mNumLocationUpdateRequest++;
             mHandler.postDelayed(() -> {
@@ -763,15 +785,18 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         float bearingAccuracyDegrees = location.getBearingAccuracyDegrees();
         long timestamp = location.getTime();
 
-        int elapsedRealtimeFlags = ELAPSED_REALTIME_HAS_TIMESTAMP_NS;
+        int elapsedRealtimeFlags = ELAPSED_REALTIME_HAS_TIMESTAMP_NS
+                | (location.hasElapsedRealtimeUncertaintyNanos()
+                        ? ELAPSED_REALTIME_HAS_TIME_UNCERTAINTY_NS : 0);
         long elapsedRealtimeNanos = location.getElapsedRealtimeNanos();
+        long elapsedRealtimeUncertaintyNanos = location.getElapsedRealtimeUncertaintyNanos();
 
         native_inject_best_location(
                 gnssLocationFlags, latitudeDegrees, longitudeDegrees,
                 altitudeMeters, speedMetersPerSec, bearingDegrees,
                 horizontalAccuracyMeters, verticalAccuracyMeters,
                 speedAccuracyMetersPerSecond, bearingAccuracyDegrees, timestamp,
-                elapsedRealtimeFlags, elapsedRealtimeNanos);
+                elapsedRealtimeFlags, elapsedRealtimeNanos, elapsedRealtimeUncertaintyNanos);
     }
 
     /** Returns true if the location request is too frequent. */
@@ -881,12 +906,14 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         return GPS_POSITION_MODE_STANDALONE;
     }
 
-    private boolean handleEnable() {
-        if (DEBUG) Log.d(TAG, "handleEnable");
+    @GuardedBy("mLock")
+    private void handleEnableLocked() {
+        if (DEBUG) Log.d(TAG, "handleEnableLocked");
 
         boolean inited = native_init();
 
         if (inited) {
+            mEnabled = true;
             mSupportsXtra = native_supports_xtra();
 
             // TODO: remove the following native calls if we can make sure they are redundant.
@@ -903,15 +930,16 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             mGnssNavigationMessageProvider.onGpsEnabledChanged();
             mGnssBatchingProvider.enable();
         } else {
+            mEnabled = false;
             Log.w(TAG, "Failed to enable location provider");
         }
-
-        return inited;
     }
 
-    private void handleDisable() {
-        if (DEBUG) Log.d(TAG, "handleDisable");
+    @GuardedBy("mLock")
+    private void handleDisableLocked() {
+        if (DEBUG) Log.d(TAG, "handleDisableLocked");
 
+        mEnabled = false;
         updateClientUids(new WorkSource());
         stopNavigating();
         mAlarmManager.cancel(mWakeupIntent);
@@ -937,10 +965,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             }
 
             if (enabled) {
-                mEnabled = handleEnable();
+                handleEnableLocked();
             } else {
-                mEnabled = false;
-                handleDisable();
+                handleDisableLocked();
             }
         }
     }
@@ -1246,6 +1273,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mAlarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, now + mFixInterval, mWakeupIntent);
     }
 
+    public int getGnssCapabilities() {
+        return mEngineCapabilities;
+    }
+
     private boolean hasCapability(int capability) {
         return ((mEngineCapabilities & capability) != 0);
     }
@@ -1310,10 +1341,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 mAlarmManager.cancel(mTimeoutIntent);
             }
 
-            // send an intent to notify that the GPS is receiving fixes.
-            Intent intent = new Intent(LocationManager.GPS_FIX_CHANGE_ACTION);
-            intent.putExtra(LocationManager.EXTRA_GPS_ENABLED, true);
-            mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
             updateStatus(LocationProvider.AVAILABLE);
         }
 
@@ -1345,11 +1372,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
         if (wasNavigating != mNavigating) {
             mGnssStatusListenerHelper.onStatusChanged(mNavigating);
-
-            // send an intent to notify that the GPS has been enabled or disabled
-            Intent intent = new Intent(LocationManager.GPS_ENABLED_CHANGE_ACTION);
-            intent.putExtra(LocationManager.EXTRA_GPS_ENABLED, mNavigating);
-            mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
         }
     }
 
@@ -1429,10 +1451,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
         if (mNavigating && mStatus == LocationProvider.AVAILABLE && mLastFixTime > 0 &&
                 SystemClock.elapsedRealtime() - mLastFixTime > RECENT_FIX_TIMEOUT) {
-            // send an intent to notify that the GPS is no longer receiving fixes.
-            Intent intent = new Intent(LocationManager.GPS_FIX_CHANGE_ACTION);
-            intent.putExtra(LocationManager.EXTRA_GPS_ENABLED, false);
-            mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
             updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE);
         }
     }
@@ -1468,22 +1486,27 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     @NativeEntryPoint
-    private void setEngineCapabilities(final int capabilities) {
+    private void setEngineCapabilities(final int capabilities, boolean hasSubHalCapabilityFlags) {
         // send to handler thread for fast native return, and in-order handling
-        mHandler.post(
-                () -> {
-                    mEngineCapabilities = capabilities;
+        mHandler.post(() -> {
+            mEngineCapabilities = capabilities;
 
-                    if (hasCapability(GPS_CAPABILITY_ON_DEMAND_TIME)) {
-                        mNtpTimeHelper.enablePeriodicTimeInjection();
-                        requestUtcTime();
-                    }
+            if (hasCapability(GPS_CAPABILITY_ON_DEMAND_TIME)) {
+                mNtpTimeHelper.enablePeriodicTimeInjection();
+                requestUtcTime();
+            }
 
-                    mGnssMeasurementsProvider.onCapabilitiesUpdated(capabilities);
-                    mGnssNavigationMessageProvider.onCapabilitiesUpdated(
-                            hasCapability(GPS_CAPABILITY_NAV_MESSAGES));
-                    restartRequests();
-                });
+            mGnssMeasurementsProvider.onCapabilitiesUpdated(capabilities, hasSubHalCapabilityFlags);
+            mGnssNavigationMessageProvider.onCapabilitiesUpdated(capabilities,
+                    hasSubHalCapabilityFlags);
+            restartRequests();
+        });
+    }
+
+    @NativeEntryPoint
+    private void setMeasurementCorrectionsCapabilities(final int capabilities) {
+        mHandler.post(() -> mGnssMeasurementCorrectionsProvider.onCapabilitiesUpdated(
+                capabilities));
     }
 
     private void restartRequests() {
@@ -1830,11 +1853,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     @NativeEntryPoint
-    private void requestLocation(boolean independentFromGnss) {
+    private void requestLocation(boolean independentFromGnss, boolean isUserEmergency) {
         if (DEBUG) {
-            Log.d(TAG, "requestLocation. independentFromGnss: " + independentFromGnss);
+            Log.d(TAG, "requestLocation. independentFromGnss: " + independentFromGnss
+                    + ", isUserEmergency: "
+                    + isUserEmergency);
         }
-        sendMessage(REQUEST_LOCATION, 0, independentFromGnss);
+        sendMessage(REQUEST_LOCATION, independentFromGnss ? 1 : 0, isUserEmergency);
     }
 
     @NativeEntryPoint
@@ -1925,7 +1950,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     mNtpTimeHelper.retrieveAndInjectNtpTime();
                     break;
                 case REQUEST_LOCATION:
-                    handleRequestLocation((boolean) msg.obj);
+                    handleRequestLocation(msg.arg1 == 1, (boolean) msg.obj);
                     break;
                 case DOWNLOAD_XTRA_DATA:
                     handleDownloadXtraData();
@@ -2121,7 +2146,23 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         if (hasCapability(GPS_CAPABILITY_GEOFENCING)) s.append("GEOFENCING ");
         if (hasCapability(GPS_CAPABILITY_MEASUREMENTS)) s.append("MEASUREMENTS ");
         if (hasCapability(GPS_CAPABILITY_NAV_MESSAGES)) s.append("NAV_MESSAGES ");
+        if (hasCapability(GPS_CAPABILITY_LOW_POWER_MODE)) s.append("LOW_POWER_MODE ");
+        if (hasCapability(GPS_CAPABILITY_SATELLITE_BLACKLIST)) s.append("SATELLITE_BLACKLIST ");
         s.append(")\n");
+        if (mGnssGeofenceProvider.isHardwareGeofenceSupported()) {
+            s.append("  hasSubHal=GEOFENCING\n");
+        }
+        if (mGnssMeasurementsProvider.isAvailableInPlatform()) {
+            s.append("  hasSubHal=MEASUREMENTS\n");
+        }
+        if (mGnssNavigationMessageProvider.isAvailableInPlatform()) {
+            s.append("  hasSubHal=NAV_MESSAGES\n");
+        }
+        if (mGnssMeasurementCorrectionsProvider.isAvailableInPlatform()) {
+            s.append("  hasSubHal=MEASUREMENT_CORRECTIONS [");
+            s.append(mGnssMeasurementCorrectionsProvider.toStringCapabilities());
+            s.append("]\n");
+        }
         s.append(mGnssMetrics.dumpGnssMetricsAsText());
         s.append("  native internal state: ").append(native_get_internal_state());
         s.append("\n");
@@ -2163,7 +2204,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             double altitudeMeters, float speedMetersPerSec, float bearingDegrees,
             float horizontalAccuracyMeters, float verticalAccuracyMeters,
             float speedAccuracyMetersPerSecond, float bearingAccuracyDegrees,
-            long timestamp, int elapsedRealtimeFlags, long elapsedRealtimeNanos);
+            long timestamp, int elapsedRealtimeFlags, long elapsedRealtimeNanos,
+            long elapsedRealtimeUncertaintyNanos);
 
     private native void native_inject_location(double latitude, double longitude, float accuracy);
 

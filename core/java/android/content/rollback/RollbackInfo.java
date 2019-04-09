@@ -16,13 +16,13 @@
 
 package android.content.rollback;
 
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
-import android.content.pm.PackageInstaller;
+import android.annotation.TestApi;
 import android.content.pm.VersionedPackage;
 import android.os.Parcel;
 import android.os.Parcelable;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -31,7 +31,7 @@ import java.util.List;
  *
  * @hide
  */
-@SystemApi
+@SystemApi @TestApi
 public final class RollbackInfo implements Parcelable {
 
     /**
@@ -44,13 +44,7 @@ public final class RollbackInfo implements Parcelable {
     private final List<VersionedPackage> mCausePackages;
 
     private final boolean mIsStaged;
-    private final int mCommittedSessionId;
-
-    /** @hide */
-    public RollbackInfo(int rollbackId, List<PackageRollbackInfo> packages, boolean isStaged) {
-        this(rollbackId, packages, isStaged, Collections.emptyList(),
-                PackageInstaller.SessionInfo.INVALID_ID);
-    }
+    private int mCommittedSessionId;
 
     /** @hide */
     public RollbackInfo(int rollbackId, List<PackageRollbackInfo> packages, boolean isStaged,
@@ -80,6 +74,7 @@ public final class RollbackInfo implements Parcelable {
     /**
      * Returns the list of package that are rolled back.
      */
+    @NonNull
     public List<PackageRollbackInfo> getPackages() {
         return mPackages;
     }
@@ -101,10 +96,19 @@ public final class RollbackInfo implements Parcelable {
     }
 
     /**
+     * Sets the session ID for the committed rollback for staged rollbacks.
+     * @hide
+     */
+    public void setCommittedSessionId(int sessionId) {
+        mCommittedSessionId = sessionId;
+    }
+
+    /**
      * Gets the list of package versions that motivated this rollback.
      * As provided to {@link #commitRollback} when the rollback was committed.
      * This is only applicable for rollbacks that have been committed.
      */
+    @NonNull
     public List<VersionedPackage> getCausePackages() {
         return mCausePackages;
     }
@@ -123,7 +127,7 @@ public final class RollbackInfo implements Parcelable {
         out.writeInt(mCommittedSessionId);
     }
 
-    public static final Parcelable.Creator<RollbackInfo> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<RollbackInfo> CREATOR =
             new Parcelable.Creator<RollbackInfo>() {
         public RollbackInfo createFromParcel(Parcel in) {
             return new RollbackInfo(in);

@@ -74,6 +74,9 @@ message MetricsEvent {
     // The view switched to summary mode (most relevant for notifications)
     TYPE_COLLAPSE = 14;
 
+    // The action results an error.
+    TYPE_ERROR = 15;
+
     // The notification was adjusted by the assistant. Enum value is
     // out of sequence due to b/122737498.
     TYPE_NOTIFICATION_ASSISTANT_ADJUSTMENT = 1573;
@@ -251,6 +254,25 @@ message MetricsEvent {
   enum ActiveUserProfile {
     PARENT_PROFILE = 1;
     MANAGED_PROFILE = 2;
+  }
+
+  // Subtypes for showing direct sharing targets
+  enum DirectShareTargetPreviousState {
+    PREVIOUSLY_UNKNOWN = 0;
+    PREVIOUSLY_HIDDEN = 1;
+    PREVIOUSLY_VISIBLE = 2;
+  }
+
+  // Explanations for notification importance, derived from
+  // NotificationRecord.mImportanceExplanation.
+  enum NotificationImportanceExplanation {
+    IMPORTANCE_EXPLANATION_UNKNOWN = 0;
+    IMPORTANCE_EXPLANATION_APP = 1;     // App-specified channel importance.
+    IMPORTANCE_EXPLANATION_USER = 2;    // User-specified channel importance.
+    IMPORTANCE_EXPLANATION_ASST = 3;    // Notification Assistant override.
+    IMPORTANCE_EXPLANATION_SYSTEM = 4;  // System override.
+    // Like _APP, but based on pre-channels priority signal.
+    IMPORTANCE_EXPLANATION_APP_PRE_CHANNELS = 5;
   }
 
   // Known visual elements: views or controls.
@@ -7065,6 +7087,68 @@ message MetricsEvent {
 
     ACTION_ATCHNUC = 1681;
 
+    // OPEN: Accessibility detail settings (android.settings.ACCESSIBILITY_DETAILS_SETTINGS intent)
+    ACCESSIBILITY_DETAILS_SETTINGS = 1682;
+
+    // Open: Settings will show the conditional when Grayscale mode is on
+    SETTINGS_CONDITION_GRAYSCALE_MODE = 1683;
+
+    // ACTION: Individual contextual card loading time
+    ACTION_CONTEXTUAL_CARD_LOAD = 1684;
+
+    //ACTION: Contextual card loading timeout
+    ACTION_CONTEXTUAL_CARD_LOAD_TIMEOUT = 1685;
+
+    //ACTION: Log result for each card's eligibility check
+    ACTION_CONTEXTUAL_CARD_ELIGIBILITY = 1686;
+
+    // Panel for Wifi
+    PANEL_WIFI = 1687;
+
+    // Custom tag for NotificationItem. A NotificationImportanceExplanation.
+    FIELD_NOTIFICATION_IMPORTANCE_EXPLANATION = 1688;
+
+    // Custom tag for NotificationItem. The initial "natural" importance.
+    FIELD_NOTIFICATION_IMPORTANCE_INITIAL = 1689;
+
+    // Custom tag for NotificationItem.  A NotificationImportanceExplanation.
+    // The source of the "natural" importance, if it was overridden.
+    FIELD_NOTIFICATION_IMPORTANCE_INITIAL_EXPLANATION = 1690;
+
+    // Custom tag for NotificationItem. The Notification Assistant's
+    // override of importance. Logged separately only if it was
+    // overridden by the system.
+    FIELD_NOTIFICATION_IMPORTANCE_ASST = 1691;
+
+    // Open: Settings > Special App Access > Do not disturb control for app
+    ZEN_ACCESS_DETAIL = 1692;
+
+    // OPEN: Settings > Face > Remove face
+    // OS: Q
+    DIALOG_FACE_REMOVE = 1693;
+
+    // FIELD - Detailed reason in screen wake. One of WAKE_REASON_* in PowerManager.
+    // OS: Q
+    FIELD_SCREEN_WAKE_REASON = 1694;
+
+    // FIELD - Detailed reason in screen sleep. One of GO_TO_SLEEP_REASON_* in PowerManager.
+    // OS: Q
+    FIELD_SCREEN_SLEEP_REASON = 1695;
+
+    // UPDATE: The screen changed policy
+    //   SUBTYPE: The applied policy. One of the DISPLAY_POLICY_* constants in
+    //   DisplayManagerInternal.
+    // OS: Q
+    DISPLAY_POLICY = 1696;
+
+    // Biometric authentication.
+    //    TYPE: SUCCESS, FAILURE or ERROR
+    //    SUBTYPE: 0 is fingerprint, 1 is face, 2 is iris and 3 is unknown.
+    // OS: Q
+    BIOMETRIC_AUTH = 1697;
+
+    // Settings > Display > Theme
+    DARK_UI_SETTINGS = 1698;
     // ---- End Q Constants, all Q constants go above this line ----
     // Add new aosp constants above this line.
     // END OF AOSP CONSTANTS

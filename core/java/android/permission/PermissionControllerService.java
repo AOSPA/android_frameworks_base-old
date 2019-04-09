@@ -112,6 +112,9 @@ public abstract class PermissionControllerService extends Service {
     /**
      * Restore a backup of the runtime permissions.
      *
+     * <p>If an app mentioned in the backup is not installed the state should be saved to later
+     * be restored via {@link #onRestoreDelayedRuntimePermissionsBackup}.
+     *
      * @param user The user to restore
      * @param backup The stream to read the backup from
      */
@@ -120,7 +123,8 @@ public abstract class PermissionControllerService extends Service {
             @NonNull InputStream backup);
 
     /**
-     * Restore a delayed backup of the runtime permissions.
+     * Restore the permission state of an app that was provided in
+     * {@link #onRestoreRuntimePermissionsBackup} but could not be restored back then.
      *
      * @param packageName The app to restore
      * @param user The user to restore
@@ -174,17 +178,6 @@ public abstract class PermissionControllerService extends Service {
             boolean countSystem, long numMillis);
 
     /**
-     * Check whether an application is qualified for a role.
-     *
-     * @param roleName name of the role to check for
-     * @param packageName package name of the application to check for
-     *
-     * @return whether the application is qualified for the role.
-     */
-    public abstract boolean onIsApplicationQualifiedForRole(@NonNull String roleName,
-            @NonNull String packageName);
-
-    /**
      * Set the runtime permission state from a device admin.
      *
      * @param callerPackageName The package name of the admin requesting the change
@@ -197,7 +190,7 @@ public abstract class PermissionControllerService extends Service {
             @NonNull String permission, @PermissionGrantState int grantState);
 
     @Override
-    public final IBinder onBind(Intent intent) {
+    public final @NonNull IBinder onBind(Intent intent) {
         return new IPermissionController.Stub() {
             @Override
             public void revokeRuntimePermissions(
@@ -330,20 +323,6 @@ public abstract class PermissionControllerService extends Service {
             }
 
             @Override
-            public void isApplicationQualifiedForRole(String roleName, String packageName,
-                    RemoteCallback callback) {
-                checkStringNotEmpty(roleName);
-                checkStringNotEmpty(packageName);
-                checkNotNull(callback, "callback");
-
-                enforceCallingPermission(Manifest.permission.MANAGE_ROLE_HOLDERS, null);
-
-                mHandler.sendMessage(obtainMessage(
-                        PermissionControllerService::isApplicationQualifiedForRole,
-                        PermissionControllerService.this, roleName, packageName, callback));
-            }
-
-            @Override
             public void setRuntimePermissionGrantStateByDeviceAdmin(String callerPackageName,
                     String packageName, String permission, int grantState,
                     RemoteCallback callback) {
@@ -435,14 +414,6 @@ public abstract class PermissionControllerService extends Service {
         } else {
             callback.sendResult(null);
         }
-    }
-
-    private void isApplicationQualifiedForRole(@NonNull String roleName,
-            @NonNull String packageName, @NonNull RemoteCallback callback) {
-        boolean qualified = onIsApplicationQualifiedForRole(roleName, packageName);
-        Bundle result = new Bundle();
-        result.putBoolean(PermissionControllerManager.KEY_RESULT, qualified);
-        callback.sendResult(result);
     }
 
     private void setRuntimePermissionGrantStateByDeviceAdmin(@NonNull String callerPackageName,

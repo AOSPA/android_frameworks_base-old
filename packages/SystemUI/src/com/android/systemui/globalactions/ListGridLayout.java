@@ -18,7 +18,6 @@ package com.android.systemui.globalactions;
 
 import android.content.Context;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -39,9 +38,8 @@ import android.widget.LinearLayout;
  */
 
 public class ListGridLayout extends LinearLayout {
+    private static final String TAG = "ListGridLayout";
     private int mExpectedCount;
-    private int mRows;
-    private int mColumns;
 
     public ListGridLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -62,11 +60,11 @@ public class ListGridLayout extends LinearLayout {
     /**
      * Get the parent view associated with the item which should be placed at the given position.
      */
-    public ViewGroup getParentView(int index, boolean reverseSublists) {
-        if (mRows == 0) {
+    public ViewGroup getParentView(int index, boolean reverseSublists, boolean swapRowsAndColumns) {
+        if (getRowCount() == 0) {
             return null;
         }
-        int column = getParentViewIndex(index, reverseSublists);
+        int column = getParentViewIndex(index, reverseSublists, swapRowsAndColumns);
         return (ViewGroup) getChildAt(column);
     }
 
@@ -74,13 +72,19 @@ public class ListGridLayout extends LinearLayout {
         return getChildCount() - (index + 1);
     }
 
-    private int getParentViewIndex(int index, boolean reverseSublists) {
-        int column = (int) Math.floor(index / mRows);
-        int columnCount = getChildCount();
-        if (reverseSublists) {
-            column = reverseSublistIndex(column);
+    private int getParentViewIndex(int index, boolean reverseSublists, boolean swapRowsAndColumns) {
+        int sublistIndex;
+        ViewGroup row;
+        int rows = getRowCount();
+        if (swapRowsAndColumns) {
+            sublistIndex = (int) Math.floor(index / rows);
+        } else {
+            sublistIndex = index % rows;
         }
-        return column;
+        if (reverseSublists) {
+            sublistIndex = reverseSublistIndex(sublistIndex);
+        }
+        return sublistIndex;
     }
 
     /**
@@ -88,32 +92,36 @@ public class ListGridLayout extends LinearLayout {
      */
     public void setExpectedCount(int count) {
         mExpectedCount = count;
-        mRows = getRowCount();
-        mColumns = getColumnCount();
 
         for (int i = 0; i < getChildCount(); i++) {
-            if (i <= mColumns) {
+            if (i <= getColumnCount()) {
                 setSublistVisibility(i, true);
             } else {
                 setSublistVisibility(i, false);
             }
         }
-
     }
 
     private void setSublistVisibility(int index, boolean visible) {
         View subList = getChildAt(index);
-        Log.d("ListGrid", "index: " + index  + ", visibility: "  + visible);
         if (subList != null) {
             subList.setVisibility(visible ? View.VISIBLE : View.GONE);
         }
     }
 
     private int getRowCount() {
-        return (int) Math.ceil(Math.sqrt(mExpectedCount));
+        // special case for 3 to use a single row
+        if (mExpectedCount == 3) {
+            return 1;
+        }
+        return (int) Math.round(Math.sqrt(mExpectedCount));
     }
 
     private int getColumnCount() {
-        return (int) Math.round(Math.sqrt(mExpectedCount));
+        // special case for 3 to use a single row
+        if (mExpectedCount == 3) {
+            return 3;
+        }
+        return (int) Math.ceil(Math.sqrt(mExpectedCount));
     }
 }

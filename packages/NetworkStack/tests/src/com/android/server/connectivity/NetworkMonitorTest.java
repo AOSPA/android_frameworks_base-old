@@ -18,8 +18,10 @@ package com.android.server.connectivity;
 
 import static android.net.CaptivePortal.APP_RETURN_DISMISSED;
 import static android.net.INetworkMonitor.NETWORK_TEST_RESULT_INVALID;
+import static android.net.INetworkMonitor.NETWORK_TEST_RESULT_PARTIAL_CONNECTIVITY;
 import static android.net.INetworkMonitor.NETWORK_TEST_RESULT_VALID;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
+import static android.provider.Settings.Global.DATA_STALL_EVALUATION_TYPE_DNS;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
@@ -60,11 +62,12 @@ import android.os.ConditionVariable;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.provider.Settings;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.telephony.CellSignalStrength;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -81,7 +84,6 @@ import java.net.URL;
 import java.util.Random;
 
 import javax.net.ssl.SSLHandshakeException;
-
 
 @RunWith(AndroidJUnit4.class)
 @SmallTest
@@ -114,7 +116,6 @@ public class NetworkMonitorTest {
     private static final String TEST_OTHER_FALLBACK_URL = "http://otherfallback.google.com/gen_204";
     private static final String TEST_MCCMNC = "123456";
 
-    private static final int DATA_STALL_EVALUATION_TYPE_DNS = 1;
     private static final int RETURN_CODE_DNS_SUCCESS = 0;
     private static final int RETURN_CODE_DNS_TIMEOUT = 255;
     private static final int DEFAULT_DNS_TIMEOUT_THRESHOLD = 5;
@@ -186,7 +187,7 @@ public class NetworkMonitorTest {
         when(mCm.getNetworkCapabilities(any())).thenReturn(METERED_CAPABILITIES);
 
         setMinDataStallEvaluateInterval(500);
-        setDataStallEvaluationType(1 << DATA_STALL_EVALUATION_TYPE_DNS);
+        setDataStallEvaluationType(DATA_STALL_EVALUATION_TYPE_DNS);
         setValidDataStallDnsTimeThreshold(500);
         setConsecutiveDnsTimeoutThreshold(5);
     }
@@ -525,7 +526,7 @@ public class NetworkMonitorTest {
         wrappedMonitor.setLastProbeTime(SystemClock.elapsedRealtime() - 1000);
         makeDnsTimeoutEvent(wrappedMonitor, 5);
         assertTrue(wrappedMonitor.isDataStall());
-        verify(mDataStallStatsUtils, times(1)).write(any(), any());
+        verify(mDataStallStatsUtils, times(1)).write(makeEmptyDataStallDetectionStats(), any());
     }
 
     @Test
@@ -534,7 +535,7 @@ public class NetworkMonitorTest {
         wrappedMonitor.setLastProbeTime(SystemClock.elapsedRealtime() - 1000);
         makeDnsTimeoutEvent(wrappedMonitor, 3);
         assertFalse(wrappedMonitor.isDataStall());
-        verify(mDataStallStatsUtils, never()).write(any(), any());
+        verify(mDataStallStatsUtils, never()).write(makeEmptyDataStallDetectionStats(), any());
     }
 
     @Test
@@ -572,6 +573,34 @@ public class NetworkMonitorTest {
                 stats.build());
     }
 
+    @Test
+    public void testIgnoreHttpsProbe() throws Exception {
+        setSslException(mHttpsConnection);
+        setStatus(mHttpConnection, 204);
+
+        final NetworkMonitor nm = makeMonitor();
+        nm.notifyNetworkConnected();
+        verify(mCallbacks, timeout(HANDLER_TIMEOUT_MS).times(1))
+                .notifyNetworkTested(NETWORK_TEST_RESULT_PARTIAL_CONNECTIVITY, null);
+
+        nm.setAcceptPartialConnectivity();
+        verify(mCallbacks, timeout(HANDLER_TIMEOUT_MS).times(1))
+                .notifyNetworkTested(NETWORK_TEST_RESULT_VALID, null);
+    }
+
+    @Test
+    public void testIsPartialConnectivity() throws IOException {
+        setStatus(mHttpsConnection, 500);
+        setStatus(mHttpConnection, 204);
+        setStatus(mFallbackConnection, 500);
+        assertPartialConnectivity(makeMonitor().isCaptivePortal());
+
+        setStatus(mHttpsConnection, 500);
+        setStatus(mHttpConnection, 500);
+        setStatus(mFallbackConnection, 204);
+        assertPartialConnectivity(makeMonitor().isCaptivePortal());
+    }
+
     private void makeDnsTimeoutEvent(WrappedNetworkMonitor wrappedMonitor, int count) {
         for (int i = 0; i < count; i++) {
             wrappedMonitor.getDnsStallDetector().accumulateConsecutiveDnsTimeoutCount(
@@ -584,6 +613,10 @@ public class NetworkMonitorTest {
             wrappedMonitor.getDnsStallDetector().accumulateConsecutiveDnsTimeoutCount(
                     RETURN_CODE_DNS_SUCCESS);
         }
+    }
+
+    private DataStallDetectionStats makeEmptyDataStallDetectionStats() {
+        return new DataStallDetectionStats.Builder().build();
     }
 
     private void setDataStallEvaluationType(int type) {
@@ -643,6 +676,10 @@ public class NetworkMonitorTest {
         assertFalse(result.isPortal());
         assertTrue(result.isFailed());
         assertFalse(result.isSuccessful());
+    }
+
+    private void assertPartialConnectivity(CaptivePortalProbeResult result) {
+        assertTrue(result.isPartialConnectivity());
     }
 
     private void setSslException(HttpURLConnection connection) throws IOException {

@@ -28,6 +28,7 @@ import java.lang.annotation.RetentionPolicy;
 
 /**
  * A representation of an app target event.
+ *
  * @hide
  */
 @SystemApi
@@ -84,7 +85,7 @@ public final class AppTargetEvent implements Parcelable {
     /**
      * Returns the launch location.
      */
-    @NonNull
+    @Nullable
     public String getLaunchLocation() {
         return mLocation;
     }
@@ -92,8 +93,7 @@ public final class AppTargetEvent implements Parcelable {
     /**
      * Returns the action type.
      */
-    @NonNull
-    public int getAction() {
+    public @ActionType int getAction() {
         return mAction;
     }
 
@@ -119,10 +119,7 @@ public final class AppTargetEvent implements Parcelable {
         dest.writeInt(mAction);
     }
 
-    /**
-     * @see Creator
-     */
-    public static final Creator<AppTargetEvent> CREATOR =
+    public static final @android.annotation.NonNull Creator<AppTargetEvent> CREATOR =
             new Creator<AppTargetEvent>() {
                 public AppTargetEvent createFromParcel(Parcel parcel) {
                     return new AppTargetEvent(parcel);
@@ -135,6 +132,7 @@ public final class AppTargetEvent implements Parcelable {
 
     /**
      * A builder for app target events.
+     *
      * @hide
      */
     @SystemApi
@@ -144,6 +142,10 @@ public final class AppTargetEvent implements Parcelable {
         private String mLocation;
         private @ActionType int mAction;
 
+        /**
+         * @param target The app target that is associated with this event.
+         * @param actionType The event type, which is one of the values in {@link ActionType}.
+         */
         public Builder(@Nullable AppTarget target, @ActionType int actionType) {
             mTarget = target;
             mAction = actionType;
@@ -152,7 +154,8 @@ public final class AppTargetEvent implements Parcelable {
         /**
          * Sets the launch location.
          */
-        public Builder setLaunchLocation(String location) {
+        @NonNull
+        public Builder setLaunchLocation(@Nullable String location) {
             mLocation = location;
             return this;
         }
@@ -160,6 +163,7 @@ public final class AppTargetEvent implements Parcelable {
         /**
          * Builds a new event instance.
          */
+        @NonNull
         public AppTargetEvent build() {
             return new AppTargetEvent(mTarget, mLocation, mAction);
         }

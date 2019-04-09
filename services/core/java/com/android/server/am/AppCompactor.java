@@ -17,14 +17,6 @@
 package com.android.server.am;
 
 import static android.os.Process.THREAD_PRIORITY_FOREGROUND;
-import static android.provider.DeviceConfig.ActivityManager.KEY_COMPACT_ACTION_1;
-import static android.provider.DeviceConfig.ActivityManager.KEY_COMPACT_ACTION_2;
-import static android.provider.DeviceConfig.ActivityManager.KEY_COMPACT_STATSD_SAMPLE_RATE;
-import static android.provider.DeviceConfig.ActivityManager.KEY_COMPACT_THROTTLE_1;
-import static android.provider.DeviceConfig.ActivityManager.KEY_COMPACT_THROTTLE_2;
-import static android.provider.DeviceConfig.ActivityManager.KEY_COMPACT_THROTTLE_3;
-import static android.provider.DeviceConfig.ActivityManager.KEY_COMPACT_THROTTLE_4;
-import static android.provider.DeviceConfig.ActivityManager.KEY_USE_COMPACTION;
 
 import android.app.ActivityManager;
 import android.app.ActivityThread;
@@ -51,6 +43,19 @@ import java.util.Random;
 
 public final class AppCompactor {
 
+    // Flags stored in the DeviceConfig API.
+    @VisibleForTesting static final String KEY_USE_COMPACTION = "use_compaction";
+    @VisibleForTesting static final String KEY_COMPACT_ACTION_1 = "compact_action_1";
+    @VisibleForTesting static final String KEY_COMPACT_ACTION_2 = "compact_action_2";
+    @VisibleForTesting static final String KEY_COMPACT_THROTTLE_1 = "compact_throttle_1";
+    @VisibleForTesting static final String KEY_COMPACT_THROTTLE_2 = "compact_throttle_2";
+    @VisibleForTesting static final String KEY_COMPACT_THROTTLE_3 = "compact_throttle_3";
+    @VisibleForTesting static final String KEY_COMPACT_THROTTLE_4 = "compact_throttle_4";
+    @VisibleForTesting static final String KEY_COMPACT_THROTTLE_5 = "compact_throttle_5";
+    @VisibleForTesting static final String KEY_COMPACT_THROTTLE_6 = "compact_throttle_6";
+    @VisibleForTesting static final String KEY_COMPACT_STATSD_SAMPLE_RATE =
+            "compact_statsd_sample_rate";
+
     // Phenotype sends int configurations and we map them to the strings we'll use on device,
     // preventing a weird string value entering the kernel.
     private static final int COMPACT_ACTION_FILE_FLAG = 1;
@@ -70,6 +75,8 @@ public final class AppCompactor {
     @VisibleForTesting static final long DEFAULT_COMPACT_THROTTLE_2 = 10_000;
     @VisibleForTesting static final long DEFAULT_COMPACT_THROTTLE_3 = 500;
     @VisibleForTesting static final long DEFAULT_COMPACT_THROTTLE_4 = 10_000;
+    @VisibleForTesting static final long DEFAULT_COMPACT_THROTTLE_5 = 10 * 60 * 1000;
+    @VisibleForTesting static final long DEFAULT_COMPACT_THROTTLE_6 = 10 * 60 * 1000;
     // The sampling rate to push app compaction events into statsd for upload.
     @VisibleForTesting static final float DEFAULT_STATSD_SAMPLE_RATE = 0.1f;
 
@@ -82,7 +89,10 @@ public final class AppCompactor {
     // Handler constants.
     static final int COMPACT_PROCESS_SOME = 1;
     static final int COMPACT_PROCESS_FULL = 2;
+    static final int COMPACT_PROCESS_PERSISTENT = 3;
+    static final int COMPACT_PROCESS_BFGS = 4;
     static final int COMPACT_PROCESS_MSG = 1;
+    static final int COMPACT_SYSTEM_MSG = 2;
 
     /**
      * This thread must be moved to the system background cpuset.
@@ -139,6 +149,10 @@ public final class AppCompactor {
     @GuardedBy("mPhenotypeFlagLock")
     @VisibleForTesting volatile long mCompactThrottleFullFull = DEFAULT_COMPACT_THROTTLE_4;
     @GuardedBy("mPhenotypeFlagLock")
+    @VisibleForTesting volatile long mCompactThrottleBFGS = DEFAULT_COMPACT_THROTTLE_5;
+    @GuardedBy("mPhenotypeFlagLock")
+    @VisibleForTesting volatile long mCompactThrottlePersistent = DEFAULT_COMPACT_THROTTLE_6;
+    @GuardedBy("mPhenotypeFlagLock")
     private volatile boolean mUseCompaction = DEFAULT_USE_COMPACTION;
 
     private final Random mRandom = new Random();
@@ -165,7 +179,7 @@ public final class AppCompactor {
      * starts the background thread if necessary.
      */
     public void init() {
-        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.ActivityManager.NAMESPACE,
+        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 ActivityThread.currentApplication().getMainExecutor(), mOnFlagsChangedListener);
         synchronized (mPhenotypeFlagLock) {
             updateUseCompaction();
@@ -208,7 +222,7 @@ public final class AppCompactor {
         mPendingCompactionProcesses.add(app);
         mCompactionHandler.sendMessage(
             mCompactionHandler.obtainMessage(
-                COMPACT_PROCESS_MSG, app.curAdj, app.setProcState));
+                COMPACT_PROCESS_MSG, app.setAdj, app.setProcState));
     }
 
     @GuardedBy("mAm")
@@ -217,9 +231,49 @@ public final class AppCompactor {
         mPendingCompactionProcesses.add(app);
         mCompactionHandler.sendMessage(
             mCompactionHandler.obtainMessage(
-                COMPACT_PROCESS_MSG, app.curAdj, app.setProcState));
+                COMPACT_PROCESS_MSG, app.setAdj, app.setProcState));
 
     }
+
+    @GuardedBy("mAm")
+    void compactAppPersistent(ProcessRecord app) {
+        app.reqCompactAction = COMPACT_PROCESS_PERSISTENT;
+        mPendingCompactionProcesses.add(app);
+        mCompactionHandler.sendMessage(
+                mCompactionHandler.obtainMessage(
+                    COMPACT_PROCESS_MSG, app.curAdj, app.setProcState));
+    }
+
+    @GuardedBy("mAm")
+    boolean shouldCompactPersistent(ProcessRecord app, long now) {
+        return (app.lastCompactTime == 0
+                || (now - app.lastCompactTime) > mCompactThrottlePersistent);
+    }
+
+    @GuardedBy("mAm")
+    void compactAppBfgs(ProcessRecord app) {
+        app.reqCompactAction = COMPACT_PROCESS_BFGS;
+        mPendingCompactionProcesses.add(app);
+        mCompactionHandler.sendMessage(
+                mCompactionHandler.obtainMessage(
+                    COMPACT_PROCESS_MSG, app.curAdj, app.setProcState));
+    }
+
+    @GuardedBy("mAm")
+    boolean shouldCompactBFGS(ProcessRecord app, long now) {
+        return (app.lastCompactTime == 0
+                || (now - app.lastCompactTime) > mCompactThrottleBFGS);
+    }
+
+    @GuardedBy("mAm")
+    void compactAllSystem() {
+        if (mUseCompaction) {
+            mCompactionHandler.sendMessage(mCompactionHandler.obtainMessage(
+                                              COMPACT_SYSTEM_MSG));
+        }
+    }
+
+    private native void compactSystem();
 
     /**
      * Reads the flag value from DeviceConfig to determine whether app compaction
@@ -227,11 +281,8 @@ public final class AppCompactor {
      */
     @GuardedBy("mPhenotypeFlagLock")
     private void updateUseCompaction() {
-        String useCompactionFlag =
-                DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
-                    KEY_USE_COMPACTION);
-        mUseCompaction = TextUtils.isEmpty(useCompactionFlag)
-                ? DEFAULT_USE_COMPACTION : Boolean.parseBoolean(useCompactionFlag);
+        mUseCompaction = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                    KEY_USE_COMPACTION, DEFAULT_USE_COMPACTION);
         if (mUseCompaction && !mCompactionThread.isAlive()) {
             mCompactionThread.start();
             mCompactionHandler = new MemCompactionHandler();
@@ -240,28 +291,11 @@ public final class AppCompactor {
 
     @GuardedBy("mPhenotypeFlagLock")
     private void updateCompactionActions() {
-        String compactAction1Flag =
-                DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
-                        KEY_COMPACT_ACTION_1);
-        String compactAction2Flag =
-                DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
-                        KEY_COMPACT_ACTION_2);
+        int compactAction1 = DeviceConfig.getInt(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_COMPACT_ACTION_1, DEFAULT_COMPACT_ACTION_1);
 
-        int compactAction1 = DEFAULT_COMPACT_ACTION_1;
-        try {
-            compactAction1 = TextUtils.isEmpty(compactAction1Flag)
-                    ? DEFAULT_COMPACT_ACTION_1 : Integer.parseInt(compactAction1Flag);
-        } catch (NumberFormatException e) {
-          // Do nothing, leave default.
-        }
-
-        int compactAction2 = DEFAULT_COMPACT_ACTION_2;
-        try {
-            compactAction2 = TextUtils.isEmpty(compactAction2Flag)
-                    ? DEFAULT_COMPACT_ACTION_2 : Integer.parseInt(compactAction2Flag);
-        } catch (NumberFormatException e) {
-            // Do nothing, leave default.
-        }
+        int compactAction2 = DeviceConfig.getInt(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_COMPACT_ACTION_2, DEFAULT_COMPACT_ACTION_2);
 
         mCompactActionSome = compactActionIntToString(compactAction1);
         mCompactActionFull = compactActionIntToString(compactAction2);
@@ -271,21 +305,29 @@ public final class AppCompactor {
     private void updateCompactionThrottles() {
         boolean useThrottleDefaults = false;
         String throttleSomeSomeFlag =
-                DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
+                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                     KEY_COMPACT_THROTTLE_1);
         String throttleSomeFullFlag =
-                DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
+                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                     KEY_COMPACT_THROTTLE_2);
         String throttleFullSomeFlag =
-                DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
+                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                     KEY_COMPACT_THROTTLE_3);
         String throttleFullFullFlag =
-                DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
+                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                     KEY_COMPACT_THROTTLE_4);
+        String throttleBFGSFlag =
+                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                    KEY_COMPACT_THROTTLE_5);
+        String throttlePersistentFlag =
+                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                    KEY_COMPACT_THROTTLE_6);
 
         if (TextUtils.isEmpty(throttleSomeSomeFlag) || TextUtils.isEmpty(throttleSomeFullFlag)
                 || TextUtils.isEmpty(throttleFullSomeFlag)
-                || TextUtils.isEmpty(throttleFullFullFlag)) {
+                || TextUtils.isEmpty(throttleFullFullFlag)
+                || TextUtils.isEmpty(throttleBFGSFlag)
+                || TextUtils.isEmpty(throttlePersistentFlag)) {
             // Set defaults for all if any are not set.
             useThrottleDefaults = true;
         } else {
@@ -294,6 +336,8 @@ public final class AppCompactor {
                 mCompactThrottleSomeFull = Integer.parseInt(throttleSomeFullFlag);
                 mCompactThrottleFullSome = Integer.parseInt(throttleFullSomeFlag);
                 mCompactThrottleFullFull = Integer.parseInt(throttleFullFullFlag);
+                mCompactThrottleBFGS = Integer.parseInt(throttleBFGSFlag);
+                mCompactThrottlePersistent = Integer.parseInt(throttlePersistentFlag);
             } catch (NumberFormatException e) {
                 useThrottleDefaults = true;
             }
@@ -304,19 +348,15 @@ public final class AppCompactor {
             mCompactThrottleSomeFull = DEFAULT_COMPACT_THROTTLE_2;
             mCompactThrottleFullSome = DEFAULT_COMPACT_THROTTLE_3;
             mCompactThrottleFullFull = DEFAULT_COMPACT_THROTTLE_4;
+            mCompactThrottleBFGS = DEFAULT_COMPACT_THROTTLE_5;
+            mCompactThrottlePersistent = DEFAULT_COMPACT_THROTTLE_6;
         }
     }
 
     @GuardedBy("mPhenotypeFlagLock")
     private void updateStatsdSampleRate() {
-        String sampleRateFlag = DeviceConfig.getProperty(DeviceConfig.ActivityManager.NAMESPACE,
-                KEY_COMPACT_STATSD_SAMPLE_RATE);
-        try {
-            mStatsdSampleRate = TextUtils.isEmpty(sampleRateFlag)
-                    ? DEFAULT_STATSD_SAMPLE_RATE : Float.parseFloat(sampleRateFlag);
-        } catch (NumberFormatException e) {
-            mStatsdSampleRate = DEFAULT_STATSD_SAMPLE_RATE;
-        }
+        mStatsdSampleRate = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_COMPACT_STATSD_SAMPLE_RATE, DEFAULT_STATSD_SAMPLE_RATE);
         mStatsdSampleRate = Math.min(1.0f, Math.max(0.0f, mStatsdSampleRate));
     }
 
@@ -355,14 +395,19 @@ public final class AppCompactor {
                     synchronized (mAm) {
                         proc = mPendingCompactionProcesses.remove(0);
 
+                        pendingAction = proc.reqCompactAction;
+
                         // don't compact if the process has returned to perceptible
-                        if (proc.setAdj <= ProcessList.PERCEPTIBLE_APP_ADJ) {
+                        // and this is only a cached/home/prev compaction
+                        if ((pendingAction == COMPACT_PROCESS_SOME
+                                || pendingAction == COMPACT_PROCESS_FULL)
+                                && (proc.setAdj <= ProcessList.PERCEPTIBLE_APP_ADJ)) {
                             return;
                         }
 
                         pid = proc.pid;
                         name = proc.processName;
-                        pendingAction = proc.reqCompactAction;
+
                         lastCompactAction = proc.lastCompactAction;
                         lastCompactTime = proc.lastCompactTime;
                     }
@@ -379,31 +424,49 @@ public final class AppCompactor {
                     // Note that we explicitly don't take mPhenotypeFlagLock here as the flags
                     // should very seldom change, and taking the risk of using the wrong action is
                     // preferable to taking the lock for every single compaction action.
-                    if (pendingAction == COMPACT_PROCESS_SOME) {
-                        if ((lastCompactAction == COMPACT_PROCESS_SOME
-                                  && (start - lastCompactTime < mCompactThrottleSomeSome))
-                                  || (lastCompactAction == COMPACT_PROCESS_FULL
-                                      && (start - lastCompactTime
-                                          < mCompactThrottleSomeFull))) {
-                            return;
-                        }
-                    } else {
-                        if ((lastCompactAction == COMPACT_PROCESS_SOME
-                                  && (start - lastCompactTime < mCompactThrottleFullSome))
-                                  || (lastCompactAction == COMPACT_PROCESS_FULL
-                                      && (start - lastCompactTime
-                                          < mCompactThrottleFullFull))) {
-                            return;
+                    if (lastCompactTime != 0) {
+                        if (pendingAction == COMPACT_PROCESS_SOME) {
+                            if ((lastCompactAction == COMPACT_PROCESS_SOME
+                                    && (start - lastCompactTime < mCompactThrottleSomeSome))
+                                    || (lastCompactAction == COMPACT_PROCESS_FULL
+                                        && (start - lastCompactTime
+                                                < mCompactThrottleSomeFull))) {
+                                return;
+                            }
+                        } else if (pendingAction == COMPACT_PROCESS_FULL) {
+                            if ((lastCompactAction == COMPACT_PROCESS_SOME
+                                    && (start - lastCompactTime < mCompactThrottleFullSome))
+                                    || (lastCompactAction == COMPACT_PROCESS_FULL
+                                        && (start - lastCompactTime
+                                                < mCompactThrottleFullFull))) {
+                                return;
+                            }
+                        } else if (pendingAction == COMPACT_PROCESS_PERSISTENT) {
+                            if (start - lastCompactTime < mCompactThrottlePersistent) {
+                                return;
+                            }
+                        } else if (pendingAction == COMPACT_PROCESS_BFGS) {
+                            if (start - lastCompactTime < mCompactThrottleBFGS) {
+                                return;
+                            }
                         }
                     }
-
-                    if (pendingAction == COMPACT_PROCESS_SOME) {
-                        action = mCompactActionSome;
-                    } else {
-                        action = mCompactActionFull;
+                    switch (pendingAction) {
+                        case COMPACT_PROCESS_SOME:
+                            action = mCompactActionSome;
+                            break;
+                        // For the time being, treat these as equivalent.
+                        case COMPACT_PROCESS_FULL:
+                        case COMPACT_PROCESS_PERSISTENT:
+                        case COMPACT_PROCESS_BFGS:
+                            action = mCompactActionFull;
+                            break;
+                        default:
+                            action = COMPACT_ACTION_NONE;
+                            break;
                     }
 
-                    if (action.equals(COMPACT_ACTION_NONE)) {
+                    if (COMPACT_ACTION_NONE.equals(action)) {
                         return;
                     }
 
@@ -445,6 +508,13 @@ public final class AppCompactor {
                         // nothing to do, presumably the process died
                         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     }
+                    break;
+                }
+                case COMPACT_SYSTEM_MSG: {
+                    Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "compactSystem");
+                    compactSystem();
+                    Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                    break;
                 }
             }
         }

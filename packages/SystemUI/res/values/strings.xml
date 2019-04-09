@@ -266,6 +266,8 @@
     <string name="accessibility_scanning_face">Scanning face</string>
     <!-- Click action label for accessibility for the smart reply buttons (not shown on-screen).". [CHAR LIMIT=NONE] -->
     <string name="accessibility_send_smart_reply">Send</string>
+    <!-- Content description of the manage notification button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_manage_notification">Manage notifications</string>
     <!-- Click action label for accessibility for the unlock button. [CHAR LIMIT=NONE] -->
     <string name="unlock_label">unlock</string>
     <!-- Click action label for accessibility for the phone button. [CHAR LIMIT=NONE] -->
@@ -277,8 +279,6 @@
     <!-- Button name for "Cancel". [CHAR LIMIT=NONE] -->
     <string name="cancel">Cancel</string>
 
-    <!-- Content description for the error/help message are when the system-provided fingerprint dialog is showing, for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_biometric_dialog_help_area">Help message area</string>
     <!-- Message shown when a biometric is authenticated, asking the user to confirm authentication [CHAR LIMIT=30] -->
     <string name="biometric_dialog_confirm">Confirm</string>
     <!-- Button name on BiometricPrompt shown when a biometric is detected but not authenticated. Tapping the button resumes authentication [CHAR_LIMIT=30] -->
@@ -445,6 +445,9 @@
     <!-- Content description of the cell data being disabled. [CHAR LIMIT=NONE] -->
     <string name="cell_data_off_content_description">Mobile data off</string>
 
+    <!-- Content description of the cell data for not default subscription. [CHAR LIMIT=NONE] -->
+    <string name="not_default_data_content_description">Not set to use data</string>
+
     <!-- Content description of the cell data being disabled but shortened. [CHAR LIMIT=20] -->
     <string name="cell_data_off">Off</string>
 
@@ -546,11 +549,11 @@
     <!-- Content description of the do not disturb tile in quick settings when on in alarms only (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_dnd_alarms_on">alarms only</string>
      <!-- Content description of the do not disturb tile in quick settings (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_quick_settings_dnd">Do not disturb.</string>
+    <string name="accessibility_quick_settings_dnd">Do Not Disturb.</string>
     <!-- Announcement made when do not disturb changes to off (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_quick_settings_dnd_changed_off">Do not disturb turned off.</string>
+    <string name="accessibility_quick_settings_dnd_changed_off">Do Not Disturb turned off.</string>
     <!-- Announcement made when do not disturb changes to on (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_quick_settings_dnd_changed_on">Do not disturb turned on.</string>
+    <string name="accessibility_quick_settings_dnd_changed_on">Do Not Disturb turned on.</string>
     <!-- Content description of the bluetooth tile in quick settings (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_bluetooth">Bluetooth.</string>
     <!-- Content description of the bluetooth tile in quick settings when off (not shown on the screen). [CHAR LIMIT=NONE] -->
@@ -651,8 +654,6 @@
 
     <!-- The overflow indicator shown when a group has more notification inside the group than the visible ones. An example is "+ 3" [CHAR LIMIT=5] -->
     <string name="notification_group_overflow_indicator">+ <xliff:g id="number" example="3">%s</xliff:g></string>
-    <!-- The overflow indicator shown when a group has more notification inside the group than the visible ones. An example is "New message, +3" [CHAR LIMIT=7] -->
-    <string name="notification_group_overflow_indicator_ambient"><xliff:g id="notification_title" example="New message">%1$s</xliff:g>, +<xliff:g id="overflow" example="+3">%2$s</xliff:g></string>
 
     <!-- Content description describing how many more notifications are in a group [CHAR LIMIT=NONE] -->
     <plurals name="notification_group_overflow_description">
@@ -698,7 +699,7 @@
     <!-- QuickSettings: Onboarding text that introduces users to long press on an option in order to view the option's menu in Settings [CHAR LIMIT=NONE] -->
     <string name="quick_settings_header_onboarding_text">Touch &amp; hold icons for more options</string>
     <!-- QuickSettings: Do not disturb [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_dnd_label">Do not disturb</string>
+    <string name="quick_settings_dnd_label">Do Not Disturb</string>
     <!-- QuickSettings: Do not disturb - Priority only [CHAR LIMIT=NONE] -->
     <string name="quick_settings_dnd_priority_label">Priority only</string>
     <!-- QuickSettings: Do not disturb - Alarms only [CHAR LIMIT=NONE] -->
@@ -776,7 +777,7 @@
     <!-- QuickSettings: Wifi secondary label shown when the wifi is being enabled [CHAR LIMIT=NONE] -->
     <string name="quick_settings_wifi_secondary_label_transient">Turning on&#8230;</string>
     <!-- QuickSettings: Cast title [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_cast_title">Cast</string>
+    <string name="quick_settings_cast_title">Screen Cast</string>
     <!-- QuickSettings: Cast detail panel, status text when casting [CHAR LIMIT=NONE] -->
     <string name="quick_settings_casting">Casting</string>
     <!-- QuickSettings: Cast detail panel, default device name [CHAR LIMIT=NONE] -->
@@ -1069,10 +1070,10 @@
     <string name="battery_saver_notification_action_text">Turn off Battery Saver</string>
 
     <!-- Media projection permission dialog warning text. [CHAR LIMIT=NONE] -->
-    <string name="media_projection_dialog_text"><xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> will start capturing everything on your screen including notifications, passwords, photos, messages and payment information.</string>
+    <string name="media_projection_dialog_text">While recording or casting, <xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> can capture any sensitive information, such as audio that you play and your passwords, payment info, photos, and messages.</string>
 
     <!-- Media projection permission dialog warning title. [CHAR LIMIT=NONE] -->
-    <string name="media_projection_dialog_title">Allow <xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> to record or cast your screen?</string>
+    <string name="media_projection_dialog_title">Exposing sensitive info during casting/recording </string>
 
     <!-- Media projection permission dialog permanent grant check box. [CHAR LIMIT=NONE] -->
     <string name="media_projection_remember_text">Don\'t show again</string>
@@ -1306,6 +1307,12 @@
 
     <!-- Content description for accessibility (not shown on the screen): volume dialog collapse button. [CHAR LIMIT=NONE] -->
     <string name="accessibility_volume_collapse">Collapse</string>
+
+    <!-- Label for the odi caption initial tool tip. [CHAR LIMIT=28] -->
+    <string name="volume_odi_captions_tip">Automatically caption media</string>
+
+    <!-- Content description for accessibility: Clear the odi caption tool tip. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_volume_close_odi_captions_tip">Close captions tip</string>
 
     <!-- content description for audio output chooser [CHAR LIMIT=NONE]-->
     <string name="accessibility_output_chooser">Switch output device</string>
@@ -1579,8 +1586,11 @@
     <string name="inline_blocking_helper">You usually dismiss these notifications.
     \nKeep showing them?</string>
 
-    <!-- Notification Inline controls: button to dismiss the blocking helper [CHAR_LIMIT=25] -->
+    <!-- Notification Inline controls: button to dismiss the blocking helper [CHAR_LIMIT=20] -->
     <string name="inline_done_button">Done</string>
+
+    <!-- Notification Inline controls: button to dismiss the blocking helper [CHAR_LIMIT=20] -->
+    <string name="inline_ok_button">OK</string>
 
     <!-- Notification Inline controls: continue receiving notifications prompt, channel level -->
     <string name="inline_keep_showing">Keep showing these notifications?</string>
@@ -1588,7 +1598,7 @@
     <!-- Notification inline controls: block notifications button [CHAR_LIMIT=25] -->
     <string name="inline_stop_button">Stop notifications</string>
 
-    <!-- Notification inline controls: button to deliver notifications silently from this channel [CHAR_LIMIT=35] -->
+    <!-- Notification inline controls: button to deliver notifications silently from this channel [CHAR_LIMIT=30] -->
     <string name="inline_deliver_silently_button">Deliver Silently</string>
 
     <!-- Notification inline controls: button to block notifications from this channel [CHAR_LIMIT=20] -->
@@ -1607,13 +1617,22 @@
     <string name="inline_silent_button_stay_silent">Stay silent</string>
 
     <!-- Notification inline controls: button to make notifications alert the user [CHAR_LIMIT=35] -->
-    <string name="inline_silent_button_alert">Alert me</string>
+    <string name="inline_silent_button_alert">Alert</string>
 
     <!-- Notification inline controls: button to continue alerting the user when notifications arrive [CHAR_LIMIT=35] -->
     <string name="inline_silent_button_keep_alerting">Keep alerting</string>
 
     <!-- Notification Inline controls: continue receiving notifications prompt, app level -->
     <string name="inline_keep_showing_app">Keep showing notifications from this app?</string>
+
+    <!-- Hint text for block button in the interruptiveness settings [CHAR_LIMIT=NONE]-->
+    <string name="hint_text_block">Blocked notifications do not appear anywhere or play a sound. You can unblock notifications in settings.</string>
+
+    <!-- Hint text for silent button in the interruptiveness settings [CHAR_LIMIT=NONE]-->
+    <string name="hint_text_silent">Silent notifications appear in the shade, but do not appear on the lock screen, present a banner, or play a sound.</string>
+
+    <!-- Hint text for alert button in the interruptiveness settings [CHAR_LIMIT=NONE]-->
+    <string name="hint_text_alert">Alerted notifications appear in the shade, on the lock screen, present a banner, and play a sound.</string>
 
     <!-- Notification: Control panel: Label that displays when the app's notifications cannot be blocked. -->
     <string name="notification_unblockable_desc">These notifications can\'t be turned off</string>
@@ -1795,14 +1814,14 @@
     <string name="tuner_full_zen_title">Show with volume controls</string>
 
     <!-- SysUI Tuner: Label for screen about do not disturb settings [CHAR LIMIT=60] -->
-    <string name="volume_and_do_not_disturb">Do not disturb</string>
+    <string name="volume_and_do_not_disturb">Do Not Disturb</string>
 
     <!-- SysUI Tuner: Switch to control whether volume buttons enter/exit do
          not disturb [CHAR LIMIT=60] -->
     <string name="volume_dnd_silent">Volume buttons shortcut</string>
 
     <!-- SysUI Tuner: Switch to control volume up behavior [CHAR LIMIT=60] -->
-    <string name="volume_up_silent">Exit do not disturb on volume up</string>
+    <string name="volume_up_silent">Exit Do Not Disturb on volume up</string>
 
     <!-- Name of the battery icon in status bar [CHAR LIMIT=30] -->
     <string name="battery">Battery</string>
@@ -2309,28 +2328,11 @@
          app for debugging. Will not be seen by users. [CHAR LIMIT=20] -->
     <string name="heap_dump_tile_name">Dump SysUI Heap</string>
 
-    <!-- Text on chip for multiple apps using a single app op [CHAR LIMIT=12] -->
-    <plurals name="ongoing_privacy_chip_multiple_apps">
-        <item quantity="one"><xliff:g id="num_apps" example="1">%d</xliff:g> app</item>
-        <item quantity="few"><xliff:g id="num_apps" example="3">%d</xliff:g> apps</item>
-        <item quantity="other"><xliff:g id="num_apps" example="3">%d</xliff:g> apps</item>
-    </plurals>
-
     <!-- Content description for ongoing privacy chip. Use with a single app [CHAR LIMIT=NONE]-->
     <string name="ongoing_privacy_chip_content_single_app"><xliff:g id="app" example="Example App">%1$s</xliff:g> is using your <xliff:g id="types_list" example="camera, location">%2$s</xliff:g>.</string>
 
     <!-- Content description for ongoing privacy chip. Use with multiple apps [CHAR LIMIT=NONE]-->
     <string name="ongoing_privacy_chip_content_multiple_apps">Applications are using your <xliff:g id="types_list" example="camera, location">%s</xliff:g>.</string>
-
-    <!-- Ongoing Privacy "Chip" in use text [CHAR LIMIT=10]-->
-    <string name="ongoing_privacy_chip_in_use">In use:</string>
-
-    <!-- Content description for ongoing privacy chip. Use with multiple apps using same app op[CHAR LIMIT=NONE]-->
-    <plurals name="ongoing_privacy_chip_content_multiple_apps_single_op">
-        <item quantity="one"><xliff:g id="num_apps" example="1">%1$d</xliff:g> application is using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</item>
-        <item quantity="few"><xliff:g id="num_apps" example="3">%1$d</xliff:g> applications are using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</item>
-        <item quantity="other"><xliff:g id="num_apps" example="3">%1$d</xliff:g> applications are using your <xliff:g id="type" example="camera">%2$s</xliff:g>.</item>
-    </plurals>
 
     <!-- Action for accepting the Ongoing privacy dialog [CHAR LIMIT=10]-->
     <string name="ongoing_privacy_dialog_ok">Got it</string>
@@ -2359,12 +2361,6 @@
     <!-- Text for microphone app op [CHAR LIMIT=20]-->
     <string name="privacy_type_microphone">microphone</string>
 
-    <!-- Text for indicating extra apps using app ops [CHAR LIMIT=NONE] -->
-    <plurals name="ongoing_privacy_dialog_overflow_text">
-        <item quantity="one"><xliff:g id="num_apps" example="1">%d</xliff:g> other app</item>
-        <item quantity="other"><xliff:g id="num_apps" example="3">%d</xliff:g> other apps</item>
-    </plurals>
-
     <!-- Text for the quick setting tile for sensor privacy [CHAR LIMIT=30] -->
     <string name="sensor_privacy_mode">Sensors off</string>
 
@@ -2374,17 +2370,37 @@
     <!-- What to show on the ambient display player when song doesn't have a title. [CHAR LIMIT=20] -->
     <string name="music_controls_no_title">No title</string>
 
+    <!-- Description of the restart button in the hint of size compatibility mode. [CHAR LIMIT=NONE] -->
+    <string name="restart_button_description">Tap to restart this app and go full screen.</string>
+
     <!-- Text used for content description of deep link button in the header of expanded bubble
          view. [CHAR_LIMIT=NONE] -->
     <string name="bubbles_deep_link_button_description">Open <xliff:g id="app_name" example="YouTube">%1$s</xliff:g></string>
     <!-- Text used for content description of settings button in the header of expanded bubble
          view. [CHAR_LIMIT=NONE] -->
-    <string name="bubbles_settings_button_description">Open notification settings for <xliff:g id="app_name" example="YouTube">%1$s</xliff:g></string>
+    <string name="bubbles_settings_button_description">Settings for <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> bubbles</string>
     <!-- Text for asking the user whether bubbles (floating app content) should be enabled for an
          app. [CHAR LIMIT=NONE] -->
-    <string name="bubbles_prompt">Allow bubbles from this app?</string>
+    <string name="bubbles_prompt">Allow bubbles from <xliff:g id="app_name" example="YouTube">%1$s</xliff:g>?</string>
     <!-- Text used for button allowing user to opt out of bubbles [CHAR LIMIT=20] -->
-    <string name="no_bubbles">Block</string>
+    <string name="no_bubbles">Deny</string>
     <!-- Text used for button allowing user to approve / enable bubbles [CHAR LIMIT=20] -->
     <string name="yes_bubbles">Allow</string>
+    <!-- Text used for the button allowing users to postpone their decision to allow or deny bubbles [CHAR LIMIT=40] -->
+    <string name="ask_me_later_bubbles">Ask me later</string>
+    <!-- Content description when a bubble is focused. [CHAR LIMIT=NONE] -->
+    <string name="bubble_content_description_single"><xliff:g id="notification_title" example="some title">%1$s</xliff:g> from <xliff:g id="app_name" example="YouTube">%2$s</xliff:g></string>
+    <!-- Content description when the stack of bubbles is focused. [CHAR LIMIT=NONE] -->
+    <string name="bubble_content_description_stack"><xliff:g id="notification_title" example="some title">%1$s</xliff:g> from <xliff:g id="app_name" example="YouTube">%2$s</xliff:g> and <xliff:g id="bubble_count" example="4">%3$d</xliff:g> more</string>
+    <!-- Action in accessibility menu to move the stack of bubbles [CHAR LIMIT=20] -->
+    <string name="bubble_accessibility_action_move">Move</string>
+    <!-- Action in accessibility menu to move the stack of bubbles to the top left of the screen. [CHAR LIMIT=30] -->
+    <string name="bubble_accessibility_action_move_top_left">Move top left</string>
+    <!-- Action in accessibility menu to move the stack of bubbles to the top right of the screen. [CHAR LIMIT=30] -->
+    <string name="bubble_accessibility_action_move_top_right">Move top right</string>
+    <!-- Action in accessibility menu to move the stack of bubbles to the bottom left of the screen. [CHAR LIMIT=30]-->
+    <string name="bubble_accessibility_action_move_bottom_left">Move bottom left</string>
+    <!-- Action in accessibility menu to move the stack of bubbles to the bottom right of the screen. [CHAR LIMIT=30]-->
+    <string name="bubble_accessibility_action_move_bottom_right">Move bottom right</string>
+
 </resources>

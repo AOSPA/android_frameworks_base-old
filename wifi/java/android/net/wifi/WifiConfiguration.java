@@ -594,41 +594,48 @@ public class WifiConfiguration implements Parcelable {
      * See {@link KeyMgmt} for descriptions of the values.
      * Defaults to WPA-PSK WPA-EAP.
      */
+    @NonNull
     public BitSet allowedKeyManagement;
     /**
      * The set of security protocols supported by this configuration.
      * See {@link Protocol} for descriptions of the values.
      * Defaults to WPA RSN.
      */
+    @NonNull
     public BitSet allowedProtocols;
     /**
      * The set of authentication protocols supported by this configuration.
      * See {@link AuthAlgorithm} for descriptions of the values.
      * Defaults to automatic selection.
      */
+    @NonNull
     public BitSet allowedAuthAlgorithms;
     /**
      * The set of pairwise ciphers for WPA supported by this configuration.
      * See {@link PairwiseCipher} for descriptions of the values.
      * Defaults to CCMP TKIP.
      */
+    @NonNull
     public BitSet allowedPairwiseCiphers;
     /**
      * The set of group ciphers supported by this configuration.
      * See {@link GroupCipher} for descriptions of the values.
      * Defaults to CCMP TKIP WEP104 WEP40.
      */
+    @NonNull
     public BitSet allowedGroupCiphers;
     /**
      * The set of group management ciphers supported by this configuration.
      * See {@link GroupMgmtCipher} for descriptions of the values.
      */
+    @NonNull
     public BitSet allowedGroupManagementCiphers;
     /**
      * The set of SuiteB ciphers supported by this configuration.
      * To be used for WPA3-Enterprise mode.
      * See {@link SuiteBCipher} for descriptions of the values.
      */
+    @NonNull
     public BitSet allowedSuiteBCiphers;
     /**
      * The enterprise configuration details specifying the EAP method,
@@ -1220,39 +1227,49 @@ public class WifiConfiguration implements Parcelable {
          * This network is disabled because EAP-TLS failure
          */
         public static final int DISABLED_TLS_VERSION_MISMATCH = 8;
+        /**
+         * This network is disabled due to WifiManager.disconnect() call.
+         */
+        public static final int DISABLED_BY_WIFI_MANAGER_DISCONNECT = 9;
+
         // Values above are for temporary disablement; values below are for permanent disablement.
+        /**
+         * The starting index for permanent network selection disabled reasons
+         */
+        public static final int NETWORK_SELECTION_DISABLED_PERMANENT_STARTING_INDEX = 10;
         /**
          * This network is disabled due to absence of user credentials
          */
-        public static final int DISABLED_AUTHENTICATION_NO_CREDENTIALS = 9;
+        public static final int DISABLED_AUTHENTICATION_NO_CREDENTIALS = 10;
         /**
          * This network is permanently disabled because it has no Internet access and user does not
          * want to stay connected.
          */
-        public static final int DISABLED_NO_INTERNET_PERMANENT = 10;
+        public static final int DISABLED_NO_INTERNET_PERMANENT = 11;
         /**
-         * This network is disabled due to WifiManager disable it explicitly
+         * This network is disabled due to WifiManager.disable() call.
          */
-        public static final int DISABLED_BY_WIFI_MANAGER = 11;
+        public static final int DISABLED_BY_WIFI_MANAGER = 12;
         /**
          * This network is disabled due to user switching
          */
-        public static final int DISABLED_DUE_TO_USER_SWITCH = 12;
+        public static final int DISABLED_DUE_TO_USER_SWITCH = 13;
         /**
          * This network is disabled due to wrong password
          */
-        public static final int DISABLED_BY_WRONG_PASSWORD = 13;
+        public static final int DISABLED_BY_WRONG_PASSWORD = 14;
         /**
          * This network is disabled because service is not subscribed
          */
-        public static final int DISABLED_AUTHENTICATION_NO_SUBSCRIPTION = 14;
+        public static final int DISABLED_AUTHENTICATION_NO_SUBSCRIPTION = 15;
         /**
          * This Maximum disable reason value
          */
-        public static final int NETWORK_SELECTION_DISABLED_MAX = 15;
+        public static final int NETWORK_SELECTION_DISABLED_MAX = 16;
 
         /**
-         * Quality network selection disable reason String (for debug purpose)
+         * Quality network selection disable reason String (for debug purposes & configuration
+         * storage)
          */
         public static final String[] QUALITY_NETWORK_SELECTION_DISABLE_REASON = {
                 "NETWORK_SELECTION_ENABLE",
@@ -1264,6 +1281,7 @@ public class WifiConfiguration implements Parcelable {
                 "NETWORK_SELECTION_DISABLED_NO_INTERNET_TEMPORARY",
                 "NETWORK_SELECTION_DISABLED_WPS_START",
                 "NETWORK_SELECTION_DISABLED_TLS_VERSION",
+                "NETWORK_SELECTION_DISABLED_BY_WIFI_MANAGER_DISCONNECT",
                 "NETWORK_SELECTION_DISABLED_AUTHENTICATION_NO_CREDENTIALS",
                 "NETWORK_SELECTION_DISABLED_NO_INTERNET_PERMANENT",
                 "NETWORK_SELECTION_DISABLED_BY_WIFI_MANAGER",
@@ -2155,7 +2173,7 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      */
     public String getKeyIdForCredentials(WifiConfiguration current) {
-        String keyMgmt = null;
+        String keyMgmt = "";
 
         try {
             // Get current config details for fields that are not initialized
@@ -2164,13 +2182,16 @@ public class WifiConfiguration implements Parcelable {
                 allowedKeyManagement = current.allowedKeyManagement;
             }
             if (allowedKeyManagement.get(KeyMgmt.WPA_EAP)) {
-                keyMgmt = KeyMgmt.strings[KeyMgmt.WPA_EAP];
+                keyMgmt += KeyMgmt.strings[KeyMgmt.WPA_EAP];
             }
             if (allowedKeyManagement.get(KeyMgmt.OSEN)) {
-                keyMgmt = KeyMgmt.strings[KeyMgmt.OSEN];
+                keyMgmt += KeyMgmt.strings[KeyMgmt.OSEN];
             }
             if (allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
                 keyMgmt += KeyMgmt.strings[KeyMgmt.IEEE8021X];
+            }
+            if (allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
+                keyMgmt += KeyMgmt.strings[KeyMgmt.SUITE_B_192];
             }
 
             if (TextUtils.isEmpty(keyMgmt)) {
@@ -2576,7 +2597,7 @@ public class WifiConfiguration implements Parcelable {
 
     /** Implement the Parcelable interface {@hide} */
     @UnsupportedAppUsage
-    public static final Creator<WifiConfiguration> CREATOR =
+    public static final @android.annotation.NonNull Creator<WifiConfiguration> CREATOR =
         new Creator<WifiConfiguration>() {
             public WifiConfiguration createFromParcel(Parcel in) {
                 WifiConfiguration config = new WifiConfiguration();

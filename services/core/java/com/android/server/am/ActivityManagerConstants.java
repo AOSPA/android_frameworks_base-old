@@ -16,8 +16,6 @@
 
 package com.android.server.am;
 
-import static android.provider.DeviceConfig.ActivityManager.KEY_MAX_CACHED_PROCESSES;
-
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_POWER_QUICK;
 
 import android.app.ActivityThread;
@@ -31,6 +29,8 @@ import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.OnPropertyChangedListener;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.text.TextUtils.SimpleStringSplitter;
+import android.util.ArraySet;
 import android.util.KeyValueListParser;
 import android.util.Slog;
 
@@ -71,6 +71,7 @@ final class ActivityManagerConstants extends ContentObserver {
     static final String KEY_SERVICE_MIN_RESTART_TIME_BETWEEN = "service_min_restart_time_between";
     static final String KEY_MAX_SERVICE_INACTIVITY = "service_max_inactivity";
     static final String KEY_BG_START_TIMEOUT = "service_bg_start_timeout";
+    static final String KEY_SERVICE_BG_ACTIVITY_START_TIMEOUT = "service_bg_activity_start_timeout";
     static final String KEY_BOUND_SERVICE_CRASH_RESTART_DURATION = "service_crash_restart_duration";
     static final String KEY_BOUND_SERVICE_CRASH_MAX_RETRY = "service_crash_max_retry";
     static final String KEY_PROCESS_START_ASYNC = "process_start_async";
@@ -102,11 +103,18 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final long DEFAULT_SERVICE_MIN_RESTART_TIME_BETWEEN = 10*1000;
     private static final long DEFAULT_MAX_SERVICE_INACTIVITY = 30*60*1000;
     private static final long DEFAULT_BG_START_TIMEOUT = 15*1000;
+    private static final long DEFAULT_SERVICE_BG_ACTIVITY_START_TIMEOUT = 10_000;
     private static final long DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION = 30*60_000;
     private static final int DEFAULT_BOUND_SERVICE_CRASH_MAX_RETRY = 16;
     private static final boolean DEFAULT_PROCESS_START_ASYNC = true;
     private static final long DEFAULT_MEMORY_INFO_THROTTLE_TIME = 5*60*1000;
     private static final long DEFAULT_TOP_TO_FGS_GRACE_DURATION = 15 * 1000;
+
+    // Flag stored in the DeviceConfig API.
+    /**
+     * Maximum number of cached processes.
+     */
+    private static final String KEY_MAX_CACHED_PROCESSES = "max_cached_processes";
 
     // Maximum number of cached processes we will allow.
     public int MAX_CACHED_PROCESSES = DEFAULT_MAX_CACHED_PROCESSES;
@@ -209,6 +217,9 @@ final class ActivityManagerConstants extends ContentObserver {
     // allowing the next pending start to run.
     public long BG_START_TIMEOUT = DEFAULT_BG_START_TIMEOUT;
 
+    // For how long after a whitelisted service's start its process can start a background activity
+    public long SERVICE_BG_ACTIVITY_START_TIMEOUT = DEFAULT_SERVICE_BG_ACTIVITY_START_TIMEOUT;
+
     // Initial backoff delay for retrying bound foreground services
     public long BOUND_SERVICE_CRASH_RESTART_DURATION = DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION;
 
@@ -233,6 +244,8 @@ final class ActivityManagerConstants extends ContentObserver {
     // Indicates whether the background activity starts is enabled.
     // Controlled by Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED
     volatile boolean mFlagBackgroundActivityStartsEnabled;
+
+    volatile ArraySet<String> mPackageNamesWhitelistedForBgActivityStarts = new ArraySet<>();
 
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
@@ -283,6 +296,10 @@ final class ActivityManagerConstants extends ContentObserver {
                 Settings.Global.getUriFor(
                         Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED);
 
+    private static final Uri BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST_URI =
+                Settings.Global.getUriFor(
+                        Settings.Global.BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST);
+
     private final OnPropertyChangedListener mOnDeviceConfigChangedListener =
             new OnPropertyChangedListener() {
                 @Override
@@ -303,10 +320,13 @@ final class ActivityManagerConstants extends ContentObserver {
         mResolver.registerContentObserver(ACTIVITY_MANAGER_CONSTANTS_URI, false, this);
         mResolver.registerContentObserver(ACTIVITY_STARTS_LOGGING_ENABLED_URI, false, this);
         mResolver.registerContentObserver(BACKGROUND_ACTIVITY_STARTS_ENABLED_URI, false, this);
+        mResolver.registerContentObserver(BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST_URI,
+                false, this);
         updateConstants();
         updateActivityStartsLoggingEnabled();
         updateBackgroundActivityStartsEnabled();
-        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.ActivityManager.NAMESPACE,
+        updateBackgroundActivityStartsPackageNamesWhitelist();
+        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 ActivityThread.currentApplication().getMainExecutor(),
                 mOnDeviceConfigChangedListener);
         updateMaxCachedProcesses();
@@ -355,6 +375,8 @@ final class ActivityManagerConstants extends ContentObserver {
             updateActivityStartsLoggingEnabled();
         } else if (BACKGROUND_ACTIVITY_STARTS_ENABLED_URI.equals(uri)) {
             updateBackgroundActivityStartsEnabled();
+        } else if (BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST_URI.equals(uri)) {
+            updateBackgroundActivityStartsPackageNamesWhitelist();
         }
     }
 
@@ -415,6 +437,9 @@ final class ActivityManagerConstants extends ContentObserver {
                     DEFAULT_MAX_SERVICE_INACTIVITY);
             BG_START_TIMEOUT = mParser.getLong(KEY_BG_START_TIMEOUT,
                     DEFAULT_BG_START_TIMEOUT);
+            SERVICE_BG_ACTIVITY_START_TIMEOUT = mParser.getLong(
+                    KEY_SERVICE_BG_ACTIVITY_START_TIMEOUT,
+                    DEFAULT_SERVICE_BG_ACTIVITY_START_TIMEOUT);
             BOUND_SERVICE_CRASH_RESTART_DURATION = mParser.getLong(
                 KEY_BOUND_SERVICE_CRASH_RESTART_DURATION,
                 DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION);
@@ -444,9 +469,24 @@ final class ActivityManagerConstants extends ContentObserver {
                 Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED, 1) == 1;
     }
 
+    private void updateBackgroundActivityStartsPackageNamesWhitelist() {
+        final String setting = Settings.Global.getString(mResolver,
+                Settings.Global.BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST);
+        if (TextUtils.isEmpty(setting)) {
+            return;
+        }
+        ArraySet<String> newSet = new ArraySet<>();
+        SimpleStringSplitter splitter = new SimpleStringSplitter(':');
+        splitter.setString(setting);
+        while (splitter.hasNext()) {
+            newSet.add(splitter.next());
+        }
+        mPackageNamesWhitelistedForBgActivityStarts = newSet;
+    }
+
     private void updateMaxCachedProcesses() {
         String maxCachedProcessesFlag = DeviceConfig.getProperty(
-                DeviceConfig.ActivityManager.NAMESPACE, KEY_MAX_CACHED_PROCESSES);
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_MAX_CACHED_PROCESSES);
         try {
             CUR_MAX_CACHED_PROCESSES = mOverrideMaxCachedProcesses < 0
                     ? (TextUtils.isEmpty(maxCachedProcessesFlag)
@@ -521,6 +561,8 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(MAX_SERVICE_INACTIVITY);
         pw.print("  "); pw.print(KEY_BG_START_TIMEOUT); pw.print("=");
         pw.println(BG_START_TIMEOUT);
+        pw.print("  "); pw.print(KEY_SERVICE_BG_ACTIVITY_START_TIMEOUT); pw.print("=");
+        pw.println(SERVICE_BG_ACTIVITY_START_TIMEOUT);
         pw.print("  "); pw.print(KEY_BOUND_SERVICE_CRASH_RESTART_DURATION); pw.print("=");
         pw.println(BOUND_SERVICE_CRASH_RESTART_DURATION);
         pw.print("  "); pw.print(KEY_BOUND_SERVICE_CRASH_MAX_RETRY); pw.print("=");

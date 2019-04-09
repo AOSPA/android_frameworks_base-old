@@ -24,6 +24,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
@@ -1342,7 +1343,8 @@ public class PackageInstaller {
          * @hide
          */
         public boolean areHiddenOptionsSet() {
-            return (installFlags & (PackageManager.INSTALL_ALLOW_DOWNGRADE
+            return (installFlags & (PackageManager.INSTALL_REQUEST_DOWNGRADE
+                    | PackageManager.INSTALL_ALLOW_DOWNGRADE
                     | PackageManager.INSTALL_DONT_KILL_APP
                     | PackageManager.INSTALL_INSTANT_APP
                     | PackageManager.INSTALL_FULL_APP
@@ -1446,21 +1448,37 @@ public class PackageInstaller {
         }
 
         /**
-         * Request that rollbacks be enabled for the given upgrade.
+         * Request that rollbacks be enabled or disabled for the given upgrade.
+         *
+         * @param enable set to {@code true} to enable, {@code false} to disable
          * @hide
          */
+        @SystemApi @TestApi
+        public void setEnableRollback(boolean enable) {
+            if (enable) {
+                installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
+            } else {
+                installFlags &= ~PackageManager.INSTALL_ENABLE_ROLLBACK;
+            }
+        }
+
+        /**
+         * @deprecated use {@link #setRequestDowngrade(boolean)}.
+         * {@hide}
+         */
         @SystemApi
-        public void setEnableRollback() {
-            installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
+        @Deprecated
+        public void setAllowDowngrade(boolean allowDowngrade) {
+            setRequestDowngrade(allowDowngrade);
         }
 
         /** {@hide} */
         @SystemApi
-        public void setAllowDowngrade(boolean allowDowngrade) {
-            if (allowDowngrade) {
-                installFlags |= PackageManager.INSTALL_ALLOW_DOWNGRADE;
+        public void setRequestDowngrade(boolean requestDowngrade) {
+            if (requestDowngrade) {
+                installFlags |= PackageManager.INSTALL_REQUEST_DOWNGRADE;
             } else {
-                installFlags &= ~PackageManager.INSTALL_ALLOW_DOWNGRADE;
+                installFlags &= ~PackageManager.INSTALL_REQUEST_DOWNGRADE;
             }
         }
 
@@ -1561,7 +1579,7 @@ public class PackageInstaller {
          *
          * {@hide}
          */
-        @SystemApi
+        @SystemApi @TestApi
         @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setStaged() {
             this.isStaged = true;
@@ -1572,7 +1590,7 @@ public class PackageInstaller {
          *
          * {@hide}
          */
-        @SystemApi
+        @SystemApi @TestApi
         @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
         public void setInstallAsApex() {
             installFlags |= PackageManager.INSTALL_APEX;
@@ -1803,7 +1821,7 @@ public class PackageInstaller {
         /**
          * Return the user associated with this session.
          */
-        public UserHandle getUser() {
+        public @NonNull UserHandle getUser() {
             return new UserHandle(userId);
         }
 
@@ -1981,11 +1999,23 @@ public class PackageInstaller {
         /**
          * Get the value set in {@link SessionParams#setAllowDowngrade(boolean)}.
          *
+         * @deprecated use {@link #getRequestDowngrade()}.
          * @hide
          */
         @SystemApi
+        @Deprecated
         public boolean getAllowDowngrade() {
-            return (installFlags & PackageManager.INSTALL_ALLOW_DOWNGRADE) != 0;
+            return getRequestDowngrade();
+        }
+
+        /**
+         * Get the value set in {@link SessionParams#setRequestDowngrade(boolean)}.
+         *
+         * @hide
+         */
+        @SystemApi
+        public boolean getRequestDowngrade() {
+            return (installFlags & PackageManager.INSTALL_REQUEST_DOWNGRADE) != 0;
         }
 
         /**
@@ -2032,6 +2062,16 @@ public class PackageInstaller {
         @SystemApi
         public boolean getInstallAsVirtualPreload() {
             return (installFlags & PackageManager.INSTALL_VIRTUAL_PRELOAD) != 0;
+        }
+
+        /**
+         * Return whether rollback is enabled or disabled for the given upgrade.
+         *
+         * @hide
+         */
+        @SystemApi
+        public boolean getEnableRollback() {
+            return (installFlags & PackageManager.INSTALL_ENABLE_ROLLBACK) != 0;
         }
 
         /**
@@ -2129,7 +2169,7 @@ public class PackageInstaller {
          * Text description of the error code returned by {@code getStagedSessionErrorCode}, or
          * empty string if no error was encountered.
          */
-        public String getStagedSessionErrorMessage() {
+        public @NonNull String getStagedSessionErrorMessage() {
             checkSessionIsStaged();
             return mStagedSessionErrorMessage;
         }

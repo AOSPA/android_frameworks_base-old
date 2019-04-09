@@ -20,12 +20,18 @@ package android.view;
 import static android.view.WindowInsets.Type.FIRST;
 import static android.view.WindowInsets.Type.IME;
 import static android.view.WindowInsets.Type.LAST;
+import static android.view.WindowInsets.Type.MANDATORY_SYSTEM_GESTURES;
 import static android.view.WindowInsets.Type.SIDE_BARS;
 import static android.view.WindowInsets.Type.SIZE;
+import static android.view.WindowInsets.Type.SYSTEM_GESTURES;
+import static android.view.WindowInsets.Type.TAPPABLE_ELEMENT;
 import static android.view.WindowInsets.Type.TOP_BAR;
 import static android.view.WindowInsets.Type.all;
 import static android.view.WindowInsets.Type.compatSystemInsets;
 import static android.view.WindowInsets.Type.indexOf;
+import static android.view.WindowInsets.Type.mandatorySystemGestures;
+import static android.view.WindowInsets.Type.systemGestures;
+import static android.view.WindowInsets.Type.tappableElement;
 
 import android.annotation.IntDef;
 import android.annotation.IntRange;
@@ -35,7 +41,6 @@ import android.annotation.UnsupportedAppUsage;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.util.SparseArray;
-import android.view.InsetsState.InternalInsetType;
 import android.view.WindowInsets.Type.InsetType;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethod;
@@ -78,7 +83,7 @@ public final class WindowInsets {
      * changes in this mode, we instead have a flag whether the navigation bar size should always
      * be consumed, so the app is treated like there is no virtual navigation bar at all.
      */
-    private final boolean mAlwaysConsumeNavBar;
+    private final boolean mAlwaysConsumeSystemBars;
 
     private final boolean mSystemWindowInsetsConsumed;
     private final boolean mStableInsetsConsumed;
@@ -106,10 +111,10 @@ public final class WindowInsets {
      * @deprecated Use {@link WindowInsets(SparseArray, SparseArray, boolean, boolean, DisplayCutout)}
      */
     public WindowInsets(Rect systemWindowInsetsRect, Rect stableInsetsRect,
-            boolean isRound, boolean alwaysConsumeNavBar, DisplayCutout displayCutout) {
+            boolean isRound, boolean alwaysConsumeSystemBars, DisplayCutout displayCutout) {
         this(createCompatTypeMap(systemWindowInsetsRect), createCompatTypeMap(stableInsetsRect),
                 createCompatVisibilityMap(createCompatTypeMap(systemWindowInsetsRect)),
-                isRound, alwaysConsumeNavBar, displayCutout);
+                isRound, alwaysConsumeSystemBars, displayCutout);
     }
 
     /**
@@ -128,7 +133,7 @@ public final class WindowInsets {
             @Nullable Insets[] typeMaxInsetsMap,
             boolean[] typeVisibilityMap,
             boolean isRound,
-            boolean alwaysConsumeNavBar, DisplayCutout displayCutout) {
+            boolean alwaysConsumeSystemBars, DisplayCutout displayCutout) {
         mSystemWindowInsetsConsumed = typeInsetsMap == null;
         mTypeInsetsMap = mSystemWindowInsetsConsumed
                 ? new Insets[SIZE]
@@ -141,7 +146,7 @@ public final class WindowInsets {
 
         mTypeVisibilityMap = typeVisibilityMap;
         mIsRound = isRound;
-        mAlwaysConsumeNavBar = alwaysConsumeNavBar;
+        mAlwaysConsumeSystemBars = alwaysConsumeSystemBars;
 
         mDisplayCutoutConsumed = displayCutout == null;
         mDisplayCutout = (mDisplayCutoutConsumed || displayCutout.isEmpty())
@@ -155,7 +160,7 @@ public final class WindowInsets {
      */
     public WindowInsets(WindowInsets src) {
         this(src.mTypeInsetsMap, src.mTypeMaxInsetsMap, src.mTypeVisibilityMap, src.mIsRound,
-                src.mAlwaysConsumeNavBar, displayCutoutCopyConstructorArgument(src));
+                src.mAlwaysConsumeSystemBars, displayCutoutCopyConstructorArgument(src));
     }
 
     private static DisplayCutout displayCutoutCopyConstructorArgument(WindowInsets w) {
@@ -220,6 +225,10 @@ public final class WindowInsets {
         }
         Insets[] typeInsetMap = new Insets[SIZE];
         assignCompatInsets(typeInsetMap, insets);
+        // TODO: set system gesture insets based on actual system gesture area.
+        typeInsetMap[indexOf(systemGestures())] = Insets.of(insets);
+        typeInsetMap[indexOf(mandatorySystemGestures())] = Insets.of(insets);
+        typeInsetMap[indexOf(tappableElement())] = Insets.of(insets);
         return typeInsetMap;
     }
 
@@ -434,7 +443,7 @@ public final class WindowInsets {
         return new WindowInsets(mSystemWindowInsetsConsumed ? null : mTypeInsetsMap,
                 mStableInsetsConsumed ? null : mTypeMaxInsetsMap,
                 mTypeVisibilityMap,
-                mIsRound, mAlwaysConsumeNavBar,
+                mIsRound, mAlwaysConsumeSystemBars,
                 null /* displayCutout */);
     }
 
@@ -480,7 +489,7 @@ public final class WindowInsets {
     public WindowInsets consumeSystemWindowInsets() {
         return new WindowInsets(null, mStableInsetsConsumed ? null : mTypeMaxInsetsMap,
                 mTypeVisibilityMap,
-                mIsRound, mAlwaysConsumeNavBar,
+                mIsRound, mAlwaysConsumeSystemBars,
                 displayCutoutCopyConstructorArgument(this));
     }
 
@@ -630,6 +639,89 @@ public final class WindowInsets {
     }
 
     /**
+     * Returns the system gesture insets.
+     *
+     * <p>The system gesture insets represent the area of a window where system gestures have
+     * priority and may consume some or all touch input, e.g. due to the a system bar
+     * occupying it, or it being reserved for touch-only gestures.
+     *
+     * <p>An app can declare priority over system gestures with
+     * {@link View#setSystemGestureExclusionRects} outside of the
+     * {@link #getMandatorySystemGestureInsets() mandatory system gesture insets}.
+     *
+     * <p>Simple taps are guaranteed to reach the window even within the system gesture insets,
+     * as long as they are outside the {@link #getTappableElementInsets() system window insets}.
+     *
+     * <p>When {@link View#SYSTEM_UI_FLAG_LAYOUT_STABLE} is requested, an inset will be returned
+     * even when the system gestures are inactive due to
+     * {@link View#SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN} or
+     * {@link View#SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION}.
+     *
+     * <p>This inset is consumed together with the {@link #getSystemWindowInsets()
+     * system window insets} by {@link #consumeSystemWindowInsets()}.
+     *
+     * @see #getMandatorySystemGestureInsets
+     */
+    @NonNull
+    public Insets getSystemGestureInsets() {
+        return getInsets(mTypeInsetsMap, SYSTEM_GESTURES);
+    }
+
+    /**
+     * Returns the mandatory system gesture insets.
+     *
+     * <p>The mandatory system gesture insets represent the area of a window where mandatory system
+     * gestures have priority and may consume some or all touch input, e.g. due to the a system bar
+     * occupying it, or it being reserved for touch-only gestures.
+     *
+     * <p>In contrast to {@link #getSystemGestureInsets regular system gestures}, <b>mandatory</b>
+     * system gestures cannot be overriden by {@link View#setSystemGestureExclusionRects}.
+     *
+     * <p>Simple taps are guaranteed to reach the window even within the system gesture insets,
+     * as long as they are outside the {@link #getTappableElementInsets() system window insets}.
+     *
+     * <p>When {@link View#SYSTEM_UI_FLAG_LAYOUT_STABLE} is requested, an inset will be returned
+     * even when the system gestures are inactive due to
+     * {@link View#SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN} or
+     * {@link View#SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION}.
+     *
+     * <p>This inset is consumed together with the {@link #getSystemWindowInsets()
+     * system window insets} by {@link #consumeSystemWindowInsets()}.
+     *
+     * @see #getSystemGestureInsets
+     */
+    @NonNull
+    public Insets getMandatorySystemGestureInsets() {
+        return getInsets(mTypeInsetsMap, MANDATORY_SYSTEM_GESTURES);
+    }
+
+    /**
+     * Returns the tappable element insets.
+     *
+     * <p>The tappable element insets represent how much tappable elements <b>must at least</b> be
+     * inset to remain both tappable and visually unobstructed by persistent system windows.
+     *
+     * <p>This may be smaller than {@link #getSystemWindowInsets()} if the system window is
+     * largely transparent and lets through simple taps (but not necessarily more complex gestures).
+     *
+     * <p>Note that generally, tappable elements <strong>should</strong> be aligned with the
+     * {@link #getSystemWindowInsets() system window insets} instead to avoid overlapping with the
+     * system bars.
+     *
+     * <p>When {@link View#SYSTEM_UI_FLAG_LAYOUT_STABLE} is requested, an inset will be returned
+     * even when the area covered by the inset would be tappable due to
+     * {@link View#SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN} or
+     * {@link View#SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION}.
+     *
+     * <p>This inset is consumed together with the {@link #getSystemWindowInsets()
+     * system window insets} by {@link #consumeSystemWindowInsets()}.
+     */
+    @NonNull
+    public Insets getTappableElementInsets() {
+        return getInsets(mTypeInsetsMap, TAPPABLE_ELEMENT);
+    }
+
+    /**
      * Returns a copy of this WindowInsets with the stable insets fully consumed.
      *
      * @return A modified copy of this WindowInsets
@@ -637,21 +729,22 @@ public final class WindowInsets {
     @NonNull
     public WindowInsets consumeStableInsets() {
         return new WindowInsets(mSystemWindowInsetsConsumed ? null : mTypeInsetsMap, null,
-                mTypeVisibilityMap, mIsRound, mAlwaysConsumeNavBar,
+                mTypeVisibilityMap, mIsRound, mAlwaysConsumeSystemBars,
                 displayCutoutCopyConstructorArgument(this));
     }
 
     /**
      * @hide
      */
-    public boolean shouldAlwaysConsumeNavBar() {
-        return mAlwaysConsumeNavBar;
+    public boolean shouldAlwaysConsumeSystemBars() {
+        return mAlwaysConsumeSystemBars;
     }
 
     @Override
     public String toString() {
         return "WindowInsets{systemWindowInsets=" + getSystemWindowInsets()
                 + " stableInsets=" + getStableInsets()
+                + " sysGestureInsets=" + getSystemGestureInsets()
                 + (mDisplayCutout != null ? " cutout=" + mDisplayCutout : "")
                 + (isRound() ? " round" : "")
                 + "}";
@@ -716,7 +809,7 @@ public final class WindowInsets {
                         ? null
                         : insetInsets(mTypeMaxInsetsMap, left, top, right, bottom),
                 mTypeVisibilityMap,
-                mIsRound, mAlwaysConsumeNavBar,
+                mIsRound, mAlwaysConsumeSystemBars,
                 mDisplayCutoutConsumed
                         ? null
                         : mDisplayCutout == null
@@ -731,7 +824,7 @@ public final class WindowInsets {
         WindowInsets that = (WindowInsets) o;
 
         return mIsRound == that.mIsRound
-                && mAlwaysConsumeNavBar == that.mAlwaysConsumeNavBar
+                && mAlwaysConsumeSystemBars == that.mAlwaysConsumeSystemBars
                 && mSystemWindowInsetsConsumed == that.mSystemWindowInsetsConsumed
                 && mStableInsetsConsumed == that.mStableInsetsConsumed
                 && mDisplayCutoutConsumed == that.mDisplayCutoutConsumed
@@ -744,8 +837,9 @@ public final class WindowInsets {
     @Override
     public int hashCode() {
         return Objects.hash(Arrays.hashCode(mTypeInsetsMap), Arrays.hashCode(mTypeMaxInsetsMap),
-                Arrays.hashCode(mTypeVisibilityMap), mIsRound, mDisplayCutout, mAlwaysConsumeNavBar,
-                mSystemWindowInsetsConsumed, mStableInsetsConsumed, mDisplayCutoutConsumed);
+                Arrays.hashCode(mTypeVisibilityMap), mIsRound, mDisplayCutout,
+                mAlwaysConsumeSystemBars, mSystemWindowInsetsConsumed, mStableInsetsConsumed,
+                mDisplayCutoutConsumed);
     }
 
 
@@ -807,7 +901,7 @@ public final class WindowInsets {
         private DisplayCutout mDisplayCutout;
 
         private boolean mIsRound;
-        private boolean mAlwaysConsumeNavBar;
+        private boolean mAlwaysConsumeSystemBars;
 
         /**
          * Creates a builder where all insets are initially consumed.
@@ -831,7 +925,7 @@ public final class WindowInsets {
             mStableInsetsConsumed = insets.mStableInsetsConsumed;
             mDisplayCutout = displayCutoutCopyConstructorArgument(insets);
             mIsRound = insets.mIsRound;
-            mAlwaysConsumeNavBar = insets.mAlwaysConsumeNavBar;
+            mAlwaysConsumeSystemBars = insets.mAlwaysConsumeSystemBars;
         }
 
         /**
@@ -849,6 +943,57 @@ public final class WindowInsets {
             Preconditions.checkNotNull(systemWindowInsets);
             assignCompatInsets(mTypeInsetsMap, systemWindowInsets.toRect());
             mSystemInsetsConsumed = false;
+            return this;
+        }
+
+        /**
+         * Sets system gesture insets in pixels.
+         *
+         * <p>The system gesture insets represent the area of a window where system gestures have
+         * priority and may consume some or all touch input, e.g. due to the a system bar
+         * occupying it, or it being reserved for touch-only gestures.
+         *
+         * @see #getSystemGestureInsets()
+         * @return itself
+         */
+        @NonNull
+        public Builder setSystemGestureInsets(@NonNull Insets insets) {
+            WindowInsets.setInsets(mTypeInsetsMap, SYSTEM_GESTURES, insets);
+            return this;
+        }
+
+        /**
+         * Sets mandatory system gesture insets in pixels.
+         *
+         * <p>The mandatory system gesture insets represent the area of a window where mandatory
+         * system gestures have priority and may consume some or all touch input, e.g. due to the a
+         * system bar occupying it, or it being reserved for touch-only gestures.
+         *
+         * <p>In contrast to {@link #setSystemGestureInsets regular system gestures},
+         * <b>mandatory</b> system gestures cannot be overriden by
+         * {@link View#setSystemGestureExclusionRects}.
+         *
+         * @see #getMandatorySystemGestureInsets()
+         * @return itself
+         */
+        @NonNull
+        public Builder setMandatorySystemGestureInsets(@NonNull Insets insets) {
+            WindowInsets.setInsets(mTypeInsetsMap, MANDATORY_SYSTEM_GESTURES, insets);
+            return this;
+        }
+
+        /**
+         * Sets tappable element insets in pixels.
+         *
+         * <p>The tappable element insets represent how much tappable elements <b>must at least</b>
+         * be inset to remain both tappable and visually unobstructed by persistent system windows.
+         *
+         * @see #getTappableElementInsets()
+         * @return itself
+         */
+        @NonNull
+        public Builder setTappableElementInsets(@NonNull Insets insets) {
+            WindowInsets.setInsets(mTypeInsetsMap, TAPPABLE_ELEMENT, insets);
             return this;
         }
 
@@ -975,8 +1120,8 @@ public final class WindowInsets {
 
         /** @hide */
         @NonNull
-        public Builder setAlwaysConsumeNavBar(boolean alwaysConsumeNavBar) {
-            mAlwaysConsumeNavBar = alwaysConsumeNavBar;
+        public Builder setAlwaysConsumeSystemBars(boolean alwaysConsumeSystemBars) {
+            mAlwaysConsumeSystemBars = alwaysConsumeSystemBars;
             return this;
         }
 
@@ -989,7 +1134,7 @@ public final class WindowInsets {
         public WindowInsets build() {
             return new WindowInsets(mSystemInsetsConsumed ? null : mTypeInsetsMap,
                     mStableInsetsConsumed ? null : mTypeMaxInsetsMap, mTypeVisibilityMap,
-                    mIsRound, mAlwaysConsumeNavBar, mDisplayCutout);
+                    mIsRound, mAlwaysConsumeSystemBars, mDisplayCutout);
         }
     }
 
@@ -999,14 +1144,18 @@ public final class WindowInsets {
      */
     public static final class Type {
 
-        static final int FIRST = 0x1;
+        static final int FIRST = 1 << 0;
         static final int TOP_BAR = FIRST;
 
-        static final int IME = 0x2;
-        static final int SIDE_BARS = 0x4;
+        static final int IME = 1 << 1;
+        static final int SIDE_BARS = 1 << 2;
 
-        static final int LAST = 0x8;
-        static final int SIZE = 4;
+        static final int SYSTEM_GESTURES = 1 << 3;
+        static final int MANDATORY_SYSTEM_GESTURES = 1 << 4;
+        static final int TAPPABLE_ELEMENT = 1 << 5;
+
+        static final int LAST = 1 << 6;
+        static final int SIZE = 7;
         static final int WINDOW_DECOR = LAST;
 
         static int indexOf(@InsetType int type) {
@@ -1017,8 +1166,14 @@ public final class WindowInsets {
                     return 1;
                 case SIDE_BARS:
                     return 2;
-                case WINDOW_DECOR:
+                case SYSTEM_GESTURES:
                     return 3;
+                case MANDATORY_SYSTEM_GESTURES:
+                    return 4;
+                case TAPPABLE_ELEMENT:
+                    return 5;
+                case WINDOW_DECOR:
+                    return 6;
                 default:
                     throw new IllegalArgumentException("type needs to be >= FIRST and <= LAST,"
                             + " type=" + type);
@@ -1030,7 +1185,8 @@ public final class WindowInsets {
 
         /** @hide */
         @Retention(RetentionPolicy.SOURCE)
-        @IntDef(flag = true, value = { TOP_BAR, IME, SIDE_BARS, WINDOW_DECOR })
+        @IntDef(flag = true, value = { TOP_BAR, IME, SIDE_BARS, WINDOW_DECOR, SYSTEM_GESTURES,
+                MANDATORY_SYSTEM_GESTURES, TAPPABLE_ELEMENT})
         public @interface InsetType {
         }
 
@@ -1064,6 +1220,41 @@ public final class WindowInsets {
         }
 
         /**
+         * Returns an inset type representing the system gesture insets.
+         *
+         * <p>The system gesture insets represent the area of a window where system gestures have
+         * priority and may consume some or all touch input, e.g. due to the a system bar
+         * occupying it, or it being reserved for touch-only gestures.
+         *
+         * <p>Simple taps are guaranteed to reach the window even within the system gesture insets,
+         * as long as they are outside the {@link #getSystemWindowInsets() system window insets}.
+         *
+         * <p>When {@link View#SYSTEM_UI_FLAG_LAYOUT_STABLE} is requested, an inset will be returned
+         * even when the system gestures are inactive due to
+         * {@link View#SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN} or
+         * {@link View#SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION}.
+         *
+         * @see #getSystemGestureInsets()
+         */
+        public static @InsetType int systemGestures() {
+            return SYSTEM_GESTURES;
+        }
+
+        /**
+         * @see #getMandatorySystemGestureInsets
+         */
+        public static @InsetType int mandatorySystemGestures() {
+            return MANDATORY_SYSTEM_GESTURES;
+        }
+
+        /**
+         * @see #getTappableElementInsets
+         */
+        public static @InsetType int tappableElement() {
+            return TAPPABLE_ELEMENT;
+        }
+
+        /**
          * @return All system bars. Includes {@link #topBar()} as well as {@link #sideBars()}, but
          *         not {@link #ime()}.
          */
@@ -1082,6 +1273,9 @@ public final class WindowInsets {
 
         /**
          * @return All inset types combined.
+         *
+         * TODO: Figure out if this makes sense at all, mixing e.g {@link #systemGestures()} and
+         *       {@link #ime()} does not seem very useful.
          */
         public static @InsetType int all() {
             return 0xFFFFFFFF;

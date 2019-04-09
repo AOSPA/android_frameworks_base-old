@@ -18,7 +18,7 @@ package com.android.server.devicepolicy;
 
 import static android.Manifest.permission.BIND_DEVICE_ADMIN;
 import static android.Manifest.permission.MANAGE_CA_CERTIFICATES;
-import static android.Manifest.permission.REQUEST_SCREEN_LOCK_COMPLEXITY;
+import static android.Manifest.permission.REQUEST_PASSWORD_COMPLEXITY;
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
 import static android.app.admin.DeviceAdminReceiver.EXTRA_TRANSFER_OWNERSHIP_ADMIN_EXTRAS_BUNDLE;
 import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_USER;
@@ -58,14 +58,21 @@ import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_HOME;
 import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS;
 import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_OVERVIEW;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_NONE;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_ALPHABETIC;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_ALPHANUMERIC;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_BIOMETRIC_WEAK;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_COMPLEX;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_MANAGED;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_NUMERIC;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_NUMERIC_COMPLEX;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_SOMETHING;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED;
 import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_MODE_OFF;
 import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_MODE_OPPORTUNISTIC;
 import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME;
 import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_MODE_UNKNOWN;
 import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_SET_ERROR_FAILURE_SETTING;
-import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_SET_SUCCESS;
+import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR;
 import static android.app.admin.DevicePolicyManager.PROFILE_KEYGUARD_FEATURES_AFFECT_OWNER;
 import static android.app.admin.DevicePolicyManager.WIPE_EUICC;
 import static android.app.admin.DevicePolicyManager.WIPE_EXTERNAL_STORAGE;
@@ -172,7 +179,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
-import android.os.ParcelableException;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
@@ -3476,15 +3482,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     static void validateQualityConstant(int quality) {
         switch (quality) {
-            case DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED:
-            case DevicePolicyManager.PASSWORD_QUALITY_BIOMETRIC_WEAK:
-            case DevicePolicyManager.PASSWORD_QUALITY_SOMETHING:
-            case DevicePolicyManager.PASSWORD_QUALITY_NUMERIC:
-            case DevicePolicyManager.PASSWORD_QUALITY_NUMERIC_COMPLEX:
-            case DevicePolicyManager.PASSWORD_QUALITY_ALPHABETIC:
-            case DevicePolicyManager.PASSWORD_QUALITY_ALPHANUMERIC:
-            case DevicePolicyManager.PASSWORD_QUALITY_COMPLEX:
-            case DevicePolicyManager.PASSWORD_QUALITY_MANAGED:
+            case PASSWORD_QUALITY_UNSPECIFIED:
+            case PASSWORD_QUALITY_BIOMETRIC_WEAK:
+            case PASSWORD_QUALITY_SOMETHING:
+            case PASSWORD_QUALITY_NUMERIC:
+            case PASSWORD_QUALITY_NUMERIC_COMPLEX:
+            case PASSWORD_QUALITY_ALPHABETIC:
+            case PASSWORD_QUALITY_ALPHANUMERIC:
+            case PASSWORD_QUALITY_COMPLEX:
+            case PASSWORD_QUALITY_MANAGED:
                 return;
         }
         throw new IllegalArgumentException("Invalid quality constant: 0x"
@@ -4748,41 +4754,36 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             // setActivePasswordState has never been called for it.
             metrics = new PasswordMetrics();
         }
+
         return isPasswordSufficientForUserWithoutCheckpointLocked(metrics, userHandle, parent);
     }
 
     /**
-     * Returns {@code true} if the password represented by the {@code passwordMetrics} argument
+     * Returns {@code true} if the password represented by the {@code metrics} argument
      * sufficiently fulfills the password requirements for the user corresponding to
-     * {@code userHandle} (or its parent, if {@code parent} is set to {@code true}).
+     * {@code userId} (or its parent, if {@code parent} is set to {@code true}).
      */
     private boolean isPasswordSufficientForUserWithoutCheckpointLocked(
-            PasswordMetrics passwordMetrics, int userHandle, boolean parent) {
-        final int requiredPasswordQuality = getPasswordQuality(null, userHandle, parent);
+            PasswordMetrics metrics, @UserIdInt int userId, boolean parent) {
+        final int requiredQuality = getPasswordQuality(null, userId, parent);
 
-        if (passwordMetrics.quality < requiredPasswordQuality) {
+        if (requiredQuality >= PASSWORD_QUALITY_NUMERIC
+                && metrics.length < getPasswordMinimumLength(null, userId, parent)) {
             return false;
         }
-        if (requiredPasswordQuality >= DevicePolicyManager.PASSWORD_QUALITY_NUMERIC
-                && passwordMetrics.length < getPasswordMinimumLength(
-                        null, userHandle, parent)) {
-            return false;
+
+        // PASSWORD_QUALITY_COMPLEX doesn't represent actual password quality, it means that number
+        // of characters of each class should be checked instead of quality itself.
+        if (requiredQuality == PASSWORD_QUALITY_COMPLEX) {
+            return metrics.upperCase >= getPasswordMinimumUpperCase(null, userId, parent)
+                    && metrics.lowerCase >= getPasswordMinimumLowerCase(null, userId, parent)
+                    && metrics.letters >= getPasswordMinimumLetters(null, userId, parent)
+                    && metrics.numeric >= getPasswordMinimumNumeric(null, userId, parent)
+                    && metrics.symbols >= getPasswordMinimumSymbols(null, userId, parent)
+                    && metrics.nonLetter >= getPasswordMinimumNonLetter(null, userId, parent);
+        } else {
+            return metrics.quality >= requiredQuality;
         }
-        if (requiredPasswordQuality != DevicePolicyManager.PASSWORD_QUALITY_COMPLEX) {
-            return true;
-        }
-        return passwordMetrics.upperCase >= getPasswordMinimumUpperCase(
-                    null, userHandle, parent)
-                && passwordMetrics.lowerCase >= getPasswordMinimumLowerCase(
-                        null, userHandle, parent)
-                && passwordMetrics.letters >= getPasswordMinimumLetters(
-                        null, userHandle, parent)
-                && passwordMetrics.numeric >= getPasswordMinimumNumeric(
-                        null, userHandle, parent)
-                && passwordMetrics.symbols >= getPasswordMinimumSymbols(
-                        null, userHandle, parent)
-                && passwordMetrics.nonLetter >= getPasswordMinimumNonLetter(
-                        null, userHandle, parent);
     }
 
     @Override
@@ -4796,8 +4797,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final int callingUserId = mInjector.userHandleGetCallingUserId();
         enforceUserUnlocked(callingUserId);
         mContext.enforceCallingOrSelfPermission(
-                REQUEST_SCREEN_LOCK_COMPLEXITY,
-                "Must have " + REQUEST_SCREEN_LOCK_COMPLEXITY + " permission.");
+                REQUEST_PASSWORD_COMPLEXITY,
+                "Must have " + REQUEST_PASSWORD_COMPLEXITY + " permission.");
 
         synchronized (getLockObject()) {
             int targetUserId = getCredentialOwner(callingUserId, /* parent= */ false);
@@ -5043,14 +5044,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         int quality;
         synchronized (getLockObject()) {
             quality = getPasswordQuality(null, userHandle, /* parent */ false);
-            if (quality == DevicePolicyManager.PASSWORD_QUALITY_MANAGED) {
+            if (quality == PASSWORD_QUALITY_MANAGED) {
                 quality = PASSWORD_QUALITY_UNSPECIFIED;
             }
             // TODO(b/120484642): remove getBytes() below
             final PasswordMetrics metrics = PasswordMetrics.computeForPassword(password.getBytes());
             final int realQuality = metrics.quality;
-            if (realQuality < quality
-                    && quality != DevicePolicyManager.PASSWORD_QUALITY_COMPLEX) {
+            if (realQuality < quality && quality != PASSWORD_QUALITY_COMPLEX) {
                 Slog.w(LOG_TAG, "resetPassword: password quality 0x"
                         + Integer.toHexString(realQuality)
                         + " does not meet required quality 0x"
@@ -5064,7 +5064,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         + " does not meet required length " + length);
                 return false;
             }
-            if (quality == DevicePolicyManager.PASSWORD_QUALITY_COMPLEX) {
+            if (quality == PASSWORD_QUALITY_COMPLEX) {
                 int neededLetters = getPasswordMinimumLetters(null, userHandle, /* parent */ false);
                 if(metrics.letters < neededLetters) {
                     Slog.w(LOG_TAG, "resetPassword: number of letters " + metrics.letters
@@ -5133,11 +5133,14 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final boolean result;
         try {
             if (token == null) {
+                // This is the legacy reset password for DPM. Here we want to be able to override
+                // the old device password without necessarily knowing it.
                 if (!TextUtils.isEmpty(password)) {
                     mLockPatternUtils.saveLockPassword(password.getBytes(), null, quality,
-                            userHandle);
+                            userHandle, /*allowUntrustedChange */true);
                 } else {
-                    mLockPatternUtils.clearLock(null, userHandle);
+                    mLockPatternUtils.clearLock(null, userHandle,
+                            /*allowUntrustedChange */ true);
                 }
                 result = true;
             } else {
@@ -5246,12 +5249,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 // would allow bypassing of the maximum time to lock.
                 mInjector.settingsGlobalPutInt(Settings.Global.STAY_ON_WHILE_PLUGGED_IN, 0);
             }
+            getPowerManagerInternal().setMaximumScreenOffTimeoutFromDeviceAdmin(
+                    UserHandle.USER_SYSTEM, timeMs);
         } finally {
             mInjector.binderRestoreCallingIdentity(ident);
         }
-
-        getPowerManagerInternal().setMaximumScreenOffTimeoutFromDeviceAdmin(
-                UserHandle.USER_SYSTEM, timeMs);
     }
 
     private void updateProfileLockTimeoutLocked(@UserIdInt int userId) {
@@ -5269,8 +5271,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
         policy.mLastMaximumTimeToLock = timeMs;
 
-        getPowerManagerInternal().setMaximumScreenOffTimeoutFromDeviceAdmin(
-                userId, policy.mLastMaximumTimeToLock);
+        final long ident = mInjector.binderClearCallingIdentity();
+        try {
+            getPowerManagerInternal().setMaximumScreenOffTimeoutFromDeviceAdmin(
+                    userId, policy.mLastMaximumTimeToLock);
+        } finally {
+            mInjector.binderRestoreCallingIdentity(ident);
+        }
     }
 
     @Override
@@ -5338,8 +5345,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      */
     @Override
     public long getRequiredStrongAuthTimeout(ComponentName who, int userId, boolean parent) {
-        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
+        if (!mHasFeature) {
             return DevicePolicyManager.DEFAULT_STRONG_AUTH_TIMEOUT_MS;
+        }
+        if (!mLockPatternUtils.hasSecureLockScreen()) {
+            // No strong auth timeout on devices not supporting the
+            // {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature
+            return 0;
         }
         enforceFullCrossUsersPermission(userId);
         synchronized (getLockObject()) {
@@ -5908,10 +5920,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         delegateReceiver = resolveDelegateReceiver(DELEGATION_CERT_SELECTION,
                 DeviceAdminReceiver.ACTION_CHOOSE_PRIVATE_KEY_ALIAS, caller.getIdentifier());
 
+        final boolean isDelegate;
         if (delegateReceiver != null) {
             intent.setComponent(delegateReceiver);
+            isDelegate = true;
         } else {
             intent.setComponent(aliasChooser);
+            isDelegate = false;
         }
 
         final long id = mInjector.binderClearCallingIdentity();
@@ -5923,11 +5938,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     sendPrivateKeyAliasResponse(chosenAlias, response);
                 }
             }, null, Activity.RESULT_OK, null, null);
-            final String adminPackageName =
-                    (aliasChooser != null ? aliasChooser.getPackageName() : null);
             DevicePolicyEventLogger
                     .createEvent(DevicePolicyEnums.CHOOSE_PRIVATE_KEY_ALIAS)
-                    .setAdmin(adminPackageName)
+                    .setAdmin(intent.getComponent())
+                    .setBoolean(isDelegate)
                     .write();
         } finally {
             mInjector.binderRestoreCallingIdentity(id);
@@ -13087,6 +13101,14 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             saveSettingsLocked(mInjector.userHandleGetCallingUserId());
 
             setNetworkLoggingActiveInternal(enabled);
+
+            final boolean isDelegate = (admin == null);
+            DevicePolicyEventLogger
+                    .createEvent(DevicePolicyEnums.SET_NETWORK_LOGGING_ENABLED)
+                    .setAdmin(packageName)
+                    .setBoolean(isDelegate)
+                    .setInt(enabled ? 1 : 0)
+                    .write();
         }
     }
 
@@ -13218,6 +13240,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     || !isNetworkLoggingEnabledInternalLocked()) {
                 return null;
             }
+            final boolean isDelegate = (admin == null);
+            DevicePolicyEventLogger
+                    .createEvent(DevicePolicyEnums.RETRIEVE_NETWORK_LOGS)
+                    .setAdmin(packageName)
+                    .setBoolean(isDelegate)
+                    .write();
 
             final long currentTime = System.currentTimeMillis();
             DevicePolicyData policyData = getUserData(UserHandle.USER_SYSTEM);
@@ -13348,8 +13376,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 if (policy.mPasswordTokenHandle != 0) {
                     mLockPatternUtils.removeEscrowToken(policy.mPasswordTokenHandle, userHandle);
                 }
-
-                policy.mPasswordTokenHandle = mLockPatternUtils.addEscrowToken(token, userHandle);
+                policy.mPasswordTokenHandle = mLockPatternUtils.addEscrowToken(token,
+                        userHandle, /*EscrowTokenStateChangeCallback*/ null);
                 saveSettingsLocked(userHandle);
                 return policy.mPasswordTokenHandle != 0;
             } finally {
@@ -14006,7 +14034,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                             "Host provided for opportunistic mode, but is not needed.");
                 }
                 putPrivateDnsSettings(ConnectivityManager.PRIVATE_DNS_MODE_OPPORTUNISTIC, null);
-                return PRIVATE_DNS_SET_SUCCESS;
+                return PRIVATE_DNS_SET_NO_ERROR;
             case PRIVATE_DNS_MODE_PROVIDER_HOSTNAME:
                 if (TextUtils.isEmpty(privateDnsHost)
                         || !NetworkUtils.isWeaklyValidatedHostname(privateDnsHost)) {
@@ -14019,7 +14047,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 putPrivateDnsSettings(
                         ConnectivityManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME,
                         privateDnsHost);
-                return PRIVATE_DNS_SET_SUCCESS;
+                return PRIVATE_DNS_SET_NO_ERROR;
             default:
                 throw new IllegalArgumentException(
                         String.format("Provided mode, %d, is not a valid mode.", mode));

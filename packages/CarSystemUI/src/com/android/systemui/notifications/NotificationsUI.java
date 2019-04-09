@@ -16,11 +16,11 @@
 
 package com.android.systemui.notifications;
 
-import android.app.ActivityManager;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
+import android.app.ActivityManager;
 import android.car.Car;
 import android.car.CarNotConnectedException;
 import android.car.drivingstate.CarUxRestrictionsManager;
@@ -113,7 +113,7 @@ public class NotificationsUI extends SystemUI
                         ServiceManager.getService(Context.STATUS_BAR_SERVICE)),
                 launchResult -> {
                     if (launchResult == ActivityManager.START_TASK_TO_FRONT
-                            || launchResult == ActivityManager.START_SUCCESS){
+                            || launchResult == ActivityManager.START_SUCCESS) {
                         closeCarNotifications(DEFAULT_FLING_VELOCITY);
                     }
                 });
@@ -130,7 +130,6 @@ public class NotificationsUI extends SystemUI
                 R.layout.navigation_bar_window, null);
         mCarNotificationWindow
                 .setBackgroundColor(mContext.getColor(R.color.notification_shade_background_color));
-
         inflateNotificationContent();
 
         WindowManager.LayoutParams layoutParams = new WindowManager.LayoutParams(
@@ -180,8 +179,7 @@ public class NotificationsUI extends SystemUI
                     }
                 });
 
-        RecyclerView notificationList = mCarNotificationWindow
-                .findViewById(com.android.car.notification.R.id.recycler_view);
+        RecyclerView notificationList = mCarNotificationWindow.findViewById(R.id.notifications);
         // register a scroll listener so we can figure out if we are at the bottom of the
         // list of notifications
         notificationList.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -203,7 +201,7 @@ public class NotificationsUI extends SystemUI
         // There's a view installed at a higher z-order such that we can intercept the ACTION_DOWN
         // to set the initial click state.
         mCarNotificationWindow.findViewById(R.id.glass_pane).setOnTouchListener((v, event) -> {
-            if (event.getActionMasked() == MotionEvent.ACTION_UP ) {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
                 mNotificationListAtBottomAtTimeOfTouch = false;
             }
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -246,6 +244,12 @@ public class NotificationsUI extends SystemUI
         public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
             return distanceY > 0;
         }
+
+        @Override
+        public boolean onSingleTapUp(MotionEvent motionEvent) {
+            closeCarNotifications(DEFAULT_FLING_VELOCITY);
+            return false;
+        }
     }
 
     private class NotificationListTouchListener implements View.OnTouchListener {
@@ -254,7 +258,7 @@ public class NotificationsUI extends SystemUI
         public boolean onTouch(View v, MotionEvent event) {
             // reset mNotificationListAtBottomAtTimeOfTouch here since the "glass pane" will not
             // get the up event
-            if (event.getActionMasked() == MotionEvent.ACTION_UP ) {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
                 mNotificationListAtBottomAtTimeOfTouch = false;
             }
             boolean wasScrolledUp = mScrollUpDetector.onTouchEvent(event);
@@ -324,6 +328,14 @@ public class NotificationsUI extends SystemUI
         @Override
         public boolean onScroll(MotionEvent event1, MotionEvent event2, float distanceX,
                 float distanceY) {
+            boolean isDown = event1.getY() - event2.getY() < 0;
+            // CarStatusBar and NavigationBar are identical so avoid the touch if it
+            // starts from NavigationBar to open.
+            if (event1.getRawY() > mCarNotificationWindow.getHeight() && isDown
+                    && mCarNotificationWindow.getVisibility() == View.GONE) {
+                mIsTracking = false;
+                return true;
+            }
             mIsTracking = true;
             mCarNotificationWindow.setVisibility(View.VISIBLE);
 
@@ -338,21 +350,22 @@ public class NotificationsUI extends SystemUI
         public boolean onFling(MotionEvent event1, MotionEvent event2,
                 float velocityX, float velocityY) {
             if (Math.abs(event1.getX() - event2.getX()) > SWIPE_MAX_OFF_PATH
-                    || Math.abs(velocityY) < SWIPE_THRESHOLD_VELOCITY){
+                    || Math.abs(velocityY) < SWIPE_THRESHOLD_VELOCITY) {
                 // swipe was not vertical or was not fast enough
                 return false;
             }
 
             boolean isUp = velocityY < 0;
             float distanceDelta = Math.abs(event1.getY() - event2.getY());
-
             if (isUp && distanceDelta > SWIPE_UP_MIN_DISTANCE) {
                 // fling up
                 mIsTracking = false;
                 closeCarNotifications(Math.abs(velocityY));
                 return true;
 
-            } else if (!isUp && distanceDelta > SWIPE_DOWN_MIN_DISTANCE) {
+            } else if (!isUp && distanceDelta > SWIPE_DOWN_MIN_DISTANCE
+                    && (event1.getRawY() < mCarNotificationWindow.getHeight()
+                    || mCarNotificationWindow.getVisibility() == View.VISIBLE)) {
                 // fling down
                 mIsTracking = false;
                 openCarNotifications(velocityY);
@@ -421,8 +434,7 @@ public class NotificationsUI extends SystemUI
         mNotificationViewController.disable();
         mIsShowing = false;
         mIsTracking = false;
-        RecyclerView notificationListView = mCarNotificationWindow.findViewById(
-                com.android.car.notification.R.id.recycler_view);
+        RecyclerView notificationListView = mCarNotificationWindow.findViewById(R.id.notifications);
         notificationListView.scrollToPosition(0);
     }
 

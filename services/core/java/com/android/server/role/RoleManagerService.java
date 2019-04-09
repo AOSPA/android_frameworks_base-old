@@ -27,7 +27,7 @@ import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.role.IOnRoleHoldersChangedListener;
 import android.app.role.IRoleManager;
-import android.app.role.IRoleManagerCallback;
+import android.app.role.RoleControllerManager;
 import android.app.role.RoleManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -97,6 +97,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
 
     private static final String LOG_TAG = RoleManagerService.class.getSimpleName();
 
+    private static final boolean DEBUG = false;
+
     @NonNull
     private final UserManagerInternal mUserManagerInternal;
     @NonNull
@@ -123,12 +125,11 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
     private final SparseArray<RoleUserState> mUserStates = new SparseArray<>();
 
     /**
-     * Maps user id to its controller service.
+     * Maps user id to its controller.
      */
     @GuardedBy("mLock")
     @NonNull
-    private final SparseArray<RemoteRoleControllerService> mControllerServices =
-            new SparseArray<>();
+    private final SparseArray<RoleControllerManager> mControllers = new SparseArray<>();
 
     /**
      * Maps user id to its list of listeners.
@@ -190,9 +191,9 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             @Override
             public void onReceive(Context context, Intent intent) {
                 int userId = UserHandle.getUserId(intent.getIntExtra(Intent.EXTRA_UID, -1));
-                if (RemoteRoleControllerService.DEBUG) {
-                    Slog.i(LOG_TAG,
-                            "Packages changed - re-running initial grants for user " + userId);
+                if (DEBUG) {
+                    Slog.i(LOG_TAG, "Packages changed - re-running initial grants for user "
+                            + userId);
                 }
                 performInitialGrantsIfNecessary(userId);
             }
@@ -243,24 +244,21 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             // Run grants again
             Slog.i(LOG_TAG, "Granting default permissions...");
             CompletableFuture<Void> result = new CompletableFuture<>();
-            getOrCreateControllerService(userId).onGrantDefaultRoles(
-                    new IRoleManagerCallback.Stub() {
-                        @Override
-                        public void onSuccess() {
+            getOrCreateControllerService(userId).grantDefaultRoles(FgThread.getExecutor(),
+                    successful -> {
+                        if (successful) {
                             result.complete(null);
-                        }
-                        @Override
-                        public void onFailure() {
+                        } else {
                             result.completeExceptionally(new RuntimeException());
                         }
                     });
             try {
-                result.get(5, TimeUnit.SECONDS);
+                result.get(30, TimeUnit.SECONDS);
                 userState.setPackagesHash(packagesHash);
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 Slog.e(LOG_TAG, "Failed to grant defaults for user " + userId, e);
             }
-        } else if (RemoteRoleControllerService.DEBUG) {
+        } else if (DEBUG) {
             Slog.i(LOG_TAG, "Already ran grants for package state " + packagesHash);
         }
     }
@@ -326,14 +324,22 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
     }
 
     @NonNull
-    private RemoteRoleControllerService getOrCreateControllerService(@UserIdInt int userId) {
+    private RoleControllerManager getOrCreateControllerService(@UserIdInt int userId) {
         synchronized (mLock) {
-            RemoteRoleControllerService controllerService = mControllerServices.get(userId);
-            if (controllerService == null) {
-                controllerService = new RemoteRoleControllerService(userId, getContext());
-                mControllerServices.put(userId, controllerService);
+            RoleControllerManager controller = mControllers.get(userId);
+            if (controller == null) {
+                Context systemContext = getContext();
+                Context context;
+                try {
+                    context = systemContext.createPackageContextAsUser(
+                            systemContext.getPackageName(), 0, UserHandle.of(userId));
+                } catch (NameNotFoundException e) {
+                    throw new RuntimeException(e);
+                }
+                controller = new RoleControllerManager(context, FgThread.getHandler());
+                mControllers.put(userId, controller);
             }
-            return controllerService;
+            return controller;
         }
     }
 
@@ -362,7 +368,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         RoleUserState userState;
         synchronized (mLock) {
             listeners = mListeners.removeReturnOld(userId);
-            mControllerServices.remove(userId);
+            mControllers.remove(userId);
             userState = mUserStates.removeReturnOld(userId);
         }
         if (listeners != null) {
@@ -424,10 +430,11 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
 
         @Override
         public boolean isRoleHeld(@NonNull String roleName, @NonNull String packageName) {
-            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
-            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             int callingUid = getCallingUid();
             mAppOpsManager.checkPackage(callingUid, packageName);
+
+            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
+            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
 
             int userId = UserHandle.getUserId(callingUid);
             ArraySet<String> roleHolders = getOrCreateUserState(userId).getRoleHolders(roleName);
@@ -440,7 +447,6 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @NonNull
         @Override
         public List<String> getRoleHoldersAsUser(@NonNull String roleName, @UserIdInt int userId) {
-            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
             if (!mUserManagerInternal.exists(userId)) {
                 Slog.e(LOG_TAG, "user " + userId + " does not exist");
                 return Collections.emptyList();
@@ -448,6 +454,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             userId = handleIncomingUser(userId, false, "getRoleHoldersAsUser");
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "getRoleHoldersAsUser");
+
+            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
 
             ArraySet<String> roleHolders = getOrCreateUserState(userId).getRoleHolders(roleName);
             if (roleHolders == null) {
@@ -459,10 +467,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public void addRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
                 @RoleManager.ManageHoldersFlags int flags, @UserIdInt int userId,
-                @NonNull IRoleManagerCallback callback) {
-            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
-            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
-            Preconditions.checkNotNull(callback, "callback cannot be null");
+                @NonNull RemoteCallback callback) {
             if (!mUserManagerInternal.exists(userId)) {
                 Slog.e(LOG_TAG, "user " + userId + " does not exist");
                 return;
@@ -471,6 +476,10 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "addRoleHolderAsUser");
 
+            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
+            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
+            Preconditions.checkNotNull(callback, "callback cannot be null");
+
             getOrCreateControllerService(userId).onAddRoleHolder(roleName, packageName, flags,
                     callback);
         }
@@ -478,10 +487,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public void removeRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
                 @RoleManager.ManageHoldersFlags int flags, @UserIdInt int userId,
-                @NonNull IRoleManagerCallback callback) {
-            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
-            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
-            Preconditions.checkNotNull(callback, "callback cannot be null");
+                @NonNull RemoteCallback callback) {
             if (!mUserManagerInternal.exists(userId)) {
                 Slog.e(LOG_TAG, "user " + userId + " does not exist");
                 return;
@@ -490,6 +496,10 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "removeRoleHolderAsUser");
 
+            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
+            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
+            Preconditions.checkNotNull(callback, "callback cannot be null");
+
             getOrCreateControllerService(userId).onRemoveRoleHolder(roleName, packageName, flags,
                     callback);
         }
@@ -497,9 +507,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public void clearRoleHoldersAsUser(@NonNull String roleName,
                 @RoleManager.ManageHoldersFlags int flags, @UserIdInt int userId,
-                @NonNull IRoleManagerCallback callback) {
-            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
-            Preconditions.checkNotNull(callback, "callback cannot be null");
+                @NonNull RemoteCallback callback) {
             if (!mUserManagerInternal.exists(userId)) {
                 Slog.e(LOG_TAG, "user " + userId + " does not exist");
                 return;
@@ -508,13 +516,15 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             getContext().enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ROLE_HOLDERS,
                     "clearRoleHoldersAsUser");
 
+            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
+            Preconditions.checkNotNull(callback, "callback cannot be null");
+
             getOrCreateControllerService(userId).onClearRoleHolders(roleName, flags, callback);
         }
 
         @Override
         public void addOnRoleHoldersChangedListenerAsUser(
                 @NonNull IOnRoleHoldersChangedListener listener, @UserIdInt int userId) {
-            Preconditions.checkNotNull(listener, "listener cannot be null");
             if (userId != UserHandle.USER_ALL && !mUserManagerInternal.exists(userId)) {
                 Slog.e(LOG_TAG, "user " + userId + " does not exist");
                 return;
@@ -522,6 +532,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             userId = handleIncomingUser(userId, true, "addOnRoleHoldersChangedListenerAsUser");
             getContext().enforceCallingOrSelfPermission(Manifest.permission.OBSERVE_ROLE_HOLDERS,
                     "addOnRoleHoldersChangedListenerAsUser");
+
+            Preconditions.checkNotNull(listener, "listener cannot be null");
 
             RemoteCallbackList<IOnRoleHoldersChangedListener> listeners = getOrCreateListeners(
                     userId);
@@ -531,7 +543,6 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public void removeOnRoleHoldersChangedListenerAsUser(
                 @NonNull IOnRoleHoldersChangedListener listener, @UserIdInt int userId) {
-            Preconditions.checkNotNull(listener, "listener cannot be null");
             if (userId != UserHandle.USER_ALL && !mUserManagerInternal.exists(userId)) {
                 Slog.e(LOG_TAG, "user " + userId + " does not exist");
                 return;
@@ -539,6 +550,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             userId = handleIncomingUser(userId, true, "removeOnRoleHoldersChangedListenerAsUser");
             getContext().enforceCallingOrSelfPermission(Manifest.permission.OBSERVE_ROLE_HOLDERS,
                     "removeOnRoleHoldersChangedListenerAsUser");
+
+            Preconditions.checkNotNull(listener, "listener cannot be null");
 
             RemoteCallbackList<IOnRoleHoldersChangedListener> listeners = getListeners(userId);
             if (listener == null) {
@@ -549,10 +562,11 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
 
         @Override
         public void setRoleNamesFromController(@NonNull List<String> roleNames) {
-            Preconditions.checkNotNull(roleNames, "roleNames cannot be null");
             getContext().enforceCallingOrSelfPermission(
                     RoleManager.PERMISSION_MANAGE_ROLES_FROM_CONTROLLER,
                     "setRoleNamesFromController");
+
+            Preconditions.checkNotNull(roleNames, "roleNames cannot be null");
 
             int userId = UserHandle.getCallingUserId();
             getOrCreateUserState(userId).setRoleNames(roleNames);
@@ -561,11 +575,12 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public boolean addRoleHolderFromController(@NonNull String roleName,
                 @NonNull String packageName) {
-            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
-            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             getContext().enforceCallingOrSelfPermission(
                     RoleManager.PERMISSION_MANAGE_ROLES_FROM_CONTROLLER,
                     "addRoleHolderFromController");
+
+            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
+            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
 
             int userId = UserHandle.getCallingUserId();
             return getOrCreateUserState(userId).addRoleHolder(roleName, packageName);
@@ -574,11 +589,12 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public boolean removeRoleHolderFromController(@NonNull String roleName,
                 @NonNull String packageName) {
-            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
-            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             getContext().enforceCallingOrSelfPermission(
                     RoleManager.PERMISSION_MANAGE_ROLES_FROM_CONTROLLER,
                     "removeRoleHolderFromController");
+
+            Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
+            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
 
             int userId = UserHandle.getCallingUserId();
             return getOrCreateUserState(userId).removeRoleHolder(roleName, packageName);
@@ -586,10 +602,11 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
 
         @Override
         public List<String> getHeldRolesFromController(@NonNull String packageName) {
-            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             getContext().enforceCallingOrSelfPermission(
                     RoleManager.PERMISSION_MANAGE_ROLES_FROM_CONTROLLER,
                     "getRolesHeldFromController");
+
+            Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
 
             int userId = UserHandle.getCallingUserId();
             return getOrCreateUserState(userId).getHeldRoles(packageName);
@@ -718,16 +735,14 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         @Override
         public boolean setDefaultBrowser(@Nullable String packageName, @UserIdInt int userId) {
             CompletableFuture<Void> future = new CompletableFuture<>();
-            IRoleManagerCallback callback = new IRoleManagerCallback.Stub() {
-                @Override
-                public void onSuccess() {
+            RemoteCallback callback = new RemoteCallback(result -> {
+                boolean successful = result != null;
+                if (successful) {
                     future.complete(null);
-                }
-                @Override
-                public void onFailure() {
+                } else {
                     future.completeExceptionally(new RuntimeException());
                 }
-            };
+            });
             if (packageName != null) {
                 getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
                         packageName, 0, callback);
@@ -743,6 +758,23 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                 return false;
             }
         }
+
+        @Override
+        public void setDefaultBrowserAsync(@Nullable String packageName, @UserIdInt int userId) {
+            RemoteCallback callback = new RemoteCallback(result -> {
+                boolean successful = result != null;
+                if (!successful) {
+                    Slog.e(LOG_TAG, "Failed to set default browser: " + packageName);
+                }
+            });
+            if (packageName != null) {
+                getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
+                        packageName, 0, callback);
+            } else {
+                getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
+                        callback);
+            }
+        }
     }
 
     private class DefaultHomeProvider implements PackageManagerInternal.DefaultHomeProvider {
@@ -756,14 +788,12 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
 
         @Override
         public void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId) {
-            IRoleManagerCallback callback = new IRoleManagerCallback.Stub() {
-                @Override
-                public void onSuccess() {}
-                @Override
-                public void onFailure() {
+            RemoteCallback callback = new RemoteCallback(result -> {
+                boolean successful = result != null;
+                if (!successful) {
                     Slog.e(LOG_TAG, "Failed to set default home: " + packageName);
                 }
-            };
+            });
             if (packageName != null) {
                 getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_HOME,
                         packageName, 0, callback);

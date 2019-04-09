@@ -18,15 +18,16 @@ package android.os;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
-import android.provider.DeviceConfig;
 import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.Zygote;
+import com.android.internal.os.ZygoteConfig;
 
 import java.io.BufferedWriter;
 import java.io.DataInputStream;
@@ -41,10 +42,12 @@ import java.util.List;
 import java.util.UUID;
 
 /*package*/ class ZygoteStartFailedEx extends Exception {
+    @UnsupportedAppUsage
     ZygoteStartFailedEx(String s) {
         super(s);
     }
 
+    @UnsupportedAppUsage
     ZygoteStartFailedEx(Throwable cause) {
         super(cause);
     }
@@ -63,28 +66,20 @@ import java.util.UUID;
  */
 public class ZygoteProcess {
 
-    /**
-     * @hide for internal use only.
-     */
-    public static final int ZYGOTE_CONNECT_TIMEOUT_MS = 20000;
+    private static final int ZYGOTE_CONNECT_TIMEOUT_MS = 20000;
 
     /**
-     * @hide for internal use only.
-     *
      * Use a relatively short delay, because for app zygote, this is in the critical path of
      * service launch.
      */
-    public static final int ZYGOTE_CONNECT_RETRY_DELAY_MS = 50;
+    private static final int ZYGOTE_CONNECT_RETRY_DELAY_MS = 50;
 
-    /**
-     * @hide for internal use only
-     */
     private static final String LOG_TAG = "ZygoteProcess";
 
     /**
-     * The default value for enabling the blastula pool.
+     * The default value for enabling the unspecialized app process (USAP) pool.
      */
-    private static final String BLASTULA_POOL_ENABLED_DEFAULT = "false";
+    private static final String USAP_POOL_ENABLED_DEFAULT = "false";
 
     /**
      * The name of the socket used to communicate with the primary zygote.
@@ -97,14 +92,14 @@ public class ZygoteProcess {
     private final LocalSocketAddress mZygoteSecondarySocketAddress;
 
     /**
-     * The name of the socket used to communicate with the primary blastula pool.
+     * The name of the socket used to communicate with the primary USAP pool.
      */
-    private final LocalSocketAddress mBlastulaPoolSocketAddress;
+    private final LocalSocketAddress mUsapPoolSocketAddress;
 
     /**
-     * The name of the socket used to communicate with the secondary (alternate ABI) blastula pool.
+     * The name of the socket used to communicate with the secondary (alternate ABI) USAP pool.
      */
-    private final LocalSocketAddress mBlastulaPoolSecondarySocketAddress;
+    private final LocalSocketAddress mUsapPoolSecondarySocketAddress;
 
     public ZygoteProcess() {
         mZygoteSocketAddress =
@@ -114,16 +109,12 @@ public class ZygoteProcess {
                 new LocalSocketAddress(Zygote.SECONDARY_SOCKET_NAME,
                                        LocalSocketAddress.Namespace.RESERVED);
 
-        mBlastulaPoolSocketAddress =
-                new LocalSocketAddress(Zygote.BLASTULA_POOL_PRIMARY_SOCKET_NAME,
+        mUsapPoolSocketAddress =
+                new LocalSocketAddress(Zygote.USAP_POOL_PRIMARY_SOCKET_NAME,
                                        LocalSocketAddress.Namespace.RESERVED);
-        mBlastulaPoolSecondarySocketAddress =
-                new LocalSocketAddress(Zygote.BLASTULA_POOL_SECONDARY_SOCKET_NAME,
+        mUsapPoolSecondarySocketAddress =
+                new LocalSocketAddress(Zygote.USAP_POOL_SECONDARY_SOCKET_NAME,
                                        LocalSocketAddress.Namespace.RESERVED);
-
-        if (fetchBlastulaPoolEnabledProp()) {
-            informZygotesOfBlastulaPoolStatus();
-        }
     }
 
     public ZygoteProcess(LocalSocketAddress primarySocketAddress,
@@ -131,8 +122,8 @@ public class ZygoteProcess {
         mZygoteSocketAddress = primarySocketAddress;
         mZygoteSecondarySocketAddress = secondarySocketAddress;
 
-        mBlastulaPoolSocketAddress = null;
-        mBlastulaPoolSecondarySocketAddress = null;
+        mUsapPoolSocketAddress = null;
+        mUsapPoolSecondarySocketAddress = null;
     }
 
     public LocalSocketAddress getPrimarySocketAddress() {
@@ -142,50 +133,54 @@ public class ZygoteProcess {
     /**
      * State for communicating with the zygote process.
      */
-    public static class ZygoteState {
+    private static class ZygoteState implements AutoCloseable {
         final LocalSocketAddress mZygoteSocketAddress;
-        final LocalSocketAddress mBlastulaSocketAddress;
+        final LocalSocketAddress mUsapSocketAddress;
 
         private final LocalSocket mZygoteSessionSocket;
 
         final DataInputStream mZygoteInputStream;
         final BufferedWriter mZygoteOutputWriter;
 
-        private final List<String> mABIList;
+        private final List<String> mAbiList;
 
         private boolean mClosed;
 
         private ZygoteState(LocalSocketAddress zygoteSocketAddress,
-                            LocalSocketAddress blastulaSocketAddress,
+                            LocalSocketAddress usapSocketAddress,
                             LocalSocket zygoteSessionSocket,
                             DataInputStream zygoteInputStream,
                             BufferedWriter zygoteOutputWriter,
                             List<String> abiList) {
             this.mZygoteSocketAddress = zygoteSocketAddress;
-            this.mBlastulaSocketAddress = blastulaSocketAddress;
+            this.mUsapSocketAddress = usapSocketAddress;
             this.mZygoteSessionSocket = zygoteSessionSocket;
             this.mZygoteInputStream = zygoteInputStream;
             this.mZygoteOutputWriter = zygoteOutputWriter;
-            this.mABIList = abiList;
+            this.mAbiList = abiList;
         }
 
         /**
          * Create a new ZygoteState object by connecting to the given Zygote socket and saving the
-         * given blastula socket address.
+         * given USAP socket address.
          *
          * @param zygoteSocketAddress  Zygote socket to connect to
-         * @param blastulaSocketAddress  Blastula socket address to save for later
+         * @param usapSocketAddress  USAP socket address to save for later
          * @return  A new ZygoteState object containing a session socket for the given Zygote socket
          * address
          * @throws IOException
          */
-        public static ZygoteState connect(LocalSocketAddress zygoteSocketAddress,
-                                          LocalSocketAddress blastulaSocketAddress)
+        static ZygoteState connect(@NonNull LocalSocketAddress zygoteSocketAddress,
+                @Nullable LocalSocketAddress usapSocketAddress)
                 throws IOException {
 
-            DataInputStream zygoteInputStream = null;
-            BufferedWriter zygoteOutputWriter = null;
+            DataInputStream zygoteInputStream;
+            BufferedWriter zygoteOutputWriter;
             final LocalSocket zygoteSessionSocket = new LocalSocket();
+
+            if (zygoteSocketAddress == null) {
+                throw new IllegalArgumentException("zygoteSocketAddress can't be null");
+            }
 
             try {
                 zygoteSessionSocket.connect(zygoteSocketAddress);
@@ -202,20 +197,20 @@ public class ZygoteProcess {
                 throw ex;
             }
 
-            return new ZygoteState(zygoteSocketAddress, blastulaSocketAddress,
+            return new ZygoteState(zygoteSocketAddress, usapSocketAddress,
                                    zygoteSessionSocket, zygoteInputStream, zygoteOutputWriter,
                                    getAbiList(zygoteOutputWriter, zygoteInputStream));
         }
 
-        LocalSocket getBlastulaSessionSocket() throws IOException {
-            final LocalSocket blastulaSessionSocket = new LocalSocket();
-            blastulaSessionSocket.connect(this.mBlastulaSocketAddress);
+        LocalSocket getUsapSessionSocket() throws IOException {
+            final LocalSocket usapSessionSocket = new LocalSocket();
+            usapSessionSocket.connect(this.mUsapSocketAddress);
 
-            return blastulaSessionSocket;
+            return usapSessionSocket;
         }
 
         boolean matches(String abi) {
-            return mABIList.contains(abi);
+            return mAbiList.contains(abi);
         }
 
         public void close() {
@@ -253,6 +248,11 @@ public class ZygoteProcess {
     private int mHiddenApiAccessLogSampleRate;
 
     /**
+     * Proportion of hidden API accesses that should be logged to statslog; 0 - 0x10000.
+     */
+    private int mHiddenApiAccessStatslogSampleRate;
+
+    /**
      * The state of the connection to the primary zygote.
      */
     private ZygoteState primaryZygoteState;
@@ -263,13 +263,13 @@ public class ZygoteProcess {
     private ZygoteState secondaryZygoteState;
 
     /**
-     * If the blastula pool should be created and used to start applications.
+     * If the USAP pool should be created and used to start applications.
      *
-     * Setting this value to false will disable the creation, maintenance, and use of the blastula
-     * pool.  When the blastula pool is disabled the application lifecycle will be identical to
+     * Setting this value to false will disable the creation, maintenance, and use of the USAP
+     * pool.  When the USAP pool is disabled the application lifecycle will be identical to
      * previous versions of Android.
      */
-    private boolean mBlastulaPoolEnabled = false;
+    private boolean mUsapPoolEnabled = false;
 
     /**
      * Start a new process.
@@ -323,19 +323,19 @@ public class ZygoteProcess {
                                                   @Nullable String packageName,
                                                   @Nullable String[] packagesForUid,
                                                   @Nullable String sandboxId,
-                                                  boolean useBlastulaPool,
+                                                  boolean useUsapPool,
                                                   @Nullable String[] zygoteArgs) {
         // TODO (chriswailes): Is there a better place to check this value?
-        if (fetchBlastulaPoolEnabledPropWithMinInterval()) {
-            informZygotesOfBlastulaPoolStatus();
+        if (fetchUsapPoolEnabledPropWithMinInterval()) {
+            informZygotesOfUsapPoolStatus();
         }
 
         try {
             return startViaZygote(processClass, niceName, uid, gid, gids,
                     runtimeFlags, mountExternal, targetSdkVersion, seInfo,
-                    abi, instructionSet, appDataDir, invokeWith, /*startChildZygote=*/false,
+                    abi, instructionSet, appDataDir, invokeWith, /*startChildZygote=*/ false,
                     packageName, packagesForUid, sandboxId,
-                    useBlastulaPool, zygoteArgs);
+                    useUsapPool, zygoteArgs);
         } catch (ZygoteStartFailedEx ex) {
             Log.e(LOG_TAG,
                     "Starting VM process through Zygote failed");
@@ -349,8 +349,6 @@ public class ZygoteProcess {
 
     /**
      * Queries the zygote for the list of ABIS it supports.
-     *
-     * @throws ZygoteStartFailedEx if the query failed.
      */
     @GuardedBy("mLock")
     private static List<String> getAbiList(BufferedWriter writer, DataInputStream inputStream)
@@ -369,7 +367,7 @@ public class ZygoteProcess {
         byte[] bytes = new byte[numBytes];
         inputStream.readFully(bytes);
 
-        String rawList = new String(bytes, StandardCharsets.US_ASCII);
+        final String rawList = new String(bytes, StandardCharsets.US_ASCII);
 
         return Arrays.asList(rawList.split(","));
     }
@@ -383,7 +381,7 @@ public class ZygoteProcess {
      */
     @GuardedBy("mLock")
     private Process.ProcessStartResult zygoteSendArgsAndGetResult(
-            ZygoteState zygoteState, boolean useBlastulaPool, ArrayList<String> args)
+            ZygoteState zygoteState, boolean useUsapPool, ArrayList<String> args)
             throws ZygoteStartFailedEx {
         // Throw early if any of the arguments are malformed. This means we can
         // avoid writing a partial response to the zygote.
@@ -403,52 +401,24 @@ public class ZygoteProcess {
          * the child or -1 on failure, followed by boolean to
          * indicate whether a wrapper process was used.
          */
-        String msgStr = Integer.toString(args.size()) + "\n"
-                        + String.join("\n", args) + "\n";
+        String msgStr = args.size() + "\n" + String.join("\n", args) + "\n";
 
-        // Should there be a timeout on this?
-        Process.ProcessStartResult result = new Process.ProcessStartResult();
-
-        // TODO (chriswailes): Move branch body into separate function.
-        if (useBlastulaPool && mBlastulaPoolEnabled && isValidBlastulaCommand(args)) {
-            LocalSocket blastulaSessionSocket = null;
-
+        if (useUsapPool && mUsapPoolEnabled && isValidUsapCommand(args)) {
             try {
-                blastulaSessionSocket = zygoteState.getBlastulaSessionSocket();
-
-                final BufferedWriter blastulaWriter =
-                        new BufferedWriter(
-                                new OutputStreamWriter(blastulaSessionSocket.getOutputStream()),
-                                Zygote.SOCKET_BUFFER_SIZE);
-                final DataInputStream blastulaReader =
-                        new DataInputStream(blastulaSessionSocket.getInputStream());
-
-                blastulaWriter.write(msgStr);
-                blastulaWriter.flush();
-
-                result.pid = blastulaReader.readInt();
-                // Blastulas can't be used to spawn processes that need wrappers.
-                result.usingWrapper = false;
-
-                if (result.pid < 0) {
-                    throw new ZygoteStartFailedEx("Blastula specialization failed");
-                }
-
-                return result;
+                return attemptUsapSendArgsAndGetResult(zygoteState, msgStr);
             } catch (IOException ex) {
-                // If there was an IOException using the blastula pool we will log the error and
+                // If there was an IOException using the USAP pool we will log the error and
                 // attempt to start the process through the Zygote.
-                Log.e(LOG_TAG, "IO Exception while communicating with blastula pool - "
-                               + ex.getMessage());
-            } finally {
-                try {
-                    blastulaSessionSocket.close();
-                } catch (IOException ex) {
-                    Log.e(LOG_TAG, "Failed to close blastula session socket: " + ex.getMessage());
-                }
+                Log.e(LOG_TAG, "IO Exception while communicating with USAP pool - "
+                        + ex.getMessage());
             }
         }
 
+        return attemptZygoteSendArgsAndGetResult(zygoteState, msgStr);
+    }
+
+    private Process.ProcessStartResult attemptZygoteSendArgsAndGetResult(
+            ZygoteState zygoteState, String msgStr) throws ZygoteStartFailedEx {
         try {
             final BufferedWriter zygoteWriter = zygoteState.mZygoteOutputWriter;
             final DataInputStream zygoteInputStream = zygoteState.mZygoteInputStream;
@@ -459,26 +429,54 @@ public class ZygoteProcess {
             // Always read the entire result from the input stream to avoid leaving
             // bytes in the stream for future process starts to accidentally stumble
             // upon.
+            Process.ProcessStartResult result = new Process.ProcessStartResult();
             result.pid = zygoteInputStream.readInt();
             result.usingWrapper = zygoteInputStream.readBoolean();
+
+            if (result.pid < 0) {
+                throw new ZygoteStartFailedEx("fork() failed");
+            }
+
+            return result;
         } catch (IOException ex) {
             zygoteState.close();
             Log.e(LOG_TAG, "IO Exception while communicating with Zygote - "
                     + ex.toString());
             throw new ZygoteStartFailedEx(ex);
         }
+    }
 
-        if (result.pid < 0) {
-            throw new ZygoteStartFailedEx("fork() failed");
+    private Process.ProcessStartResult attemptUsapSendArgsAndGetResult(
+            ZygoteState zygoteState, String msgStr)
+            throws ZygoteStartFailedEx, IOException {
+        try (LocalSocket usapSessionSocket = zygoteState.getUsapSessionSocket()) {
+            final BufferedWriter usapWriter =
+                    new BufferedWriter(
+                            new OutputStreamWriter(usapSessionSocket.getOutputStream()),
+                            Zygote.SOCKET_BUFFER_SIZE);
+            final DataInputStream usapReader =
+                    new DataInputStream(usapSessionSocket.getInputStream());
+
+            usapWriter.write(msgStr);
+            usapWriter.flush();
+
+            Process.ProcessStartResult result = new Process.ProcessStartResult();
+            result.pid = usapReader.readInt();
+            // USAPs can't be used to spawn processes that need wrappers.
+            result.usingWrapper = false;
+
+            if (result.pid >= 0) {
+                return result;
+            } else {
+                throw new ZygoteStartFailedEx("USAP specialization failed");
+            }
         }
-
-        return result;
     }
 
     /**
-     * Flags that may not be passed to a blastula.
+     * Flags that may not be passed to a USAP.
      */
-    private static final String[] INVALID_BLASTULA_FLAGS = {
+    private static final String[] INVALID_USAP_FLAGS = {
         "--query-abi-list",
         "--get-pid",
         "--preload-default",
@@ -487,17 +485,18 @@ public class ZygoteProcess {
         "--start-child-zygote",
         "--set-api-blacklist-exemptions",
         "--hidden-api-log-sampling-rate",
+        "--hidden-api-statslog-sampling-rate",
         "--invoke-with"
     };
 
     /**
-     * Tests a command list to see if it is valid to send to a blastula.
-     * @param args  Zygote/Blastula command arguments
-     * @return  True if the command can be passed to a blastula; false otherwise
+     * Tests a command list to see if it is valid to send to a USAP.
+     * @param args  Zygote/USAP command arguments
+     * @return  True if the command can be passed to a USAP; false otherwise
      */
-    private static boolean isValidBlastulaCommand(ArrayList<String> args) {
+    private static boolean isValidUsapCommand(ArrayList<String> args) {
         for (String flag : args) {
-            for (String badFlag : INVALID_BLASTULA_FLAGS) {
+            for (String badFlag : INVALID_USAP_FLAGS) {
                 if (flag.startsWith(badFlag)) {
                     return false;
                 }
@@ -545,10 +544,10 @@ public class ZygoteProcess {
                                                       @Nullable String packageName,
                                                       @Nullable String[] packagesForUid,
                                                       @Nullable String sandboxId,
-                                                      boolean useBlastulaPool,
+                                                      boolean useUnspecializedAppProcessPool,
                                                       @Nullable String[] extraArgs)
                                                       throws ZygoteStartFailedEx {
-        ArrayList<String> argsForZygote = new ArrayList<String>();
+        ArrayList<String> argsForZygote = new ArrayList<>();
 
         // --runtime-args, --setuid=, --setgid=,
         // and --setgroups= must go first
@@ -618,17 +617,7 @@ public class ZygoteProcess {
         }
 
         if (packagesForUid != null && packagesForUid.length > 0) {
-            final StringBuilder sb = new StringBuilder();
-            sb.append("--packages-for-uid=");
-
-            // TODO (chriswailes): Replace with String.join
-            for (int i = 0; i < packagesForUid.length; ++i) {
-                if (i != 0) {
-                    sb.append(',');
-                }
-                sb.append(packagesForUid[i]);
-            }
-            argsForZygote.add(sb.toString());
+            argsForZygote.add("--packages-for-uid=" + String.join(",", packagesForUid));
         }
 
         if (sandboxId != null) {
@@ -638,48 +627,48 @@ public class ZygoteProcess {
         argsForZygote.add(processClass);
 
         if (extraArgs != null) {
-            for (String arg : extraArgs) {
-                argsForZygote.add(arg);
-            }
+            Collections.addAll(argsForZygote, extraArgs);
         }
 
         synchronized(mLock) {
             return zygoteSendArgsAndGetResult(openZygoteSocketIfNeeded(abi),
-                                              useBlastulaPool,
+                                              useUnspecializedAppProcessPool,
                                               argsForZygote);
         }
     }
 
-    private boolean fetchBlastulaPoolEnabledProp() {
-        boolean origVal = mBlastulaPoolEnabled;
+    private boolean fetchUsapPoolEnabledProp() {
+        boolean origVal = mUsapPoolEnabled;
 
-        final String propertyString =
-                Zygote.getSystemProperty(
-                        DeviceConfig.RuntimeNative.BLASTULA_POOL_ENABLED,
-                        BLASTULA_POOL_ENABLED_DEFAULT);
+        final String propertyString = Zygote.getConfigurationProperty(
+                ZygoteConfig.USAP_POOL_ENABLED, USAP_POOL_ENABLED_DEFAULT);
 
         if (!propertyString.isEmpty()) {
-            mBlastulaPoolEnabled =
-                    Zygote.getSystemPropertyBoolean(
-                            DeviceConfig.RuntimeNative.BLASTULA_POOL_ENABLED,
-                            Boolean.parseBoolean(BLASTULA_POOL_ENABLED_DEFAULT));
+            mUsapPoolEnabled = Zygote.getConfigurationPropertyBoolean(
+                    ZygoteConfig.USAP_POOL_ENABLED,
+                    Boolean.parseBoolean(USAP_POOL_ENABLED_DEFAULT));
         }
 
-        if (origVal != mBlastulaPoolEnabled) {
-            Log.i(LOG_TAG, "blastulaPoolEnabled = " + mBlastulaPoolEnabled);
+        boolean valueChanged = origVal != mUsapPoolEnabled;
+
+        if (valueChanged) {
+            Log.i(LOG_TAG, "usapPoolEnabled = " + mUsapPoolEnabled);
         }
 
-        return origVal != mBlastulaPoolEnabled;
+        return valueChanged;
     }
 
+    private boolean mIsFirstPropCheck = true;
     private long mLastPropCheckTimestamp = 0;
 
-    private boolean fetchBlastulaPoolEnabledPropWithMinInterval() {
+    private boolean fetchUsapPoolEnabledPropWithMinInterval() {
         final long currentTimestamp = SystemClock.elapsedRealtime();
 
-        if (currentTimestamp - mLastPropCheckTimestamp >= Zygote.PROPERTY_CHECK_INTERVAL) {
+        if (mIsFirstPropCheck
+                || (currentTimestamp - mLastPropCheckTimestamp >= Zygote.PROPERTY_CHECK_INTERVAL)) {
+            mIsFirstPropCheck = false;
             mLastPropCheckTimestamp = currentTimestamp;
-            return fetchBlastulaPoolEnabledProp();
+            return fetchUsapPoolEnabledProp();
         }
 
         return false;
@@ -776,15 +765,30 @@ public class ZygoteProcess {
         }
     }
 
+    /**
+     * Set the precentage of detected hidden API accesses that are logged to the new event log.
+     *
+     * <p>This rate will take affect for all new processes forked from the zygote after this call.
+     *
+     * @param rate An integer between 0 and 0x10000 inclusive. 0 means no event logging.
+     */
+    public void setHiddenApiAccessStatslogSampleRate(int rate) {
+        synchronized (mLock) {
+            mHiddenApiAccessStatslogSampleRate = rate;
+            maybeSetHiddenApiAccessStatslogSampleRate(primaryZygoteState);
+            maybeSetHiddenApiAccessStatslogSampleRate(secondaryZygoteState);
+        }
+    }
+
     @GuardedBy("mLock")
     private boolean maybeSetApiBlacklistExemptions(ZygoteState state, boolean sendIfEmpty) {
         if (state == null || state.isClosed()) {
             Slog.e(LOG_TAG, "Can't set API blacklist exemptions: no zygote connection");
             return false;
-        }
-        if (!sendIfEmpty && mApiBlacklistExemptions.isEmpty()) {
+        } else if (!sendIfEmpty && mApiBlacklistExemptions.isEmpty()) {
             return true;
         }
+
         try {
             state.mZygoteOutputWriter.write(Integer.toString(mApiBlacklistExemptions.size() + 1));
             state.mZygoteOutputWriter.newLine();
@@ -808,17 +812,15 @@ public class ZygoteProcess {
     }
 
     private void maybeSetHiddenApiAccessLogSampleRate(ZygoteState state) {
-        if (state == null || state.isClosed()) {
+        if (state == null || state.isClosed() || mHiddenApiAccessLogSampleRate == -1) {
             return;
         }
-        if (mHiddenApiAccessLogSampleRate == -1) {
-            return;
-        }
+
         try {
             state.mZygoteOutputWriter.write(Integer.toString(1));
             state.mZygoteOutputWriter.newLine();
             state.mZygoteOutputWriter.write("--hidden-api-log-sampling-rate="
-                    + Integer.toString(mHiddenApiAccessLogSampleRate));
+                    + mHiddenApiAccessLogSampleRate);
             state.mZygoteOutputWriter.newLine();
             state.mZygoteOutputWriter.flush();
             int status = state.mZygoteInputStream.readInt();
@@ -830,6 +832,28 @@ public class ZygoteProcess {
         }
     }
 
+    private void maybeSetHiddenApiAccessStatslogSampleRate(ZygoteState state) {
+        if (state == null || state.isClosed() || mHiddenApiAccessStatslogSampleRate == -1) {
+            return;
+        }
+
+        try {
+            state.mZygoteOutputWriter.write(Integer.toString(1));
+            state.mZygoteOutputWriter.newLine();
+            state.mZygoteOutputWriter.write("--hidden-api-statslog-sampling-rate="
+                    + mHiddenApiAccessStatslogSampleRate);
+            state.mZygoteOutputWriter.newLine();
+            state.mZygoteOutputWriter.flush();
+            int status = state.mZygoteInputStream.readInt();
+            if (status != 0) {
+                Slog.e(LOG_TAG, "Failed to set hidden API statslog sampling rate; status "
+                        + status);
+            }
+        } catch (IOException ioe) {
+            Slog.e(LOG_TAG, "Failed to set hidden API statslog sampling rate", ioe);
+        }
+    }
+
     /**
      * Creates a ZygoteState for the primary zygote if it doesn't exist or has been disconnected.
      */
@@ -837,7 +861,7 @@ public class ZygoteProcess {
     private void attemptConnectionToPrimaryZygote() throws IOException {
         if (primaryZygoteState == null || primaryZygoteState.isClosed()) {
             primaryZygoteState =
-                    ZygoteState.connect(mZygoteSocketAddress, mBlastulaPoolSocketAddress);
+                    ZygoteState.connect(mZygoteSocketAddress, mUsapPoolSocketAddress);
 
             maybeSetApiBlacklistExemptions(primaryZygoteState, false);
             maybeSetHiddenApiAccessLogSampleRate(primaryZygoteState);
@@ -852,7 +876,7 @@ public class ZygoteProcess {
         if (secondaryZygoteState == null || secondaryZygoteState.isClosed()) {
             secondaryZygoteState =
                     ZygoteState.connect(mZygoteSecondarySocketAddress,
-                            mBlastulaPoolSecondarySocketAddress);
+                            mUsapPoolSecondarySocketAddress);
 
             maybeSetApiBlacklistExemptions(secondaryZygoteState, false);
             maybeSetHiddenApiAccessLogSampleRate(secondaryZygoteState);
@@ -874,11 +898,13 @@ public class ZygoteProcess {
                 return primaryZygoteState;
             }
 
-            // The primary zygote didn't match. Try the secondary.
-            attemptConnectionToSecondaryZygote();
+            if (mZygoteSecondarySocketAddress != null) {
+                // The primary zygote didn't match. Try the secondary.
+                attemptConnectionToSecondaryZygote();
 
-            if (secondaryZygoteState.matches(abi)) {
-                return secondaryZygoteState;
+                if (secondaryZygoteState.matches(abi)) {
+                    return secondaryZygoteState;
+                }
             }
         } catch (IOException ioe) {
             throw new ZygoteStartFailedEx("Error connecting to zygote", ioe);
@@ -892,8 +918,8 @@ public class ZygoteProcess {
      * Only the app zygote supports this function.
      * TODO preloadPackageForAbi() can probably be removed and the callers an use this instead.
      */
-    public boolean preloadApp(ApplicationInfo appInfo, String abi) throws ZygoteStartFailedEx,
-                                                                          IOException {
+    public boolean preloadApp(ApplicationInfo appInfo, String abi)
+            throws ZygoteStartFailedEx, IOException {
         synchronized (mLock) {
             ZygoteState state = openZygoteSocketIfNeeded(abi);
             state.mZygoteOutputWriter.write("2");
@@ -921,10 +947,10 @@ public class ZygoteProcess {
      * Instructs the zygote to pre-load the classes and native libraries at the given paths
      * for the specified abi. Not all zygotes support this function.
      */
-    public boolean preloadPackageForAbi(String packagePath, String libsPath, String libFileName,
-                                        String cacheKey, String abi) throws ZygoteStartFailedEx,
-                                                                            IOException {
-        synchronized(mLock) {
+    public boolean preloadPackageForAbi(
+            String packagePath, String libsPath, String libFileName, String cacheKey, String abi)
+            throws ZygoteStartFailedEx, IOException {
+        synchronized (mLock) {
             ZygoteState state = openZygoteSocketIfNeeded(abi);
             state.mZygoteOutputWriter.write("5");
             state.mZygoteOutputWriter.newLine();
@@ -999,19 +1025,18 @@ public class ZygoteProcess {
 
             try {
                 Thread.sleep(ZYGOTE_CONNECT_RETRY_DELAY_MS);
-            } catch (InterruptedException ie) {
-            }
+            } catch (InterruptedException ignored) { }
         }
         Slog.wtf(LOG_TAG, "Failed to connect to Zygote through socket "
                 + zygoteSocketAddress.getName());
     }
 
     /**
-     * Sends messages to the zygotes telling them to change the status of their blastula pools.  If
+     * Sends messages to the zygotes telling them to change the status of their USAP pools.  If
      * this notification fails the ZygoteProcess will fall back to the previous behavior.
      */
-    private void informZygotesOfBlastulaPoolStatus() {
-        final String command = "1\n--blastula-pool-enabled=" + mBlastulaPoolEnabled + "\n";
+    private void informZygotesOfUsapPoolStatus() {
+        final String command = "1\n--usap-pool-enabled=" + mUsapPoolEnabled + "\n";
 
         synchronized (mLock) {
             try {
@@ -1020,28 +1045,30 @@ public class ZygoteProcess {
                 primaryZygoteState.mZygoteOutputWriter.write(command);
                 primaryZygoteState.mZygoteOutputWriter.flush();
             } catch (IOException ioe) {
-                mBlastulaPoolEnabled = !mBlastulaPoolEnabled;
-                Log.w(LOG_TAG, "Failed to inform zygotes of blastula pool status: "
+                mUsapPoolEnabled = !mUsapPoolEnabled;
+                Log.w(LOG_TAG, "Failed to inform zygotes of USAP pool status: "
                         + ioe.getMessage());
                 return;
             }
 
-            try {
-                attemptConnectionToSecondaryZygote();
-
+            if (mZygoteSecondarySocketAddress != null) {
                 try {
-                    secondaryZygoteState.mZygoteOutputWriter.write(command);
-                    secondaryZygoteState.mZygoteOutputWriter.flush();
+                    attemptConnectionToSecondaryZygote();
 
-                    // Wait for the secondary Zygote to finish its work.
-                    secondaryZygoteState.mZygoteInputStream.readInt();
+                    try {
+                        secondaryZygoteState.mZygoteOutputWriter.write(command);
+                        secondaryZygoteState.mZygoteOutputWriter.flush();
+
+                        // Wait for the secondary Zygote to finish its work.
+                        secondaryZygoteState.mZygoteInputStream.readInt();
+                    } catch (IOException ioe) {
+                        throw new IllegalStateException(
+                                "USAP pool state change cause an irrecoverable error",
+                                ioe);
+                    }
                 } catch (IOException ioe) {
-                    throw new IllegalStateException(
-                            "Blastula pool state change cause an irrecoverable error",
-                            ioe);
+                    // No secondary zygote present.  This is expected on some devices.
                 }
-            } catch (IOException ioe) {
-                // No secondary zygote present.  This is expected on some devices.
             }
 
             // Wait for the response from the primary zygote here so the primary/secondary zygotes
@@ -1051,7 +1078,7 @@ public class ZygoteProcess {
                 primaryZygoteState.mZygoteInputStream.readInt();
             } catch (IOException ioe) {
                 throw new IllegalStateException(
-                        "Blastula pool state change cause an irrecoverable error",
+                        "USAP pool state change cause an irrecoverable error",
                         ioe);
             }
         }
@@ -1105,7 +1132,7 @@ public class ZygoteProcess {
                     abi, instructionSet, null /* appDataDir */, null /* invokeWith */,
                     true /* startChildZygote */, null /* packageName */,
                     null /* packagesForUid */, null /* sandboxId */,
-                    false /* useBlastulaPool */, extraArgs);
+                    false /* useUsapPool */, extraArgs);
         } catch (ZygoteStartFailedEx ex) {
             throw new RuntimeException("Starting child-zygote through Zygote failed", ex);
         }

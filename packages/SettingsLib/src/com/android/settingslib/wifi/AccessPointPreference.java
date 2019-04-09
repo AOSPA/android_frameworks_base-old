@@ -242,7 +242,7 @@ public class AccessPointPreference extends Preference {
      * Updates the title and summary; may indirectly call notifyChanged().
      */
     public void refresh() {
-        setTitle(this, mAccessPoint, mForSavedNetworks);
+        setTitle(this, mAccessPoint);
         final Context context = getContext();
         int level = mAccessPoint.getLevel();
         int wifiSpeed = mAccessPoint.getSpeed();
@@ -272,12 +272,8 @@ public class AccessPointPreference extends Preference {
     }
 
     @VisibleForTesting
-    static void setTitle(AccessPointPreference preference, AccessPoint ap, boolean savedNetworks) {
-        if (savedNetworks) {
-            preference.setTitle(ap.getConfigName());
-        } else {
-            preference.setTitle(ap.getTitle());
-        }
+    static void setTitle(AccessPointPreference preference, AccessPoint ap) {
+        preference.setTitle(ap.getTitle());
     }
 
     /**

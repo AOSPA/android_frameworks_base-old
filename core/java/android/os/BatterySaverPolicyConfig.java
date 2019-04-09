@@ -111,7 +111,7 @@ public final class BatterySaverPolicyConfig implements Parcelable {
                 Math.min(in.readInt(), PowerManager.MAX_LOCATION_MODE));
     }
 
-    public static final Creator<BatterySaverPolicyConfig> CREATOR =
+    public static final @android.annotation.NonNull Creator<BatterySaverPolicyConfig> CREATOR =
             new Creator<BatterySaverPolicyConfig>() {
                 @Override
                 public BatterySaverPolicyConfig createFromParcel(Parcel in) {
@@ -476,10 +476,6 @@ public final class BatterySaverPolicyConfig implements Parcelable {
          */
         @NonNull
         public BatterySaverPolicyConfig build() {
-            if (!mEnableAdjustBrightness && Float.compare(1f, mAdjustBrightnessFactor) != 0) {
-                throw new IllegalArgumentException("Brightness adjustment factor changed without "
-                        + "enabling brightness adjustment");
-            }
             return new BatterySaverPolicyConfig(this);
         }
     }

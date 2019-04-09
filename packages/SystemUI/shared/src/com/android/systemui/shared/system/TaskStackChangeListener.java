@@ -18,6 +18,7 @@ package com.android.systemui.shared.system;
 
 import android.app.ActivityManager.RunningTaskInfo;
 import android.content.ComponentName;
+import android.os.IBinder;
 import android.os.UserHandle;
 import android.util.Log;
 
@@ -48,6 +49,21 @@ public abstract class TaskStackChangeListener {
         onActivityLaunchOnSecondaryDisplayFailed();
     }
 
+    /**
+     * @see #onActivityLaunchOnSecondaryDisplayRerouted(RunningTaskInfo taskInfo)
+     */
+    public void onActivityLaunchOnSecondaryDisplayRerouted() { }
+
+    /**
+     * Called when an activity was requested to be launched on a secondary display but was rerouted
+     * to default display.
+     *
+     * @param taskInfo info about the Activity's task
+     */
+    public void onActivityLaunchOnSecondaryDisplayRerouted(RunningTaskInfo taskInfo) {
+        onActivityLaunchOnSecondaryDisplayRerouted();
+    }
+
     public void onTaskProfileLocked(int taskId, int userId) { }
     public void onTaskCreated(int taskId, ComponentName componentName) { }
     public void onTaskRemoved(int taskId) { }
@@ -58,6 +74,7 @@ public abstract class TaskStackChangeListener {
     }
 
     public void onActivityRequestedOrientationChanged(int taskId, int requestedOrientation) { }
+    public void onSizeCompatModeActivityChanged(int displayId, IBinder activityToken) { }
 
     /**
      * Checks that the current user matches the process. Since

@@ -20,14 +20,14 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.assist.AssistStructure;
 import android.app.assist.AssistStructure.ViewNode;
+import android.app.assist.AssistStructure.WindowNode;
 import android.content.ComponentName;
 import android.metrics.LogMaker;
-import android.provider.DeviceConfig;
 import android.service.autofill.Dataset;
 import android.util.ArrayMap;
 import android.util.ArraySet;
-import android.util.Log;
 import android.util.Slog;
+import android.view.View;
 import android.view.WindowManager;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillValue;
@@ -208,17 +208,28 @@ public final class Helper {
     }
 
     /**
-     * Gets the value of a device config property from the Autofill namespace.
+     * Gets the {@link AutofillId} of the autofillable nodes in the {@code structure}.
      */
-    static int getIntDeviceConfigProperty(@NonNull String key, int defaultValue) {
-        final String value = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_AUTOFILL, key);
-        if (value == null) return defaultValue;
+    @NonNull
+    static ArraySet<AutofillId> getAutofillableIds(@NonNull AssistStructure structure) {
+        final ArraySet<AutofillId> ids = new ArraySet<>();
+        final int size = structure.getWindowNodeCount();
+        for (int i = 0; i < size; i++) {
+            final WindowNode node = structure.getWindowNodeAt(i);
+            addAutofillableIds(node.getRootViewNode(), ids);
+        }
+        return ids;
+    }
 
-        try {
-            return Integer.parseInt(value);
-        } catch (Exception e) {
-            Log.w(TAG, "error parsing value (" + value + ") of property " + key + ": " + e);
-            return defaultValue;
+    private static void addAutofillableIds(@NonNull ViewNode node,
+            @NonNull ArraySet<AutofillId> ids) {
+        if (node.getAutofillType() != View.AUTOFILL_TYPE_NONE) {
+            ids.add(node.getAutofillId());
+        }
+        final int size = node.getChildCount();
+        for (int i = 0; i < size; i++) {
+            final ViewNode child = node.getChildAt(i);
+            addAutofillableIds(child, ids);
         }
     }
 

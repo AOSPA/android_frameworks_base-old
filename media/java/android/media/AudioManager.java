@@ -44,6 +44,7 @@ import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.MediaSessionLegacyHelper;
 import android.media.session.MediaSessionManager;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -553,8 +554,7 @@ public class AudioManager {
      * request is from a hardware key press. (e.g. {@link MediaController}).
      * @hide
      */
-    @SystemApi
-    public static final int FLAG_FROM_KEY = 1 << 16;
+    public static final int FLAG_FROM_KEY = 1 << 12;
 
     // The iterator of TreeMap#entrySet() returns the entries in ascending key order.
     private static final TreeMap<Integer, String> FLAG_NAMES = new TreeMap<>();
@@ -1493,13 +1493,18 @@ public class AudioManager {
      * it does not indicate whether the resources necessary for the offloaded playback are
      * available at that instant.
      * @param format the audio format (codec, sample rate, channels) being checked.
+     * @param attributes the {@link AudioAttributes} to be used for playback
      * @return true if the given audio format can be offloaded.
      */
-    public static boolean isOffloadedPlaybackSupported(@NonNull AudioFormat format) {
+    public static boolean isOffloadedPlaybackSupported(@NonNull AudioFormat format,
+            @NonNull AudioAttributes attributes) {
         if (format == null) {
-            throw new IllegalArgumentException("Illegal null AudioFormat");
+            throw new NullPointerException("Illegal null AudioFormat");
         }
-        return AudioSystem.isOffloadSupported(format);
+        if (attributes == null) {
+            throw new NullPointerException("Illegal null AudioAttributes");
+        }
+        return AudioSystem.isOffloadSupported(format, attributes);
     }
 
     //====================================================================
@@ -1837,6 +1842,21 @@ public class AudioManager {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_MICROPHONE_MUTE_CHANGED =
             "android.media.action.MICROPHONE_MUTE_CHANGED";
+
+    /**
+     * Broadcast Action: speakerphone state changed.
+     *
+     * You <em>cannot</em> receive this through components declared
+     * in manifests, only by explicitly registering for it with
+     * {@link Context#registerReceiver(BroadcastReceiver, IntentFilter)
+     * Context.registerReceiver()}.
+     *
+     * <p>The intent has no extra values, use {@link #isSpeakerphoneOn} to check whether the
+     * speakerphone functionality is enabled or not.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SPEAKERPHONE_STATE_CHANGED =
+            "android.media.action.SPEAKERPHONE_STATE_CHANGED";
 
     /**
      * Sets the audio mode.
@@ -3311,7 +3331,8 @@ public class AudioManager {
         try {
             MediaProjection projection = policy.getMediaProjection();
             String regId = service.registerAudioPolicy(policy.getConfig(), policy.cb(),
-                    policy.hasFocusListener(), policy.isFocusPolicy(), policy.isVolumeController(),
+                    policy.hasFocusListener(), policy.isFocusPolicy(), policy.isTestFocusPolicy(),
+                    policy.isVolumeController(),
                     projection == null ? null : projection.getProjection());
             if (regId == null) {
                 return ERROR;
@@ -3327,6 +3348,7 @@ public class AudioManager {
 
     /**
      * @hide
+     * Unregisters an {@link AudioPolicy} asynchronously.
      * @param policy the non-null {@link AudioPolicy} to unregister.
      */
     @SystemApi
@@ -3342,6 +3364,27 @@ public class AudioManager {
         final IAudioService service = getService();
         try {
             service.unregisterAudioPolicyAsync(policy.cb());
+            policy.setRegistration(null);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Unregisters an {@link AudioPolicy} synchronously.
+     * This method also invalidates all {@link AudioRecord} and {@link AudioTrack} objects
+     * associated with mixes of this policy.
+     * @param policy the non-null {@link AudioPolicy} to unregister.
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void unregisterAudioPolicy(@NonNull AudioPolicy policy) {
+        Preconditions.checkNotNull(policy, "Illegal null AudioPolicy argument");
+        final IAudioService service = getService();
+        try {
+            policy.invalidateCaptorsAndInjectors();
+            service.unregisterAudioPolicy(policy.cb());
             policy.setRegistration(null);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -4086,6 +4129,10 @@ public class AudioManager {
      /**
      * Indicate Hearing Aid connection state change and eventually suppress
      * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to {@link #setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
+     * * BluetoothDevice, int, int, boolean, int)} and
+     * and {@link #handleBluetoothA2dpDeviceConfigChange(BluetoothDevice)}.
      * @param device Bluetooth device connected/disconnected
      * @param state new connection state (BluetoothProfile.STATE_xxx)
      * @param musicDevice Default get system volume for the connecting device.
@@ -4093,27 +4140,27 @@ public class AudioManager {
      * {@link android.bluetooth.BluetoothProfile.HEARING_AID})
      * @param suppressNoisyIntent if true the
      * {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent will not be sent.
-     * @return a delay in ms that the caller should wait before broadcasting
-     * BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED intent.
      * {@hide}
      */
-    public int setBluetoothHearingAidDeviceConnectionState(
+    public void setBluetoothHearingAidDeviceConnectionState(
                 BluetoothDevice device, int state, boolean suppressNoisyIntent,
                 int musicDevice) {
         final IAudioService service = getService();
-        int delay = 0;
         try {
-            delay = service.setBluetoothHearingAidDeviceConnectionState(device,
+            service.setBluetoothHearingAidDeviceConnectionState(device,
                 state, suppressNoisyIntent, musicDevice);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return delay;
     }
 
      /**
      * Indicate A2DP source or sink connection state change and eventually suppress
      * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to {@link #setBluetoothHearingAidDeviceConnectionState(BluetoothDevice,
+     * int, boolean, int)} and
+     * {@link #handleBluetoothA2dpDeviceConfigChange(BluetoothDevice)}.
      * @param device Bluetooth device connected/disconnected
      * @param state  new connection state, {@link BluetoothProfile#STATE_CONNECTED}
      *     or {@link BluetoothProfile#STATE_DISCONNECTED}
@@ -4123,26 +4170,27 @@ public class AudioManager {
      * {@link android.bluetooth.BluetoothProfile.A2DP_SINK})
      * @param suppressNoisyIntent if true the
      * {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent will not be sent.
-     * @return a delay in ms that the caller should wait before broadcasting
-     * BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED intent.
      * {@hide}
      */
-    public int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
+    public void setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
             BluetoothDevice device, int state,
             int profile, boolean suppressNoisyIntent, int a2dpVolume) {
         final IAudioService service = getService();
-        int delay = 0;
         try {
-            delay = service.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device,
+            service.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device,
                 state, profile, suppressNoisyIntent, a2dpVolume);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return delay;
     }
 
      /**
      * Indicate A2DP device configuration has changed.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to
+     * {@link #setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(BluetoothDevice, int, int,
+     * boolean, int)} and
+     * {@link #setBluetoothHearingAidDeviceConnectionState(BluetoothDevice, int, boolean, int)}
      * @param device Bluetooth device whose configuration has changed.
      * {@hide}
      */
@@ -4158,6 +4206,10 @@ public class AudioManager {
      /**
      * Indicate A2DP source or sink active device change and eventually suppress
      * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to {@link #setBluetoothHearingAidDeviceConnectionState(BluetoothDevice,
+     * int, boolean, int)} and
+     * {@link #handleBluetoothA2dpDeviceConfigChange(BluetoothDevice)}.
      * @param device Bluetooth device connected/disconnected
      * @param state  new connection state (BluetoothProfile.STATE_xxx)
      * @param profile profile for the A2DP device
@@ -4171,18 +4223,16 @@ public class AudioManager {
      * BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED intent.
      * {@hide}
      */
-    public int handleBluetoothA2dpActiveDeviceChange(
+    public void handleBluetoothA2dpActiveDeviceChange(
                 BluetoothDevice device, int state, int profile,
                 boolean suppressNoisyIntent, int a2dpVolume) {
         final IAudioService service = getService();
-        int delay = 0;
         try {
-            delay = service.handleBluetoothA2dpActiveDeviceChange(device,
+            service.handleBluetoothA2dpActiveDeviceChange(device,
                 state, profile, suppressNoisyIntent, a2dpVolume);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return delay;
     }
 
     /** {@hide} */
@@ -5414,6 +5464,20 @@ public class AudioManager {
             @NonNull VolumeGroupCallback callback) {
         Preconditions.checkNotNull(callback, "volume group change cb must not be null");
         sAudioAudioVolumeGroupChangedHandler.unregisterListener(callback);
+    }
+
+    /**
+     * Return if an asset contains haptic channels or not.
+     * @param uri the {@link Uri} of the asset.
+     * @return true if the assert contains haptic channels.
+     * @hide
+     */
+    public static boolean hasHapticChannels(Uri uri) {
+        try {
+            return getService().hasHapticChannels(uri);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     //---------------------------------------------------------

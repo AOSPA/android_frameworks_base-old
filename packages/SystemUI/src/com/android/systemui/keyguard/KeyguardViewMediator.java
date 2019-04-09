@@ -90,6 +90,7 @@ import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.NotificationPanelView;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
+import com.android.systemui.util.InjectionInflationController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -710,7 +711,10 @@ public class KeyguardViewMediator extends SystemUI {
         mContext.registerReceiver(mDelayedLockBroadcastReceiver, delayedActionFilter,
                 SYSTEMUI_PERMISSION, null /* scheduler */);
 
-        mKeyguardDisplayManager = new KeyguardDisplayManager(mContext);
+        InjectionInflationController injectionInflationController =
+                new InjectionInflationController(SystemUIFactory.getInstance().getRootComponent());
+        mKeyguardDisplayManager = new KeyguardDisplayManager(mContext,
+                injectionInflationController);
 
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
 
@@ -1788,6 +1792,7 @@ public class KeyguardViewMediator extends SystemUI {
             mHideAnimationRun = false;
             adjustStatusBarLocked();
             userActivity();
+            mUpdateMonitor.setKeyguardGoingAway(false /* away */);
             mShowKeyguardWakeLock.release();
         }
         mKeyguardDisplayManager.show();
@@ -1908,7 +1913,6 @@ public class KeyguardViewMediator extends SystemUI {
             mHideAnimationRun = false;
             adjustStatusBarLocked();
             sendUserPresentBroadcast();
-            mUpdateMonitor.setKeyguardGoingAway(false /* goingAway */);
         }
         Trace.endSection();
     }
@@ -2032,7 +2036,6 @@ public class KeyguardViewMediator extends SystemUI {
     private void handleNotifyScreenTurnedOff() {
         synchronized (this) {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurnedOff");
-            mStatusBarKeyguardViewManager.onScreenTurnedOff();
             mDrawnCallback = null;
         }
     }

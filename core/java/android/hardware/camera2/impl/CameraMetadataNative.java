@@ -350,7 +350,7 @@ public class CameraMetadataNative implements Parcelable {
         return newObject;
     }
 
-    public static final Parcelable.Creator<CameraMetadataNative> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<CameraMetadataNative> CREATOR =
             new Parcelable.Creator<CameraMetadataNative>() {
         @Override
         public CameraMetadataNative createFromParcel(Parcel in) {
@@ -1113,8 +1113,10 @@ public class CameraMetadataNative implements Parcelable {
                         depthStreamDurationList.get(i), depthStreamStallList.get(i), depthScData);
             }
 
-            if ((scData.streamConfigurationArray == null) &&
-                    (depthScData.streamConfigurationArray == null)) {
+            if ((scData.streamConfigurationArray == null ||
+                    scData.streamConfigurationArray.length == 0) &&
+                    (depthScData.streamConfigurationArray == null ||
+                     depthScData.streamConfigurationArray.length == 0)) {
                 recommendedConfigurations.add(null);
                 continue;
             }
@@ -1125,6 +1127,7 @@ public class CameraMetadataNative implements Parcelable {
             switch (i) {
                 case RecommendedStreamConfigurationMap.USECASE_PREVIEW:
                 case RecommendedStreamConfigurationMap.USECASE_RAW:
+                case RecommendedStreamConfigurationMap.USECASE_LOW_LATENCY_SNAPSHOT:
                 case RecommendedStreamConfigurationMap.USECASE_VIDEO_SNAPSHOT:
                     map = new StreamConfigurationMap(scData.streamConfigurationArray,
                             scData.minDurationArray, scData.stallDurationArray,

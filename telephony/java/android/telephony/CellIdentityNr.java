@@ -16,13 +16,15 @@
 
 package android.telephony;
 
+import android.annotation.IntRange;
+import android.annotation.Nullable;
 import android.os.Parcel;
 import android.telephony.gsm.GsmCellLocation;
 
 import java.util.Objects;
 
 /**
- * Information to represent a unique 5G NR cell.
+ * Information to represent a unique NR(New Radio 5G) cell.
  */
 public final class CellIdentityNr extends CellIdentity {
     private static final String TAG = "CellIdentityNr";
@@ -79,20 +81,25 @@ public final class CellIdentityNr extends CellIdentity {
     }
 
     /**
-     * Get the NR Cell Identity.
+     * Get the NR(New Radio 5G) Cell Identity.
      *
-     * @return The NR Cell Identity in range [0, 68719476735] or Long.MAX_VALUE if unknown.
+     * @return The 36-bit NR Cell Identity in range [0, 68719476735] or
+     *         {@link CellInfo#UNAVAILABLE_LONG} if unknown.
      */
     public long getNci() {
         return mNci;
     }
 
     /**
-     * Get the Absolute Radio Frequency Channel Number.
+     * Get the New Radio Absolute Radio Frequency Channel Number.
+     *
+     * Reference: 3GPP TS 38.101-1 section 5.4.2.1 NR-ARFCN and channel raster.
+     * Reference: 3GPP TS 38.101-2 section 5.4.2.1 NR-ARFCN and channel raster.
+     *
      * @return Integer value in range [0, 3279165] or {@link CellInfo#UNAVAILABLE} if unknown.
      */
-    @Override
-    public int getChannelNumber() {
+    @IntRange(from = 0, to = 3279165)
+    public int getNrarfcn() {
         return mNrArfcn;
     }
 
@@ -100,6 +107,7 @@ public final class CellIdentityNr extends CellIdentity {
      * Get the physical cell id.
      * @return Integer value in range [0, 1007] or {@link CellInfo#UNAVAILABLE} if unknown.
      */
+    @IntRange(from = 0, to = 1007)
     public int getPci() {
         return mPci;
     }
@@ -108,6 +116,7 @@ public final class CellIdentityNr extends CellIdentity {
      * Get the tracking area code.
      * @return a 16 bit integer or {@link CellInfo#UNAVAILABLE} if unknown.
      */
+    @IntRange(from = 0, to = 65535)
     public int getTac() {
         return mTac;
     }
@@ -115,6 +124,7 @@ public final class CellIdentityNr extends CellIdentity {
     /**
      * @return Mobile Country Code in string format, or {@code null} if unknown.
      */
+    @Nullable
     public String getMccString() {
         return mMccStr;
     }
@@ -122,6 +132,7 @@ public final class CellIdentityNr extends CellIdentity {
     /**
      * @return Mobile Network Code in string fomrat, or {@code null} if unknown.
      */
+    @Nullable
     public String getMncString() {
         return mMncStr;
     }
@@ -160,7 +171,7 @@ public final class CellIdentityNr extends CellIdentity {
     }
 
     /** Implement the Parcelable interface */
-    public static final Creator<CellIdentityNr> CREATOR =
+    public static final @android.annotation.NonNull Creator<CellIdentityNr> CREATOR =
             new Creator<CellIdentityNr>() {
                 @Override
                 public CellIdentityNr createFromParcel(Parcel in) {

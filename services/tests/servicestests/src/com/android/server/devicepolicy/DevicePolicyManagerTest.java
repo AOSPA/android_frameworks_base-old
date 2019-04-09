@@ -29,6 +29,7 @@ import static android.os.UserManagerInternal.CAMERA_DISABLED_GLOBALLY;
 import static android.os.UserManagerInternal.CAMERA_DISABLED_LOCALLY;
 import static android.os.UserManagerInternal.CAMERA_NOT_DISABLED;
 
+import static com.android.internal.widget.LockPatternUtils.EscrowTokenStateChangeCallback;
 import static com.android.server.testutils.TestUtils.assertExpectException;
 
 import static org.mockito.Matchers.any;
@@ -4157,8 +4158,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         final byte[] token = new byte[32];
         final long handle = 123456;
         final String password = "password";
-        when(getServices().lockPatternUtils.addEscrowToken(eq(token), eq(UserHandle.USER_SYSTEM)))
-            .thenReturn(handle);
+        when(getServices().lockPatternUtils.addEscrowToken(eq(token), eq(UserHandle.USER_SYSTEM),
+                nullable(EscrowTokenStateChangeCallback.class)))
+                .thenReturn(handle);
         assertTrue(dpm.setResetPasswordToken(admin1, token));
 
         // test password activation
@@ -5019,8 +5021,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         configureContextForAccess(mContext, false);
 
         assertExpectException(SecurityException.class, /* messageRegex= */ null,
-                () -> dpm.setProfileOwnerCanAccessDeviceIdsForUser(admin2,
-                        UserHandle.of(DpmMockContext.CALLER_UID)));
+                () -> dpm.setProfileOwnerCanAccessDeviceIds(admin2));
     }
 
     public void testGrantDeviceIdsAccess_notByAuthorizedCaller() throws Exception {
@@ -5028,8 +5029,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         configureContextForAccess(mContext, false);
 
         assertExpectException(SecurityException.class, /* messageRegex= */ null,
-                () -> dpm.setProfileOwnerCanAccessDeviceIdsForUser(admin1,
-                        UserHandle.of(DpmMockContext.CALLER_UID)));
+                () -> dpm.setProfileOwnerCanAccessDeviceIds(admin1));
     }
 
     public void testGrantDeviceIdsAccess_byAuthorizedSystemCaller() throws Exception {
@@ -5058,8 +5058,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                         DpmMockContext.CALLER_MANAGED_PROVISIONING_UID);
         try {
             runAsCaller(mServiceContext, dpms, dpm -> {
-                dpm.setProfileOwnerCanAccessDeviceIdsForUser(admin1,
-                        UserHandle.of(DpmMockContext.CALLER_USER_HANDLE));
+                dpm.setProfileOwnerCanAccessDeviceIds(admin1);
             });
         } finally {
             mServiceContext.binder.restoreCallingIdentity(ident);
@@ -5199,7 +5198,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_currentUserNoPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_PASSWORD_COMPLEXITY);
         when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
 
@@ -5209,7 +5208,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_currentUserHasPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_PASSWORD_COMPLEXITY);
         when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
         dpms.mUserPasswordMetrics.put(
@@ -5222,7 +5221,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_unifiedChallengeReturnsParentUserPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_PASSWORD_COMPLEXITY);
 
         UserInfo parentUser = new UserInfo();
         parentUser.id = DpmMockContext.CALLER_USER_HANDLE + 10;
@@ -5312,7 +5311,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mServiceContext.binder.callingUid =
                 UserHandle.getUid(DpmMockContext.CALLER_USER_HANDLE, DpmMockContext.SYSTEM_UID);
         runAsCaller(mServiceContext, dpms, dpm -> {
-            dpm.setProfileOwnerCanAccessDeviceIdsForUser(who, UserHandle.of(userId));
+            dpm.setProfileOwnerCanAccessDeviceIds(who);
         });
         mServiceContext.binder.restoreCallingIdentity(ident);
     }

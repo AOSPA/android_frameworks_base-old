@@ -17,6 +17,7 @@ package android.telephony.euicc;
 
 import android.Manifest;
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
@@ -117,7 +118,11 @@ public class EuiccManager {
     /**
      * Intent action sent by system apps (such as the Settings app) to the Telephony framework to
      * enable or disable a subscription. Must be accompanied with {@link #EXTRA_SUBSCRIPTION_ID} and
-     * {@link #EXTRA_ENABLE_SUBSCRIPTION}.
+     * {@link #EXTRA_ENABLE_SUBSCRIPTION}, and optionally {@link #EXTRA_FROM_SUBSCRIPTION_ID}.
+     *
+     * <p>Requires the caller to be a privileged process with the
+     * {@link android.permission#CALL_PRIVILEGED} permission for the intent to reach the Telephony
+     * stack.
      *
      * <p>Unlike {@link #switchToSubscription(int, PendingIntent)}, using this action allows the
      * underlying eUICC service (i.e. the LPA app) to control the UI experience during this
@@ -138,6 +143,10 @@ public class EuiccManager {
      * Intent action sent by system apps (such as the Settings app) to the Telephony framework to
      * delete a subscription. Must be accompanied with {@link #EXTRA_SUBSCRIPTION_ID}.
      *
+     * <p>Requires the caller to be a privileged process with the
+     * {@link android.permission#CALL_PRIVILEGED} permission for the intent to reach the Telephony
+     * stack.
+     *
      * <p>Unlike {@link #deleteSubscription(int, PendingIntent)}, using this action allows the
      * underlying eUICC service (i.e. the LPA app) to control the UI experience during this
      * operation. The action is received by the Telephony framework, which in turn selects and
@@ -157,6 +166,10 @@ public class EuiccManager {
      * Intent action sent by system apps (such as the Settings app) to the Telephony framework to
      * rename a subscription. Must be accompanied with {@link #EXTRA_SUBSCRIPTION_ID} and
      * {@link #EXTRA_SUBSCRIPTION_NICKNAME}.
+     *
+     * <p>Requires the caller to be a privileged process with the
+     * {@link android.permission#CALL_PRIVILEGED} permission for the intent to reach the Telephony
+     * stack.
      *
      * <p>Unlike {@link #updateSubscriptionNickname(int, String, PendingIntent)}, using this action
      * allows the the underlying eUICC service (i.e. the LPA app) to control the UI experience
@@ -257,7 +270,10 @@ public class EuiccManager {
 
     /**
      * Key for an extra set on the {@link #ACTION_PROVISION_EMBEDDED_SUBSCRIPTION} intent for
-     * whether the user choses to use eUICC to set up network in SUW.
+     * whether eSIM provisioning flow is forced to be started or not. If this extra hasn't been
+     * set, eSIM provisioning flow may be skipped and the corresponding carrier's app will be
+     * notified. Otherwise, eSIM provisioning flow will be started when
+     * {@link #ACTION_PROVISION_EMBEDDED_SUBSCRIPTION} has been received.
      * @hide
      */
     @SystemApi
@@ -269,6 +285,8 @@ public class EuiccManager {
      * {@link #ACTION_DELETE_SUBSCRIPTION_PRIVILEGED}, and
      * {@link #ACTION_RENAME_SUBSCRIPTION_PRIVILEGED} providing the ID of the targeted subscription.
      *
+     * <p>Expected type of the extra data: int
+     *
      * @hide
      */
     @SystemApi
@@ -278,6 +296,8 @@ public class EuiccManager {
     /**
      * Key for an extra set on {@link #ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED} providing a boolean
      * value of whether to enable or disable the targeted subscription.
+     *
+     * <p>Expected type of the extra data: boolean
      *
      * @hide
      */
@@ -289,11 +309,29 @@ public class EuiccManager {
      * Key for an extra set on {@link #ACTION_RENAME_SUBSCRIPTION_PRIVILEGED} providing a new
      * nickname for the targeted subscription.
      *
+     * <p>Expected type of the extra data: String
+     *
      * @hide
      */
     @SystemApi
     public static final String EXTRA_SUBSCRIPTION_NICKNAME =
             "android.telephony.euicc.extra.SUBSCRIPTION_NICKNAME";
+
+    /**
+     * Key for an extra set on {@link #ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED} providing the ID of
+     * the subscription we're toggling from. This extra is optional and is only used for UI
+     * purposes by the underlying eUICC service (i.e. the LPA app), such as displaying a dialog
+     * titled "Switch X with Y". If set, the provided subscription will be used as the "from"
+     * subscription in UI (the "X" in the dialog example). Otherwise, the currently active
+     * subscription that will be disabled is the "from" subscription.
+     *
+     * <p>Expected type of the extra data: int
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_FROM_SUBSCRIPTION_ID =
+            "android.telephony.euicc.extra.FROM_SUBSCRIPTION_ID";
 
     /**
      * Optional meta-data attribute for a carrier app providing an icon to use to represent the
@@ -429,6 +467,7 @@ public class EuiccManager {
      *
      * @return an EuiccManager that uses the given card ID for all calls.
      */
+    @NonNull
     public EuiccManager createForCardId(int cardId) {
         return new EuiccManager(mContext, cardId);
     }
@@ -756,7 +795,7 @@ public class EuiccManager {
      */
     @RequiresPermission(Manifest.permission.WRITE_EMBEDDED_SUBSCRIPTIONS)
     public void updateSubscriptionNickname(
-            int subscriptionId, String nickname, PendingIntent callbackIntent) {
+            int subscriptionId, @Nullable String nickname, @NonNull PendingIntent callbackIntent) {
         if (!refreshCardIdIfUninitialized()) {
             sendUnavailableError(callbackIntent);
             return;

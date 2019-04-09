@@ -19,13 +19,13 @@ package com.android.systemui.bubbles.animation;
 import static org.junit.Assert.assertEquals;
 
 import android.graphics.PointF;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
+import androidx.test.filters.SmallTest;
 
 import com.android.systemui.R;
 
@@ -177,6 +177,7 @@ public class StackAnimationControllerTest extends PhysicsAnimationLayoutTestCase
     }
 
     @Test
+    @Ignore("Occasionally flakes, ignoring pending investigation.")
     public void testChildRemoved() throws InterruptedException {
         assertEquals(0, mLayout.getTransientViewCount());
 
@@ -195,6 +196,29 @@ public class StackAnimationControllerTest extends PhysicsAnimationLayoutTestCase
 
         // The subsequent view should have been translated over to 0, not stacked off to the left.
         assertEquals(0, mLayout.getChildAt(0).getTranslationX(), .1f);
+    }
+
+    @Test
+    public void testRestoredAtRestingPosition() throws InterruptedException {
+        mStackController.flingStackThenSpringToEdge(0, 5000, 5000);
+
+        waitForPropertyAnimations(
+                DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+        waitForLayoutMessageQueue();
+
+        final PointF prevStackPos = mStackController.getStackPosition();
+
+        mLayout.removeAllViews();
+
+        waitForLayoutMessageQueue();
+
+        mLayout.addView(new FrameLayout(getContext()));
+
+        waitForLayoutMessageQueue();
+        waitForPropertyAnimations(
+                DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+
+        assertEquals(prevStackPos, mStackController.getStackPosition());
     }
 
     /**
@@ -216,7 +240,7 @@ public class StackAnimationControllerTest extends PhysicsAnimationLayoutTestCase
      */
     private class TestableStackController extends StackAnimationController {
         @Override
-        public void flingThenSpringFirstBubbleWithStackFollowing(
+        protected void flingThenSpringFirstBubbleWithStackFollowing(
                 DynamicAnimation.ViewProperty property, float vel, float friction,
                 SpringForce spring, Float finalPosition) {
             mMainThreadHandler.post(() ->

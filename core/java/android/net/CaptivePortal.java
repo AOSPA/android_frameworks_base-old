@@ -15,6 +15,7 @@
  */
 package android.net;
 
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.os.IBinder;
@@ -29,15 +30,33 @@ import android.os.RemoteException;
  * {@code ACTION_CAPTIVE_PORTAL_SIGN_IN} activity.
  */
 public class CaptivePortal implements Parcelable {
-    /** @hide */
+    /**
+     * Response code from the captive portal application, indicating that the portal was dismissed
+     * and the network should be re-validated.
+     * @see ICaptivePortal#appResponse(int)
+     * @see android.net.INetworkMonitor#notifyCaptivePortalAppFinished(int)
+     * @hide
+     */
     @SystemApi
     @TestApi
     public static final int APP_RETURN_DISMISSED    = 0;
-    /** @hide */
+    /**
+     * Response code from the captive portal application, indicating that the user did not login and
+     * does not want to use the captive portal network.
+     * @see ICaptivePortal#appResponse(int)
+     * @see android.net.INetworkMonitor#notifyCaptivePortalAppFinished(int)
+     * @hide
+     */
     @SystemApi
     @TestApi
     public static final int APP_RETURN_UNWANTED     = 1;
-    /** @hide */
+    /**
+     * Response code from the captive portal application, indicating that the user does not wish to
+     * login but wants to use the captive portal network as-is.
+     * @see ICaptivePortal#appResponse(int)
+     * @see android.net.INetworkMonitor#notifyCaptivePortalAppFinished(int)
+     * @hide
+     */
     @SystemApi
     @TestApi
     public static final int APP_RETURN_WANTED_AS_IS = 2;
@@ -45,9 +64,7 @@ public class CaptivePortal implements Parcelable {
     private final IBinder mBinder;
 
     /** @hide */
-    @SystemApi
-    @TestApi
-    public CaptivePortal(IBinder binder) {
+    public CaptivePortal(@NonNull IBinder binder) {
         mBinder = binder;
     }
 
@@ -61,7 +78,7 @@ public class CaptivePortal implements Parcelable {
         out.writeStrongBinder(mBinder);
     }
 
-    public static final Parcelable.Creator<CaptivePortal> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<CaptivePortal> CREATOR
             = new Parcelable.Creator<CaptivePortal>() {
         @Override
         public CaptivePortal createFromParcel(Parcel in) {
@@ -124,7 +141,7 @@ public class CaptivePortal implements Parcelable {
      */
     @SystemApi
     @TestApi
-    public void logEvent(int eventId, String packageName) {
+    public void logEvent(int eventId, @NonNull String packageName) {
         try {
             ICaptivePortal.Stub.asInterface(mBinder).logEvent(eventId, packageName);
         } catch (RemoteException e) {

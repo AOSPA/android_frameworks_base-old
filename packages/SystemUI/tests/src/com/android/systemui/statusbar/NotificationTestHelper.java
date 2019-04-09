@@ -23,6 +23,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.Instrumentation;
 import android.app.Notification;
+import android.app.Notification.BubbleMetadata;
 import android.app.NotificationChannel;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -30,10 +31,11 @@ import android.content.Intent;
 import android.graphics.drawable.Icon;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
-import android.support.test.InstrumentationRegistry;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.widget.RemoteViews;
+
+import androidx.test.InstrumentationRegistry;
 
 import com.android.systemui.R;
 import com.android.systemui.bubbles.BubblesTestActivity;
@@ -151,8 +153,18 @@ public class NotificationTestHelper {
      * Returns an {@link ExpandableNotificationRow} that should be shown as a bubble.
      */
     public ExpandableNotificationRow createBubble() throws Exception {
+        return createBubble(null);
+    }
+
+    /**
+     * Returns an {@link ExpandableNotificationRow} that should be shown as a bubble.
+     *
+     * @param deleteIntent the intent to assign to {@link BubbleMetadata#deleteIntent}
+     */
+    public ExpandableNotificationRow createBubble(@Nullable PendingIntent deleteIntent)
+            throws Exception {
         Notification n = createNotification(false /* isGroupSummary */,
-                null /* groupKey */, true /* isBubble */);
+                null /* groupKey */, true /* isBubble */, deleteIntent);
         return generateRow(n, PKG, UID, USER_HANDLE, 0 /* extraInflationFlags */, IMPORTANCE_HIGH);
     }
 
@@ -195,7 +207,8 @@ public class NotificationTestHelper {
      * @return a notification that is in the group specified or standalone if unspecified
      */
     private Notification createNotification(boolean isGroupSummary, @Nullable String groupKey) {
-        return createNotification(isGroupSummary, groupKey, false /* isBubble */);
+        return createNotification(isGroupSummary, groupKey, false /* isBubble */,
+                null /* bubbleDeleteIntent */);
     }
 
     /**
@@ -207,7 +220,8 @@ public class NotificationTestHelper {
      * @return a notification that is in the group specified or standalone if unspecified
      */
     private Notification createNotification(boolean isGroupSummary,
-            @Nullable String groupKey, boolean isBubble) {
+            @Nullable String groupKey, boolean isBubble,
+            @Nullable PendingIntent bubbleDeleteIntent) {
         Notification publicVersion = new Notification.Builder(mContext).setSmallIcon(
                 R.drawable.ic_person)
                 .setCustomContentView(new RemoteViews(mContext.getPackageName(),
@@ -226,7 +240,8 @@ public class NotificationTestHelper {
             notificationBuilder.setGroup(groupKey);
         }
         if (isBubble) {
-            notificationBuilder.setBubbleMetadata(makeBubbleMetadata());
+            BubbleMetadata metadata = makeBubbleMetadata(bubbleDeleteIntent);
+            notificationBuilder.setBubbleMetadata(metadata);
         }
         return notificationBuilder.build();
     }
@@ -290,13 +305,14 @@ public class NotificationTestHelper {
         return row;
     }
 
-    private Notification.BubbleMetadata makeBubbleMetadata() {
+    private BubbleMetadata makeBubbleMetadata(PendingIntent deleteIntent) {
         Intent target = new Intent(mContext, BubblesTestActivity.class);
         PendingIntent bubbleIntent = PendingIntent.getActivity(mContext, 0, target, 0);
-        return new Notification.BubbleMetadata.Builder()
+
+        return new BubbleMetadata.Builder()
                 .setIntent(bubbleIntent)
-                .setTitle("bubble title")
-                .setIcon(Icon.createWithResource(mContext, 1))
+                .setDeleteIntent(deleteIntent)
+                .setIcon(Icon.createWithResource(mContext, R.drawable.android))
                 .setDesiredHeight(314)
                 .build();
     }

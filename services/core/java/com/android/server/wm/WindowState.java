@@ -205,6 +205,7 @@ import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.function.Predicate;
 
 /** A window in the window manager. */
@@ -362,6 +363,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      *{@link android.app.IActivityTaskManager#resizeDockedStack}.
      */
     private final Rect mInsetFrame = new Rect();
+
+    /**
+     * List of rects where system gestures should be ignored.
+     *
+     * Coordinates are relative to the window's position.
+     */
+    private final List<Rect> mExclusionRects = new ArrayList<>();
 
     // If a window showing a wallpaper: the requested offset for the
     // wallpaper; if a wallpaper window: the currently applied offset.
@@ -612,6 +620,24 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
+    List<Rect> getSystemGestureExclusion() {
+        return mExclusionRects;
+    }
+
+    /**
+     * Sets the system gesture exclusion rects.
+     *
+     * @return {@code true} if anything changed
+     */
+    boolean setSystemGestureExclusion(List<Rect> exclusionRects) {
+        if (mExclusionRects.equals(exclusionRects)) {
+            return false;
+        }
+        mExclusionRects.clear();
+        mExclusionRects.addAll(exclusionRects);
+        return true;
+    }
+
     interface PowerManagerWrapper {
         void wakeUp(long time, @WakeReason int reason, String details);
 
@@ -826,7 +852,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mHaveFrame = true;
 
         final Task task = getTask();
-        final boolean inFullscreenContainer = inFullscreenContainer();
+        final boolean isFullscreenAndFillsDisplay = !inMultiWindowMode() && matchesDisplayBounds();
         final boolean windowsAreFloating = task != null && task.isFloating();
         final DisplayContent dc = getDisplayContent();
 
@@ -842,7 +868,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // The offset from the layout containing frame to the actual containing frame.
         final int layoutXDiff;
         final int layoutYDiff;
-        if (inFullscreenContainer || layoutInParentFrame()) {
+        final WindowState imeWin = mWmService.mRoot.getCurrentInputMethodWindow();
+        final boolean isImeTarget =
+                imeWin != null && imeWin.isVisibleNow() && isInputMethodTarget();
+        if (isFullscreenAndFillsDisplay || layoutInParentFrame()) {
             // We use the parent frame as the containing frame for fullscreen and child windows
             mWindowFrames.mContainingFrame.set(mWindowFrames.mParentFrame);
             layoutDisplayFrame = mWindowFrames.mDisplayFrame;
@@ -861,15 +890,19 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mWindowFrames.mContainingFrame.bottom =
                         mWindowFrames.mContainingFrame.top + frozen.height();
             }
-            final WindowState imeWin = mWmService.mRoot.getCurrentInputMethodWindow();
             // IME is up and obscuring this window. Adjust the window position so it is visible.
-            if (imeWin != null && imeWin.isVisibleNow() && isInputMethodTarget()) {
-                if (inFreeformWindowingMode() && mWindowFrames.mContainingFrame.bottom
-                        > mWindowFrames.mContentFrame.bottom) {
-                    // In freeform we want to move the top up directly.
-                    // TODO: Investigate why this is contentFrame not parentFrame.
-                    mWindowFrames.mContainingFrame.top -= mWindowFrames.mContainingFrame.bottom
-                            - mWindowFrames.mContentFrame.bottom;
+            if (isImeTarget) {
+                if (inFreeformWindowingMode()) {
+                    // Push the freeform window up to make room for the IME. However, don't push
+                    // it up past the top of the screen.
+                    final int bottomOverlap = mWindowFrames.mContainingFrame.bottom
+                            - mWindowFrames.mVisibleFrame.bottom;
+                    if (bottomOverlap > 0) {
+                        final int distanceToTop = Math.max(mWindowFrames.mContainingFrame.top
+                                - mWindowFrames.mDisplayFrame.top, 0);
+                        int offs = Math.min(bottomOverlap, distanceToTop);
+                        mWindowFrames.mContainingFrame.top -= offs;
+                    }
                 } else if (!inPinnedWindowingMode() && mWindowFrames.mContainingFrame.bottom
                         > mWindowFrames.mParentFrame.bottom) {
                     // But in docked we want to behave like fullscreen and behave as if the task
@@ -935,29 +968,21 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // Make sure the content and visible frames are inside of the
         // final window frame.
         if (windowsAreFloating && !mWindowFrames.mFrame.isEmpty()) {
-            // For pinned workspace the frame isn't limited in any particular
-            // way since SystemUI controls the bounds. For freeform however
-            // we want to keep things inside the content frame.
-            final Rect limitFrame = task.inPinnedWindowingMode() ? mWindowFrames.mFrame
-                    : mWindowFrames.mContentFrame;
-            // Keep the frame out of the blocked system area, limit it in size to the content area
-            // and make sure that there is always a minimum visible so that the user can drag it
-            // into a usable area..
-            final int height = Math.min(mWindowFrames.mFrame.height(), limitFrame.height());
-            final int width = Math.min(limitFrame.width(), mWindowFrames.mFrame.width());
-            final DisplayMetrics displayMetrics = getDisplayContent().getDisplayMetrics();
-            final int minVisibleHeight = Math.min(height, WindowManagerService.dipToPixel(
-                    MINIMUM_VISIBLE_HEIGHT_IN_DP, displayMetrics));
-            final int minVisibleWidth = Math.min(width, WindowManagerService.dipToPixel(
-                    MINIMUM_VISIBLE_WIDTH_IN_DP, displayMetrics));
-            final int top = Math.max(limitFrame.top,
-                    Math.min( mWindowFrames.mFrame.top, limitFrame.bottom - minVisibleHeight));
-            final int left = Math.max(limitFrame.left + minVisibleWidth - width,
-                    Math.min( mWindowFrames.mFrame.left, limitFrame.right - minVisibleWidth));
-            mWindowFrames.mFrame.set(left, top, left + width, top + height);
-            mWindowFrames.mContentFrame.set( mWindowFrames.mFrame);
+            final int visBottom = mWindowFrames.mVisibleFrame.bottom;
+            final int contentBottom = mWindowFrames.mContentFrame.bottom;
+            mWindowFrames.mContentFrame.set(mWindowFrames.mFrame);
             mWindowFrames.mVisibleFrame.set(mWindowFrames.mContentFrame);
             mWindowFrames.mStableFrame.set(mWindowFrames.mContentFrame);
+            if (isImeTarget && inFreeformWindowingMode()) {
+                // After displacing a freeform window to make room for the ime, any part of
+                // the window still covered by IME should be inset.
+                if (contentBottom + layoutYDiff < mWindowFrames.mContentFrame.bottom) {
+                    mWindowFrames.mContentFrame.bottom = contentBottom + layoutYDiff;
+                }
+                if (visBottom + layoutYDiff < mWindowFrames.mVisibleFrame.bottom) {
+                    mWindowFrames.mVisibleFrame.bottom = visBottom + layoutYDiff;
+                }
+            }
         } else if (mAttrs.type == TYPE_DOCK_DIVIDER) {
             dc.getDockedDividerController().positionDockedStackedDivider(mWindowFrames.mFrame);
             mWindowFrames.mContentFrame.set(mWindowFrames.mFrame);
@@ -984,7 +1009,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     Math.min(mWindowFrames.mStableFrame.bottom, mWindowFrames.mFrame.bottom));
         }
 
-        if (inFullscreenContainer && !windowsAreFloating) {
+        if (isFullscreenAndFillsDisplay && !windowsAreFloating) {
             // Windows that are not fullscreen can be positioned outside of the display frame,
             // but that is not a reason to provide them with overscan insets.
             InsetUtils.insetsBetweenFrames(layoutContainingFrame, mWindowFrames.mOverscanFrame,
@@ -997,7 +1022,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mWindowFrames.calculateDockedDividerInsets(c.getDisplayCutout().getSafeInsets());
         } else {
             getDisplayContent().getBounds(mTmpRect);
-            mWindowFrames.calculateInsets(windowsAreFloating, inFullscreenContainer, mTmpRect);
+            mWindowFrames.calculateInsets(
+                    windowsAreFloating, isFullscreenAndFillsDisplay, mTmpRect);
         }
 
         mWindowFrames.setDisplayCutout(
@@ -1039,9 +1065,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     // TODO: Look into whether this override is still necessary.
     @Override
     public Rect getBounds() {
-        if (isInMultiWindowMode()) {
-            return getTask().getBounds();
-        } else if (mAppToken != null){
+        if (mAppToken != null) {
             return mAppToken.getBounds();
         } else {
             return super.getBounds();
@@ -1750,6 +1774,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mWindowFrames.mFrame.left <= 0 && mWindowFrames.mFrame.top <= 0
                 && mWindowFrames.mFrame.right >= displayInfo.appWidth
                 && mWindowFrames.mFrame.bottom >= displayInfo.appHeight;
+    }
+
+    private boolean matchesDisplayBounds() {
+        return getDisplayContent().getBounds().equals(getBounds());
     }
 
     /** Returns true if last applied config was not yet requested by client. */
@@ -3089,7 +3117,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         mClient.resized(frame, overscanInsets, contentInsets, visibleInsets, stableInsets, outsets,
                 reportDraw, mergedConfiguration, getBackdropFrame(frame), forceRelayout,
-                getDisplayContent().getDisplayPolicy().isNavBarForcedShownLw(this), displayId,
+                getDisplayContent().getDisplayPolicy().areSystemBarsForcedShownLw(this), displayId,
                 new DisplayCutout.ParcelableWrapper(displayCutout));
         mDragResizingChangeReported = true;
     }
@@ -3115,20 +3143,16 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return getDisplayContent().mCurrentFocus == this;
     }
 
-    @Override
-    public boolean isInMultiWindowMode() {
-        final Task task = getTask();
-        return task != null && !task.isFullscreen();
-    }
 
     /** Is this window in a container that takes up the entire screen space? */
-    private boolean inFullscreenContainer() {
-        return mAppToken == null || (mAppToken.matchParentBounds() && !isInMultiWindowMode());
+    private boolean inAppWindowThatMatchesParentBounds() {
+        return mAppToken == null || (mAppToken.matchParentBounds() && !inMultiWindowMode());
     }
 
-    /** @return true when the window is in fullscreen task, but has non-fullscreen bounds set. */
+    /** @return true when the window is in fullscreen mode, but has non-fullscreen bounds set, or
+     *          is transitioning into/out-of fullscreen. */
     boolean isLetterboxedAppWindow() {
-        return !isInMultiWindowMode() && mAppToken != null && !mAppToken.matchParentBounds()
+        return !inMultiWindowMode() && !matchesDisplayBounds()
                 || isLetterboxedForDisplayCutoutLw();
     }
 
@@ -3495,7 +3519,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final int pw = containingFrame.width();
         final int ph = containingFrame.height();
         final Task task = getTask();
-        final boolean inNonFullscreenContainer = !inFullscreenContainer();
+        final boolean inNonFullscreenContainer = !inAppWindowThatMatchesParentBounds();
         final boolean noLimits = (mAttrs.flags & FLAG_LAYOUT_NO_LIMITS) != 0;
 
         // We need to fit it to the display if either
@@ -4458,7 +4482,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         anim.restrictDuration(MAX_ANIMATION_DURATION);
         anim.scaleCurrentDuration(mWmService.getWindowAnimationScaleLocked());
         final AnimationAdapter adapter = new LocalAnimationAdapter(
-                new WindowAnimationSpec(anim, mSurfacePosition, false /* canSkipFirstFrame */),
+                new WindowAnimationSpec(anim, mSurfacePosition, false /* canSkipFirstFrame */,
+                        mWmService.mWindowCornerRadius),
                 mWmService.mSurfaceAnimationRunner);
         startAnimation(mPendingTransaction, adapter);
         commitPendingTransaction();

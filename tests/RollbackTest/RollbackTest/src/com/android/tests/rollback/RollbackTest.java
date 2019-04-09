@@ -19,36 +19,31 @@ package com.android.tests.rollback;
 import static com.android.tests.rollback.RollbackTestUtils.assertPackageRollbackInfoEquals;
 import static com.android.tests.rollback.RollbackTestUtils.assertRollbackInfoEquals;
 import static com.android.tests.rollback.RollbackTestUtils.getUniqueRollbackInfoForPackage;
-
-import android.Manifest;
-import android.app.ActivityManager;
-import android.content.BroadcastReceiver;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.VersionedPackage;
-import android.content.rollback.RollbackInfo;
-import android.content.rollback.RollbackManager;
-import android.os.Handler;
-import android.os.HandlerThread;
-import android.provider.DeviceConfig;
-import android.support.test.InstrumentationRegistry;
-import android.util.Log;
+import static com.android.tests.rollback.RollbackTestUtils.processUserData;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
+import android.Manifest;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.VersionedPackage;
+import android.content.rollback.RollbackInfo;
+import android.content.rollback.RollbackManager;
+import android.provider.DeviceConfig;
+import android.util.Log;
+
+import androidx.test.InstrumentationRegistry;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.util.Collections;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -88,6 +83,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS,
                     Manifest.permission.MANAGE_ROLLBACKS);
 
             // Register a broadcast receiver for notification when the
@@ -176,7 +172,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
 
             RollbackManager rm = RollbackTestUtils.getRollbackManager();
 
@@ -234,7 +230,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
 
             RollbackManager rm = RollbackTestUtils.getRollbackManager();
 
@@ -291,7 +287,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
 
             RollbackManager rm = RollbackTestUtils.getRollbackManager();
 
@@ -344,11 +340,11 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS,
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS,
                     Manifest.permission.WRITE_DEVICE_CONFIG);
 
-            DeviceConfig.setProperty(DeviceConfig.Rollback.BOOT_NAMESPACE,
-                    DeviceConfig.Rollback.ROLLBACK_LIFETIME_IN_MILLIS,
+            DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ROLLBACK_BOOT,
+                    RollbackManager.PROPERTY_ROLLBACK_LIFETIME_MILLIS,
                     Long.toString(expirationTime), false /* makeDefault*/);
 
             // Pull the new expiration time from DeviceConfig
@@ -381,9 +377,86 @@ public class RollbackTest {
             // Check that the data has expired after the expiration time (with a buffer of 1 second)
             Thread.sleep(expirationTime / 2);
             assertNull(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(), TEST_APP_A));
+
         } finally {
-            DeviceConfig.setProperty(DeviceConfig.Rollback.BOOT_NAMESPACE,
-                    DeviceConfig.Rollback.ROLLBACK_LIFETIME_IN_MILLIS,
+            DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ROLLBACK_BOOT,
+                    RollbackManager.PROPERTY_ROLLBACK_LIFETIME_MILLIS,
+                    Long.toString(defaultExpirationTime), false /* makeDefault*/);
+            RollbackTestUtils.dropShellPermissionIdentity();
+        }
+    }
+
+    /**
+     * Test that changing time on device does not affect the duration of time that we keep
+     * rollback available
+     */
+    @Test
+    public void testTimeChangeDoesNotAffectLifetime() throws Exception {
+        long expirationTime = TimeUnit.SECONDS.toMillis(30);
+        long defaultExpirationTime = TimeUnit.HOURS.toMillis(48);
+        RollbackManager rm = RollbackTestUtils.getRollbackManager();
+
+        try {
+            RollbackTestUtils.adoptShellPermissionIdentity(
+                    Manifest.permission.INSTALL_PACKAGES,
+                    Manifest.permission.DELETE_PACKAGES,
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS,
+                    Manifest.permission.WRITE_DEVICE_CONFIG,
+                    Manifest.permission.SET_TIME);
+
+            DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ROLLBACK_BOOT,
+                    RollbackManager.PROPERTY_ROLLBACK_LIFETIME_MILLIS,
+                    Long.toString(expirationTime), false /* makeDefault*/);
+
+            // Pull the new expiration time from DeviceConfig
+            rm.reloadPersistedData();
+
+            // Install app A with rollback enabled
+            RollbackTestUtils.uninstall(TEST_APP_A);
+            RollbackTestUtils.install("RollbackTestAppAv1.apk", false);
+            RollbackTestUtils.install("RollbackTestAppAv2.apk", true);
+            assertEquals(2, RollbackTestUtils.getInstalledVersion(TEST_APP_A));
+
+            Thread.sleep(expirationTime / 2);
+
+            // Install app B with rollback enabled
+            RollbackTestUtils.uninstall(TEST_APP_B);
+            RollbackTestUtils.install("RollbackTestAppBv1.apk", false);
+            RollbackTestUtils.install("RollbackTestAppBv2.apk", true);
+            assertEquals(2, RollbackTestUtils.getInstalledVersion(TEST_APP_B));
+            // 1 second buffer
+            Thread.sleep(1000);
+
+            try {
+                // Change the time
+                RollbackTestUtils.forwardTimeBy(expirationTime);
+
+                // 1 second buffer to allow Rollback Manager to handle time change before loading
+                // persisted data
+                Thread.sleep(1000);
+
+                // Load timestamps from storage
+                rm.reloadPersistedData();
+
+                // Wait until rollback for app A has expired
+                // This will trigger an expiration run that should expire app A but not B
+                Thread.sleep(expirationTime / 2);
+                assertNull(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(), TEST_APP_A));
+
+                // Rollback for app B should not be expired
+                RollbackInfo rollback = getUniqueRollbackInfoForPackage(
+                        rm.getAvailableRollbacks(), TEST_APP_B);
+                assertRollbackInfoEquals(TEST_APP_B, 2, 1, rollback);
+
+                // Wait until rollback for app B has expired
+                Thread.sleep(expirationTime / 2);
+                assertNull(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(), TEST_APP_B));
+            } finally {
+                RollbackTestUtils.forwardTimeBy(-expirationTime);
+            }
+        } finally {
+            DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ROLLBACK_BOOT,
+                    RollbackManager.PROPERTY_ROLLBACK_LIFETIME_MILLIS,
                     Long.toString(defaultExpirationTime), false /* makeDefault*/);
             RollbackTestUtils.dropShellPermissionIdentity();
         }
@@ -399,7 +472,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
 
             RollbackManager rm = RollbackTestUtils.getRollbackManager();
             RollbackTestUtils.uninstall(TEST_APP_A);
@@ -427,52 +500,6 @@ public class RollbackTest {
         }
     }
 
-    private static final String NO_RESPONSE = "NO RESPONSE";
-
-    // Calls into the test app to process user data.
-    // Asserts if the user data could not be processed or was version
-    // incompatible with the previously processed user data.
-    private void processUserData(String packageName) throws Exception {
-        Intent intent = new Intent();
-        intent.setComponent(new ComponentName(packageName,
-                    "com.android.tests.rollback.testapp.ProcessUserData"));
-        Context context = InstrumentationRegistry.getContext();
-
-        HandlerThread handlerThread = new HandlerThread("RollbackTestHandlerThread");
-        handlerThread.start();
-
-        // It can sometimes take a while after rollback before the app will
-        // receive this broadcast, so try a few times in a loop.
-        String result = NO_RESPONSE;
-        for (int i = 0; result.equals(NO_RESPONSE) && i < 5; ++i) {
-            BlockingQueue<String> resultQueue = new LinkedBlockingQueue<>();
-            context.sendOrderedBroadcast(intent, null, new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    if (getResultCode() == 1) {
-                        resultQueue.add("OK");
-                    } else {
-                        // If the test app doesn't receive the broadcast or
-                        // fails to set the result data, then getResultData
-                        // here returns the initial NO_RESPONSE data passed to
-                        // the sendOrderedBroadcast call.
-                        resultQueue.add(getResultData());
-                    }
-                }
-            }, new Handler(handlerThread.getLooper()), 0, NO_RESPONSE, null);
-
-            result = resultQueue.poll(10, TimeUnit.SECONDS);
-            if (result == null) {
-                result = "ProcessUserData broadcast timed out";
-            }
-        }
-
-        handlerThread.quit();
-        if (!"OK".equals(result)) {
-            fail(result);
-        }
-    }
-
     /**
      * Test that app user data is rolled back.
      */
@@ -482,7 +509,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
 
             RollbackTestUtils.uninstall(TEST_APP_A);
             RollbackTestUtils.install("RollbackTestAppAv1.apk", false);
@@ -509,7 +536,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
 
             RollbackTestUtils.uninstall(TEST_APP_A);
             RollbackTestUtils.installSplit(false,
@@ -567,7 +594,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
             RollbackManager rm = RollbackTestUtils.getRollbackManager();
 
             // Prep installation of the test apps.
@@ -662,6 +689,75 @@ public class RollbackTest {
     }
 
     /**
+     * Test that you cannot enable rollback for a package without the
+     * MANAGE_ROLLBACKS permission.
+     */
+    @Test
+    public void testEnableRollbackPermission() throws Exception {
+        try {
+            RollbackTestUtils.adoptShellPermissionIdentity(
+                    Manifest.permission.INSTALL_PACKAGES,
+                    Manifest.permission.DELETE_PACKAGES);
+
+            RollbackTestUtils.uninstall(TEST_APP_A);
+            RollbackTestUtils.install("RollbackTestAppAv1.apk", /* enableRollback */ false);
+            assertEquals(1, RollbackTestUtils.getInstalledVersion(TEST_APP_A));
+
+            RollbackTestUtils.install("RollbackTestAppAv2.apk", /* enableRollback */ true);
+
+            // We expect v2 of the app was installed, but rollback has not
+            // been enabled.
+            assertEquals(2, RollbackTestUtils.getInstalledVersion(TEST_APP_A));
+
+            // TODO: See if there is a way to remove this race condition
+            // between when the app is installed and when the rollback
+            // would be made available.
+            Thread.sleep(1000);
+
+            RollbackTestUtils.adoptShellPermissionIdentity(
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
+            RollbackManager rm = RollbackTestUtils.getRollbackManager();
+            assertNull(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(), TEST_APP_A));
+        } finally {
+            RollbackTestUtils.dropShellPermissionIdentity();
+        }
+    }
+
+    /**
+     * Test that you cannot enable rollback for a non-module package when
+     * holding the MANAGE_ROLLBACKS permission.
+     */
+    @Test
+    public void testNonModuleEnableRollback() throws Exception {
+        try {
+            RollbackTestUtils.adoptShellPermissionIdentity(
+                    Manifest.permission.INSTALL_PACKAGES,
+                    Manifest.permission.DELETE_PACKAGES,
+                    Manifest.permission.MANAGE_ROLLBACKS);
+
+            RollbackTestUtils.uninstall(TEST_APP_A);
+            RollbackTestUtils.install("RollbackTestAppAv1.apk", /* enableRollback */ false);
+            assertEquals(1, RollbackTestUtils.getInstalledVersion(TEST_APP_A));
+
+            RollbackTestUtils.install("RollbackTestAppAv2.apk", /* enableRollback */ true);
+
+            // We expect v2 of the app was installed, but rollback has not
+            // been enabled because the test app is not a module.
+            assertEquals(2, RollbackTestUtils.getInstalledVersion(TEST_APP_A));
+
+            // TODO: See if there is a way to remove this race condition
+            // between when the app is installed and when the rollback
+            // would be made available.
+            Thread.sleep(1000);
+
+            RollbackManager rm = RollbackTestUtils.getRollbackManager();
+            assertNull(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(), TEST_APP_A));
+        } finally {
+            RollbackTestUtils.dropShellPermissionIdentity();
+        }
+    }
+
+    /**
      * Test rollback of multi-package installs is implemented.
      */
     @Test
@@ -670,7 +766,7 @@ public class RollbackTest {
             RollbackTestUtils.adoptShellPermissionIdentity(
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
-                    Manifest.permission.MANAGE_ROLLBACKS);
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS);
             RollbackManager rm = RollbackTestUtils.getRollbackManager();
 
             // Prep installation of the test apps.
@@ -730,6 +826,7 @@ public class RollbackTest {
                     Manifest.permission.INSTALL_PACKAGES,
                     Manifest.permission.DELETE_PACKAGES,
                     Manifest.permission.MANAGE_ROLLBACKS,
+                    Manifest.permission.TEST_MANAGE_ROLLBACKS,
                     Manifest.permission.KILL_BACKGROUND_PROCESSES,
                     Manifest.permission.RESTART_PACKAGES);
             RollbackManager rm = RollbackTestUtils.getRollbackManager();
@@ -759,34 +856,14 @@ public class RollbackTest {
                     rm.getAvailableRollbacks(), TEST_APP_B);
             assertRollbackInfoEquals(TEST_APP_B, 2, 1, rollbackB);
 
-            BlockingQueue<Integer> crashQueue = new SynchronousQueue<>();
+            // Register rollback committed receiver
+            RollbackBroadcastReceiver rollbackReceiver = new RollbackBroadcastReceiver();
 
-            IntentFilter crashCountFilter = new IntentFilter();
-            crashCountFilter.addAction("com.android.tests.rollback.CRASH");
-            crashCountFilter.addCategory(Intent.CATEGORY_DEFAULT);
+            // Crash TEST_APP_A PackageWatchdog#TRIGGER_FAILURE_COUNT times to trigger rollback
+            crashCountReceiver = RollbackTestUtils.sendCrashBroadcast(context, TEST_APP_A, 5);
 
-            crashCountReceiver = new BroadcastReceiver() {
-                    @Override
-                    public void onReceive(Context context, Intent intent) {
-                        try {
-                            // Sleep long enough for packagewatchdog to be notified of crash
-                            Thread.sleep(1000);
-                            // Kill app and close AppErrorDialog
-                            ActivityManager am = context.getSystemService(ActivityManager.class);
-                            am.killBackgroundProcesses(TEST_APP_A);
-                            // Allow another package launch
-                            crashQueue.put(intent.getIntExtra("count", 0));
-                        } catch (InterruptedException e) {
-                            fail("Failed to communicate with test app");
-                        }
-                    }
-                };
-            context.registerReceiver(crashCountReceiver, crashCountFilter);
-
-            // Start apps PackageWatchdog#TRIGGER_FAILURE_COUNT times so TEST_APP_A crashes
-            do {
-                RollbackTestUtils.launchPackage(TEST_APP_A);
-            } while(crashQueue.take() < 5);
+            // Verify we received a broadcast for the rollback.
+            rollbackReceiver.take();
 
             // TEST_APP_A is automatically rolled back by the RollbackPackageHealthObserver
             assertEquals(1, RollbackTestUtils.getInstalledVersion(TEST_APP_A));

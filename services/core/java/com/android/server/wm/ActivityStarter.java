@@ -27,6 +27,8 @@ import static android.app.ActivityManager.START_RETURN_INTENT_TO_CALLER;
 import static android.app.ActivityManager.START_RETURN_LOCK_TASK_MODE_VIOLATION;
 import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
+import static android.app.WaitResult.LAUNCH_STATE_COLD;
+import static android.app.WaitResult.LAUNCH_STATE_HOT;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
@@ -1013,6 +1015,12 @@ class ActivityStarter {
         if (mService.isDeviceOwner(callingPackage)) {
             return false;
         }
+        // don't abort if the callingPackage is temporarily whitelisted
+        if (mService.isPackageNameWhitelistedForBgActivityStarts(callingPackage)) {
+            Slog.w(TAG, "Background activity start for " + callingPackage
+                    + " temporarily whitelisted. This will not be supported in future Q builds.");
+            return false;
+        }
         // anything that has fallen through would currently be aborted
         Slog.w(TAG, "Background activity start [callingPackage: " + callingPackage
                 + "; callingUid: " + callingUid
@@ -1309,6 +1317,8 @@ class ActivityStarter {
                         break;
                     }
                     case START_TASK_TO_FRONT: {
+                        outResult.launchState =
+                                r.attachedToProcess() ? LAUNCH_STATE_HOT : LAUNCH_STATE_COLD;
                         // ActivityRecord may represent a different activity, but it should not be
                         // in the resumed state.
                         if (r.nowVisible && r.isState(RESUMED)) {
@@ -1809,7 +1819,7 @@ class ActivityStarter {
             }
         }
 
-        mNotTop = (mLaunchFlags & FLAG_ACTIVITY_PREVIOUS_IS_TOP) != 0 ? r : null;
+        mNotTop = (mLaunchFlags & FLAG_ACTIVITY_PREVIOUS_IS_TOP) != 0 ? sourceRecord : null;
 
         mInTask = inTask;
         // In some flows in to this function, we retrieve the task record and hold on to it

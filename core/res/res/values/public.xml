@@ -2934,13 +2934,14 @@
         <public name="foregroundServiceType" />
         <public name="hasFragileUserData" />
         <public name="minAspectRatio" />
-        <!-- @hide @SystemApi -->
         <public name="inheritShowWhenLocked" />
         <public name="zygotePreloadName" />
         <public name="useEmbeddedDex" />
         <public name="forceUriPermissions" />
         <!-- @hide @SystemApi -->
         <public name="allowClearUserDataOnFailedRestore"/>
+        <public name="allowAudioPlaybackCapture"/>
+        <public name="secureElementName" />
     </public-group>
 
     <public-group type="drawable" first-id="0x010800b4">
@@ -3005,8 +3006,6 @@
     <public-group type="dimen" first-id="0x01050007">
         <!-- @hide @SystemApi -->
         <public name="config_restrictedIconSize" />
-        <!-- @hide @SystemApi -->
-        <public name="config_mediaMetadataBitmapMaxSize" />
     </public-group>
 
     <public-group type="color" first-id="0x0106001c">

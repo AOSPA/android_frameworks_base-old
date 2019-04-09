@@ -42,6 +42,7 @@ import android.os.ServiceManager;
 import android.os.StrictMode;
 import android.os.UserHandle;
 import android.provider.Settings.Global;
+import android.service.notification.Adjustment;
 import android.service.notification.Condition;
 import android.service.notification.StatusBarNotification;
 import android.service.notification.ZenModeConfig;
@@ -314,7 +315,8 @@ public class NotificationManager {
      * This tag should contain a localized name of the type of the zen rule provided by the
      * activity.
      */
-    public static final String META_DATA_AUTOMATIC_RULE_TYPE = "android.app.automatic.ruleType";
+    public static final String META_DATA_AUTOMATIC_RULE_TYPE =
+            "android.service.zen.automatic.ruleType";
 
     /**
      * An optional {@code meta-data} tag for activities that handle
@@ -324,7 +326,7 @@ public class NotificationManager {
      * can be created for this rule type. Omit or enter a value <= 0 to allow unlimited instances.
      */
     public static final String META_DATA_RULE_INSTANCE_LIMIT =
-            "android.app.zen.automatic.ruleInstanceLimit";
+            "android.service.zen.automatic.ruleInstanceLimit";
 
     /** Value signifying that the user has not expressed a per-app visibility override value.
      * @hide */
@@ -465,7 +467,7 @@ public class NotificationManager {
      *        show the user. Must not be null.
      */
     public void notifyAsPackage(@NonNull String targetPackage, @NonNull String tag, int id,
-            Notification notification) {
+            @NonNull Notification notification) {
         INotificationManager service = getService();
         String sender = mContext.getPackageName();
 
@@ -589,30 +591,16 @@ public class NotificationManager {
      * received on your behalf from the cloud, without your process having to wake up.
      *
      * You can check if you have an allowed delegate with {@link #getNotificationDelegate()} and
-     * revoke your delegate with {@link #revokeNotificationDelegate()}.
+     * revoke your delegate by passing null to this method.
      *
      * @param delegate Package name of the app which can send notifications on your behalf.
      */
-    public void setNotificationDelegate(@NonNull String delegate) {
+    public void setNotificationDelegate(@Nullable String delegate) {
         INotificationManager service = getService();
         String pkg = mContext.getPackageName();
         if (localLOGV) Log.v(TAG, pkg + ": cancelAll()");
         try {
             service.setNotificationDelegate(pkg, delegate);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Revokes permission for your {@link #setNotificationDelegate(String) notification delegate}
-     * to post notifications on your behalf.
-     */
-    public void revokeNotificationDelegate() {
-        INotificationManager service = getService();
-        String pkg = mContext.getPackageName();
-        try {
-            service.revokeNotificationDelegate(pkg);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -638,10 +626,10 @@ public class NotificationManager {
      *
      * See {@link #setNotificationDelegate(String)}.
      */
-    public boolean canNotifyAsPackage(String pkg) {
+    public boolean canNotifyAsPackage(@NonNull String pkg) {
         INotificationManager service = getService();
         try {
-            return service.canNotifyAsPackage(mContext.getPackageName(), pkg);
+            return service.canNotifyAsPackage(mContext.getPackageName(), pkg, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -729,12 +717,16 @@ public class NotificationManager {
     /**
      * Returns the notification channel settings for a given channel id.
      *
-     * The channel must belong to your package, or it will not be returned.
+     * <p>The channel must belong to your package, or to a package you are an approved notification
+     * delegate for (see {@link #canNotifyAsPackage(String)}), or it will not be returned. To query
+     * a channel as a notification delegate, call this method from a context created for that
+     * package (see {@link Context#createPackageContext(String, int)}).</p>
      */
     public NotificationChannel getNotificationChannel(String channelId) {
         INotificationManager service = getService();
         try {
-            return service.getNotificationChannel(mContext.getPackageName(), channelId);
+            return service.getNotificationChannel(mContext.getOpPackageName(),
+                    mContext.getUserId(), mContext.getPackageName(), channelId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -742,11 +734,17 @@ public class NotificationManager {
 
     /**
      * Returns all notification channels belonging to the calling package.
+     *
+     * <p>Approved notification delegates (see {@link #canNotifyAsPackage(String)}) can query
+     * notification channels belonging to packages they are the delegate for. To do so, call this
+     * method from a context created for that package (see
+     * {@link Context#createPackageContext(String, int)}).</p>
      */
     public List<NotificationChannel> getNotificationChannels() {
         INotificationManager service = getService();
         try {
-            return service.getNotificationChannels(mContext.getPackageName()).getList();
+            return service.getNotificationChannels(mContext.getOpPackageName(),
+                    mContext.getPackageName(), mContext.getUserId()).getList();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1008,7 +1006,7 @@ public class NotificationManager {
      * @param id The id of the rule whose state should change
      * @param condition The new state of this rule
      */
-    public void setAutomaticZenRuleState(String id, Condition condition) {
+    public void setAutomaticZenRuleState(@NonNull String id, @NonNull Condition condition) {
         INotificationManager service = getService();
         try {
             service.setAutomaticZenRuleState(id, condition);
@@ -1168,8 +1166,10 @@ public class NotificationManager {
      * matches the system intent action
      * TODO: STOPSHIP: Add correct intent
      * {@link android.provider.Settings#ACTION_MANAGE_DEFAULT_APPS_SETTINGS}.
+     * @hide
      */
-    public boolean isNotificationAssistantAccessGranted(ComponentName assistant) {
+    @SystemApi
+    public boolean isNotificationAssistantAccessGranted(@NonNull ComponentName assistant) {
         INotificationManager service = getService();
         try {
             return service.isNotificationAssistantAccessGranted(assistant);
@@ -1189,6 +1189,25 @@ public class NotificationManager {
         INotificationManager service = getService();
         try {
             return service.shouldHideSilentStatusIcons(mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the list of {@link android.service.notification.Adjustment adjustment keys} that can
+     * be modified by the current {@link android.service.notification.NotificationAssistantService}.
+     *
+     * <p>Only callable by the current
+     * {@link android.service.notification.NotificationAssistantService}.
+     * See {@link #isNotificationAssistantAccessGranted(ComponentName)}</p>
+     * @hide
+     */
+    @SystemApi
+    public @NonNull @Adjustment.Keys List<String> getAllowedAssistantCapabilities() {
+        INotificationManager service = getService();
+        try {
+            return service.getAllowedAssistantCapabilities(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1282,6 +1301,8 @@ public class NotificationManager {
 
     /**
      * Grants/revokes Notification Assistant access to {@code assistant} for current user.
+     * To grant access for a particular user, obtain this service by using the {@link Context}
+     * provided by {@link Context#createPackageContextAsUser}
      *
      * @param assistant Name of component to grant/revoke access or {@code null} to revoke access to
      *                  current assistant
@@ -1289,31 +1310,11 @@ public class NotificationManager {
      * @hide
      */
     @SystemApi
-    public void setNotificationAssistantAccessGranted(ComponentName assistant, boolean granted) {
+    public void setNotificationAssistantAccessGranted(@Nullable ComponentName assistant,
+            boolean granted) {
         INotificationManager service = getService();
         try {
             service.setNotificationAssistantAccessGranted(assistant, granted);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Grants/revokes Notification Assistant access to {@code assistant} for given user.
-     *
-     * @param assistant Name of component to grant/revoke access or {@code null} to revoke access to
-     *                  current assistant
-     * @param user handle to associate assistant with
-     * @param granted Grant/revoke access
-     * @hide
-     */
-    @SystemApi
-    public void setNotificationAssistantAccessGrantedForUser(ComponentName assistant,
-            UserHandle user, boolean granted) {
-        INotificationManager service = getService();
-        try {
-            service.setNotificationAssistantAccessGrantedForUser(assistant, user.getIdentifier(),
-                    granted);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1324,17 +1325,6 @@ public class NotificationManager {
         INotificationManager service = getService();
         try {
             return service.getEnabledNotificationListeners(userId);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /** @hide */
-    @SystemApi
-    public @Nullable ComponentName getAllowedNotificationAssistantForUser(UserHandle user) {
-        INotificationManager service = getService();
-        try {
-            return service.getAllowedNotificationAssistantForUser(user.getIdentifier());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1842,7 +1832,7 @@ public class NotificationManager {
             }
         }
 
-        public static final Parcelable.Creator<Policy> CREATOR = new Parcelable.Creator<Policy>() {
+        public static final @android.annotation.NonNull Parcelable.Creator<Policy> CREATOR = new Parcelable.Creator<Policy>() {
             @Override
             public Policy createFromParcel(Parcel in) {
                 return new Policy(in);

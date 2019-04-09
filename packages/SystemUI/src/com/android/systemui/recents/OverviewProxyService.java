@@ -16,7 +16,7 @@
 
 package com.android.systemui.recents;
 
-import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
+import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.view.MotionEvent.ACTION_CANCEL;
 import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_UP;
@@ -29,6 +29,7 @@ import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SUP
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SYSUI_PROXY;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_WINDOW_CORNER_RADIUS;
 
+import android.annotation.FloatRange;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -106,6 +107,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private IOverviewProxy mOverviewProxy;
     private int mConnectionBackoffAttempts;
     private @InteractionType int mInteractionFlags;
+    private boolean mBound;
     private boolean mIsEnabled;
     private int mCurrentBoundedUserId = -1;
     private float mBackButtonAlpha;
@@ -264,6 +266,30 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             long token = Binder.clearCallingIdentity();
             try {
                 return mSupportsRoundedCornersOnWindows;
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        public void onAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {
+            if (!verifyCaller("onAssistantProgress")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> notifyAssistantProgress(progress));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        public void startAssistant(Bundle bundle) {
+            if (!verifyCaller("startAssistant")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> notifyStartAssistant(bundle));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -485,16 +511,15 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         mHandler.removeCallbacks(mConnectionRunnable);
         Intent launcherServiceIntent = new Intent(ACTION_QUICKSTEP)
                 .setPackage(mRecentsComponentName.getPackageName());
-        boolean bound = false;
         try {
-            bound = mContext.bindServiceAsUser(launcherServiceIntent,
+            mBound = mContext.bindServiceAsUser(launcherServiceIntent,
                     mOverviewServiceConnection,
                     Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE,
                     UserHandle.of(mDeviceProvisionedController.getCurrentUser()));
         } catch (SecurityException e) {
             Log.e(TAG_OPS, "Unable to bind because of security error", e);
         }
-        if (bound) {
+        if (mBound) {
             // Ensure that connection has been established even if it thinks it is bound
             mHandler.postDelayed(mDeferredConnectionCallback, DEFERRED_CALLBACK_MILLIS);
         } else {
@@ -548,9 +573,14 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     }
 
     private void disconnectFromLauncherService() {
+        if (mBound) {
+            // Always unbind the service (ie. if called through onNullBinding or onBindingDied)
+            mContext.unbindService(mOverviewServiceConnection);
+            mBound = false;
+        }
+
         if (mOverviewProxy != null) {
             mOverviewProxy.asBinder().unlinkToDeath(mOverviewServiceDeathRcpt, 0);
-            mContext.unbindService(mOverviewServiceConnection);
             mOverviewProxy = null;
             notifyBackButtonAlphaChanged(1f, false /* animate */);
             notifyConnectionChanged();
@@ -590,9 +620,21 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
     }
 
+    private void notifyAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onAssistantProgress(progress);
+        }
+    }
+
+    private void notifyStartAssistant(Bundle bundle) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).startAssistant(bundle);
+        }
+    }
+
     private void updateEnabledState() {
         mIsEnabled = mContext.getPackageManager().resolveServiceAsUser(mQuickStepIntent,
-                MATCH_DIRECT_BOOT_UNAWARE,
+                MATCH_SYSTEM_ONLY,
                 ActivityManagerWrapper.getInstance().getCurrentUserId()) != null;
     }
 
@@ -637,5 +679,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         default void onOverviewShown(boolean fromHome) {}
         default void onQuickScrubStarted() {}
         default void onBackButtonAlphaChanged(float alpha, boolean animate) {}
+        default void onAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {}
+        default void startAssistant(Bundle bundle) {}
     }
 }

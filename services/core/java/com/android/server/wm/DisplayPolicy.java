@@ -45,8 +45,8 @@ import static android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATIO
 import static android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
-import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_STATUS_BAR_BACKGROUND;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_STATUS_BAR_VISIBLE_TRANSPARENT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INHERIT_TRANSLUCENT_DECOR;
@@ -60,7 +60,6 @@ import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLES
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_BOOT_PROGRESS;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
@@ -115,6 +114,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Insets;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.input.InputManager;
 import android.hardware.power.V1_0.PowerHint;
@@ -152,6 +152,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ScreenShapeHelper;
 import com.android.internal.util.ScreenshotHelper;
+import com.android.internal.widget.PointerLocationView;
 import com.android.server.LocalServices;
 import com.android.server.UiThread;
 import com.android.server.policy.WindowManagerPolicy;
@@ -161,6 +162,7 @@ import com.android.server.policy.WindowManagerPolicy.ScreenOnListener;
 import com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs;
 import com.android.server.policy.WindowOrientationListener;
 import com.android.server.statusbar.StatusBarManagerInternal;
+import com.android.server.wallpaper.WallpaperManagerInternal;
 import com.android.server.wm.utils.InsetUtils;
 
 import java.io.PrintWriter;
@@ -234,7 +236,6 @@ public class DisplayPolicy {
         }
     }
 
-    @VisibleForTesting
     private final SystemGesturesPointerEventListener mSystemGestures;
 
     private volatile int mLidState = LID_ABSENT;
@@ -347,6 +348,11 @@ public class DisplayPolicy {
     private int mForcingShowNavBarLayer;
     private boolean mForceShowSystemBars;
 
+    /**
+     * Force the display of system bars regardless of other settings.
+     */
+    private boolean mForceShowSystemBarsFromExternal;
+
     private boolean mShowingDream;
     private boolean mLastShowingDream;
     private boolean mDreamingLockscreen;
@@ -356,6 +362,8 @@ public class DisplayPolicy {
     private boolean mAllowLockscreenWhenOn;
 
     private InputConsumer mInputConsumer = null;
+
+    private PointerLocationView mPointerLocationView;
 
     /**
      * The area covered by system windows which belong to another display. Forwarded insets is set
@@ -371,6 +379,8 @@ public class DisplayPolicy {
     private static final int MSG_UPDATE_DREAMING_SLEEP_TOKEN = 1;
     private static final int MSG_REQUEST_TRANSIENT_BARS = 2;
     private static final int MSG_DISPOSE_INPUT_CONSUMER = 3;
+    private static final int MSG_ENABLE_POINTER_LOCATION = 4;
+    private static final int MSG_DISABLE_POINTER_LOCATION = 5;
 
     private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_STATUS = 0;
     private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_NAVIGATION = 1;
@@ -396,6 +406,12 @@ public class DisplayPolicy {
                     break;
                 case MSG_DISPOSE_INPUT_CONSUMER:
                     disposeInputConsumer((InputConsumer) msg.obj);
+                    break;
+                case MSG_ENABLE_POINTER_LOCATION:
+                    enablePointerLocation();
+                    break;
+                case MSG_DISABLE_POINTER_LOCATION:
+                    disablePointerLocation();
                     break;
             }
         }
@@ -430,6 +446,7 @@ public class DisplayPolicy {
         mCarDockEnablesAccelerometer = r.getBoolean(R.bool.config_carDockEnablesAccelerometer);
         mDeskDockEnablesAccelerometer = r.getBoolean(R.bool.config_deskDockEnablesAccelerometer);
         mTranslucentDecorEnabled = r.getBoolean(R.bool.config_enableTranslucentDecor);
+        mForceShowSystemBarsFromExternal = r.getBoolean(R.bool.config_forceShowSystemBars);
         updateConfigurationDependentBehaviors();
 
         mAccessibilityManager = (AccessibilityManager) mContext.getSystemService(
@@ -622,20 +639,19 @@ public class DisplayPolicy {
             }
         } else {
             mHasStatusBar = false;
-            mHasNavigationBar = mDisplayContent.getDisplay().supportsSystemDecorations();
+            mHasNavigationBar = mDisplayContent.supportsSystemDecorations();
         }
     }
 
     void systemReady() {
         mSystemGestures.systemReady();
+        if (mService.mPointerLocationEnabled) {
+            setPointerLocationEnabled(true);
+        }
     }
 
     private int getDisplayId() {
         return mDisplayContent.getDisplayId();
-    }
-
-    void onDisplayRemoved() {
-        mDisplayContent.unregisterPointerEventListener(mSystemGestures);
     }
 
     void configure(int width, int height, int shortSizeDp) {
@@ -688,6 +704,13 @@ public class DisplayPolicy {
 
     public int getDockMode() {
         return mDockMode;
+    }
+
+    /**
+     * @see WindowManagerService.setForceShowSystemBars
+     */
+    void setForceShowSystemBars(boolean forceShowSystemBars) {
+        mForceShowSystemBarsFromExternal = forceShowSystemBars;
     }
 
     public boolean hasNavigationBar() {
@@ -838,7 +861,7 @@ public class DisplayPolicy {
             case TYPE_WALLPAPER:
                 // Dreams and wallpapers don't have an app window token and can thus not be
                 // letterboxed. Hence always let them extend under the cutout.
-                attrs.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+                attrs.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
                 break;
             case TYPE_STATUS_BAR:
 
@@ -1196,9 +1219,9 @@ public class DisplayPolicy {
     }
 
     /**
-     * @return true if the navigation bar is forced to stay visible
+     * @return true if the system bars are forced to stay visible
      */
-    public boolean isNavBarForcedShownLw(WindowState windowState) {
+    public boolean areSystemBarsForcedShownLw(WindowState windowState) {
         return mForceShowSystemBars;
     }
 
@@ -1218,8 +1241,8 @@ public class DisplayPolicy {
      *                        current visibility. Expressed as positive insets.
      * @param outOutsets The areas that are not real display, but we would like to treat as such.
      * @param outDisplayCutout The area that has been cut away from the display.
-     * @return Whether to always consume the navigation bar.
-     *         See {@link #isNavBarForcedShownLw(WindowState)}.
+     * @return Whether to always consume the system bars.
+     *         See {@link #areSystemBarsForcedShownLw(WindowState)}.
      */
     public boolean getLayoutHintLw(LayoutParams attrs, Rect taskBounds,
             DisplayFrames displayFrames, boolean floatingStack, Rect outFrame,
@@ -2031,10 +2054,6 @@ public class DisplayPolicy {
                     } else {
                         vf.set(cf);
                     }
-
-                    // EXPERIMENT TODO(b/113952590): Remove once experiment in bug is completed
-                    mExperiments.offsetWindowFramesForNavBar(mNavigationBarPosition, win);
-                    // EXPERIMENT END
                 }
             } else if (layoutInScreen || (sysUiFl
                     & (View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
@@ -2147,8 +2166,7 @@ public class DisplayPolicy {
                     of.set(displayFrames.mRestricted);
                     df.set(displayFrames.mRestricted);
                     pf.set(displayFrames.mRestricted);
-                } else if (type == TYPE_TOAST || type == TYPE_SYSTEM_ALERT
-                        || type == TYPE_APPLICATION_OVERLAY) {
+                } else if (type == TYPE_TOAST || type == TYPE_SYSTEM_ALERT) {
                     // These dialogs are stable to interim decor changes.
                     cf.set(displayFrames.mStable);
                     of.set(displayFrames.mStable);
@@ -2190,7 +2208,7 @@ public class DisplayPolicy {
 
         // Ensure that windows with a DEFAULT or NEVER display cutout mode are laid out in
         // the cutout safe zone.
-        if (cutoutMode != LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS) {
+        if (cutoutMode != LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES) {
             final Rect displayCutoutSafeExceptMaybeBars = sTmpDisplayCutoutSafeExceptMaybeBarsRect;
             displayCutoutSafeExceptMaybeBars.set(displayFrames.mDisplayCutoutSafe);
             if (layoutInScreen && layoutInsetDecor && !requestedFullscreen
@@ -2241,7 +2259,7 @@ public class DisplayPolicy {
         // TYPE_SYSTEM_ERROR is above the NavigationBar so it can't be allowed to extend over it.
         // Also, we don't allow windows in multi-window mode to extend out of the screen.
         if ((fl & FLAG_LAYOUT_NO_LIMITS) != 0 && type != TYPE_SYSTEM_ERROR
-                && !win.isInMultiWindowMode()) {
+                && !win.inMultiWindowMode()) {
             df.left = df.top = -10000;
             df.right = df.bottom = 10000;
             if (type != TYPE_WALLPAPER) {
@@ -2692,7 +2710,11 @@ public class DisplayPolicy {
     }
 
     void notifyDisplayReady() {
-        mHandler.post(() -> getStatusBarManagerInternal().onDisplayReady(getDisplayId()));
+        mHandler.post(() -> {
+            final int displayId = getDisplayId();
+            getStatusBarManagerInternal().onDisplayReady(displayId);
+            LocalServices.getService(WallpaperManagerInternal.class).onDisplayReady(displayId);
+        });
     }
 
     /**
@@ -3126,7 +3148,8 @@ public class DisplayPolicy {
         // We need to force system bars when the docked stack is visible, when the freeform stack
         // is visible but also when we are resizing for the transitions when docked stack
         // visibility changes.
-        mForceShowSystemBars = dockedStackVisible || freeformStackVisible || resizing;
+        mForceShowSystemBars = dockedStackVisible || freeformStackVisible || resizing
+                || mForceShowSystemBarsFromExternal;
         final boolean forceOpaqueStatusBar = mForceShowSystemBars && !mForceStatusBarFromKeyguard;
 
         // apply translucent bar vis flags
@@ -3498,11 +3521,66 @@ public class DisplayPolicy {
         pw.print(prefix); pw.print("mTopIsFullscreen="); pw.print(mTopIsFullscreen);
         pw.print(prefix); pw.print("mForceStatusBar="); pw.print(mForceStatusBar);
         pw.print(" mForceStatusBarFromKeyguard="); pw.println(mForceStatusBarFromKeyguard);
+        pw.print(" mForceShowSystemBarsFromExternal=");
+        pw.println(mForceShowSystemBarsFromExternal);
         pw.print(prefix); pw.print("mAllowLockscreenWhenOn="); pw.println(mAllowLockscreenWhenOn);
         mStatusBarController.dump(pw, prefix);
         mNavigationBarController.dump(pw, prefix);
 
         pw.print(prefix); pw.println("Looper state:");
         mHandler.getLooper().dump(new PrintWriterPrinter(pw), prefix + "  ");
+    }
+
+    private boolean supportsPointerLocation() {
+        return mDisplayContent.isDefaultDisplay || !mDisplayContent.isPrivate();
+    }
+
+    void setPointerLocationEnabled(boolean pointerLocationEnabled) {
+        if (!supportsPointerLocation()) {
+            return;
+        }
+
+        mHandler.sendEmptyMessage(pointerLocationEnabled
+                ? MSG_ENABLE_POINTER_LOCATION : MSG_DISABLE_POINTER_LOCATION);
+    }
+
+    private void enablePointerLocation() {
+        if (mPointerLocationView != null) {
+            return;
+        }
+
+        mPointerLocationView = new PointerLocationView(mContext);
+        mPointerLocationView.setPrintCoords(false);
+        final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT);
+        lp.type = WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY;
+        lp.flags = WindowManager.LayoutParams.FLAG_FULLSCREEN
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+        lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        if (ActivityManager.isHighEndGfx()) {
+            lp.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+            lp.privateFlags |=
+                    WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED;
+        }
+        lp.format = PixelFormat.TRANSLUCENT;
+        lp.setTitle("PointerLocation - display " + getDisplayId());
+        lp.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
+        final WindowManager wm = mContext.getSystemService(WindowManager.class);
+        wm.addView(mPointerLocationView, lp);
+        mDisplayContent.registerPointerEventListener(mPointerLocationView);
+    }
+
+    private void disablePointerLocation() {
+        if (mPointerLocationView == null) {
+            return;
+        }
+
+        mDisplayContent.unregisterPointerEventListener(mPointerLocationView);
+        final WindowManager wm = mContext.getSystemService(WindowManager.class);
+        wm.removeView(mPointerLocationView);
+        mPointerLocationView = null;
     }
 }

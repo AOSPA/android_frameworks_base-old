@@ -16,6 +16,7 @@
 
 package android.net;
 
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
@@ -112,7 +113,8 @@ public final class RouteInfo implements Parcelable {
      */
     @SystemApi
     @TestApi
-    public RouteInfo(IpPrefix destination, InetAddress gateway, String iface, int type) {
+    public RouteInfo(@Nullable IpPrefix destination, @Nullable InetAddress gateway,
+            @Nullable String iface, int type) {
         switch (type) {
             case RTN_UNICAST:
             case RTN_UNREACHABLE:
@@ -486,7 +488,7 @@ public final class RouteInfo implements Parcelable {
     /**
      * Implement the Parcelable interface.
      */
-    public static final Creator<RouteInfo> CREATOR =
+    public static final @android.annotation.NonNull Creator<RouteInfo> CREATOR =
         new Creator<RouteInfo>() {
         public RouteInfo createFromParcel(Parcel in) {
             IpPrefix dest = in.readParcelable(null);

@@ -27,6 +27,7 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
+import android.app.admin.DevicePolicyEventLogger;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.content.Context;
 import android.content.Intent;
@@ -59,6 +60,7 @@ import android.os.RemoteException;
 import android.os.SELinux;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
+import android.stats.devicepolicy.DevicePolicyEnums;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.TextUtils;
@@ -121,6 +123,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
     /** Automatically destroy sessions older than this */
     private static final long MAX_AGE_MILLIS = 3 * DateUtils.DAY_IN_MILLIS;
+    /** Automatically destroy staged sessions that have not changed state in this time */
+    private static final long MAX_TIME_SINCE_UPDATE_MILLIS = 7 * DateUtils.DAY_IN_MILLIS;
     /** Upper bound on number of active sessions for a UID */
     private static final long MAX_ACTIVE_SESSIONS = 1024;
     /** Upper bound on number of historical sessions for a UID */
@@ -205,7 +209,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         mApexManager = am;
 
-        mStagingManager = new StagingManager(pm, this, am, context);
+        mStagingManager = new StagingManager(this, am, context);
     }
 
     boolean okToSendBroadcasts()  {
@@ -355,11 +359,19 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         }
 
                         final long age = System.currentTimeMillis() - session.createdMillis;
-
+                        final long timeSinceUpdate =
+                                System.currentTimeMillis() - session.updatedMillis;
                         final boolean valid;
-                        if (age >= MAX_AGE_MILLIS) {
-                            Slog.w(TAG, "Abandoning old session first created at "
-                                    + session.createdMillis);
+                        if (session.isStaged()) {
+                            if (timeSinceUpdate >= MAX_TIME_SINCE_UPDATE_MILLIS
+                                    && session.isStagedAndInTerminalState()) {
+                                valid = false;
+                            } else {
+                                valid = true;
+                            }
+                        } else if (age >= MAX_AGE_MILLIS) {
+                            Slog.w(TAG, "Abandoning old session created at "
+                                        + session.createdMillis);
                             valid = false;
                         } else {
                             valid = true;
@@ -482,6 +494,12 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             }
         }
 
+        if (callingUid == Process.SYSTEM_UID) {
+            params.installFlags |= PackageManager.INSTALL_ALLOW_DOWNGRADE;
+        } else {
+            params.installFlags &= ~PackageManager.INSTALL_ALLOW_DOWNGRADE;
+        }
+
         boolean isApex = (params.installFlags & PackageManager.INSTALL_APEX) != 0;
         if (params.isStaged || isApex) {
             mContext.enforceCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES, TAG);
@@ -584,7 +602,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
                 mInstallThread.getLooper(), mStagingManager, sessionId, userId,
                 installerPackageName, callingUid, params, createdMillis, stageDir, stageCid, false,
-                false, null, SessionInfo.INVALID_ID, false, false, false,
+                false, false, null, SessionInfo.INVALID_ID, false, false, false,
                 SessionInfo.STAGED_SESSION_NO_ERROR, "");
 
         synchronized (mSessions) {
@@ -805,6 +823,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
+            DevicePolicyEventLogger
+                    .createEvent(DevicePolicyEnums.UNINSTALL_PACKAGE)
+                    .setAdmin(callerPackageName)
+                    .write();
         } else {
             ApplicationInfo appInfo = mPm.getApplicationInfo(callerPackageName, 0, userId);
             if (appInfo.targetSdkVersion >= Build.VERSION_CODES.P) {
@@ -1185,6 +1207,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
 
         public void onStagedSessionChanged(PackageInstallerSession session) {
+            session.markUpdated();
             writeSessionsAsync();
             if (mOkToSendBroadcasts) {
                 mPm.sendSessionUpdatedBroadcast(session.generateInfo(false),

@@ -145,6 +145,7 @@ import android.hardware.configstore.V1_0.OptionalBool;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManager;
+import android.hardware.input.InputManagerInternal;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -202,6 +203,7 @@ import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
 import android.view.IRecentsAnimationRunner;
 import android.view.IRotationWatcher;
+import android.view.ISystemGestureExclusionListener;
 import android.view.IWallpaperVisibilityListener;
 import android.view.IWindow;
 import android.view.IWindowId;
@@ -232,9 +234,11 @@ import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
+import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.LatencyTracker;
@@ -272,6 +276,7 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 
 /** {@hide} */
 public class WindowManagerService extends IWindowManager.Stub
@@ -416,6 +421,14 @@ public class WindowManagerService extends IWindowManager.Stub
         @Override
         public void dumpCritical(FileDescriptor fd, PrintWriter pw, String[] args,
                 boolean asProto) {
+            // Bugreport dumps the trace 2x, 1x as proto and 1x as text. Save file to disk only 1x.
+            if (asProto && mWindowTracing.isEnabled()) {
+                mWindowTracing.stopTrace(null, false /* writeToFile */);
+                BackgroundThread.getHandler().post(() -> {
+                    mWindowTracing.writeTraceToFile();
+                    mWindowTracing.startTrace(null);
+                });
+            }
             doDump(fd, pw, new String[] {"-a"}, asProto);
         }
 
@@ -682,6 +695,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 Settings.Secure.getUriFor(Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS);
         private final Uri mPolicyControlUri =
                 Settings.Global.getUriFor(Settings.Global.POLICY_CONTROL);
+        private final Uri mPointerLocationUri =
+                Settings.System.getUriFor(Settings.System.POINTER_LOCATION);
 
         public SettingsObserver() {
             super(new Handler());
@@ -696,8 +711,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mImmersiveModeConfirmationsUri, false, this,
                     UserHandle.USER_ALL);
-            resolver.registerContentObserver(mPolicyControlUri, false, this,
-                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(mPolicyControlUri, false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(mPointerLocationUri, false, this, UserHandle.USER_ALL);
         }
 
         @Override
@@ -713,6 +728,11 @@ public class WindowManagerService extends IWindowManager.Stub
 
             if (mDisplayInversionEnabledUri.equals(uri)) {
                 updateCircularDisplayMaskIfNeeded();
+                return;
+            }
+
+            if (mPointerLocationUri.equals(uri)) {
+                updatePointerLocation();
                 return;
             }
 
@@ -742,6 +762,22 @@ public class WindowManagerService extends IWindowManager.Stub
                 updateRotation(false /* alwaysSendConfiguration */, false /* forceRelayout */);
             }
         }
+
+        void updatePointerLocation() {
+            ContentResolver resolver = mContext.getContentResolver();
+            final boolean enablePointerLocation = Settings.System.getIntForUser(resolver,
+                    Settings.System.POINTER_LOCATION, 0, UserHandle.USER_CURRENT) != 0;
+
+            if (mPointerLocationEnabled == enablePointerLocation) {
+                return;
+            }
+            mPointerLocationEnabled = enablePointerLocation;
+            synchronized (mGlobalLock) {
+                mRoot.forAllDisplayPolicies(PooledLambda.obtainConsumer(
+                        DisplayPolicy::setPointerLocationEnabled, PooledLambda.__(),
+                        mPointerLocationEnabled));
+            }
+        }
     }
 
     PowerManager mPowerManager;
@@ -751,30 +787,34 @@ public class WindowManagerService extends IWindowManager.Stub
     private float mTransitionAnimationScaleSetting = 1.0f;
     private float mAnimatorDurationScaleSetting = 1.0f;
     private boolean mAnimationsDisabled = false;
+    boolean mPointerLocationEnabled = false;
 
     final InputManagerService mInputManager;
     final DisplayManagerInternal mDisplayManagerInternal;
     final DisplayManager mDisplayManager;
     final ActivityTaskManagerService mAtmService;
 
-    // Indicates whether this device supports wide color gamut / HDR rendering
+    /** Corner radius that windows should have in order to match the display. */
+    final float mWindowCornerRadius;
+
+    /** Indicates whether this device supports wide color gamut / HDR rendering */
     private boolean mHasWideColorGamutSupport;
     private boolean mHasHdrSupport;
 
-    // Who is holding the screen on.
+    /** Who is holding the screen on. */
     private Session mHoldingScreenOn;
     private PowerManager.WakeLock mHoldingScreenWakeLock;
 
-    // Whether or not a layout can cause a wake up when theater mode is enabled.
+    /** Whether or not a layout can cause a wake up when theater mode is enabled. */
     boolean mAllowTheaterModeWakeFromLayout;
 
     final TaskPositioningController mTaskPositioningController;
     final DragDropController mDragDropController;
 
-    // For frozen screen animations.
+    /** For frozen screen animations. */
     private int mExitAnimId, mEnterAnimId;
 
-    // The display that the rotation animation is applying to.
+    /** The display that the rotation animation is applying to. */
     private int mFrozenDisplayId;
 
     /** Skip repeated AppWindowTokens initialization. Note that AppWindowsToken's version of this
@@ -981,7 +1021,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mInputManager = inputManager; // Must be before createDisplayContentLocked.
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
         mDisplayWindowSettings = new DisplayWindowSettings(this);
-
+        mWindowCornerRadius = ScreenDecorationsUtils.getWindowCornerRadius(context.getResources());
 
         mTransactionFactory = transactionFactory;
         mTransaction = mTransactionFactory.make();
@@ -1178,8 +1218,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         + displayId + ".  Aborting.");
                 return WindowManagerGlobal.ADD_INVALID_DISPLAY;
             }
-            if (!displayContent.hasAccess(session.mUid)
-                    && !mDisplayManagerInternal.isUidPresentOnDisplay(session.mUid, displayId)) {
+            if (!displayContent.hasAccess(session.mUid)) {
                 Slog.w(TAG_WM, "Attempted to add window to a display for which the application "
                         + "does not have access: " + displayId + ".  Aborting.");
                 return WindowManagerGlobal.ADD_INVALID_DISPLAY;
@@ -1499,7 +1538,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             if (displayPolicy.getLayoutHintLw(win.mAttrs, taskBounds, displayFrames, floatingStack,
                     outFrame, outContentInsets, outStableInsets, outOutsets, outDisplayCutout)) {
-                res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_NAV_BAR;
+                res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_SYSTEM_BARS;
             }
             outInsetsState.set(displayContent.getInsetsStateController().getInsetsForDispatch(win));
 
@@ -1985,6 +2024,10 @@ public class WindowManagerService extends IWindowManager.Stub
                     updateNonSystemOverlayWindowsVisibilityIfNeeded(
                             win, win.mWinAnimator.getShown());
                 }
+                if ((attrChanges & (WindowManager.LayoutParams.PRIVATE_FLAGS_CHANGED)) != 0) {
+                    winAnimator.setColorSpaceAgnosticLocked((win.mAttrs.privateFlags
+                            & WindowManager.LayoutParams.PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC) != 0);
+                }
             }
 
             if (DEBUG_LAYOUT) Slog.v(TAG_WM, "Relayout " + win + ": viewVisibility=" + viewVisibility
@@ -2167,8 +2210,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 winAnimator.mReportSurfaceResized = false;
                 result |= WindowManagerGlobal.RELAYOUT_RES_SURFACE_RESIZED;
             }
-            if (displayPolicy.isNavBarForcedShownLw(win)) {
-                result |= WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_NAV_BAR;
+            if (displayPolicy.areSystemBarsForcedShownLw(win)) {
+                result |= WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS;
             }
             if (!win.isGoneForLayoutLw()) {
                 win.mResizedWhileGone = false;
@@ -2831,8 +2874,13 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public boolean isKeyguardSecure() {
-        int userId = UserHandle.getCallingUserId();
+    public boolean isKeyguardSecure(int userId) {
+        if (userId != UserHandle.getCallingUserId()
+                && !checkCallingPermission(Manifest.permission.INTERACT_ACROSS_USERS,
+                "isKeyguardSecure")) {
+            throw new SecurityException("Requires INTERACT_ACROSS_USERS permission");
+        }
+
         long origId = Binder.clearCallingIdentity();
         try {
             return mPolicy.isKeyguardSecure(userId);
@@ -3791,6 +3839,42 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
+    public void registerSystemGestureExclusionListener(ISystemGestureExclusionListener listener,
+            int displayId) {
+        synchronized (mGlobalLock) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent == null) {
+                throw new IllegalArgumentException("Trying to register visibility event "
+                        + "for invalid display: " + displayId);
+            }
+            displayContent.registerSystemGestureExclusionListener(listener);
+        }
+    }
+
+    @Override
+    public void unregisterSystemGestureExclusionListener(ISystemGestureExclusionListener listener,
+            int displayId) {
+        synchronized (mGlobalLock) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent == null) {
+                throw new IllegalArgumentException("Trying to register visibility event "
+                        + "for invalid display: " + displayId);
+            }
+            displayContent.unregisterSystemGestureExclusionListener(listener);
+        }
+    }
+
+    void reportSystemGestureExclusionChanged(Session session, IWindow window,
+            List<Rect> exclusionRects) {
+        synchronized (mGlobalLock) {
+            final WindowState win = windowForClientLocked(session, window, true);
+            if (win.setSystemGestureExclusion(exclusionRects)) {
+                win.getDisplayContent().updateSystemGestureExclusion();
+            }
+        }
+    }
+
+    @Override
     public void registerDisplayFoldListener(IDisplayFoldListener listener) {
         mPolicy.registerDisplayFoldListener(listener);
     }
@@ -4366,6 +4450,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mHasWideColorGamutSupport = queryWideColorGamutSupport();
         mHasHdrSupport = queryHdrSupport();
         UiThread.getHandler().post(mSettingsObserver::updateSystemUiSettings);
+        UiThread.getHandler().post(mSettingsObserver::updatePointerLocation);
         IVrManager vrManager = IVrManager.Stub.asInterface(
                 ServiceManager.getService(Context.VR_SERVICE));
         if (vrManager != null) {
@@ -5582,6 +5667,19 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    @Override
+    public void setForceShowSystemBars(boolean show) {
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Caller does not hold permission "
+                    + android.Manifest.permission.STATUS_BAR);
+        }
+        synchronized (mGlobalLock) {
+            mRoot.forAllDisplayPolicies(PooledLambda.obtainConsumer(
+                    DisplayPolicy::setForceShowSystemBars, PooledLambda.__(), show));
+        }
+    }
+
     public void setNavBarVirtualKeyHapticFeedbackEnabled(boolean enabled) {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -6207,9 +6305,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 return;
             } else if ("trace".equals(cmd)) {
                 dumpTraceStatus(pw);
-                synchronized (mGlobalLock) {
-                    mWindowTracing.writeTraceToFile();
-                }
                 return;
             } else {
                 // Dumping a single name?
@@ -6800,7 +6895,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         + "not exist: " + displayId);
                 return false;
             }
-            return mDisplayWindowSettings.shouldShowSystemDecorsLocked(displayContent);
+            return displayContent.supportsSystemDecorations();
         }
     }
 
@@ -7269,6 +7364,13 @@ public class WindowManagerService extends IWindowManager.Stub
                 return Display.INVALID_DISPLAY;
             }
         }
+
+        @Override
+        public boolean shouldShowSystemDecorOnDisplay(int displayId) {
+            synchronized (mGlobalLock) {
+                return WindowManagerService.this.shouldShowSystemDecors(displayId);
+            }
+        }
     }
 
     void registerAppFreezeListener(AppFreezeListener listener) {
@@ -7455,15 +7557,28 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public boolean injectInputAfterTransactionsApplied(InputEvent ev, int mode) {
-        waitForAnimationsToComplete();
-
-        synchronized (mGlobalLock) {
-            mWindowPlacerLocked.performSurfacePlacementIfScheduled();
+        boolean shouldWaitForAnimComplete = false;
+        if (ev instanceof KeyEvent) {
+            KeyEvent keyEvent = (KeyEvent) ev;
+            shouldWaitForAnimComplete = keyEvent.getSource() == InputDevice.SOURCE_MOUSE
+                    || keyEvent.getAction() == KeyEvent.ACTION_DOWN;
+        } else if (ev instanceof MotionEvent) {
+            MotionEvent motionEvent = (MotionEvent) ev;
+            shouldWaitForAnimComplete = motionEvent.getSource() == InputDevice.SOURCE_MOUSE
+                    || motionEvent.getAction() == MotionEvent.ACTION_DOWN;
         }
 
-        new SurfaceControl.Transaction().syncInputWindows().apply(true);
+        if (shouldWaitForAnimComplete) {
+            waitForAnimationsToComplete();
 
-        return mInputManager.injectInputEvent(ev, mode);
+            synchronized (mGlobalLock) {
+                mWindowPlacerLocked.performSurfacePlacementIfScheduled();
+            }
+
+            new SurfaceControl.Transaction().syncInputWindows().apply(true);
+        }
+
+        return LocalServices.getService(InputManagerInternal.class).injectInputEvent(ev, mode);
     }
 
     private void waitForAnimationsToComplete() {

@@ -6488,6 +6488,9 @@
         <!-- Special option for window animations: show the wallpaper behind when running this
              animation. -->
         <attr name="showWallpaper" format="boolean" />
+        <!-- Special option for window animations: whether window should have rounded corners.
+             @see ScreenDecorationsUtils#getWindowCornerRadius(Resources) -->
+        <attr name="hasRoundedCorners" format="boolean" />
     </declare-styleable>
 
     <declare-styleable name="AnimationSet">
@@ -8105,7 +8108,7 @@
 
     <!-- Use <code>autofill-service</code> as the root tag of the XML resource that describes a
          {@link android.service.autofill.AutofillService}, which is referenced from its
-         {@link android.service.autofill#SERVICE_META_DATA} meta-data entry.
+         {@link android.service.autofill.AutofillService#SERVICE_META_DATA} meta-data entry.
     -->
     <declare-styleable name="AutofillService">
         <!-- Fully qualified class name of an activity that allows the user to modify
@@ -8128,6 +8131,23 @@
              android.content.pm.PackageInfo#getLongVersionCode()} for the target package.
         -->
         <attr name="maxLongVersionCode" format="string" />
+    </declare-styleable>
+
+    <!-- =============================== -->
+    <!-- Content Capture attributes -->
+    <!-- =============================== -->
+    <eat-comment />
+
+    <!-- Use <code>content-capture-service</code> as the root tag of the XML resource that describes
+         a {@link android.service.contentcapture.ContentCaptureService}, which is referenced from
+         its {@link android.service.contentcapture.ContentCaptureService#SERVICE_META_DATA}
+         meta-data entry.
+         @hide @SystemApi
+    -->
+    <declare-styleable name="ContentCaptureService">
+        <!-- Fully qualified class name of an activity that allows the user to modify
+             the settings for this service. -->
+        <attr name="settingsActivity" />
     </declare-styleable>
 
     <!-- =============================== -->

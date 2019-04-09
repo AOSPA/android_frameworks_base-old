@@ -58,6 +58,7 @@
         <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_sensors_off</xliff:g></item>
     </string-array>
 
     <string translatable="false" name="status_bar_rotate">rotate</string>
@@ -92,6 +93,7 @@
     <string translatable="false" name="status_bar_microphone">microphone</string>
     <string translatable="false" name="status_bar_camera">camera</string>
     <string translatable="false" name="status_bar_airplane">airplane</string>
+    <string translatable="false" name="status_bar_sensors_off">sensors_off</string>
 
     <!-- Flag indicating whether the surface flinger has limited
          alpha compositing functionality in hardware.  If set, the window
@@ -127,7 +129,7 @@
     <bool name="config_sendAudioBecomingNoisy">true</bool>
 
     <!-- Whether Hearing Aid profile is supported -->
-    <bool name="config_hearing_aid_profile_supported">true</bool>
+    <bool name="config_hearing_aid_profile_supported">false</bool>
 
     <!-- Flag to disable all transition animations -->
     <bool name="config_disableTransitionAnimation">false</bool>
@@ -486,22 +488,16 @@
              - the return value of TelephonyManager.getTetherApnRequired()
                determines how the array is further modified:
 
-                   * DUN_REQUIRED
-                     TYPE_MOBILE is removed (if present)
-                     TYPE_MOBILE_HIPRI is removed (if present)
-                     TYPE_MOBILE_DUN is appended (if not already present)
+                   * TRUE (DUN REQUIRED).
+                     TYPE_MOBILE is removed (if present).
+                     TYPE_MOBILE_HIPRI is removed (if present).
+                     TYPE_MOBILE_DUN is appended (if not already present).
 
-                   * DUN_NOT_REQUIRED
-                     TYPE_MOBILE_DUN is removed (if present)
-                     TYPE_MOBILE is appended (if not already present)
-                     TYPE_MOBILE_HIPRI is appended (if not already present)
-
-                   * DUN_UNSPECIFIED
-                     if any of TYPE_MOBILE{,_DUN,_HIPRI} are present:
-                         change nothing
-                     else:
-                         TYPE_MOBILE is appended
-                         TYPE_MOBILE_HIPRI is appended
+                   * FALSE (DUN NOT REQUIRED).
+                     TYPE_MOBILE_DUN is removed (if present).
+                     If both of TYPE_MOBILE{,_HIPRI} are not present:
+                        TYPE_MOBILE is appended.
+                        TYPE_MOBILE_HIPRI is appended.
 
          For other changes applied to this list, now and in the future, see
          com.android.server.connectivity.tethering.TetheringConfiguration.
@@ -660,7 +656,7 @@
     <bool translatable="false" name="config_wifi_framework_enable_associated_network_selection">true</bool>
 
     <!-- Boolean indicating whether single radio chain scan results are to be used for network selection -->
-    <bool translatable="false" name="config_wifi_framework_use_single_radio_chain_scan_results_network_selection">false</bool>
+    <bool translatable="false" name="config_wifi_framework_use_single_radio_chain_scan_results_network_selection">true</bool>
 
     <!-- Boolean indicating that wifi only link configuratios that have exact same credentials (i.e PSK) -->
     <bool translatable="false" name="config_wifi_only_link_same_credential_configurations">true</bool>
@@ -711,6 +707,9 @@
 
     <!-- Indicates that connected MAC randomization is supported on this device -->
     <bool translatable="false" name="config_wifi_connected_mac_randomization_supported">false</bool>
+
+    <!-- Indicates that p2p MAC randomization is supported on this device -->
+    <bool translatable="false" name="config_wifi_p2p_mac_randomization_supported">false</bool>
 
     <!-- Indicates that wifi link probing is supported on this device -->
     <bool translatable="false" name="config_wifi_link_probing_supported">false</bool>
@@ -916,6 +915,11 @@
           enabled. But in environments like real car, default home app may be enough, and in that
           case, this can be disabled (set to false). -->
     <bool name="config_enableCarDockHomeLaunch">true</bool>
+
+    <!-- Control whether to force the display of System UI Bars at all times regardless of
+         System Ui Flags. This can be useful in the Automotive case if there's a requirement for
+         a UI element to be on screen at all times. -->
+    <bool name="config_forceShowSystemBars">false</bool>
 
     <!-- HDMI behavior -->
 
@@ -1956,7 +1960,7 @@
     <!-- The name of the package that will hold the browser role by default. -->
     <string name="config_defaultBrowser" translatable="false">@string/default_browser</string>
     <!-- The name of the package that will hold the dialer role by default. -->
-    <string name="config_defaultDialer" translatable="false">com.android.phone</string>
+    <string name="config_defaultDialer" translatable="false">com.android.dialer</string>
     <!-- The name of the package that will hold the SMS role by default. -->
     <string name="config_defaultSms" translatable="false">@string/default_sms_application</string>
     <!-- Whether the default emergency settings should be shown. -->
@@ -2270,7 +2274,7 @@
 
     <!-- If the sensor that wakes up the lock screen is available or not. -->
     <bool name="config_dozeWakeLockScreenSensorAvailable">false</bool>
-    <integer name="config_dozeWakeLockScreenDebounce">3000</integer>
+    <integer name="config_dozeWakeLockScreenDebounce">1500</integer>
 
     <!-- Control whether the always on display mode is available. This should only be enabled on
          devices where the display has been tuned to be power efficient in DOZE and/or DOZE_SUSPEND
@@ -2929,14 +2933,6 @@
 
     <bool name="config_networkSamplingWakesDevice">true</bool>
 
-    <!-- Home (non-roaming) values for CDMA roaming indicator.
-         Carriers can override this table by resource overlay. If not,
-         the default values come from 3GPP2 C.R1001 table
-         8.1-1. Enhanced Roaming Indicator Number Assignments -->
-    <string-array translatable="false" name="config_cdma_home_system">
-        <item>1</item>
-    </string-array>
-
     <!--From SmsMessage-->
     <!--Support decoding the user data payload as pack GSM 8-bit (a GSM alphabet
         string that's stored in 8-bit unpacked format) characters.-->
@@ -3232,6 +3228,12 @@
          -->
     <integer name="config_navBarOpacityMode">0</integer>
 
+    <!-- Controls the navigation bar interaction mode:
+         0: 3 button mode (back, home, overview buttons)
+         1: 2 button mode (back, home buttons + swipe up for overview)
+         2: gestures only for back, home and overview -->
+    <integer name="config_navBarInteractionMode">0</integer>
+
     <!-- Default insets [LEFT/RIGHTxTOP/BOTTOM] from the screen edge for picture-in-picture windows.
          These values are in DPs and will be converted to pixel sizes internally. -->
     <string translatable="false" name="config_defaultPictureInPictureScreenEdgeInsets">16x16</string>
@@ -3322,6 +3324,9 @@
     <!-- True if the device has no home screen. That is a launcher activity
          where the user can launch other applications from.  -->
     <bool name="config_noHomeScreen">false</bool>
+
+    <!-- True if the device supports system decorations on secondary displays. -->
+    <bool name="config_supportsSystemDecorsOnSecondaryDisplays">true</bool>
 
     <!-- True if the device requires AppWidgetService even if it does not have
          the PackageManager.FEATURE_APP_WIDGETS feature -->
@@ -3530,6 +3535,12 @@
     -->
     <string name="config_defaultAttentionService" translatable="false"></string>
 
+    <!-- The component name for the system-wide captions service.
+         This service must be trusted, as it controls part of the UI of the volume bar.
+         Example: "com.android.captions/.SystemCaptionsService"
+    -->
+    <string name="config_defaultSystemCaptionsService" translatable="false"></string>
+
     <!-- The package name for the incident report approver app.
         This app is usually PermissionController or an app that replaces it.  When
         a bugreport or incident report with EXPLICT-level sharing flags is going to be
@@ -3718,8 +3729,8 @@
 
     <string translatable="false" name="config_batterySaverDeviceSpecificConfig"></string>
 
-    <!-- Package name that should be granted Notification Assistant access -->
-    <string name="config_defaultAssistantAccessPackage" translatable="false">android.ext.services</string>
+    <!-- Component name that should be granted Notification Assistant access -->
+    <string name="config_defaultAssistantAccessComponent" translatable="false">android.ext.services/android.ext.services.notification.Assistant</string>
 
     <bool name="config_supportBluetoothPersistedState">true</bool>
 
@@ -3963,11 +3974,18 @@
         M5,17.5 V12 H3 L7,4.5 V10 h2 L5,17.5 z
     </string>
     <string name="config_batterymeterPowersavePath" translatable="false">
-		M9,10l-2,0l0,-2l-2,0l0,2l-2,0l0,2l2,0l0,2l2,0l0,-2l2,0z
+		M9.75,10l-2.5,0l0,-2.5l-2.5,0l0,2.5l-2.5,0l0,2.5l2.5,0l0,2.5l2.5,0l0,-2.5l2.5,0z
     </string>
 
     <!-- A dual tone battery meter draws the perimeter path twice - once to define the shape
      and a second time clipped to the fill level to indicate charge -->
     <bool name="config_batterymeterDualTone">false</bool>
 
+    <!-- The default peak refresh rate for a given device. Change this value if you want to allow
+         for higher refresh rates to be automatically used out of the box -->
+    <integer name="config_defaultPeakRefreshRate">60</integer>
+
+    <!-- The type of the light sensor to be used by the display framework for things like
+         auto-brightness. If unset, then it just gets the default sensor of type TYPE_LIGHT. -->
+    <string name="config_displayLightSensorType" translatable="false" />
 </resources>

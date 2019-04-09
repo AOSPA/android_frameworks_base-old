@@ -17,6 +17,8 @@
 package android.telephony;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
@@ -26,8 +28,9 @@ import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
-import android.telephony.NetworkRegistrationState.Domain;
-import android.telephony.NetworkRegistrationState.NRStatus;
+import android.telephony.AccessNetworkConstants.TransportType;
+import android.telephony.NetworkRegistrationInfo.Domain;
+import android.telephony.NetworkRegistrationInfo.NRState;
 import android.text.TextUtils;
 
 import java.lang.annotation.Retention;
@@ -50,6 +53,9 @@ import java.util.stream.Collectors;
  *   <li>Operator name, short name and numeric id
  *   <li>Network selection mode
  * </ul>
+ *
+ * For historical reasons this class is not declared as final; however,
+ * it should be treated as though it were final.
  */
 public class ServiceState implements Parcelable {
 
@@ -346,7 +352,7 @@ public class ServiceState implements Parcelable {
      * Reference: 3GPP TS 36.104 5.4.3 */
     private int mLteEarfcnRsrpBoost = 0;
 
-    private List<NetworkRegistrationState> mNetworkRegistrationStates = new ArrayList<>();
+    private List<NetworkRegistrationInfo> mNetworkRegistrationInfos = new ArrayList<>();
 
     /**
      * get String description of roaming type
@@ -429,14 +435,18 @@ public class ServiceState implements Parcelable {
         mCellBandwidths = s.mCellBandwidths == null ? null :
                 Arrays.copyOf(s.mCellBandwidths, s.mCellBandwidths.length);
         mLteEarfcnRsrpBoost = s.mLteEarfcnRsrpBoost;
-        mNetworkRegistrationStates = s.mNetworkRegistrationStates == null ? null :
-                new ArrayList<>(s.mNetworkRegistrationStates);
+        mNetworkRegistrationInfos = s.mNetworkRegistrationInfos == null ? null :
+                new ArrayList<>(s.mNetworkRegistrationInfos);
         mNrFrequencyRange = s.mNrFrequencyRange;
     }
 
     /**
      * Construct a ServiceState object from the given parcel.
+     *
+     * @deprecated The constructor takes parcel should not be public at the beginning. Use
+     * {@link #ServiceState()} instead.
      */
+    @Deprecated
     public ServiceState(Parcel in) {
         mVoiceRegState = in.readInt();
         mDataRegState = in.readInt();
@@ -459,8 +469,8 @@ public class ServiceState implements Parcelable {
         mIsEmergencyOnly = in.readInt() != 0;
         mIsUsingCarrierAggregation = in.readInt() != 0;
         mLteEarfcnRsrpBoost = in.readInt();
-        mNetworkRegistrationStates = new ArrayList<>();
-        in.readList(mNetworkRegistrationStates, NetworkRegistrationState.class.getClassLoader());
+        mNetworkRegistrationInfos = new ArrayList<>();
+        in.readList(mNetworkRegistrationInfos, NetworkRegistrationInfo.class.getClassLoader());
         mChannelNumber = in.readInt();
         mCellBandwidths = in.createIntArray();
         mNrFrequencyRange = in.readInt();
@@ -488,7 +498,7 @@ public class ServiceState implements Parcelable {
         out.writeInt(mIsEmergencyOnly ? 1 : 0);
         out.writeInt(mIsUsingCarrierAggregation ? 1 : 0);
         out.writeInt(mLteEarfcnRsrpBoost);
-        out.writeList(mNetworkRegistrationStates);
+        out.writeList(mNetworkRegistrationInfos);
         out.writeInt(mChannelNumber);
         out.writeIntArray(mCellBandwidths);
         out.writeInt(mNrFrequencyRange);
@@ -498,7 +508,7 @@ public class ServiceState implements Parcelable {
         return 0;
     }
 
-    public static final Parcelable.Creator<ServiceState> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<ServiceState> CREATOR =
             new Parcelable.Creator<ServiceState>() {
         public ServiceState createFromParcel(Parcel in) {
             return new ServiceState(in);
@@ -613,8 +623,8 @@ public class ServiceState implements Parcelable {
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public @RoamingType int getVoiceRoamingType() {
-        final NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_CS, AccessNetworkConstants.TransportType.WWAN);
+        final NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_CS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState != null) {
             return regState.getRoamingType();
         }
@@ -637,10 +647,11 @@ public class ServiceState implements Parcelable {
      * @hide
      */
     public boolean getDataRoamingFromRegistration() {
-        final NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN);
+        final NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState != null) {
-            return (regState.getRegState() == NetworkRegistrationState.REG_STATE_ROAMING);
+            return regState.getRegistrationState()
+                    == NetworkRegistrationInfo.REGISTRATION_STATE_ROAMING;
         }
         return false;
     }
@@ -652,8 +663,8 @@ public class ServiceState implements Parcelable {
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public @RoamingType int getDataRoamingType() {
-        final NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN);
+        final NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState != null) {
             return regState.getRoamingType();
         }
@@ -831,7 +842,7 @@ public class ServiceState implements Parcelable {
                 mVoiceRegState,
                 mDataRegState,
                 mChannelNumber,
-                mCellBandwidths,
+                Arrays.hashCode(mCellBandwidths),
                 mVoiceOperatorAlphaLong,
                 mVoiceOperatorAlphaShort,
                 mVoiceOperatorNumeric,
@@ -851,7 +862,7 @@ public class ServiceState implements Parcelable {
                 mIsEmergencyOnly,
                 mIsUsingCarrierAggregation,
                 mLteEarfcnRsrpBoost,
-                mNetworkRegistrationStates,
+                mNetworkRegistrationInfos,
                 mNrFrequencyRange);
     }
 
@@ -881,9 +892,9 @@ public class ServiceState implements Parcelable {
                         s.mCdmaDefaultRoamingIndicator)
                 && mIsEmergencyOnly == s.mIsEmergencyOnly
                 && mIsUsingCarrierAggregation == s.mIsUsingCarrierAggregation)
-                && (mNetworkRegistrationStates == null ? s.mNetworkRegistrationStates == null :
-                        s.mNetworkRegistrationStates != null &&
-                        mNetworkRegistrationStates.containsAll(s.mNetworkRegistrationStates))
+                && (mNetworkRegistrationInfos == null
+                ? s.mNetworkRegistrationInfos == null : s.mNetworkRegistrationInfos != null
+                && mNetworkRegistrationInfos.containsAll(s.mNetworkRegistrationInfos))
                 && mNrFrequencyRange == s.mNrFrequencyRange;
     }
 
@@ -1036,7 +1047,7 @@ public class ServiceState implements Parcelable {
             .append(", mIsEmergencyOnly=").append(mIsEmergencyOnly)
             .append(", mIsUsingCarrierAggregation=").append(mIsUsingCarrierAggregation)
             .append(", mLteEarfcnRsrpBoost=").append(mLteEarfcnRsrpBoost)
-            .append(", mNetworkRegistrationStates=").append(mNetworkRegistrationStates)
+            .append(", mNetworkRegistrationInfos=").append(mNetworkRegistrationInfos)
             .append(", mNrFrequencyRange=").append(mNrFrequencyRange)
             .append("}").toString();
     }
@@ -1066,7 +1077,7 @@ public class ServiceState implements Parcelable {
         mIsEmergencyOnly = false;
         mIsUsingCarrierAggregation = false;
         mLteEarfcnRsrpBoost = 0;
-        mNetworkRegistrationStates = new ArrayList<>();
+        mNetworkRegistrationInfos = new ArrayList<>();
         mNrFrequencyRange = FREQUENCY_RANGE_UNKNOWN;
     }
 
@@ -1121,16 +1132,16 @@ public class ServiceState implements Parcelable {
     }
 
     /** @hide */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
+    @TestApi
     public void setVoiceRoamingType(@RoamingType int type) {
-        NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_CS, AccessNetworkConstants.TransportType.WWAN);
+        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_CS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState == null) {
-            regState = new NetworkRegistrationState(
-                    NetworkRegistrationState.DOMAIN_CS, AccessNetworkConstants.TransportType.WWAN,
-                    ServiceState.ROAMING_TYPE_NOT_ROAMING, TelephonyManager.NETWORK_TYPE_UNKNOWN, 0,
-                    false, null, null);
-            addNetworkRegistrationState(regState);
+            regState = new NetworkRegistrationInfo.Builder()
+                    .setDomain(NetworkRegistrationInfo.DOMAIN_CS)
+                    .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
+                    .build();
+            addNetworkRegistrationInfo(regState);
         }
         regState.setRoamingType(type);
     }
@@ -1142,16 +1153,16 @@ public class ServiceState implements Parcelable {
     }
 
     /** @hide */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
+    @TestApi
     public void setDataRoamingType(@RoamingType int type) {
-        NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN);
+        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState == null) {
-            regState = new NetworkRegistrationState(
-                    NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN,
-                    ServiceState.ROAMING_TYPE_NOT_ROAMING, TelephonyManager.NETWORK_TYPE_UNKNOWN, 0,
-                    false, null, null);
-            addNetworkRegistrationState(regState);
+            regState = new NetworkRegistrationInfo.Builder()
+                    .setDomain(NetworkRegistrationInfo.DOMAIN_PS)
+                    .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
+                    .build();
+            addNetworkRegistrationInfo(regState);
         }
         regState.setRoamingType(type);
     }
@@ -1319,14 +1330,14 @@ public class ServiceState implements Parcelable {
         this.mRilVoiceRadioTechnology = rt;
 
         // sync to network registration state
-        NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_CS, AccessNetworkConstants.TransportType.WWAN);
+        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_CS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState == null) {
-            regState = new NetworkRegistrationState(
-                    NetworkRegistrationState.DOMAIN_CS, AccessNetworkConstants.TransportType.WWAN,
-                    ServiceState.ROAMING_TYPE_NOT_ROAMING, TelephonyManager.NETWORK_TYPE_UNKNOWN,
-                    0, false, null, null);
-            addNetworkRegistrationState(regState);
+            regState = new NetworkRegistrationInfo.Builder()
+                    .setDomain(NetworkRegistrationInfo.DOMAIN_CS)
+                    .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
+                    .build();
+            addNetworkRegistrationInfo(regState);
         }
         regState.setAccessNetworkTechnology(
                 rilRadioTechnologyToNetworkType(mRilVoiceRadioTechnology));
@@ -1346,15 +1357,15 @@ public class ServiceState implements Parcelable {
                 mRilDataRadioTechnology);
 
         // sync to network registration state
-        NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN);
+        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
 
         if (regState == null) {
-            regState = new NetworkRegistrationState(
-                    NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN,
-                    ServiceState.ROAMING_TYPE_NOT_ROAMING, TelephonyManager.NETWORK_TYPE_UNKNOWN,
-                    0, false, null, null);
-            addNetworkRegistrationState(regState);
+            regState = new NetworkRegistrationInfo.Builder()
+                    .setDomain(NetworkRegistrationInfo.DOMAIN_PS)
+                    .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
+                    .build();
+            addNetworkRegistrationInfo(regState);
         }
         regState.setAccessNetworkTechnology(
                 rilRadioTechnologyToNetworkType(mRilDataRadioTechnology));
@@ -1379,15 +1390,15 @@ public class ServiceState implements Parcelable {
     }
 
     /**
-     * Get the NR 5G status of the mobile data network.
-     * @return the NR 5G status.
+     * Get the NR 5G state of the mobile data network.
+     * @return the NR 5G state.
      * @hide
      */
-    public @NRStatus int getNrStatus() {
-        final NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN);
-        if (regState == null) return NetworkRegistrationState.NR_STATUS_NONE;
-        return regState.getNrStatus();
+    public @NRState int getNrState() {
+        final NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+        if (regState == null) return NetworkRegistrationInfo.NR_STATE_NONE;
+        return regState.getNrState();
     }
 
     /**
@@ -1569,19 +1580,19 @@ public class ServiceState implements Parcelable {
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public @TelephonyManager.NetworkType int getDataNetworkType() {
-        final NetworkRegistrationState iwlanRegState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WLAN);
-        if (iwlanRegState != null
-                && iwlanRegState.getRegState() == NetworkRegistrationState.REG_STATE_HOME) {
+        final NetworkRegistrationInfo iwlanRegState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WLAN);
+        if (iwlanRegState != null && iwlanRegState.getRegistrationState()
+                == NetworkRegistrationInfo.REGISTRATION_STATE_HOME) {
             // If the device is on IWLAN, return IWLAN as the network type. This is to simulate the
             // behavior of legacy mode device. In the future caller should use
-            // getNetworkRegistrationState() to retrieve the actual data network type on cellular
+            // requestNetworkRegistrationInfo() to retrieve the actual data network type on cellular
             // or on IWLAN.
             return iwlanRegState.getAccessNetworkTechnology();
         }
 
-        final NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_PS, AccessNetworkConstants.TransportType.WWAN);
+        final NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState != null) {
             return regState.getAccessNetworkTechnology();
         }
@@ -1591,8 +1602,8 @@ public class ServiceState implements Parcelable {
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public @TelephonyManager.NetworkType int getVoiceNetworkType() {
-        final NetworkRegistrationState regState = getNetworkRegistrationState(
-                NetworkRegistrationState.DOMAIN_CS, AccessNetworkConstants.TransportType.WWAN);
+        final NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+                NetworkRegistrationInfo.DOMAIN_CS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
         if (regState != null) {
             return regState.getAccessNetworkTechnology();
         }
@@ -1755,49 +1766,36 @@ public class ServiceState implements Parcelable {
     }
 
     /**
-     * Get all of the available network registration states.
+     * Get all of the available network registration info.
      *
-     * @return List of {@link NetworkRegistrationState}
+     * @return List of {@link NetworkRegistrationInfo}
      * @hide
      */
+    @NonNull
     @SystemApi
-    public List<NetworkRegistrationState> getNetworkRegistrationStates() {
-        synchronized (mNetworkRegistrationStates) {
-            return new ArrayList<>(mNetworkRegistrationStates);
+    public List<NetworkRegistrationInfo> getNetworkRegistrationInfoList() {
+        synchronized (mNetworkRegistrationInfos) {
+            return new ArrayList<>(mNetworkRegistrationInfos);
         }
     }
 
     /**
-     * Get the network registration states for the transport type.
+     * Get the network registration info list for the transport type.
      *
-     * @param transportType The {@link AccessNetworkConstants.TransportType transport type}
-     * @return List of {@link NetworkRegistrationState}
-     * @hide
-     *
-     * @deprecated Use {@link #getNetworkRegistrationStatesFromTransportType(int)}
-     */
-    @Deprecated
-    @SystemApi
-    public List<NetworkRegistrationState> getNetworkRegistrationStates(int transportType) {
-        return getNetworkRegistrationStatesForTransportType(transportType);
-    }
-
-    /**
-     * Get the network registration states for the transport type.
-     *
-     * @param transportType The {@link AccessNetworkConstants.TransportType transport type}
-     * @return List of {@link NetworkRegistrationState}
+     * @param transportType The transport type
+     * @return List of {@link NetworkRegistrationInfo}
      * @hide
      */
+    @NonNull
     @SystemApi
-    public List<NetworkRegistrationState> getNetworkRegistrationStatesForTransportType(
-            int transportType) {
-        List<NetworkRegistrationState> list = new ArrayList<>();
+    public List<NetworkRegistrationInfo> getNetworkRegistrationInfoListForTransportType(
+            @TransportType int transportType) {
+        List<NetworkRegistrationInfo> list = new ArrayList<>();
 
-        synchronized (mNetworkRegistrationStates) {
-            for (NetworkRegistrationState networkRegistrationState : mNetworkRegistrationStates) {
-                if (networkRegistrationState.getTransportType() == transportType) {
-                    list.add(networkRegistrationState);
+        synchronized (mNetworkRegistrationInfos) {
+            for (NetworkRegistrationInfo networkRegistrationInfo : mNetworkRegistrationInfos) {
+                if (networkRegistrationInfo.getTransportType() == transportType) {
+                    list.add(networkRegistrationInfo);
                 }
             }
         }
@@ -1806,21 +1804,22 @@ public class ServiceState implements Parcelable {
     }
 
     /**
-     * Get the network registration states for the network domain.
+     * Get the network registration info list for the network domain.
      *
-     * @param domain The network {@link NetworkRegistrationState.Domain domain}
-     * @return List of {@link NetworkRegistrationState}
+     * @param domain The network {@link NetworkRegistrationInfo.Domain domain}
+     * @return List of {@link NetworkRegistrationInfo}
      * @hide
      */
+    @NonNull
     @SystemApi
-    public List<NetworkRegistrationState> getNetworkRegistrationStatesForDomain(
+    public List<NetworkRegistrationInfo> getNetworkRegistrationInfoListForDomain(
             @Domain int domain) {
-        List<NetworkRegistrationState> list = new ArrayList<>();
+        List<NetworkRegistrationInfo> list = new ArrayList<>();
 
-        synchronized (mNetworkRegistrationStates) {
-            for (NetworkRegistrationState networkRegistrationState : mNetworkRegistrationStates) {
-                if (networkRegistrationState.getDomain() == domain) {
-                    list.add(networkRegistrationState);
+        synchronized (mNetworkRegistrationInfos) {
+            for (NetworkRegistrationInfo networkRegistrationInfo : mNetworkRegistrationInfos) {
+                if (networkRegistrationInfo.getDomain() == domain) {
+                    list.add(networkRegistrationInfo);
                 }
             }
         }
@@ -1831,37 +1830,21 @@ public class ServiceState implements Parcelable {
     /**
      * Get the network registration state for the transport type and network domain.
      *
-     * @param domain The network {@link NetworkRegistrationState.Domain domain}
-     * @param transportType The {@link AccessNetworkConstants.TransportType transport type}
-     * @return The matching {@link NetworkRegistrationState}
-     * @hide
-     *
-     * @deprecated Use {@link #getNetworkRegistrationState(int, int)}
-     */
-    @Deprecated
-    @SystemApi
-    public NetworkRegistrationState getNetworkRegistrationStates(@Domain int domain,
-                                                                 int transportType) {
-        return getNetworkRegistrationState(domain, transportType);
-    }
-
-    /**
-     * Get the network registration state for the transport type and network domain.
-     *
-     * @param domain The network {@link NetworkRegistrationState.Domain domain}
-     * @param transportType The {@link AccessNetworkConstants.TransportType transport type}
-     * @return The matching {@link NetworkRegistrationState}
+     * @param domain The network {@link NetworkRegistrationInfo.Domain domain}
+     * @param transportType The transport type
+     * @return The matching {@link NetworkRegistrationInfo}
      * @hide
      *
      */
+    @Nullable
     @SystemApi
-    public NetworkRegistrationState getNetworkRegistrationState(@Domain int domain,
-                                                                int transportType) {
-        synchronized (mNetworkRegistrationStates) {
-            for (NetworkRegistrationState networkRegistrationState : mNetworkRegistrationStates) {
-                if (networkRegistrationState.getTransportType() == transportType
-                        && networkRegistrationState.getDomain() == domain) {
-                    return networkRegistrationState;
+    public NetworkRegistrationInfo getNetworkRegistrationInfo(@Domain int domain,
+                                                              @TransportType int transportType) {
+        synchronized (mNetworkRegistrationInfos) {
+            for (NetworkRegistrationInfo networkRegistrationInfo : mNetworkRegistrationInfos) {
+                if (networkRegistrationInfo.getTransportType() == transportType
+                        && networkRegistrationInfo.getDomain() == domain) {
+                    return networkRegistrationInfo;
                 }
             }
         }
@@ -1872,20 +1855,21 @@ public class ServiceState implements Parcelable {
     /**
      * @hide
      */
-    public void addNetworkRegistrationState(NetworkRegistrationState regState) {
+    @TestApi
+    public void addNetworkRegistrationInfo(NetworkRegistrationInfo regState) {
         if (regState == null) return;
 
-        synchronized (mNetworkRegistrationStates) {
-            for (int i = 0; i < mNetworkRegistrationStates.size(); i++) {
-                NetworkRegistrationState curRegState = mNetworkRegistrationStates.get(i);
+        synchronized (mNetworkRegistrationInfos) {
+            for (int i = 0; i < mNetworkRegistrationInfos.size(); i++) {
+                NetworkRegistrationInfo curRegState = mNetworkRegistrationInfos.get(i);
                 if (curRegState.getTransportType() == regState.getTransportType()
                         && curRegState.getDomain() == regState.getDomain()) {
-                    mNetworkRegistrationStates.remove(i);
+                    mNetworkRegistrationInfos.remove(i);
                     break;
                 }
             }
 
-            mNetworkRegistrationStates.add(regState);
+            mNetworkRegistrationInfos.add(regState);
         }
     }
 
@@ -1900,15 +1884,15 @@ public class ServiceState implements Parcelable {
 
     /**
      * Returns a copy of self with location-identifying information removed.
-     * Always clears the NetworkRegistrationState's CellIdentity fields, but if removeCoarseLocation
+     * Always clears the NetworkRegistrationInfo's CellIdentity fields, but if removeCoarseLocation
      * is true, clears other info as well.
      * @hide
      */
     public ServiceState sanitizeLocationInfo(boolean removeCoarseLocation) {
         ServiceState state = new ServiceState(this);
-        if (state.mNetworkRegistrationStates != null) {
-            state.mNetworkRegistrationStates = state.mNetworkRegistrationStates.stream()
-                    .map(NetworkRegistrationState::sanitizeLocationInfo)
+        if (state.mNetworkRegistrationInfos != null) {
+            state.mNetworkRegistrationInfos = state.mNetworkRegistrationInfos.stream()
+                    .map(NetworkRegistrationInfo::sanitizeLocationInfo)
                     .collect(Collectors.toList());
         }
         if (!removeCoarseLocation) return state;

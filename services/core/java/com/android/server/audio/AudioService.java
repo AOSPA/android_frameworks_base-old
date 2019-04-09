@@ -78,6 +78,8 @@ import android.media.IPlaybackConfigDispatcher;
 import android.media.IRecordingConfigDispatcher;
 import android.media.IRingtonePlayer;
 import android.media.IVolumeController;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
 import android.media.MediaPlayer;
 import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnErrorListener;
@@ -94,6 +96,7 @@ import android.media.audiopolicy.AudioVolumeGroups;
 import android.media.audiopolicy.IAudioPolicyCallback;
 import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -186,6 +189,9 @@ public class AudioService extends IAudioService.Stub
 
     /** debug calls to devices APIs */
     protected static final boolean DEBUG_DEVICES = false;
+
+    /** debug SCO modes */
+    protected static final boolean DEBUG_SCO = true;
 
     /** How long to delay before persisting a change in volume/ringer mode. */
     private static final int PERSIST_DELAY = 500;
@@ -3353,7 +3359,11 @@ public class AudioService extends IAudioService.Stub
                 .append(Binder.getCallingPid()).toString();
         Log.i(TAG, "In setSpeakerphoneOn(), on: " + on + ", eventSource: " + eventSource);
 
-        mDeviceBroker.setSpeakerphoneOn(on, eventSource);
+        final boolean stateChanged = mDeviceBroker.setSpeakerphoneOn(on, eventSource);
+        if (stateChanged) {
+            mContext.sendBroadcast(new Intent(AudioManager.ACTION_SPEAKERPHONE_STATE_CHANGED)
+                    .setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY));
+        }
     }
 
     /** @see AudioManager#isSpeakerphoneOn() */
@@ -4067,7 +4077,10 @@ public class AudioService extends IAudioService.Stub
     @Retention(RetentionPolicy.SOURCE)
     public @interface BtProfileConnectionState {}
 
-    public int setBluetoothHearingAidDeviceConnectionState(
+    /**
+     * See AudioManager.setBluetoothHearingAidDeviceConnectionState()
+     */
+    public void setBluetoothHearingAidDeviceConnectionState(
             @NonNull BluetoothDevice device, @BtProfileConnectionState int state,
             boolean suppressNoisyIntent, int musicDevice)
     {
@@ -4079,14 +4092,14 @@ public class AudioService extends IAudioService.Stub
             throw new IllegalArgumentException("Illegal BluetoothProfile state for device "
                     + " (dis)connection, got " + state);
         }
-        return mDeviceBroker.setBluetoothHearingAidDeviceConnectionState(
+        mDeviceBroker.postBluetoothHearingAidDeviceConnectionState(
                 device, state, suppressNoisyIntent, musicDevice, "AudioService");
     }
 
     /**
      * See AudioManager.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent()
      */
-    public int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
+    public void setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
             @NonNull BluetoothDevice device, @AudioService.BtProfileConnectionState int state,
             int profile, boolean suppressNoisyIntent, int a2dpVolume) {
         if (device == null) {
@@ -4097,7 +4110,7 @@ public class AudioService extends IAudioService.Stub
             throw new IllegalArgumentException("Illegal BluetoothProfile state for device "
                     + " (dis)connection, got " + state);
         }
-        return mDeviceBroker.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device, state,
+        mDeviceBroker.postBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device, state,
                 profile, suppressNoisyIntent, a2dpVolume);
     }
 
@@ -4117,7 +4130,7 @@ public class AudioService extends IAudioService.Stub
      * @see AudioManager#handleBluetoothA2dpActiveDeviceChange(BluetoothDevice, int, int,
      *                                                          boolean, int)
      */
-    public int handleBluetoothA2dpActiveDeviceChange(
+    public void handleBluetoothA2dpActiveDeviceChange(
             BluetoothDevice device, int state, int profile, boolean suppressNoisyIntent,
             int a2dpVolume) {
         if (device == null) {
@@ -4130,7 +4143,7 @@ public class AudioService extends IAudioService.Stub
                 && state != BluetoothProfile.STATE_DISCONNECTED) {
             throw new IllegalArgumentException("Invalid state " + state);
         }
-        return mDeviceBroker.handleBluetoothA2dpActiveDeviceChange(device, state, profile,
+        mDeviceBroker.postBluetoothA2dpDeviceConfigChangeExt(device, state, profile,
                 suppressNoisyIntent, a2dpVolume);
     }
 
@@ -4163,6 +4176,26 @@ public class AudioService extends IAudioService.Stub
             }
             mStreamStates[AudioSystem.STREAM_MUSIC].mute(false);
         }
+    }
+
+    /**
+     * See AudioManager.hasHapticChannels(Uri).
+     */
+    public boolean hasHapticChannels(Uri uri) {
+        MediaExtractor extractor = new MediaExtractor();
+        try {
+            extractor.setDataSource(mContext, uri, null);
+            for (int i = 0; i < extractor.getTrackCount(); i++) {
+                MediaFormat format = extractor.getTrackFormat(i);
+                if (format.containsKey(MediaFormat.KEY_HAPTIC_CHANNEL_COUNT)
+                        && format.getInteger(MediaFormat.KEY_HAPTIC_CHANNEL_COUNT) > 0) {
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "hasHapticChannels failure:" + e);
+        }
+        return false;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -5976,6 +6009,14 @@ public class AudioService extends IAudioService.Stub
         pw.print("  mVolumePolicy="); pw.println(mVolumePolicy);
         pw.print("  mAvrcpAbsVolSupported=");
         pw.println(mDeviceBroker.isAvrcpAbsoluteVolumeSupported());
+        pw.print("  mIsSingleVolume="); pw.println(mIsSingleVolume);
+        pw.print("  mUseFixedVolume="); pw.println(mUseFixedVolume);
+        pw.print("  mFixedVolumeDevices=0x"); pw.println(Integer.toHexString(mFixedVolumeDevices));
+        pw.print("  mHdmiCecSink="); pw.println(mHdmiCecSink);
+        pw.print("  mHdmiAudioSystemClient="); pw.println(mHdmiAudioSystemClient);
+        pw.print("  mHdmiPlaybackClient="); pw.println(mHdmiPlaybackClient);
+        pw.print("  mHdmiTvClient="); pw.println(mHdmiTvClient);
+        pw.print("  mHdmiSystemAudioSupported="); pw.println(mHdmiSystemAudioSupported);
 
         dumpAudioPolicies(pw);
         mDynPolicyLogger.dump(pw);
@@ -6301,8 +6342,8 @@ public class AudioService extends IAudioService.Stub
     // Audio policy management
     //==========================================================================================
     public String registerAudioPolicy(AudioPolicyConfig policyConfig, IAudioPolicyCallback pcb,
-            boolean hasFocusListener, boolean isFocusPolicy, boolean isVolumeController,
-            IMediaProjection projection) {
+            boolean hasFocusListener, boolean isFocusPolicy, boolean isTestFocusPolicy,
+            boolean isVolumeController, IMediaProjection projection) {
         AudioSystem.setDynamicPolicyCallback(mDynPolicyCallback);
 
         if (!isPolicyRegisterAllowed(policyConfig, projection)) {
@@ -6323,7 +6364,7 @@ public class AudioService extends IAudioService.Stub
                     return null;
                 }
                 AudioPolicyProxy app = new AudioPolicyProxy(policyConfig, pcb, hasFocusListener,
-                        isFocusPolicy, isVolumeController);
+                        isFocusPolicy, isTestFocusPolicy, isVolumeController);
                 pcb.asBinder().linkToDeath(app, 0/*flags*/);
                 regId = app.getRegistrationId();
                 mAudioPolicies.put(pcb.asBinder(), app);
@@ -6407,7 +6448,28 @@ public class AudioService extends IAudioService.Stub
         return mProjectionService;
     }
 
-    public void unregisterAudioPolicyAsync(IAudioPolicyCallback pcb) {
+    /**
+     * See {@link AudioManager#unregisterAudioPolicyAsync(AudioPolicy)}
+     * Declared oneway
+     * @param pcb nullable because on service interface
+     */
+    public void unregisterAudioPolicyAsync(@Nullable IAudioPolicyCallback pcb) {
+        unregisterAudioPolicy(pcb);
+    }
+
+    /**
+     * See {@link AudioManager#unregisterAudioPolicy(AudioPolicy)}
+     * @param pcb nullable because on service interface
+     */
+    public void unregisterAudioPolicy(@Nullable IAudioPolicyCallback pcb) {
+        if (pcb == null) {
+            return;
+        }
+        unregisterAudioPolicyInt(pcb);
+    }
+
+
+    private void unregisterAudioPolicyInt(@NonNull IAudioPolicyCallback pcb) {
         mDynPolicyLogger.log((new AudioEventLogger.StringEvent("unregisterAudioPolicyAsync for "
                 + pcb.asBinder()).printLog(TAG)));
         synchronized (mAudioPolicies) {
@@ -6720,9 +6782,11 @@ public class AudioService extends IAudioService.Stub
          */
         int mFocusDuckBehavior = AudioPolicy.FOCUS_POLICY_DUCKING_DEFAULT;
         boolean mIsFocusPolicy = false;
+        boolean mIsTestFocusPolicy = false;
 
         AudioPolicyProxy(AudioPolicyConfig config, IAudioPolicyCallback token,
-                boolean hasFocusListener, boolean isFocusPolicy, boolean isVolumeController) {
+                boolean hasFocusListener, boolean isFocusPolicy, boolean isTestFocusPolicy,
+                boolean isVolumeController) {
             super(config);
             setRegistration(new String(config.hashCode() + ":ap:" + mAudioPolicyCounter++));
             mPolicyCallback = token;
@@ -6733,7 +6797,8 @@ public class AudioService extends IAudioService.Stub
                 // can only ever be true if there is a focus listener
                 if (isFocusPolicy) {
                     mIsFocusPolicy = true;
-                    mMediaFocusControl.setFocusPolicy(mPolicyCallback);
+                    mIsTestFocusPolicy = isTestFocusPolicy;
+                    mMediaFocusControl.setFocusPolicy(mPolicyCallback, mIsTestFocusPolicy);
                 }
             }
             if (mIsVolumeController) {
@@ -6761,7 +6826,7 @@ public class AudioService extends IAudioService.Stub
 
         void release() {
             if (mIsFocusPolicy) {
-                mMediaFocusControl.unsetFocusPolicy(mPolicyCallback);
+                mMediaFocusControl.unsetFocusPolicy(mPolicyCallback, mIsTestFocusPolicy);
             }
             if (mFocusDuckBehavior == AudioPolicy.FOCUS_POLICY_DUCKING_IN_POLICY) {
                 mMediaFocusControl.setDuckingInExtPolicyAvailable(false);

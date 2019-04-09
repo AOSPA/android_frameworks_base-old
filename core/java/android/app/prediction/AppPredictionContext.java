@@ -15,6 +15,7 @@
  */
 package android.app.prediction;
 
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
@@ -25,7 +26,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 /**
- * TODO(b/111701043): Add java docs
+ * Class that provides contextual information about the environment in which the app prediction is
+ * used, such as package name, UI in which the app targets are shown, and number of targets.
  *
  * @hide
  */
@@ -49,26 +51,39 @@ public final class AppPredictionContext implements Parcelable {
         mExtras = extras;
     }
 
-    private AppPredictionContext(Parcel parcel) {
+    private AppPredictionContext(@NonNull Parcel parcel) {
         mUiSurface = parcel.readString();
         mPredictedTargetCount = parcel.readInt();
         mPackageName = parcel.readString();
         mExtras = parcel.readBundle();
     }
 
+    /**
+     * Returns the UI surface of the prediction context.
+     */
+    @NonNull
     public String getUiSurface() {
         return mUiSurface;
     }
 
-    public int getPredictedTargetCount() {
+    /**
+     * Returns the predicted target count
+     */
+    public @IntRange(from = 0) int getPredictedTargetCount() {
         return mPredictedTargetCount;
     }
 
+    /**
+     * Returns the package name of the prediction context.
+     */
     @NonNull
     public String getPackageName() {
         return mPackageName;
     }
 
+    /**
+     * Returns the extras of the prediction context.
+     */
     @Nullable
     public Bundle getExtras() {
         return mExtras;
@@ -91,17 +106,14 @@ public final class AppPredictionContext implements Parcelable {
     }
 
     @Override
-    public void writeToParcel(Parcel dest, int flags) {
+    public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeString(mUiSurface);
         dest.writeInt(mPredictedTargetCount);
         dest.writeString(mPackageName);
         dest.writeBundle(mExtras);
     }
 
-    /**
-     * @see Parcelable.Creator
-     */
-    public static final Parcelable.Creator<AppPredictionContext> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<AppPredictionContext> CREATOR =
             new Parcelable.Creator<AppPredictionContext>() {
                 public AppPredictionContext createFromParcel(Parcel parcel) {
                     return new AppPredictionContext(parcel);
@@ -130,7 +142,7 @@ public final class AppPredictionContext implements Parcelable {
         private Bundle mExtras;
 
         /**
-         * TODO(b/123591863): Add java docs
+         * @param context The {@link Context} of the prediction client.
          *
          * @hide
          */
@@ -144,7 +156,8 @@ public final class AppPredictionContext implements Parcelable {
         /**
          * Sets the number of prediction targets as a hint.
          */
-        public Builder setPredictedTargetCount(int predictedTargetCount) {
+        @NonNull
+        public Builder setPredictedTargetCount(@IntRange(from = 0) int predictedTargetCount) {
             mPredictedTargetCount = predictedTargetCount;
             return this;
         }
@@ -152,7 +165,8 @@ public final class AppPredictionContext implements Parcelable {
         /**
          * Sets the UI surface.
          */
-        public Builder setUiSurface(@Nullable String uiSurface) {
+        @NonNull
+        public Builder setUiSurface(@NonNull String uiSurface) {
             mUiSurface = uiSurface;
             return this;
         }
@@ -160,6 +174,7 @@ public final class AppPredictionContext implements Parcelable {
         /**
          * Sets the extras.
          */
+        @NonNull
         public Builder setExtras(@Nullable Bundle extras) {
             mExtras = extras;
             return this;
@@ -168,6 +183,7 @@ public final class AppPredictionContext implements Parcelable {
         /**
          * Builds a new context instance.
          */
+        @NonNull
         public AppPredictionContext build() {
             return new AppPredictionContext(mUiSurface, mPredictedTargetCount, mPackageName,
                     mExtras);

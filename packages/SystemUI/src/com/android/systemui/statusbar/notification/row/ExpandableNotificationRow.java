@@ -81,6 +81,7 @@ import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
 import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.AboveShelfChangedListener;
@@ -90,7 +91,6 @@ import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.logging.NotificationCounters;
 import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
-import com.android.systemui.statusbar.notification.row.wrapper.NotificationMediaTemplateViewWrapper;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
@@ -215,6 +215,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private boolean mIsAmbientPulsing;
 
     /**
+     * Happens when the notification was pulsing before and goes away to ensure smooth animations.
+     */
+    private boolean mAmbientGoingAway;
+
+    /**
      * Whether or not the notification should be redacted on the lock screen, i.e has sensitive
      * content which should be redacted on the lock screen.
      */
@@ -329,8 +334,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private boolean mUseIncreasedHeadsUpHeight;
     private float mTranslationWhenRemoved;
     private boolean mWasChildInGroupWhenRemoved;
-    private int mNotificationColorAmbient;
     private NotificationInlineImageResolver mImageResolver;
+    private NotificationMediaManager mMediaManager;
 
     private SystemNotificationAsyncTask mSystemNotificationAsyncTask =
             new SystemNotificationAsyncTask();
@@ -658,10 +663,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         View expandedView = layout.getExpandedChild();
         boolean isMediaLayout = expandedView != null
                 && expandedView.findViewById(com.android.internal.R.id.media_actions) != null;
+        boolean showCompactMediaSeekbar = mMediaManager.getShowCompactMediaSeekbar();
 
         if (customView && beforeP && !mIsSummaryWithChildren) {
             minHeight = beforeN ? mNotificationMinHeightBeforeN : mNotificationMinHeightBeforeP;
-        } else if (isMediaLayout && !NotificationMediaTemplateViewWrapper.HIDE_COMPACT_SCRUBBER) {
+        } else if (isMediaLayout && showCompactMediaSeekbar) {
             minHeight = mNotificationMinHeightMedia;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
             minHeight = mNotificationMinHeightLarge;
@@ -719,8 +725,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
     }
 
-    public boolean isAmbientPulsing() {
-        return mIsAmbientPulsing;
+    @Override
+    public boolean showingAmbientPulsing() {
+        return mIsAmbientPulsing || mAmbientGoingAway;
     }
 
     public void setAmbientPulsing(boolean isAmbientPulsing) {
@@ -1276,16 +1283,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mNotificationColor = ContrastColorUtil.resolveContrastColor(mContext,
                 getStatusBarNotification().getNotification().color,
                 getBackgroundColorWithoutTint(), nightMode);
-        mNotificationColorAmbient = ContrastColorUtil.resolveAmbientColor(mContext,
-                getStatusBarNotification().getNotification().color);
     }
 
     public HybridNotificationView getSingleLineView() {
         return mPrivateLayout.getSingleLineView();
-    }
-
-    public HybridNotificationView getAmbientSingleLineView() {
-        return getShowingLayout().getAmbientSingleLineChild();
     }
 
     public boolean isOnKeyguard() {
@@ -1620,10 +1621,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return mNotificationInflater;
     }
 
-    public int getNotificationColorAmbient() {
-        return mNotificationColorAmbient;
-    }
-
     public interface ExpansionLogger {
         void logNotificationExpansion(String key, boolean userAction, boolean expanded);
     }
@@ -1635,6 +1632,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mMenuRow = new NotificationMenuRow(mContext);
         mImageResolver = new NotificationInlineImageResolver(context,
                 new NotificationInlineImageCache());
+        mMediaManager = Dependency.get(NotificationMediaManager.class);
         initDimens();
     }
 
@@ -2215,11 +2213,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     public void resetUserExpansion() {
-        boolean changed = mUserExpanded;
+        boolean wasExpanded = isExpanded();
         mHasUserChangedExpansion = false;
         mUserExpanded = false;
-        if (changed && mIsSummaryWithChildren) {
-            mChildrenContainer.onExpansionChanged();
+        if (wasExpanded != isExpanded()) {
+            if (mIsSummaryWithChildren) {
+                mChildrenContainer.onExpansionChanged();
+            }
+            notifyHeightChanged(false /* needsAnimation */);
         }
         updateShelfIconColor();
     }
@@ -2307,7 +2308,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return mPrivateLayout.getMinHeight();
         } else if (mSensitive && mHideSensitiveForIntrinsicHeight) {
             return getMinHeight();
-        } else if (mIsSummaryWithChildren && (!mOnKeyguard || mOnAmbient)) {
+        } else if (mIsSummaryWithChildren && !mOnKeyguard) {
             return mChildrenContainer.getIntrinsicHeight();
         } else if (isHeadsUpAllowed() && (mIsHeadsUp || mHeadsupDisappearRunning)) {
             if (isPinned() || mHeadsupDisappearRunning) {
@@ -2431,7 +2432,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         int intrinsicBefore = getIntrinsicHeight();
         super.onLayout(changed, left, top, right, bottom);
-        if (intrinsicBefore != getIntrinsicHeight()) {
+        if (intrinsicBefore != getIntrinsicHeight() && intrinsicBefore != 0) {
             notifyHeightChanged(true  /* needsAnimation */);
         }
         if (mMenuRow.getMenuView() != null) {
@@ -3001,17 +3002,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     @Override
     public boolean isAboveShelf() {
-        return !isOnKeyguard()
+        return showingAmbientPulsing() || (!isOnKeyguard()
                 && (mIsPinned || mHeadsupDisappearRunning || (mIsHeadsUp && mAboveShelf)
-                || mExpandAnimationRunning || mChildIsExpanding);
+                || mExpandAnimationRunning || mChildIsExpanding));
     }
 
     public void setOnAmbient(boolean onAmbient) {
         if (onAmbient != mOnAmbient) {
             mOnAmbient = onAmbient;
-            if (mChildrenContainer != null) {
-                mChildrenContainer.notifyDozingStateChanged();
-            }
             notifyHeightChanged(false /* needsAnimation */);
         }
     }
@@ -3156,6 +3154,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 row.startChildAnimation(properties);
             }
         }
+    }
+
+    public void setAmbientGoingAway(boolean goingAway) {
+        mAmbientGoingAway = goingAway;
     }
 
     @VisibleForTesting

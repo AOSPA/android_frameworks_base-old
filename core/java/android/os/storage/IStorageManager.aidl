@@ -191,5 +191,7 @@ interface IStorageManager {
     String translateAppToSystem(String path, int pid, int uid) = 81;
     String translateSystemToApp(String path, int pid, int uid) = 82;
     void commitChanges() = 83;
-    void clearUserKeyAuth(int userId, int serialNumber, in byte[] token, in byte[] secret) = 84;
+    boolean supportsCheckpoint() = 84;
+    void startCheckpoint(int numTries) = 85;
+    void clearUserKeyAuth(int userId, int serialNumber, in byte[] token, in byte[] secret) = 86;
 }

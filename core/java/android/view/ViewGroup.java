@@ -61,7 +61,7 @@ import android.view.animation.LayoutAnimationController;
 import android.view.animation.Transformation;
 import android.view.autofill.Helper;
 import android.view.inspector.InspectableProperty;
-import android.view.inspector.InspectableProperty.EnumMap;
+import android.view.inspector.InspectableProperty.EnumEntry;
 
 import com.android.internal.R;
 
@@ -142,7 +142,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * This field should be made private, so it is hidden from the SDK.
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123768704)
     protected OnHierarchyChangeListener mOnHierarchyChangeListener;
 
     // The view contained within this ViewGroup that has or contains focus.
@@ -239,7 +239,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             @ViewDebug.FlagToString(mask = FLAG_PADDING_NOT_NULL, equals = FLAG_PADDING_NOT_NULL,
                     name = "PADDING_NOT_NULL")
     }, formatToHexString = true)
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769411)
     protected int mGroupFlags;
 
     /**
@@ -300,7 +300,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769377)
     protected static final int FLAG_USE_CHILD_DRAWING_ORDER = 0x400;
 
     /**
@@ -314,7 +314,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      *
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769647)
     protected static final int FLAG_SUPPORT_STATIC_TRANSFORMATIONS = 0x800;
 
     // UNUSED FLAG VALUE: 0x1000;
@@ -368,7 +368,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * When set, this ViewGroup should not intercept touch events.
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123983692)
     protected static final int FLAG_DISALLOW_INTERCEPT = 0x80000;
 
     /**
@@ -778,9 +778,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         @ViewDebug.IntToString(from = FOCUS_BLOCK_DESCENDANTS, to = "FOCUS_BLOCK_DESCENDANTS")
     })
     @InspectableProperty(enumMapping = {
-            @EnumMap(value = FOCUS_BEFORE_DESCENDANTS, name = "beforeDescendants"),
-            @EnumMap(value = FOCUS_AFTER_DESCENDANTS, name = "afterDescendants"),
-            @EnumMap(value = FOCUS_BLOCK_DESCENDANTS, name = "blocksDescendants")
+            @EnumEntry(value = FOCUS_BEFORE_DESCENDANTS, name = "beforeDescendants"),
+            @EnumEntry(value = FOCUS_AFTER_DESCENDANTS, name = "afterDescendants"),
+            @EnumEntry(value = FOCUS_BLOCK_DESCENDANTS, name = "blocksDescendants")
     })
     public int getDescendantFocusability() {
         return mGroupFlags & FLAG_MASK_FOCUSABILITY;
@@ -4284,35 +4284,38 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     /**
-     * Returns the index of the child to draw for this iteration. Override this
+     * Converts drawing order position to container position. Override this
      * if you want to change the drawing order of children. By default, it
-     * returns i.
+     * returns drawingPosition.
      * <p>
      * NOTE: In order for this method to be called, you must enable child ordering
      * first by calling {@link #setChildrenDrawingOrderEnabled(boolean)}.
      *
-     * @param i The current iteration.
-     * @return The index of the child to draw this iteration.
+     * @param drawingPosition the drawing order position.
+     * @return the container position of a child for this drawing order position.
      *
      * @see #setChildrenDrawingOrderEnabled(boolean)
      * @see #isChildrenDrawingOrderEnabled()
      */
-    protected int getChildDrawingOrder(int childCount, int i) {
-        return i;
+    protected int getChildDrawingOrder(int childCount, int drawingPosition) {
+        return drawingPosition;
     }
 
     /**
-     * The public version of getChildDrawingOrder().
+     * Converts drawing order position to container position.
+     * <p>
+     * Children are not necessarily drawn in the order in which they appear in the container.
+     * ViewGroups can enable a custom ordering via {@link #setChildrenDrawingOrderEnabled(boolean)}.
+     * This method returns the container position of a child that appears in the given position
+     * in the current drawing order.
      *
-     * Returns the index of the child to draw for this iteration.
-     *
-     * @param i The current iteration.
-     * @return The index of the child to draw this iteration.
+     * @param drawingPosition the drawing order position.
+     * @return the container position of a child for this drawing order position.
      *
      * @see #getChildDrawingOrder(int, int)}
      */
-    public final int getChildDrawingOrder(int i) {
-        return getChildDrawingOrder(getChildCount(), i);
+    public final int getChildDrawingOrder(int drawingPosition) {
+        return getChildDrawingOrder(getChildCount(), drawingPosition);
     }
 
     private boolean hasChildWithZ() {
@@ -6571,10 +6574,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         @ViewDebug.IntToString(from = PERSISTENT_ALL_CACHES,      to = "ALL")
     })
     @InspectableProperty(enumMapping = {
-            @EnumMap(value = PERSISTENT_NO_CACHE, name = "none"),
-            @EnumMap(value = PERSISTENT_ANIMATION_CACHE, name = "animation"),
-            @EnumMap(value = PERSISTENT_SCROLLING_CACHE, name = "scrolling"),
-            @EnumMap(value = PERSISTENT_ALL_CACHES, name = "all"),
+            @EnumEntry(value = PERSISTENT_NO_CACHE, name = "none"),
+            @EnumEntry(value = PERSISTENT_ANIMATION_CACHE, name = "animation"),
+            @EnumEntry(value = PERSISTENT_SCROLLING_CACHE, name = "scrolling"),
+            @EnumEntry(value = PERSISTENT_ALL_CACHES, name = "all"),
     })
     public int getPersistentDrawingCache() {
         return mPersistentDrawingCache;
@@ -6654,8 +6657,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * @see #setLayoutMode(int)
      */
     @InspectableProperty(enumMapping = {
-            @EnumMap(value = LAYOUT_MODE_CLIP_BOUNDS, name = "clipBounds"),
-            @EnumMap(value = LAYOUT_MODE_OPTICAL_BOUNDS, name = "opticalBounds")
+            @EnumEntry(value = LAYOUT_MODE_CLIP_BOUNDS, name = "clipBounds"),
+            @EnumEntry(value = LAYOUT_MODE_OPTICAL_BOUNDS, name = "opticalBounds")
     })
     public int getLayoutMode() {
         if (mLayoutMode == LAYOUT_MODE_UNDEFINED) {
@@ -7845,6 +7848,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             @ViewDebug.IntToString(from = MATCH_PARENT, to = "MATCH_PARENT"),
             @ViewDebug.IntToString(from = WRAP_CONTENT, to = "WRAP_CONTENT")
         })
+        @InspectableProperty(name = "layout_width", enumMapping = {
+                @EnumEntry(name = "match_parent", value = MATCH_PARENT),
+                @EnumEntry(name = "wrap_content", value = WRAP_CONTENT)
+        })
         public int width;
 
         /**
@@ -7855,6 +7862,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         @ViewDebug.ExportedProperty(category = "layout", mapping = {
             @ViewDebug.IntToString(from = MATCH_PARENT, to = "MATCH_PARENT"),
             @ViewDebug.IntToString(from = WRAP_CONTENT, to = "WRAP_CONTENT")
+        })
+        @InspectableProperty(name = "layout_height", enumMapping = {
+                @EnumEntry(name = "match_parent", value = MATCH_PARENT),
+                @EnumEntry(name = "wrap_content", value = WRAP_CONTENT)
         })
         public int height;
 
@@ -8028,6 +8039,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginLeft")
         public int leftMargin;
 
         /**
@@ -8036,6 +8048,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginTop")
         public int topMargin;
 
         /**
@@ -8044,6 +8057,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginRight")
         public int rightMargin;
 
         /**
@@ -8052,6 +8066,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginBottom")
         public int bottomMargin;
 
         /**

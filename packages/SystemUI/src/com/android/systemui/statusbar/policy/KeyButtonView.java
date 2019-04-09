@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.policy;
 
 import static android.view.Display.INVALID_DISPLAY;
+import static android.view.KeyEvent.KEYCODE_UNKNOWN;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK;
 
@@ -65,7 +66,6 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
     private int mTouchDownX;
     private int mTouchDownY;
     private boolean mIsVertical;
-    private boolean mSupportsLongpress = true;
     private AudioManager mAudioManager;
     private boolean mGestureAborted;
     private boolean mLongClicked;
@@ -82,7 +82,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
                     // Just an old-fashioned ImageView
                     performLongClick();
                     mLongClicked = true;
-                } else if (mSupportsLongpress) {
+                } else {
                     sendEvent(KeyEvent.ACTION_DOWN, KeyEvent.FLAG_LONG_PRESS);
                     sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
                     mLongClicked = true;
@@ -101,9 +101,8 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.KeyButtonView,
                 defStyle, 0);
 
-        mCode = a.getInteger(R.styleable.KeyButtonView_keyCode, 0);
+        mCode = a.getInteger(R.styleable.KeyButtonView_keyCode, KEYCODE_UNKNOWN);
 
-        mSupportsLongpress = a.getBoolean(R.styleable.KeyButtonView_keyRepeat, true);
         mPlaySounds = a.getBoolean(R.styleable.KeyButtonView_playSound, true);
 
         TypedValue value = new TypedValue();
@@ -124,7 +123,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
 
     @Override
     public boolean isClickable() {
-        return mCode != 0 || super.isClickable();
+        return mCode != KEYCODE_UNKNOWN || super.isClickable();
     }
 
     public void setCode(int code) {
@@ -163,9 +162,9 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
-        if (mCode != 0) {
+        if (mCode != KEYCODE_UNKNOWN) {
             info.addAction(new AccessibilityNodeInfo.AccessibilityAction(ACTION_CLICK, null));
-            if (mSupportsLongpress || isLongClickable()) {
+            if (isLongClickable()) {
                 info.addAction(
                         new AccessibilityNodeInfo.AccessibilityAction(ACTION_LONG_CLICK, null));
             }
@@ -182,13 +181,13 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
 
     @Override
     public boolean performAccessibilityActionInternal(int action, Bundle arguments) {
-        if (action == ACTION_CLICK && mCode != 0) {
+        if (action == ACTION_CLICK && mCode != KEYCODE_UNKNOWN) {
             sendEvent(KeyEvent.ACTION_DOWN, 0, SystemClock.uptimeMillis());
             sendEvent(KeyEvent.ACTION_UP, 0);
             sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_CLICKED);
             playSoundEffect(SoundEffectConstants.CLICK);
             return true;
-        } else if (action == ACTION_LONG_CLICK && mCode != 0) {
+        } else if (action == ACTION_LONG_CLICK && mCode != KEYCODE_UNKNOWN) {
             sendEvent(KeyEvent.ACTION_DOWN, KeyEvent.FLAG_LONG_PRESS);
             sendEvent(KeyEvent.ACTION_UP, 0);
             sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
@@ -197,6 +196,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
         return super.performAccessibilityActionInternal(action, arguments);
     }
 
+    @Override
     public boolean onTouchEvent(MotionEvent ev) {
         final boolean showSwipeUI = mOverviewProxyService.shouldShowSwipeUpUI();
         final int action = ev.getAction();
@@ -218,7 +218,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
                 // Use raw X and Y to detect gestures in case a parent changes the x and y values
                 mTouchDownX = (int) ev.getRawX();
                 mTouchDownY = (int) ev.getRawY();
-                if (mCode != 0) {
+                if (mCode != KEYCODE_UNKNOWN) {
                     sendEvent(KeyEvent.ACTION_DOWN, 0, mDownTime);
                 } else {
                     // Provide the same haptic feedback that the system offers for virtual keys.
@@ -249,7 +249,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
                 break;
             case MotionEvent.ACTION_CANCEL:
                 setPressed(false);
-                if (mCode != 0) {
+                if (mCode != KEYCODE_UNKNOWN) {
                     sendEvent(KeyEvent.ACTION_UP, KeyEvent.FLAG_CANCELED);
                 }
                 removeCallbacks(mCheckLongPress);
@@ -269,7 +269,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
                     // and it feels weird to sometimes get a release haptic and other times not.
                     performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY_RELEASE);
                 }
-                if (mCode != 0) {
+                if (mCode != KEYCODE_UNKNOWN) {
                     if (doIt) {
                         sendEvent(KeyEvent.ACTION_UP, 0);
                         sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_CLICKED);
@@ -299,7 +299,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
         sendEvent(action, flags, SystemClock.uptimeMillis());
     }
 
-    void sendEvent(int action, int flags, long when) {
+    private void sendEvent(int action, int flags, long when) {
         mMetricsLogger.write(new LogMaker(MetricsEvent.ACTION_NAV_BUTTON_EVENT)
                 .setType(MetricsEvent.TYPE_ACTION)
                 .setSubtype(mCode)

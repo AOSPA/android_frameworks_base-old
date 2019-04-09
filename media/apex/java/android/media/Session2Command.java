@@ -32,6 +32,10 @@ import java.util.Objects;
  * If {@link #getCommandCode()} is {@link #COMMAND_CODE_CUSTOM}), it's custom command and
  * {@link #getCustomCommand()} shouldn't be {@code null}.
  * <p>
+ * Refer to the
+ * <a href="{@docRoot}reference/androidx/media2/SessionCommand2.html">AndroidX SessionCommand</a>
+ * class for the list of valid commands.
+ * <p>
  * This API is not generally intended for third party application developers.
  * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
  * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
@@ -44,23 +48,7 @@ public final class Session2Command implements Parcelable {
      */
     public static final int COMMAND_CODE_CUSTOM = 0;
 
-    /**
-     * Result code representing that the command is skipped or canceled. For an example, a seek
-     * command can be skipped if it is followed by another seek command.
-     */
-    public static final int RESULT_INFO_SKIPPED = 1;
-
-    /**
-     * Result code representing that the command is successfully completed.
-     */
-    public static final int RESULT_SUCCESS = 0;
-
-    /**
-     * Result code represents that call is ended with an unknown error.
-     */
-    public static final int RESULT_ERROR_UNKNOWN_ERROR = -1;
-
-    public static final Parcelable.Creator<Session2Command> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<Session2Command> CREATOR =
             new Parcelable.Creator<Session2Command>() {
                 @Override
                 public Session2Command createFromParcel(Parcel in) {
@@ -179,6 +167,22 @@ public final class Session2Command implements Parcelable {
     public static final class Result {
         private final int mResultCode;
         private final Bundle mResultData;
+
+        /**
+         * Result code representing that the command is skipped or canceled. For an example, a seek
+         * command can be skipped if it is followed by another seek command.
+         */
+        public static final int RESULT_INFO_SKIPPED = 1;
+
+        /**
+         * Result code representing that the command is successfully completed.
+         */
+        public static final int RESULT_SUCCESS = 0;
+
+        /**
+         * Result code represents that call is ended with an unknown error.
+         */
+        public static final int RESULT_ERROR_UNKNOWN_ERROR = -1;
 
         /**
          * Constructor of {@link Result}.

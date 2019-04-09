@@ -27,9 +27,10 @@ import android.os.Handler;
 import android.os.UserHandle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.SysuiTestCase;
@@ -128,7 +129,7 @@ public class NotificationListenerTest extends SysuiTestCase {
                 mock(NotificationListener.NotificationSettingsListener.class);
         mListener.addNotificationSettingsListener(settingsListener);
 
-        mListener.onStatusBarIconsBehaviorChanged(true);
+        mListener.onSilentStatusBarIconsVisibilityChanged(true);
 
         verify(settingsListener).onStatusBarIconsBehaviorChanged(true);
     }

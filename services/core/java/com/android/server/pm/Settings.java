@@ -979,7 +979,7 @@ public final class Settings {
             // Try to revoke as an install permission which is for all users.
             // The package is gone - no need to keep flags for applying policy.
             permissionsState.updatePermissionFlags(bp, userId,
-                    PackageManager.MASK_PERMISSION_FLAGS, 0);
+                    PackageManager.MASK_PERMISSION_FLAGS_ALL, 0);
 
             if (permissionsState.revokeInstallPermission(bp) ==
                     PermissionsState.PERMISSION_OPERATION_SUCCESS_GIDS_CHANGED) {
@@ -2165,7 +2165,7 @@ public final class Settings {
                         XmlUtils.skipCurrentTag(parser);
                     } else {
                         permissionsState.updatePermissionFlags(bp, UserHandle.USER_ALL,
-                                PackageManager.MASK_PERMISSION_FLAGS, flags);
+                                PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
                     }
                 } else {
                     if (permissionsState.revokeInstallPermission(bp) ==
@@ -2174,7 +2174,7 @@ public final class Settings {
                         XmlUtils.skipCurrentTag(parser);
                     } else {
                         permissionsState.updatePermissionFlags(bp, UserHandle.USER_ALL,
-                                PackageManager.MASK_PERMISSION_FLAGS, flags);
+                                PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
                     }
                 }
             } else {
@@ -2693,6 +2693,7 @@ public final class Settings {
                 // seinfo     - seinfo label for the app (assigned at install time)
                 // gids       - supplementary gids this app launches with
                 // profileableFromShellFlag  - 0 or 1 if the package is profileable from shell.
+                // longVersionCode - integer version of the package.
                 //
                 // NOTE: We prefer not to expose all ApplicationInfo flags for now.
                 //
@@ -2720,6 +2721,8 @@ public final class Settings {
                 }
                 sb.append(" ");
                 sb.append(ai.isProfileableByShell() ? "1" : "0");
+                sb.append(" ");
+                sb.append(String.valueOf(ai.longVersionCode));
                 sb.append("\n");
                 writer.append(sb);
             }
@@ -4372,6 +4375,7 @@ public final class Settings {
             ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE, "PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE",
             ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION, "PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION",
             ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE, "PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE",
+            ApplicationInfo.PRIVATE_FLAG_ALLOW_AUDIO_PLAYBACK_CAPTURE, "ALLOW_AUDIO_PLAYBACK_CAPTURE",
             ApplicationInfo.PRIVATE_FLAG_BACKUP_IN_FOREGROUND, "BACKUP_IN_FOREGROUND",
             ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE, "CANT_SAVE_STATE",
             ApplicationInfo.PRIVATE_FLAG_DEFAULT_TO_DEVICE_PROTECTED_STORAGE, "DEFAULT_TO_DEVICE_PROTECTED_STORAGE",
@@ -5239,7 +5243,7 @@ public final class Settings {
                 if (bp != null) {
                     permissionsState.revokeRuntimePermission(bp, userId);
                     permissionsState.updatePermissionFlags(bp, userId,
-                            PackageManager.MASK_PERMISSION_FLAGS, 0);
+                            PackageManager.MASK_PERMISSION_FLAGS_ALL, 0);
                 }
             }
         }
@@ -5353,10 +5357,10 @@ public final class Settings {
                         if (granted) {
                             permissionsState.grantRuntimePermission(bp, userId);
                             permissionsState.updatePermissionFlags(bp, userId,
-                                        PackageManager.MASK_PERMISSION_FLAGS, flags);
+                                        PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
                         } else {
                             permissionsState.updatePermissionFlags(bp, userId,
-                                    PackageManager.MASK_PERMISSION_FLAGS, flags);
+                                    PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
                         }
 
                     } break;

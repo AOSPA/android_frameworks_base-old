@@ -27,6 +27,8 @@ import android.view.RenderNodeAnimator;
 import android.view.Surface;
 import android.view.View;
 
+import com.android.internal.util.ArrayUtils;
+
 import dalvik.annotation.optimization.CriticalNative;
 import dalvik.annotation.optimization.FastNative;
 
@@ -60,7 +62,7 @@ import java.lang.annotation.RetentionPolicy;
  *
  * <h3>Creating a RenderNode</h3>
  * <pre class="prettyprint">
- *     RenderNode renderNode = RenderNode.create("myRenderNode");
+ *     RenderNode renderNode = new RenderNode("myRenderNode");
  *     renderNode.setLeftTopRightBottom(0, 0, 50, 50); // Set the size to 50x50
  *     RecordingCanvas canvas = renderNode.beginRecording();
  *     try {
@@ -68,8 +70,7 @@ import java.lang.annotation.RetentionPolicy;
  *         canvas.drawRect(...);
  *     } finally {
  *         renderNode.endRecording();
- *     }
- * </pre>
+ *     }</pre>
  *
  * <h3>Drawing a RenderNode in a View</h3>
  * <pre class="prettyprint">
@@ -82,8 +83,7 @@ import java.lang.annotation.RetentionPolicy;
  *             // Draw the RenderNode into this canvas.
  *             canvas.drawRenderNode(myRenderNode);
  *         }
- *     }
- * </pre>
+ *     }</pre>
  *
  * <h3>Releasing resources</h3>
  * <p>This step is not mandatory but recommended if you want to release resources
@@ -91,8 +91,7 @@ import java.lang.annotation.RetentionPolicy;
  * <pre class="prettyprint">
  *     // Discards the display list content allowing for any held resources to be released.
  *     // After calling this
- *     renderNode.discardDisplayList();
- * </pre>
+ *     renderNode.discardDisplayList();</pre>
  *
  *
  * <h3>Properties</h3>
@@ -104,7 +103,7 @@ import java.lang.annotation.RetentionPolicy;
  *
  * <pre class="prettyprint">
  *     private void createDisplayList() {
- *         mRenderNode = RenderNode.create("MyRenderNode");
+ *         mRenderNode = new RenderNode("MyRenderNode");
  *         mRenderNode.setLeftTopRightBottom(0, 0, width, height);
  *         RecordingCanvas canvas = mRenderNode.beginRecording();
  *         try {
@@ -130,8 +129,39 @@ import java.lang.annotation.RetentionPolicy;
  *          // will be invoked and will execute very quickly
  *          mRenderNode.offsetLeftAndRight(x);
  *          invalidate();
- *     }
- * </pre>
+ *     }</pre>
+ *
+ * <p>A few of the properties may at first appear redundant, such as {@link #setElevation(float)}
+ * and {@link #setTranslationZ(float)}. The reason for these duplicates are to allow for a
+ * separation between static & transient usages. For example consider a button that raises from 2dp
+ * to 8dp when pressed. To achieve that an application may decide to setElevation(2dip), and then
+ * on press to animate setTranslationZ to 6dip. Combined this achieves the final desired 8dip
+ * value, but the animation need only concern itself with animating the lift from press without
+ * needing to know the initial starting value. {@link #setTranslationX(float)} and
+ * {@link #setTranslationY(float)} are similarly provided for animation uses despite the functional
+ * overlap with {@link #setPosition(Rect)}.
+ *
+ * <p>The RenderNode's transform matrix is computed at render time as follows:
+ * <pre class="prettyprint">
+ *     Matrix transform = new Matrix();
+ *     transform.setTranslate(renderNode.getTranslationX(), renderNode.getTranslationY());
+ *     transform.preRotate(renderNode.getRotationZ(),
+ *             renderNode.getPivotX(), renderNode.getPivotY());
+ *     transform.preScale(renderNode.getScaleX(), renderNode.getScaleY(),
+ *             renderNode.getPivotX(), renderNode.getPivotY());</pre>
+ * The current canvas transform matrix, which is translated to the RenderNode's position,
+ * is then multiplied by the RenderNode's transform matrix. Therefore the ordering of calling
+ * property setters does not affect the result. That is to say that:
+ *
+ * <pre class="prettyprint">
+ *     renderNode.setTranslationX(100);
+ *     renderNode.setScaleX(100);</pre>
+ *
+ * is equivalent to:
+ *
+ * <pre class="prettyprint">
+ *     renderNode.setScaleX(100);
+ *     renderNode.setTranslationX(100);</pre>
  *
  * <h3>Threading</h3>
  * <p>RenderNode may be created and used on any thread but they are not thread-safe. Only
@@ -150,8 +180,7 @@ import java.lang.annotation.RetentionPolicy;
  *         if (needsUpdate) {
  *             myOwningView.invalidate();
  *         }
- *     }
- * </pre>
+ *     }</pre>
  * This is marginally faster than doing a more explicit up-front check if the value changed by
  * comparing the desired value against {@link #getTranslationX()} as it minimizes JNI transitions.
  * The actual mechanism of requesting a new frame to be rendered will depend on how this
@@ -166,8 +195,9 @@ public final class RenderNode {
 
     // Use a Holder to allow static initialization in the boot image.
     private static class NoImagePreloadHolder {
-        public static final NativeAllocationRegistry sRegistry = new NativeAllocationRegistry(
-                RenderNode.class.getClassLoader(), nGetNativeFinalizer(), 1024);
+        public static final NativeAllocationRegistry sRegistry =
+                NativeAllocationRegistry.createMalloced(
+                RenderNode.class.getClassLoader(), nGetNativeFinalizer());
     }
 
     /**
@@ -178,6 +208,10 @@ public final class RenderNode {
     public final long mNativeRenderNode;
     private final AnimationHost mAnimationHost;
     private RecordingCanvas mCurrentRecordingCanvas;
+
+    // Will be null if not currently registered
+    @Nullable
+    private CompositePositionUpdateListener mCompositePositionUpdateListener;
 
     /**
      * Creates a new RenderNode that can be used to record batches of
@@ -248,15 +282,70 @@ public final class RenderNode {
 
     }
 
+    private static final class CompositePositionUpdateListener implements PositionUpdateListener {
+        private final PositionUpdateListener[] mListeners;
+
+        CompositePositionUpdateListener(PositionUpdateListener... listeners) {
+            mListeners = listeners;
+        }
+
+        public CompositePositionUpdateListener with(PositionUpdateListener listener) {
+            return new CompositePositionUpdateListener(
+                    ArrayUtils.appendElement(PositionUpdateListener.class, mListeners, listener));
+        }
+
+        public CompositePositionUpdateListener without(PositionUpdateListener listener) {
+            return new CompositePositionUpdateListener(
+                    ArrayUtils.removeElement(PositionUpdateListener.class, mListeners, listener));
+        }
+
+        @Override
+        public void positionChanged(long frameNumber, int left, int top, int right, int bottom) {
+            for (PositionUpdateListener pul : mListeners) {
+                pul.positionChanged(frameNumber, left, top, right, bottom);
+            }
+        }
+
+        @Override
+        public void positionLost(long frameNumber) {
+            for (PositionUpdateListener pul : mListeners) {
+                pul.positionLost(frameNumber);
+            }
+        }
+    }
+
     /**
-     * Enable callbacks for position changes.
+     * Enable callbacks for position changes. Call only from the UI thread or with
+     * external synchronization.
      *
      * @hide
      */
-    public void requestPositionUpdates(PositionUpdateListener listener) {
-        nRequestPositionUpdates(mNativeRenderNode, listener);
+    public void addPositionUpdateListener(@NonNull PositionUpdateListener listener) {
+        CompositePositionUpdateListener comp = mCompositePositionUpdateListener;
+        if (comp == null) {
+            comp = new CompositePositionUpdateListener(listener);
+        } else {
+            comp = comp.with(listener);
+        }
+        mCompositePositionUpdateListener = comp;
+        nRequestPositionUpdates(mNativeRenderNode, comp);
     }
 
+    /**
+     * Disable a callback for position changes. Call only from the UI thread or with
+     * external synchronization.
+     *
+     * @param listener Callback to remove
+     * @hide
+     */
+    public void removePositionUpdateListener(@NonNull PositionUpdateListener listener) {
+        CompositePositionUpdateListener comp = mCompositePositionUpdateListener;
+        if (comp != null) {
+            comp = comp.without(listener);
+            mCompositePositionUpdateListener = comp;
+            nRequestPositionUpdates(mNativeRenderNode, comp);
+        }
+    }
 
     /**
      * Starts recording a display list for the render node. All
@@ -277,7 +366,7 @@ public final class RenderNode {
      * @see #endRecording()
      * @see #hasDisplayList()
      */
-    public RecordingCanvas beginRecording(int width, int height) {
+    public @NonNull RecordingCanvas beginRecording(int width, int height) {
         if (mCurrentRecordingCanvas != null) {
             throw new IllegalStateException(
                     "Recording currently in progress - missing #endRecording() call?");
@@ -297,7 +386,7 @@ public final class RenderNode {
      * @see #endRecording()
      * @see #hasDisplayList()
      */
-    public RecordingCanvas beginRecording() {
+    public @NonNull RecordingCanvas beginRecording() {
         return beginRecording(nGetWidth(mNativeRenderNode), nGetHeight(mNativeRenderNode));
     }
 
@@ -717,11 +806,34 @@ public final class RenderNode {
      * for the matrix parameter.
      *
      * @param matrix The matrix, null indicates that the matrix should be cleared.
+     * @see #getAnimationMatrix()
+     *
      * @hide TODO Do we want this?
      */
-    public boolean setAnimationMatrix(Matrix matrix) {
+    public boolean setAnimationMatrix(@Nullable Matrix matrix) {
         return nSetAnimationMatrix(mNativeRenderNode,
                 (matrix != null) ? matrix.native_instance : 0);
+    }
+
+    /**
+     * Returns the previously set Animation matrix. This matrix exists if an Animation is
+     * currently playing on a View, and is set on the display list during at draw() time.
+     * Returns <code>null</code> when there is no transformation provided by
+     * {@link #setAnimationMatrix(Matrix)}.
+     *
+     * @return the current Animation matrix.
+     * @see #setAnimationMatrix(Matrix)
+     *
+     * @hide
+     */
+    @Nullable
+    public Matrix getAnimationMatrix() {
+        Matrix output = new Matrix();
+        if (nGetAnimationMatrix(mNativeRenderNode, output.native_instance)) {
+            return output;
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -1224,7 +1336,7 @@ public final class RenderNode {
      * @param position The position rectangle in pixels
      * @return True if the value changed, false if the new value was the same as the previous value.
      */
-    public boolean setPosition(Rect position) {
+    public boolean setPosition(@NonNull Rect position) {
         return nSetLeftTopRightBottom(mNativeRenderNode,
                 position.left, position.top, position.right, position.bottom);
     }
@@ -1567,6 +1679,9 @@ public final class RenderNode {
 
     @CriticalNative
     private static native boolean nHasOverlappingRendering(long renderNode);
+
+    @CriticalNative
+    private static native boolean nGetAnimationMatrix(long renderNode, long animationMatrix);
 
     @CriticalNative
     private static native boolean nGetClipToOutline(long renderNode);

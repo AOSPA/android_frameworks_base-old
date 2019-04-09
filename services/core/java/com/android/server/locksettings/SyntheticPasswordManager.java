@@ -16,6 +16,8 @@
 
 package com.android.server.locksettings;
 
+import static com.android.internal.widget.LockPatternUtils.EscrowTokenStateChangeCallback;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.admin.DevicePolicyManager;
@@ -281,20 +283,23 @@ public class SyntheticPasswordManager {
         byte[] secdiscardableOnDisk;
         byte[] weaverSecret;
         byte[] aggregatedSecret;
+        EscrowTokenStateChangeCallback mCallback;
     }
 
     private final Context mContext;
     private LockSettingsStorage mStorage;
     private IWeaver mWeaver;
     private WeaverConfig mWeaverConfig;
+    private PasswordSlotManager mPasswordSlotManager;
 
     private final UserManager mUserManager;
 
     public SyntheticPasswordManager(Context context, LockSettingsStorage storage,
-            UserManager userManager) {
+            UserManager userManager, PasswordSlotManager passwordSlotManager) {
         mContext = context;
         mStorage = storage;
         mUserManager = userManager;
+        mPasswordSlotManager = passwordSlotManager;
     }
 
     @VisibleForTesting
@@ -324,6 +329,7 @@ public class SyntheticPasswordManager {
                         mWeaver = null;
                     }
                 });
+                mPasswordSlotManager.refreshActiveSlots(getUsedWeaverSlots());
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "Failed to get weaver service", e);
@@ -561,6 +567,7 @@ public class SyntheticPasswordManager {
                 Log.i(TAG, "Destroy weaver slot " + slot + " for user " + userId);
                 try {
                     weaverEnroll(slot, null, null);
+                    mPasswordSlotManager.markSlotDeleted(slot);
                 } catch (RemoteException e) {
                     Log.w(TAG, "Failed to destroy slot", e);
                 }
@@ -595,6 +602,7 @@ public class SyntheticPasswordManager {
 
     private int getNextAvailableWeaverSlot() {
         Set<Integer> usedSlots = getUsedWeaverSlots();
+        usedSlots.addAll(mPasswordSlotManager.getUsedSlots());
         for (int i = 0; i < mWeaverConfig.slots; i++) {
             if (!usedSlots.contains(i)) {
                 return i;
@@ -640,6 +648,7 @@ public class SyntheticPasswordManager {
                 return DEFAULT_HANDLE;
             }
             saveWeaverSlot(weaverSlot, handle, userId);
+            mPasswordSlotManager.markSlotInUse(weaverSlot);
             synchronizeWeaverFrpPassword(pwd, requestedQuality, userId, weaverSlot);
 
             pwd.passwordHandle = null;
@@ -740,7 +749,12 @@ public class SyntheticPasswordManager {
 
     private ArrayMap<Integer, ArrayMap<Long, TokenData>> tokenMap = new ArrayMap<>();
 
-    public long createTokenBasedSyntheticPassword(byte[] token, int userId) {
+    /**
+     * Create a token based Synthetic password for the given user.
+     * @return the handle of the token
+     */
+    public long createTokenBasedSyntheticPassword(byte[] token, int userId,
+            @Nullable EscrowTokenStateChangeCallback changeCallback) {
         long handle = generateHandle();
         if (!tokenMap.containsKey(userId)) {
             tokenMap.put(userId, new ArrayMap<>());
@@ -756,6 +770,7 @@ public class SyntheticPasswordManager {
             tokenData.weaverSecret = null;
         }
         tokenData.aggregatedSecret = transformUnderSecdiscardable(token, secdiscardable);
+        tokenData.mCallback = changeCallback;
 
         tokenMap.get(userId).put(handle, tokenData);
         return handle;
@@ -798,11 +813,15 @@ public class SyntheticPasswordManager {
                 return false;
             }
             saveWeaverSlot(slot, handle, userId);
+            mPasswordSlotManager.markSlotInUse(slot);
         }
         saveSecdiscardable(handle, tokenData.secdiscardableOnDisk, userId);
         createSyntheticPasswordBlob(handle, SYNTHETIC_PASSWORD_TOKEN_BASED, authToken,
                 tokenData.aggregatedSecret, 0L, userId);
         tokenMap.get(userId).remove(handle);
+        if (tokenData.mCallback != null) {
+            tokenData.mCallback.onEscrowTokenActivated(handle, userId);
+        }
         return true;
     }
 

@@ -65,6 +65,7 @@ import java.lang.ref.WeakReference;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -524,7 +525,7 @@ public class WifiManager {
     /**
      * The look up key for an int that indicates why softAP started failed
      * currently support general and no_channel
-     * @see #SAP_START_FAILURE_GENERIC
+     * @see #SAP_START_FAILURE_GENERAL
      * @see #SAP_START_FAILURE_NO_CHANNEL
      *
      * @hide
@@ -628,15 +629,15 @@ public class WifiManager {
     public @interface SapStartFailure {}
 
     /**
-     *  If WIFI AP start failed, this reason code means there is no legal channel exists on
-     *  user selected band by regulatory
+     *  All other reasons for AP start failure besides {@link #SAP_START_FAILURE_NO_CHANNEL}.
      *
      *  @hide
      */
     public static final int SAP_START_FAILURE_GENERAL= 0;
 
     /**
-     *  All other reason for AP start failed besides SAP_START_FAILURE_GENERAL
+     *  If Wi-Fi AP start failed, this reason code means that no legal channel exists on user
+     *  selected band due to regulatory constraints.
      *
      *  @hide
      */
@@ -1008,7 +1009,8 @@ public class WifiManager {
     /**
      * Directed broadcast intent action indicating that the device has connected to one of the
      * network suggestions provided by the app. This will be sent post connection to a network
-     * which was created with {@link WifiNetworkSuggestion.Builder#setIsAppInteractionRequired()}
+     * which was created with {@link WifiNetworkSuggestion.Builder#setIsAppInteractionRequired(
+     * boolean)}
      * flag set.
      * <p>
      * Note: The broadcast is sent to the app only if it holds
@@ -1061,8 +1063,9 @@ public class WifiManager {
     /**
      * In this Wi-Fi lock mode, Wi-Fi will not go to power save.
      * This results in operating with low packet latency.
-     * The lock is active  even when the device screen is off or
-     * the acquiring application is running in the background.
+     * The lock is only active when the device is connected to an access point.
+     * The lock is active even when the device screen is off or the acquiring application is
+     * running in the background.
      * This mode will consume more power and hence should be used only
      * when there is a need for this tradeoff.
      * <p>
@@ -1080,6 +1083,7 @@ public class WifiManager {
      * In this Wi-Fi lock mode, Wi-Fi will operate with a priority to achieve low latency.
      * {@link #WIFI_MODE_FULL_LOW_LATENCY} lock has the following limitations:
      * <ol>
+     * <li>The lock is only active when the device is connected to an access point.</li>
      * <li>The lock is only active when the screen is on.</li>
      * <li>The lock is only active when the acquiring app is running in the foreground.</li>
      * </ol>
@@ -1288,6 +1292,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD
     })
+    @NonNull
     public List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> getAllMatchingWifiConfigs(
             @NonNull List<ScanResult> scanResults) {
         List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> configs = new ArrayList<>();
@@ -1330,8 +1335,12 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD
     })
+    @NonNull
     public Map<OsuProvider, List<ScanResult>> getMatchingOsuProviders(
-            List<ScanResult> scanResults) {
+            @Nullable List<ScanResult> scanResults) {
+        if (scanResults == null) {
+            return new HashMap<>();
+        }
         try {
             return mService.getMatchingOsuProviders(scanResults);
         } catch (RemoteException e) {
@@ -1356,6 +1365,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD
     })
+    @NonNull
     public Map<OsuProvider, PasspointConfiguration> getMatchingPasspointConfigsForOsuProviders(
             @NonNull Set<OsuProvider> osuProviders) {
         try {
@@ -3741,7 +3751,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETUP_WIZARD,
             android.Manifest.permission.NETWORK_STACK
     })
-    public void connect(WifiConfiguration config, ActionListener listener) {
+    public void connect(@NonNull WifiConfiguration config, @Nullable ActionListener listener) {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
         // Use INVALID_NETWORK_ID for arg1 when passing a config object
         // arg1 is used to pass network id when the network already exists
@@ -3767,7 +3777,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETUP_WIZARD,
             android.Manifest.permission.NETWORK_STACK
     })
-    public void connect(int networkId, ActionListener listener) {
+    public void connect(int networkId, @Nullable ActionListener listener) {
         if (networkId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         getChannel().sendMessage(CONNECT_NETWORK, networkId, putListener(listener));
     }
@@ -3798,7 +3808,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETUP_WIZARD,
             android.Manifest.permission.NETWORK_STACK
     })
-    public void save(WifiConfiguration config, ActionListener listener) {
+    public void save(@NonNull WifiConfiguration config, @Nullable ActionListener listener) {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
         getChannel().sendMessage(SAVE_NETWORK, 0, putListener(listener), config);
     }
@@ -3822,7 +3832,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETUP_WIZARD,
             android.Manifest.permission.NETWORK_STACK
     })
-    public void forget(int netId, ActionListener listener) {
+    public void forget(int netId, @Nullable ActionListener listener) {
         if (netId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         getChannel().sendMessage(FORGET_NETWORK, netId, putListener(listener));
     }
@@ -3842,7 +3852,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETUP_WIZARD,
             android.Manifest.permission.NETWORK_STACK
     })
-    public void disable(int netId, ActionListener listener) {
+    public void disable(int netId, @Nullable ActionListener listener) {
         if (netId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         getChannel().sendMessage(DISABLE_NETWORK, netId, putListener(listener));
     }
@@ -4483,7 +4493,9 @@ public class WifiManager {
 
     /**
      * Start subscription provisioning flow
+     *
      * @param provider {@link OsuProvider} to provision with
+     * @param executor the Executor on which to run the callback.
      * @param callback {@link ProvisioningCallback} for updates regarding provisioning flow
      * @hide
      */
@@ -4492,44 +4504,47 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD
     })
-    public void startSubscriptionProvisioning(OsuProvider provider, ProvisioningCallback callback,
-            @Nullable Handler handler) {
-        Looper looper = (handler == null) ? Looper.getMainLooper() : handler.getLooper();
+    public void startSubscriptionProvisioning(@NonNull OsuProvider provider,
+            @NonNull @CallbackExecutor Executor executor, @NonNull ProvisioningCallback callback) {
+        // Verify arguments
+        if (executor == null) {
+            throw new IllegalArgumentException("executor must not be null");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("callback must not be null");
+        }
         try {
             mService.startSubscriptionProvisioning(provider,
-                    new ProvisioningCallbackProxy(looper, callback));
+                    new ProvisioningCallbackProxy(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
+    /**
+     * Helper class to support OSU Provisioning callbacks
+     */
     private static class ProvisioningCallbackProxy extends IProvisioningCallback.Stub {
-        private final Handler mHandler;
+        private final Executor mExecutor;
         private final ProvisioningCallback mCallback;
 
-        ProvisioningCallbackProxy(Looper looper, ProvisioningCallback callback) {
-            mHandler = new Handler(looper);
+        ProvisioningCallbackProxy(Executor executor, ProvisioningCallback callback) {
+            mExecutor = executor;
             mCallback = callback;
         }
         @Override
         public void onProvisioningStatus(int status) {
-            mHandler.post(() -> {
-                mCallback.onProvisioningStatus(status);
-            });
+            mExecutor.execute(() -> mCallback.onProvisioningStatus(status));
         }
 
         @Override
         public void onProvisioningFailure(int status) {
-            mHandler.post(() -> {
-                mCallback.onProvisioningFailure(status);
-            });
+            mExecutor.execute(() -> mCallback.onProvisioningFailure(status));
         }
 
         @Override
         public void onProvisioningComplete() {
-            mHandler.post(() -> {
-                mCallback.onProvisioningComplete();
-            });
+            mExecutor.execute(() -> mCallback.onProvisioningComplete());
         }
     }
 
@@ -4848,7 +4863,7 @@ public class WifiManager {
     /**
      * @return true if this device supports Wi-Fi Enhanced Open (OWE)
      */
-    public boolean isOweSupported() {
+    public boolean isEnhancedOpenSupported() {
         return isFeatureSupported(WIFI_FEATURE_OWE);
     }
 
@@ -4899,7 +4914,8 @@ public class WifiManager {
     public static final int DEVICE_MOBILITY_STATE_UNKNOWN = 0;
 
     /**
-     * High movement device mobility state
+     * High movement device mobility state.
+     * e.g. on a bike, in a motor vehicle
      *
      * @see #setDeviceMobilityState(int)
      *
@@ -4909,7 +4925,8 @@ public class WifiManager {
     public static final int DEVICE_MOBILITY_STATE_HIGH_MVMT = 1;
 
     /**
-     * Low movement device mobility state
+     * Low movement device mobility state.
+     * e.g. walking, running
      *
      * @see #setDeviceMobilityState(int)
      *
@@ -4931,6 +4948,8 @@ public class WifiManager {
     /**
      * Updates the device mobility state. Wifi uses this information to adjust the interval between
      * Wifi scans in order to balance power consumption with scan accuracy.
+     * The default mobility state when the device boots is {@link #DEVICE_MOBILITY_STATE_UNKNOWN}.
+     * This API should be called whenever there is a change in the mobility state.
      * @param state the updated device mobility state
      * @hide
      */
@@ -5097,13 +5116,13 @@ public class WifiManager {
 
     /**
      * Interface for Wi-Fi usability statistics listener. Should be implemented by applications and
-     * set when calling {@link WifiManager#addWifiUsabilityStatsListener(Executor,
-     * WifiUsabilityStatsListener)}.
+     * set when calling {@link WifiManager#addOnWifiUsabilityStatsListener(Executor,
+     * OnWifiUsabilityStatsListener)}.
      *
      * @hide
      */
     @SystemApi
-    public interface WifiUsabilityStatsListener {
+    public interface OnWifiUsabilityStatsListener {
         /**
          * Called when Wi-Fi usability statistics is updated.
          *
@@ -5115,15 +5134,15 @@ public class WifiManager {
          *                           Wi-Fi usability stats.
          * @param stats The updated Wi-Fi usability statistics.
          */
-        void onStatsUpdated(int seqNum, boolean isSameBssidAndFreq,
-                WifiUsabilityStatsEntry stats);
+        void onWifiUsabilityStats(int seqNum, boolean isSameBssidAndFreq,
+                @NonNull WifiUsabilityStatsEntry stats);
     }
 
     /**
-     * Adds a listener for Wi-Fi usability statistics. See {@link WifiUsabilityStatsListener}.
+     * Adds a listener for Wi-Fi usability statistics. See {@link OnWifiUsabilityStatsListener}.
      * Multiple listeners can be added. Callers will be invoked periodically by framework to
      * inform clients about the current Wi-Fi usability statistics. Callers can remove a previously
-     * added listener using {@link removeWifiUsabilityStatsListener}.
+     * added listener using {@link removeOnWifiUsabilityStatsListener}.
      *
      * @param executor The executor on which callback will be invoked.
      * @param listener Listener for Wifi usability statistics.
@@ -5132,25 +5151,25 @@ public class WifiManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.WIFI_UPDATE_USABILITY_STATS_SCORE)
-    public void addWifiUsabilityStatsListener(@NonNull @CallbackExecutor Executor executor,
-            @NonNull WifiUsabilityStatsListener listener) {
+    public void addOnWifiUsabilityStatsListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull OnWifiUsabilityStatsListener listener) {
         if (executor == null) throw new IllegalArgumentException("executor cannot be null");
         if (listener == null) throw new IllegalArgumentException("listener cannot be null");
         if (mVerboseLoggingEnabled) {
-            Log.v(TAG, "addWifiUsabilityStatsListener: listener=" + listener);
+            Log.v(TAG, "addOnWifiUsabilityStatsListener: listener=" + listener);
         }
         try {
-            mService.addWifiUsabilityStatsListener(new Binder(),
-                    new IWifiUsabilityStatsListener.Stub() {
+            mService.addOnWifiUsabilityStatsListener(new Binder(),
+                    new IOnWifiUsabilityStatsListener.Stub() {
                         @Override
-                        public void onStatsUpdated(int seqNum, boolean isSameBssidAndFreq,
+                        public void onWifiUsabilityStats(int seqNum, boolean isSameBssidAndFreq,
                                 WifiUsabilityStatsEntry stats) {
                             if (mVerboseLoggingEnabled) {
-                                Log.v(TAG, "WifiUsabilityStatsListener: onStatsUpdated: seqNum="
-                                        + seqNum);
+                                Log.v(TAG, "OnWifiUsabilityStatsListener: "
+                                        + "onWifiUsabilityStats: seqNum=" + seqNum);
                             }
                             Binder.withCleanCallingIdentity(() ->
-                                    executor.execute(() -> listener.onStatsUpdated(seqNum,
+                                    executor.execute(() -> listener.onWifiUsabilityStats(seqNum,
                                             isSameBssidAndFreq, stats)));
                         }
                     },
@@ -5171,13 +5190,13 @@ public class WifiManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.WIFI_UPDATE_USABILITY_STATS_SCORE)
-    public void removeWifiUsabilityStatsListener(@NonNull WifiUsabilityStatsListener listener) {
+    public void removeOnWifiUsabilityStatsListener(@NonNull OnWifiUsabilityStatsListener listener) {
         if (listener == null) throw new IllegalArgumentException("listener cannot be null");
         if (mVerboseLoggingEnabled) {
-            Log.v(TAG, "removeWifiUsabilityStatsListener: listener=" + listener);
+            Log.v(TAG, "removeOnWifiUsabilityStatsListener: listener=" + listener);
         }
         try {
-            mService.removeWifiUsabilityStatsListener(listener.hashCode());
+            mService.removeOnWifiUsabilityStatsListener(listener.hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5185,13 +5204,14 @@ public class WifiManager {
 
     /**
      * Provide a Wi-Fi usability score information to be recorded (but not acted upon) by the
-     * framework. The Wi-Fi usability score is derived from {@link WifiUsabilityStatsListener}
+     * framework. The Wi-Fi usability score is derived from {@link OnWifiUsabilityStatsListener}
      * where a score is matched to Wi-Fi usability statistics using the sequence number. The score
      * is used to quantify whether Wi-Fi is usable in a future time.
      *
      * @param seqNum Sequence number of the Wi-Fi usability score.
-     * @param score The Wi-Fi usability score.
-     * @param predictionHorizonSec Prediction horizon of the Wi-Fi usability score.
+     * @param score The Wi-Fi usability score, expected range: [0, 100].
+     * @param predictionHorizonSec Prediction horizon of the Wi-Fi usability score in second,
+     *                             expected range: [0, 30].
      *
      * @hide
      */

@@ -21,6 +21,8 @@ LIBANDROID {
     AChoreographer_getInstance; # introduced=24
     AChoreographer_postFrameCallback; # introduced=24
     AChoreographer_postFrameCallbackDelayed; # introduced=24
+    AChoreographer_postFrameCallback64; # introduced=29
+    AChoreographer_postFrameCallbackDelayed64; # introduced=29
     AConfiguration_copy;
     AConfiguration_delete;
     AConfiguration_diff;
@@ -146,6 +148,7 @@ LIBANDROID {
     AHardwareBuffer_getNativeHandle; # introduced=26
     AHardwareBuffer_isSupported; # introduced=29
     AHardwareBuffer_lock; # introduced=26
+    AHardwareBuffer_lockAndGetInfo; # introduced=29
     AHardwareBuffer_lockPlanes; # introduced=29
     AHardwareBuffer_recvHandleFromUnixSocket; # introduced=26
     AHardwareBuffer_release; # introduced=26

@@ -30,6 +30,7 @@ import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
+import static android.view.Display.FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.InsetsState.TYPE_IME;
 import static android.view.Surface.ROTATION_0;
@@ -40,12 +41,14 @@ import static android.view.View.GONE;
 import static android.view.WindowManager.DOCKED_BOTTOM;
 import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.DOCKED_TOP;
+import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
 import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
+import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.NEEDS_MENU_SET_TRUE;
 import static android.view.WindowManager.LayoutParams.NEEDS_MENU_UNSET;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
@@ -127,6 +130,7 @@ import static com.android.server.wm.WindowManagerService.logSurface;
 import static com.android.server.wm.WindowState.RESIZE_HANDLE_WIDTH_IN_DP;
 import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.READY_TO_SHOW;
+import static com.android.server.wm.utils.RegionUtils.rectListToRegion;
 
 import android.animation.AnimationHandler;
 import android.annotation.CallSuper;
@@ -150,6 +154,7 @@ import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Process;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.Trace;
@@ -162,6 +167,7 @@ import android.view.Display;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.Gravity;
+import android.view.ISystemGestureExclusionListener;
 import android.view.InputChannel;
 import android.view.InputDevice;
 import android.view.InputWindowHandle;
@@ -181,6 +187,8 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.TriConsumer;
+import com.android.internal.util.function.pooled.PooledConsumer;
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.AnimationThread;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.utils.DisplayRotationUtil;
@@ -307,6 +315,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private DisplayRotation mDisplayRotation;
     DisplayFrames mDisplayFrames;
 
+    private final RemoteCallbackList<ISystemGestureExclusionListener>
+            mSystemGestureExclusionListeners = new RemoteCallbackList<>();
+    private final Region mSystemGestureExclusion = new Region();
+
     /**
      * For default display it contains real metrics, empty for others.
      * @see WindowManagerService#createWatermarkInTransaction()
@@ -391,7 +403,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     final ArrayList<WindowToken> mExitingTokens = new ArrayList<>();
 
     /** Detect user tapping outside of current focused task bounds .*/
-    TaskTapPointerEventListener mTapDetector;
+    @VisibleForTesting
+    final TaskTapPointerEventListener mTapDetector;
 
     /** Detect user tapping outside of current focused stack bounds .*/
     private Region mTouchExcludeRegion = new Region();
@@ -875,14 +888,21 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mBoundsAnimationController = new BoundsAnimationController(service.mContext,
                 mAppTransition, AnimationThread.getHandler(), animationHandler);
 
-        if (mWmService.mInputManager != null) {
-            final InputChannel inputChannel = mWmService.mInputManager.monitorInput("Display "
-                    + mDisplayId, mDisplayId);
-            mPointerEventDispatcher = inputChannel != null
-                    ? new PointerEventDispatcher(inputChannel) : null;
-        } else {
-            mPointerEventDispatcher = null;
+        final InputChannel inputChannel = mWmService.mInputManager.monitorInput(
+                "PointerEventDispatcher" + mDisplayId, mDisplayId);
+        mPointerEventDispatcher = new PointerEventDispatcher(inputChannel);
+
+        // Tap Listeners are supported for:
+        // 1. All physical displays (multi-display).
+        // 2. VirtualDisplays on VR, AA (and everything else).
+        mTapDetector = new TaskTapPointerEventListener(mWmService, this);
+        registerPointerEventListener(mTapDetector);
+        registerPointerEventListener(mWmService.mMousePositionTracker);
+        if (mWmService.mAtmService.getRecentTasks() != null) {
+            registerPointerEventListener(
+                    mWmService.mAtmService.getRecentTasks().getInputListener());
         }
+
         mDisplayPolicy = new DisplayPolicy(service, this);
         mDisplayRotation = new DisplayRotation(service, this);
         if (isDefaultDisplay) {
@@ -1510,19 +1530,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         mDisplayFrames.onDisplayInfoUpdated(mDisplayInfo,
                 calculateDisplayCutoutForRotation(mDisplayInfo.rotation));
-
-        // Tap Listeners are supported for:
-        // 1. All physical displays (multi-display).
-        // 2. VirtualDisplays on VR, AA (and everything else).
-        if (mPointerEventDispatcher != null && mTapDetector == null) {
-            if (DEBUG_DISPLAY) {
-                Slog.d(TAG,
-                        "Registering PointerEventListener for DisplayId: " + mDisplayId);
-            }
-            mTapDetector = new TaskTapPointerEventListener(mWmService, this);
-            registerPointerEventListener(mTapDetector);
-            registerPointerEventListener(mWmService.mMousePositionTracker);
-        }
     }
 
     /**
@@ -2389,6 +2396,27 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     /**
+     * Returns true if the input point is within an app window.
+     */
+    boolean pointWithinAppWindow(int x, int y) {
+        final int[] targetWindowType = {-1};
+        final Consumer fn = PooledLambda.obtainConsumer((w, nonArg) -> {
+            if (targetWindowType[0] != -1) {
+                return;
+            }
+
+            if (w.isOnScreen() && w.isVisibleLw() && w.getFrameLw().contains(x, y)) {
+                targetWindowType[0] = w.mAttrs.type;
+                return;
+            }
+        }, PooledLambda.__(WindowState.class), mTmpRect);
+        forAllWindows(fn, true /* traverseTopToBottom */);
+        ((PooledConsumer) fn).recycle();
+        return FIRST_APPLICATION_WINDOW <= targetWindowType[0]
+                        && targetWindowType[0] <= LAST_APPLICATION_WINDOW;
+    }
+
+    /**
      * Find the task whose outside touch area (for resizing) (x, y) falls within.
      * Returns null if the touch doesn't fall into a resizing area.
      */
@@ -2449,9 +2477,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mTmpRegion.set(mTmpRect);
             mTouchExcludeRegion.op(mTmpRegion, Op.UNION);
         }
-        if (mTapDetector != null) {
-            mTapDetector.setTouchExcludeRegion(mTouchExcludeRegion);
-        }
+        mTapDetector.setTouchExcludeRegion(mTouchExcludeRegion);
     }
 
     /**
@@ -2501,11 +2527,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mWmService.stopFreezingDisplayLocked();
             super.removeImmediately();
             if (DEBUG_DISPLAY) Slog.v(TAG_WM, "Removing display=" + this);
-            if (mPointerEventDispatcher != null && mTapDetector != null) {
-                unregisterPointerEventListener(mTapDetector);
-                unregisterPointerEventListener(mWmService.mMousePositionTracker);
-                mTapDetector = null;
-            }
+            mPointerEventDispatcher.dispose();
             mWmService.mAnimator.removeDisplayLocked(mDisplayId);
             mWindowingLayer.release();
             mOverlayLayer.release();
@@ -2515,7 +2537,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mRemovingDisplay = false;
         }
 
-        mDisplayPolicy.onDisplayRemoved();
         mWmService.mWindowPlacerLocked.requestTraversal();
     }
 
@@ -2802,6 +2823,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         pw.println();
         mWallpaperController.dump(pw, "  ");
+
+        pw.println();
+        pw.print("mSystemGestureExclusion=");
+        if (mSystemGestureExclusionListeners.getRegisteredCallbackCount() > 0) {
+            pw.println(mSystemGestureExclusion);
+        } else {
+            pw.println("<no lstnrs>");
+        }
 
         pw.println();
         pw.println(prefix + "Application tokens in top down Z order:");
@@ -3270,7 +3299,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     private void updateImeParent() {
-        final SurfaceControl newParent = computeImeParent();
+        // Force attaching IME to the display when magnifying, or it would be magnified with
+        // target app together.
+        final boolean shouldAttachToDisplay = (mMagnificationSpec != null);
+        final SurfaceControl newParent =
+                shouldAttachToDisplay ? mWindowingLayer : computeImeParent();
         if (newParent != null) {
             mPendingTransaction.reparent(mImeWindowsContainers.mSurfaceControl, newParent);
             scheduleAnimation();
@@ -3286,8 +3319,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         // Attach it to app if the target is part of an app and such app is covering the entire
         // screen. If it's not covering the entire screen the IME might extend beyond the apps
         // bounds.
-        if (mInputMethodTarget != null && mInputMethodTarget.mAppToken != null &&
-                mInputMethodTarget.getWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
+        if (mInputMethodTarget != null && mInputMethodTarget.mAppToken != null
+                && mInputMethodTarget.getWindowingMode() == WINDOWING_MODE_FULLSCREEN
+                // An activity with override bounds should be letterboxed inside its parent bounds,
+                // so it doesn't fill the screen.
+                && mInputMethodTarget.mAppToken.matchParentBounds()) {
             return mInputMethodTarget.mAppToken.getSurfaceControl();
         }
 
@@ -4682,6 +4718,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         } else {
             mMagnificationSpec = null;
         }
+        // Re-parent IME's SurfaceControl when MagnificationSpec changed.
+        updateImeParent();
 
         applyMagnificationSpec(getPendingTransaction(), spec);
         getPendingTransaction().apply();
@@ -4824,15 +4862,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     void registerPointerEventListener(@NonNull PointerEventListener listener) {
-        if (mPointerEventDispatcher != null) {
-            mPointerEventDispatcher.registerInputEventListener(listener);
-        }
+        mPointerEventDispatcher.registerInputEventListener(listener);
     }
 
     void unregisterPointerEventListener(@NonNull PointerEventListener listener) {
-        if (mPointerEventDispatcher != null) {
-            mPointerEventDispatcher.unregisterInputEventListener(listener);
-        }
+        mPointerEventDispatcher.unregisterInputEventListener(listener);
     }
 
     void prepareAppTransition(@WindowManager.TransitionType int transit,
@@ -4904,12 +4938,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * @see Display#FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
      */
     boolean supportsSystemDecorations() {
-        // TODO(b/114338689): Read the setting from DisplaySettings.
-        return mDisplay.supportsSystemDecorations()
-                // TODO (b/111363427): Remove this and set the new FLAG_SHOULD_SHOW_LAUNCHER flag
-                // (b/114338689) whenever vr 2d display id is set.
-                || mDisplayId == mWmService.mVr2dDisplayId
-                || mWmService.mForceDesktopModeOnExternalDisplays;
+        return (mWmService.mDisplayWindowSettings.shouldShowSystemDecorsLocked(this)
+                || (mDisplay.getFlags() & FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS) != 0
+                || mWmService.mForceDesktopModeOnExternalDisplays)
+                // VR virtual display will be used to run and render 2D app within a VR experience.
+                && mDisplayId != mWmService.mVr2dDisplayId;
     }
 
     /**
@@ -4930,6 +4963,100 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     @VisibleForTesting
     SurfaceControl getWindowingLayer() {
         return mWindowingLayer;
+    }
+
+    /**
+     * Updates the display's system gesture exclusion.
+     *
+     * @return true, if the exclusion changed.
+     */
+    boolean updateSystemGestureExclusion() {
+        if (mSystemGestureExclusionListeners.getRegisteredCallbackCount() == 0) {
+            // No one's interested anyways.
+            return false;
+        }
+
+        final Region systemGestureExclusion = calculateSystemGestureExclusion();
+        try {
+            if (mSystemGestureExclusion.equals(systemGestureExclusion)) {
+                return false;
+            }
+            mSystemGestureExclusion.set(systemGestureExclusion);
+            for (int i = mSystemGestureExclusionListeners.beginBroadcast() - 1; i >= 0; --i) {
+                try {
+                    mSystemGestureExclusionListeners.getBroadcastItem(i)
+                            .onSystemGestureExclusionChanged(mDisplayId, systemGestureExclusion);
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to notify SystemGestureExclusionListener", e);
+                }
+            }
+            mSystemGestureExclusionListeners.finishBroadcast();
+            return true;
+        } finally {
+            systemGestureExclusion.recycle();
+        }
+    }
+
+    @VisibleForTesting
+    Region calculateSystemGestureExclusion() {
+        final Region global = Region.obtain();
+        final Region touchableRegion = Region.obtain();
+        final Region local = Region.obtain();
+
+        // Traverse all windows bottom up to assemble the gesture exclusion rects.
+        // For each window, we only take the rects that fall within its touchable region.
+        forAllWindows(w -> {
+            if (w.cantReceiveTouchInput() || !w.isVisible()
+                    || (w.getAttrs().flags & FLAG_NOT_TOUCHABLE) != 0) {
+                return;
+            }
+            final boolean modal =
+                    (w.mAttrs.flags & (FLAG_NOT_TOUCH_MODAL | FLAG_NOT_FOCUSABLE)) == 0;
+
+            // Only keep the exclusion zones from the windows behind where the current window
+            // isn't touchable.
+            w.getTouchableRegion(touchableRegion);
+            global.op(touchableRegion, Op.DIFFERENCE);
+
+            rectListToRegion(w.getSystemGestureExclusion(), local);
+
+            // Transform to display coordinates
+            local.scale(w.mGlobalScale);
+            final Rect frame = w.getWindowFrames().mFrame;
+            local.translate(frame.left, frame.top);
+
+            // A window can only exclude system gestures where it is actually touchable
+            local.op(touchableRegion, Op.INTERSECT);
+
+            global.op(local, Op.UNION);
+        }, false /* topToBottom */);
+        local.recycle();
+        touchableRegion.recycle();
+        return global;
+    }
+
+    void registerSystemGestureExclusionListener(ISystemGestureExclusionListener listener) {
+        mSystemGestureExclusionListeners.register(listener);
+        final boolean changed;
+        if (mSystemGestureExclusionListeners.getRegisteredCallbackCount() == 1) {
+            changed = updateSystemGestureExclusion();
+        } else {
+            changed = false;
+        }
+
+        if (!changed) {
+            // If updateSystemGestureExclusion changed the exclusion, it will already have
+            // notified the listener. Otherwise, we'll do it here.
+            try {
+                listener.onSystemGestureExclusionChanged(mDisplayId, mSystemGestureExclusion);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to notify SystemGestureExclusionListener during register", e);
+            }
+        }
+    }
+
+    void unregisterSystemGestureExclusionListener(ISystemGestureExclusionListener listener) {
+        mSystemGestureExclusionListeners.unregister(listener);
     }
 
     /**

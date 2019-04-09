@@ -118,8 +118,11 @@
     <attr name="manageSpaceActivity" format="string" />
 
     <!-- Option to let applications specify that user data can/cannot be
-         cleared by the user in Settings. This flag is turned on by default.
-         <em>This attribute is usable only by applications
+         cleared. This flag is turned on by default.
+         <p>Starting from API level 29 this flag only controls if the user can
+         clear app data from Settings. To control clearing the data after a
+         failed restore use allowClearUserDataOnFailedRestore flag.
+         <p><em>This attribute is usable only by applications
          included in the system image. Third-party apps cannot use it.</em> -->
     <attr name="allowClearUserData" format="boolean" />
 
@@ -965,7 +968,7 @@
          <p>The default value of this attribute is <code>false</code>. -->
     <attr name="allowEmbedded" format="boolean" />
 
-    <!-- @hide @SystemApi Specifies whether this {@link android.app.Activity} should be shown on
+    <!-- Specifies whether this {@link android.app.Activity} should be shown on
          top of the lock screen whenever the lockscreen is up and this activity has another
          activity behind it with the {@link android.R.attr#showWhenLocked} attribute set. That
          is, this activity is only visible on the lock screen if there is another activity with
@@ -1473,6 +1476,9 @@
         <flag name="location" value="0x08" />
         <!-- Auto, bluetooth, TV or other devices connection, monitoring and interaction. -->
         <flag name="connectedDevice" value="0x10" />
+        <!-- Managing a media projection session, e.g, for screen recording or taking
+             screenshots.-->
+        <flag name="mediaProjection" value="0x20" />
     </attr>
 
 
@@ -1667,6 +1673,9 @@
              This flag is turned on by default. <em>This attribute is usable only by system apps.
              </em> -->
         <attr name="allowClearUserDataOnFailedRestore"/>
+        <!-- If {@code true} the app's non sensitive audio can be capture by other apps.
+             The default value is true. -->
+        <attr name="allowAudioPlaybackCapture" format="boolean" />
     </declare-styleable>
     <!-- The <code>permission</code> tag declares a security permission that can be
          used to control access from other packages to specific components or
@@ -1990,7 +1999,9 @@
          {@link #AndroidManifestApplication application} tag. -->
     <declare-styleable name="AndroidManifestUsesPackage" parent="AndroidManifestApplication">
         <!-- Required type of association with the package, for example "android.package.ad_service"
-             if it provides an advertising service. -->
+             if it provides an advertising service.  This should use the standard scoped naming
+             convention as used for other things such as package names, based on the Java naming
+             convention. -->
         <attr name="packageType" format="string" />
         <!-- Required name of the package you use. -->
         <attr name="name" />

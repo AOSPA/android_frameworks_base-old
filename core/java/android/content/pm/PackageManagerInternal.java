@@ -22,6 +22,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager.ApplicationInfoFlags;
 import android.content.pm.PackageManager.ComponentInfoFlags;
 import android.content.pm.PackageManager.PackageInfoFlags;
@@ -78,9 +79,9 @@ public abstract class PackageManagerInternal {
     /** Observer called whenever the list of packages changes */
     public interface PackageListObserver {
         /** A package was added to the system. */
-        void onPackageAdded(@NonNull String packageName);
+        void onPackageAdded(@NonNull String packageName, int uid);
         /** A package was removed from the system. */
-        void onPackageRemoved(@NonNull String packageName);
+        void onPackageRemoved(@NonNull String packageName, int uid);
     }
 
     /** Interface to override permission checks via composition */
@@ -160,6 +161,14 @@ public abstract class PackageManagerInternal {
          * @return whether the default browser was successfully set.
          */
         boolean setDefaultBrowser(@Nullable String packageName, @UserIdInt int userId);
+
+        /**
+         * Set the package name of the default browser asynchronously.
+         *
+         * @param packageName package name of the default browser, or {@code null} to remove
+         * @param userId the user id
+         */
+        void setDefaultBrowserAsync(@Nullable String packageName, @UserIdInt int userId);
     }
 
     /**
@@ -917,4 +926,21 @@ public abstract class PackageManagerInternal {
      * @param provider the provider
      */
     public abstract void setDefaultHomeProvider(@NonNull DefaultHomeProvider provider);
+
+    /**
+     * Returns {@code true} if given {@code packageName} is an apex package.
+     */
+    public abstract boolean isApexPackage(String packageName);
+
+    /**
+     * Uninstalls given {@code packageName}.
+     *
+     * @param packageName apex package to uninstall.
+     * @param versionCode version of a package to uninstall.
+     * @param userId user to uninstall apex package for. Must be
+     *               {@link android.os.UserHandle#USER_ALL}, otherwise failure will be reported.
+     * @param intentSender a {@link IntentSender} to send result of an uninstall to.
+     */
+    public abstract void uninstallApex(String packageName, long versionCode, int userId,
+            IntentSender intentSender);
 }

@@ -347,7 +347,7 @@ public class NetworkRequest implements Parcelable {
          * @hide
          */
         @SystemApi
-        public Builder setSignalStrength(int signalStrength) {
+        public @NonNull Builder setSignalStrength(int signalStrength) {
             mNetworkCapabilities.setSignalStrength(signalStrength);
             return this;
         }
@@ -363,7 +363,7 @@ public class NetworkRequest implements Parcelable {
         dest.writeInt(requestId);
         dest.writeString(type.name());
     }
-    public static final Creator<NetworkRequest> CREATOR =
+    public static final @android.annotation.NonNull Creator<NetworkRequest> CREATOR =
         new Creator<NetworkRequest>() {
             public NetworkRequest createFromParcel(Parcel in) {
                 NetworkCapabilities nc = NetworkCapabilities.CREATOR.createFromParcel(in);

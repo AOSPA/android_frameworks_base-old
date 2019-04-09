@@ -52,6 +52,7 @@
 package android.bluetooth;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
@@ -1099,7 +1100,7 @@ public final class BluetoothDevice implements Parcelable {
         return 0;
     }
 
-    public static final Parcelable.Creator<BluetoothDevice> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<BluetoothDevice> CREATOR =
             new Parcelable.Creator<BluetoothDevice>() {
                 public BluetoothDevice createFromParcel(Parcel in) {
                     return new BluetoothDevice(in.readString());
@@ -2357,7 +2358,7 @@ public final class BluetoothDevice implements Parcelable {
      * permissions
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public BluetoothSocket createL2capChannel(int psm) throws IOException {
+    public @NonNull BluetoothSocket createL2capChannel(int psm) throws IOException {
         if (!isBluetoothEnabled()) {
             Log.e(TAG, "createL2capChannel: Bluetooth is not enabled");
             throw new IOException();
@@ -2396,7 +2397,7 @@ public final class BluetoothDevice implements Parcelable {
      * permissions
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public BluetoothSocket createInsecureL2capChannel(int psm) throws IOException {
+    public @NonNull BluetoothSocket createInsecureL2capChannel(int psm) throws IOException {
         if (!isBluetoothEnabled()) {
             Log.e(TAG, "createInsecureL2capChannel: Bluetooth is not enabled");
             throw new IOException();

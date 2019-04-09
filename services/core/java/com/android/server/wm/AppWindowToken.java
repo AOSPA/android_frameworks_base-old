@@ -582,6 +582,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     }
                 }
             }
+            // Changes in opening apps and closing apps may cause orientation change.
+            reportDescendantOrientationChangeIfNeeded();
             return;
         }
 
@@ -664,7 +666,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             }
         }
 
-        if (isReallyAnimating()) {
+        if (isSelfAnimating()) {
             delayed = true;
         } else {
 
@@ -729,9 +731,29 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 }
                 SurfaceControl.closeTransaction();
             }
+
+            // Visibility changes may cause orientation request change.
+            reportDescendantOrientationChangeIfNeeded();
         }
 
         return delayed;
+    }
+
+    private void reportDescendantOrientationChangeIfNeeded() {
+        // Orientation request is exposed only when we're visible. Therefore visibility change
+        // will change requested orientation. Notify upward the hierarchy ladder to adjust
+        // configuration. This is important to cases where activities with incompatible
+        // orientations launch, or user goes back from an activity of bi-orientation to an
+        // activity with specified orientation.
+        if (mActivityRecord.getRequestedConfigurationOrientation() == getConfiguration().orientation
+                || getOrientationIgnoreVisibility() == SCREEN_ORIENTATION_UNSET) {
+            return;
+        }
+
+        final IBinder freezeToken =
+                mActivityRecord.mayFreezeScreenLocked(mActivityRecord.app)
+                        ? mActivityRecord.appToken : null;
+        onDescendantOrientationChanged(freezeToken, mActivityRecord);
     }
 
     /**
@@ -1725,7 +1747,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     boolean isInChangeTransition() {
-        return mTransitChangeLeash != null || isChangeTransition(mTransit);
+        return mTransitChangeLeash != null || AppTransition.isChangeTransit(mTransit);
     }
 
     @VisibleForTesting
@@ -1957,7 +1979,14 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 mLetterbox.attachInput(w);
             }
             getPosition(mTmpPoint);
-            mLetterbox.layout(getParent().getBounds(), w.getFrameLw(), mTmpPoint);
+            // Get the bounds of the "space-to-fill". We union the Task and the Stack bounds here
+            // to handle both split window (where task-bounds can be larger) and orientation
+            // letterbox (where the task is letterboxed within stack).
+            Rect spaceToFill = getTask().getBounds();
+            if (getStack() != null) {
+                spaceToFill.union(getStack().getBounds());
+            }
+            mLetterbox.layout(spaceToFill, w.getFrameLw(), mTmpPoint);
         } else if (mLetterbox != null) {
             mLetterbox.hide();
         }
@@ -2407,6 +2436,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
         final boolean allowSplitScreenPrimaryAnimation = transit != TRANSIT_WALLPAPER_OPEN;
 
+        // Don't animate when the task runs recents animation.
+        final RecentsAnimationController controller = mWmService.getRecentsAnimationController();
+        if (controller != null && controller.isAnimatingTask(getTask())) {
+            return false;
+        }
+
         // We animate always if it's not split screen primary, and only some special cases in split
         // screen primary because it causes issues with stack clipping when we run an un-minimize
         // animation at the same time.
@@ -2426,30 +2461,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         return boundsLayer;
     }
 
-    /** Get position and crop region of animation. */
-    @VisibleForTesting
-    void getAnimationBounds(Point outPosition, Rect outBounds) {
-        outPosition.set(0, 0);
-        outBounds.setEmpty();
-
-        final TaskStack stack = getStack();
-        final Task task = getTask();
-        if (task != null && task.inFreeformWindowingMode()) {
-            task.getRelativeDisplayedPosition(outPosition);
-        } else if (stack != null) {
-            stack.getRelativeDisplayedPosition(outPosition);
-        }
-
-        // Always use stack bounds in order to have the ability to animate outside the task region.
-        // It also needs to be consistent when {@link #mNeedsAnimationBoundsLayer} is set that crops
-        // according to the bounds.
-        if (stack != null) {
-            stack.getBounds(outBounds);
-        }
-        // We have the relative position so the local position can be removed from bounds.
-        outBounds.offsetTo(0, 0);
-    }
-
     @Override
     Rect getDisplayedBounds() {
         final Task task = getTask();
@@ -2460,10 +2471,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             }
         }
         return getBounds();
-    }
-
-    private static boolean isChangeTransition(int transit) {
-        return transit == TRANSIT_TASK_CHANGE_WINDOWING_MODE;
     }
 
     boolean applyAnimationLocked(WindowManager.LayoutParams lp, int transit, boolean enter,
@@ -2485,9 +2492,15 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (okToAnimate()) {
             final AnimationAdapter adapter;
             AnimationAdapter thumbnailAdapter = null;
-            getAnimationBounds(mTmpPoint, mTmpRect);
 
-            boolean isChanging = isChangeTransition(transit) && enter;
+            // Separate position and size for use in animators. Use task-bounds for now so
+            // that activity-level letterbox (maxAspectRatio) is included in the animation.
+            mTmpRect.set(getTask() != null ? getTask().getBounds() : getBounds());
+            mTmpPoint.set(mTmpRect.left, mTmpRect.top);
+            mTmpRect.offsetTo(0, 0);
+
+            final boolean isChanging = AppTransition.isChangeTransit(transit) && enter
+                    && getDisplayContent().mChangingApps.contains(this);
 
             // Delaying animation start isn't compatible with remote animations at all.
             if (getDisplayContent().mAppTransition.getRemoteAnimationController() != null
@@ -2526,7 +2539,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                             new WindowAnimationSpec(a, mTmpPoint, mTmpRect,
                                     getDisplayContent().mAppTransition.canSkipFirstFrame(),
                                     appStackClipMode,
-                                    true /* isAppAnimation */),
+                                    true /* isAppAnimation */,
+                                    mWmService.mWindowCornerRadius),
                             mWmService.mSurfaceAnimationRunner);
                     if (a.getZAdjustment() == Animation.ZORDER_TOP) {
                         mNeedsZBoost = true;
@@ -2697,15 +2711,20 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         // If the animation needs to be cropped then an animation bounds layer is created as a child
         // of the pinned stack or animation layer. The leash is then reparented to this new layer.
         if (mNeedsAnimationBoundsLayer) {
-            final TaskStack stack = getStack();
-            if (stack == null) {
-                return;
+            mTmpRect.setEmpty();
+            final Task task = getTask();
+            if (getDisplayContent().mAppTransitionController.isTransitWithinTask(
+                    getTransit(), task)) {
+                task.getBounds(mTmpRect);
+            } else {
+                final TaskStack stack = getStack();
+                if (stack == null) {
+                    return;
+                }
+                // Set clip rect to stack bounds.
+                stack.getBounds(mTmpRect);
             }
             mAnimationBoundsLayer = createAnimationBoundsLayer(t);
-
-            // Set clip rect to stack bounds.
-            mTmpRect.setEmpty();
-            stack.getBounds(mTmpRect);
 
             // Crop to stack bounds.
             t.setWindowCrop(mAnimationBoundsLayer, mTmpRect);
@@ -2761,6 +2780,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
         getDisplayContent().mAppTransition.notifyAppTransitionFinishedLocked(token);
         scheduleAnimation();
+
+        mActivityRecord.onAnimationFinished();
     }
 
     @Override

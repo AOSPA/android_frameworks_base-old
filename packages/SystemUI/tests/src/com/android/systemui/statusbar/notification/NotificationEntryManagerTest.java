@@ -42,13 +42,13 @@ import android.os.Looper;
 import android.os.UserHandle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.util.ArraySet;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.Dependency;
@@ -347,7 +347,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         verify(mPresenter).updateNotificationViews();
         verify(mEntryListener).onEntryRemoved(
-                mEntry, null, false /* removedByUser */);
+                eq(mEntry), any(), eq(false) /* removedByUser */);
         verify(mRow).setRemoved();
 
         assertNull(mEntryManager.getNotificationData().get(mSbn.getKey()));
@@ -360,7 +360,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         mEntryManager.removeNotification("not_a_real_key", mRankingMap);
 
         verify(mEntryListener, never()).onEntryRemoved(
-                mEntry, null, false /* removedByUser */);
+                eq(mEntry), any(), eq(false) /* removedByUser */);
     }
 
     @Test
@@ -373,7 +373,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         mEntryManager.removeNotification(mSbn.getKey(), mRankingMap);
 
         verify(mEntryListener, never()).onEntryRemoved(
-                mEntry, null, false /* removedByUser */);
+                eq(mEntry), any(), eq(false /* removedByUser */));
     }
 
     @Test
@@ -455,7 +455,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
         verify(extender).setShouldManageLifetime(mEntry, true);
         // THEN the notification is retained
         assertNotNull(mEntryManager.getNotificationData().get(mSbn.getKey()));
-        verify(mEntryListener, never()).onEntryRemoved(mEntry, null, false);
+        verify(mEntryListener, never()).onEntryRemoved(eq(mEntry), any(), eq(false));
     }
 
     @Test
@@ -474,7 +474,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         // THEN the notification is removed
         assertNull(mEntryManager.getNotificationData().get(mSbn.getKey()));
-        verify(mEntryListener).onEntryRemoved(mEntry, null, false);
+        verify(mEntryListener).onEntryRemoved(eq(mEntry), any(), eq(false));
     }
 
     @Test

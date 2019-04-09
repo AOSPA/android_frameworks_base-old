@@ -31,6 +31,7 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.service.carrier.CarrierService;
+import android.telecom.TelecomManager;
 import android.telephony.ims.ImsReasonInfo;
 
 import com.android.internal.telephony.ICarrierConfigLoader;
@@ -71,10 +72,10 @@ public class CarrierConfigManager {
      * one is available for the slot index. An optional int extra
      * {@link TelephonyManager#EXTRA_CARRIER_ID} is included to indicate the carrier id for the
      * changed carrier configuration. An optional int extra
-     * {@link TelephonyManager#EXTRA_PRECISE_CARRIER_ID} is included to indicate the precise
+     * {@link TelephonyManager#EXTRA_SPECIFIC_CARRIER_ID} is included to indicate the precise
      * carrier id for the changed carrier configuration.
      * @see TelephonyManager#getSimCarrierId()
-     * @see TelephonyManager#getSimPreciseCarrierId()
+     * @see TelephonyManager#getSimSpecificCarrierId()
      */
     public static final String
             ACTION_CARRIER_CONFIG_CHANGED = "android.telephony.action.CARRIER_CONFIG_CHANGED";
@@ -186,13 +187,6 @@ public class CarrierConfigManager {
      */
     public static final String
             KEY_SUPPORT_EMERGENCY_SMS_OVER_IMS_BOOL = "support_emergency_sms_over_ims_bool";
-
-    /**
-     * Indicates if carrier supports emergency sms.
-     * @hide
-     */
-    public static final String
-            KEY_EMERGENCY_SMS_SUPPORT_BOOL = "emergency_sms_support_bool";
 
     /** Flag indicating if the phone is a world phone */
     public static final String KEY_WORLD_PHONE_BOOL = "world_phone_bool";
@@ -1540,6 +1534,14 @@ public class CarrierConfigManager {
             "carrier_app_no_wake_signal_config";
 
     /**
+     * Determines whether the carrier app needed to be involved when users try to finish setting up
+     * the SIM card to get network service.
+     * @hide
+     */
+    public static final String KEY_CARRIER_APP_REQUIRED_DURING_SIM_SETUP_BOOL =
+            "carrier_app_required_during_setup_bool";
+
+    /**
      * Default value for {@link Settings.Global#DATA_ROAMING}
      * @hide
      */
@@ -1553,6 +1555,21 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ALLOW_NON_EMERGENCY_CALLS_IN_ECM_BOOL =
             "allow_non_emergency_calls_in_ecm_bool";
+
+    /**
+     * Time that the telephony framework stays in "emergency SMS mode" after an emergency SMS is
+     * sent to the network. This is used by carriers to configure the time
+     * {@link TelephonyManager#isInEmergencySmsMode()} will be true after an emergency SMS is sent.
+     * This is used by GNSS to override user location permissions so that the carrier network can
+     * get the user's location for emergency services.
+     *
+     * The default is 0, which means that this feature is disabled. The maximum value for this timer
+     * is 300000 mS (5 minutes).
+     *
+     * @hide
+     */
+    public static final String KEY_EMERGENCY_SMS_MODE_TIMER_MS_INT =
+            "emergency_sms_mode_timer_ms_int";
 
     /**
      * Flag indicating whether to allow carrier video calls to emergency numbers.
@@ -1840,21 +1857,56 @@ public class CarrierConfigManager {
 
     /**
      * Determine whether user can change Wi-Fi Calling preference in roaming.
-     * {@code false} - roaming preference {@link KEY_CARRIER_DEFAULT_WFC_IMS_ROAMING_MODE_INT} is
-     *                 the same as home preference {@link KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT}
-     *                 and cannot be changed.
-     * {@code true}  - roaming preference can be changed by user independently.
-     *
+     * {@code false} - roaming preference cannot be changed by user independently. If
+     *                 {@link #KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL} is false,
+     *                 {@link #KEY_CARRIER_DEFAULT_WFC_IMS_ROAMING_MODE_INT} is used as the default
+     *                 value. If {@link #KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL} is
+     *                 true, roaming preference is the same as home preference and
+     *                 {@link #KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT} is used as the default value.
+     * {@code true}  - roaming preference can be changed by user independently if
+     *                 {@link #KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL} is false. If
+     *                 {@link #KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL} is true, this
+     *                 configuration is ignored and roaming preference cannot be changed.
      * @hide
      */
     public static final String KEY_EDITABLE_WFC_ROAMING_MODE_BOOL =
             "editable_wfc_roaming_mode_bool";
 
     /**
+     * Flag specifying whether the carrier will use the WFC home network mode in roaming network.
+     * {@code false} - roaming preference can be selected separately from the home preference.
+     * {@code true}  - roaming preference is the same as home preference and
+     *                 {@link #KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT} is used as the default value.
+     * @hide
+     */
+    public static final String KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL =
+            "use_wfc_home_network_mode_in_roaming_network_bool";
+
+    /**
+     * Flag specifying whether the carrier is allowed to use metered network to download a
+     * certificate of Carrier-WiFi.
+     * {@code false} - default value.
+     *
+     * @hide
+     */
+    public static final String KEY_ALLOW_METERED_NETWORK_FOR_CERT_DOWNLOAD_BOOL =
+            "allow_metered_network_for_cert_download_bool";
+
+    /**
      * Carrier specified WiFi networks.
      * @hide
      */
     public static final String KEY_CARRIER_WIFI_STRING_ARRAY = "carrier_wifi_string_array";
+
+    /**
+     * Base64 Encoding method the carrier will use for encoding encrypted IMSI and SSID.
+     * The value set as below:
+     * 2045 - RFC2045 (default value)
+     * 4648 - RFC4648
+     *
+     * @hide
+     */
+    public static final String KEY_IMSI_ENCODING_METHOD_INT = "imsi_encoding_method_int";
 
     /**
      * Time delay (in ms) after which we show the notification to switch the preferred
@@ -2127,6 +2179,18 @@ public class CarrierConfigManager {
     public static final String KEY_RTT_SUPPORTED_BOOL = "rtt_supported_bool";
 
     /**
+     * Boolean flag indicating whether the carrier supports TTY.
+     * <p>
+     * Note that {@link #KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL} controls availability of TTY over
+     * VoLTE; if {@link #KEY_TTY_SUPPORTED_BOOL} is disabled, then
+     * {@link #KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL} is also implicitly disabled.
+     * <p>
+     * {@link TelecomManager#isTtySupported()} should be used to determine if a device supports TTY,
+     * and this carrier config key should be used to see if the current carrier supports it.
+     */
+    public static final String KEY_TTY_SUPPORTED_BOOL = "tty_supported_bool";
+
+    /**
      * Indicates if the carrier supports auto-upgrading a call to RTT when receiving a call from a
      * RTT-supported device.
      * @hide
@@ -2307,9 +2371,9 @@ public class CarrierConfigManager {
             "undelivered_sms_message_expiration_time";
 
     /**
-     * Specifies a carrier-defined {@link CallRedirectionService} which Telecom will bind
-     * to for outgoing calls.  An empty string indicates that no carrier-defined
-     * {@link CallRedirectionService} is specified.
+     * Specifies a carrier-defined {@link android.telecom.CallRedirectionService} which Telecom
+     * will bind to for outgoing calls.  An empty string indicates that no carrier-defined
+     * {@link android.telecom.CallRedirectionService} is specified.
      * @hide
      */
     public static final String KEY_CALL_REDIRECTION_SERVICE_COMPONENT_NAME_STRING =
@@ -2520,6 +2584,18 @@ public class CarrierConfigManager {
             "emergency_number_prefix_string_array";
 
     /**
+     * Indicates when a carrier has a primary subscription and an opportunistic subscription active,
+     * and when Internet data is switched to opportunistic network, whether to still show
+     * signal bar of primary network. By default it will be false, meaning whenever data
+     * is going over opportunistic network, signal bar will reflect signal strength and rat
+     * icon of that network.
+     *
+     * @hide
+     */
+    public static final String KEY_ALWAYS_SHOW_PRIMARY_SIGNAL_BAR_IN_OPPORTUNISTIC_NETWORK_BOOLEAN =
+            "always_show_primary_signal_bar_in_opportunistic_network_boolean";
+
+    /**
      * GPS configs. See android.hardware.gnss@1.0 IGnssConfiguration.
      * @hide
      */
@@ -2645,6 +2721,33 @@ public class CarrierConfigManager {
     */
     public static final String KEY_CDMA_ENHANCED_ROAMING_INDICATOR_FOR_HOME_NETWORK_INT_ARRAY =
             "cdma_enhanced_roaming_indicator_for_home_network_int_array";
+
+    /**
+     * Determines whether wifi calling location privacy policy is shown.
+     *
+     * @hide
+     */
+    public static final String KEY_SHOW_WFC_LOCATION_PRIVACY_POLICY_BOOL =
+            "show_wfc_location_privacy_policy_bool";
+
+    /**
+     * Indicates use 3GPP application to replace 3GPP2 application even if it's a CDMA/CDMA-LTE
+     * phone, becasue some carriers's CSIM application is present but not supported.
+     * @hide
+     */
+    public static final String KEY_USE_USIM_BOOL = "use_usim_bool";
+
+    /**
+     * Determines whether the carrier wants to cancel the cs reject notification automatically
+     * when the voice registration state changes.
+     * If true, the notification will be automatically removed
+     *          when the voice registration state changes.
+     * If false, the notification will persist until the user dismisses it,
+     *           the SIM is removed, or the device is rebooted.
+     * @hide
+     */
+    public static final String KEY_AUTO_CANCEL_CS_REJECT_NOTIFICATION =
+            "carrier_auto_cancel_cs_notification";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -2838,6 +2941,7 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_CARRIER_NAME_STRING, "");
         sDefaults.putString(KEY_SIM_COUNTRY_ISO_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_CALL_SCREENING_APP_STRING, "");
+        sDefaults.putString(KEY_CALL_REDIRECTION_SERVICE_COMPONENT_NAME_STRING, null);
         sDefaults.putBoolean(KEY_CDMA_HOME_REGISTERED_PLMN_NAME_OVERRIDE_BOOL, false);
         sDefaults.putString(KEY_CDMA_HOME_REGISTERED_PLMN_NAME_STRING, "");
         sDefaults.putBoolean(KEY_SUPPORT_DIRECT_FDN_DIALING_BOOL, false);
@@ -2879,6 +2983,7 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_MMS_UA_PROF_URL_STRING, "");
         sDefaults.putString(KEY_MMS_USER_AGENT_STRING, "");
         sDefaults.putBoolean(KEY_ALLOW_NON_EMERGENCY_CALLS_IN_ECM_BOOL, true);
+        sDefaults.putInt(KEY_EMERGENCY_SMS_MODE_TIMER_MS_INT, 0);
         sDefaults.putBoolean(KEY_USE_RCS_PRESENCE_BOOL, false);
         sDefaults.putBoolean(KEY_FORCE_IMEI_BOOL, false);
         sDefaults.putInt(
@@ -2893,6 +2998,7 @@ public class CarrierConfigManager {
                                 + "com.android.internal.telephony.CARRIER_SIGNAL_RESET"
                 });
         sDefaults.putStringArray(KEY_CARRIER_APP_NO_WAKE_SIGNAL_CONFIG_STRING_ARRAY, null);
+        sDefaults.putBoolean(KEY_CARRIER_APP_REQUIRED_DURING_SIM_SETUP_BOOL, false);
 
 
         // Default carrier app configurations
@@ -2942,8 +3048,11 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_NOTIFY_VT_HANDOVER_TO_WIFI_FAILURE_BOOL, false);
         sDefaults.putStringArray(KEY_FILTERED_CNAP_NAMES_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_EDITABLE_WFC_ROAMING_MODE_BOOL, false);
+        sDefaults.putBoolean(KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL, false);
         sDefaults.putBoolean(KEY_STK_DISABLE_LAUNCH_BROWSER_BOOL, false);
+        sDefaults.putBoolean(KEY_ALLOW_METERED_NETWORK_FOR_CERT_DOWNLOAD_BOOL, false);
         sDefaults.putStringArray(KEY_CARRIER_WIFI_STRING_ARRAY, null);
+        sDefaults.putInt(KEY_IMSI_ENCODING_METHOD_INT, 2045);
         sDefaults.putInt(KEY_PREF_NETWORK_NOTIFICATION_DELAY_INT, -1);
         sDefaults.putInt(KEY_EMERGENCY_NOTIFICATION_DELAY_INT, -1);
         sDefaults.putBoolean(KEY_ALLOW_USSD_REQUESTS_VIA_TELEPHONY_MANAGER_BOOL, true);
@@ -2967,6 +3076,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_ROAMING_OPERATOR_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_SHOW_IMS_REGISTRATION_STATUS_BOOL, false);
         sDefaults.putBoolean(KEY_RTT_SUPPORTED_BOOL, false);
+        sDefaults.putBoolean(KEY_TTY_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_DISABLE_CHARGE_INDICATION_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_NO_REPLY_TIMER_FOR_CFNRY_BOOL, true);
         sDefaults.putStringArray(KEY_FEATURE_ACCESS_CODES_STRING_ARRAY, null);
@@ -3032,6 +3142,11 @@ public class CarrierConfigManager {
                         1 /* Roaming Indicator Off */
                 });
         sDefaults.putStringArray(KEY_EMERGENCY_NUMBER_PREFIX_STRING_ARRAY, new String[0]);
+        sDefaults.putBoolean(KEY_USE_USIM_BOOL, false);
+        sDefaults.putBoolean(KEY_SHOW_WFC_LOCATION_PRIVACY_POLICY_BOOL, true);
+        sDefaults.putBoolean(KEY_AUTO_CANCEL_CS_REJECT_NOTIFICATION, false);
+        sDefaults.putBoolean(KEY_ALWAYS_SHOW_PRIMARY_SIGNAL_BAR_IN_OPPORTUNISTIC_NETWORK_BOOLEAN,
+                false);
     }
 
     /**

@@ -40,11 +40,13 @@ import "frameworks/base/core/proto/android/server/job/enums.proto";
 import "frameworks/base/core/proto/android/server/location/enums.proto";
 import "frameworks/base/core/proto/android/service/procstats_enum.proto";
 import "frameworks/base/core/proto/android/service/usb.proto";
+import "frameworks/base/core/proto/android/stats/connectivity/network_stack.proto";
 import "frameworks/base/core/proto/android/stats/enums.proto";
 import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enums.proto";
 import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
+import "frameworks/base/core/proto/android/stats/storage/storage_enums.proto";
 import "frameworks/base/core/proto/android/stats/style/style_enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
@@ -149,7 +151,7 @@ message Atom {
         WTFOccurred wtf_occurred = 80;
         LowMemReported low_mem_reported = 81;
         GenericAtom generic_atom = 82;
-        KeyValuePairsAtom key_value_pairs_atom = 83;
+        KeyValuePairsAtom key_value_pairs_atom = 83 [(allow_from_any_uid) = true];
         VibratorStateChanged vibrator_state_changed = 84;
         DeferredJobStatsReported deferred_job_stats_reported = 85;
         ThermalThrottlingStateChanged thermal_throttling = 86;
@@ -249,10 +251,13 @@ message Atom {
         TouchGestureClassified touch_gesture_classified = 177;
         HiddenApiUsed hidden_api_used = 178 [(allow_from_any_uid) = true];
         StyleUIChanged style_ui_changed = 179;
+        PrivacyIndicatorsInteracted privacy_indicators_interacted = 180;
+        AppInstallOnExternalStorageReported app_install_on_external_storage_reported = 181;
+        NetworkStackReported network_stack_reported = 182;
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10048
+    // Next: 10057
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -307,7 +312,10 @@ message Atom {
         DangerousPermissionState dangerous_permission_state = 10050;
         TrainInfo train_info = 10051;
         TimeZoneDataInfo time_zone_data_info = 10052;
-        SDCardInfo sdcard_info = 10053;
+        ExternalStorageInfo external_storage_info = 10053;
+        GpuStatsGlobalInfo gpu_stats_global_info = 10054;
+        GpuStatsAppInfo gpu_stats_app_info = 10055;
+        SystemIonHeapSize system_ion_heap_size = 10056;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -519,7 +527,7 @@ message ProcessMemoryStatReported {
         ADD_PSS_EXTERNAL_SLOW = 4;
     }
     optional Type type = 7;
-    optional int64 duration = 8;
+    optional int64 duration_millis = 8;
 }
 
 /**
@@ -1566,6 +1574,7 @@ message WatchdogRollbackOccurred {
         ROLLBACK_INITIATE = 1;
         ROLLBACK_SUCCESS = 2;
         ROLLBACK_FAILURE = 3;
+        ROLLBACK_BOOT_TRIGGERED = 4;
     }
     optional RollbackType rollback_type = 1;
 
@@ -2058,6 +2067,9 @@ message BluetoothClassicPairingEventReported {
     // HCI reason code associated with this event
     // Default: STATUS_UNKNOWN
     optional android.bluetooth.hci.StatusEnum reason_code = 6;
+    // A status value related to this specific event
+    // Default: 0
+    optional int64 event_value = 7;
 }
 
 /**
@@ -2553,6 +2565,18 @@ message AppOptimizedAfterDowngraded {
 }
 
 /**
+ * Logs whenever an app is installed on external storage.
+ * Logged from:
+        frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+ */
+message AppInstallOnExternalStorageReported {
+    // The type of external storage.
+    optional android.stats.storage.ExternalStorageType storage_type = 1;
+    // The name of the package that is installed on the sd card.
+    optional string package_name = 2;
+}
+
+/**
  * Logs when an app crashes.
  * Logged from:
  *      frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
@@ -3002,6 +3026,9 @@ message LmkKillOccurred {
 
     // The elapsed real time of start of the process.
     optional int64 process_start_time_nanos = 9;
+
+    // Min oom adj score considered by lmkd.
+    optional int32 min_oom_score = 10;
 }
 
 /*
@@ -3237,8 +3264,18 @@ message BinaryPushStateChanged {
         INSTALL_FAILURE = 6;
         INSTALL_CANCELLED = 7;
         INSTALLER_ROLLBACK_REQUESTED = 8;
-        INSTALLER_ROLLBACK_SUCCESS = 9;
-        INSTALLER_ROLLBACK_FAILURE = 10;
+        INSTALLER_ROLLBACK_INITIATED = 9;
+        INSTALLER_ROLLBACK_INITIATED_FAILURE = 10;
+        INSTALLER_ROLLBACK_STAGED = 11;
+        INSTALLER_ROLLBACK_STAGED_FAILURE = 12;
+        INSTALLER_ROLLBACK_BOOT_TRIGGERED = 13;
+        INSTALLER_ROLLBACK_BOOT_TRIGGERED_FAILURE = 14;
+        INSTALLER_ROLLBACK_SUCCESS = 15;
+        INSTALLER_ROLLBACK_FAILURE = 16;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_REMOVE_FROM_QUEUE = 17;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_INITIATED = 18;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_SUCCESS = 19;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_FAILURE = 20;
     }
     optional State state = 6;
     // Possible experiment ids for monitoring this push.
@@ -3279,25 +3316,27 @@ message BatteryCycleCount {
 }
 
 /**
- * Logs that an SD card is mounted and information about it, its type (public or private) and the
- * size in bytes.
+ * Logs that external storage is mounted and information about it, the storage type (sd card/usb/
+ * others), its type (public or private) and the size in bytes.
  * Pulled from:
  *   StatsCompanionService
  */
 
-message SDCardInfo {
+message ExternalStorageInfo {
 
-    enum Type {
+    enum VolumeType {
         UNKNOWN = 0;
-        TYPE_PUBLIC = 1;
-        TYPE_PRIVATE = 2;
-        OTHERS = 3;
+        PUBLIC = 1;
+        PRIVATE = 2;
+        OTHER = 3;
     }
 
-    // Type of the SD card: TYPE_PUBLIC if portable and TYPE_PRIVATE if internal.
-    optional Type type = 1;
+    // The type of external storage.
+    optional android.stats.storage.ExternalStorageType storage_type = 1;
+    // Type of the volume: TYPE_PUBLIC if portable and TYPE_PRIVATE if internal.
+    optional VolumeType volume_type = 2;
     // Total size of the sd card in bytes.
-    optional int64 size_bytes = 2;
+    optional int64 size_bytes = 3;
 }
 
 /*
@@ -3377,6 +3416,31 @@ message HiddenApiUsed {
 
     // Whether the access was prevented or not.
     optional bool access_denied = 4;
+}
+
+/**
+ * Logs user interaction with the Privacy Indicators added in Q. In particular:
+ * - When user sees privacy chip
+ * - When user clicks privacy chip
+ * - How does the user exit the Privacy Dialog
+ * Logged from:
+ *   packages/SystemUI/src/com/android/systemui/qs/QuickStatusBarHeader.java
+ */
+message PrivacyIndicatorsInteracted {
+
+    enum Type {
+        UNKNOWN = 0;
+        CHIP_VIEWED = 1;
+        CHIP_CLICKED = 2;
+        DIALOG_PRIVACY_SETTINGS = 3;
+        DIALOG_DISMISS = 4;
+        DIALOG_LINE_ITEM = 5;
+    }
+
+    optional Type type = 1 [(state_field_option).option = EXCLUSIVE];
+
+    // Used if the type is LINE_ITEM
+    optional string package_name = 2;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -4869,7 +4933,7 @@ message AppCompacted {
   // since boot, not including sleep (see SystemClock.uptimeMillis()).
   optional int64 last_compact_timestamp_ms_since_boot = 14;
 
-  // The oom_score_adj at the time of compaction.
+  // The "setAdj" (i.e. previous) oom_score_adj at the time of compaction.
   optional int32 oom_score_adj = 15;
 
   // The process state at the time of compaction.
@@ -5528,8 +5592,9 @@ message ScheduledJobConstraintChanged {
     optional com.android.server.job.ConstraintEnum constraint = 3;
 
     enum State {
-        UNSATISFIED = 0;
-        SATISFIED = 1;
+        UNKNOWN = 0;
+        UNSATISFIED = 1;
+        SATISFIED = 2;
     }
     optional State state = 4;
 }
@@ -5646,6 +5711,33 @@ message TrainInfo {
     optional int64 train_version_code = 1;
 
     optional TrainExperimentIds train_experiment_id = 2;
+
+    optional string train_name = 3;
+
+    enum Status {
+        UNKNOWN = 0;
+        INSTALL_REQUESTED = 1;
+        INSTALL_STARTED = 2;
+        INSTALL_STAGED_NOT_READY = 3;
+        INSTALL_STAGED_READY = 4;
+        INSTALL_SUCCESS = 5;
+        INSTALL_FAILURE = 6;
+        INSTALL_CANCELLED = 7;
+        INSTALLER_ROLLBACK_REQUESTED = 8;
+        INSTALLER_ROLLBACK_INITIATED = 9;
+        INSTALLER_ROLLBACK_INITIATED_FAILURE = 10;
+        INSTALLER_ROLLBACK_STAGED = 11;
+        INSTALLER_ROLLBACK_STAGED_FAILURE = 12;
+        INSTALLER_ROLLBACK_BOOT_TRIGGERED = 13;
+        INSTALLER_ROLLBACK_BOOT_TRIGGERED_FAILURE = 14;
+        INSTALLER_ROLLBACK_SUCCESS = 15;
+        INSTALLER_ROLLBACK_FAILURE = 16;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_REMOVE_FROM_QUEUE = 17;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_INITIATED = 18;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_SUCCESS = 19;
+        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_FAILURE = 20;
+    }
+    optional Status status = 4;
 }
 
 /**
@@ -5686,4 +5778,89 @@ message AssistGestureProgressReported {
 message TimeZoneDataInfo {
     // A version identifier for the data set on device. e.g. "2018i"
     optional string tzdb_version = 1;
+}
+
+/**
+ * Logs the GPU stats global health information.
+ *
+ * Logged from:
+ *   frameworks/native/services/gpuservice/gpustats/
+ */
+message GpuStatsGlobalInfo {
+    // Package name of the gpu driver.
+    optional string driver_package_name = 1;
+
+    // Version name of the gpu driver.
+    optional string driver_version_name = 2;
+
+    // Version code of the gpu driver.
+    optional int64 driver_version_code = 3;
+
+    // Build time of the gpu driver in UTC as seconds since January 1, 1970.
+    optional int64 driver_build_time = 4;
+
+    // Total count of the gl driver gets loaded.
+    optional int64 gl_loading_count = 5;
+
+    // Total count of the gl driver fails to be loaded.
+    optional int64 gl_loading_failure_count = 6;
+
+    // Total count of the Vulkan driver gets loaded.
+    optional int64 vk_loading_count = 7;
+
+    // Total count of the Vulkan driver fails to be loaded.
+    optional int64 vk_loading_failure_count = 8;
+}
+
+/**
+ * GPU driver loading time info.
+ */
+message GpuDriverLoadingTime {
+    // List of all the driver loading times for this app. The list size is
+    // capped at 50.
+    repeated int64 driver_loading_time = 1;
+}
+
+/**
+ * Logs the GPU stats per app health information.
+ *
+ * Logged from:
+ *   frameworks/native/services/gpuservice/gpustats/
+ */
+message GpuStatsAppInfo {
+    // Package name of the application that loads the gpu driver. Total number
+    // of different packages is capped at 100.
+    optional string app_package_name = 1;
+
+    // Version code of the gpu driver this app loads.
+    optional int64 driver_version_code = 2;
+
+    // gl driver loading time info.
+    optional GpuDriverLoadingTime gl_driver_loading_time = 3
+            [(android.os.statsd.log_mode) = MODE_BYTES];
+
+    // Vulkan driver loading time info.
+    optional GpuDriverLoadingTime vk_driver_loading_time = 4
+            [(android.os.statsd.log_mode) = MODE_BYTES];
+}
+
+/*
+ * Logs the size of the system ion heap.
+ *
+ * Pulled from StatsCompanionService.
+ */
+message SystemIonHeapSize {
+    // Size of the system ion heap in bytes.
+    optional int64 size_in_bytes = 1;
+}
+
+/**
+ * Push network stack events.
+ *
+ * Log from:
+ *     frameworks/base/packages/NetworkStack/
+ */
+message NetworkStackReported {
+    optional int32 eventId = 1;
+    optional android.stats.connectivity.NetworkStackEventData network_stack_event = 2 [(log_mode) = MODE_BYTES];
 }

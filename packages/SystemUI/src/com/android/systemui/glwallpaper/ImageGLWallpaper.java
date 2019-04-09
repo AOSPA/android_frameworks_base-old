@@ -50,7 +50,7 @@ class ImageGLWallpaper {
 
     static final String A_POSITION = "aPosition";
     static final String A_TEXTURE_COORDINATES = "aTextureCoordinates";
-    static final String U_CENTER_REVEAL = "uCenterReveal";
+    static final String U_PER85 = "uPer85";
     static final String U_REVEAL = "uReveal";
     static final String U_AOD2OPACITY = "uAod2Opacity";
     static final String U_TEXTURE = "uTexture";
@@ -87,7 +87,7 @@ class ImageGLWallpaper {
     private int mAttrPosition;
     private int mAttrTextureCoordinates;
     private int mUniAod2Opacity;
-    private int mUniCenterReveal;
+    private int mUniPer85;
     private int mUniReveal;
     private int mUniTexture;
     private int mTextureId;
@@ -110,9 +110,10 @@ class ImageGLWallpaper {
         mTextureBuffer.position(0);
     }
 
-    void setup() {
+    void setup(Bitmap bitmap) {
         setupAttributes();
         setupUniforms();
+        setupTexture(bitmap);
     }
 
     private void setupAttributes() {
@@ -131,7 +132,7 @@ class ImageGLWallpaper {
 
     private void setupUniforms() {
         mUniAod2Opacity = mProgram.getUniformHandle(U_AOD2OPACITY);
-        mUniCenterReveal = mProgram.getUniformHandle(U_CENTER_REVEAL);
+        mUniPer85 = mProgram.getUniformHandle(U_PER85);
         mUniReveal = mProgram.getUniformHandle(U_REVEAL);
         mUniTexture = mProgram.getUniformHandle(U_TEXTURE);
     }
@@ -144,8 +145,8 @@ class ImageGLWallpaper {
                 return mAttrTextureCoordinates;
             case U_AOD2OPACITY:
                 return mUniAod2Opacity;
-            case U_CENTER_REVEAL:
-                return mUniCenterReveal;
+            case U_PER85:
+                return mUniPer85;
             case U_REVEAL:
                 return mUniReveal;
             case U_TEXTURE:
@@ -159,7 +160,7 @@ class ImageGLWallpaper {
         glDrawArrays(GL_TRIANGLES, 0, VERTICES.length / 2);
     }
 
-    void setupTexture(Bitmap bitmap) {
+    private void setupTexture(Bitmap bitmap) {
         final int[] tids = new int[1];
 
         if (bitmap == null) {
@@ -174,7 +175,7 @@ class ImageGLWallpaper {
             return;
         }
 
-        // Bind a named texture to a texturing target.
+        // Bind a named texture to a target.
         glBindTexture(GL_TEXTURE_2D, tids[0]);
         // Load the bitmap data and copy it over into the texture object that is currently bound.
         GLUtils.texImage2D(GL_TEXTURE_2D, 0, bitmap, 0);
@@ -195,15 +196,8 @@ class ImageGLWallpaper {
         glUniform1i(mUniTexture, 0);
     }
 
-    void adjustTextureCoordinates(Bitmap bitmap, int surfaceWidth, int surfaceHeight,
-            float xOffset, float yOffset) {
-        if (bitmap == null) {
-            Log.d(TAG, "adjustTextureCoordinates: invalid bitmap");
-            return;
-        }
-
-        int bitmapWidth = bitmap.getWidth();
-        int bitmapHeight = bitmap.getHeight();
+    void adjustTextureCoordinates(int bitmapWidth, int bitmapHeight,
+            int surfaceWidth, int surfaceHeight, float xOffset, float yOffset) {
         float ratioW = 1f;
         float ratioH = 1f;
         float rX = 0f;

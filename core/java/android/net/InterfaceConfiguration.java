@@ -19,11 +19,9 @@ package android.net;
 import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.text.TextUtils;
 
 import com.google.android.collect.Sets;
 
-import java.net.InetAddress;
 import java.util.HashSet;
 
 /**
@@ -117,40 +115,6 @@ public class InterfaceConfiguration implements Parcelable {
     }
 
     /**
-     * Construct InterfaceConfiguration from InterfaceConfigurationParcel.
-     */
-    public static InterfaceConfiguration fromParcel(InterfaceConfigurationParcel p) {
-        InterfaceConfiguration cfg = new InterfaceConfiguration();
-        cfg.setHardwareAddress(p.hwAddr);
-
-        final InetAddress addr = NetworkUtils.numericToInetAddress(p.ipv4Addr);
-        cfg.setLinkAddress(new LinkAddress(addr, p.prefixLength));
-        for (String flag : p.flags) {
-            cfg.setFlag(flag);
-        }
-
-        return cfg;
-    }
-
-    /**
-     * Convert InterfaceConfiguration to InterfaceConfigurationParcel with given ifname.
-     */
-    public InterfaceConfigurationParcel toParcel(String iface) {
-        InterfaceConfigurationParcel cfgParcel = new InterfaceConfigurationParcel();
-        cfgParcel.ifName = iface;
-        if (!TextUtils.isEmpty(mHwAddr)) {
-            cfgParcel.hwAddr = mHwAddr;
-        } else {
-            cfgParcel.hwAddr = "";
-        }
-        cfgParcel.ipv4Addr = mAddr.getAddress().getHostAddress();
-        cfgParcel.prefixLength = mAddr.getPrefixLength();
-        cfgParcel.flags = mFlags.toArray(EMPTY_STRING_ARRAY);
-
-        return cfgParcel;
-    }
-
-    /**
      * This function determines if the interface is up and has a valid IP
      * configuration (IP address has a non zero octet).
      *
@@ -194,7 +158,7 @@ public class InterfaceConfiguration implements Parcelable {
         }
     }
 
-    public static final Creator<InterfaceConfiguration> CREATOR = new Creator<
+    public static final @android.annotation.NonNull Creator<InterfaceConfiguration> CREATOR = new Creator<
             InterfaceConfiguration>() {
         public InterfaceConfiguration createFromParcel(Parcel in) {
             InterfaceConfiguration info = new InterfaceConfiguration();

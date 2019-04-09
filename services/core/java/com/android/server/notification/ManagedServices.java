@@ -64,6 +64,7 @@ import android.util.proto.ProtoOutputStream;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.XmlUtils;
+import com.android.internal.util.function.TriPredicate;
 import com.android.server.notification.NotificationManagerService.DumpFilter;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -333,6 +334,7 @@ abstract public class ManagedServices {
                         out.attribute(null, ATT_APPROVED_LIST, allowedItems);
                         out.attribute(null, ATT_USER_ID, Integer.toString(approvedUserId));
                         out.attribute(null, ATT_IS_PRIMARY, Boolean.toString(isPrimary));
+                        writeExtraAttributes(out, approvedUserId);
                         out.endTag(null, TAG_MANAGED_SERVICES);
 
                         if (!forBackup && isPrimary) {
@@ -346,8 +348,25 @@ abstract public class ManagedServices {
             }
         }
 
+        writeExtraXmlTags(out);
+
         out.endTag(null, getConfig().xmlTag);
     }
+
+    /**
+     * Writes extra xml attributes to {@link #TAG_MANAGED_SERVICES} tag.
+     */
+    protected void writeExtraAttributes(XmlSerializer out, int userId) throws IOException {}
+
+    /**
+     * Writes extra xml tags within the parent tag specified in {@link Config#xmlTag}.
+     */
+    protected void writeExtraXmlTags(XmlSerializer out) throws IOException {}
+
+    /**
+     * This is called to process tags other than {@link #TAG_MANAGED_SERVICES}.
+     */
+    protected void readExtraTag(String tag, XmlPullParser parser) throws IOException {}
 
     protected void migrateToXml() {
         loadAllowedComponentsFromSettings();
@@ -355,7 +374,7 @@ abstract public class ManagedServices {
 
     public void readXml(
             XmlPullParser parser,
-            Predicate<String> allowedManagedServicePackages,
+            TriPredicate<String, Integer, String> allowedManagedServicePackages,
             boolean forRestore,
             int userId)
             throws XmlPullParserException, IOException {
@@ -377,19 +396,29 @@ abstract public class ManagedServices {
                             ? userId : XmlUtils.readIntAttribute(parser, ATT_USER_ID, 0);
                     final boolean isPrimary =
                             XmlUtils.readBooleanAttribute(parser, ATT_IS_PRIMARY, true);
-
-                    if (allowedManagedServicePackages == null ||
-                            allowedManagedServicePackages.test(getPackageName(approved))) {
+                    readExtraAttributes(tag, parser, resolvedUserId);
+                    if (allowedManagedServicePackages == null || allowedManagedServicePackages.test(
+                            getPackageName(approved), resolvedUserId, getRequiredPermission())) {
                         if (mUm.getUserInfo(resolvedUserId) != null) {
                             addApprovedList(approved, resolvedUserId, isPrimary);
                         }
                         mUseXml = true;
                     }
+                } else {
+                    readExtraTag(tag, parser);
                 }
             }
         }
         rebindServices(false, USER_ALL);
     }
+
+    /**
+     * Read extra attributes in the {@link #TAG_MANAGED_SERVICES} tag.
+     */
+    protected void readExtraAttributes(String tag, XmlPullParser parser, int userId)
+            throws IOException {}
+
+    protected abstract String getRequiredPermission();
 
     private void loadAllowedComponentsFromSettings() {
         for (UserInfo user : mUm.getUsers()) {
@@ -1098,7 +1127,7 @@ abstract public class ManagedServices {
                             binder.linkToDeath(info, 0);
                             added = mServices.add(info);
                         } catch (RemoteException e) {
-                            // already dead
+                            Slog.e(TAG, "Failed to linkToDeath, already dead", e);
                         }
                     }
                     if (added) {
@@ -1129,6 +1158,11 @@ abstract public class ManagedServices {
                                     + " as a previous rebind attempt was made: " + name);
                         }
                     }
+                }
+
+                @Override
+                public void onNullBinding(ComponentName name) {
+                    Slog.v(TAG, "onNullBinding() called with: name = [" + name + "]");
                 }
             };
             if (!mContext.bindServiceAsUser(intent,

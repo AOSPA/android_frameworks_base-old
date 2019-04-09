@@ -155,11 +155,6 @@ public final class DefaultPermissionGrantPolicy {
         ACTIVITY_RECOGNITION_PERMISSIONS.add(Manifest.permission.ACTIVITY_RECOGNITION);
     }
 
-    private static final Set<String> COARSE_LOCATION_PERMISSIONS = new ArraySet<>();
-    static {
-        COARSE_LOCATION_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-    }
-
     private static final Set<String> CALENDAR_PERMISSIONS = new ArraySet<>();
     static {
         CALENDAR_PERMISSIONS.add(Manifest.permission.READ_CALENDAR);
@@ -657,13 +652,13 @@ public final class DefaultPermissionGrantPolicy {
                         PHONE_PERMISSIONS, SMS_PERMISSIONS, CAMERA_PERMISSIONS,
                         SENSORS_PERMISSIONS, STORAGE_PERMISSIONS, MEDIA_AURAL_PERMISSIONS);
                 grantSystemFixedPermissionsToSystemPackage(packageName, userId,
-                        LOCATION_PERMISSIONS, ACTIVITY_RECOGNITION_PERMISSIONS);
+                        ALWAYS_LOCATION_PERMISSIONS, ACTIVITY_RECOGNITION_PERMISSIONS);
             }
         }
         if (locationExtraPackageNames != null) {
             // Also grant location permission to location extra packages.
             for (String packageName : locationExtraPackageNames) {
-                grantPermissionsToSystemPackage(packageName, userId, LOCATION_PERMISSIONS);
+                grantPermissionsToSystemPackage(packageName, userId, ALWAYS_LOCATION_PERMISSIONS);
             }
         }
 
@@ -709,6 +704,12 @@ public final class DefaultPermissionGrantPolicy {
                         TelephonyManager.ACTION_EMERGENCY_ASSISTANCE, userId),
                 userId, CONTACTS_PERMISSIONS, PHONE_PERMISSIONS);
 
+        // STOPSHIP(b/128289173): remove once EmergencyInfo app was replaced.
+        grantSystemFixedPermissionsToSystemPackage(
+                getDefaultSystemHandlerActivityPackage(
+                        "com.android.emergency.action.EMERGENCY_ASSISTANCE", userId),
+                userId, CONTACTS_PERMISSIONS, PHONE_PERMISSIONS);
+
         // NFC Tag viewer
         Intent nfcTagIntent = new Intent(Intent.ACTION_VIEW)
                 .setType("vnd.android.cursor.item/ndef_msg");
@@ -747,11 +748,11 @@ public final class DefaultPermissionGrantPolicy {
         grantSystemFixedPermissionsToSystemPackage("com.android.sharedstoragebackup", userId,
                 STORAGE_PERMISSIONS);
 
-        // Content Capture Service
-        String contentCaptureServicePackageName =
-                mContext.getPackageManager().getContentCaptureServicePackageName();
-        if (!TextUtils.isEmpty(contentCaptureServicePackageName)) {
-            grantPermissionsToSystemPackage(contentCaptureServicePackageName, userId,
+        // System Captions Service
+        String systemCaptionsServicePackageName =
+                mContext.getPackageManager().getSystemCaptionsServicePackageName();
+        if (!TextUtils.isEmpty(systemCaptionsServicePackageName)) {
+            grantPermissionsToSystemPackage(systemCaptionsServicePackageName, userId,
                     MICROPHONE_PERMISSIONS);
         }
 
@@ -803,8 +804,7 @@ public final class DefaultPermissionGrantPolicy {
 
     private void grantDefaultPermissionsToDefaultSystemUseOpenWifiApp(
             String useOpenWifiPackage, int userId) {
-        grantPermissionsToSystemPackage(
-                useOpenWifiPackage, userId, COARSE_LOCATION_PERMISSIONS);
+        grantPermissionsToSystemPackage(useOpenWifiPackage, userId, ALWAYS_LOCATION_PERMISSIONS);
     }
 
     public void grantDefaultPermissionsToDefaultSmsApp(String packageName, int userId) {
@@ -824,7 +824,7 @@ public final class DefaultPermissionGrantPolicy {
 
     public void grantDefaultPermissionsToDefaultUseOpenWifiApp(String packageName, int userId) {
         Log.i(TAG, "Granting permissions to default Use Open WiFi app for user:" + userId);
-        grantIgnoringSystemPackage(packageName, userId, COARSE_LOCATION_PERMISSIONS);
+        grantIgnoringSystemPackage(packageName, userId, ALWAYS_LOCATION_PERMISSIONS);
     }
 
     public void grantDefaultPermissionsToDefaultSimCallManager(String packageName, int userId) {
@@ -1473,6 +1473,13 @@ public final class DefaultPermissionGrantPolicy {
                 if (packageExceptions == null) {
                     // The package must be on the system image
                     PackageInfo packageInfo = getSystemPackageInfo(packageName);
+
+                    if (packageInfo == null) {
+                        Log.w(TAG, "No such package:" + packageName);
+                        XmlUtils.skipCurrentTag(parser);
+                        continue;
+                    }
+
                     if (!isSystemPackage(packageInfo)) {
                         Log.w(TAG, "Unknown system package:" + packageName);
                         XmlUtils.skipCurrentTag(parser);

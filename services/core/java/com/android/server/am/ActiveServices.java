@@ -133,9 +133,6 @@ public final class ActiveServices {
     // calling startForeground() before we ANR + stop it.
     static final int SERVICE_START_FOREGROUND_TIMEOUT = 10*1000;
 
-    // For how long after a whitelisted service's start its process can start a background activity
-    private static final int SERVICE_BG_ACTIVITY_START_TIMEOUT_MS = 10*1000;
-
     final ActivityManagerService mAm;
 
     // Maximum number of services that we allow to start in the background
@@ -339,8 +336,8 @@ public final class ActiveServices {
                             + " delayedStop=" + r.delayedStop);
                 } else {
                     try {
-                        startServiceInnerLocked(this, r.pendingStarts.get(0).intent, r, false, true,
-                                false);
+                        startServiceInnerLocked(this, r.pendingStarts.get(0).intent, r, false,
+                                true);
                     } catch (TransactionTooLargeException e) {
                         // Ignore, nobody upstack cares.
                     }
@@ -643,26 +640,26 @@ public final class ActiveServices {
         }
 
         if (allowBackgroundActivityStarts) {
-            ProcessRecord proc = mAm.getProcessRecordLocked(r.processName, r.appInfo.uid, false);
-            if (proc != null) {
-                proc.addAllowBackgroundActivityStartsToken(r);
-                // schedule removal of the whitelisting token after the timeout
-                removeAllowBackgroundActivityStartsServiceToken(proc, r,
-                        SERVICE_BG_ACTIVITY_START_TIMEOUT_MS);
-            }
+            r.hasStartedWhitelistingBgActivityStarts = true;
+            scheduleCleanUpHasStartedWhitelistingBgActivityStartsLocked(r);
         }
-        ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting,
-                allowBackgroundActivityStarts);
+
+        ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
         return cmp;
     }
 
-    private void removeAllowBackgroundActivityStartsServiceToken(ProcessRecord proc,
-            ServiceRecord r, int delayMillis) {
-        mAm.mHandler.postDelayed(() -> {
-            if (proc != null) {
-                proc.removeAllowBackgroundActivityStartsToken(r);
-            }
-        }, delayMillis);
+    private void scheduleCleanUpHasStartedWhitelistingBgActivityStartsLocked(ServiceRecord r) {
+        // if there's a request pending from the past, drop it before scheduling a new one
+        if (r.startedWhitelistingBgActivityStartsCleanUp == null) {
+            r.startedWhitelistingBgActivityStartsCleanUp = () -> {
+                synchronized(mAm) {
+                    r.setHasStartedWhitelistingBgActivityStarts(false);
+                }
+            };
+        }
+        mAm.mHandler.removeCallbacks(r.startedWhitelistingBgActivityStartsCleanUp);
+        mAm.mHandler.postDelayed(r.startedWhitelistingBgActivityStartsCleanUp,
+                mAm.mConstants.SERVICE_BG_ACTIVITY_START_TIMEOUT);
     }
 
     private boolean requestStartTargetPermissionsReviewIfNeededLocked(ServiceRecord r,
@@ -711,8 +708,7 @@ public final class ActiveServices {
     }
 
     ComponentName startServiceInnerLocked(ServiceMap smap, Intent service, ServiceRecord r,
-            boolean callerFg, boolean addToStarting, boolean allowBackgroundActivityStarts)
-            throws TransactionTooLargeException {
+            boolean callerFg, boolean addToStarting) throws TransactionTooLargeException {
         ServiceState stracker = r.getTracker();
         if (stracker != null) {
             stracker.setStarted(true, mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
@@ -723,8 +719,7 @@ public final class ActiveServices {
         synchronized (r.stats.getBatteryStats()) {
             r.stats.startRunningLocked();
         }
-        String error = bringUpServiceLocked(r, service.getFlags(), callerFg, false, false,
-                allowBackgroundActivityStarts);
+        String error = bringUpServiceLocked(r, service.getFlags(), callerFg, false, false);
         if (error != null) {
             return new ComponentName("!!", error);
         }
@@ -771,6 +766,12 @@ public final class ActiveServices {
                     SystemClock.uptimeMillis());
         }
         service.callStart = false;
+
+        // the service will not necessarily be brought down, so only clear the whitelisting state
+        // for start-based bg activity starts now, and drop any existing future cleanup callback
+        service.setHasStartedWhitelistingBgActivityStarts(false);
+        mAm.mHandler.removeCallbacks(service.startedWhitelistingBgActivityStartsCleanUp);
+
         bringDownServiceIfNeededLocked(service, false, false);
     }
 
@@ -794,9 +795,6 @@ public final class ActiveServices {
             if (r.record != null) {
                 final long origId = Binder.clearCallingIdentity();
                 try {
-                    // immediately remove bg activity whitelisting token if there was one
-                    removeAllowBackgroundActivityStartsServiceToken(callerApp, r.record,
-                            0 /* delayMillis */);
                     stopServiceLocked(r.record);
                 } finally {
                     Binder.restoreCallingIdentity(origId);
@@ -1608,6 +1606,11 @@ public final class ActiveServices {
                     "BIND_TREAT_LIKE_ACTIVITY");
         }
 
+        if ((flags & Context.BIND_SCHEDULE_LIKE_TOP_APP) != 0 && !isCallerSystem) {
+            throw new SecurityException("Non-system caller (pid=" + Binder.getCallingPid()
+                    + ") set BIND_SCHEDULE_LIKE_TOP_APP when binding service " + service);
+        }
+
         if ((flags & Context.BIND_ALLOW_WHITELIST_MANAGEMENT) != 0 && !isCallerSystem) {
             throw new SecurityException(
                     "Non-system caller " + caller + " (pid=" + Binder.getCallingPid()
@@ -1618,6 +1621,12 @@ public final class ActiveServices {
             throw new SecurityException(
                     "Non-system caller " + caller + " (pid=" + Binder.getCallingPid()
                             + ") set BIND_ALLOW_INSTANT when binding service " + service);
+        }
+
+        if ((flags & Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS) != 0) {
+            mAm.enforceCallingPermission(
+                    android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND,
+                    "BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS");
         }
 
         final boolean callerFg = callerApp.setSchedGroup != ProcessList.SCHED_GROUP_BACKGROUND;
@@ -1678,7 +1687,7 @@ public final class ActiveServices {
                                 try {
                                     bringUpServiceLocked(serviceRecord,
                                             serviceIntent.getFlags(),
-                                            callerFg, false, false, false);
+                                            callerFg, false, false);
                                 } catch (RemoteException e) {
                                     /* ignore - local call */
                                 }
@@ -1768,6 +1777,9 @@ public final class ActiveServices {
             if ((c.flags&Context.BIND_ALLOW_WHITELIST_MANAGEMENT) != 0) {
                 s.whitelistManager = true;
             }
+            if ((flags & Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS) != 0) {
+                s.setHasBindingWhitelistingBgActivityStarts(true);
+            }
             if (s.app != null) {
                 updateServiceClientActivitiesLocked(s.app, c, true);
             }
@@ -1781,7 +1793,7 @@ public final class ActiveServices {
             if ((flags&Context.BIND_AUTO_CREATE) != 0) {
                 s.lastActivity = SystemClock.uptimeMillis();
                 if (bringUpServiceLocked(s, service.getFlags(), callerFg, false,
-                        permissionsReviewRequired, false) != null) {
+                        permissionsReviewRequired) != null) {
                     return 0;
                 }
             }
@@ -2217,7 +2229,7 @@ public final class ActiveServices {
                 return new ServiceLookupResult(null, r.permission);
             } else if (r.permission != null && callingPackage != null) {
                 final int opCode = AppOpsManager.permissionToOpCode(r.permission);
-                if (opCode != AppOpsManager.OP_NONE && mAm.mAppOpsService.noteOperation(
+                if (opCode != AppOpsManager.OP_NONE && mAm.mAppOpsService.checkOperation(
                         opCode, callingUid, callingPackage) != AppOpsManager.MODE_ALLOWED) {
                     Slog.w(TAG, "Appop Denial: Accessing service " + r.shortInstanceName
                             + " from pid=" + callingPid
@@ -2500,8 +2512,7 @@ public final class ActiveServices {
                     }
                 }
                 if(!shouldDelay) {
-                    bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false,
-                            false);
+                    bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
                 } else {
                     if (DEBUG_DELAYED_SERVICE) {
                         Slog.v(TAG, "Reschedule service restart due to app launch"
@@ -2511,8 +2522,7 @@ public final class ActiveServices {
                     scheduleServiceRestartLocked(r, true);
                 }
             } else {
-                bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false,
-                        false);
+                bringUpServiceLocked(r, r.intent.getIntent().getFlags(), r.createdFromFg, true, false);
             }
         } catch (TransactionTooLargeException e) {
             // Ignore, it's been logged and nothing upstack cares.
@@ -2558,11 +2568,8 @@ public final class ActiveServices {
     }
 
     private String bringUpServiceLocked(ServiceRecord r, int intentFlags, boolean execInFg,
-            boolean whileRestarting, boolean permissionsReviewRequired,
-            boolean allowBackgroundActivityStarts) throws TransactionTooLargeException {
-        //Slog.i(TAG, "Bring up service:");
-        //r.dump("  ");
-
+            boolean whileRestarting, boolean permissionsReviewRequired)
+            throws TransactionTooLargeException {
         if (r.app != null && r.app.thread != null) {
             sendServiceArgsLocked(r, execInFg, false);
             return null;
@@ -2670,13 +2677,6 @@ public final class ActiveServices {
             }
         }
 
-        if (app != null && allowBackgroundActivityStarts) {
-            app.addAllowBackgroundActivityStartsToken(r);
-            // schedule removal of the whitelisting token after the timeout
-            removeAllowBackgroundActivityStartsServiceToken(app, r,
-                    SERVICE_BG_ACTIVITY_START_TIMEOUT_MS);
-        }
-
         if (r.fgRequired) {
             if (DEBUG_FOREGROUND_SERVICE) {
                 Slog.v(TAG, "Whitelisting " + UserHandle.formatUid(r.appInfo.uid)
@@ -2713,6 +2713,11 @@ public final class ActiveServices {
         }
     }
 
+    /**
+     * Note the name of this method should not be confused with the started services concept.
+     * The "start" here means bring up the instance in the client, and this method is called
+     * from bindService() as well.
+     */
     private final void realStartServiceLocked(ServiceRecord r,
             ProcessRecord app, boolean execInFg) throws RemoteException {
         if (app.thread == null) {
@@ -3156,6 +3161,10 @@ public final class ActiveServices {
                 if (!s.whitelistManager && s.app != null) {
                     updateWhitelistManagerLocked(s.app);
                 }
+            }
+            // And do the same for bg activity starts whitelisting.
+            if ((c.flags & Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS) != 0) {
+                s.updateHasBindingWhitelistingBgActivityStarts();
             }
             if (s.app != null) {
                 updateServiceClientActivitiesLocked(s.app, c, true);

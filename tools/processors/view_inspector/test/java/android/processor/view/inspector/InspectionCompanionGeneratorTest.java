@@ -20,6 +20,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
+
+import android.processor.view.inspector.InspectableClassModel.Accessor;
 import android.processor.view.inspector.InspectableClassModel.IntEnumEntry;
 import android.processor.view.inspector.InspectableClassModel.IntFlagEntry;
 import android.processor.view.inspector.InspectableClassModel.Property;
@@ -34,7 +36,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Arrays;
-import java.util.Optional;
 
 /**
  * Tests for {@link InspectionCompanionGenerator}
@@ -51,12 +52,6 @@ public class InspectionCompanionGeneratorTest {
     public void setup() {
         mModel = new InspectableClassModel(TEST_CLASS_NAME);
         mGenerator = new InspectionCompanionGenerator(null, getClass());
-    }
-
-    @Test
-    public void testNodeName() {
-        mModel.setNodeName(Optional.of("NodeName"));
-        assertGeneratedFileEquals("NodeName");
     }
 
     @Test
@@ -80,13 +75,14 @@ public class InspectionCompanionGeneratorTest {
         addProperty("object", "getObject", Property.Type.OBJECT);
         addProperty("color", "getColor", Property.Type.COLOR);
         addProperty("gravity", "getGravity", Property.Type.GRAVITY);
+        addProperty("resourceId", "getResourceId", Property.Type.RESOURCE_ID);
 
         assertGeneratedFileEquals("SimpleProperties");
     }
 
     @Test
     public void testNoAttributeId() {
-        final Property property = new Property(
+        final Property property = addProperty(
                 "noAttributeProperty",
                 "getNoAttributeProperty",
                 Property.Type.INT);
@@ -98,27 +94,26 @@ public class InspectionCompanionGeneratorTest {
 
     @Test
     public void testSuppliedAttributeId() {
-        final Property property = new Property(
+        final Property property = addProperty(
                 "suppliedAttributeProperty",
                 "getSuppliedAttributeProperty",
                 Property.Type.INT);
         property.setAttributeId(0xdecafbad);
-        mModel.putProperty(property);
 
         assertGeneratedFileEquals("SuppliedAttributeId");
     }
 
     @Test
     public void testIntEnum() {
-        final Property property = new Property(
+        final Property property = addProperty(
                 "intEnumProperty",
                 "getIntEnumProperty",
                 Property.Type.INT_ENUM);
 
         property.setIntEnumEntries(Arrays.asList(
-                new IntEnumEntry("THREE", 3),
-                new IntEnumEntry("TWO", 2),
-                new IntEnumEntry("ONE", 1)));
+                new IntEnumEntry(3, "THREE"),
+                new IntEnumEntry(2, "TWO"),
+                new IntEnumEntry(1, "ONE")));
 
         mModel.putProperty(property);
 
@@ -127,25 +122,33 @@ public class InspectionCompanionGeneratorTest {
 
     @Test
     public void testIntFlag() {
-        final Property property = new Property(
+        final Property property = addProperty(
                 "intFlag",
                 "getIntFlag",
                 Property.Type.INT_FLAG);
 
         property.setAttributeIdInferrableFromR(false);
         property.setIntFlagEntries(Arrays.asList(
-                new IntFlagEntry("TURBO", 0x1, 0x3),
-                new IntFlagEntry("OVERDRIVE", 0x2, 0x3),
-                new IntFlagEntry("WARP", 0x4)
+                new IntFlagEntry(0x3, 0x1, "TURBO"),
+                new IntFlagEntry(0x3, 0x2, "OVERDRIVE"),
+                new IntFlagEntry(0x4, "WARP")
         ));
-
-        mModel.putProperty(property);
 
         assertGeneratedFileEquals("IntFlag");
     }
 
+    @Test
+    public void testFieldProperty() {
+        mModel.putProperty(new Property(
+                "fieldProperty",
+                Accessor.ofField("fieldProperty"),
+                Property.Type.INT));
+
+        assertGeneratedFileEquals("FieldProperty");
+    }
+
     private Property addProperty(String name, String getter, Property.Type type) {
-        final Property property = new Property(name, getter, type);
+        final Property property = new Property(name, Accessor.ofGetter(getter), type);
         mModel.putProperty(property);
         return property;
     }

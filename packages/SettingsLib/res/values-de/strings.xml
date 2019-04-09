@@ -209,7 +209,7 @@
     <string name="oem_unlock_enable" msgid="6040763321967327691">"OEM-Entsperrung"</string>
     <string name="oem_unlock_enable_summary" msgid="4720281828891618376">"Bootloader-Entsperrung zulassen"</string>
     <string name="confirm_enable_oem_unlock_title" msgid="4802157344812385674">"OEM-Entsperrung zulassen?"</string>
-    <string name="confirm_enable_oem_unlock_text" msgid="5517144575601647022">"Achtung: Die Geräteschutzfunktionen funktionieren auf diesem Gerät nicht, solange diese Einstellung aktiviert ist."</string>
+    <string name="confirm_enable_oem_unlock_text" msgid="5517144575601647022">"Achtung: Der Geräteschutz funktioniert auf diesem Gerät nicht, solange diese Einstellung aktiviert ist."</string>
     <string name="mock_location_app" msgid="7966220972812881854">"App für simulierte Standorte auswählen"</string>
     <string name="mock_location_app_not_set" msgid="809543285495344223">"Keine App für simulierte Standorte eingerichtet"</string>
     <string name="mock_location_app_set" msgid="8966420655295102685">"App für simulierte Standorte: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
@@ -377,7 +377,8 @@
     <string name="power_discharging_duration" msgid="8848256785736335185">"Noch etwa <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Noch etwa <xliff:g id="TIME_REMAINING">%1$s</xliff:g>, basierend auf deiner Nutzung"</string>
     <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Noch etwa <xliff:g id="TIME_REMAINING">%1$s</xliff:g>, basierend auf deiner Nutzung (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"Noch <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Sollte basierend auf deiner Nutzung etwa bis <xliff:g id="TIME">%1$s</xliff:g> reichen (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Sollte basierend auf deiner Nutzung etwa bis <xliff:g id="TIME">%1$s</xliff:g> reichen"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Sollte etwa bis <xliff:g id="TIME">%1$s</xliff:g> reichen (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>

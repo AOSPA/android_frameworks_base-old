@@ -122,13 +122,22 @@ public final class Bitmap implements Parcelable {
     }
 
     /**
-     * Private constructor that must received an already allocated native bitmap
+     * Private constructor that must receive an already allocated native bitmap
      * int (pointer).
      */
-    // called from JNI
-    @UnsupportedAppUsage
-    Bitmap(long nativeBitmap, int width, int height, int density, boolean requestPremultiplied,
-            byte[] ninePatchChunk, NinePatch.InsetStruct ninePatchInsets) {
+    // JNI now calls the version below this one. This is preserved due to UnsupportedAppUsage.
+    @UnsupportedAppUsage(maxTargetSdk = 28)
+    Bitmap(long nativeBitmap, int width, int height, int density,
+            boolean requestPremultiplied, byte[] ninePatchChunk,
+            NinePatch.InsetStruct ninePatchInsets) {
+        this(nativeBitmap, width, height, density, requestPremultiplied, ninePatchChunk,
+                ninePatchInsets, true);
+    }
+
+    // called from JNI and Bitmap_Delegate.
+    Bitmap(long nativeBitmap, int width, int height, int density,
+            boolean requestPremultiplied, byte[] ninePatchChunk,
+            NinePatch.InsetStruct ninePatchInsets, boolean fromMalloc) {
         if (nativeBitmap == 0) {
             throw new RuntimeException("internal error: native bitmap is 0");
         }
@@ -144,13 +153,21 @@ public final class Bitmap implements Parcelable {
         }
 
         mNativePtr = nativeBitmap;
-        long nativeSize = NATIVE_ALLOCATION_SIZE + getAllocationByteCount();
-        NativeAllocationRegistry registry = new NativeAllocationRegistry(
-            Bitmap.class.getClassLoader(), nativeGetNativeFinalizer(), nativeSize);
+
+        final int allocationByteCount = getAllocationByteCount();
+        NativeAllocationRegistry registry;
+        if (fromMalloc) {
+            registry = NativeAllocationRegistry.createMalloced(
+                    Bitmap.class.getClassLoader(), nativeGetNativeFinalizer(), allocationByteCount);
+        } else {
+            registry = NativeAllocationRegistry.createNonmalloced(
+                    Bitmap.class.getClassLoader(), nativeGetNativeFinalizer(), allocationByteCount);
+        }
         registry.registerNativeAllocation(this, nativeBitmap);
 
         if (ResourcesImpl.TRACE_FOR_DETAILED_PRELOAD) {
             sPreloadTracingNumInstantiatedBitmaps++;
+            long nativeSize = NATIVE_ALLOCATION_SIZE + allocationByteCount;
             sPreloadTracingTotalBitmapsSize += nativeSize;
         }
     }
@@ -1718,6 +1735,11 @@ public final class Bitmap implements Parcelable {
      * <p>Modifies the bitmap to have the specified {@link ColorSpace}, without
      * affecting the underlying allocation backing the bitmap.</p>
      *
+     * <p>This affects how the framework will interpret the color at each pixel. A bitmap
+     * with {@link Config#ALPHA_8} never has a color space, since a color space does not
+     * affect the alpha channel. Other {@code Config}s must always have a non-null
+     * {@code ColorSpace}.</p>
+     *
      * @throws IllegalArgumentException If the specified color space is {@code null}, not
      *         {@link ColorSpace.Model#RGB RGB}, has a transfer function that is not an
      *         {@link ColorSpace.Rgb.TransferParameters ICC parametric curve}, or whose
@@ -1845,6 +1867,7 @@ public final class Bitmap implements Parcelable {
      * @throws IllegalStateException if the bitmap's config is {@link Config#HARDWARE}
      *
      */
+    @NonNull
     public Color getColor(int x, int y) {
         checkRecycled("Can't call getColor() on a recycled bitmap");
         checkHardware("unable to getColor(), "
@@ -2024,7 +2047,7 @@ public final class Bitmap implements Parcelable {
                         x, y, width, height);
     }
 
-    public static final Parcelable.Creator<Bitmap> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<Bitmap> CREATOR
             = new Parcelable.Creator<Bitmap>() {
         /**
          * Rebuilds a bitmap previously stored with writeToParcel().

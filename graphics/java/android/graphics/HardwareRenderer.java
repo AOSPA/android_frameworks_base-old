@@ -170,13 +170,14 @@ public class HardwareRenderer {
 
     /**
      * Destroys the rendering context of this HardwareRenderer. This destroys the resources
-     * associated with this renderer and releases the currently set {@link Surface}.
+     * associated with this renderer and releases the currently set {@link Surface}. This must
+     * be called when this HardwareRenderer is no longer needed.
      *
      * <p>The renderer may be restored from this state by setting a new {@link Surface}, setting
      * new rendering content with {@link #setContentRoot(RenderNode)}, and resuming
      * rendering by issuing a new {@link FrameRenderRequest}.
      *
-     * <p>It is suggested to call this in response to callbacks such as
+     * <p>It is recommended to call this in response to callbacks such as
      * {@link android.view.SurfaceHolder.Callback#surfaceDestroyed(SurfaceHolder)}.
      *
      * <p>Note that if there are any outstanding frame commit callbacks they may never being
@@ -193,7 +194,7 @@ public class HardwareRenderer {
      *
      * @param name The debug name to use for this HardwareRenderer instance
      */
-    public void setName(String name) {
+    public void setName(@NonNull String name) {
         nSetName(mNativeProxy, name);
     }
 
@@ -330,7 +331,7 @@ public class HardwareRenderer {
          *
          * @return this instance
          */
-        public FrameRenderRequest setVsyncTime(long vsyncTime) {
+        public @NonNull FrameRenderRequest setVsyncTime(long vsyncTime) {
             mFrameInfo.setVsync(vsyncTime, vsyncTime);
             mFrameInfo.addFlags(FrameInfo.FLAG_SURFACE_CANVAS);
             return this;
@@ -351,7 +352,7 @@ public class HardwareRenderer {
          *
          * @return this instance
          */
-        public FrameRenderRequest setFrameCommitCallback(@NonNull Executor executor,
+        public @NonNull FrameRenderRequest setFrameCommitCallback(@NonNull Executor executor,
                 @NonNull Runnable frameCommitCallback) {
             setFrameCompleteCallback(frameNr -> executor.execute(frameCommitCallback));
             return this;
@@ -372,7 +373,7 @@ public class HardwareRenderer {
          *                   completion.
          * @return this instance
          */
-        public FrameRenderRequest setWaitForPresent(boolean shouldWait) {
+        public @NonNull FrameRenderRequest setWaitForPresent(boolean shouldWait) {
             mWaitForPresent = shouldWait;
             return this;
         }
@@ -383,7 +384,7 @@ public class HardwareRenderer {
          * The system internally may reuse instances of {@link FrameRenderRequest} to reduce
          * allocation churn.
          *
-         * @return The result of the sync operation. See {@link SyncAndDrawResult}.
+         * @return The result of the sync operation.
          */
         @SyncAndDrawResult
         public int syncAndDraw() {
@@ -406,7 +407,7 @@ public class HardwareRenderer {
      * @return An instance of {@link FrameRenderRequest}. The instance may be reused for every
      * frame, so the caller should not hold onto it for longer than a single render request.
      */
-    public FrameRenderRequest createRenderRequest() {
+    public @NonNull FrameRenderRequest createRenderRequest() {
         mRenderRequest.reset();
         return mRenderRequest;
     }
@@ -456,9 +457,34 @@ public class HardwareRenderer {
      * and {@link Activity#onStart()}.
      *
      * @param stopped true to stop all rendering, false to resume
+     * @hide
      */
     public void setStopped(boolean stopped) {
         nSetStopped(mNativeProxy, stopped);
+    }
+
+    /**
+     * Hard stops rendering into the surface. If the renderer is stopped it will
+     * block any attempt to render. Calls to {@link FrameRenderRequest#syncAndDraw()} will
+     * still sync over the latest rendering content, however they will not render and instead
+     * {@link #SYNC_CONTEXT_IS_STOPPED} will be returned.
+     *
+     * <p>This is useful in combination with lifecycle events such as {@link Activity#onStop()}.
+     * See {@link #start()} for resuming rendering.
+     */
+    public void stop() {
+        nSetStopped(mNativeProxy, true);
+    }
+
+    /**
+     * Resumes rendering into the surface. Any pending rendering requests
+     * will produce a new frame at the next vsync signal.
+     *
+     * <p>This is useful in combination with lifecycle events such as {@link Activity#onStart()}.
+     * See {@link #stop()} for stopping rendering.
+     */
+    public void start() {
+        nSetStopped(mNativeProxy, false);
     }
 
     /**
@@ -473,7 +499,7 @@ public class HardwareRenderer {
      * {@link android.content.ComponentCallbacks2#onTrimMemory(int)} signals such as
      * {@link android.content.ComponentCallbacks2#TRIM_MEMORY_UI_HIDDEN}
      *
-     * See also {@link #setStopped(boolean)}
+     * See also {@link #stop()}.
      */
     public void clearContent() {
         nDestroyHardwareResources(mNativeProxy);

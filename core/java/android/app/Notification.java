@@ -16,9 +16,12 @@
 
 package android.app;
 
+import static android.graphics.drawable.Icon.TYPE_BITMAP;
+
 import static com.android.internal.util.ContrastColorUtil.satisfiesTextContrast;
 
 import android.annotation.ColorInt;
+import android.annotation.DimenRes;
 import android.annotation.DrawableRes;
 import android.annotation.IdRes;
 import android.annotation.IntDef;
@@ -31,6 +34,7 @@ import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
+import android.content.LocusId;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -77,6 +81,7 @@ import android.view.Gravity;
 import android.view.NotificationHeaderView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.contentcapture.ContentCaptureContext;
 import android.widget.ProgressBar;
 import android.widget.RemoteViews;
 
@@ -1201,7 +1206,7 @@ public class Notification implements Parcelable
 
     /**
      * {@link #extras} key: whether the notification should be colorized as
-     * supplied to {@link Builder#setColorized(boolean)}}.
+     * supplied to {@link Builder#setColorized(boolean)}.
      */
     public static final String EXTRA_COLORIZED = "android.colorized";
 
@@ -1271,6 +1276,7 @@ public class Notification implements Parcelable
     private long mTimeout;
 
     private String mShortcutId;
+    private LocusId mLocusId;
     private CharSequence mSettingsText;
 
     private BubbleMetadata mBubbleMetadata;
@@ -1355,7 +1361,7 @@ public class Notification implements Parcelable
          *
          * This is intended for {@link RemoteInput}s that only accept data, meaning
          * {@link RemoteInput#getAllowFreeFormInput} is false, {@link RemoteInput#getChoices}
-         * is null or empty, and {@link RemoteInput#getAllowedDataTypes is non-null and not
+         * is null or empty, and {@link RemoteInput#getAllowedDataTypes} is non-null and not
          * empty. These {@link RemoteInput}s will be ignored by devices that do not
          * support non-text-based {@link RemoteInput}s. See {@link Builder#build}.
          *
@@ -1566,12 +1572,12 @@ public class Notification implements Parcelable
          * Builder class for {@link Action} objects.
          */
         public static final class Builder {
-            private final Icon mIcon;
-            private final CharSequence mTitle;
-            private final PendingIntent mIntent;
+            @Nullable private final Icon mIcon;
+            @Nullable private final CharSequence mTitle;
+            @Nullable private final PendingIntent mIntent;
             private boolean mAllowGeneratedReplies = true;
-            private final Bundle mExtras;
-            private ArrayList<RemoteInput> mRemoteInputs;
+            @NonNull private final Bundle mExtras;
+            @Nullable private ArrayList<RemoteInput> mRemoteInputs;
             private @SemanticAction int mSemanticAction;
             private boolean mIsContextual;
 
@@ -1607,9 +1613,10 @@ public class Notification implements Parcelable
                         action.getAllowGeneratedReplies(), action.getSemanticAction());
             }
 
-            private Builder(Icon icon, CharSequence title, PendingIntent intent, Bundle extras,
-                    RemoteInput[] remoteInputs, boolean allowGeneratedReplies,
-                            @SemanticAction int semanticAction) {
+            private Builder(@Nullable Icon icon, @Nullable CharSequence title,
+                    @Nullable PendingIntent intent, @NonNull Bundle extras,
+                    @Nullable RemoteInput[] remoteInputs, boolean allowGeneratedReplies,
+                    @SemanticAction int semanticAction) {
                 mIcon = icon;
                 mTitle = title;
                 mIntent = intent;
@@ -1629,6 +1636,7 @@ public class Notification implements Parcelable
              *
              * @see Notification.Action#extras
              */
+            @NonNull
             public Builder addExtras(Bundle extras) {
                 if (extras != null) {
                     mExtras.putAll(extras);
@@ -1641,6 +1649,7 @@ public class Notification implements Parcelable
              *
              * <p>The returned Bundle is shared with this Builder.
              */
+            @NonNull
             public Bundle getExtras() {
                 return mExtras;
             }
@@ -1652,6 +1661,7 @@ public class Notification implements Parcelable
              * @param remoteInput a {@link RemoteInput} to add to the action
              * @return this object for method chaining
              */
+            @NonNull
             public Builder addRemoteInput(RemoteInput remoteInput) {
                 if (mRemoteInputs == null) {
                     mRemoteInputs = new ArrayList<RemoteInput>();
@@ -1669,6 +1679,7 @@ public class Notification implements Parcelable
              * @return this object for method chaining
              * The default value is {@code true}
              */
+            @NonNull
             public Builder setAllowGeneratedReplies(boolean allowGeneratedReplies) {
                 mAllowGeneratedReplies = allowGeneratedReplies;
                 return this;
@@ -1682,6 +1693,7 @@ public class Notification implements Parcelable
              * {@code SEMANTIC_ACTION_} prefixes
              * @return this object for method chaining
              */
+            @NonNull
             public Builder setSemanticAction(@SemanticAction int semanticAction) {
                 mSemanticAction = semanticAction;
                 return this;
@@ -1692,6 +1704,7 @@ public class Notification implements Parcelable
              * dependent on the notification message body. An example of a contextual action could
              * be an action opening a map application with an address shown in the notification.
              */
+            @NonNull
             public Builder setContextual(boolean isContextual) {
                 mIsContextual = isContextual;
                 return this;
@@ -1701,6 +1714,7 @@ public class Notification implements Parcelable
              * Apply an extender to this action builder. Extenders may be used to add
              * metadata or change options on this builder.
              */
+            @NonNull
             public Builder extend(Extender extender) {
                 extender.extend(this);
                 return this;
@@ -1728,6 +1742,7 @@ public class Notification implements Parcelable
              * object.
              * @return the built action
              */
+            @NonNull
             public Action build() {
                 checkContextualActionNullFields();
 
@@ -1802,7 +1817,7 @@ public class Notification implements Parcelable
             out.writeInt(mIsContextual ? 1 : 0);
         }
 
-        public static final Parcelable.Creator<Action> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<Action> CREATOR =
                 new Parcelable.Creator<Action>() {
             public Action createFromParcel(Parcel in) {
                 return new Action(in);
@@ -2267,6 +2282,10 @@ public class Notification implements Parcelable
             mShortcutId = parcel.readString();
         }
 
+        if (parcel.readInt() != 0) {
+            mLocusId = LocusId.CREATOR.createFromParcel(parcel);
+        }
+
         mBadgeIcon = parcel.readInt();
 
         if (parcel.readInt() != 0) {
@@ -2390,6 +2409,7 @@ public class Notification implements Parcelable
         that.mChannelId = this.mChannelId;
         that.mTimeout = this.mTimeout;
         that.mShortcutId = this.mShortcutId;
+        that.mLocusId = this.mLocusId;
         that.mBadgeIcon = this.mBadgeIcon;
         that.mSettingsText = this.mSettingsText;
         that.mGroupAlertBehavior = this.mGroupAlertBehavior;
@@ -2705,6 +2725,13 @@ public class Notification implements Parcelable
             parcel.writeInt(0);
         }
 
+        if (mLocusId != null) {
+            parcel.writeInt(1);
+            mLocusId.writeToParcel(parcel, 0);
+        } else {
+            parcel.writeInt(0);
+        }
+
         parcel.writeInt(mBadgeIcon);
 
         if (mSettingsText != null) {
@@ -2731,7 +2758,7 @@ public class Notification implements Parcelable
     /**
      * Parcelable.Creator that instantiates Notification objects
      */
-    public static final Parcelable.Creator<Notification> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<Notification> CREATOR
             = new Parcelable.Creator<Notification>()
     {
         public Notification createFromParcel(Parcel parcel)
@@ -3018,6 +3045,10 @@ public class Notification implements Parcelable
             sb.append(" publicVersion=");
             sb.append(publicVersion.toString());
         }
+        if (this.mLocusId != null) {
+            sb.append(" locusId=");
+            sb.append(this.mLocusId); // LocusId.toString() is PII safe.
+        }
         sb.append(")");
         return sb.toString();
     }
@@ -3120,6 +3151,16 @@ public class Notification implements Parcelable
         return mShortcutId;
     }
 
+    /**
+     * Gets the {@link LocusId} associated with this notification.
+     *
+     * <p>Used by the device's intelligence services to correlate objects (such as
+     * {@link ShortcutInfo} and {@link ContentCaptureContext}) that are correlated.
+     */
+    @Nullable
+    public LocusId getLocusId() {
+        return mLocusId;
+    }
 
     /**
      * Returns the settings text provided to {@link Builder#setSettingsText(CharSequence)}.
@@ -3141,6 +3182,7 @@ public class Notification implements Parcelable
      * Returns the bubble metadata that will be used to display app content in a floating window
      * over the existing foreground activity.
      */
+    @Nullable
     public BubbleMetadata getBubbleMetadata() {
         return mBubbleMetadata;
     }
@@ -3471,8 +3513,22 @@ public class Notification implements Parcelable
          * @param shortcutId the {@link ShortcutInfo#getId() id} of the shortcut this notification
          *                   supersedes
          */
+        @NonNull
         public Builder setShortcutId(String shortcutId) {
             mN.mShortcutId = shortcutId;
+            return this;
+        }
+
+        /**
+         * Sets the {@link LocusId} associated with this notification.
+         *
+         * <p>This method should be called when the {@link LocusId} is used in other places (such
+         * as {@link ShortcutInfo} and {@link ContentCaptureContext}) so the device's intelligence
+         * services can correlate them.
+         */
+        @NonNull
+        public Builder setLocusId(@Nullable LocusId locusId) {
+            mN.mLocusId = locusId;
             return this;
         }
 
@@ -3484,6 +3540,7 @@ public class Notification implements Parcelable
          *
          * Note: This value might be ignored, for launchers that don't support badge icons.
          */
+        @NonNull
         public Builder setBadgeIconType(int icon) {
             mN.mBadgeIcon = icon;
             return this;
@@ -3499,6 +3556,7 @@ public class Notification implements Parcelable
          *
          * <p> The default value is {@link #GROUP_ALERT_ALL}.</p>
          */
+        @NonNull
         public Builder setGroupAlertBehavior(@GroupAlertBehavior int groupAlertBehavior) {
             mN.mGroupAlertBehavior = groupAlertBehavior;
             return this;
@@ -3515,7 +3573,8 @@ public class Notification implements Parcelable
          * outside of the notification shade on unlocked devices. When a user interacts with the
          * collapsed state, the bubble intent will be invoked and displayed.</b>
          */
-        public Builder setBubbleMetadata(BubbleMetadata data) {
+        @NonNull
+        public Builder setBubbleMetadata(@Nullable BubbleMetadata data) {
             mN.mBubbleMetadata = data;
             return this;
         }
@@ -3530,6 +3589,7 @@ public class Notification implements Parcelable
         /**
          * Specifies the channel the notification should be delivered on.
          */
+        @NonNull
         public Builder setChannelId(String channelId) {
             mN.mChannelId = channelId;
             return this;
@@ -3546,6 +3606,7 @@ public class Notification implements Parcelable
          * Specifies a duration in milliseconds after which this notification should be canceled,
          * if it is not already canceled.
          */
+        @NonNull
         public Builder setTimeoutAfter(long durationMs) {
             mN.mTimeout = durationMs;
             return this;
@@ -3560,6 +3621,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#when
          */
+        @NonNull
         public Builder setWhen(long when) {
             mN.when = when;
             return this;
@@ -3571,6 +3633,7 @@ public class Notification implements Parcelable
          * For apps targeting {@link android.os.Build.VERSION_CODES#N} and above, this defaults to
          * {@code false}. For earlier apps, the default is {@code true}.
          */
+        @NonNull
         public Builder setShowWhen(boolean show) {
             mN.extras.putBoolean(EXTRA_SHOW_WHEN, show);
             return this;
@@ -3591,6 +3654,7 @@ public class Notification implements Parcelable
          * @see Notification#when
          * @see #setChronometerCountDown(boolean)
          */
+        @NonNull
         public Builder setUsesChronometer(boolean b) {
             mN.extras.putBoolean(EXTRA_SHOW_CHRONOMETER, b);
             return this;
@@ -3604,6 +3668,7 @@ public class Notification implements Parcelable
          *
          * @see #setUsesChronometer(boolean)
          */
+        @NonNull
         public Builder setChronometerCountDown(boolean countDown) {
             mN.extras.putBoolean(EXTRA_CHRONOMETER_COUNT_DOWN, countDown);
             return this;
@@ -3623,6 +3688,7 @@ public class Notification implements Parcelable
          *            A resource ID in the application's package of the drawable to use.
          * @see Notification#icon
          */
+        @NonNull
         public Builder setSmallIcon(@DrawableRes int icon) {
             return setSmallIcon(icon != 0
                     ? Icon.createWithResource(mContext, icon)
@@ -3640,6 +3706,7 @@ public class Notification implements Parcelable
          * @see Notification#icon
          * @see Notification#iconLevel
          */
+        @NonNull
         public Builder setSmallIcon(@DrawableRes int icon, int level) {
             mN.iconLevel = level;
             return setSmallIcon(icon);
@@ -3653,6 +3720,7 @@ public class Notification implements Parcelable
          * @param icon An Icon object to use.
          * @see Notification#icon
          */
+        @NonNull
         public Builder setSmallIcon(Icon icon) {
             mN.setSmallIcon(icon);
             if (icon != null && icon.getType() == Icon.TYPE_RESOURCE) {
@@ -3664,6 +3732,7 @@ public class Notification implements Parcelable
         /**
          * Set the first line of text in the platform notification template.
          */
+        @NonNull
         public Builder setContentTitle(CharSequence title) {
             mN.extras.putCharSequence(EXTRA_TITLE, safeCharSequence(title));
             return this;
@@ -3672,6 +3741,7 @@ public class Notification implements Parcelable
         /**
          * Set the second line of text in the platform notification template.
          */
+        @NonNull
         public Builder setContentText(CharSequence text) {
             mN.extras.putCharSequence(EXTRA_TEXT, safeCharSequence(text));
             return this;
@@ -3695,6 +3765,7 @@ public class Notification implements Parcelable
          * same time on those versions; they occupy the same place.
          * </p>
          */
+        @NonNull
         public Builder setSubText(CharSequence text) {
             mN.extras.putCharSequence(EXTRA_SUB_TEXT, safeCharSequence(text));
             return this;
@@ -3713,6 +3784,7 @@ public class Notification implements Parcelable
          * @param text
          * @return
          */
+        @NonNull
         public Builder setSettingsText(CharSequence text) {
             mN.mSettingsText = safeCharSequence(text);
             return this;
@@ -3732,6 +3804,7 @@ public class Notification implements Parcelable
          * <p>Note: The reply text will only be shown on notifications that have least one action
          * with a {@code RemoteInput}.</p>
          */
+        @NonNull
         public Builder setRemoteInputHistory(CharSequence[] text) {
             if (text == null) {
                 mN.extras.putCharSequenceArray(EXTRA_REMOTE_INPUT_HISTORY, null);
@@ -3750,6 +3823,7 @@ public class Notification implements Parcelable
          * Sets whether remote history entries view should have a spinner.
          * @hide
          */
+        @NonNull
         public Builder setShowRemoteInputSpinner(boolean showSpinner) {
             mN.extras.putBoolean(EXTRA_SHOW_REMOTE_INPUT_SPINNER, showSpinner);
             return this;
@@ -3759,6 +3833,7 @@ public class Notification implements Parcelable
          * Sets whether smart reply buttons should be hidden.
          * @hide
          */
+        @NonNull
         public Builder setHideSmartReplies(boolean hideSmartReplies) {
             mN.extras.putBoolean(EXTRA_HIDE_SMART_REPLIES, hideSmartReplies);
             return this;
@@ -3768,6 +3843,7 @@ public class Notification implements Parcelable
          * Sets the number of items this notification represents. May be displayed as a badge count
          * for Launchers that support badging.
          */
+        @NonNull
         public Builder setNumber(int number) {
             mN.number = number;
             return this;
@@ -3794,6 +3870,7 @@ public class Notification implements Parcelable
          *
          * The platform template will represent this using a {@link ProgressBar}.
          */
+        @NonNull
         public Builder setProgress(int max, int progress, boolean indeterminate) {
             mN.extras.putInt(EXTRA_PROGRESS, progress);
             mN.extras.putInt(EXTRA_PROGRESS_MAX, max);
@@ -3817,6 +3894,7 @@ public class Notification implements Parcelable
          * This will override the layout that would otherwise be constructed by this Builder
          * object.
          */
+        @NonNull
         public Builder setCustomContentView(RemoteViews contentView) {
             mN.contentView = contentView;
             return this;
@@ -3828,6 +3906,7 @@ public class Notification implements Parcelable
          * This will override the expanded layout that would otherwise be constructed by this
          * Builder object.
          */
+        @NonNull
         public Builder setCustomBigContentView(RemoteViews contentView) {
             mN.bigContentView = contentView;
             return this;
@@ -3839,6 +3918,7 @@ public class Notification implements Parcelable
          * This will override the heads-up layout that would otherwise be constructed by this
          * Builder object.
          */
+        @NonNull
         public Builder setCustomHeadsUpContentView(RemoteViews contentView) {
             mN.headsUpContentView = contentView;
             return this;
@@ -3855,6 +3935,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#contentIntent Notification.contentIntent
          */
+        @NonNull
         public Builder setContentIntent(PendingIntent intent) {
             mN.contentIntent = intent;
             return this;
@@ -3865,6 +3946,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#deleteIntent
          */
+        @NonNull
         public Builder setDeleteIntent(PendingIntent intent) {
             mN.deleteIntent = intent;
             return this;
@@ -3893,6 +3975,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#fullScreenIntent
          */
+        @NonNull
         public Builder setFullScreenIntent(PendingIntent intent, boolean highPriority) {
             mN.fullScreenIntent = intent;
             setFlag(FLAG_HIGH_PRIORITY, highPriority);
@@ -3904,6 +3987,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#tickerText
          */
+        @NonNull
         public Builder setTicker(CharSequence tickerText) {
             mN.tickerText = safeCharSequence(tickerText);
             return this;
@@ -3927,6 +4011,7 @@ public class Notification implements Parcelable
          * in place of the {@link #setSmallIcon(Icon) small icon} (which will be placed in a small
          * badge atop the large icon).
          */
+        @NonNull
         public Builder setLargeIcon(Bitmap b) {
             return setLargeIcon(b != null ? Icon.createWithBitmap(b) : null);
         }
@@ -3938,6 +4023,7 @@ public class Notification implements Parcelable
          * in place of the {@link #setSmallIcon(Icon) small icon} (which will be placed in a small
          * badge atop the large icon).
          */
+        @NonNull
         public Builder setLargeIcon(Icon icon) {
             mN.mLargeIcon = icon;
             mN.extras.putParcelable(EXTRA_LARGE_ICON, icon);
@@ -4045,6 +4131,7 @@ public class Notification implements Parcelable
 
          * @see Notification#FLAG_ONGOING_EVENT
          */
+        @NonNull
         public Builder setOngoing(boolean ongoing) {
             setFlag(FLAG_ONGOING_EVENT, ongoing);
             return this;
@@ -4065,6 +4152,7 @@ public class Notification implements Parcelable
          * @see #setColor(int)
          * @see MediaStyle#setMediaSession(MediaSession.Token)
          */
+        @NonNull
         public Builder setColorized(boolean colorize) {
             mN.extras.putBoolean(EXTRA_COLORIZED, colorize);
             return this;
@@ -4076,6 +4164,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#FLAG_ONLY_ALERT_ONCE
          */
+        @NonNull
         public Builder setOnlyAlertOnce(boolean onlyAlertOnce) {
             setFlag(FLAG_ONLY_ALERT_ONCE, onlyAlertOnce);
             return this;
@@ -4086,6 +4175,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#FLAG_AUTO_CANCEL
          */
+        @NonNull
         public Builder setAutoCancel(boolean autoCancel) {
             setFlag(FLAG_AUTO_CANCEL, autoCancel);
             return this;
@@ -4097,6 +4187,7 @@ public class Notification implements Parcelable
          * <p>Some notifications can be bridged to other devices for remote display.
          * This hint can be set to recommend this notification not be bridged.
          */
+        @NonNull
         public Builder setLocalOnly(boolean localOnly) {
             setFlag(FLAG_LOCAL_ONLY, localOnly);
             return this;
@@ -4138,6 +4229,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#category
          */
+        @NonNull
         public Builder setCategory(String category) {
             mN.category = category;
             return this;
@@ -4195,6 +4287,7 @@ public class Notification implements Parcelable
          * @param person the person to add.
          * @see Notification#EXTRA_PEOPLE_LIST
          */
+        @NonNull
         public Builder addPerson(Person person) {
             mPersonList.add(person);
             return this;
@@ -4211,6 +4304,7 @@ public class Notification implements Parcelable
          * @param groupKey The group key of the group.
          * @return this object for method chaining
          */
+        @NonNull
         public Builder setGroup(String groupKey) {
             mN.mGroupKey = groupKey;
             return this;
@@ -4224,6 +4318,7 @@ public class Notification implements Parcelable
          * @param isGroupSummary Whether this notification should be a group summary.
          * @return this object for method chaining
          */
+        @NonNull
         public Builder setGroupSummary(boolean isGroupSummary) {
             setFlag(FLAG_GROUP_SUMMARY, isGroupSummary);
             return this;
@@ -4241,6 +4336,7 @@ public class Notification implements Parcelable
          *
          * @see String#compareTo(String)
          */
+        @NonNull
         public Builder setSortKey(String sortKey) {
             mN.mSortKey = sortKey;
             return this;
@@ -4253,6 +4349,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#extras
          */
+        @NonNull
         public Builder addExtras(Bundle extras) {
             if (extras != null) {
                 mUserExtras.putAll(extras);
@@ -4272,6 +4369,7 @@ public class Notification implements Parcelable
          *
          * @see Notification#extras
          */
+        @NonNull
         public Builder setExtras(Bundle extras) {
             if (extras != null) {
                 mUserExtras = extras;
@@ -4339,6 +4437,7 @@ public class Notification implements Parcelable
          *
          * @param action The action to add.
          */
+        @NonNull
         public Builder addAction(Action action) {
             if (action != null) {
                 mActions.add(action);
@@ -4353,6 +4452,7 @@ public class Notification implements Parcelable
          * @param actions
          * @return
          */
+        @NonNull
         public Builder setActions(Action... actions) {
             mActions.clear();
             for (int i = 0; i < actions.length; i++) {
@@ -4368,6 +4468,7 @@ public class Notification implements Parcelable
          *
          * @param style Object responsible for modifying the notification style.
          */
+        @NonNull
         public Builder setStyle(Style style) {
             if (mStyle != style) {
                 mStyle = style;
@@ -4393,6 +4494,7 @@ public class Notification implements Parcelable
          *
          * @return The same Builder.
          */
+        @NonNull
         public Builder setVisibility(@Visibility int visibility) {
             mN.visibility = visibility;
             return this;
@@ -4404,6 +4506,7 @@ public class Notification implements Parcelable
          * @param n A replacement notification, presumably with some or all info redacted.
          * @return The same Builder.
          */
+        @NonNull
         public Builder setPublicVersion(Notification n) {
             if (n != null) {
                 mN.publicVersion = new Notification();
@@ -4418,6 +4521,7 @@ public class Notification implements Parcelable
          * Apply an extender to this notification builder. Extenders may be used to add
          * metadata or change options on this builder.
          */
+        @NonNull
         public Builder extend(Extender extender) {
             extender.extend(this);
             return this;
@@ -4426,6 +4530,7 @@ public class Notification implements Parcelable
         /**
          * @hide
          */
+        @NonNull
         public Builder setFlag(int mask, boolean value) {
             if (value) {
                 mN.flags |= mask;
@@ -4442,6 +4547,7 @@ public class Notification implements Parcelable
          *
          * @return The same Builder.
          */
+        @NonNull
         public Builder setColor(@ColorInt int argb) {
             mN.color = argb;
             sanitizeColor();
@@ -5674,6 +5780,7 @@ public class Notification implements Parcelable
          * Apply the unstyled operations and return a new {@link Notification} object.
          * @hide
          */
+        @NonNull
         public Notification buildUnstyled() {
             if (mActions.size() > 0) {
                 mN.actions = new Action[mActions.size()];
@@ -5694,6 +5801,7 @@ public class Notification implements Parcelable
          * @param context The context for your application / activity.
          * @param n The notification to create a Builder from.
          */
+        @NonNull
         public static Notification.Builder recoverBuilder(Context context, Notification n) {
             // Re-create notification context so we can access app resources.
             ApplicationInfo applicationInfo = n.extras.getParcelable(
@@ -5718,6 +5826,7 @@ public class Notification implements Parcelable
          * Determines whether the platform can generate contextual actions for a notification.
          * By default this is true.
          */
+        @NonNull
         public Builder setAllowSystemGeneratedContextualActions(boolean allowed) {
             mN.mAllowSystemGeneratedContextualActions = allowed;
             return this;
@@ -5735,6 +5844,7 @@ public class Notification implements Parcelable
          * Combine all of the options that have been set and return a new {@link Notification}
          * object.
          */
+        @NonNull
         public Notification build() {
             // first, add any extras from the calling code
             if (mUserExtras != null) {
@@ -5793,7 +5903,8 @@ public class Notification implements Parcelable
          *
          * @hide
          */
-        public Notification buildInto(Notification n) {
+        @NonNull
+        public Notification buildInto(@NonNull Notification n) {
             build().cloneInto(n, true);
             return n;
         }
@@ -8411,6 +8522,7 @@ public class Notification implements Parcelable
         private PendingIntent mDeleteIntent;
         private Icon mIcon;
         private int mDesiredHeight;
+        @DimenRes private int mDesiredHeightResId;
         private int mFlags;
 
         /**
@@ -8437,10 +8549,11 @@ public class Notification implements Parcelable
         private static final int FLAG_SUPPRESS_INITIAL_NOTIFICATION = 0x00000002;
 
         private BubbleMetadata(PendingIntent expandIntent, PendingIntent deleteIntent,
-                Icon icon, int height) {
+                Icon icon, int height, @DimenRes int heightResId) {
             mPendingIntent = expandIntent;
             mIcon = icon;
             mDesiredHeight = height;
+            mDesiredHeightResId = heightResId;
             mDeleteIntent = deleteIntent;
         }
 
@@ -8452,11 +8565,13 @@ public class Notification implements Parcelable
             if (in.readInt() != 0) {
                 mDeleteIntent = PendingIntent.CREATOR.createFromParcel(in);
             }
+            mDesiredHeightResId = in.readInt();
         }
 
         /**
          * @return the pending intent used to populate the floating window for this bubble.
          */
+        @NonNull
         public PendingIntent getIntent() {
             return mPendingIntent;
         }
@@ -8464,33 +8579,34 @@ public class Notification implements Parcelable
         /**
          * @return the pending intent to send when the bubble is dismissed by a user, if one exists.
          */
+        @Nullable
         public PendingIntent getDeleteIntent() {
             return mDeleteIntent;
         }
 
         /**
-         * @return the title that will appear along with the app content defined by
-         * {@link #getIntent()} for this bubble.
-         *
-         * @deprecated titles are no longer required or shown.
-         */
-        @Deprecated
-        public CharSequence getTitle() {
-            return "";
-        }
-        /**
          * @return the icon that will be displayed for this bubble when it is collapsed.
          */
+        @NonNull
         public Icon getIcon() {
             return mIcon;
         }
 
         /**
-         * @return the ideal height for the floating window that app content defined by
+         * @return the ideal height, in DPs, for the floating window that app content defined by
          * {@link #getIntent()} for this bubble.
          */
         public int getDesiredHeight() {
             return mDesiredHeight;
+        }
+
+        /**
+         * @return the resId of ideal height for the floating window that app content defined by
+         * {@link #getIntent()} for this bubble.
+         */
+        @DimenRes
+        public int getDesiredHeightResId() {
+            return mDesiredHeightResId;
         }
 
         /**
@@ -8511,7 +8627,7 @@ public class Notification implements Parcelable
             return (mFlags & FLAG_SUPPRESS_INITIAL_NOTIFICATION) != 0;
         }
 
-        public static final Parcelable.Creator<BubbleMetadata> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<BubbleMetadata> CREATOR =
                 new Parcelable.Creator<BubbleMetadata>() {
 
                     @Override
@@ -8540,6 +8656,7 @@ public class Notification implements Parcelable
             if (mDeleteIntent != null) {
                 mDeleteIntent.writeToParcel(out, 0);
             }
+            out.writeInt(mDesiredHeightResId);
         }
 
         private void setFlags(int flags) {
@@ -8549,11 +8666,12 @@ public class Notification implements Parcelable
         /**
          * Builder to construct a {@link BubbleMetadata} object.
          */
-        public static class Builder {
+        public static final class Builder {
 
             private PendingIntent mPendingIntent;
             private Icon mIcon;
             private int mDesiredHeight;
+            @DimenRes private int mDesiredHeightResId;
             private int mFlags;
             private PendingIntent mDeleteIntent;
 
@@ -8567,24 +8685,12 @@ public class Notification implements Parcelable
              * Sets the intent that will be used when the bubble is expanded. This will display the
              * app content in a floating window over the existing foreground activity.
              */
-            public BubbleMetadata.Builder setIntent(PendingIntent intent) {
+            @NonNull
+            public BubbleMetadata.Builder setIntent(@NonNull PendingIntent intent) {
                 if (intent == null) {
                     throw new IllegalArgumentException("Bubble requires non-null pending intent");
                 }
                 mPendingIntent = intent;
-                return this;
-            }
-
-            /**
-             * Sets the title that will appear along with the app content for this bubble.
-             *
-             * <p>A title is required and should expect to fit on a single line and make sense when
-             * shown with the content defined by {@link #setIntent(PendingIntent)}.</p>
-             *
-             * @deprecated titles are no longer required or shown.
-             */
-            @Deprecated
-            public BubbleMetadata.Builder setTitle(CharSequence title) {
                 return this;
             }
 
@@ -8594,22 +8700,59 @@ public class Notification implements Parcelable
              * <p>An icon is required and should be representative of the content within the bubble.
              * If your app produces multiple bubbles, the image should be unique for each of them.
              * </p>
+             *
+             * <p>The shape of a bubble icon is adaptive and can match the device theme.
+             *
+             * If your icon is bitmap-based, you should create it using
+             * {@link Icon#createWithAdaptiveBitmap(Bitmap)}, otherwise this method will throw.
+             *
+             * If your icon is not bitmap-based, you should expect that the icon will be tinted.
+             * </p>
              */
-            public BubbleMetadata.Builder setIcon(Icon icon) {
+            @NonNull
+            public BubbleMetadata.Builder setIcon(@NonNull Icon icon) {
                 if (icon == null) {
                     throw new IllegalArgumentException("Bubbles require non-null icon");
+                }
+                if (icon.getType() == TYPE_BITMAP) {
+                    throw new IllegalArgumentException("When using bitmap based icons, Bubbles "
+                            + "require TYPE_ADAPTIVE_BITMAP, please use"
+                            + " Icon#createWithAdaptiveBitmap instead");
                 }
                 mIcon = icon;
                 return this;
             }
 
             /**
-             * Sets the desired height for the app content defined by
+             * Sets the desired height in DPs for the app content defined by
              * {@link #setIntent(PendingIntent)}, this height may not be respected if there is not
              * enough space on the screen or if the provided height is too small to be useful.
+             * <p>
+             * If {@link #setDesiredHeightResId(int)} was previously called on this builder, the
+             * previous value set will be cleared after calling this method, and this value will
+             * be used instead.
              */
+            @NonNull
             public BubbleMetadata.Builder setDesiredHeight(int height) {
                 mDesiredHeight = Math.max(height, 0);
+                mDesiredHeightResId = 0;
+                return this;
+            }
+
+
+            /**
+             * Sets the desired height via resId for the app content defined by
+             * {@link #setIntent(PendingIntent)}, this height may not be respected if there is not
+             * enough space on the screen or if the provided height is too small to be useful.
+             * <p>
+             * If {@link #setDesiredHeight(int)} was previously called on this builder, the
+             * previous value set will be cleared after calling this method, and this value will
+             * be used instead.
+             */
+            @NonNull
+            public BubbleMetadata.Builder setDesiredHeightResId(@DimenRes int heightResId) {
+                mDesiredHeightResId = heightResId;
+                mDesiredHeight = 0;
                 return this;
             }
 
@@ -8624,6 +8767,7 @@ public class Notification implements Parcelable
              * <p>Generally this flag should only be set if the user has performed an action to
              * request or create a bubble.</p>
              */
+            @NonNull
             public BubbleMetadata.Builder setAutoExpandBubble(boolean shouldExpand) {
                 setFlag(FLAG_AUTO_EXPAND_BUBBLE, shouldExpand);
                 return this;
@@ -8640,6 +8784,7 @@ public class Notification implements Parcelable
              * <p>Generally this flag should only be set if the user has performed an action to
              * request or create a bubble.</p>
              */
+            @NonNull
             public BubbleMetadata.Builder setSuppressInitialNotification(
                     boolean shouldSupressNotif) {
                 setFlag(FLAG_SUPPRESS_INITIAL_NOTIFICATION, shouldSupressNotif);
@@ -8649,7 +8794,8 @@ public class Notification implements Parcelable
             /**
              * Sets an optional intent to send when this bubble is explicitly removed by the user.
              */
-            public BubbleMetadata.Builder setDeleteIntent(PendingIntent deleteIntent) {
+            @NonNull
+            public BubbleMetadata.Builder setDeleteIntent(@Nullable PendingIntent deleteIntent) {
                 mDeleteIntent = deleteIntent;
                 return this;
             }
@@ -8659,6 +8805,7 @@ public class Notification implements Parcelable
              * <p>Will throw {@link IllegalStateException} if required fields have not been set
              * on this builder.</p>
              */
+            @NonNull
             public BubbleMetadata build() {
                 if (mPendingIntent == null) {
                     throw new IllegalStateException("Must supply pending intent to bubble");
@@ -8667,7 +8814,7 @@ public class Notification implements Parcelable
                     throw new IllegalStateException("Must supply an icon for the bubble");
                 }
                 BubbleMetadata data = new BubbleMetadata(mPendingIntent, mDeleteIntent,
-                        mIcon, mDesiredHeight);
+                        mIcon, mDesiredHeight, mDesiredHeightResId);
                 data.setFlags(mFlags);
                 return data;
             }

@@ -51,10 +51,12 @@ import android.database.ContentObserver;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.inputmethodservice.InputMethodService;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -137,6 +139,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private AccessibilityManager mAccessibilityManager;
     private MagnificationContentObserver mMagnificationObserver;
     private ContentResolver mContentResolver;
+    private boolean mAssistantAvailable;
 
     private int mDisabledFlags1;
     private int mDisabledFlags2;
@@ -156,7 +159,8 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
 
     private OverviewProxyService mOverviewProxyService;
 
-    private int mDisplayId;
+    @VisibleForTesting
+    public int mDisplayId;
     private boolean mIsOnDefaultDisplay;
     public boolean mHomeBlockedThisTouch;
 
@@ -167,6 +171,11 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         public void onConnectionChanged(boolean isConnected) {
             mNavigationBarView.updateStates();
             updateScreenPinningGestures();
+
+            // Send the assistant availability upon connection
+            if (isConnected) {
+                mNavigationBarView.setAssistantAvailable(mAssistantAvailable);
+            }
         }
 
         @Override
@@ -182,6 +191,11 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         public void onInteractionFlagsChanged(@InteractionType int flags) {
             mNavigationBarView.updateStates();
             updateScreenPinningGestures();
+        }
+
+        @Override
+        public void startAssistant(Bundle bundle) {
+            mAssistManager.startAssist(bundle);
         }
 
         @Override
@@ -208,6 +222,19 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
 
     private final Runnable mAutoDim = () -> getBarTransitions().setAutoDim(true);
 
+    private final ContentObserver mAssistContentObserver = new ContentObserver(
+            new Handler(Looper.getMainLooper())) {
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            boolean available = mAssistManager
+                    .getAssistInfoForUser(UserHandle.USER_CURRENT) != null;
+            if (mAssistantAvailable != available) {
+                mNavigationBarView.setAssistantAvailable(available);
+                mAssistantAvailable = available;
+            }
+        }
+    };
+
     @Inject
     public NavigationBarFragment(AccessibilityManagerWrapper accessibilityManagerWrapper,
             DeviceProvisionedController deviceProvisionedController, MetricsLogger metricsLogger,
@@ -216,6 +243,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         mDeviceProvisionedController = deviceProvisionedController;
         mMetricsLogger = metricsLogger;
         mAssistManager = assistManager;
+        mAssistantAvailable = mAssistManager.getAssistInfoForUser(UserHandle.USER_CURRENT) != null;
         mOverviewProxyService = overviewProxyService;
     }
 
@@ -237,6 +265,9 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         mContentResolver.registerContentObserver(Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED), false,
                 mMagnificationObserver, UserHandle.USER_ALL);
+        mContentResolver.registerContentObserver(
+                Settings.Secure.getUriFor(Settings.Secure.ASSISTANT),
+                false /* notifyForDescendants */, mAssistContentObserver, UserHandle.USER_ALL);
 
         if (savedInstanceState != null) {
             mDisabledFlags1 = savedInstanceState.getInt(EXTRA_DISABLE_STATE, 0);
@@ -253,6 +284,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         super.onDestroy();
         mAccessibilityManagerWrapper.removeCallback(mAccessibilityListener);
         mContentResolver.unregisterContentObserver(mMagnificationObserver);
+        mContentResolver.unregisterContentObserver(mAssistContentObserver);
     }
 
     @Override
@@ -960,7 +992,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                     }
                 } else {
                     // Screen off disable it
-                    mNavigationBarView.getColorAdaptionController().end();
+                    mNavigationBarView.getColorAdaptionController().stop();
                 }
             }
             if (Intent.ACTION_USER_SWITCHED.equals(action)) {
@@ -985,6 +1017,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         lp.setTitle("NavigationBar" + context.getDisplayId());
         lp.accessibilityTitle = context.getString(R.string.nav_bar);
         lp.windowAnimations = 0;
+        lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC;
 
         View navigationBarView = LayoutInflater.from(context).inflate(
                 R.layout.navigation_bar_window, null);

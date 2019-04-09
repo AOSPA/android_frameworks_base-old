@@ -20,7 +20,6 @@
 #include "renderthread/EglManager.h"
 #include "renderthread/VulkanManager.h"
 
-#include <SkToSRGBColorFilter.h>
 #include <gui/Surface.h>
 #include <ui/Fence.h>
 #include <ui/GraphicBuffer.h>
@@ -29,6 +28,7 @@
 #include "hwui/Bitmap.h"
 #include "utils/Color.h"
 #include "utils/MathUtils.h"
+#include "utils/TraceUtils.h"
 
 using namespace android::uirenderer::renderthread;
 

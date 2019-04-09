@@ -216,7 +216,7 @@ class AutomaticBrightnessController {
     private PackageManager mPackageManager;
 
     public AutomaticBrightnessController(Callbacks callbacks, Looper looper,
-            SensorManager sensorManager, BrightnessMappingStrategy mapper,
+            SensorManager sensorManager, Sensor lightSensor, BrightnessMappingStrategy mapper,
             int lightSensorWarmUpTime, int brightnessMin, int brightnessMax, float dozeScaleFactor,
             int lightSensorRate, int initialLightSensorRate, long brighteningLightDebounceConfig,
             long darkeningLightDebounceConfig, boolean resetAmbientLuxAfterWarmUpConfig,
@@ -249,7 +249,7 @@ class AutomaticBrightnessController {
             new AmbientLightRingBuffer(mNormalLightSensorRate, mAmbientLightHorizon);
 
         if (!DEBUG_PRETEND_LIGHT_SENSOR_ABSENT) {
-            mLightSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
+            mLightSensor = lightSensor;
         }
 
         mActivityTaskManager = ActivityTaskManager.getService();
@@ -286,6 +286,10 @@ class AutomaticBrightnessController {
             return (int) (mScreenAutoBrightness * mDozeScaleFactor);
         }
         return mScreenAutoBrightness;
+    }
+
+    public boolean hasValidAmbientLux() {
+        return mAmbientLuxValid;
     }
 
     public float getAutomaticScreenBrightnessAdjustment() {
@@ -648,9 +652,9 @@ class AutomaticBrightnessController {
                 mLightSensorWarmUpTimeConfig + mLightSensorEnableTime;
             if (time < timeWhenSensorWarmedUp) {
                 if (mLoggingEnabled) {
-                    Slog.d(TAG, "updateAmbientLux: Sensor not  ready yet: " +
-                            "time=" + time + ", " +
-                            "timeWhenSensorWarmedUp=" + timeWhenSensorWarmedUp);
+                    Slog.d(TAG, "updateAmbientLux: Sensor not ready yet: "
+                            + "time=" + time + ", "
+                            + "timeWhenSensorWarmedUp=" + timeWhenSensorWarmedUp);
                 }
                 mHandler.sendEmptyMessageAtTime(MSG_UPDATE_AMBIENT_LUX,
                         timeWhenSensorWarmedUp);

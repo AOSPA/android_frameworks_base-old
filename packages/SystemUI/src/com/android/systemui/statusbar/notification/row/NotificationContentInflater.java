@@ -34,12 +34,17 @@ import android.widget.RemoteViews;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.widget.ImageMessageConsumer;
+import com.android.systemui.Dependency;
 import com.android.systemui.statusbar.InflationTask;
+import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.MediaNotificationProcessor;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.policy.HeadsUpManager;
+import com.android.systemui.statusbar.policy.InflatedSmartReplies;
+import com.android.systemui.statusbar.policy.SmartReplyConstants;
 import com.android.systemui.util.Assert;
 
 import java.lang.annotation.Retention;
@@ -278,6 +283,8 @@ public class NotificationContentInflater {
         InflationProgress result = createRemoteViews(reInflateFlags, builder, mIsLowPriority,
                 mIsChildInGroup, mUsesIncreasedHeight, mUsesIncreasedHeadsUpHeight,
                 mRedactAmbient, packageContext);
+        result = inflateSmartReplyViews(result, reInflateFlags, mRow.getEntry(),
+                mRow.getContext(), mRow.getHeadsUpManager());
         apply(
                 inflateSynchronously,
                 result,
@@ -306,6 +313,7 @@ public class NotificationContentInflater {
                 if (mRow.getPrivateLayout().isContentViewInactive(VISIBLE_TYPE_HEADSUP)) {
                     mRow.getPrivateLayout().setHeadsUpChild(null);
                     mCachedContentViews.remove(FLAG_CONTENT_VIEW_HEADS_UP);
+                    mRow.getPrivateLayout().setHeadsUpInflatedSmartReplies(null);
                 }
                 break;
             case FLAG_CONTENT_VIEW_AMBIENT:
@@ -336,12 +344,33 @@ public class NotificationContentInflater {
         }
     }
 
+    private static InflationProgress inflateSmartReplyViews(InflationProgress result,
+            @InflationFlag int reInflateFlags, NotificationEntry entry, Context context,
+            HeadsUpManager headsUpManager) {
+        SmartReplyConstants smartReplyConstants = Dependency.get(SmartReplyConstants.class);
+        SmartReplyController smartReplyController = Dependency.get(SmartReplyController.class);
+        if ((reInflateFlags & FLAG_CONTENT_VIEW_EXPANDED) != 0 && result.newExpandedView != null) {
+            result.expandedInflatedSmartReplies =
+                    InflatedSmartReplies.inflate(
+                            context, entry, smartReplyConstants, smartReplyController,
+                            headsUpManager);
+        }
+        if ((reInflateFlags & FLAG_CONTENT_VIEW_HEADS_UP) != 0 && result.newHeadsUpView != null) {
+            result.headsUpInflatedSmartReplies =
+                    InflatedSmartReplies.inflate(
+                            context, entry, smartReplyConstants, smartReplyController,
+                            headsUpManager);
+        }
+        return result;
+    }
+
     private static InflationProgress createRemoteViews(@InflationFlag int reInflateFlags,
             Notification.Builder builder, boolean isLowPriority, boolean isChildInGroup,
             boolean usesIncreasedHeight, boolean usesIncreasedHeadsUpHeight, boolean redactAmbient,
             Context packageContext) {
         InflationProgress result = new InflationProgress();
         isLowPriority = isLowPriority && !isChildInGroup;
+
         if ((reInflateFlags & FLAG_CONTENT_VIEW_CONTRACTED) != 0) {
             result.newContentView = createContentView(builder, isLowPriority, usesIncreasedHeight);
         }
@@ -650,35 +679,60 @@ public class NotificationContentInflater {
         if (runningInflations.isEmpty()) {
             if ((reInflateFlags & FLAG_CONTENT_VIEW_CONTRACTED) != 0) {
                 if (result.inflatedContentView != null) {
+                    // New view case
                     privateLayout.setContractedChild(result.inflatedContentView);
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_CONTRACTED, result.newContentView);
+                } else if (cachedContentViews.get(FLAG_CONTENT_VIEW_CONTRACTED) != null) {
+                    // Reinflation case. Only update if it's still cached (i.e. view has not been
+                    // freed while inflating).
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_CONTRACTED, result.newContentView);
                 }
-                cachedContentViews.put(FLAG_CONTENT_VIEW_CONTRACTED, result.newContentView);
             }
 
             if ((reInflateFlags & FLAG_CONTENT_VIEW_EXPANDED) != 0) {
                 if (result.inflatedExpandedView != null) {
                     privateLayout.setExpandedChild(result.inflatedExpandedView);
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_EXPANDED, result.newExpandedView);
                 } else if (result.newExpandedView == null) {
                     privateLayout.setExpandedChild(null);
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_EXPANDED, null);
+                } else if (cachedContentViews.get(FLAG_CONTENT_VIEW_EXPANDED) != null) {
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_EXPANDED, result.newExpandedView);
                 }
-                cachedContentViews.put(FLAG_CONTENT_VIEW_EXPANDED, result.newExpandedView);
+                if (result.newExpandedView != null) {
+                    privateLayout.setExpandedInflatedSmartReplies(
+                            result.expandedInflatedSmartReplies);
+                } else {
+                    privateLayout.setExpandedInflatedSmartReplies(null);
+                }
                 row.setExpandable(result.newExpandedView != null);
             }
 
             if ((reInflateFlags & FLAG_CONTENT_VIEW_HEADS_UP) != 0) {
                 if (result.inflatedHeadsUpView != null) {
                     privateLayout.setHeadsUpChild(result.inflatedHeadsUpView);
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_HEADS_UP, result.newHeadsUpView);
                 } else if (result.newHeadsUpView == null) {
                     privateLayout.setHeadsUpChild(null);
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_HEADS_UP, null);
+                } else if (cachedContentViews.get(FLAG_CONTENT_VIEW_HEADS_UP) != null) {
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_HEADS_UP, result.newHeadsUpView);
                 }
-                cachedContentViews.put(FLAG_CONTENT_VIEW_HEADS_UP, result.newHeadsUpView);
+                if (result.newHeadsUpView != null) {
+                    privateLayout.setHeadsUpInflatedSmartReplies(
+                            result.headsUpInflatedSmartReplies);
+                } else {
+                    privateLayout.setHeadsUpInflatedSmartReplies(null);
+                }
             }
 
             if ((reInflateFlags & FLAG_CONTENT_VIEW_PUBLIC) != 0) {
                 if (result.inflatedPublicView != null) {
                     publicLayout.setContractedChild(result.inflatedPublicView);
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_PUBLIC, result.newPublicView);
+                } else if (cachedContentViews.get(FLAG_CONTENT_VIEW_PUBLIC) != null) {
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_PUBLIC, result.newPublicView);
                 }
-                cachedContentViews.put(FLAG_CONTENT_VIEW_PUBLIC, result.newPublicView);
             }
 
             if ((reInflateFlags & FLAG_CONTENT_VIEW_AMBIENT) != 0) {
@@ -689,8 +743,10 @@ public class NotificationContentInflater {
                             ? publicLayout : privateLayout;
                     newParent.setAmbientChild(result.inflatedAmbientView);
                     otherParent.setAmbientChild(null);
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_AMBIENT, result.newAmbientView);
+                } else if (cachedContentViews.get(FLAG_CONTENT_VIEW_AMBIENT) != null) {
+                    cachedContentViews.put(FLAG_CONTENT_VIEW_AMBIENT, result.newAmbientView);
                 }
-                cachedContentViews.put(FLAG_CONTENT_VIEW_AMBIENT, result.newAmbientView);
             }
             entry.headsUpStatusBarText = result.headsUpStatusBarText;
             entry.headsUpStatusBarTextPublic = result.headsUpStatusBarTextPublic;
@@ -846,9 +902,12 @@ public class NotificationContentInflater {
                             packageContext);
                     processor.processNotification(notification, recoveredBuilder);
                 }
-                return createRemoteViews(mReInflateFlags, recoveredBuilder, mIsLowPriority,
+                InflationProgress inflationProgress = createRemoteViews(mReInflateFlags,
+                        recoveredBuilder, mIsLowPriority,
                         mIsChildInGroup, mUsesIncreasedHeight, mUsesIncreasedHeadsUpHeight,
                         mRedactAmbient, packageContext);
+                return inflateSmartReplyViews(inflationProgress, mReInflateFlags, mRow.getEntry(),
+                        mRow.getContext(), mRow.getHeadsUpManager());
             } catch (Exception e) {
                 mError = e;
                 return null;
@@ -927,6 +986,9 @@ public class NotificationContentInflater {
         private View inflatedPublicView;
         private CharSequence headsUpStatusBarText;
         private CharSequence headsUpStatusBarTextPublic;
+
+        private InflatedSmartReplies expandedInflatedSmartReplies;
+        private InflatedSmartReplies headsUpInflatedSmartReplies;
     }
 
     @VisibleForTesting

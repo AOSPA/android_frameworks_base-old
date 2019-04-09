@@ -303,6 +303,47 @@ public final class ContentCaptureEvent implements Parcelable {
         return mText;
     }
 
+    /**
+     * Merges event of the same type, either {@link #TYPE_VIEW_TEXT_CHANGED}
+     * or {@link #TYPE_VIEW_DISAPPEARED}.
+     *
+     * @hide
+     */
+    public void mergeEvent(@NonNull ContentCaptureEvent event) {
+        Preconditions.checkNotNull(event);
+        final int eventType = event.getType();
+        if (mType != eventType) {
+            Log.e(TAG, "mergeEvent(" + getTypeAsString(eventType) + ") cannot be merged "
+                    + "with different eventType=" + getTypeAsString(mType));
+            return;
+        }
+
+        if (eventType == TYPE_VIEW_DISAPPEARED) {
+            final List<AutofillId> ids = event.getIds();
+            final AutofillId id = event.getId();
+            if (ids != null) {
+                if (id != null) {
+                    Log.w(TAG, "got TYPE_VIEW_DISAPPEARED event with both id and ids: " + event);
+                }
+                for (int i = 0; i < ids.size(); i++) {
+                    addAutofillId(ids.get(i));
+                }
+                return;
+            }
+            if (id != null) {
+                addAutofillId(id);
+                return;
+            }
+            throw new IllegalArgumentException("mergeEvent(): got "
+                    + "TYPE_VIEW_DISAPPEARED event with neither id or ids: " + event);
+        } else if (eventType == TYPE_VIEW_TEXT_CHANGED) {
+            setText(event.getText());
+        } else {
+            Log.e(TAG, "mergeEvent(" + getTypeAsString(eventType)
+                    + ") does not support this event type.");
+        }
+    }
+
     /** @hide */
     public void dump(@NonNull PrintWriter pw) {
         pw.print("type="); pw.print(getTypeAsString(mType));
@@ -383,10 +424,11 @@ public final class ContentCaptureEvent implements Parcelable {
         }
     }
 
-    public static final Parcelable.Creator<ContentCaptureEvent> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<ContentCaptureEvent> CREATOR =
             new Parcelable.Creator<ContentCaptureEvent>() {
 
         @Override
+        @NonNull
         public ContentCaptureEvent createFromParcel(Parcel parcel) {
             final String sessionId = parcel.readString();
             final int type = parcel.readInt();
@@ -415,6 +457,7 @@ public final class ContentCaptureEvent implements Parcelable {
         }
 
         @Override
+        @NonNull
         public ContentCaptureEvent[] newArray(int size) {
             return new ContentCaptureEvent[size];
         }

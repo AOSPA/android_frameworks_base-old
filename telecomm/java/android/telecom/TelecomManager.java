@@ -17,6 +17,7 @@ package android.telecom;
 import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressAutoDoc;
 import android.annotation.SuppressLint;
@@ -24,7 +25,6 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
-import android.app.role.RoleManagerCallback;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -495,12 +495,6 @@ public class TelecomManager {
             "android.telecom.extra.START_CALL_WITH_RTT";
 
     /**
-     * A boolean extra set to indicate whether an app is eligible to be bound to when there are
-     * ongoing calls on the device.
-     */
-    public static final String EXTRA_IS_ENABLED = "android.telecom.extra.IS_ENABLED";
-
-    /**
      * A boolean meta-data value indicating whether an {@link InCallService} implements an
      * in-call user interface. Dialer implementations (see {@link #getDefaultDialerPackage()}) which
      * would also like to replace the in-call interface should set this meta-data to {@code true} in
@@ -832,10 +826,11 @@ public class TelecomManager {
      * <p>
      * The default dialer has access to use this method.
      *
-     * @return The user outgoing phone account selected by the user.
+     * @return The user outgoing phone account selected by the user, or {@code null} if there is no
+     * user selected outgoing {@link PhoneAccountHandle}.
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
-    public PhoneAccountHandle getUserSelectedOutgoingPhoneAccount() {
+    public @Nullable PhoneAccountHandle getUserSelectedOutgoingPhoneAccount() {
         try {
             if (isServiceConnected()) {
                 return getTelecomService().getUserSelectedOutgoingPhoneAccount(
@@ -851,13 +846,14 @@ public class TelecomManager {
      * Sets the user-chosen default {@link PhoneAccountHandle} for making outgoing phone calls.
      *
      * @param accountHandle The {@link PhoneAccountHandle} which will be used by default for making
-     *                      outgoing voice calls.
+     *                      outgoing voice calls, or {@code null} if no default is specified (the
+     *                      user will be asked each time a call is placed in this case).
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     @TestApi
     @SystemApi
-    public void setUserSelectedOutgoingPhoneAccount(PhoneAccountHandle accountHandle) {
+    public void setUserSelectedOutgoingPhoneAccount(@Nullable PhoneAccountHandle accountHandle) {
         try {
             if (isServiceConnected()) {
                 getTelecomService().setUserSelectedOutgoingPhoneAccount(accountHandle);
@@ -1224,7 +1220,8 @@ public class TelecomManager {
     /**
      * Used to set the default dialer package.
      *
-     * @param packageName to set the default dialer to.
+     * @param packageName to set the default dialer to, or {@code null} if the system provided
+     *                    dialer should be used instead.
      *
      * @result {@code true} if the default dialer was successfully changed, {@code false} if
      *         the specified package does not correspond to an installed dialer, or is already
@@ -1235,15 +1232,15 @@ public class TelecomManager {
      *
      * @hide
      * @deprecated Use
-     * {@link android.app.role.RoleManager#addRoleHolderAsUser(String, String, UserHandle, Executor,
-     * RoleManagerCallback)} instead.
+     * {@link android.app.role.RoleManager#addRoleHolderAsUser(String, String, int, UserHandle,
+     * Executor, java.util.function.Consumer)} instead.
      */
     @SystemApi
     @Deprecated
     @RequiresPermission(allOf = {
             android.Manifest.permission.MODIFY_PHONE_STATE,
             android.Manifest.permission.WRITE_SECURE_SETTINGS})
-    public boolean setDefaultDialer(String packageName) {
+    public boolean setDefaultDialer(@Nullable String packageName) {
         try {
             if (isServiceConnected()) {
                 return getTelecomService().setDefaultDialer(packageName);
@@ -1257,9 +1254,10 @@ public class TelecomManager {
     /**
      * Determines the package name of the system-provided default phone app.
      *
-     * @return package name for the system dialer package or null if no system dialer is preloaded.
+     * @return package name for the system dialer package or {@code null} if no system dialer is
+     *         preloaded.
      */
-    public String getSystemDialerPackage() {
+    public @Nullable String getSystemDialerPackage() {
         try {
             if (isServiceConnected()) {
                 return getTelecomService().getSystemDialerPackage();
@@ -1609,7 +1607,7 @@ public class TelecomManager {
                                 Build.VERSION_CODES.O_MR1) {
                     Log.e("TAG", "addNewIncomingCall failed. Use public api " +
                             "acceptHandover for API > O-MR1");
-                    // TODO add "return" after DUO team adds support for new handover API
+                    return;
                 }
                 getTelecomService().addNewIncomingCall(
                         phoneAccount, extras == null ? new Bundle() : extras);

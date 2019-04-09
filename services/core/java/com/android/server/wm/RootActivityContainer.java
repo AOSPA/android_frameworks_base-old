@@ -114,6 +114,7 @@ import com.android.server.LocalServices;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.AppTimeTracker;
 import com.android.server.am.UserState;
+import com.android.server.policy.WindowManagerPolicy;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -174,12 +175,6 @@ public class RootActivityContainer extends ConfigurationContainer
     /** Reference to default display so we can quickly look it up. */
     private ActivityDisplay mDefaultDisplay;
     private final SparseArray<IntArray> mDisplayAccessUIDs = new SparseArray<>();
-
-    /**
-     * Cached value of the topmost resumed activity in the system. Updated when new activity is
-     * resumed.
-     */
-    private ActivityRecord mTopResumedActivity;
 
     /** The current user */
     int mCurrentUser;
@@ -351,6 +346,11 @@ public class RootActivityContainer extends ConfigurationContainer
         }
     }
 
+    boolean startHomeOnDisplay(int userId, String reason, int displayId) {
+        return startHomeOnDisplay(userId, reason, displayId, false /* allowInstrumenting */,
+                false /* fromHomeKey */);
+    }
+
     /**
      * This starts home activity on displays that can have system decorations based on displayId -
      * Default display always use primary home component.
@@ -362,12 +362,20 @@ public class RootActivityContainer extends ConfigurationContainer
      *    If there are multiple activities matched, use first one.
      *  - Use the secondary home defined in the config.
      */
-    boolean startHomeOnDisplay(int userId, String reason, int displayId) {
+    boolean startHomeOnDisplay(int userId, String reason, int displayId, boolean allowInstrumenting,
+            boolean fromHomeKey) {
+        // Fallback to top focused display if the displayId is invalid.
+        if (displayId == INVALID_DISPLAY) {
+            displayId = getTopDisplayFocusedStack().mDisplayId;
+        }
+
         Intent homeIntent;
         ActivityInfo aInfo;
         if (displayId == DEFAULT_DISPLAY) {
             homeIntent = mService.getHomeIntent();
             aInfo = resolveHomeActivity(userId, homeIntent);
+        } else if (!mService.mSupportsMultiDisplay) {
+            return false;
         } else {
             Pair<ActivityInfo, Intent> info = resolveSecondaryHomeActivity(userId, displayId);
             aInfo = info.first;
@@ -377,13 +385,17 @@ public class RootActivityContainer extends ConfigurationContainer
             return false;
         }
 
-        if (!canStartHomeOnDisplay(aInfo, displayId, false /* allowInstrumenting */)) {
+        if (!canStartHomeOnDisplay(aInfo, displayId, allowInstrumenting)) {
             return false;
         }
 
         // Updates the home component of the intent.
         homeIntent.setComponent(new ComponentName(aInfo.applicationInfo.packageName, aInfo.name));
         homeIntent.setFlags(homeIntent.getFlags() | FLAG_ACTIVITY_NEW_TASK);
+        // Updates the extra information of the intent.
+        if (fromHomeKey) {
+            homeIntent.putExtra(WindowManagerPolicy.EXTRA_FROM_HOME_KEY, true);
+        }
         // Update the reason for ANR debugging to verify if the user activity is the one that
         // actually launched.
         final String myReason = reason + ":" + userId + ":" + UserHandle.getUserId(
@@ -548,6 +560,11 @@ public class RootActivityContainer extends ConfigurationContainer
                 && displayId == mService.mVr2dDisplayId)) {
             // No restrictions to default display or vr 2d display.
             return true;
+        }
+
+        if (displayId != DEFAULT_DISPLAY && !mService.mSupportsMultiDisplay) {
+            // Can't launch home on secondary display if device not support multi-display.
+            return false;
         }
 
         final boolean deviceProvisioned = Settings.Global.getInt(
@@ -1155,23 +1172,6 @@ public class RootActivityContainer extends ConfigurationContainer
         return result;
     }
 
-    void updateTopResumedActivityIfNeeded() {
-        final ActivityRecord prevTopActivity = mTopResumedActivity;
-        final ActivityStack topStack = getTopDisplayFocusedStack();
-        if (topStack == null || topStack.mResumedActivity == prevTopActivity) {
-            return;
-        }
-        // Clear previous top state
-        if (prevTopActivity != null) {
-            prevTopActivity.scheduleTopResumedActivityChanged(false /* onTop */);
-        }
-        // Update the current top activity
-        mTopResumedActivity = topStack.mResumedActivity;
-        if (mTopResumedActivity != null) {
-            mTopResumedActivity.scheduleTopResumedActivityChanged(true /* onTop */);
-        }
-    }
-
     void applySleepTokens(boolean applyToStacks) {
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
             // Set the sleeping state of the display.
@@ -1434,7 +1434,7 @@ public class RootActivityContainer extends ConfigurationContainer
             mActivityDisplays.remove(display);
             mActivityDisplays.add(position, display);
         }
-        updateTopResumedActivityIfNeeded();
+        mStackSupervisor.updateTopResumedActivityIfNeeded();
     }
 
     @VisibleForTesting
@@ -2039,8 +2039,7 @@ public class RootActivityContainer extends ConfigurationContainer
                 final ActivityStack stack = display.getChildAt(stackNdx);
                 final ActivityRecord r = stack.getResumedActivity();
                 if (r != null) {
-                    if (!r.nowVisible
-                            || mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(r)) {
+                    if (!r.nowVisible) {
                         return false;
                     }
                     foundResumed = true;
@@ -2368,10 +2367,6 @@ public class RootActivityContainer extends ConfigurationContainer
         printed |= dumpHistoryList(fd, pw, mStackSupervisor.mStoppingActivities, "  ",
                 "Stop", false, !dumpAll,
                 false, dumpPackage, true, "  Activities waiting to stop:", null);
-        printed |= dumpHistoryList(fd, pw,
-                mStackSupervisor.mActivitiesWaitingForVisibleActivity, "  ", "Wait",
-                false, !dumpAll, false, dumpPackage, true,
-                "  Activities waiting for another to become visible:", null);
         printed |= dumpHistoryList(fd, pw, mStackSupervisor.mGoingToSleepActivities,
                 "  ", "Sleep", false, !dumpAll,
                 false, dumpPackage, true, "  Activities waiting to sleep:", null);

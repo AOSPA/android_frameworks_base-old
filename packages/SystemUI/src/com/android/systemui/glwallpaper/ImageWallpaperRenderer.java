@@ -29,6 +29,7 @@ import android.graphics.Rect;
 import android.opengl.GLSurfaceView;
 import android.os.Build;
 import android.util.Log;
+import android.util.MathUtils;
 
 import com.android.systemui.ImageWallpaper;
 import com.android.systemui.ImageWallpaper.ImageGLView;
@@ -43,6 +44,8 @@ import javax.microedition.khronos.opengles.GL10;
 public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
         ImageWallpaper.WallpaperStatusListener, ImageRevealHelper.RevealStateListener {
     private static final String TAG = ImageWallpaperRenderer.class.getSimpleName();
+    private static final float SCALE_VIEWPORT_MIN = 0.98f;
+    private static final float SCALE_VIEWPORT_MAX = 1f;
 
     private final WallpaperManager mWallpaperManager;
     private final ImageGLProgram mProgram;
@@ -52,6 +55,12 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
     private final ImageGLView mGLView;
     private float mXOffset = 0f;
     private float mYOffset = 0f;
+    private int mWidth = 0;
+    private int mHeight = 0;
+
+    private Bitmap mBitmap;
+    private int mBitmapWidth = 0;
+    private int mBitmapHeight = 0;
 
     public ImageWallpaperRenderer(Context context, ImageGLView glView) {
         mWallpaperManager = context.getSystemService(WallpaperManager.class);
@@ -66,8 +75,12 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
         mGLView = glView;
 
         if (mWallpaperManager != null) {
+            mBitmap = mWallpaperManager.getBitmap();
+            mBitmapWidth = mBitmap.getWidth();
+            mBitmapHeight = mBitmap.getHeight();
             // Compute per85 as transition threshold, this is an async work.
-            mImageProcessHelper.startComputingPercentile85(mWallpaperManager.getBitmap());
+            mImageProcessHelper.startComputingPercentile85(mBitmap);
+            mWallpaperManager.forgetLoadedWallpaper();
         }
     }
 
@@ -76,8 +89,8 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
         glClearColor(0f, 0f, 0f, 1.0f);
         mProgram.useGLProgram(
                 R.raw.image_wallpaper_vertex_shader, R.raw.image_wallpaper_fragment_shader);
-        mWallpaper.setup();
-        mWallpaper.setupTexture(mWallpaperManager.getBitmap());
+        mWallpaper.setup(mBitmap);
+        mBitmap = null;
     }
 
     @Override
@@ -87,23 +100,36 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
             Log.d(TAG, "onSurfaceChanged: width=" + width + ", height=" + height
                     + ", xOffset=" + mXOffset + ", yOffset=" + mYOffset);
         }
-        mWallpaper.adjustTextureCoordinates(mWallpaperManager.getBitmap(),
-                width, height, mXOffset, mYOffset);
+        mWidth = width;
+        mHeight = height;
+        mWallpaper.adjustTextureCoordinates(
+                mBitmapWidth, mBitmapHeight, width, height, mXOffset, mYOffset);
     }
 
     @Override
     public void onDrawFrame(GL10 gl) {
-        float threshold = mImageProcessHelper.getPercentile85();
+        float per85 = mImageProcessHelper.getPercentile85();
         float reveal = mImageRevealHelper.getReveal();
 
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_AOD2OPACITY), 1);
-        glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_CENTER_REVEAL), threshold);
+        glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_PER85), per85);
         glUniform1f(mWallpaper.getHandle(ImageGLWallpaper.U_REVEAL), reveal);
 
+        scaleViewport(reveal);
         mWallpaper.useTexture();
         mWallpaper.draw();
+    }
+
+    private void scaleViewport(float reveal) {
+        // Interpolation between SCALE_VIEWPORT_MAX and SCALE_VIEWPORT_MIN by reveal.
+        float vpScaled = MathUtils.lerp(SCALE_VIEWPORT_MAX, SCALE_VIEWPORT_MIN, reveal);
+        // Calculate the offset amount from the lower left corner.
+        float offset = (SCALE_VIEWPORT_MAX - vpScaled) / 2;
+        // Change the viewport.
+        glViewport((int) (mWidth * offset), (int) (mHeight * offset),
+                (int) (mWidth * vpScaled), (int) (mHeight * vpScaled));
     }
 
     @Override
@@ -114,13 +140,7 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
 
     @Override
     public void onOffsetsChanged(float xOffset, float yOffset, Rect frame) {
-        if (frame == null || mWallpaperManager == null
-                || (xOffset == mXOffset && yOffset == mYOffset)) {
-            return;
-        }
-
-        Bitmap bitmap = mWallpaperManager.getBitmap();
-        if (bitmap == null) {
+        if (frame == null || (xOffset == mXOffset && yOffset == mYOffset)) {
             return;
         }
 
@@ -133,7 +153,8 @@ public class ImageWallpaperRenderer implements GLSurfaceView.Renderer,
             Log.d(TAG, "onOffsetsChanged: width=" + width + ", height=" + height
                     + ", xOffset=" + mXOffset + ", yOffset=" + mYOffset);
         }
-        mWallpaper.adjustTextureCoordinates(bitmap, width, height, mXOffset, mYOffset);
+        mWallpaper.adjustTextureCoordinates(
+                mBitmapWidth, mBitmapHeight, width, height, mXOffset, mYOffset);
         requestRender();
     }
 

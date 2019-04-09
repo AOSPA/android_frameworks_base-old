@@ -19,6 +19,7 @@ package android.app;
 import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager.TaskSnapshot;
 import android.content.ComponentName;
+import android.os.IBinder;
 import android.os.RemoteException;
 
 /**
@@ -85,6 +86,12 @@ public abstract class TaskStackListener extends ITaskStackListener.Stub {
     }
 
     @Override
+    @UnsupportedAppUsage
+    public void onActivityLaunchOnSecondaryDisplayRerouted(ActivityManager.RunningTaskInfo taskInfo,
+            int requestedDisplayId) throws RemoteException {
+    }
+
+    @Override
     public void onTaskCreated(int taskId, ComponentName componentName) throws RemoteException {
     }
 
@@ -148,5 +155,11 @@ public abstract class TaskStackListener extends ITaskStackListener.Stub {
     @Override
     @UnsupportedAppUsage
     public void onTaskSnapshotChanged(int taskId, TaskSnapshot snapshot) throws RemoteException {
+    }
+
+    @Override
+    @UnsupportedAppUsage
+    public void onSizeCompatModeActivityChanged(int displayId, IBinder activityToken)
+            throws RemoteException {
     }
 }

@@ -16,6 +16,7 @@
 
 package android.service.notification;
 
+import android.annotation.NonNull;
 import android.annotation.UnsupportedAppUsage;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -61,9 +62,6 @@ public class StatusBarNotification implements Parcelable {
     private final long postTime;
 
     private Context mContext; // used for inflation & icon expansion
-
-    // Contains the basic logging data of the notification.
-    private LogMaker mLogMaker;
 
     /** @hide */
     public StatusBarNotification(String pkg, String opPkg, int id,
@@ -205,7 +203,7 @@ public class StatusBarNotification implements Parcelable {
         return 0;
     }
 
-    public static final Parcelable.Creator<StatusBarNotification> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<StatusBarNotification> CREATOR
             = new Parcelable.Creator<StatusBarNotification>()
     {
         public StatusBarNotification createFromParcel(Parcel parcel)
@@ -294,12 +292,12 @@ public class StatusBarNotification implements Parcelable {
         return uid;
     }
 
-    /** The package that posted the notification.
-     *<p>
-     * Might be different from {@link #getPackageName()} if the app owning the notification has
+    /**
+     * The package that posted the notification.
+     * <p> Might be different from {@link #getPackageName()} if the app owning the notification has
      * a {@link NotificationManager#setNotificationDelegate(String) notification delegate}.
      */
-    public String getOpPkg() {
+    public @NonNull String getOpPkg() {
         return opPkg;
     }
 
@@ -403,24 +401,15 @@ public class StatusBarNotification implements Parcelable {
      * @hide
      */
     public LogMaker getLogMaker() {
-        if (mLogMaker == null) {
-            // Initialize fields that only change on update (so a new record).
-            mLogMaker = new LogMaker(MetricsEvent.VIEW_UNKNOWN)
-                .setPackageName(getPackageName())
+        return new LogMaker(MetricsEvent.VIEW_UNKNOWN).setPackageName(getPackageName())
                 .addTaggedData(MetricsEvent.NOTIFICATION_ID, getId())
                 .addTaggedData(MetricsEvent.NOTIFICATION_TAG, getTag())
-                .addTaggedData(MetricsEvent.FIELD_NOTIFICATION_CHANNEL_ID, getChannelIdLogTag());
-        }
-        // Reset fields that can change between updates, or are used by multiple logs.
-        return mLogMaker
-            .clearCategory()
-            .clearType()
-            .clearSubtype()
-            .addTaggedData(MetricsEvent.FIELD_NOTIFICATION_GROUP_ID, getGroupLogTag())
-            .addTaggedData(MetricsEvent.FIELD_NOTIFICATION_GROUP_SUMMARY,
-                getNotification().isGroupSummary() ? 1 : 0)
-            .addTaggedData(MetricsProto.MetricsEvent.FIELD_NOTIFICATION_CATEGORY,
-                    getNotification().category);
+                .addTaggedData(MetricsEvent.FIELD_NOTIFICATION_CHANNEL_ID, getChannelIdLogTag())
+                .addTaggedData(MetricsEvent.FIELD_NOTIFICATION_GROUP_ID, getGroupLogTag())
+                .addTaggedData(MetricsEvent.FIELD_NOTIFICATION_GROUP_SUMMARY,
+                        getNotification().isGroupSummary() ? 1 : 0)
+                .addTaggedData(MetricsProto.MetricsEvent.FIELD_NOTIFICATION_CATEGORY,
+                        getNotification().category);
     }
 
     private String getGroupLogTag() {

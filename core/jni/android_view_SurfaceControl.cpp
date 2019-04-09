@@ -126,6 +126,41 @@ static struct {
     jfieldID white;
 } gDisplayPrimariesClassInfo;
 
+static struct {
+    jclass clazz;
+    jmethodID builder;
+} gScreenshotGraphicBufferClassInfo;
+
+class JNamedColorSpace {
+public:
+    // ColorSpace.Named.SRGB.ordinal() = 0;
+    static constexpr jint SRGB = 0;
+
+    // ColorSpace.Named.DISPLAY_P3.ordinal() = 6;
+    static constexpr jint DISPLAY_P3 = 6;
+};
+
+constexpr jint fromDataspaceToNamedColorSpaceValue(const ui::Dataspace dataspace) {
+    switch (dataspace) {
+        case ui::Dataspace::DISPLAY_P3:
+            return JNamedColorSpace::DISPLAY_P3;
+        default:
+            return JNamedColorSpace::SRGB;
+    }
+}
+
+constexpr ui::Dataspace pickDataspaceFromColorMode(const ui::ColorMode colorMode) {
+    switch (colorMode) {
+        case ui::ColorMode::DISPLAY_P3:
+        case ui::ColorMode::BT2100_PQ:
+        case ui::ColorMode::BT2100_HLG:
+        case ui::ColorMode::DISPLAY_BT2020:
+            return ui::Dataspace::DISPLAY_P3;
+        default:
+            return ui::Dataspace::V0_SRGB;
+    }
+}
+
 // ----------------------------------------------------------------------------
 
 static jlong nativeCreateTransaction(JNIEnv* env, jclass clazz) {
@@ -210,9 +245,12 @@ static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
     if (displayToken == NULL) {
         return NULL;
     }
+    const ui::ColorMode colorMode = SurfaceComposerClient::getActiveColorMode(displayToken);
+    const ui::Dataspace dataspace = pickDataspaceFromColorMode(colorMode);
+
     Rect sourceCrop = rectFromObj(env, sourceCropObj);
     sp<GraphicBuffer> buffer;
-    status_t res = ScreenshotClient::capture(displayToken, ui::Dataspace::V0_SRGB,
+    status_t res = ScreenshotClient::capture(displayToken, dataspace,
             ui::PixelFormat::RGBA_8888,
             sourceCrop, width, height,
             useIdentityTransform, rotation, captureSecureLayers, &buffer);
@@ -220,13 +258,15 @@ static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
         return NULL;
     }
 
-    return env->CallStaticObjectMethod(gGraphicBufferClassInfo.clazz,
-            gGraphicBufferClassInfo.builder,
+    const jint namedColorSpace = fromDataspaceToNamedColorSpaceValue(dataspace);
+    return env->CallStaticObjectMethod(gScreenshotGraphicBufferClassInfo.clazz,
+            gScreenshotGraphicBufferClassInfo.builder,
             buffer->getWidth(),
             buffer->getHeight(),
             buffer->getPixelFormat(),
             (jint)buffer->getUsage(),
-            (jlong)buffer.get());
+            (jlong)buffer.get(),
+            namedColorSpace);
 }
 
 static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandleToken,
@@ -243,20 +283,23 @@ static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandl
     }
 
     sp<GraphicBuffer> buffer;
-    status_t res = ScreenshotClient::captureChildLayers(layerHandle, ui::Dataspace::V0_SRGB,
+    const ui::Dataspace dataspace = ui::Dataspace::V0_SRGB;
+    status_t res = ScreenshotClient::captureChildLayers(layerHandle, dataspace,
                                                         ui::PixelFormat::RGBA_8888, sourceCrop,
                                                         frameScale, &buffer);
     if (res != NO_ERROR) {
         return NULL;
     }
 
-    return env->CallStaticObjectMethod(gGraphicBufferClassInfo.clazz,
-                                       gGraphicBufferClassInfo.builder,
+    const jint namedColorSpace = fromDataspaceToNamedColorSpaceValue(dataspace);
+    return env->CallStaticObjectMethod(gScreenshotGraphicBufferClassInfo.clazz,
+                                       gScreenshotGraphicBufferClassInfo.builder,
                                        buffer->getWidth(),
                                        buffer->getHeight(),
                                        buffer->getPixelFormat(),
                                        (jint)buffer->getUsage(),
-                                       (jlong)buffer.get());
+                                       (jlong)buffer.get(),
+                                       namedColorSpace);
 }
 
 static void nativeApplyTransaction(JNIEnv* env, jclass clazz, jlong transactionObj, jboolean sync) {
@@ -461,6 +504,13 @@ static void nativeSetColorTransform(JNIEnv* env, jclass clazz, jlong transaction
     float* floatTranslation = env->GetFloatArrayElements(fTranslation, 0);
     vec3 translation(floatTranslation[0], floatTranslation[1], floatTranslation[2]);
     transaction->setColorTransform(surfaceControl, matrix, translation);
+}
+
+static void nativeSetColorSpaceAgnostic(JNIEnv* env, jclass clazz, jlong transactionObj,
+        jlong nativeObject, jboolean agnostic) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    SurfaceControl* const surfaceControl = reinterpret_cast<SurfaceControl*>(nativeObject);
+    transaction->setColorSpaceAgnostic(surfaceControl, agnostic);
 }
 
 static void nativeSetWindowCrop(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -715,6 +765,29 @@ static jboolean nativeSetAllowedDisplayConfigs(JNIEnv* env, jclass clazz,
 
     size_t result = SurfaceComposerClient::setAllowedDisplayConfigs(token, allowedConfigs);
     return result == NO_ERROR ? JNI_TRUE : JNI_FALSE;
+}
+
+static jintArray nativeGetAllowedDisplayConfigs(JNIEnv* env, jclass clazz, jobject tokenObj) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+    if (token == nullptr) return JNI_FALSE;
+
+    std::vector<int32_t> allowedConfigs;
+    size_t result = SurfaceComposerClient::getAllowedDisplayConfigs(token, &allowedConfigs);
+    if (result != NO_ERROR) {
+        return nullptr;
+    }
+
+    jintArray allowedConfigsArray = env->NewIntArray(allowedConfigs.size());
+    if (allowedConfigsArray == nullptr) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+        return nullptr;
+    }
+    jint* allowedConfigsArrayValues = env->GetIntArrayElements(allowedConfigsArray, 0);
+    for (size_t i = 0; i < allowedConfigs.size(); i++) {
+        allowedConfigsArrayValues[i] = static_cast<jint>(allowedConfigs[i]);
+    }
+    env->ReleaseIntArrayElements(allowedConfigsArray, allowedConfigsArrayValues, 0);
+    return allowedConfigsArray;
 }
 
 static jint nativeGetActiveConfig(JNIEnv* env, jclass clazz, jobject tokenObj) {
@@ -1134,6 +1207,25 @@ static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
     }
 }
 
+static jboolean nativeGetDisplayBrightnessSupport(JNIEnv* env, jclass clazz,
+        jobject displayTokenObject) {
+    sp<IBinder> displayToken(ibinderForJavaObject(env, displayTokenObject));
+    if (displayToken == nullptr) {
+        return JNI_FALSE;
+    }
+    return static_cast<jboolean>(SurfaceComposerClient::getDisplayBrightnessSupport(displayToken));
+}
+
+static jboolean nativeSetDisplayBrightness(JNIEnv* env, jclass clazz, jobject displayTokenObject,
+        jfloat brightness) {
+    sp<IBinder> displayToken(ibinderForJavaObject(env, displayTokenObject));
+    if (displayToken == nullptr) {
+        return JNI_FALSE;
+    }
+    status_t error = SurfaceComposerClient::setDisplayBrightness(displayToken, brightness);
+    return error == OK ? JNI_TRUE : JNI_FALSE;
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
@@ -1183,6 +1275,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetMatrix },
     {"nativeSetColorTransform", "(JJ[F[F)V",
             (void*)nativeSetColorTransform },
+    {"nativeSetColorSpaceAgnostic", "(JJZ)V",
+            (void*)nativeSetColorSpaceAgnostic },
     {"nativeSetFlags", "(JJII)V",
             (void*)nativeSetFlags },
     {"nativeSetWindowCrop", "(JJIIII)V",
@@ -1215,6 +1309,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetActiveConfig },
     {"nativeSetAllowedDisplayConfigs", "(Landroid/os/IBinder;[I)Z",
             (void*)nativeSetAllowedDisplayConfigs },
+    {"nativeGetAllowedDisplayConfigs", "(Landroid/os/IBinder;)[I",
+            (void*)nativeGetAllowedDisplayConfigs },
     {"nativeGetDisplayColorModes", "(Landroid/os/IBinder;)[I",
             (void*)nativeGetDisplayColorModes},
     {"nativeGetDisplayNativePrimaries", "(Landroid/os/IBinder;)Landroid/view/SurfaceControl$DisplayPrimaries;",
@@ -1253,9 +1349,13 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetOverrideScalingMode },
     {"nativeGetHandle", "(J)Landroid/os/IBinder;",
             (void*)nativeGetHandle },
-    {"nativeScreenshot", "(Landroid/os/IBinder;Landroid/graphics/Rect;IIZIZ)Landroid/graphics/GraphicBuffer;",
+    {"nativeScreenshot",
+            "(Landroid/os/IBinder;Landroid/graphics/Rect;IIZIZ)"
+            "Landroid/view/SurfaceControl$ScreenshotGraphicBuffer;",
             (void*)nativeScreenshot },
-    {"nativeCaptureLayers", "(Landroid/os/IBinder;Landroid/graphics/Rect;F)Landroid/graphics/GraphicBuffer;",
+    {"nativeCaptureLayers",
+            "(Landroid/os/IBinder;Landroid/graphics/Rect;F)"
+            "Landroid/view/SurfaceControl$ScreenshotGraphicBuffer;",
             (void*)nativeCaptureLayers },
     {"nativeSetInputWindowInfo", "(JJLandroid/view/InputWindowHandle;)V",
             (void*)nativeSetInputWindowInfo },
@@ -1274,7 +1374,11 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
     {"nativeSetGeometry", "(JJLandroid/graphics/Rect;Landroid/graphics/Rect;J)V",
             (void*)nativeSetGeometry },
     {"nativeSyncInputWindows", "(J)V",
-            (void*)nativeSyncInputWindows }
+            (void*)nativeSyncInputWindows },
+    {"nativeGetDisplayBrightnessSupport", "(Landroid/os/IBinder;)Z",
+            (void*)nativeGetDisplayBrightnessSupport },
+    {"nativeSetDisplayBrightness", "(Landroid/os/IBinder;F)Z",
+            (void*)nativeSetDisplayBrightness },
 };
 
 int register_android_view_SurfaceControl(JNIEnv* env)
@@ -1328,6 +1432,14 @@ int register_android_view_SurfaceControl(JNIEnv* env)
     gGraphicBufferClassInfo.clazz = MakeGlobalRefOrDie(env, graphicsBufferClazz);
     gGraphicBufferClassInfo.builder = GetStaticMethodIDOrDie(env, graphicsBufferClazz,
             "createFromExisting", "(IIIIJ)Landroid/graphics/GraphicBuffer;");
+
+    jclass screenshotGraphicsBufferClazz = FindClassOrDie(env,
+            "android/view/SurfaceControl$ScreenshotGraphicBuffer");
+    gScreenshotGraphicBufferClassInfo.clazz =
+            MakeGlobalRefOrDie(env, screenshotGraphicsBufferClazz);
+    gScreenshotGraphicBufferClassInfo.builder = GetStaticMethodIDOrDie(env,
+            screenshotGraphicsBufferClazz,
+            "createFromNative", "(IIIIJI)Landroid/view/SurfaceControl$ScreenshotGraphicBuffer;");
 
     jclass displayedContentSampleClazz = FindClassOrDie(env,
             "android/hardware/display/DisplayedContentSample");

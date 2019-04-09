@@ -92,6 +92,10 @@ public class CarStatusBar extends StatusBar implements
 
     @Override
     public void start() {
+        // get the provisioned state before calling the parent class since it's that flow that
+        // builds the nav bar
+        mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
+        mDeviceIsProvisioned = mDeviceProvisionedController.isDeviceProvisioned();
         super.start();
         mTaskStackListener = new TaskStackListenerImpl();
         mActivityManagerWrapper = ActivityManagerWrapper.getInstance();
@@ -105,8 +109,6 @@ public class CarStatusBar extends StatusBar implements
         mHvacController.connectToCarService();
 
         CarSystemUIFactory factory = SystemUIFactory.getInstance();
-        mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
-        mDeviceIsProvisioned = mDeviceProvisionedController.isDeviceProvisioned();
         if (!mDeviceIsProvisioned) {
             mDeviceProvisionedController.addCallback(
                     new DeviceProvisionedController.DeviceProvisionedListener() {
@@ -159,6 +161,11 @@ public class CarStatusBar extends StatusBar implements
         }
 
         buildNavBarContent();
+        // If the UI was rebuilt (day/night change) while the keyguard was up we need to
+        // correctly respect that state.
+        if (mIsKeyguard) {
+            updateNavBarForKeyguardContent();
+        }
     }
 
     private void addTemperatureViewToController(View v) {
@@ -209,6 +216,13 @@ public class CarStatusBar extends StatusBar implements
     @Override
     public void showKeyguard() {
         super.showKeyguard();
+        updateNavBarForKeyguardContent();
+    }
+
+    /**
+     * Switch to the keyguard applicable content contained in the nav bars
+     */
+    private void updateNavBarForKeyguardContent() {
         getComponent(NotificationsUI.class).closeCarNotifications(0);
         if (mNavigationBarView != null) {
             mNavigationBarView.showKeyguardButtons();
@@ -604,4 +618,8 @@ public class CarStatusBar extends StatusBar implements
         getComponent(NotificationsUI.class).toggleShowingCarNotifications();
     }
 
+    @Override
+    public void maybeEscalateHeadsUp() {
+        // Never send full screen intent in car.
+    }
 }

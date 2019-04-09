@@ -590,6 +590,13 @@ enum Action {
     // OS: P
     DIALOG_SWITCH_HFP_DEVICES = 1416;
 
+    // OPEN: QS Sensor Privacy Mode tile shown
+    // ACTION: QS Sensor Privacy Mode tile tapped
+    // SUBTYPE: 0 is off, 1 is on
+    // CATEGORY: QUICK_SETTINGS
+    // OS: Q
+    QS_SENSOR_PRIVACY = 1598;
+
     // ACTION: Tap & Pay -> Default Application Setting -> Use Forground
     ACTION_NFC_PAYMENT_FOREGROUND_SETTING = 1622;
 
@@ -616,7 +623,7 @@ enum Action {
     // OS: Q
     ACTION_PANEL_INTERACTION = 1658;
 
-    // ACTION: Show Contextual homepage, log latency in loading cards
+    // ACTION: Show Contextual homepage. Log total loading latency.
     ACTION_CONTEXTUAL_HOME_SHOW = 1662;
 
     // ACTION: Contextual card displays
@@ -649,6 +656,15 @@ enum Action {
     ACTION_ATCSCUC = 1680;
 
     ACTION_ATCHNUC = 1681;
+
+    // ACTION: Individual contextual card loading time
+    ACTION_CONTEXTUAL_CARD_LOAD = 1684;
+
+    //ACTION: Contextual card loading timeout
+    ACTION_CONTEXTUAL_CARD_LOAD_TIMEOUT = 1685;
+
+    //ACTION: Log result for each card's eligibility check
+    ACTION_CONTEXTUAL_CARD_ELIGIBILITY = 1686;
 }
 
 /**
@@ -2284,4 +2300,23 @@ enum PageId {
     PAGE_ATSCP = 1672;
 
     PAGE_ATHNP = 1673;
+
+    // OPEN: Accessibility detail settings (android.settings.ACCESSIBILITY_DETAILS_SETTINGS intent)
+    ACCESSIBILITY_DETAILS_SETTINGS = 1682;
+
+    // Open: Settings will show the conditional when Grayscale mode is on
+    SETTINGS_CONDITION_GRAYSCALE_MODE = 1683;
+
+    // Panel for Wifi
+    PANEL_WIFI = 1687;
+
+    // Open: Settings > Special App Access > Do not disturb control for app
+    ZEN_ACCESS_DETAIL = 1692;
+
+    // OPEN: Settings > Face > Remove face
+    // OS: Q
+    DIALOG_FACE_REMOVE = 1693;
+
+    // Settings > Display > Theme
+    DARK_UI_SETTINGS = 1698;
 }

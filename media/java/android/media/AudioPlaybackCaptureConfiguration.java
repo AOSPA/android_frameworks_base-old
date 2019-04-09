@@ -17,6 +17,7 @@
 package android.media;
 
 import android.annotation.NonNull;
+import android.media.AudioAttributes.AttributeUsage;
 import android.media.audiopolicy.AudioMix;
 import android.media.audiopolicy.AudioMixingRule;
 import android.media.projection.MediaProjection;
@@ -33,7 +34,7 @@ import com.android.internal.util.Preconditions;
  *  - played by apps that MUST be in the same user profile as the capturing app
  *    (eg work profile can not capture user profile apps and vice-versa).
  *  - played by apps that MUST NOT have in their manifest.xml the application
- *    attribute android:allowPlaybackCapture="false"
+ *    attribute android:allowAudioPlaybackCapture="false"
  *  - played by apps that MUST have a targetSdkVersion higher or equal to 29 (Q).
  *
  * <p>An example for creating a capture configuration for capturing all media playback:
@@ -41,12 +42,9 @@ import com.android.internal.util.Preconditions;
  * <pre>
  *     MediaProjection mediaProjection;
  *     // Retrieve a audio capable projection from the MediaProjectionManager
- *     AudioAttributes mediaAttr = new AudioAttributes.Builder()
- *         .setUsage(AudioAttributes.USAGE_MEDIA)
- *         .build();
  *     AudioPlaybackCaptureConfiguration config =
  *              new AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
- *         .addMatchingUsage(mediaAttr)
+ *         .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
  *         .build();
  *     AudioRecord record = new AudioRecord.Builder()
  *         .setAudioPlaybackCaptureConfig(config)
@@ -68,18 +66,24 @@ public final class AudioPlaybackCaptureConfiguration {
     }
 
     /**
+     * @return the {@code MediaProjection} used to build this object.
+     * @see {@code Builder.Builder}
+     */
+    public @NonNull MediaProjection getMediaProjection() {
+        return mProjection;
+    }
+
+
+    /**
      * Returns a mix that routes audio back into the app while still playing it from the speakers.
      *
      * @param audioFormat The format in which to capture the audio.
      */
-    AudioMix createAudioMix(AudioFormat audioFormat) {
+    @NonNull AudioMix createAudioMix(@NonNull AudioFormat audioFormat) {
         return new AudioMix.Builder(mAudioMixingRule)
                 .setFormat(audioFormat)
                 .setRouteFlags(AudioMix.ROUTE_FLAG_LOOP_BACK | AudioMix.ROUTE_FLAG_RENDER)
                 .build();
-    }
-    MediaProjection getMediaProjection() {
-        return mProjection;
     }
 
     /** Builder for creating {@link AudioPlaybackCaptureConfiguration} instances. */
@@ -121,14 +125,13 @@ public final class AudioPlaybackCaptureConfiguration {
          * attributes.
          *
          * @throws IllegalStateException if called in conjunction with
-         *     {@link #excludeUsage(AudioAttributes)}.
+         *     {@link #excludeUsage(int)}.
          */
-        public Builder addMatchingUsage(@NonNull AudioAttributes audioAttributes) {
-            Preconditions.checkNotNull(audioAttributes);
+        public @NonNull Builder addMatchingUsage(@AttributeUsage int usage) {
             Preconditions.checkState(
                     mUsageMatchType != MATCH_TYPE_EXCLUSIVE, ERROR_MESSAGE_MISMATCHED_RULES);
-            mAudioMixingRuleBuilder
-                    .addRule(audioAttributes, AudioMixingRule.RULE_MATCH_ATTRIBUTE_USAGE);
+            mAudioMixingRuleBuilder.addRule(new AudioAttributes.Builder().setUsage(usage).build(),
+                                            AudioMixingRule.RULE_MATCH_ATTRIBUTE_USAGE);
             mUsageMatchType = MATCH_TYPE_INCLUSIVE;
             return this;
         }
@@ -141,7 +144,7 @@ public final class AudioPlaybackCaptureConfiguration {
          *
          * @throws IllegalStateException if called in conjunction with {@link #excludeUid(int)}.
          */
-        public Builder addMatchingUid(int uid) {
+        public @NonNull Builder addMatchingUid(int uid) {
             Preconditions.checkState(
                     mUidMatchType != MATCH_TYPE_EXCLUSIVE, ERROR_MESSAGE_MISMATCHED_RULES);
             mAudioMixingRuleBuilder.addMixRule(AudioMixingRule.RULE_MATCH_UID, uid);
@@ -156,14 +159,15 @@ public final class AudioPlaybackCaptureConfiguration {
          * given attributes.
          *
          * @throws IllegalStateException if called in conjunction with
-         *     {@link #addMatchingUsage(AudioAttributes)}.
+         *     {@link #addMatchingUsage(int)}.
          */
-        public Builder excludeUsage(@NonNull AudioAttributes audioAttributes) {
-            Preconditions.checkNotNull(audioAttributes);
+        public @NonNull Builder excludeUsage(@AttributeUsage int usage) {
             Preconditions.checkState(
                     mUsageMatchType != MATCH_TYPE_INCLUSIVE, ERROR_MESSAGE_MISMATCHED_RULES);
-            mAudioMixingRuleBuilder.excludeRule(audioAttributes,
-                    AudioMixingRule.RULE_MATCH_ATTRIBUTE_USAGE);
+            mAudioMixingRuleBuilder.excludeRule(new AudioAttributes.Builder()
+                                                    .setUsage(usage)
+                                                    .build(),
+                                                AudioMixingRule.RULE_MATCH_ATTRIBUTE_USAGE);
             mUsageMatchType = MATCH_TYPE_EXCLUSIVE;
             return this;
         }
@@ -176,7 +180,7 @@ public final class AudioPlaybackCaptureConfiguration {
          *
          * @throws IllegalStateException if called in conjunction with {@link #addMatchingUid(int)}.
          */
-        public Builder excludeUid(int uid) {
+        public @NonNull Builder excludeUid(int uid) {
             Preconditions.checkState(
                     mUidMatchType != MATCH_TYPE_INCLUSIVE, ERROR_MESSAGE_MISMATCHED_RULES);
             mAudioMixingRuleBuilder.excludeMixRule(AudioMixingRule.RULE_MATCH_UID, uid);
@@ -189,7 +193,7 @@ public final class AudioPlaybackCaptureConfiguration {
          *
          * @throws UnsupportedOperationException if the parameters set are incompatible.
          */
-        public AudioPlaybackCaptureConfiguration build() {
+        public @NonNull AudioPlaybackCaptureConfiguration build() {
             return new AudioPlaybackCaptureConfiguration(mAudioMixingRuleBuilder.build(),
                                                          mProjection);
         }
