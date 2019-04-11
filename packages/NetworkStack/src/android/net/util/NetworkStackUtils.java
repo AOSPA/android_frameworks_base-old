@@ -23,14 +23,21 @@ import android.util.SparseArray;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.SocketException;
 import java.util.List;
 import java.util.function.Predicate;
-
 
 /**
  * Collection of utilities for the network stack.
  */
 public class NetworkStackUtils {
+    // TODO: Refer to DeviceConfig definition.
+    public static final String NAMESPACE_CONNECTIVITY = "connectivity";
+
+    static {
+        System.loadLibrary("networkstackutilsjni");
+    }
 
     /**
      * @return True if the array is null or 0-length.
@@ -98,4 +105,57 @@ public class NetworkStackUtils {
         String value = DeviceConfig.getProperty(namespace, name);
         return value != null ? value : defaultValue;
     }
+
+    /**
+     * Look up the value of a property for a particular namespace from {@link DeviceConfig}.
+     * @param namespace The namespace containing the property to look up.
+     * @param name The name of the property to look up.
+     * @param defaultValue The value to return if the property does not exist or has no non-null
+     *                     value.
+     * @return the corresponding value, or defaultValue if none exists.
+     */
+    public static int getDeviceConfigPropertyInt(@NonNull String namespace, @NonNull String name,
+            int defaultValue) {
+        String value = getDeviceConfigProperty(namespace, name, null /* defaultValue */);
+        try {
+            return (value != null) ? Integer.parseInt(value) : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    /**
+     * Attaches a socket filter that accepts DHCP packets to the given socket.
+     */
+    public static native void attachDhcpFilter(FileDescriptor fd) throws SocketException;
+
+    /**
+     * Attaches a socket filter that accepts ICMPv6 router advertisements to the given socket.
+     * @param fd the socket's {@link FileDescriptor}.
+     * @param packetType the hardware address type, one of ARPHRD_*.
+     */
+    public static native void attachRaFilter(FileDescriptor fd, int packetType)
+            throws SocketException;
+
+    /**
+     * Attaches a socket filter that accepts L2-L4 signaling traffic required for IP connectivity.
+     *
+     * This includes: all ARP, ICMPv6 RS/RA/NS/NA messages, and DHCPv4 exchanges.
+     *
+     * @param fd the socket's {@link FileDescriptor}.
+     * @param packetType the hardware address type, one of ARPHRD_*.
+     */
+    public static native void attachControlPacketFilter(FileDescriptor fd, int packetType)
+            throws SocketException;
+
+    /**
+     * Add an entry into the ARP cache.
+     */
+    public static void addArpEntry(Inet4Address ipv4Addr, android.net.MacAddress ethAddr,
+            String ifname, FileDescriptor fd) throws IOException {
+        addArpEntry(ethAddr.toByteArray(), ipv4Addr.getAddress(), ifname, fd);
+    }
+
+    private static native void addArpEntry(byte[] ethAddr, byte[] netAddr, String ifname,
+            FileDescriptor fd) throws IOException;
 }

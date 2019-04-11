@@ -48,6 +48,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.system.ErrnoException;
 import android.system.Os;
+import android.util.ArraySet;
 import android.util.ExceptionUtils;
 
 import com.android.internal.util.IndentingPrintWriter;
@@ -62,8 +63,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 
 /**
@@ -80,8 +83,6 @@ import java.util.concurrent.Executor;
  * <ul>
  * <li>the device owner
  * <li>the affiliated profile owner
- * <li>the device owner delegated app with
- *     {@link android.app.admin.DevicePolicyManager#DELEGATION_PACKAGE_INSTALLATION}
  * </ul>
  * <p>
  * Sessions can install brand new apps, upgrade existing apps, or add new splits
@@ -502,12 +503,14 @@ public class PackageInstaller {
      *
      * <p>Staged session is active iff:
      * <ul>
-     *     <li>It is committed.
-     *     <li>It is not applied.
-     *     <li>It is not failed.
+     *     <li>It is committed, i.e. {@link SessionInfo#isCommitted()} is {@code true}, and
+     *     <li>it is not applied, i.e. {@link SessionInfo#isStagedSessionApplied()} is {@code
+     *     false}, and
+     *     <li>it is not failed, i.e. {@link SessionInfo#isStagedSessionFailed()} is {@code false}.
      * </ul>
      *
-     * <p>In case of a multi-apk session, parent session will be returned.
+     * <p>In case of a multi-apk session, reasoning above is applied to the parent session, since
+     * that is the one that should been {@link Session#commit committed}.
      */
     public @Nullable SessionInfo getActiveStagedSession() {
         final List<SessionInfo> stagedSessions = getStagedSessions();
@@ -534,8 +537,6 @@ public class PackageInstaller {
      * <li>the current "installer of record" for the package
      * <li>the device owner
      * <li>the affiliated profile owner
-     * <li>the device owner delegated app with
-     *     {@link android.app.admin.DevicePolicyManager#DELEGATION_PACKAGE_INSTALLATION}
      * </ul>
      *
      * @param packageName The package to uninstall.
@@ -1265,6 +1266,11 @@ public class PackageInstaller {
          */
         public static final int MODE_INHERIT_EXISTING = 2;
 
+        /**
+         * Special constant to refer to all restricted permissions.
+         */
+        public static final @NonNull Set<String> RESTRICTED_PERMISSIONS_ALL = new ArraySet<>();
+
         /** {@hide} */
         public static final int UID_UNKNOWN = -1;
 
@@ -1306,6 +1312,8 @@ public class PackageInstaller {
         /** {@hide} */
         public String[] grantedRuntimePermissions;
         /** {@hide} */
+        public List<String> whitelistedRestrictedPermissions;
+        /** {@hide} */
         public String installerPackageName;
         /** {@hide} */
         public boolean isMultiPackage;
@@ -1339,6 +1347,7 @@ public class PackageInstaller {
             abiOverride = source.readString();
             volumeUuid = source.readString();
             grantedRuntimePermissions = source.readStringArray();
+            whitelistedRestrictedPermissions = source.createStringArrayList();
             installerPackageName = source.readString();
             isMultiPackage = source.readBoolean();
             isStaged = source.readBoolean();
@@ -1360,6 +1369,7 @@ public class PackageInstaller {
             ret.abiOverride = abiOverride;
             ret.volumeUuid = volumeUuid;
             ret.grantedRuntimePermissions = grantedRuntimePermissions;
+            ret.whitelistedRestrictedPermissions = whitelistedRestrictedPermissions;
             ret.installerPackageName = installerPackageName;
             ret.isMultiPackage = isMultiPackage;
             ret.isStaged = isStaged;
@@ -1474,11 +1484,49 @@ public class PackageInstaller {
          *
          * @hide
          */
+        @TestApi
         @SystemApi
         @RequiresPermission(android.Manifest.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS)
         public void setGrantedRuntimePermissions(String[] permissions) {
             installFlags |= PackageManager.INSTALL_GRANT_RUNTIME_PERMISSIONS;
             this.grantedRuntimePermissions = permissions;
+        }
+
+        /**
+         * Sets which restricted permissions to be whitelisted for the app. Whitelisting
+         * is not granting the permissions, rather it allows the app to hold permissions
+         * which are otherwise restricted. Whitelisting a non restricted permission has
+         * no effect.
+         *
+         * <p> Permissions can be hard restricted which means that the app cannot hold
+         * them or soft restricted where the app can hold the permission but in a weaker
+         * form. Whether a permission is {@link PermissionInfo#FLAG_HARD_RESTRICTED hard
+         * restricted} or {@link PermissionInfo#FLAG_SOFT_RESTRICTED soft restricted}
+         * depends on the permission declaration. Whitelisting a hard restricted permission
+         * allows the app to hold that permission and whitelisting a soft restricted
+         * permission allows the app to hold the permission in its full, unrestricted form.
+         *
+         * <p>The whitelisted permissions would be applied as the {@link
+         * PackageManager#FLAG_PERMISSION_WHITELIST_INSTALLER installer whitelist}.
+         *
+         * @param permissions The restricted permissions to whitelist. Pass
+         * {@link #RESTRICTED_PERMISSIONS_ALL} to whitelist all permissions and
+         * <code>null</code> to clear. If you want to whitelist some permissions
+         * (not all) the list must contain at least one permission.
+         *
+         * @see PackageManager#addWhitelistedRestrictedPermission(String, String, int)
+         * @see PackageManager#removeWhitelistedRestrictedPermission(String, String, int)
+         */
+        public void setWhitelistedRestrictedPermissions(@Nullable Set<String> permissions) {
+            if (permissions == RESTRICTED_PERMISSIONS_ALL) {
+                installFlags |= PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
+            }
+            if (permissions != null) {
+                this.whitelistedRestrictedPermissions = new ArrayList<>(permissions);
+            } else {
+                installFlags &= ~PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
+                this.whitelistedRestrictedPermissions = null;
+            }
         }
 
         /**
@@ -1656,6 +1704,7 @@ public class PackageInstaller {
             pw.printPair("abiOverride", abiOverride);
             pw.printPair("volumeUuid", volumeUuid);
             pw.printPair("grantedRuntimePermissions", grantedRuntimePermissions);
+            pw.printPair("whitelistedRestrictedPermissions", whitelistedRestrictedPermissions);
             pw.printPair("installerPackageName", installerPackageName);
             pw.printPair("isMultiPackage", isMultiPackage);
             pw.printPair("isStaged", isStaged);
@@ -1683,6 +1732,7 @@ public class PackageInstaller {
             dest.writeString(abiOverride);
             dest.writeString(volumeUuid);
             dest.writeStringArray(grantedRuntimePermissions);
+            dest.writeStringList(whitelistedRestrictedPermissions);
             dest.writeString(installerPackageName);
             dest.writeBoolean(isMultiPackage);
             dest.writeBoolean(isStaged);
@@ -1794,6 +1844,8 @@ public class PackageInstaller {
         public Uri referrerUri;
         /** {@hide} */
         public String[] grantedRuntimePermissions;
+        /** {@hide}*/
+        public List<String> whitelistedRestrictedPermissions;
         /** {@hide} */
         public int installFlags;
         /** {@hide} */
@@ -1847,6 +1899,8 @@ public class PackageInstaller {
             originatingUid = source.readInt();
             referrerUri = source.readParcelable(null);
             grantedRuntimePermissions = source.readStringArray();
+            whitelistedRestrictedPermissions = source.createStringArrayList();
+
             installFlags = source.readInt();
             isMultiPackage = source.readBoolean();
             isStaged = source.readBoolean();
@@ -2049,6 +2103,25 @@ public class PackageInstaller {
         }
 
         /**
+         * Get the value set in {@link SessionParams#setWhitelistedRestrictedPermissions(Set)}.
+         * Note that if all permissions are whitelisted this method returns {@link
+         * SessionParams#RESTRICTED_PERMISSIONS_ALL}.
+         *
+         * @hide
+         */
+        @TestApi
+        @SystemApi
+        public @NonNull Set<String> getWhitelistedRestrictedPermissions() {
+            if ((installFlags & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS) != 0) {
+                return SessionParams.RESTRICTED_PERMISSIONS_ALL;
+            }
+            if (whitelistedRestrictedPermissions != null) {
+                return new ArraySet<>(whitelistedRestrictedPermissions);
+            }
+            return Collections.emptySet();
+        }
+
+        /**
          * Get the value set in {@link SessionParams#setAllowDowngrade(boolean)}.
          *
          * @deprecated use {@link #getRequestDowngrade()}.
@@ -2235,7 +2308,8 @@ public class PackageInstaller {
         }
 
         /**
-         * Whenever this session was committed.
+         * Returns {@code true} if {@link Session#commit(IntentSender)}} was called for this
+         * session.
          */
         public boolean isCommitted() {
             return isCommitted;
@@ -2277,6 +2351,7 @@ public class PackageInstaller {
             dest.writeInt(originatingUid);
             dest.writeParcelable(referrerUri, flags);
             dest.writeStringArray(grantedRuntimePermissions);
+            dest.writeStringList(whitelistedRestrictedPermissions);
             dest.writeInt(installFlags);
             dest.writeBoolean(isMultiPackage);
             dest.writeBoolean(isStaged);

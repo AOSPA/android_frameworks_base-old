@@ -955,6 +955,20 @@ public final class Settings {
             "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
 
     /**
+     * Activity Action: Open the advanced power usage details page of an associated app.
+     * <p>
+     * Input: Intent's data URI set with an application name, using the
+     * "package" schema (like "package:com.my.app")
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_VIEW_ADVANCED_POWER_USAGE_DETAIL =
+            "android.settings.VIEW_ADVANCED_POWER_USAGE_DETAIL";
+
+    /**
      * Activity Action: Show screen for controlling background data
      * restrictions for a particular application.
      * <p>
@@ -5666,17 +5680,6 @@ public final class Settings {
         private static final Validator ODI_CAPTIONS_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
-         * Setting to indicate that on device captions cannot be shown because the app
-         * which is currently playing media had opted out.
-         *
-         * @hide
-         */
-        @SystemApi
-        public static final String ODI_CAPTIONS_OPTED_OUT = "odi_captions_opted_out";
-
-        private static final Validator ODI_CAPTIONS_OPTED_OUT_VALIDATOR = BOOLEAN_VALIDATOR;
-
-        /**
          * On Android 8.0 (API level 26) and higher versions of the platform,
          * a 64-bit number (expressed as a hexadecimal string), unique to
          * each combination of app-signing key, user, and device.
@@ -9014,7 +9017,6 @@ public final class Settings {
             VALIDATORS.put(SILENCE_CALL_GESTURE_COUNT, SILENCE_GESTURE_COUNT_VALIDATOR);
             VALIDATORS.put(SILENCE_NOTIFICATION_GESTURE_COUNT, SILENCE_GESTURE_COUNT_VALIDATOR);
             VALIDATORS.put(ODI_CAPTIONS_ENABLED, ODI_CAPTIONS_ENABLED_VALIDATOR);
-            VALIDATORS.put(ODI_CAPTIONS_OPTED_OUT, ODI_CAPTIONS_OPTED_OUT_VALIDATOR);
         }
 
         /**
@@ -11237,62 +11239,6 @@ public final class Settings {
         public static final String CAPTIVE_PORTAL_USER_AGENT = "captive_portal_user_agent";
 
         /**
-         * The threshold value for the number of consecutive dns timeout events received to be a
-         * signal of data stall. The number of consecutive timeouts needs to be {@code >=} this
-         * threshold to be considered a data stall. Set the value to {@code <= 0} to disable. Note
-         * that the value should be {@code > 0} if the DNS data stall detection is enabled.
-         *
-         * @hide
-         */
-        @SystemApi
-        @TestApi
-        public static final String DATA_STALL_CONSECUTIVE_DNS_TIMEOUT_THRESHOLD =
-                "data_stall_consecutive_dns_timeout_threshold";
-
-        /**
-         * The minimal time interval in milliseconds for data stall reevaluation.
-         *
-         * @hide
-         */
-        @SystemApi
-        @TestApi
-        public static final String DATA_STALL_MIN_EVALUATE_INTERVAL =
-                "data_stall_min_evaluate_interval";
-
-        /**
-         * DNS timeouts older than this timeout (in milliseconds) are not considered for detecting
-         * a data stall.
-         *
-         * @hide
-         */
-        @SystemApi
-        @TestApi
-        public static final String DATA_STALL_VALID_DNS_TIME_THRESHOLD =
-                "data_stall_valid_dns_time_threshold";
-
-        /**
-         * Which data stall detection signal to use. This is a bitmask constructed by bitwise-or-ing
-         * (i.e. {@code |}) the DATA_STALL_EVALUATION_TYPE_* values.
-         *
-         * Type: int
-         * Valid values:
-         *   {@link #DATA_STALL_EVALUATION_TYPE_DNS} : Use dns as a signal.
-         * @hide
-         */
-        @SystemApi
-        @TestApi
-        public static final String DATA_STALL_EVALUATION_TYPE = "data_stall_evaluation_type";
-
-        /**
-         * Use dns timeout counts to detect data stall.
-         *
-         * @hide
-         */
-        @SystemApi
-        @TestApi
-        public static final int DATA_STALL_EVALUATION_TYPE_DNS = 1;
-
-        /**
          * Whether to try cellular data recovery when a bad network is reported.
          *
          * @hide
@@ -13415,18 +13361,6 @@ public final class Settings {
         @TestApi
         public static final String LOCATION_GLOBAL_KILL_SWITCH =
                 "location_global_kill_switch";
-
-        /**
-         * If set to 1, app cannot request read sms permission unless it's the default sms handler.
-         *
-         * STOPSHIP: Remove this once we ship with the restriction enabled.
-         *
-         * @hide
-         */
-        @SystemApi
-        @TestApi
-        public static final String SMS_ACCESS_RESTRICTION_ENABLED =
-                "sms_access_restriction_enabled";
 
         /**
          * If set to 1, the device identifier check will be relaxed to the previous READ_PHONE_STATE

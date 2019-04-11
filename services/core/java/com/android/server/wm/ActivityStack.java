@@ -1505,7 +1505,6 @@ public class ActivityStack extends ConfigurationContainer {
                 + " callers=" + Debug.getCallers(5));
         r.setState(RESUMED, "minimalResumeActivityLocked");
         r.completeResumeLocked();
-        mStackSupervisor.updateTopResumedActivityIfNeeded();
         if (DEBUG_SAVED_STATE) Slog.i(TAG_SAVED_STATE,
                 "Launch completed; removing icicle of " + r.icicle);
     }
@@ -1814,7 +1813,7 @@ public class ActivityStack extends ConfigurationContainer {
             if (prev.finishing) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Executing finish of activity: " + prev);
                 prev = finishCurrentActivityLocked(prev, FINISH_AFTER_VISIBLE, false,
-                        "completedPausedLocked");
+                        "completePausedLocked");
             } else if (prev.hasProcess()) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Enqueue pending stop if needed: " + prev
                         + " wasStopping=" + wasStopping + " visible=" + prev.visible);
@@ -2581,7 +2580,6 @@ public class ActivityStack extends ConfigurationContainer {
             // Protect against recursion.
             mInResumeTopActivity = true;
             result = resumeTopActivityInnerLocked(prev, options);
-            mStackSupervisor.updateTopResumedActivityIfNeeded();
 
             // When resuming the top activity, it may be necessary to pause the top activity (for
             // example, returning to the lock screen. We suppress the normal pause logic in
@@ -2616,6 +2614,7 @@ public class ActivityStack extends ConfigurationContainer {
         if (DEBUG_STACK) Slog.d(TAG_STACK, "setResumedActivity stack:" + this + " + from: "
                 + mResumedActivity + " to:" + r + " reason:" + reason);
         mResumedActivity = r;
+        mStackSupervisor.updateTopResumedActivityIfNeeded();
     }
 
     @GuardedBy("mService")
@@ -2995,8 +2994,7 @@ public class ActivityStack extends ConfigurationContainer {
                 }
 
                 if (next.newIntents != null) {
-                    transaction.addCallback(NewIntentItem.obtain(next.newIntents,
-                            false /* andPause */));
+                    transaction.addCallback(NewIntentItem.obtain(next.newIntents));
                 }
 
                 // Well the app will no longer be stopped.
