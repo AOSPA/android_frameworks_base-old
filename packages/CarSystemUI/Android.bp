@@ -32,7 +32,6 @@ android_app {
         "SystemUISharedLib",
         "SettingsLib",
         "android.car.userlib",
-        "androidx.car_car",
         "androidx.legacy_legacy-support-v4",
         "androidx.recyclerview_recyclerview",
         "androidx.preference_preference",
@@ -46,7 +45,6 @@ android_app {
         "androidx.slice_slice-builders",
         "androidx.arch.core_core-runtime",
         "androidx.lifecycle_lifecycle-extensions",
-        "car-theme-lib-bp",
         "SystemUI-tags",
         "SystemUI-proto",
     ],
@@ -58,8 +56,8 @@ android_app {
 
     manifest: "AndroidManifest.xml",
 
-    owner: "google",
     platform_apis: true,
+    product_specific: true,
     certificate: "platform",
     privileged: true,
 
@@ -82,4 +80,6 @@ android_app {
     ],
 
     plugins: ["dagger2-compiler-2.19"],
+
+    required: ["privapp_whitelist_com.android.systemui"],
 }

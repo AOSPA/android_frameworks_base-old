@@ -16,9 +16,12 @@
 package com.android.settingslib.media;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.util.Log;
 
+import com.android.settingslib.R;
 import com.android.settingslib.bluetooth.A2dpProfile;
+import com.android.settingslib.bluetooth.BluetoothUtils;
 import com.android.settingslib.bluetooth.HearingAidProfile;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.settingslib.bluetooth.LocalBluetoothProfileManager;
@@ -34,6 +37,7 @@ public class PhoneMediaDevice extends MediaDevice {
 
     private LocalBluetoothProfileManager mProfileManager;
     private LocalBluetoothManager mLocalBluetoothManager;
+    private String mSummary = "";
 
     PhoneMediaDevice(Context context, LocalBluetoothManager localBluetoothManager) {
         super(context, MediaDeviceType.TYPE_PHONE_DEVICE);
@@ -45,14 +49,18 @@ public class PhoneMediaDevice extends MediaDevice {
 
     @Override
     public String getName() {
-        return mContext
-                .getString(com.android.settingslib.R.string.media_transfer_phone_device_name);
+        return mContext.getString(R.string.media_transfer_this_device_name);
     }
 
     @Override
-    public int getIcon() {
-        //TODO(b/117129183): This is not final icon for phone device, just for demo.
-        return com.android.internal.R.drawable.ic_phone;
+    public String getSummary() {
+        return mSummary;
+    }
+
+    @Override
+    public Drawable getIcon() {
+        return BluetoothUtils.buildBtRainbowDrawable(mContext,
+                mContext.getDrawable(R.drawable.ic_smartphone), getId().hashCode());
     }
 
     @Override
@@ -65,18 +73,38 @@ public class PhoneMediaDevice extends MediaDevice {
         final HearingAidProfile hapProfile = mProfileManager.getHearingAidProfile();
         final A2dpProfile a2dpProfile = mProfileManager.getA2dpProfile();
 
+        // Some device may not have HearingAidProfile, consider all situation to set active device.
         boolean isConnected = false;
-
         if (hapProfile != null && a2dpProfile != null) {
             isConnected = hapProfile.setActiveDevice(null) && a2dpProfile.setActiveDevice(null);
-            setConnectedRecord();
+        } else if (a2dpProfile != null) {
+            isConnected = a2dpProfile.setActiveDevice(null);
+        } else if (hapProfile != null) {
+            isConnected = hapProfile.setActiveDevice(null);
         }
+        updateSummary(isConnected);
+        setConnectedRecord();
+
         Log.d(TAG, "connect() device : " + getName() + ", is selected : " + isConnected);
         return isConnected;
     }
 
     @Override
     public void disconnect() {
-        //TODO(b/117129183): disconnected last select device
+        updateSummary(false);
+    }
+
+    @Override
+    public boolean isConnected() {
+        return true;
+    }
+
+    /**
+     * According current active device is {@link PhoneMediaDevice} or not to update summary.
+     */
+    public void updateSummary(boolean isActive) {
+        mSummary = isActive
+                ? mContext.getString(R.string.bluetooth_active_no_battery_level)
+                : "";
     }
 }

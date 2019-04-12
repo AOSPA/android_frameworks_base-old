@@ -15,11 +15,18 @@
  */
 package com.android.keyguard.clock;
 
+import android.app.WallpaperManager;
+import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Paint.Style;
 import android.view.LayoutInflater;
 import android.view.View;
 
+import com.android.internal.colorextraction.ColorExtractor;
 import com.android.keyguard.R;
+import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.plugins.ClockPlugin;
 
 import java.util.TimeZone;
@@ -30,6 +37,26 @@ import java.util.TimeZone;
 public class TypeClockController implements ClockPlugin {
 
     /**
+     * Resources used to get title and thumbnail.
+     */
+    private final Resources mResources;
+
+    /**
+     * LayoutInflater used to inflate custom clock views.
+     */
+    private final LayoutInflater mLayoutInflater;
+
+    /**
+     * Extracts accent color from wallpaper.
+     */
+    private final SysuiColorExtractor mColorExtractor;
+
+    /**
+     * Renders preview from clock view.
+     */
+    private final ViewPreviewer mRenderer = new ViewPreviewer();
+
+    /**
      * Custom clock shown on AOD screen and behind stack scroller on lock.
      */
     private View mView;
@@ -38,43 +65,92 @@ public class TypeClockController implements ClockPlugin {
     /**
      * Small clock shown on lock screen above stack scroller.
      */
-    private View mLockClockContainer;
+    private TypographicClock mLockClock;
 
     /**
      * Controller for transition into dark state.
      */
     private CrossFadeDarkController mDarkController;
 
-    private TypeClockController() {}
-
     /**
      * Create a TypeClockController instance.
      *
+     * @param res Resources contains title and thumbnail.
      * @param inflater Inflater used to inflate custom clock views.
+     * @param colorExtractor Extracts accent color from wallpaper.
      */
-    public static TypeClockController build(LayoutInflater inflater) {
-        TypeClockController controller = new TypeClockController();
-        controller.createViews(inflater);
-        return controller;
+    TypeClockController(Resources res, LayoutInflater inflater,
+            SysuiColorExtractor colorExtractor) {
+        mResources = res;
+        mLayoutInflater = inflater;
+        mColorExtractor = colorExtractor;
     }
 
-    private void createViews(LayoutInflater inflater) {
-        mView = inflater.inflate(R.layout.type_clock, null);
+    private void createViews() {
+        mView = mLayoutInflater.inflate(R.layout.type_aod_clock, null);
         mTypeClock = mView.findViewById(R.id.type_clock);
 
         // For now, this view is used to hide the default digital clock.
         // Need better transition to lock screen.
-        mLockClockContainer = inflater.inflate(R.layout.digital_clock, null);
-        mLockClockContainer.setVisibility(View.GONE);
+        mLockClock = (TypographicClock) mLayoutInflater.inflate(R.layout.typographic_clock, null);
+        mLockClock.setVisibility(View.GONE);
+
+        mDarkController = new CrossFadeDarkController(mView, mLockClock);
+    }
+
+    @Override
+    public void onDestroyView() {
+        mView = null;
+        mTypeClock = null;
+        mLockClock = null;
+        mDarkController = null;
+    }
+
+    @Override
+    public String getName() {
+        return "type";
+    }
+
+    @Override
+    public String getTitle() {
+        return mResources.getString(R.string.clock_title_type);
+    }
+
+    @Override
+    public Bitmap getThumbnail() {
+        return BitmapFactory.decodeResource(mResources, R.drawable.type_thumbnail);
+    }
+
+    @Override
+    public Bitmap getPreview(int width, int height) {
+
+        // Use the big clock view for the preview
+        View view = getBigClockView();
+
+        // Initialize state of plugin before generating preview.
+        setDarkAmount(1f);
+        setTextColor(Color.WHITE);
+        ColorExtractor.GradientColors colors = mColorExtractor.getColors(
+                WallpaperManager.FLAG_LOCK, true);
+        setColorPalette(colors.supportsDarkText(), colors.getColorPalette());
+        onTimeTick();
+
+        return mRenderer.createPreview(view, width, height);
     }
 
     @Override
     public View getView() {
-        return mLockClockContainer;
+        if (mLockClock == null) {
+            createViews();
+        }
+        return mLockClock;
     }
 
     @Override
     public View getBigClockView() {
+        if (mView == null) {
+            createViews();
+        }
         return mView;
     }
 
@@ -84,6 +160,7 @@ public class TypeClockController implements ClockPlugin {
     @Override
     public void setTextColor(int color) {
         mTypeClock.setTextColor(color);
+        mLockClock.setTextColor(color);
     }
 
     @Override
@@ -91,21 +168,28 @@ public class TypeClockController implements ClockPlugin {
         if (colorPalette == null || colorPalette.length == 0) {
             return;
         }
-        final int length = colorPalette.length;
-        mTypeClock.setClockColor(colorPalette[Math.max(0, length - 5)]);
+        final int color = colorPalette[Math.max(0, colorPalette.length - 5)];
+        mTypeClock.setClockColor(color);
+        mLockClock.setClockColor(color);
     }
 
     @Override
-    public void dozeTimeTick() {
+    public void onTimeTick() {
         mTypeClock.onTimeChanged();
+        mLockClock.onTimeChanged();
     }
 
     @Override
-    public void setDarkAmount(float darkAmount) {}
+    public void setDarkAmount(float darkAmount) {
+        if (mDarkController != null) {
+            mDarkController.setDarkAmount(darkAmount);
+        }
+    }
 
     @Override
     public void onTimeZoneChanged(TimeZone timeZone) {
         mTypeClock.onTimeZoneChanged(timeZone);
+        mLockClock.onTimeZoneChanged(timeZone);
     }
 
     @Override

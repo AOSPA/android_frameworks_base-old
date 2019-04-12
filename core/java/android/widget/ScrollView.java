@@ -1474,7 +1474,7 @@ public class ScrollView extends FrameLayout {
      *
      * @param child the View to scroll to
      */
-    public void scrollToDescendant(View child) {
+    public void scrollToDescendant(@NonNull View child) {
         if (!mIsLayoutDirty) {
             child.getDrawingRect(mTempRect);
 
@@ -1978,7 +1978,7 @@ public class ScrollView extends FrameLayout {
                     + " scrollPosition=" + scrollPosition + "}";
         }
 
-        public static final Parcelable.Creator<SavedState> CREATOR
+        public static final @android.annotation.NonNull Parcelable.Creator<SavedState> CREATOR
                 = new Parcelable.Creator<SavedState>() {
             public SavedState createFromParcel(Parcel in) {
                 return new SavedState(in);

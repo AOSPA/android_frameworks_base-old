@@ -113,6 +113,13 @@ public abstract class AbstractPerUserSystemService<S extends AbstractPerUserSyst
     }
 
     /**
+     * Gets whether the service is disabled by {@link UserManager} restrictions.
+     */
+    protected final boolean isDisabledByUserRestrictionsLocked() {
+        return mDisabled;
+    }
+
+    /**
      * Updates the state of this service.
      *
      * <p>Typically called when the service {@link Settings} property or {@link UserManager}
@@ -136,7 +143,9 @@ public abstract class AbstractPerUserSystemService<S extends AbstractPerUserSyst
                     + ", disabled=" + disabled + ", mDisabled=" + mDisabled);
         }
 
-        mSetupComplete = isSetupCompletedLocked();
+        final String setupComplete = Settings.Secure.getStringForUser(
+                getContext().getContentResolver(), Settings.Secure.USER_SETUP_COMPLETE, mUserId);
+        mSetupComplete = "1".equals(setupComplete);
         mDisabled = disabled;
 
         updateServiceInfoLocked();
@@ -235,6 +244,15 @@ public abstract class AbstractPerUserSystemService<S extends AbstractPerUserSyst
     }
 
     /**
+     * Gets the {@link ServiceInfo} of the remote service this service binds to, or {@code null}
+     * if the service is disabled.
+     */
+    @Nullable
+    public final ServiceInfo getServiceInfo() {
+        return mServiceInfo;
+    }
+
+    /**
      * Gets the {@link ComponentName} of the remote service this service binds to, or {@code null}
      * if the service is disabled.
      */
@@ -311,9 +329,7 @@ public abstract class AbstractPerUserSystemService<S extends AbstractPerUserSyst
      * Gets whether the device already finished setup.
      */
     protected final boolean isSetupCompletedLocked() {
-        final String setupComplete = Settings.Secure.getStringForUser(
-                getContext().getContentResolver(), Settings.Secure.USER_SETUP_COMPLETE, mUserId);
-        return "1".equals(setupComplete);
+        return mSetupComplete;
     }
 
     /**
@@ -327,6 +343,10 @@ public abstract class AbstractPerUserSystemService<S extends AbstractPerUserSyst
     @GuardedBy("mLock")
     protected void dumpLocked(@NonNull String prefix, @NonNull PrintWriter pw) {
         pw.print(prefix); pw.print("User: "); pw.println(mUserId);
+        if (mServiceInfo != null) {
+            pw.print(prefix); pw.print("Service Label: "); pw.println(getServiceLabelLocked());
+            pw.print(prefix); pw.print("Target SDK: "); pw.println(getTargedSdkLocked());
+        }
         if (mMaster.mServiceNameResolver != null) {
             pw.print(prefix); pw.print("Name resolver: ");
             mMaster.mServiceNameResolver.dumpShort(pw, mUserId); pw.println();

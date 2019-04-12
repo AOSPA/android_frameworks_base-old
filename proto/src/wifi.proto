@@ -527,6 +527,15 @@ message WifiLog {
 
   // List of NetworkSelectionExperimentDecisions stats for each experiment
   repeated NetworkSelectionExperimentDecisions network_selection_experiment_decisions_list = 140;
+
+  // Network Request API surface metrics.
+  optional WifiNetworkRequestApiLog wifi_network_request_api_log = 141;
+
+  // Network Suggestion API surface metrics.
+  optional WifiNetworkSuggestionApiLog wifi_network_suggestion_api_log = 142;
+
+  // WifiLock statistics
+  optional WifiLockStats wifi_lock_stats = 143;
 }
 
 // Information that gets logged for every WiFi connection.
@@ -654,6 +663,26 @@ message ConnectionEvent {
     HLF_UNWANTED = 4;
   }
 
+  // Level 2 failure reason.
+  enum Level2FailureReason {
+
+    // Unknown default
+    FAILURE_REASON_UNKNOWN = 0;
+
+    // The reason code if there is no error during authentication. It could
+    // also imply that there no authentication in progress.
+    AUTH_FAILURE_NONE = 1;
+
+    // The reason code if there was a timeout authenticating.
+    AUTH_FAILURE_TIMEOUT = 2;
+
+    // The reason code if there was a wrong password while authenticating.
+    AUTH_FAILURE_WRONG_PSWD = 3;
+
+    // The reason code if there was EAP failure while authenticating.
+    AUTH_FAILURE_EAP_FAILURE = 4;
+  }
+
   // Entity that recommended connecting to this network.
   enum ConnectionNominator {
     // Unknown nominator
@@ -677,8 +706,8 @@ message ConnectionEvent {
     // External scorer
     NOMINATOR_EXTERNAL_SCORED = 6;
 
-    // Netrec
-    NOMINATOR_NETREC = 7;
+    // Network Specifier
+    NOMINATOR_SPECIFIER = 7;
 
     // User connected choice override
     NOMINATOR_SAVED_USER_CONNECT_CHOICE = 8;
@@ -722,6 +751,10 @@ message ConnectionEvent {
 
   // The currently running network selector when this connection event occurred.
   optional int32 network_selector_experiment_id = 12;
+
+  // Breakdown of level_2_failure_code with more detailed reason.
+  optional Level2FailureReason level_2_failure_reason = 13
+          [default = FAILURE_REASON_UNKNOWN];
 }
 
 // Number of occurrences of a specific RSSI poll rssi value
@@ -1722,6 +1755,9 @@ message WifiIsUnusableEvent {
 
     // Firmware generated an alert
     TYPE_FIRMWARE_ALERT = 4;
+
+    // IP Manager lost reachability to network neighbors
+    TYPE_IP_REACHABILITY_LOST = 5;
   }
 
   // What event triggered WifiIsUnusableEvent.
@@ -1768,6 +1804,9 @@ message WifiIsUnusableEvent {
   // Prediction horizon (in second) of Wifi usability score provided by external
   // system app
   optional int32 last_prediction_horizon_sec = 12 [default = -1];
+
+  // Whether screen status is on when WifiIsUnusableEvent happens.
+  optional bool screen_on = 13 [default = false];
 }
 
 message PasspointProfileTypeCount {
@@ -1847,6 +1886,33 @@ message WifiUsabilityStatsEntry {
     PROBE_STATUS_FAILURE = 3;
   }
 
+  // Codes for cellular data network type
+  enum CellularDataNetworkType {
+    // Unknown network
+    NETWORK_TYPE_UNKNOWN = 0;
+
+    // GSM network
+    NETWORK_TYPE_GSM = 1;
+
+    // CDMA network
+    NETWORK_TYPE_CDMA = 2;
+
+    // CDMA EVDO network
+    NETWORK_TYPE_EVDO_0 = 3;
+
+    // WCDMA network
+    NETWORK_TYPE_UMTS = 4;
+
+    // TDSCDMA network
+    NETWORK_TYPE_TD_SCDMA = 5;
+
+    // LTE network
+    NETWORK_TYPE_LTE = 6;
+
+    // NR network
+    NETWORK_TYPE_NR = 7;
+  }
+
   // Absolute milliseconds from device boot when these stats were sampled
   optional int64 time_stamp_ms = 1;
 
@@ -1924,7 +1990,7 @@ message WifiUsabilityStatsEntry {
   optional LinkProbeStatus probe_status_since_last_update = 24;
 
   // The elapsed time of the most recent link probe since last stats update;
-  optional int32 probe_elapsed_time_ms_since_last_update = 25;
+  optional int32 probe_elapsed_time_since_last_update_ms = 25;
 
   // The MCS rate of the most recent link probe since last stats update
   optional int32 probe_mcs_rate_since_last_update = 26;
@@ -1938,6 +2004,24 @@ message WifiUsabilityStatsEntry {
   // Whether current entry is for the same BSSID on the same frequency compared
   // to last entry
   optional bool is_same_bssid_and_freq = 29;
+
+  // Cellular data network type currently in use on the device for data transmission
+  optional CellularDataNetworkType cellular_data_network_type = 30;
+
+  // Cellular signal strength in dBm, NR: CsiRsrp, LTE: Rsrp, WCDMA/TDSCDMA: Rscp,
+  // CDMA: Rssi, EVDO: Rssi, GSM: Rssi
+  optional int32 cellular_signal_strength_dbm = 31;
+
+  // Cellular signal strength in dB, NR: CsiSinr, LTE: Rsrq, WCDMA: EcNo, TDSCDMA: invalid,
+  // CDMA: Ecio, EVDO: SNR, GSM: invalid */
+  optional int32 cellular_signal_strength_db = 32;
+
+  // Whether the primary registered cell of current entry is same as that of previous entry
+  optional bool is_same_registered_cell = 33;
+
+  // The device mobility state
+  optional DeviceMobilityStatePnoScanStats.DeviceMobilityState
+          device_mobility_state = 34;
 }
 
 message WifiUsabilityStats {
@@ -1967,6 +2051,9 @@ message WifiUsabilityStats {
 
     // Firmware generated an alert
     TYPE_FIRMWARE_ALERT = 4;
+
+    // IP Manager lost reachability to network neighbors
+    TYPE_IP_REACHABILITY_LOST = 5;
   }
 
   // The current wifi usability state
@@ -1977,6 +2064,10 @@ message WifiUsabilityStats {
 
   // What event triggered WifiUsabilityStats.
   optional UsabilityStatsTriggerType trigger_type = 3;
+
+  // Firmware alert code. Only valid when the stats was triggered by a firmware
+  // alert, otherwise -1.
+  optional int32 firmware_alert_code = 4 [default = -1];
 }
 
 message DeviceMobilityStatePnoScanStats {
@@ -2258,13 +2349,13 @@ message HistogramBucketInt32 {
   optional int32 count = 3;
 }
 
-// Single entry in a map from int32 => int32
-message MapEntryInt32Int32 {
+// Counts occurrences of a int32 key
+message Int32Count {
   // the key
   optional int32 key = 1;
 
-  // the value
-  optional int32 value = 2;
+  // the count
+  optional int32 count = 2;
 }
 
 message LinkProbeStats {
@@ -2295,16 +2386,16 @@ message LinkProbeStats {
   }
 
   // Counts the occurrences of RSSI values when a link probe succeeds.
-  repeated MapEntryInt32Int32 success_rssi_counts = 1;
+  repeated Int32Count success_rssi_counts = 1;
 
   // Counts the occurrences of RSSI values when a link probe fails.
-  repeated MapEntryInt32Int32 failure_rssi_counts = 2;
+  repeated Int32Count failure_rssi_counts = 2;
 
   // Counts the occurrences of Link Speed values when a link probe succeeds.
-  repeated MapEntryInt32Int32 success_link_speed_counts = 3;
+  repeated Int32Count success_link_speed_counts = 3;
 
   // Counts the occurrences of Link Speed values when a link probe fails.
-  repeated MapEntryInt32Int32 failure_link_speed_counts = 4;
+  repeated Int32Count failure_link_speed_counts = 4;
 
   // Histogram for the number of seconds since the last TX success when a link probe succeeds.
   repeated HistogramBucketInt32 success_seconds_since_last_tx_success_histogram = 5;
@@ -2331,7 +2422,7 @@ message NetworkSelectionExperimentDecisions {
   // same network selection as experiment2.
   // The keys are the number of network choices, and the values are the number of occurrences of
   // this number of network choices when exp1 and exp2 make the same network selection.
-  repeated MapEntryInt32Int32 same_selection_num_choices_counter = 3;
+  repeated Int32Count same_selection_num_choices_counter = 3;
 
   // Counts occurrences of the number of network choices there were when experiment1 makes the
   // same network selection as experiment2.
@@ -2339,5 +2430,68 @@ message NetworkSelectionExperimentDecisions {
   // this number of network choices when exp1 and exp2 make different network selections.
   // Note that it is possible for the network selection to be different even when there only exists
   // a single network choice, since choosing not to connect to that network is a valid choice.
-  repeated MapEntryInt32Int32 different_selection_num_choices_counter = 4;
+  repeated Int32Count different_selection_num_choices_counter = 4;
+}
+
+// NetworkRequest API metrics.
+message WifiNetworkRequestApiLog {
+  // Number of requests via this API surface.
+  optional int32 num_request = 1;
+
+  // Histogram of requests via this API surface to number of networks matched in scan results.
+  repeated HistogramBucketInt32 network_match_size_histogram = 2;
+
+  // Number of successful network connection from this API.
+  optional int32 num_connect_success = 3;
+
+  // Number of requests via this API surface that bypassed user approval.
+  optional int32 num_user_approval_bypass = 4;
+
+  // Number of requests via this API surface that was rejected by the user.
+  optional int32 num_user_reject = 5;
+
+  // Number of unique apps using this API surface.
+  optional int32 num_apps = 6;
+}
+
+// NetworkSuggestion API metrics.
+message WifiNetworkSuggestionApiLog {
+  // Number of modifications to their suggestions by apps.
+  optional int32 num_modification = 1;
+
+  // Number of successful network connection from app suggestions.
+  optional int32 num_connect_success = 2;
+
+  // Number of network connection failures from app suggestions.
+  optional int32 num_connect_failure = 3;
+
+  // Histogram for size of the network lists provided by various apps on the device.
+  repeated HistogramBucketInt32 network_list_size_histogram = 4;
+}
+
+// WifiLock metrics
+message WifiLockStats {
+    // Amount of time wifi is actively in HIGH_PERF mode (ms)
+    // This means the lock takes effect and the device takes the actions required for this mode
+    optional int64 high_perf_active_time_ms = 1;
+
+    // Amount of time wifi is actively in LOW_LATENCY mode (ms)
+    // This means the lock takes effect and the device takes the actions required for this mode
+    optional int64 low_latency_active_time_ms = 2;
+
+    // Histogram of HIGH_PERF lock acquisition duration (seconds)
+    // Note that acquiring the lock does not necessarily mean that device is actively in that mode
+    repeated HistogramBucketInt32 high_perf_lock_acq_duration_sec_histogram = 3;
+
+    // Histogram of LOW_LATENCY lock acquisition duration (seconds)
+    // Note that acquiring the lock does not necessarily mean that device is actively in that mode
+    repeated HistogramBucketInt32 low_latency_lock_acq_duration_sec_histogram = 4;
+
+    // Histogram of HIGH_PERF active session duration (seconds)
+    // This means the lock takes effect and the device takes the actions required for this mode
+    repeated HistogramBucketInt32 high_perf_active_session_duration_sec_histogram = 5;
+
+    // Histogram of LOW_LATENCY active session duration (seconds)
+    // This means the lock takes effect and the device takes the actions required for this mode
+    repeated HistogramBucketInt32 low_latency_active_session_duration_sec_histogram = 6;
 }

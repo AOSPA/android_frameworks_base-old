@@ -129,6 +129,7 @@ interface IActivityTaskManager {
     oneway void activityIdle(in IBinder token, in Configuration config,
             in boolean stopProfiling);
     void activityResumed(in IBinder token);
+    void activityTopResumedStateLost();
     void activityPaused(in IBinder token);
     void activityStopped(in IBinder token, in Bundle state,
             in PersistableBundle persistentState, in CharSequence description);
@@ -472,4 +473,14 @@ interface IActivityTaskManager {
      * contain one task.
      */
     void setDisplayToSingleTaskInstance(int displayId);
+
+    /**
+     * Restarts the activity by killing its process if it is visible. If the activity is not
+     * visible, the activity will not be restarted immediately and just keep the activity record in
+     * the stack. It also resets the current override configuration so the activity will use the
+     * configuration according to the latest state.
+     *
+     * @param activityToken The token of the target activity to restart.
+     */
+    void restartActivityProcessIfVisible(in IBinder activityToken);
 }

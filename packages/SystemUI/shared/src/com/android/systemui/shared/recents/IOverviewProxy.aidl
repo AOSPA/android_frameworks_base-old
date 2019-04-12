@@ -113,4 +113,20 @@ oneway interface IOverviewProxy {
      * Sent when there was an action on one of the onboarding tips view.
      */
     void onTip(int actionType, int viewType) = 10;
+
+    /**
+     * Sent when device assistant changes its default assistant whether it is available or not.
+     */
+    void onAssistantAvailable(boolean available) = 13;
+
+    /**
+     * Sent when the assistant changes how visible it is to the user.
+     */
+    void onAssistantVisibilityChanged(float visibility) = 14;
+
+    /*
+     * Sent when back is triggered.
+     */
+    void onBackAction(boolean completed, int downX, int downY, boolean isButton,
+            boolean gestureSwipeLeft) = 15;
 }

@@ -1850,8 +1850,8 @@ public class LinearLayout extends ViewGroup {
      */
     @OrientationMode
     @InspectableProperty(enumMapping = {
-            @InspectableProperty.EnumMap(value = HORIZONTAL, name = "horizontal"),
-            @InspectableProperty.EnumMap(value = VERTICAL, name = "vertical")
+            @InspectableProperty.EnumEntry(value = HORIZONTAL, name = "horizontal"),
+            @InspectableProperty.EnumEntry(value = VERTICAL, name = "vertical")
     })
     public int getOrientation() {
         return mOrientation;
@@ -1987,6 +1987,7 @@ public class LinearLayout extends ViewGroup {
          * will be pro-rated among all views whose weight is greater than 0.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_weight")
         public float weight;
 
         /**
@@ -2010,6 +2011,9 @@ public class LinearLayout extends ViewGroup {
             @ViewDebug.IntToString(from = Gravity.CENTER,            to = "CENTER"),
             @ViewDebug.IntToString(from = Gravity.FILL,              to = "FILL")
         })
+        @InspectableProperty(
+                name = "layout_gravity",
+                valueType = InspectableProperty.ValueType.GRAVITY)
         public int gravity = -1;
 
         /**

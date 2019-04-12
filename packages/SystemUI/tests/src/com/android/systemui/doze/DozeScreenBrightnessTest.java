@@ -28,17 +28,16 @@ import static com.android.systemui.doze.DozeMachine.State.INITIALIZED;
 import static com.android.systemui.doze.DozeMachine.State.UNINITIALIZED;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Intent;
 import android.os.PowerManager;
 import android.os.UserHandle;
 import android.provider.Settings;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.utils.hardware.FakeSensorManager;
@@ -235,6 +234,18 @@ public class DozeScreenBrightnessTest extends SysuiTestCase {
 
         mSensor.sendSensorEvent(1);
         assertEquals(1f, mHostFake.aodDimmingScrimOpacity, 0.001f /* delta */);
+    }
+
+    @Test
+    public void screenOff_softBlanks() throws Exception {
+        mScreen.transitionTo(UNINITIALIZED, INITIALIZED);
+        mScreen.transitionTo(INITIALIZED, DOZE_AOD);
+        mScreen.transitionTo(DOZE_AOD, DOZE);
+        assertEquals(1f, mHostFake.aodDimmingScrimOpacity, 0.001f /* delta */);
+
+        mScreen.transitionTo(DOZE, DOZE_AOD);
+        mSensor.sendSensorEvent(2);
+        assertEquals(0f, mHostFake.aodDimmingScrimOpacity, 0.001f /* delta */);
     }
 
     @Test

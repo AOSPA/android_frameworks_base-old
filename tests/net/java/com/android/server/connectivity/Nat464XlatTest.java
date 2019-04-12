@@ -27,6 +27,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.net.ConnectivityManager;
+import android.net.IDnsResolver;
 import android.net.INetd;
 import android.net.InterfaceConfiguration;
 import android.net.IpPrefix;
@@ -37,8 +38,9 @@ import android.net.NetworkMisc;
 import android.os.Handler;
 import android.os.INetworkManagementService;
 import android.os.test.TestLooper;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.ConnectivityService;
 
@@ -62,6 +64,7 @@ public class Nat464XlatTest {
 
     @Mock ConnectivityService mConnectivity;
     @Mock NetworkMisc mMisc;
+    @Mock IDnsResolver mDnsResolver;
     @Mock INetd mNetd;
     @Mock INetworkManagementService mNms;
     @Mock InterfaceConfiguration mConfig;
@@ -71,7 +74,7 @@ public class Nat464XlatTest {
     Handler mHandler;
 
     Nat464Xlat makeNat464Xlat() {
-        return new Nat464Xlat(mNai, mNetd, mNms) {
+        return new Nat464Xlat(mNai, mNetd, mDnsResolver, mNms) {
             @Override protected int getNetId() {
                 return NETID;
             }
@@ -204,7 +207,7 @@ public class Nat464XlatTest {
         verify(mNms).unregisterObserver(eq(nat));
         assertTrue(c.getValue().getStackedLinks().isEmpty());
         assertFalse(c.getValue().getAllInterfaceNames().contains(STACKED_IFACE));
-        verify(mNetd).resolverStopPrefix64Discovery(eq(NETID));
+        verify(mDnsResolver).stopPrefix64Discovery(eq(NETID));
         assertIdle(nat);
 
         // Stacked interface removed notification arrives and is ignored.
@@ -330,7 +333,7 @@ public class Nat464XlatTest {
         verify(mNetd).clatdStop(eq(BASE_IFACE));
         verify(mConnectivity, times(2)).handleUpdateLinkProperties(eq(mNai), c.capture());
         verify(mNms).unregisterObserver(eq(nat));
-        verify(mNetd).resolverStopPrefix64Discovery(eq(NETID));
+        verify(mDnsResolver).stopPrefix64Discovery(eq(NETID));
         assertTrue(c.getValue().getStackedLinks().isEmpty());
         assertFalse(c.getValue().getAllInterfaceNames().contains(STACKED_IFACE));
         assertIdle(nat);
@@ -357,7 +360,7 @@ public class Nat464XlatTest {
 
         verify(mNetd).clatdStop(eq(BASE_IFACE));
         verify(mNms).unregisterObserver(eq(nat));
-        verify(mNetd).resolverStopPrefix64Discovery(eq(NETID));
+        verify(mDnsResolver).stopPrefix64Discovery(eq(NETID));
         assertIdle(nat);
 
         // In-flight interface up notification arrives: no-op
@@ -389,7 +392,7 @@ public class Nat464XlatTest {
 
         verify(mNetd).clatdStop(eq(BASE_IFACE));
         verify(mNms).unregisterObserver(eq(nat));
-        verify(mNetd).resolverStopPrefix64Discovery(eq(NETID));
+        verify(mDnsResolver).stopPrefix64Discovery(eq(NETID));
         assertIdle(nat);
 
         verifyNoMoreInteractions(mNetd, mNms, mConnectivity);

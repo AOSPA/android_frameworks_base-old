@@ -455,6 +455,8 @@ public class ScanResult implements Parcelable {
         public static final int EID_VHT_OPERATION = 192;
         @UnsupportedAppUsage
         public static final int EID_VSA = 221;
+        public static final int EID_EXTENSION = 255;
+        public static final int EID_EXT_HE_CAPABILITIES = 35;
 
         @UnsupportedAppUsage
         public int id;
@@ -751,7 +753,7 @@ public class ScanResult implements Parcelable {
 
     /** Implement the Parcelable interface {@hide} */
     @UnsupportedAppUsage
-    public static final Creator<ScanResult> CREATOR =
+    public static final @android.annotation.NonNull Creator<ScanResult> CREATOR =
         new Creator<ScanResult>() {
             public ScanResult createFromParcel(Parcel in) {
                 WifiSsid wifiSsid = null;

@@ -50,6 +50,7 @@ using android::base::StringPrintf;
 using android::util::FIELD_COUNT_REPEATED;
 using android::util::FIELD_TYPE_INT64;
 using android::util::FIELD_TYPE_MESSAGE;
+using android::util::ProtoReader;
 
 namespace android {
 namespace os {
@@ -64,8 +65,6 @@ constexpr const char* kOpUsage = "android:get_usage_stats";
 
 // for StatsDataDumpProto
 const int FIELD_ID_REPORTS_LIST = 1;
-// for TrainInfo experiment id serialization
-const int FIELD_ID_EXPERIMENT_ID = 1;
 
 static binder::Status ok() {
     return binder::Status::ok();
@@ -131,34 +130,36 @@ binder::Status checkDumpAndUsageStats(const String16& packageName) {
     }                                                             \
 }
 
-StatsService::StatsService(const sp<Looper>& handlerLooper)
-    : mAnomalyAlarmMonitor(new AlarmMonitor(MIN_DIFF_TO_UPDATE_REGISTERED_ALARM_SECS,
-       [](const sp<IStatsCompanionService>& sc, int64_t timeMillis) {
-           if (sc != nullptr) {
-               sc->setAnomalyAlarm(timeMillis);
-               StatsdStats::getInstance().noteRegisteredAnomalyAlarmChanged();
-           }
-       },
-       [](const sp<IStatsCompanionService>& sc) {
-           if (sc != nullptr) {
-               sc->cancelAnomalyAlarm();
-               StatsdStats::getInstance().noteRegisteredAnomalyAlarmChanged();
-           }
-       })),
-   mPeriodicAlarmMonitor(new AlarmMonitor(MIN_DIFF_TO_UPDATE_REGISTERED_ALARM_SECS,
-      [](const sp<IStatsCompanionService>& sc, int64_t timeMillis) {
-           if (sc != nullptr) {
-               sc->setAlarmForSubscriberTriggering(timeMillis);
-               StatsdStats::getInstance().noteRegisteredPeriodicAlarmChanged();
-           }
-      },
-      [](const sp<IStatsCompanionService>& sc) {
-           if (sc != nullptr) {
-               sc->cancelAlarmForSubscriberTriggering();
-               StatsdStats::getInstance().noteRegisteredPeriodicAlarmChanged();
-           }
-
-      }))  {
+StatsService::StatsService(const sp<Looper>& handlerLooper, shared_ptr<LogEventQueue> queue)
+    : mAnomalyAlarmMonitor(new AlarmMonitor(
+              MIN_DIFF_TO_UPDATE_REGISTERED_ALARM_SECS,
+              [](const sp<IStatsCompanionService>& sc, int64_t timeMillis) {
+                  if (sc != nullptr) {
+                      sc->setAnomalyAlarm(timeMillis);
+                      StatsdStats::getInstance().noteRegisteredAnomalyAlarmChanged();
+                  }
+              },
+              [](const sp<IStatsCompanionService>& sc) {
+                  if (sc != nullptr) {
+                      sc->cancelAnomalyAlarm();
+                      StatsdStats::getInstance().noteRegisteredAnomalyAlarmChanged();
+                  }
+              })),
+      mPeriodicAlarmMonitor(new AlarmMonitor(
+              MIN_DIFF_TO_UPDATE_REGISTERED_ALARM_SECS,
+              [](const sp<IStatsCompanionService>& sc, int64_t timeMillis) {
+                  if (sc != nullptr) {
+                      sc->setAlarmForSubscriberTriggering(timeMillis);
+                      StatsdStats::getInstance().noteRegisteredPeriodicAlarmChanged();
+                  }
+              },
+              [](const sp<IStatsCompanionService>& sc) {
+                  if (sc != nullptr) {
+                      sc->cancelAlarmForSubscriberTriggering();
+                      StatsdStats::getInstance().noteRegisteredPeriodicAlarmChanged();
+                  }
+              })),
+      mEventQueue(queue) {
     mUidMap = UidMap::getInstance();
     mPullerManager = new StatsPullerManager();
     StatsPuller::SetUidMap(mUidMap);
@@ -200,9 +201,31 @@ StatsService::StatsService(const sp<Looper>& handlerLooper)
     mConfigManager->AddListener(mProcessor);
 
     init_system_properties();
+
+    if (mEventQueue != nullptr) {
+        std::thread pushedEventThread([this] { readLogs(); });
+        pushedEventThread.detach();
+    }
 }
 
 StatsService::~StatsService() {
+}
+
+/* Runs on a dedicated thread to process pushed events. */
+void StatsService::readLogs() {
+    // Read forever..... long live statsd
+    while (1) {
+        // Block until an event is available.
+        auto event = mEventQueue->waitPop();
+        // Pass it to StatsLogProcess to all configs/metrics
+        // At this point, the LogEventQueue is not blocked, so that the socketListener
+        // can read events from the socket and write to buffer to avoid data drop.
+        mProcessor->OnLogEvent(event.get());
+        // The ShellSubscriber is only used by shell for local debugging.
+        if (mShellSubscriber != nullptr) {
+            mShellSubscriber->onLogEvent(*event);
+        }
+    }
 }
 
 void StatsService::init_system_properties() {
@@ -1005,9 +1028,11 @@ void StatsService::Terminate() {
     ALOGI("StatsService::Terminating");
     if (mProcessor != nullptr) {
         mProcessor->WriteDataToDisk(TERMINATION_SIGNAL_RECEIVED, FAST);
+        mProcessor->WriteMetricsActivationToDisk(getElapsedRealtimeNs());
     }
 }
 
+// Test only interface!!!
 void StatsService::OnLogEvent(LogEvent* event) {
     mProcessor->OnLogEvent(event);
     if (mShellSubscriber != nullptr) {
@@ -1180,7 +1205,7 @@ Status StatsService::unregisterPullerCallback(int32_t atomTag, const String16& p
 Status StatsService::sendBinaryPushStateChangedAtom(const android::String16& trainName,
                                                     int64_t trainVersionCode, int options,
                                                     int32_t state,
-                                                    const std::vector<int64_t>& experimentIds) {
+                                                    const std::vector<int64_t>& experimentIdsIn) {
     uid_t uid = IPCThreadState::self()->getCallingUid();
     // For testing
     if (uid == AID_ROOT || uid == AID_SYSTEM || uid == AID_SHELL) {
@@ -1198,101 +1223,151 @@ Status StatsService::sendBinaryPushStateChangedAtom(const android::String16& tra
     }
     // TODO: add verifier permission
 
-    userid_t userId = multiuser_get_user_id(uid);
+    bool readTrainInfoSuccess = false;
+    InstallTrainInfo trainInfo;
+    if (trainVersionCode == -1 || experimentIdsIn.empty() || trainName.size() == 0) {
+        readTrainInfoSuccess = StorageManager::readTrainInfo(trainInfo);
+    }
 
+    if (trainVersionCode == -1 && readTrainInfoSuccess) {
+        trainVersionCode = trainInfo.trainVersionCode;
+    }
+
+    // Find the right experiment IDs
+    std::vector<int64_t> experimentIds;
+    if (readTrainInfoSuccess && experimentIdsIn.empty()) {
+        experimentIds = trainInfo.experimentIds;
+    } else {
+        experimentIds = experimentIdsIn;
+    }
+
+    // Flatten the experiment IDs to proto
+    vector<uint8_t> experimentIdsProtoBuffer;
+    writeExperimentIdsToProto(experimentIds, &experimentIdsProtoBuffer);
+
+    // Find the right train name
+    std::string trainNameUtf8;
+    if (readTrainInfoSuccess && trainName.size() == 0) {
+        trainNameUtf8 = trainInfo.trainName;
+    } else {
+        trainNameUtf8 = std::string(String8(trainName).string());
+    }
+
+    userid_t userId = multiuser_get_user_id(uid);
     bool requiresStaging = options & IStatsManager::FLAG_REQUIRE_STAGING;
     bool rollbackEnabled = options & IStatsManager::FLAG_ROLLBACK_ENABLED;
     bool requiresLowLatencyMonitor = options & IStatsManager::FLAG_REQUIRE_LOW_LATENCY_MONITOR;
-
-    ProtoOutputStream proto;
-    for (const auto& expId : experimentIds) {
-        proto.write(FIELD_TYPE_INT64 | FIELD_COUNT_REPEATED | FIELD_ID_EXPERIMENT_ID,
-                    (long long)expId);
-    }
-
-    vector<uint8_t> buffer;
-    buffer.resize(proto.size());
-    size_t pos = 0;
-    auto iter = proto.data();
-    while (iter.readBuffer() != NULL) {
-        size_t toRead = iter.currentToRead();
-        std::memcpy(&(buffer[pos]), iter.readBuffer(), toRead);
-        pos += toRead;
-        iter.rp()->move(toRead);
-    }
-    LogEvent event(std::string(String8(trainName).string()), trainVersionCode, requiresStaging,
-                   rollbackEnabled, requiresLowLatencyMonitor, state, buffer, userId);
+    LogEvent event(trainNameUtf8, trainVersionCode, requiresStaging, rollbackEnabled,
+                   requiresLowLatencyMonitor, state, experimentIdsProtoBuffer, userId);
     mProcessor->OnLogEvent(&event);
-    StorageManager::writeTrainInfo(trainVersionCode, buffer);
+    StorageManager::writeTrainInfo(trainVersionCode, trainNameUtf8, state, experimentIds);
+    return Status::ok();
+}
+
+Status StatsService::getRegisteredExperimentIds(std::vector<int64_t>* experimentIdsOut) {
+    uid_t uid = IPCThreadState::self()->getCallingUid();
+
+    // Caller must be granted these permissions
+    if (!checkCallingPermission(String16(kPermissionDump))) {
+        return exception(binder::Status::EX_SECURITY,
+                         StringPrintf("UID %d lacks permission %s", uid, kPermissionDump));
+    }
+    if (!checkCallingPermission(String16(kPermissionUsage))) {
+        return exception(binder::Status::EX_SECURITY,
+                         StringPrintf("UID %d lacks permission %s", uid, kPermissionUsage));
+    }
+    // TODO: add verifier permission
+
+    // Read the latest train info
+    InstallTrainInfo trainInfo;
+    if (!StorageManager::readTrainInfo(trainInfo)) {
+        // No train info means no experiment IDs, return an empty list
+        experimentIdsOut->clear();
+        return Status::ok();
+    }
+
+    // Copy the experiment IDs to the out vector
+    experimentIdsOut->assign(trainInfo.experimentIds.begin(), trainInfo.experimentIds.end());
     return Status::ok();
 }
 
 hardware::Return<void> StatsService::reportSpeakerImpedance(
         const SpeakerImpedance& speakerImpedance) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), speakerImpedance);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::SPEAKER_IMPEDANCE_REPORTED,
+            speakerImpedance.speakerLocation, speakerImpedance.milliOhms);
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportHardwareFailed(const HardwareFailed& hardwareFailed) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), hardwareFailed);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::HARDWARE_FAILED, int32_t(hardwareFailed.hardwareType),
+            hardwareFailed.hardwareLocation, int32_t(hardwareFailed.errorCode));
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportPhysicalDropDetected(
         const PhysicalDropDetected& physicalDropDetected) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), physicalDropDetected);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::PHYSICAL_DROP_DETECTED,
+            int32_t(physicalDropDetected.confidencePctg), physicalDropDetected.accelPeak,
+            physicalDropDetected.freefallDuration);
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportChargeCycles(const ChargeCycles& chargeCycles) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), chargeCycles);
-    mProcessor->OnLogEvent(&event);
+    std::vector<int32_t> buckets = chargeCycles.cycleBucket;
+    int initialSize = buckets.size();
+    for (int i = 0; i < 10 - initialSize; i++) {
+        buckets.push_back(-1); // Push -1 for buckets that do not exist.
+    }
+    android::util::stats_write(android::util::CHARGE_CYCLES_REPORTED, buckets[0], buckets[1],
+            buckets[2], buckets[3], buckets[4], buckets[5], buckets[6], buckets[7], buckets[8],
+            buckets[9]);
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportBatteryHealthSnapshot(
         const BatteryHealthSnapshotArgs& batteryHealthSnapshotArgs) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(),
-                   batteryHealthSnapshotArgs);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::BATTERY_HEALTH_SNAPSHOT,
+            int32_t(batteryHealthSnapshotArgs.type), batteryHealthSnapshotArgs.temperatureDeciC,
+            batteryHealthSnapshotArgs.voltageMicroV, batteryHealthSnapshotArgs.currentMicroA,
+            batteryHealthSnapshotArgs.openCircuitVoltageMicroV,
+            batteryHealthSnapshotArgs.resistanceMicroOhm, batteryHealthSnapshotArgs.levelPercent);
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportSlowIo(const SlowIo& slowIo) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), slowIo);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::SLOW_IO, int32_t(slowIo.operation), slowIo.count);
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportBatteryCausedShutdown(
         const BatteryCausedShutdown& batteryCausedShutdown) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), batteryCausedShutdown);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::BATTERY_CAUSED_SHUTDOWN,
+            batteryCausedShutdown.voltageMicroV);
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportUsbPortOverheatEvent(
         const UsbPortOverheatEvent& usbPortOverheatEvent) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), usbPortOverheatEvent);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::USB_PORT_OVERHEAT_EVENT_REPORTED,
+            usbPortOverheatEvent.plugTemperatureDeciC, usbPortOverheatEvent.maxTemperatureDeciC,
+            usbPortOverheatEvent.timeToOverheat, usbPortOverheatEvent.timeToHysteresis,
+            usbPortOverheatEvent.timeToInactive);
 
     return hardware::Void();
 }
 
 hardware::Return<void> StatsService::reportSpeechDspStat(
         const SpeechDspStat& speechDspStat) {
-    LogEvent event(getWallClockSec() * NS_PER_SEC, getElapsedRealtimeNs(), speechDspStat);
-    mProcessor->OnLogEvent(&event);
+    android::util::stats_write(android::util::SPEECH_DSP_STAT_REPORTED,
+            speechDspStat.totalUptimeMillis, speechDspStat.totalDowntimeMillis,
+            speechDspStat.totalCrashCount, speechDspStat.totalRecoverCount);
 
     return hardware::Void();
 }

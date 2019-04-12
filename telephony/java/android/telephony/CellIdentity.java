@@ -86,7 +86,7 @@ public abstract class CellIdentity implements Parcelable {
         }
 
         if ((mMccStr != null && mMncStr == null) || (mMccStr == null && mMncStr != null)) {
-            DebugEventReporter.sendEvent(
+            AnomalyReporter.reportAnomaly(
                     UUID.fromString("a3ab0b9d-f2aa-4baf-911d-7096c0d4645a"),
                     "CellIdentity Missing Half of PLMN ID");
         }
@@ -107,6 +107,22 @@ public abstract class CellIdentity implements Parcelable {
      */
     public @CellInfo.Type int getType() {
         return mType;
+    }
+
+    /**
+     * @return MCC or null for CDMA
+     * @hide
+     */
+    public String getMccString() {
+        return mMccStr;
+    }
+
+    /**
+     * @return MNC or null for CDMA
+     * @hide
+     */
+    public String getMncString() {
+        return mMncStr;
     }
 
     /**
@@ -186,7 +202,7 @@ public abstract class CellIdentity implements Parcelable {
     }
 
     /** Implement the Parcelable interface */
-    public static final Creator<CellIdentity> CREATOR =
+    public static final @android.annotation.NonNull Creator<CellIdentity> CREATOR =
             new Creator<CellIdentity>() {
                 @Override
                 public CellIdentity createFromParcel(Parcel in) {

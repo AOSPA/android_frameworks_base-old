@@ -16,10 +16,11 @@
 
 package android.util;
 
+import android.annotation.UnsupportedAppUsage;
+
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.GrowingArrayUtils;
 
-import android.annotation.UnsupportedAppUsage;
 import libcore.util.EmptyArray;
 
 /**
@@ -171,6 +172,10 @@ public class LongSparseLongArray implements Cloneable {
      * key.</p>
      */
     public long keyAt(int index) {
+        if (index >= mSize) {
+            // The array might be slightly bigger than mSize, in which case, indexing won't fail.
+            throw new ArrayIndexOutOfBoundsException(index);
+        }
         return mKeys[index];
     }
 
@@ -186,6 +191,10 @@ public class LongSparseLongArray implements Cloneable {
      * associated with the largest key.</p>
      */
     public long valueAt(int index) {
+        if (index >= mSize) {
+            // The array might be slightly bigger than mSize, in which case, indexing won't fail.
+            throw new ArrayIndexOutOfBoundsException(index);
+        }
         return mValues[index];
     }
 

@@ -17,13 +17,17 @@
 package com.android.systemui.statusbar.phone;
 
 import android.annotation.IntDef;
+import android.content.ComponentCallbacks;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.Point;
 import android.net.Uri;
 import android.os.Handler;
 import android.provider.Settings;
+
+import com.android.systemui.shared.system.QuickStepContract;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -33,7 +37,7 @@ import java.lang.annotation.RetentionPolicy;
  * prototypes to run in the system. The class will handle communication changes from the settings
  * app and call back to listeners.
  */
-public class NavigationPrototypeController extends ContentObserver {
+public class NavigationPrototypeController extends ContentObserver implements ComponentCallbacks {
     private static final String HIDE_BACK_BUTTON_SETTING = "quickstepcontroller_hideback";
     private static final String HIDE_HOME_BUTTON_SETTING = "quickstepcontroller_hidehome";
     private static final String PROTOTYPE_ENABLED = "prototype_enabled";
@@ -43,10 +47,11 @@ public class NavigationPrototypeController extends ContentObserver {
     private final String GESTURE_MATCH_SETTING = "quickstepcontroller_gesture_match_map";
     public static final String NAV_COLOR_ADAPT_ENABLE_SETTING = "navbar_color_adapt_enable";
     public static final String SHOW_HOME_HANDLE_SETTING = "quickstepcontroller_showhandle";
+    public static final String ENABLE_ASSISTANT_GESTURE = "ENABLE_ASSISTANT_GESTURE";
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({ACTION_DEFAULT, ACTION_QUICKSTEP, ACTION_QUICKSCRUB, ACTION_BACK,
-            ACTION_QUICKSWITCH, ACTION_NOTHING, ACTION_ASSISTANT, ACTION_EXPAND_NOTIFICATION})
+            ACTION_QUICKSWITCH, ACTION_NOTHING, ACTION_ASSISTANT})
     @interface GestureAction {}
     static final int ACTION_DEFAULT = 0;
     static final int ACTION_QUICKSTEP = 1;
@@ -55,7 +60,6 @@ public class NavigationPrototypeController extends ContentObserver {
     static final int ACTION_QUICKSWITCH = 4;
     static final int ACTION_NOTHING = 5;
     static final int ACTION_ASSISTANT = 6;
-    static final int ACTION_EXPAND_NOTIFICATION = 7;
 
     private OnPrototypeChangedListener mListener;
 
@@ -67,8 +71,8 @@ public class NavigationPrototypeController extends ContentObserver {
 
     private final Context mContext;
 
-    public NavigationPrototypeController(Handler handler, Context context) {
-        super(handler);
+    public NavigationPrototypeController(Context context) {
+        super(new Handler());
         mContext = context;
         updateSwipeLTRBackSetting();
     }
@@ -85,8 +89,9 @@ public class NavigationPrototypeController extends ContentObserver {
         registerObserver(HIDE_HOME_BUTTON_SETTING);
         registerObserver(GESTURE_MATCH_SETTING);
         registerObserver(NAV_COLOR_ADAPT_ENABLE_SETTING);
-        registerObserver(EDGE_SENSITIVITY_WIDTH_SETTING);
         registerObserver(SHOW_HOME_HANDLE_SETTING);
+        registerObserver(ENABLE_ASSISTANT_GESTURE);
+        mContext.registerComponentCallbacks(this);
     }
 
     /**
@@ -94,6 +99,7 @@ public class NavigationPrototypeController extends ContentObserver {
      */
     public void unregister() {
         mContext.getContentResolver().unregisterContentObserver(this);
+        mContext.unregisterComponentCallbacks(this);
     }
 
     @Override
@@ -114,11 +120,10 @@ public class NavigationPrototypeController extends ContentObserver {
             } else if (path.endsWith(NAV_COLOR_ADAPT_ENABLE_SETTING)) {
                 mListener.onColorAdaptChanged(
                         NavBarTintController.isEnabled(mContext));
-            } else if (path.endsWith(EDGE_SENSITIVITY_WIDTH_SETTING)) {
-                mListener.onEdgeSensitivityChanged(getEdgeSensitivityWidth(),
-                        getEdgeSensitivityHeight());
             } else if (path.endsWith(SHOW_HOME_HANDLE_SETTING)) {
                 mListener.onHomeHandleVisiblilityChanged(showHomeHandle());
+            } else if (path.endsWith(ENABLE_ASSISTANT_GESTURE)) {
+                mListener.onAssistantGestureEnabled(isAssistantGestureEnabled());
             }
         }
     }
@@ -127,7 +132,7 @@ public class NavigationPrototypeController extends ContentObserver {
      * @return the width for edge swipe
      */
     public int getEdgeSensitivityWidth() {
-        return convertDpToPixel(getGlobalInt(EDGE_SENSITIVITY_WIDTH_SETTING, 0));
+        return QuickStepContract.getEdgeSensitivityWidth(mContext);
     }
 
     /**
@@ -162,6 +167,11 @@ public class NavigationPrototypeController extends ContentObserver {
         return getGlobalBool(SHOW_HOME_HANDLE_SETTING, false /* default */);
     }
 
+    boolean isAssistantGestureEnabled() {
+        return getGlobalBool(ENABLE_ASSISTANT_GESTURE, false /* default */);
+    }
+
+
     /**
      * Since Settings.Global cannot pass arrays, use a string to represent each character as a
      * gesture map to actions corresponding to {@see GestureAction}. The number is represented as:
@@ -194,6 +204,18 @@ public class NavigationPrototypeController extends ContentObserver {
         return (int) (dp * Resources.getSystem().getDisplayMetrics().density);
     }
 
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        if (mListener != null) {
+            mListener.onEdgeSensitivityChanged(getEdgeSensitivityWidth(),
+                    getEdgeSensitivityHeight());
+        }
+    }
+
+    @Override
+    public void onLowMemory() {
+    }
+
     public interface OnPrototypeChangedListener {
         void onGestureRemap(@GestureAction int[] actions);
         void onBackButtonVisibilityChanged(boolean visible);
@@ -201,5 +223,6 @@ public class NavigationPrototypeController extends ContentObserver {
         void onHomeHandleVisiblilityChanged(boolean visible);
         void onColorAdaptChanged(boolean enabled);
         void onEdgeSensitivityChanged(int width, int height);
+        void onAssistantGestureEnabled(boolean enabled);
     }
 }

@@ -169,8 +169,8 @@ public class TimePicker extends FrameLayout {
     @TimePickerMode
     @TestApi
     @InspectableProperty(name = "timePickerMode", enumMapping = {
-            @InspectableProperty.EnumMap(name = "clock", value = MODE_CLOCK),
-            @InspectableProperty.EnumMap(name = "spinner", value = MODE_SPINNER)
+            @InspectableProperty.EnumEntry(name = "clock", value = MODE_CLOCK),
+            @InspectableProperty.EnumEntry(name = "spinner", value = MODE_SPINNER)
     })
     public int getMode() {
         return mMode;
@@ -552,7 +552,7 @@ public class TimePicker extends FrameLayout {
             }
 
             @SuppressWarnings({"unused", "hiding"})
-            public static final Creator<SavedState> CREATOR = new Creator<SavedState>() {
+            public static final @android.annotation.NonNull Creator<SavedState> CREATOR = new Creator<SavedState>() {
                 public SavedState createFromParcel(Parcel in) {
                     return new SavedState(in);
                 }

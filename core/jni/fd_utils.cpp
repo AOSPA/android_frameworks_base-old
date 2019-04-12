@@ -38,8 +38,8 @@ static const char* kPathWhitelist[] = {
   "/dev/null",
   "/dev/socket/zygote",
   "/dev/socket/zygote_secondary",
-  "/dev/socket/blastula_pool",
-  "/dev/socket/blastula_pool_secondary",
+  "/dev/socket/usap_pool_primary",
+  "/dev/socket/usap_pool_secondary",
   "/dev/socket/webview_zygote",
   "/dev/socket/heapprofd",
   "/sys/kernel/debug/tracing/trace_marker",
@@ -102,6 +102,8 @@ bool FileDescriptorWhitelist::IsAllowed(const std::string& path) const {
   static const char* kProductOverlayDir = "/product/overlay";
   static const char* kSystemProductServicesOverlayDir = "/system/product_services/overlay/";
   static const char* kProductServicesOverlayDir = "/product_services/overlay";
+  static const char* kSystemOdmOverlayDir = "/system/odm/overlay";
+  static const char* kOdmOverlayDir = "/odm/overlay";
   static const char* kApkSuffix = ".apk";
 
   if ((android::base::StartsWith(path, kOverlayDir)
@@ -110,7 +112,9 @@ bool FileDescriptorWhitelist::IsAllowed(const std::string& path) const {
        || android::base::StartsWith(path, kSystemProductOverlayDir)
        || android::base::StartsWith(path, kProductOverlayDir)
        || android::base::StartsWith(path, kSystemProductServicesOverlayDir)
-       || android::base::StartsWith(path, kProductServicesOverlayDir))
+       || android::base::StartsWith(path, kProductServicesOverlayDir)
+       || android::base::StartsWith(path, kSystemOdmOverlayDir)
+       || android::base::StartsWith(path, kOdmOverlayDir))
       && android::base::EndsWith(path, kApkSuffix)
       && path.find("/../") == std::string::npos) {
     return true;
@@ -215,7 +219,7 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd, fail_fn_t fail_fn) 
   // S_ISDIR : Not supported. (We could if we wanted to, but it's unused).
   // S_ISLINK : Not supported.
   // S_ISBLK : Not supported.
-  // S_ISFIFO : Not supported. Note that the Zygote and blastulas use pipes to
+  // S_ISFIFO : Not supported. Note that the Zygote and USAPs use pipes to
   // communicate with the child processes across forks but those should have been
   // added to the redirection exemption list.
   if (!S_ISCHR(f_stat.st_mode) && !S_ISREG(f_stat.st_mode)) {

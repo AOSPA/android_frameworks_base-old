@@ -15,12 +15,17 @@
  */
 package android.service.notification;
 
+import android.annotation.NonNull;
+import android.annotation.StringDef;
 import android.annotation.SystemApi;
 import android.app.Notification;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Ranking updates from the Assistant.
@@ -31,13 +36,24 @@ import android.os.UserHandle;
  * realizes on the notification rankings.
  *
  * Notifications affected by the Adjustment will be re-ranked if necessary.
+ *
+ * @hide
  */
+@SystemApi
 public final class Adjustment implements Parcelable {
     private final String mPackage;
     private final String mKey;
     private final CharSequence mExplanation;
     private final Bundle mSignals;
     private final int mUser;
+
+    /** @hide */
+    @StringDef (prefix = { "KEY_" }, value = {
+            KEY_CONTEXTUAL_ACTIONS, KEY_GROUP_KEY, KEY_IMPORTANCE, KEY_PEOPLE, KEY_SNOOZE_CRITERIA,
+            KEY_TEXT_REPLIES, KEY_USER_SENTIMENT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Keys {}
 
     /**
      * Data type: ArrayList of {@code String}, where each is a representation of a
@@ -132,8 +148,9 @@ public final class Adjustment implements Parcelable {
      * @param explanation A human-readable justification for the adjustment.
      * @param userHandle User handle for for whose the adjustments will be applied.
      */
-    public Adjustment(String pkg, String key, Bundle signals, CharSequence explanation,
-            UserHandle userHandle) {
+    public Adjustment(@NonNull String pkg, @NonNull String key, @NonNull Bundle signals,
+            @NonNull CharSequence explanation,
+            @NonNull UserHandle userHandle) {
         mPackage = pkg;
         mKey = key;
         mSignals = signals;
@@ -165,7 +182,7 @@ public final class Adjustment implements Parcelable {
         mUser = in.readInt();
     }
 
-    public static final Creator<Adjustment> CREATOR = new Creator<Adjustment>() {
+    public static final @android.annotation.NonNull Creator<Adjustment> CREATOR = new Creator<Adjustment>() {
         @Override
         public Adjustment createFromParcel(Parcel in) {
             return new Adjustment(in);
@@ -177,19 +194,19 @@ public final class Adjustment implements Parcelable {
         }
     };
 
-    public String getPackage() {
+    public @NonNull String getPackage() {
         return mPackage;
     }
 
-    public String getKey() {
+    public @NonNull String getKey() {
         return mKey;
     }
 
-    public CharSequence getExplanation() {
+    public @NonNull CharSequence getExplanation() {
         return mExplanation;
     }
 
-    public Bundle getSignals() {
+    public @NonNull Bundle getSignals() {
         return mSignals;
     }
 
@@ -199,7 +216,7 @@ public final class Adjustment implements Parcelable {
         return mUser;
     }
 
-    public UserHandle getUserHandle() {
+    public @NonNull UserHandle getUserHandle() {
         return UserHandle.of(mUser);
     }
 

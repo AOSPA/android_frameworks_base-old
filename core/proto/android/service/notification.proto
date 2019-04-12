@@ -25,7 +25,7 @@ import "frameworks/base/core/proto/android/app/notification_channel_group.proto"
 import "frameworks/base/core/proto/android/app/notificationmanager.proto";
 import "frameworks/base/core/proto/android/content/component_name.proto";
 import "frameworks/base/core/proto/android/media/audioattributes.proto";
-import "frameworks/base/libs/incident/proto/android/privacy.proto";
+import "frameworks/base/core/proto/android/privacy.proto";
 
 message NotificationServiceDumpProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
@@ -66,6 +66,10 @@ message NotificationRecordProto {
     optional bool can_show_light = 8;
     optional string group_key = 9 [ (.android.privacy).dest = DEST_EXPLICIT ];
     optional sint32 importance = 10;
+    // The package the notification was posted for.
+    optional string package = 11;
+    // The package that posted the notification. It might not be the same as package.
+    optional string delegate_package = 12;
 }
 
 message ListenersDisablingEffectsProto {

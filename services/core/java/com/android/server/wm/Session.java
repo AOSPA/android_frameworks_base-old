@@ -57,6 +57,7 @@ import com.android.server.wm.WindowManagerService.H;
 
 import java.io.PrintWriter;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
@@ -314,6 +315,16 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         }
     }
 
+    @Override
+    public void reportSystemGestureExclusionChanged(IWindow window, List<Rect> exclusionRects) {
+        long ident = Binder.clearCallingIdentity();
+        try {
+            mService.reportSystemGestureExclusionChanged(this, window, exclusionRects);
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
     private void actionOnWallpaper(IBinder window,
             BiConsumer<WallpaperController, WindowState> action) {
         final WindowState windowState = mService.windowForClientLocked(this, window, true);
@@ -415,11 +426,10 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public void updateTapExcludeRegion(IWindow window, int regionId, int left, int top, int width,
-            int height) {
+    public void updateTapExcludeRegion(IWindow window, int regionId, Region region) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            mService.updateTapExcludeRegion(window, regionId, left, top, width, height);
+            mService.updateTapExcludeRegion(window, regionId, region);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

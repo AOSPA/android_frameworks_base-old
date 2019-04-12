@@ -723,11 +723,15 @@ namespace PaintGlue {
         obj->setStyle(style);
     }
 
-    static void setColor(jlong paintHandle, jlong colorSpaceHandle,
-            jfloat r, jfloat g, jfloat b, jfloat a) {
+    static void setColorLong(jlong paintHandle, jlong colorSpaceHandle,
+            jlong colorLong) {
+        SkColor4f color = GraphicsJNI::convertColorLong(colorLong);
         sk_sp<SkColorSpace> cs = GraphicsJNI::getNativeColorSpace(colorSpaceHandle);
-        SkColor4f color = SkColor4f{r, g, b, a};
         reinterpret_cast<Paint*>(paintHandle)->setColor4f(color, cs.get());
+    }
+
+    static void setColor(jlong paintHandle, jint color) {
+        reinterpret_cast<Paint*>(paintHandle)->setColor(color);
     }
 
     static void setAlpha(jlong paintHandle, jint a) {
@@ -923,14 +927,24 @@ namespace PaintGlue {
         paint->setWordSpacing(wordSpacing);
     }
 
-    static jint getHyphenEdit(jlong paintHandle, jint hyphen) {
+    static jint getStartHyphenEdit(jlong paintHandle, jint hyphen) {
         Paint* paint = reinterpret_cast<Paint*>(paintHandle);
-        return paint->getHyphenEdit();
+        return static_cast<jint>(paint->getStartHyphenEdit());
     }
 
-    static void setHyphenEdit(jlong paintHandle, jint hyphen) {
+    static jint getEndHyphenEdit(jlong paintHandle, jint hyphen) {
         Paint* paint = reinterpret_cast<Paint*>(paintHandle);
-        paint->setHyphenEdit((uint32_t)hyphen);
+        return static_cast<jint>(paint->getEndHyphenEdit());
+    }
+
+    static void setStartHyphenEdit(jlong paintHandle, jint hyphen) {
+        Paint* paint = reinterpret_cast<Paint*>(paintHandle);
+        paint->setStartHyphenEdit((uint32_t)hyphen);
+    }
+
+    static void setEndHyphenEdit(jlong paintHandle, jint hyphen) {
+        Paint* paint = reinterpret_cast<Paint*>(paintHandle);
+        paint->setEndHyphenEdit((uint32_t)hyphen);
     }
 
     static jfloat ascent(jlong paintHandle) {
@@ -981,9 +995,9 @@ namespace PaintGlue {
 
     static void setShadowLayer(jlong paintHandle, jfloat radius,
                                jfloat dx, jfloat dy, jlong colorSpaceHandle,
-                               jfloat r, jfloat g, jfloat b, jfloat a) {
+                               jlong colorLong) {
+        SkColor4f color = GraphicsJNI::convertColorLong(colorLong);
         sk_sp<SkColorSpace> cs = GraphicsJNI::getNativeColorSpace(colorSpaceHandle);
-        SkColor4f color = SkColor4f{r, g, b, a};
 
         Paint* paint = reinterpret_cast<Paint*>(paintHandle);
         if (radius <= 0) {
@@ -1072,7 +1086,8 @@ static const JNINativeMethod methods[] = {
     {"nSetDither","(JZ)V", (void*) PaintGlue::setDither},
     {"nGetStyle","(J)I", (void*) PaintGlue::getStyle},
     {"nSetStyle","(JI)V", (void*) PaintGlue::setStyle},
-    {"nSetColor","(JJFFFF)V", (void*) PaintGlue::setColor},
+    {"nSetColor","(JI)V", (void*) PaintGlue::setColor},
+    {"nSetColor","(JJJ)V", (void*) PaintGlue::setColorLong},
     {"nSetAlpha","(JI)V", (void*) PaintGlue::setAlpha},
     {"nGetStrokeWidth","(J)F", (void*) PaintGlue::getStrokeWidth},
     {"nSetStrokeWidth","(JF)V", (void*) PaintGlue::setStrokeWidth},
@@ -1105,15 +1120,17 @@ static const JNINativeMethod methods[] = {
     {"nSetLetterSpacing","(JF)V", (void*) PaintGlue::setLetterSpacing},
     {"nGetWordSpacing","(J)F", (void*) PaintGlue::getWordSpacing},
     {"nSetWordSpacing","(JF)V", (void*) PaintGlue::setWordSpacing},
-    {"nGetHyphenEdit", "(J)I", (void*) PaintGlue::getHyphenEdit},
-    {"nSetHyphenEdit", "(JI)V", (void*) PaintGlue::setHyphenEdit},
+    {"nGetStartHyphenEdit", "(J)I", (void*) PaintGlue::getStartHyphenEdit},
+    {"nGetEndHyphenEdit", "(J)I", (void*) PaintGlue::getEndHyphenEdit},
+    {"nSetStartHyphenEdit", "(JI)V", (void*) PaintGlue::setStartHyphenEdit},
+    {"nSetEndHyphenEdit", "(JI)V", (void*) PaintGlue::setEndHyphenEdit},
     {"nAscent","(J)F", (void*) PaintGlue::ascent},
     {"nDescent","(J)F", (void*) PaintGlue::descent},
     {"nGetUnderlinePosition","(J)F", (void*) PaintGlue::getUnderlinePosition},
     {"nGetUnderlineThickness","(J)F", (void*) PaintGlue::getUnderlineThickness},
     {"nGetStrikeThruPosition","(J)F", (void*) PaintGlue::getStrikeThruPosition},
     {"nGetStrikeThruThickness","(J)F", (void*) PaintGlue::getStrikeThruThickness},
-    {"nSetShadowLayer", "(JFFFJFFFF)V", (void*)PaintGlue::setShadowLayer},
+    {"nSetShadowLayer", "(JFFFJJ)V", (void*)PaintGlue::setShadowLayer},
     {"nHasShadowLayer", "(J)Z", (void*)PaintGlue::hasShadowLayer},
     {"nEqualsForTextMeasurement", "(JJ)Z", (void*)PaintGlue::equalsForTextMeasurement},
 };

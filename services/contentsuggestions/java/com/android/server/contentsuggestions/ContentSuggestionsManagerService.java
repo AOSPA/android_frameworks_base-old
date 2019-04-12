@@ -32,8 +32,10 @@ import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.util.Slog;
 
+import com.android.internal.os.IResultReceiver;
 import com.android.server.LocalServices;
 import com.android.server.infra.AbstractMasterSystemService;
 import com.android.server.infra.FrameworkResourcesServiceNameResolver;
@@ -63,7 +65,8 @@ public class ContentSuggestionsManagerService extends
 
     public ContentSuggestionsManagerService(Context context) {
         super(context, new FrameworkResourcesServiceNameResolver(context,
-                com.android.internal.R.string.config_defaultContentSuggestionsService), null);
+                com.android.internal.R.string.config_defaultContentSuggestionsService),
+                UserManager.DISALLOW_CONTENT_SUGGESTIONS);
         mActivityTaskManagerInternal = LocalServices.getService(ActivityTaskManagerInternal.class);
     }
 
@@ -112,13 +115,14 @@ public class ContentSuggestionsManagerService extends
 
     private class ContentSuggestionsManagerStub extends IContentSuggestionsManager.Stub {
         @Override
-        public void provideContextImage(int taskId, @NonNull Bundle imageContextRequestExtras) {
+        public void provideContextImage(
+                int userId,
+                int taskId,
+                @NonNull Bundle imageContextRequestExtras) {
             if (imageContextRequestExtras == null) {
                 throw new IllegalArgumentException("Expected non-null imageContextRequestExtras");
             }
-
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "provideContextImage");
+            enforceCallerIsRecents(UserHandle.getCallingUserId(), "provideContextImage");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -134,10 +138,10 @@ public class ContentSuggestionsManagerService extends
 
         @Override
         public void suggestContentSelections(
+                int userId,
                 @NonNull SelectionsRequest selectionsRequest,
                 @NonNull ISelectionsCallback selectionsCallback) {
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "suggestContentSelections");
+            enforceCallerIsRecents(UserHandle.getCallingUserId(), "suggestContentSelections");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -153,10 +157,10 @@ public class ContentSuggestionsManagerService extends
 
         @Override
         public void classifyContentSelections(
+                int userId,
                 @NonNull ClassificationsRequest classificationsRequest,
                 @NonNull IClassificationsCallback callback) {
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "classifyContentSelections");
+            enforceCallerIsRecents(UserHandle.getCallingUserId(), "classifyContentSelections");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -171,9 +175,9 @@ public class ContentSuggestionsManagerService extends
         }
 
         @Override
-        public void notifyInteraction(@NonNull String requestId, @NonNull Bundle bundle) {
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "notifyInteraction");
+        public void notifyInteraction(
+                int userId, @NonNull String requestId, @NonNull Bundle bundle) {
+            enforceCallerIsRecents(UserHandle.getCallingUserId(), "notifyInteraction");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -185,6 +189,18 @@ public class ContentSuggestionsManagerService extends
                     }
                 }
             }
+        }
+
+        @Override
+        public void isEnabled(int userId, @NonNull IResultReceiver receiver)
+                throws RemoteException {
+            enforceCallerIsRecents(UserHandle.getCallingUserId(), "isEnabled");
+
+            boolean isDisabled;
+            synchronized (mLock) {
+                isDisabled = isDisabledLocked(userId);
+            }
+            receiver.send(isDisabled ? 0 : 1, null);
         }
 
         public void onShellCommand(@Nullable FileDescriptor in, @Nullable FileDescriptor out,

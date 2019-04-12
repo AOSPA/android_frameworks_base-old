@@ -434,8 +434,8 @@ public class WifiConfiguration implements Parcelable {
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SUITE_B_192);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
                 allowedGroupManagementCiphers.set(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256);
-                allowedSuiteBCiphers.set(WifiConfiguration.SuiteBCipher.ECDHE_ECDSA);
-                allowedSuiteBCiphers.set(WifiConfiguration.SuiteBCipher.ECDHE_RSA);
+                // Note: allowedSuiteBCiphers bitset will be set by the service once the
+                // certificates are attached to this profile
                 requirePMF = true;
                 break;
             case SECURITY_TYPE_OWE:
@@ -594,41 +594,48 @@ public class WifiConfiguration implements Parcelable {
      * See {@link KeyMgmt} for descriptions of the values.
      * Defaults to WPA-PSK WPA-EAP.
      */
+    @NonNull
     public BitSet allowedKeyManagement;
     /**
      * The set of security protocols supported by this configuration.
      * See {@link Protocol} for descriptions of the values.
      * Defaults to WPA RSN.
      */
+    @NonNull
     public BitSet allowedProtocols;
     /**
      * The set of authentication protocols supported by this configuration.
      * See {@link AuthAlgorithm} for descriptions of the values.
      * Defaults to automatic selection.
      */
+    @NonNull
     public BitSet allowedAuthAlgorithms;
     /**
      * The set of pairwise ciphers for WPA supported by this configuration.
      * See {@link PairwiseCipher} for descriptions of the values.
      * Defaults to CCMP TKIP.
      */
+    @NonNull
     public BitSet allowedPairwiseCiphers;
     /**
      * The set of group ciphers supported by this configuration.
      * See {@link GroupCipher} for descriptions of the values.
      * Defaults to CCMP TKIP WEP104 WEP40.
      */
+    @NonNull
     public BitSet allowedGroupCiphers;
     /**
      * The set of group management ciphers supported by this configuration.
      * See {@link GroupMgmtCipher} for descriptions of the values.
      */
+    @NonNull
     public BitSet allowedGroupManagementCiphers;
     /**
      * The set of SuiteB ciphers supported by this configuration.
      * To be used for WPA3-Enterprise mode.
      * See {@link SuiteBCipher} for descriptions of the values.
      */
+    @NonNull
     public BitSet allowedSuiteBCiphers;
     /**
      * The enterprise configuration details specifying the EAP method,
@@ -2155,7 +2162,7 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      */
     public String getKeyIdForCredentials(WifiConfiguration current) {
-        String keyMgmt = null;
+        String keyMgmt = "";
 
         try {
             // Get current config details for fields that are not initialized
@@ -2164,13 +2171,16 @@ public class WifiConfiguration implements Parcelable {
                 allowedKeyManagement = current.allowedKeyManagement;
             }
             if (allowedKeyManagement.get(KeyMgmt.WPA_EAP)) {
-                keyMgmt = KeyMgmt.strings[KeyMgmt.WPA_EAP];
+                keyMgmt += KeyMgmt.strings[KeyMgmt.WPA_EAP];
             }
             if (allowedKeyManagement.get(KeyMgmt.OSEN)) {
-                keyMgmt = KeyMgmt.strings[KeyMgmt.OSEN];
+                keyMgmt += KeyMgmt.strings[KeyMgmt.OSEN];
             }
             if (allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
                 keyMgmt += KeyMgmt.strings[KeyMgmt.IEEE8021X];
+            }
+            if (allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
+                keyMgmt += KeyMgmt.strings[KeyMgmt.SUITE_B_192];
             }
 
             if (TextUtils.isEmpty(keyMgmt)) {
@@ -2257,28 +2267,37 @@ public class WifiConfiguration implements Parcelable {
                 key += "-" + Integer.toString(UserHandle.getUserId(creatorUid));
             }
         } else {
-            if (allowedKeyManagement.get(KeyMgmt.WPA_PSK)) {
-                key = SSID + KeyMgmt.strings[KeyMgmt.WPA_PSK];
-            } else if (allowedKeyManagement.get(KeyMgmt.WPA_EAP) ||
-                    allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
-                key = SSID + KeyMgmt.strings[KeyMgmt.WPA_EAP];
-            } else if (wepKeys[0] != null) {
-                key = SSID + "WEP";
-            } else if (allowedKeyManagement.get(KeyMgmt.DPP)) {
-                key = SSID + KeyMgmt.strings[KeyMgmt.DPP];
-            } else if (allowedKeyManagement.get(KeyMgmt.OWE)) {
-                key = SSID + KeyMgmt.strings[KeyMgmt.OWE];
-            } else if (allowedKeyManagement.get(KeyMgmt.SAE)) {
-                key = SSID + KeyMgmt.strings[KeyMgmt.SAE];
-            } else if (allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
-                key = SSID + KeyMgmt.strings[KeyMgmt.SUITE_B_192];
-            } else {
-                key = SSID + KeyMgmt.strings[KeyMgmt.NONE];
-            }
+            key = getSsidAndSecurityTypeString();
             if (!shared) {
                 key += "-" + Integer.toString(UserHandle.getUserId(creatorUid));
             }
             mCachedConfigKey = key;
+        }
+        return key;
+    }
+
+    /** @hide
+     *  return the SSID + security type in String format.
+     */
+    public String getSsidAndSecurityTypeString() {
+        String key;
+        if (allowedKeyManagement.get(KeyMgmt.WPA_PSK)) {
+            key = SSID + KeyMgmt.strings[KeyMgmt.WPA_PSK];
+        } else if (allowedKeyManagement.get(KeyMgmt.WPA_EAP)
+                || allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
+            key = SSID + KeyMgmt.strings[KeyMgmt.WPA_EAP];
+        } else if (wepKeys[0] != null) {
+            key = SSID + "WEP";
+        } else if (allowedKeyManagement.get(KeyMgmt.OWE)) {
+            key = SSID + KeyMgmt.strings[KeyMgmt.OWE];
+        } else if (allowedKeyManagement.get(KeyMgmt.SAE)) {
+            key = SSID + KeyMgmt.strings[KeyMgmt.SAE];
+        } else if (allowedKeyManagement.get(KeyMgmt.SUITE_B_192)) {
+            key = SSID + KeyMgmt.strings[KeyMgmt.SUITE_B_192];
+        } else if (allowedKeyManagement.get(KeyMgmt.DPP)) {
+            key = SSID + KeyMgmt.strings[KeyMgmt.DPP];
+        } else {
+            key = SSID + KeyMgmt.strings[KeyMgmt.NONE];
         }
         return key;
     }
@@ -2576,7 +2595,7 @@ public class WifiConfiguration implements Parcelable {
 
     /** Implement the Parcelable interface {@hide} */
     @UnsupportedAppUsage
-    public static final Creator<WifiConfiguration> CREATOR =
+    public static final @android.annotation.NonNull Creator<WifiConfiguration> CREATOR =
         new Creator<WifiConfiguration>() {
             public WifiConfiguration createFromParcel(Parcel in) {
                 WifiConfiguration config = new WifiConfiguration();

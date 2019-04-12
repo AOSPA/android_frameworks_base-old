@@ -167,7 +167,7 @@ public class NewNetworkTimeUpdateService extends Binder implements NetworkTimeUp
         // Force an NTP fix when outdated
         if (mTime.getCacheAge() >= mPollingIntervalMs) {
             if (DBG) Log.d(TAG, "Stale NTP fix; forcing refresh");
-            mTime.forceRefresh();
+            mTime.forceSync();
         }
 
         if (mTime.getCacheAge() < mPollingIntervalMs) {

@@ -16,13 +16,23 @@
 
 package com.android.systemui.globalactions;
 
+import static com.android.systemui.util.leak.RotationUtils.ROTATION_LANDSCAPE;
+import static com.android.systemui.util.leak.RotationUtils.ROTATION_NONE;
+import static com.android.systemui.util.leak.RotationUtils.ROTATION_SEASCAPE;
+
 import android.content.Context;
+import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 
 import com.android.systemui.HardwareBgDrawable;
 import com.android.systemui.MultiListLayout;
+import com.android.systemui.util.leak.RotationUtils;
+
+import java.util.ArrayList;
+import java.util.Locale;
 
 /**
  * Grid-based implementation of the button layout created by the global actions dialog.
@@ -36,11 +46,16 @@ public class GlobalActionsGridLayout extends MultiListLayout {
     }
 
     private void setBackgrounds() {
+        int gridBackgroundColor = getResources().getColor(
+                com.android.systemui.R.color.global_actions_grid_background, null);
+        int separatedBackgroundColor = getResources().getColor(
+                com.android.systemui.R.color.global_actions_separated_background, null);
         HardwareBgDrawable listBackground  = new HardwareBgDrawable(true, true, getContext());
-        HardwareBgDrawable separatedViewBackground = new HardwareBgDrawable(true, true,
-                getContext());
+        HardwareBgDrawable separatedBackground = new HardwareBgDrawable(true, true, getContext());
+        listBackground.setTint(gridBackgroundColor);
+        separatedBackground.setTint(separatedBackgroundColor);
         getListView().setBackground(listBackground);
-        getSeparatedView().setBackground(separatedViewBackground);
+        getSeparatedView().setBackground(separatedBackground);
     }
 
     @Override
@@ -54,15 +69,74 @@ public class GlobalActionsGridLayout extends MultiListLayout {
         }
     }
 
-    @Override
+    /**
+     * Sets the number of items expected to be rendered in the list container. This allows the
+     * layout to correctly determine which parent containers will be used for items before they have
+     * beenadded to the layout.
+     * @param count The number of items expected.
+     */
     public void setExpectedListItemCount(int count) {
-        mExpectedListItemCount = count;
         getListView().setExpectedCount(count);
+    }
+
+    @Override
+    public void onUpdateList() {
+        super.onUpdateList();
+        ArrayList<GlobalActionsDialog.Action> separatedActions =
+                mAdapter.getSeparatedItems();
+        ArrayList<GlobalActionsDialog.Action> listActions = mAdapter.getListItems();
+        setExpectedListItemCount(listActions.size());
+        int rotation = RotationUtils.getRotation(mContext);
+
+        boolean reverse = false; // should we add items to parents in the reverse order?
+        if (rotation == ROTATION_NONE
+                || rotation == ROTATION_SEASCAPE) {
+            reverse = !reverse; // if we're in portrait or seascape, reverse items
+        }
+        if (TextUtils.getLayoutDirectionFromLocale(Locale.getDefault())
+                == View.LAYOUT_DIRECTION_RTL) {
+            reverse = !reverse; // if we're in an RTL language, reverse items (again)
+        }
+
+        for (int i = 0; i < mAdapter.getCount(); i++) {
+            Object action = mAdapter.getItem(i);
+            int separatedIndex = separatedActions.indexOf(action);
+            ViewGroup parent;
+            if (separatedIndex != -1) {
+                parent = getParentView(true, separatedIndex, rotation);
+            } else {
+                int listIndex = listActions.indexOf(action);
+                parent = getParentView(false, listIndex, rotation);
+            }
+            View v = mAdapter.getView(i, null, parent);
+            final int pos = i;
+            v.setOnClickListener(view -> mAdapter.onClickItem(pos));
+            v.setOnLongClickListener(view -> mAdapter.onLongClickItem(pos));
+            if (reverse) {
+                parent.addView(v, 0); // reverse order of items
+            } else {
+                parent.addView(v);
+            }
+        }
+        updateSnapPosition();
     }
 
     @Override
     protected ViewGroup getSeparatedView() {
         return findViewById(com.android.systemui.R.id.separated_button);
+    }
+
+    private void updateSnapPosition() {
+        if (mSnapToEdge) {
+            setPadding(0, 0, 0, 0);
+            if (mRotation == ROTATION_LANDSCAPE) {
+                setGravity(Gravity.RIGHT);
+            } else if (mRotation == ROTATION_SEASCAPE) {
+                setGravity(Gravity.LEFT);
+            } else {
+                setGravity(Gravity.BOTTOM);
+            }
+        }
     }
 
     @Override
@@ -82,20 +156,53 @@ public class GlobalActionsGridLayout extends MultiListLayout {
         }
     }
 
-    @Override
-    public ViewGroup getParentView(boolean separated, int index, boolean reverseOrder) {
+    public ViewGroup getParentView(boolean separated, int index, int rotation) {
         if (separated) {
             return getSeparatedView();
         } else {
-            return getListView().getParentView(index, reverseOrder);
+            switch (rotation) {
+                case ROTATION_LANDSCAPE:
+                    return getListView().getParentView(index, false, true);
+                case ROTATION_SEASCAPE:
+                    return getListView().getParentView(index, true, true);
+                default:
+                    return getListView().getParentView(index, false, false);
+            }
         }
     }
 
     /**
-     * Not used in this implementation of the Global Actions Menu, but necessary for some others.
+     * Not ued in this implementation of the Global Actions Menu, but necessary for some others.
      */
     @Override
     public void setDivisionView(View v) {
+        // do nothing
+    }
 
+    private float getAnimationDistance() {
+        int rows = getListView().getRowCount();
+        float gridItemSize = getContext().getResources().getDimension(
+                com.android.systemui.R.dimen.global_actions_grid_item_height);
+        return rows * gridItemSize / 2;
+    }
+
+    @Override
+    public float getAnimationOffsetX() {
+        switch (RotationUtils.getRotation(getContext())) {
+            case ROTATION_LANDSCAPE:
+                return getAnimationDistance();
+            case ROTATION_SEASCAPE:
+                return -getAnimationDistance();
+            default: // Portrait
+                return 0;
+        }
+    }
+
+    @Override
+    public float getAnimationOffsetY() {
+        if (RotationUtils.getRotation(mContext) == ROTATION_NONE) {
+            return getAnimationDistance();
+        }
+        return 0;
     }
 }

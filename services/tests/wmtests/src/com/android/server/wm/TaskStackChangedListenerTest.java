@@ -100,7 +100,7 @@ public class TaskStackChangedListenerTest {
     }
 
     @Test
-    @FlakyTest(detail = "Promote to presubmit when shown to be stable.")
+    @Presubmit
     public void testTaskDescriptionChanged() throws Exception {
         final Object[] params = new Object[2];
         final CountDownLatch latch = new CountDownLatch(1);
@@ -133,7 +133,7 @@ public class TaskStackChangedListenerTest {
     }
 
     @Test
-    @FlakyTest(detail = "Promote to presubmit when shown to be stable.")
+    @Presubmit
     public void testActivityRequestedOrientationChanged() throws Exception {
         final int[] params = new int[2];
         final CountDownLatch latch = new CountDownLatch(1);
@@ -159,7 +159,6 @@ public class TaskStackChangedListenerTest {
      * Tests for onTaskCreated, onTaskMovedToFront, onTaskRemoved and onTaskRemovalStarted.
      */
     @Test
-    @FlakyTest(detail = "Promote to presubmit when shown to be stable.")
     public void testTaskChangeCallBacks() throws Exception {
         final Object[] params = new Object[2];
         final CountDownLatch taskCreatedLaunchLatch = new CountDownLatch(1);
@@ -214,6 +213,7 @@ public class TaskStackChangedListenerTest {
 
         // Test for onTaskRemovalStarted.
         assertEquals(1, taskRemovalStartedLatch.getCount());
+        assertEquals(1, taskRemovedLatch.getCount());
         activity.finishAndRemoveTask();
         waitForCallback(taskRemovalStartedLatch);
         // onTaskRemovalStarted happens before the activity's window is removed.
@@ -221,7 +221,6 @@ public class TaskStackChangedListenerTest {
         assertEquals(id, params[0]);
 
         // Test for onTaskRemoved.
-        assertEquals(1, taskRemovedLatch.getCount());
         waitForCallback(taskRemovedLatch);
         assertEquals(id, params[0]);
         waitForCallback(onDetachedFromWindowLatch);

@@ -623,7 +623,7 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /** {@hide} */
-    public static ContentResolver wrap(@NonNull ContentInterface wrapped) {
+    public static @NonNull ContentResolver wrap(@NonNull ContentInterface wrapped) {
         Preconditions.checkNotNull(wrapped);
 
         return new ContentResolver(null, wrapped) {
@@ -654,7 +654,7 @@ public abstract class ContentResolver implements ContentInterface {
      * Create a {@link ContentResolver} instance that redirects all its methods
      * to the given {@link ContentProvider}.
      */
-    public static ContentResolver wrap(@NonNull ContentProvider wrapped) {
+    public static @NonNull ContentResolver wrap(@NonNull ContentProvider wrapped) {
         return wrap((ContentInterface) wrapped);
     }
 
@@ -662,7 +662,7 @@ public abstract class ContentResolver implements ContentInterface {
      * Create a {@link ContentResolver} instance that redirects all its methods
      * to the given {@link ContentProviderClient}.
      */
-    public static ContentResolver wrap(@NonNull ContentProviderClient wrapped) {
+    public static @NonNull ContentResolver wrap(@NonNull ContentProviderClient wrapped) {
         return wrap((ContentInterface) wrapped);
     }
 
@@ -1315,6 +1315,12 @@ public abstract class ContentResolver implements ContentInterface {
     public final @Nullable ParcelFileDescriptor openFileDescriptor(@NonNull Uri uri,
             @NonNull String mode, @Nullable CancellationSignal cancellationSignal)
                     throws FileNotFoundException {
+        try {
+            if (mWrapped != null) return mWrapped.openFile(uri, mode, cancellationSignal);
+        } catch (RemoteException e) {
+            return null;
+        }
+
         AssetFileDescriptor afd = openAssetFileDescriptor(uri, mode, cancellationSignal);
         if (afd == null) {
             return null;
@@ -1456,6 +1462,12 @@ public abstract class ContentResolver implements ContentInterface {
                     throws FileNotFoundException {
         Preconditions.checkNotNull(uri, "uri");
         Preconditions.checkNotNull(mode, "mode");
+
+        try {
+            if (mWrapped != null) return mWrapped.openAssetFile(uri, mode, cancellationSignal);
+        } catch (RemoteException e) {
+            return null;
+        }
 
         String scheme = uri.getScheme();
         if (SCHEME_ANDROID_RESOURCE.equals(scheme)) {
@@ -1635,6 +1647,12 @@ public abstract class ContentResolver implements ContentInterface {
             @Nullable CancellationSignal cancellationSignal) throws FileNotFoundException {
         Preconditions.checkNotNull(uri, "uri");
         Preconditions.checkNotNull(mimeType, "mimeType");
+
+        try {
+            if (mWrapped != null) return mWrapped.openTypedAssetFile(uri, mimeType, opts, cancellationSignal);
+        } catch (RemoteException e) {
+            return null;
+        }
 
         IContentProvider unstableProvider = acquireUnstableProvider(uri);
         if (unstableProvider == null) {
@@ -3528,12 +3546,7 @@ public abstract class ContentResolver implements ContentInterface {
      */
     public @NonNull Bitmap loadThumbnail(@NonNull Uri uri, @NonNull Size size,
             @Nullable CancellationSignal signal) throws IOException {
-        Objects.requireNonNull(uri);
-        Objects.requireNonNull(size);
-
-        try (ContentProviderClient client = acquireContentProviderClient(uri)) {
-            return loadThumbnail(client, uri, size, signal, ImageDecoder.ALLOCATOR_SOFTWARE);
-        }
+        return loadThumbnail(this, uri, size, signal, ImageDecoder.ALLOCATOR_SOFTWARE);
     }
 
     /** {@hide} */

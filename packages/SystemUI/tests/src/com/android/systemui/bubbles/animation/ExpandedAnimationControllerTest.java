@@ -21,12 +21,12 @@ import static org.junit.Assert.assertEquals;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.PointF;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.dynamicanimation.animation.DynamicAnimation;
+import androidx.test.filters.SmallTest;
 
 import com.android.systemui.R;
 
@@ -43,7 +43,6 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
     @Spy
     private ExpandedAnimationController mExpandedController =
             new ExpandedAnimationController(new Point(500, 1000) /* displaySize */);
-
     private int mStackOffset;
     private float mBubblePadding;
     private float mBubbleSize;

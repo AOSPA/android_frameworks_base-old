@@ -42,7 +42,7 @@ import java.util.Objects;
  * See {@link PhoneAccount}, {@link TelecomManager}.
  */
 public final class PhoneAccountHandle implements Parcelable {
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 127403196)
     private final ComponentName mComponentName;
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private final String mId;
@@ -156,7 +156,7 @@ public final class PhoneAccountHandle implements Parcelable {
         }
     }
 
-    public static final Creator<PhoneAccountHandle> CREATOR = new Creator<PhoneAccountHandle>() {
+    public static final @android.annotation.NonNull Creator<PhoneAccountHandle> CREATOR = new Creator<PhoneAccountHandle>() {
         @Override
         public PhoneAccountHandle createFromParcel(Parcel in) {
             return new PhoneAccountHandle(in);

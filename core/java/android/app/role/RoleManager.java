@@ -30,6 +30,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.Process;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
@@ -42,6 +43,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * This class provides information about and manages roles.
@@ -187,6 +189,7 @@ public final class RoleManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final int MANAGE_HOLDERS_FLAG_DONT_KILL_APP = 1;
 
     /**
@@ -314,9 +317,9 @@ public final class RoleManager {
      *
      * @return a list of package names of the role holders, or an empty list if none.
      *
-     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
-     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
-     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, Consumer)
+     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, Consumer)
+     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, Consumer)
      *
      * @hide
      */
@@ -350,8 +353,8 @@ public final class RoleManager {
      * @param callback the callback for whether this call is successful
      *
      * @see #getRoleHoldersAsUser(String, UserHandle)
-     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
-     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, Consumer)
+     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, Consumer)
      *
      * @hide
      */
@@ -360,7 +363,7 @@ public final class RoleManager {
     @TestApi
     public void addRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
             @ManageHoldersFlags int flags, @NonNull UserHandle user,
-            @CallbackExecutor @NonNull Executor executor, @NonNull RoleManagerCallback callback) {
+            @CallbackExecutor @NonNull Executor executor, @NonNull Consumer<Boolean> callback) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
         Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
         Preconditions.checkNotNull(user, "user cannot be null");
@@ -368,7 +371,7 @@ public final class RoleManager {
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
             mService.addRoleHolderAsUser(roleName, packageName, flags, user.getIdentifier(),
-                    new RoleManagerCallbackDelegate(executor, callback));
+                    createRemoteCallback(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -389,8 +392,8 @@ public final class RoleManager {
      * @param callback the callback for whether this call is successful
      *
      * @see #getRoleHoldersAsUser(String, UserHandle)
-     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
-     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, Consumer)
+     * @see #clearRoleHoldersAsUser(String, int, UserHandle, Executor, Consumer)
      *
      * @hide
      */
@@ -399,7 +402,7 @@ public final class RoleManager {
     @TestApi
     public void removeRoleHolderAsUser(@NonNull String roleName, @NonNull String packageName,
             @ManageHoldersFlags int flags, @NonNull UserHandle user,
-            @CallbackExecutor @NonNull Executor executor, @NonNull RoleManagerCallback callback) {
+            @CallbackExecutor @NonNull Executor executor, @NonNull Consumer<Boolean> callback) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
         Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
         Preconditions.checkNotNull(user, "user cannot be null");
@@ -407,7 +410,7 @@ public final class RoleManager {
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
             mService.removeRoleHolderAsUser(roleName, packageName, flags, user.getIdentifier(),
-                    new RoleManagerCallbackDelegate(executor, callback));
+                    createRemoteCallback(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -427,8 +430,8 @@ public final class RoleManager {
      * @param callback the callback for whether this call is successful
      *
      * @see #getRoleHoldersAsUser(String, UserHandle)
-     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
-     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, RoleManagerCallback)
+     * @see #addRoleHolderAsUser(String, String, int, UserHandle, Executor, Consumer)
+     * @see #removeRoleHolderAsUser(String, String, int, UserHandle, Executor, Consumer)
      *
      * @hide
      */
@@ -437,17 +440,31 @@ public final class RoleManager {
     @TestApi
     public void clearRoleHoldersAsUser(@NonNull String roleName, @ManageHoldersFlags int flags,
             @NonNull UserHandle user, @CallbackExecutor @NonNull Executor executor,
-            @NonNull RoleManagerCallback callback) {
+            @NonNull Consumer<Boolean> callback) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
         Preconditions.checkNotNull(user, "user cannot be null");
         Preconditions.checkNotNull(executor, "executor cannot be null");
         Preconditions.checkNotNull(callback, "callback cannot be null");
         try {
             mService.clearRoleHoldersAsUser(roleName, flags, user.getIdentifier(),
-                    new RoleManagerCallbackDelegate(executor, callback));
+                    createRemoteCallback(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    @NonNull
+    private static RemoteCallback createRemoteCallback(@NonNull Executor executor,
+            @NonNull Consumer<Boolean> callback) {
+        return new RemoteCallback(result -> executor.execute(() -> {
+            boolean successful = result != null;
+            long token = Binder.clearCallingIdentity();
+            try {
+                callback.accept(successful);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }));
     }
 
     /**
@@ -467,6 +484,7 @@ public final class RoleManager {
      */
     @RequiresPermission(Manifest.permission.OBSERVE_ROLE_HOLDERS)
     @SystemApi
+    @TestApi
     public void addOnRoleHoldersChangedListenerAsUser(@CallbackExecutor @NonNull Executor executor,
             @NonNull OnRoleHoldersChangedListener listener, @NonNull UserHandle user) {
         Preconditions.checkNotNull(executor, "executor cannot be null");
@@ -512,6 +530,7 @@ public final class RoleManager {
      */
     @RequiresPermission(Manifest.permission.OBSERVE_ROLE_HOLDERS)
     @SystemApi
+    @TestApi
     public void removeOnRoleHoldersChangedListenerAsUser(
             @NonNull OnRoleHoldersChangedListener listener, @NonNull UserHandle user) {
         Preconditions.checkNotNull(listener, "listener cannot be null");
@@ -542,7 +561,7 @@ public final class RoleManager {
 
     /**
      * Set the names of all the available roles. Should only be called from
-     * {@link android.rolecontrollerservice.RoleControllerService}.
+     * {@link android.app.role.RoleControllerService}.
      * <p>
      * <strong>Note:</strong> Using this API requires holding
      * {@link #PERMISSION_MANAGE_ROLES_FROM_CONTROLLER}.
@@ -553,6 +572,7 @@ public final class RoleManager {
      */
     @RequiresPermission(PERMISSION_MANAGE_ROLES_FROM_CONTROLLER)
     @SystemApi
+    @TestApi
     public void setRoleNamesFromController(@NonNull List<String> roleNames) {
         Preconditions.checkNotNull(roleNames, "roleNames cannot be null");
         try {
@@ -565,7 +585,7 @@ public final class RoleManager {
     /**
      * Add a specific application to the holders of a role, only modifying records inside
      * {@link RoleManager}. Should only be called from
-     * {@link android.rolecontrollerservice.RoleControllerService}.
+     * {@link android.app.role.RoleControllerService}.
      * <p>
      * <strong>Note:</strong> Using this API requires holding
      * {@link #PERMISSION_MANAGE_ROLES_FROM_CONTROLLER}.
@@ -583,6 +603,7 @@ public final class RoleManager {
      */
     @RequiresPermission(PERMISSION_MANAGE_ROLES_FROM_CONTROLLER)
     @SystemApi
+    @TestApi
     public boolean addRoleHolderFromController(@NonNull String roleName,
             @NonNull String packageName) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
@@ -597,7 +618,7 @@ public final class RoleManager {
     /**
      * Remove a specific application from the holders of a role, only modifying records inside
      * {@link RoleManager}. Should only be called from
-     * {@link android.rolecontrollerservice.RoleControllerService}.
+     * {@link android.app.role.RoleControllerService}.
      * <p>
      * <strong>Note:</strong> Using this API requires holding
      * {@link #PERMISSION_MANAGE_ROLES_FROM_CONTROLLER}.
@@ -615,6 +636,7 @@ public final class RoleManager {
      */
     @RequiresPermission(PERMISSION_MANAGE_ROLES_FROM_CONTROLLER)
     @SystemApi
+    @TestApi
     public boolean removeRoleHolderFromController(@NonNull String roleName,
             @NonNull String packageName) {
         Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
@@ -634,9 +656,10 @@ public final class RoleManager {
      *
      * @hide
      */
+    @NonNull
     @RequiresPermission(PERMISSION_MANAGE_ROLES_FROM_CONTROLLER)
     @SystemApi
-    @NonNull
+    @TestApi
     public List<String> getHeldRolesFromController(@NonNull String packageName) {
         Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
         try {
@@ -659,40 +682,6 @@ public final class RoleManager {
             return mService.getDefaultSmsPackage(userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        }
-    }
-
-    private static class RoleManagerCallbackDelegate extends IRoleManagerCallback.Stub {
-
-        @NonNull
-        private final Executor mExecutor;
-        @NonNull
-        private final RoleManagerCallback mCallback;
-
-        RoleManagerCallbackDelegate(@NonNull Executor executor,
-                @NonNull RoleManagerCallback callback) {
-            mExecutor = executor;
-            mCallback = callback;
-        }
-
-        @Override
-        public void onSuccess() {
-            long token = Binder.clearCallingIdentity();
-            try {
-                mExecutor.execute(mCallback::onSuccess);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-        }
-
-        @Override
-        public void onFailure() {
-            long token = Binder.clearCallingIdentity();
-            try {
-                mExecutor.execute(mCallback::onFailure);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
         }
     }
 

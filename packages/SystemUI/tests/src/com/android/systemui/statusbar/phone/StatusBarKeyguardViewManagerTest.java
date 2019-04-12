@@ -25,10 +25,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.ViewGroup;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.ViewMediatorCallback;
@@ -119,7 +120,8 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
     @Test
     public void onPanelExpansionChanged_neverHidesScrimmedBouncer() {
-        when(mBouncer.isShowingScrimmed()).thenReturn(true);
+        when(mBouncer.isShowing()).thenReturn(true);
+        when(mBouncer.isScrimmed()).thenReturn(true);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(0.5f /* expansion */,
                 true /* tracking */);
         verify(mBouncer).setExpansion(eq(KeyguardBouncer.EXPANSION_VISIBLE));

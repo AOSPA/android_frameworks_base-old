@@ -27,7 +27,6 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
-import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Slog;
@@ -42,8 +41,8 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 
-import com.google.android.collect.Sets;
-
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -63,7 +62,6 @@ public class KeyguardStatusView extends GridLayout implements
     private Runnable mPendingMarqueeStart;
     private Handler mHandler;
 
-    private ArraySet<View> mVisibleInDoze;
     private boolean mPulsing;
     private float mDarkAmount = 0;
     private int mTextColor;
@@ -175,7 +173,6 @@ public class KeyguardStatusView extends GridLayout implements
         }
         mOwnerInfo = findViewById(R.id.owner_info);
         mKeyguardSlice = findViewById(R.id.keyguard_status_area);
-        mVisibleInDoze = Sets.newArraySet(mClockView, mKeyguardSlice);
         mTextColor = mClockView.getCurrentTextColor();
 
         mKeyguardSlice.setContentChangeListener(this::onSliceContentChanged);
@@ -217,7 +214,6 @@ public class KeyguardStatusView extends GridLayout implements
     public void dozeTimeTick() {
         refreshTime();
         mKeyguardSlice.refresh();
-        mClockView.dozeTimeTick();
     }
 
     private void refreshTime() {
@@ -294,6 +290,24 @@ public class KeyguardStatusView extends GridLayout implements
         return false;
     }
 
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("KeyguardStatusView:");
+        pw.println("  mOwnerInfo: " + (mOwnerInfo == null
+                ? "null" : mOwnerInfo.getVisibility() == VISIBLE));
+        pw.println("  mPulsing: " + mPulsing);
+        pw.println("  mDarkAmount: " + mDarkAmount);
+        pw.println("  mTextColor: " + Integer.toHexString(mTextColor));
+        if (mLogoutView != null) {
+            pw.println("  logout visible: " + (mLogoutView.getVisibility() == VISIBLE));
+        }
+        if (mClockView != null) {
+            mClockView.dump(fd, pw, args);
+        }
+        if (mKeyguardSlice != null) {
+            mKeyguardSlice.dump(fd, pw, args);
+        }
+    }
+
     // DateFormat.getBestDateTimePattern is extremely expensive, and refresh is called often.
     // This is an optimization to ensure we only recompute the patterns when the inputs change.
     private static final class Patterns {
@@ -348,7 +362,6 @@ public class KeyguardStatusView extends GridLayout implements
         }
 
         final int blendedTextColor = ColorUtils.blendARGB(mTextColor, Color.WHITE, mDarkAmount);
-        updateDozeVisibleViews();
         mKeyguardSlice.setDarkAmount(mDarkAmount);
         mClockView.setTextColor(blendedTextColor);
     }
@@ -372,13 +385,6 @@ public class KeyguardStatusView extends GridLayout implements
             return;
         }
         mPulsing = pulsing;
-        updateDozeVisibleViews();
-    }
-
-    private void updateDozeVisibleViews() {
-        for (View child : mVisibleInDoze) {
-            child.setAlpha(mDarkAmount == 1 && mPulsing ? 0.8f : 1);
-        }
     }
 
     private boolean shouldShowLogout() {

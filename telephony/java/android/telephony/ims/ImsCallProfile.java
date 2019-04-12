@@ -17,6 +17,7 @@
 package android.telephony.ims;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.os.Bundle;
@@ -588,7 +589,7 @@ public final class ImsCallProfile implements Parcelable {
         mHasKnownUserIntentEmergency = in.readBoolean();
     }
 
-    public static final Creator<ImsCallProfile> CREATOR = new Creator<ImsCallProfile>() {
+    public static final @android.annotation.NonNull Creator<ImsCallProfile> CREATOR = new Creator<ImsCallProfile>() {
         @Override
         public ImsCallProfile createFromParcel(Parcel in) {
             return new ImsCallProfile(in);
@@ -847,7 +848,7 @@ public final class ImsCallProfile implements Parcelable {
      *            3gpp 22.101, Section 10 - Emergency Calls.
      */
     @VisibleForTesting
-    public void setEmergencyUrns(List<String> emergencyUrns) {
+    public void setEmergencyUrns(@NonNull List<String> emergencyUrns) {
         mEmergencyUrns = emergencyUrns;
     }
 
@@ -921,7 +922,7 @@ public final class ImsCallProfile implements Parcelable {
      * Reference: 3gpp 24.503, Section 5.1.6.8.1 - General;
      *            3gpp 22.101, Section 10 - Emergency Calls.
      */
-    public List<String> getEmergencyUrns() {
+    public @NonNull List<String> getEmergencyUrns() {
         return mEmergencyUrns;
     }
 

@@ -16,6 +16,7 @@
 
 package android.view.inspector;
 
+import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.SOURCE;
@@ -39,7 +40,7 @@ import java.lang.annotation.Target;
  * @see InspectionCompanion#readProperties(Object, PropertyReader)
  * @hide
  */
-@Target({METHOD})
+@Target({METHOD, FIELD})
 @Retention(SOURCE)
 @TestApi
 public @interface InspectableProperty {
@@ -86,21 +87,21 @@ public @interface InspectableProperty {
      *
      * Note that {@link #enumMapping()} cannot be used simultaneously with {@link #flagMapping()}.
      *
-     * @return An array of {@link EnumMap}, empty if not applicable
+     * @return An array of {@link EnumEntry}, empty if not applicable
      * @see android.annotation.IntDef
      */
-    EnumMap[] enumMapping() default {};
+    EnumEntry[] enumMapping() default {};
 
     /**
      * For flags packed into primitive {int} properties, model the string names of the flags.
      *
      * Note that {@link #flagMapping()} cannot be used simultaneously with {@link #enumMapping()}.
      *
-     * @return An array of {@link FlagMap}, empty if not applicable
+     * @return An array of {@link FlagEntry}, empty if not applicable
      * @see android.annotation.IntDef
      * @see IntFlagMapping
      */
-    FlagMap[] flagMapping() default {};
+    FlagEntry[] flagMapping() default {};
 
 
     /**
@@ -112,7 +113,7 @@ public @interface InspectableProperty {
     @Target({TYPE})
     @Retention(SOURCE)
     @TestApi
-    @interface EnumMap {
+    @interface EnumEntry {
         /**
          * The string name of this enumeration value.
          *
@@ -137,7 +138,7 @@ public @interface InspectableProperty {
     @Target({TYPE})
     @Retention(SOURCE)
     @TestApi
-    @interface FlagMap {
+    @interface FlagEntry {
         /**
          * The string name of this flag.
          *
@@ -194,7 +195,7 @@ public @interface InspectableProperty {
          *
          * This is inferred if {@link #enumMapping()} is specified.
          *
-         * @see EnumMap
+         * @see EnumEntry
          * @hide
          */
         @TestApi
@@ -205,7 +206,7 @@ public @interface InspectableProperty {
          *
          * This is inferred if {@link #flagMapping()} is specified.
          *
-         * @see FlagMap
+         * @see FlagEntry
          * @hide
          */
         @TestApi
@@ -226,12 +227,23 @@ public @interface InspectableProperty {
         /**
          * Value packs gravity information.
          *
-         * This type is not inferred, and is non-trivial to represent using {@link FlagMap}.
+         * This type is not inferred, and is non-trivial to represent using {@link FlagEntry}.
          *
          * @see android.view.Gravity
          * @hide
          */
         @TestApi
-        GRAVITY
+        GRAVITY,
+
+        /**
+         * Value is a resource ID
+         *
+         * This type is inferred from the presence of a resource ID annotation such as
+         * {@link android.annotation.AnyRes}.
+         *
+         * @hide
+         */
+        @TestApi
+        RESOURCE_ID
     }
 }

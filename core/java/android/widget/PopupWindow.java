@@ -886,10 +886,36 @@ public class PopupWindow {
      * containing window<p/>
      *
      * @return true if popup will be clipped to the screen instead of the window, false otherwise
-     *
-     * @see #setClipToScreenEnabled(boolean)
+     * @deprecated Use {@link #isClippedToScreen()} instead
      */
+    @Deprecated
     public boolean isClipToScreenEnabled() {
+        return mClipToScreen;
+    }
+
+    /**
+     * <p>Clip this popup window to the screen, but not to the containing window.</p>
+     *
+     * <p>If the popup is showing, calling this method will take effect only
+     * the next time the popup is shown or through a manual call to one of
+     * the {@link #update()} methods.</p>
+     *
+     * @deprecated Use {@link #setIsClippedToScreen(boolean)} instead
+     */
+    @Deprecated
+    public void setClipToScreenEnabled(boolean enabled) {
+        mClipToScreen = enabled;
+    }
+
+    /**
+     * <p>Indicates whether this popup will be clipped to the screen and not to the
+     * containing window<p/>
+     *
+     * @return true if popup will be clipped to the screen instead of the window, false otherwise
+     *
+     * @see #setIsClippedToScreen(boolean)
+     */
+    public boolean isClippedToScreen() {
         return mClipToScreen;
     }
 
@@ -902,9 +928,9 @@ public class PopupWindow {
      *
      * @param enabled true to clip to the screen.
      *
-     * @see #isClipToScreenEnabled()
+     * @see #isClippedToScreen()
      */
-    public void setClipToScreenEnabled(boolean enabled) {
+    public void setIsClippedToScreen(boolean enabled) {
         mClipToScreen = enabled;
     }
 
@@ -961,8 +987,9 @@ public class PopupWindow {
      *
      * @return true if the window will always be positioned in screen coordinates.
      *
-     * @see #setLayoutInScreenEnabled(boolean)
+     * @deprecated Use {@link #isLaidOutInScreen()} instead
      */
+    @Deprecated
     public boolean isLayoutInScreenEnabled() {
         return mLayoutInScreen;
     }
@@ -973,10 +1000,35 @@ public class PopupWindow {
      * This will cause the popup to be positioned in absolute screen coordinates.</p>
      *
      * @param enabled true if the popup should always be positioned in screen coordinates
-     *
-     * @see #isLayoutInScreenEnabled()
+     * @deprecated Use {@link #setIsLaidOutInScreen(boolean)} instead
      */
+    @Deprecated
     public void setLayoutInScreenEnabled(boolean enabled) {
+        mLayoutInScreen = enabled;
+    }
+
+    /**
+     * <p>Indicates whether the popup window will be forced into using absolute screen coordinates
+     * for positioning.</p>
+     *
+     * @return true if the window will always be positioned in screen coordinates.
+     *
+     * @see #setIsLaidOutInScreen(boolean)
+     */
+    public boolean isLaidOutInScreen() {
+        return mLayoutInScreen;
+    }
+
+    /**
+     * <p>Allows the popup window to force the flag
+     * {@link WindowManager.LayoutParams#FLAG_LAYOUT_IN_SCREEN}, overriding default behavior.
+     * This will cause the popup to be positioned in absolute screen coordinates.</p>
+     *
+     * @param enabled true if the popup should always be positioned in screen coordinates
+     *
+     * @see #isLaidOutInScreen()
+     */
+    public void setIsLaidOutInScreen(boolean enabled) {
         mLayoutInScreen = enabled;
     }
 
@@ -1016,7 +1068,7 @@ public class PopupWindow {
      * This will cause the popup to inset its content to account for system windows overlaying
      * the screen, such as the status bar.
      *
-     * <p>This will often be combined with {@link #setLayoutInScreenEnabled(boolean)}.
+     * <p>This will often be combined with {@link #setIsLaidOutInScreen(boolean)}.
      *
      * @param enabled true if the popup's views should inset content to account for system windows,
      *                the way that decor views behave for full-screen windows.
@@ -2114,7 +2166,7 @@ public class PopupWindow {
      *     <li>{@link #setTouchable(boolean)}</li>
      *     <li>{@link #setAnimationStyle(int)}</li>
      *     <li>{@link #setTouchModal(boolean)} (boolean)}</li>
-     *     <li>{@link #setClipToScreenEnabled(boolean)}</li>
+     *     <li>{@link #setIsClippedToScreen(boolean)}</li>
      * </ul>
      */
     public void update() {

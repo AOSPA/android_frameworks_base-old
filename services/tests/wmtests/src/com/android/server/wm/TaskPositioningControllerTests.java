@@ -61,10 +61,9 @@ public class TaskPositioningControllerTests extends WindowTestsBase {
         mWindow.mInputChannel = new InputChannel();
         synchronized (mWm.mGlobalLock) {
             mWm.mWindowMap.put(mWindow.mClient.asBinder(), mWindow);
+            spyOn(mDisplayContent);
+            doReturn(mock(InputMonitor.class)).when(mDisplayContent).getInputMonitor();
         }
-
-        spyOn(mDisplayContent);
-        doReturn(mock(InputMonitor.class)).when(mDisplayContent).getInputMonitor();
     }
 
     @Test
@@ -89,7 +88,7 @@ public class TaskPositioningControllerTests extends WindowTestsBase {
         assertNull(mTarget.getDragWindowHandleLocked());
     }
 
-    @FlakyTest(bugId = 69229402)
+    @FlakyTest(bugId = 129331490)
     @Test
     public void testHandleTapOutsideTask() {
         synchronized (mWm.mGlobalLock) {

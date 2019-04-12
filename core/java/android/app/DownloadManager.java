@@ -21,6 +21,7 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -162,6 +163,10 @@ public class DownloadManager {
      * downloaded list.
      */
     public static final String COLUMN_MEDIAPROVIDER_URI = Downloads.Impl.COLUMN_MEDIAPROVIDER_URI;
+
+    /** @hide */
+    @TestApi
+    public static final String COLUMN_MEDIASTORE_URI = Downloads.Impl.COLUMN_MEDIASTORE_URI;
 
     /**
      * @hide
@@ -1153,6 +1158,7 @@ public class DownloadManager {
      * @param ids the IDs of the downloads
      * @hide
      */
+    @UnsupportedAppUsage
     public void restartDownload(long... ids) {
         Cursor cursor = query(new Query().setFilterById(ids));
         try {

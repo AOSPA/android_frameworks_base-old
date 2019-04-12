@@ -22,8 +22,8 @@ import static android.media.MediaConstants.KEY_PID;
 import static android.media.MediaConstants.KEY_PLAYBACK_ACTIVE;
 import static android.media.MediaConstants.KEY_SESSION2LINK;
 import static android.media.MediaConstants.KEY_TOKEN_EXTRAS;
-import static android.media.Session2Command.RESULT_ERROR_UNKNOWN_ERROR;
-import static android.media.Session2Command.RESULT_INFO_SKIPPED;
+import static android.media.Session2Command.Result.RESULT_ERROR_UNKNOWN_ERROR;
+import static android.media.Session2Command.Result.RESULT_INFO_SKIPPED;
 import static android.media.Session2Token.TYPE_SESSION;
 
 import android.annotation.NonNull;
@@ -415,7 +415,7 @@ public class MediaSession2 implements AutoCloseable {
                     MediaSession2.this, controllerInfo, command, args);
             if (resultReceiver != null) {
                 if (result == null) {
-                    resultReceiver.send(Session2Command.RESULT_INFO_SKIPPED, null);
+                    resultReceiver.send(RESULT_INFO_SKIPPED, null);
                 } else {
                     resultReceiver.send(result.getResultCode(), result.getResultData());
                 }
@@ -511,7 +511,8 @@ public class MediaSession2 implements AutoCloseable {
         }
 
         /**
-         * Set extras for the session token.
+         * Set extras for the session token. If null or not set, {@link Session2Token#getExtras()}
+         * will return {@link Bundle#EMPTY}.
          *
          * @return The Builder to allow chaining
          * @see Session2Token#getExtras()
@@ -749,6 +750,10 @@ public class MediaSession2 implements AutoCloseable {
          * You can reject the connection by returning {@code null}. In that case, controller
          * receives {@link MediaController2.ControllerCallback#onDisconnected(MediaController2)}
          * and cannot be used.
+         * <p>
+         * The controller hasn't connected yet in this method, so calls to the controller
+         * (e.g. {@link #sendSessionCommand}) would be ignored. Override {@link #onPostConnect} for
+         * the custom initialization for the controller instead.
          *
          * @param session the session for this event
          * @param controller controller information.
@@ -763,6 +768,10 @@ public class MediaSession2 implements AutoCloseable {
         /**
          * Called immediately after a controller is connected. This is a convenient method to add
          * custom initialization between the session and a controller.
+         * <p>
+         * Note that calls to the controller (e.g. {@link #sendSessionCommand}) work here but don't
+         * work in {@link #onConnect} because the controller hasn't connected yet in
+         * {@link #onConnect}.
          *
          * @param session the session for this event
          * @param controller controller information.

@@ -72,15 +72,12 @@ public final class DhcpResults implements Parcelable {
      * Create a {@link StaticIpConfiguration} based on the DhcpResults.
      */
     public StaticIpConfiguration toStaticIpConfiguration() {
-        final StaticIpConfiguration s = new StaticIpConfiguration();
-        // All these except dnsServers are immutable, so no need to make copies.
-        s.setIpAddress(ipAddress);
-        s.setGateway(gateway);
-        for (InetAddress addr : dnsServers) {
-            s.addDnsServer(addr);
-        }
-        s.setDomains(domains);
-        return s;
+        return new StaticIpConfiguration.Builder()
+                .setIpAddress(ipAddress)
+                .setGateway(gateway)
+                .setDnsServers(dnsServers)
+                .setDomains(domains)
+                .build();
     }
 
     public DhcpResults(StaticIpConfiguration source) {
@@ -164,7 +161,7 @@ public final class DhcpResults implements Parcelable {
     /**
      * Implement the Parcelable interface
      */
-    public static final Creator<DhcpResults> CREATOR =
+    public static final @android.annotation.NonNull Creator<DhcpResults> CREATOR =
         new Creator<DhcpResults>() {
             public DhcpResults createFromParcel(Parcel in) {
                 return readFromParcel(in);

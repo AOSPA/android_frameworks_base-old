@@ -800,7 +800,7 @@ public class WifiP2pManager {
          * The requested {@link android.net.NetworkInfo} is available
          * @param networkInfo Wi-Fi p2p {@link android.net.NetworkInfo}
          */
-        void onNetworkInfoAvailable(NetworkInfo networkInfo);
+        void onNetworkInfoAvailable(@NonNull NetworkInfo networkInfo);
     }
 
     /**
@@ -823,7 +823,7 @@ public class WifiP2pManager {
          * The requested {@link android.net.wifi.p2p.WifiP2pDevice} is available.
          * @param wifiP2pDevice Wi-Fi p2p {@link android.net.wifi.p2p.WifiP2pDevice}
          */
-        void onDeviceInfoAvailable(WifiP2pDevice wifiP2pDevice);
+        void onDeviceInfoAvailable(@Nullable WifiP2pDevice wifiP2pDevice);
     }
 
     /**

@@ -36,6 +36,7 @@ public abstract class EnrollClient extends ClientMonitor {
     private final byte[] mCryptoToken;
     private final BiometricUtils mBiometricUtils;
     private final int[] mDisabledFeatures;
+    private long mEnrollmentStartTimeMs;
 
     public abstract boolean shouldVibrate();
 
@@ -61,6 +62,9 @@ public abstract class EnrollClient extends ClientMonitor {
             int remaining) {
         if (remaining == 0) {
             mBiometricUtils.addBiometricForUser(getContext(), getTargetUserId(), identifier);
+            logOnEnrolled(getTargetUserId(),
+                    System.currentTimeMillis() - mEnrollmentStartTimeMs,
+                    true /* enrollSuccessful */);
         }
         notifyUserActivity();
         return sendEnrollResult(identifier, remaining);
@@ -76,7 +80,10 @@ public abstract class EnrollClient extends ClientMonitor {
         }
         mMetricsLogger.action(mMetrics.actionBiometricEnroll());
         try {
-            getListener().onEnrollResult(identifier, remaining);
+            final BiometricServiceBase.ServiceListener listener = getListener();
+            if (listener != null) {
+                listener.onEnrollResult(identifier, remaining);
+            }
             return remaining == 0;
         } catch (RemoteException e) {
             Slog.w(getLogTag(), "Failed to notify EnrollResult:", e);
@@ -86,6 +93,7 @@ public abstract class EnrollClient extends ClientMonitor {
 
     @Override
     public int start() {
+        mEnrollmentStartTimeMs = System.currentTimeMillis();
         final int timeout = (int) (ENROLLMENT_TIMEOUT_MS / MS_PER_SEC);
         try {
             final ArrayList<Integer> disabledFeatures = new ArrayList<>();
@@ -124,10 +132,6 @@ public abstract class EnrollClient extends ClientMonitor {
         } catch (RemoteException e) {
             Slog.e(getLogTag(), "stopEnrollment failed", e);
         }
-        if (initiatedByClient) {
-            onError(getHalDeviceId(), BiometricConstants.BIOMETRIC_ERROR_CANCELED,
-                    0 /* vendorCode */);
-        }
         mAlreadyCancelled = true;
         return 0;
     }
@@ -150,6 +154,19 @@ public abstract class EnrollClient extends ClientMonitor {
             boolean authenticated, ArrayList<Byte> token) {
         if (DEBUG) Slog.w(getLogTag(), "onAuthenticated() called for enroll!");
         return true; // Invalid for EnrollClient
+    }
+
+    /**
+     * Called when we get notification from the biometric's HAL that an error has occurred with the
+     * current operation. Common to authenticate, enroll, enumerate and remove.
+     * @param error
+     * @return true if client should be removed
+     */
+    @Override
+    public boolean onError(long deviceId, int error, int vendorCode) {
+        logOnEnrolled(getTargetUserId(), System.currentTimeMillis() - mEnrollmentStartTimeMs,
+                false /* enrollSuccessful */);
+        return super.onError(deviceId, error, vendorCode);
     }
 
 }

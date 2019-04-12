@@ -958,9 +958,8 @@ public class WifiAwareManagerTest {
         WifiAwareNetworkSpecifier ns =
                 (WifiAwareNetworkSpecifier) publishSession.getValue().createNetworkSpecifierOpen(
                         peerHandle);
-        WifiAwareNetworkSpecifier nsb = (WifiAwareNetworkSpecifier) new WifiAwareManager
-                .NetworkSpecifierBuilder().setDiscoverySession(publishSession.getValue())
-                .setPeerHandle(peerHandle).build();
+        WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(
+                publishSession.getValue(), peerHandle).build();
 
         // validate format
         collector.checkThat("role", WifiAwareManager.WIFI_AWARE_DATA_PATH_ROLE_RESPONDER,
@@ -980,9 +979,8 @@ public class WifiAwareManagerTest {
         // (4) request an encrypted (PMK) network specifier from the session
         ns = (WifiAwareNetworkSpecifier) publishSession.getValue().createNetworkSpecifierPmk(
                 peerHandle, pmk);
-        nsb = (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                .setDiscoverySession(publishSession.getValue()).setPeerHandle(peerHandle)
-                .setPmk(pmk).setPort(port).setTransportProtocol(transportProtocol).build();
+        nsb = new WifiAwareNetworkSpecifier.Builder(publishSession.getValue(), peerHandle).setPmk(
+                pmk).setPort(port).setTransportProtocol(transportProtocol).build();
 
         // validate format
         collector.checkThat("role", WifiAwareManager.WIFI_AWARE_DATA_PATH_ROLE_RESPONDER,
@@ -1006,10 +1004,9 @@ public class WifiAwareManagerTest {
                 (WifiAwareNetworkSpecifier) publishSession.getValue()
                         .createNetworkSpecifierPassphrase(
                         peerHandle, passphrase);
-        nsb = (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                .setDiscoverySession(publishSession.getValue()).setPeerHandle(peerHandle)
-                .setPskPassphrase(passphrase).setPort(port).setTransportProtocol(transportProtocol)
-                .build();
+        nsb = new WifiAwareNetworkSpecifier.Builder(publishSession.getValue(),
+                peerHandle).setPskPassphrase(passphrase).setPort(port).setTransportProtocol(
+                transportProtocol).build();
 
         // validate format
         collector.checkThat("role", WifiAwareManager.WIFI_AWARE_DATA_PATH_ROLE_RESPONDER,
@@ -1257,16 +1254,15 @@ public class WifiAwareManagerTest {
         // (3) create network specifier
         if (doPmk) {
             if (useBuilder) {
-                new WifiAwareManager.NetworkSpecifierBuilder().setDiscoverySession(
-                        publishSession.getValue()).setPeerHandle(peerHandle).setPmk(pmk).build();
+                new WifiAwareNetworkSpecifier.Builder(publishSession.getValue(), peerHandle).setPmk(
+                        pmk).build();
             } else {
                 publishSession.getValue().createNetworkSpecifierPmk(peerHandle, pmk);
             }
         } else {
             if (useBuilder) {
-                new WifiAwareManager.NetworkSpecifierBuilder().setDiscoverySession(
-                        publishSession.getValue()).setPeerHandle(peerHandle).setPskPassphrase(
-                        passphrase).build();
+                new WifiAwareNetworkSpecifier.Builder(publishSession.getValue(),
+                        peerHandle).setPskPassphrase(passphrase).build();
             } else {
                 publishSession.getValue().createNetworkSpecifierPassphrase(peerHandle, passphrase);
             }
@@ -1355,10 +1351,8 @@ public class WifiAwareManagerTest {
 
         DiscoverySession publishSession = executeSessionStartup(true);
 
-        WifiAwareNetworkSpecifier nsb =
-                (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                        .setDiscoverySession(publishSession).setPeerHandle(peerHandle)
-                        .setPmk(pmk).setPort(port).build();
+        WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(publishSession,
+                peerHandle).setPmk(pmk).setPort(port).build();
     }
 
     /**
@@ -1372,10 +1366,8 @@ public class WifiAwareManagerTest {
 
         DiscoverySession publishSession = executeSessionStartup(true);
 
-        WifiAwareNetworkSpecifier nsb =
-                (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                        .setDiscoverySession(publishSession).setPeerHandle(peerHandle)
-                        .setPort(port).build();
+        WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(publishSession,
+                peerHandle).setPort(port).build();
     }
 
     /**
@@ -1389,10 +1381,8 @@ public class WifiAwareManagerTest {
 
         DiscoverySession subscribeSession = executeSessionStartup(false);
 
-        WifiAwareNetworkSpecifier nsb =
-                (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                        .setDiscoverySession(subscribeSession).setPeerHandle(peerHandle)
-                        .setPort(port).build();
+        WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(subscribeSession,
+                peerHandle).setPort(port).build();
     }
 
     /**
@@ -1411,32 +1401,23 @@ public class WifiAwareManagerTest {
         DiscoverySession publishSession = executeSessionStartup(true);
 
         try {
-            WifiAwareNetworkSpecifier nsb =
-                    (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                            .setDiscoverySession(publishSession).setPeerHandle(peerHandle)
-                            .setPmk(pmk).setTransportProtocol(tpNegative).build();
+            WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(publishSession,
+                    peerHandle).setPmk(pmk).setTransportProtocol(tpNegative).build();
             assertTrue("No exception on negative transport protocol!", false);
         } catch (IllegalArgumentException e) {
             // nop - exception is correct!
         }
         try {
-            WifiAwareNetworkSpecifier nsb =
-                    (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                            .setDiscoverySession(publishSession).setPeerHandle(peerHandle)
-                            .setPmk(pmk).setTransportProtocol(tpTooLarge).build();
+            WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(publishSession,
+                    peerHandle).setPmk(pmk).setTransportProtocol(tpTooLarge).build();
             assertTrue("No exception on >255 transport protocol!", false);
         } catch (IllegalArgumentException e) {
             // nop - exception is correct!
         }
-        WifiAwareNetworkSpecifier nsb =
-                (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                        .setDiscoverySession(publishSession).setPeerHandle(peerHandle)
-                        .setPmk(pmk).setTransportProtocol(tpSmallest).build();
-        nsb =
-                (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                        .setDiscoverySession(
-                                publishSession).setPeerHandle(peerHandle).setPmk(
-                        pmk).setTransportProtocol(tpLargest).build();
+        WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(publishSession,
+                peerHandle).setPmk(pmk).setTransportProtocol(tpSmallest).build();
+        nsb = new WifiAwareNetworkSpecifier.Builder(publishSession, peerHandle).setPmk(
+                pmk).setTransportProtocol(tpLargest).build();
     }
 
     /**
@@ -1450,10 +1431,8 @@ public class WifiAwareManagerTest {
 
         DiscoverySession publishSession = executeSessionStartup(true);
 
-        WifiAwareNetworkSpecifier nsb =
-                (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                        .setDiscoverySession(publishSession).setPeerHandle(peerHandle)
-                        .setTransportProtocol(transportProtocol).build();
+        WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(publishSession,
+                peerHandle).setTransportProtocol(transportProtocol).build();
     }
 
     /**
@@ -1467,10 +1446,8 @@ public class WifiAwareManagerTest {
 
         DiscoverySession subscribeSession = executeSessionStartup(false);
 
-        WifiAwareNetworkSpecifier nsb =
-                (WifiAwareNetworkSpecifier) new WifiAwareManager.NetworkSpecifierBuilder()
-                        .setDiscoverySession(subscribeSession).setPeerHandle(peerHandle)
-                        .setTransportProtocol(transportProtocol).build();
+        WifiAwareNetworkSpecifier nsb = new WifiAwareNetworkSpecifier.Builder(subscribeSession,
+                peerHandle).setTransportProtocol(transportProtocol).build();
     }
 
     /*

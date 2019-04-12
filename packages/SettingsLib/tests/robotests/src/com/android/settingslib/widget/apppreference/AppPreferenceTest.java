@@ -23,6 +23,8 @@ import android.view.View;
 
 import androidx.preference.PreferenceViewHolder;
 
+import com.android.settingslib.widget.R;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,24 +54,6 @@ public class AppPreferenceTest {
 
         assertThat(mHolder.findViewById(android.R.id.progress).getVisibility())
                 .isEqualTo(View.VISIBLE);
-    }
-
-    @Test
-    public void setSummary_showSummaryContainer() {
-        mPref.setSummary("test");
-        mPref.onBindViewHolder(mHolder);
-
-        assertThat(mHolder.findViewById(R.id.summary_container).getVisibility())
-                .isEqualTo(View.VISIBLE);
-    }
-
-    @Test
-    public void noSummary_hideSummaryContainer() {
-        mPref.setSummary(null);
-        mPref.onBindViewHolder(mHolder);
-
-        assertThat(mHolder.findViewById(R.id.summary_container).getVisibility())
-                .isEqualTo(View.GONE);
     }
 
     @Test

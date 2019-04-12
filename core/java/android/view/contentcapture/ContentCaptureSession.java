@@ -38,7 +38,7 @@ import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
-import java.util.UUID;
+import java.util.Random;
 
 /**
  * Session used to notify a system-provided Content Capture service about events associated with
@@ -47,6 +47,11 @@ import java.util.UUID;
 public abstract class ContentCaptureSession implements AutoCloseable {
 
     private static final String TAG = ContentCaptureSession.class.getSimpleName();
+
+    private static final Random sIdGenerator = new Random();
+
+    /** @hide */
+    public static final int NO_SESSION_ID = 0;
 
     /**
      * Initial state, when there is no session.
@@ -121,11 +126,32 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     public static final int STATE_INTERNAL_ERROR = 0x100;
 
     /**
-     * Session is disabled because service didn't whitelist package.
+     * Session is disabled because service didn't whitelist package or activity.
      *
      * @hide
      */
-    public static final int STATE_PACKAGE_NOT_WHITELISTED = 0x200;
+    public static final int STATE_NOT_WHITELISTED = 0x200;
+
+    /**
+     * Session is disabled because the service died.
+     *
+     * @hide
+     */
+    public static final int STATE_SERVICE_DIED = 0x400;
+
+    /**
+     * Session is disabled because the service package is being udpated.
+     *
+     * @hide
+     */
+    public static final int STATE_SERVICE_UPDATING = 0x800;
+
+    /**
+     * Session is enabled, after the service died and came back to live.
+     *
+     * @hide
+     */
+    public static final int STATE_SERVICE_RESURRECTED = 0x1000;
 
     private static final int INITIAL_CHILDREN_CAPACITY = 5;
 
@@ -139,6 +165,8 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     public static final int FLUSH_REASON_SESSION_FINISHED = 4;
     /** @hide */
     public static final int FLUSH_REASON_IDLE_TIMEOUT = 5;
+    /** @hide */
+    public static final int FLUSH_REASON_TEXT_CHANGE_TIMEOUT = 6;
 
     /** @hide */
     @IntDef(prefix = { "FLUSH_REASON_" }, value = {
@@ -146,7 +174,8 @@ public abstract class ContentCaptureSession implements AutoCloseable {
             FLUSH_REASON_VIEW_ROOT_ENTERED,
             FLUSH_REASON_SESSION_STARTED,
             FLUSH_REASON_SESSION_FINISHED,
-            FLUSH_REASON_IDLE_TIMEOUT
+            FLUSH_REASON_IDLE_TIMEOUT,
+            FLUSH_REASON_TEXT_CHANGE_TIMEOUT
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface FlushReason{}
@@ -162,7 +191,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
 
     /** @hide */
     @Nullable
-    protected final String mId;
+    protected final int mId;
 
     private int mState = UNKNOWN_STATE;
 
@@ -186,13 +215,14 @@ public abstract class ContentCaptureSession implements AutoCloseable {
 
     /** @hide */
     protected ContentCaptureSession() {
-        this(UUID.randomUUID().toString());
+        this(getRandomSessionId());
     }
 
     /** @hide */
     @VisibleForTesting
-    public ContentCaptureSession(@NonNull String id) {
-        mId = Preconditions.checkNotNull(id);
+    public ContentCaptureSession(int id) {
+        Preconditions.checkArgument(id != NO_SESSION_ID);
+        mId = id;
     }
 
     // Used by ChildCOntentCaptureSession
@@ -208,6 +238,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     /**
      * Gets the id used to identify this session.
      */
+    @NonNull
     public final ContentCaptureSessionId getContentCaptureSessionId() {
         if (mContentCaptureSessionId == null) {
             mContentCaptureSessionId = new ContentCaptureSessionId(mId);
@@ -216,15 +247,8 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /** @hide */
-    @VisibleForTesting
-    public int getIdAsInt() {
-        // TODO(b/121197119): use sessionId instead of hashcode once it's changed to int
-        return mId.hashCode();
-    }
-
-    /** @hide */
     @NonNull
-    public String getId() {
+    public int getId() {
         return mId;
     }
 
@@ -374,7 +398,8 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      *
      * <p>Should only be called by views that handle their own virtual view hierarchy.
      *
-     * @param hostId id of the view hosting the virtual hierarchy.
+     * @param hostId id of the non-virtual view hosting the virtual view hierarchy (it can be
+     * obtained by calling {@link ViewStructure#getAutofillId()}).
      * @param virtualIds ids of the virtual children.
      *
      * @throws IllegalArgumentException if the {@code hostId} is an autofill id for a virtual view.
@@ -382,14 +407,14 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      */
     public final void notifyViewsDisappeared(@NonNull AutofillId hostId,
             @NonNull long[] virtualIds) {
-        Preconditions.checkArgument(hostId.isNonVirtual(), "parent cannot be virtual");
+        Preconditions.checkArgument(hostId.isNonVirtual(), "hostId cannot be virtual: %s", hostId);
         Preconditions.checkArgument(!ArrayUtils.isEmpty(virtualIds), "virtual ids cannot be empty");
         if (!isContentCaptureEnabled()) return;
 
         // TODO(b/123036895): use a internalNotifyViewsDisappeared that optimizes how the event is
         // parcelized
         for (long id : virtualIds) {
-            internalNotifyViewDisappeared(new AutofillId(hostId, id, getIdAsInt()));
+            internalNotifyViewDisappeared(new AutofillId(hostId, id, mId));
         }
     }
 
@@ -427,18 +452,18 @@ public abstract class ContentCaptureSession implements AutoCloseable {
      * Creates a new {@link AutofillId} for a virtual child, so it can be used to uniquely identify
      * the children in the session.
      *
-     * @param parentId id of the virtual view parent (it can be obtained by calling
-     * {@link ViewStructure#getAutofillId()} on the parent).
+     * @param hostId id of the non-virtual view hosting the virtual view hierarchy (it can be
+     * obtained by calling {@link ViewStructure#getAutofillId()}).
      * @param virtualChildId id of the virtual child, relative to the parent.
      *
      * @return if for the virtual child
      *
      * @throws IllegalArgumentException if the {@code parentId} is a virtual child id.
      */
-    public @NonNull AutofillId newAutofillId(@NonNull AutofillId parentId, long virtualChildId) {
-        Preconditions.checkNotNull(parentId);
-        Preconditions.checkArgument(parentId.isNonVirtual(), "virtual ids cannot have children");
-        return new AutofillId(parentId, virtualChildId, getIdAsInt());
+    public @NonNull AutofillId newAutofillId(@NonNull AutofillId hostId, long virtualChildId) {
+        Preconditions.checkNotNull(hostId);
+        Preconditions.checkArgument(hostId.isNonVirtual(), "hostId cannot be virtual: %s", hostId);
+        return new AutofillId(hostId, virtualChildId, mId);
     }
 
     /**
@@ -454,7 +479,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     @NonNull
     public final ViewStructure newVirtualViewStructure(@NonNull AutofillId parentId,
             long virtualId) {
-        return new ViewNode.ViewStructureImpl(parentId, virtualId, getIdAsInt());
+        return new ViewNode.ViewStructureImpl(parentId, virtualId, mId);
     }
 
     boolean isContentCaptureEnabled() {
@@ -485,7 +510,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
 
     @Override
     public String toString() {
-        return mId;
+        return Integer.toString(mId);
     }
 
     /** @hide */
@@ -509,8 +534,18 @@ public abstract class ContentCaptureSession implements AutoCloseable {
                 return "FINISHED";
             case FLUSH_REASON_IDLE_TIMEOUT:
                 return "IDLE";
+            case FLUSH_REASON_TEXT_CHANGE_TIMEOUT:
+                return "TEXT_CHANGE";
             default:
                 return "UNKOWN-" + reason;
         }
+    }
+
+    private static int getRandomSessionId() {
+        int id;
+        do {
+            id = sIdGenerator.nextInt();
+        } while (id == NO_SESSION_ID);
+        return id;
     }
 }

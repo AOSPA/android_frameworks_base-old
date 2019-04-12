@@ -106,6 +106,8 @@
     <string-array name="bt_hci_snoop_log_entries">
         <item>Disabled</item>
         <item>Enabled Filtered</item>
+        <item>Enabled Headers Filtered</item>
+        <item>Enabled Media Pkts Filtered</item>
         <item>Enabled</item>
     </string-array>
 
@@ -113,6 +115,8 @@
     <string-array name="bt_hci_snoop_log_values" translatable="false">
         <item>disabled</item>
         <item>filtered</item>
+        <item>snoopheadersfiltered</item>
+        <item>mediapktsfiltered</item>
         <item>full</item>
     </string-array>
 
@@ -141,6 +145,7 @@
         <item><xliff:g id="qualcomm">Qualcomm®</xliff:g> <xliff:g id="aptx_hd">aptX™ HD</xliff:g> audio</item>
         <item>LDAC</item>
         <item><xliff:g id="qualcomm">Qualcomm®</xliff:g> <xliff:g id="aptx_adaptive">aptX™ Adaptive</xliff:g> audio</item>
+        <item><xliff:g id="qualcomm">Qualcomm®</xliff:g> <xliff:g id="aptx_twsp">aptX™ TWS+</xliff:g> audio</item>
         <item>Enable Optional Codecs</item>
         <item>Disable Optional Codecs</item>
     </string-array>
@@ -167,6 +172,7 @@
         <item><xliff:g id="qualcomm">Qualcomm®</xliff:g> <xliff:g id="aptx_hd">aptX™ HD</xliff:g> audio</item>
         <item>LDAC</item>
         <item><xliff:g id="qualcomm">Qualcomm®</xliff:g> <xliff:g id="aptx_adaptive">aptX™ Adaptive</xliff:g> audio</item>
+        <item><xliff:g id="qualcomm">Qualcomm®</xliff:g> <xliff:g id="aptx_twsp">aptX™ TWS+</xliff:g> audio</item>
         <item>Enable Optional Codecs</item>
         <item>Disable Optional Codecs</item>
     </string-array>
@@ -605,5 +611,27 @@
         <item>0</item><item>3</item>
         <item>3</item><item>3</item>
     </array>
+
+    <!-- Bluetooth icon foreground colors -->
+    <integer-array name="bt_icon_fg_colors">
+        <item>@color/bt_color_icon_1</item>
+        <item>@color/bt_color_icon_2</item>
+        <item>@color/bt_color_icon_3</item>
+        <item>@color/bt_color_icon_4</item>
+        <item>@color/bt_color_icon_5</item>
+        <item>@color/bt_color_icon_6</item>
+        <item>@color/bt_color_icon_7</item>
+    </integer-array>
+
+    <!-- Bluetooth icon background colors -->
+    <integer-array name="bt_icon_bg_colors">
+        <item>@color/bt_color_bg_1</item>
+        <item>@color/bt_color_bg_2</item>
+        <item>@color/bt_color_bg_3</item>
+        <item>@color/bt_color_bg_4</item>
+        <item>@color/bt_color_bg_5</item>
+        <item>@color/bt_color_bg_6</item>
+        <item>@color/bt_color_bg_7</item>
+    </integer-array>
 
 </resources>

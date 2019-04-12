@@ -249,6 +249,10 @@ public final class ProcessList {
     // Threshold of number of cached+empty where we consider memory critical.
     static final int TRIM_LOW_THRESHOLD = 5;
 
+    // If true, then we pass the flag to ART to load the app image startup cache.
+    private static final String PROPERTY_USE_APP_IMAGE_STARTUP_CACHE =
+            "persist.device_config.runtime_native.use_app_image_startup_cache";
+
     // Low Memory Killer Daemon command codes.
     // These must be kept in sync with the definitions in lmkd.c
     //
@@ -765,6 +769,9 @@ public final class ProcessList {
             case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
                 procState = "FGSL";
                 break;
+            case ActivityManager.PROCESS_STATE_BOUND_TOP:
+                procState = "BTOP";
+                break;
             case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
                 procState = "FGS ";
                 break;
@@ -832,6 +839,9 @@ public final class ProcessList {
             case ActivityManager.PROCESS_STATE_TOP:
                 return AppProtoEnums.PROCESS_STATE_TOP;
             case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
+                return AppProtoEnums.PROCESS_STATE_FOREGROUND_SERVICE;
+            case ActivityManager.PROCESS_STATE_BOUND_TOP:
+                return AppProtoEnums.PROCESS_STATE_BOUND_TOP;
             case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
                 return AppProtoEnums.PROCESS_STATE_FOREGROUND_SERVICE;
             case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
@@ -962,6 +972,7 @@ public final class ProcessList {
         PROC_MEM_TOP,                   // ActivityManager.PROCESS_STATE_TOP
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
+        PROC_MEM_TOP,                   // ActivityManager.PROCESS_STATE_BOUND_TOP
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND
@@ -1157,11 +1168,11 @@ public final class ProcessList {
      *
      * @param pid The process identifier to set.
      * @param uid The uid of the app
-     * @param amt Adjustment value -- lmkd allows -16 to +15.
+     * @param amt Adjustment value -- lmkd allows -1000 to +1000
      *
      * {@hide}
      */
-    public static final void setOomAdj(int pid, int uid, int amt) {
+    public static void setOomAdj(int pid, int uid, int amt) {
         // This indicates that the process is not started yet and so no need to proceed further.
         if (pid <= 0) {
             return;
@@ -1559,6 +1570,13 @@ public final class ProcessList {
                 runtimeFlags |= policyBits;
             }
 
+            String useAppImageCache = SystemProperties.get(
+                    PROPERTY_USE_APP_IMAGE_STARTUP_CACHE, "");
+            // Property defaults to true currently.
+            if (!TextUtils.isEmpty(useAppImageCache) && !useAppImageCache.equals("false")) {
+                runtimeFlags |= Zygote.USE_APP_IMAGE_STARTUP_CACHE;
+            }
+
             String invokeWith = null;
             if ((app.info.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
                 // Debuggable apps may include a wrapper script with their library directory.
@@ -1783,7 +1801,7 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        packageNames, sandboxId, /*useBlastulaPool=*/ false,
+                        packageNames, sandboxId, /*useUnspecializedAppProcessPool=*/ false,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
@@ -2074,25 +2092,6 @@ public final class ProcessList {
         }
     }
 
-    void killAllBackgroundProcessesLocked() {
-        final ArrayList<ProcessRecord> procs = new ArrayList<>();
-        final int NP = mProcessNames.getMap().size();
-        for (int ip = 0; ip < NP; ip++) {
-            final SparseArray<ProcessRecord> apps = mProcessNames.getMap().valueAt(ip);
-            final int NA = apps.size();
-            for (int ia = 0; ia < NA; ia++) {
-                final ProcessRecord app = apps.valueAt(ia);
-                if (app.isPersistent()) {
-                    // We don't kill persistent processes.
-                    continue;
-                }
-                if (app.removed || app.setAdj >= ProcessList.CACHED_APP_MIN_ADJ) {
-                    procs.add(app);
-                }
-            }
-        }
-    }
-
     @GuardedBy("mService")
     boolean killPackageProcessesLocked(String packageName, int appId, int userId, int minOomAdj,
             String reason) {
@@ -2129,6 +2128,11 @@ public final class ProcessList {
 
                 // Skip process if it doesn't meet our oom adj requirement.
                 if (app.setAdj < minOomAdj) {
+                    // Note it is still possible to have a process with oom adj 0 in the killed
+                    // processes, but it does not mean misjudgment. E.g. a bound service process
+                    // and its client activity process are both in the background, so they are
+                    // collected to be killed. If the client activity is killed first, the service
+                    // may be scheduled to unbind and become an executing service (oom adj 0).
                     continue;
                 }
 
@@ -2852,6 +2856,15 @@ public final class ProcessList {
                     pos--;
                 }
                 mLruProcesses.add(pos, app);
+                if (pos == mLruProcessActivityStart) {
+                    mLruProcessActivityStart++;
+                }
+                if (pos == mLruProcessServiceStart) {
+                    // Unless {@code #hasService} is implemented, currently the starting position
+                    // for activity and service are the same, so the incoming position may equal to
+                    // the starting position of service.
+                    mLruProcessServiceStart++;
+                }
                 // If this process is part of a group, need to pull up any other processes
                 // in that group to be with it.
                 int endIndex = pos - 1;

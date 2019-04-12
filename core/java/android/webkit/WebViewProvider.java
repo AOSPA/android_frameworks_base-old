@@ -238,13 +238,15 @@ public interface WebViewProvider {
 
     public WebViewClient getWebViewClient();
 
-    public WebViewRenderer getWebViewRenderer();
+    @Nullable
+    public WebViewRenderProcess getWebViewRenderProcess();
 
-    public void setWebViewRendererClient(
+    public void setWebViewRenderProcessClient(
             @Nullable Executor executor,
-            @Nullable WebViewRendererClient client);
+            @Nullable WebViewRenderProcessClient client);
 
-    public WebViewRendererClient getWebViewRendererClient();
+    @Nullable
+    public WebViewRenderProcessClient getWebViewRenderProcessClient();
 
     public void setDownloadListener(DownloadListener listener);
 
@@ -351,7 +353,7 @@ public interface WebViewProvider {
         }
 
         default void onProvideContentCaptureStructure(
-                @SuppressWarnings("unused") android.view.ViewStructure structure,
+                @NonNull @SuppressWarnings("unused") android.view.ViewStructure structure,
                 @SuppressWarnings("unused") int flags) {
         }
 

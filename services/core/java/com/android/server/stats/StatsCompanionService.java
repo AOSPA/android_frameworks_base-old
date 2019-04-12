@@ -19,11 +19,14 @@ import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.os.Process.getPidsForCommands;
 import static android.os.Process.getUidForPid;
+import static android.os.storage.VolumeInfo.TYPE_PRIVATE;
+import static android.os.storage.VolumeInfo.TYPE_PUBLIC;
 
 import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.server.am.MemoryStatUtil.readCmdlineFromProcfs;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromProcfs;
 import static com.android.server.am.MemoryStatUtil.readRssHighWaterMarkFromProcfs;
+import static com.android.server.am.MemoryStatUtil.readSystemIonHeapSizeFromDebugfs;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -41,6 +44,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PermissionInfo;
@@ -88,6 +92,7 @@ import android.os.UserManager;
 import android.os.storage.DiskInfo;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
+import android.stats.storage.StorageEnums;
 import android.telephony.ModemActivityInfo;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
@@ -105,6 +110,7 @@ import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BinderCallsStats.ExportedCallStat;
 import com.android.internal.os.KernelCpuSpeedReader;
 import com.android.internal.os.KernelCpuThreadReader;
+import com.android.internal.os.KernelCpuThreadReaderDiff;
 import com.android.internal.os.KernelCpuThreadReaderSettingsObserver;
 import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidActiveTimeReader;
 import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidClusterTimeReader;
@@ -145,6 +151,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -256,7 +263,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private StoragedUidIoStatsReader mStoragedUidIoStatsReader =
             new StoragedUidIoStatsReader();
     @Nullable
-    private final KernelCpuThreadReader mKernelCpuThreadReader;
+    private final KernelCpuThreadReaderDiff mKernelCpuThreadReader;
 
     private long mDebugElapsedClockPreviousValue = 0;
     private long mDebugElapsedClockPullCount = 0;
@@ -1182,6 +1189,15 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         SystemProperties.set("sys.rss_hwm_reset.on", "1");
     }
 
+    private void pullSystemIonHeapSize(
+            int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        final long systemIonHeapSizeInBytes = readSystemIonHeapSizeFromDebugfs();
+        StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+        e.writeLong(systemIonHeapSizeInBytes);
+        pulledData.add(e);
+    }
+
     private void pullBinderCallsStats(
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
@@ -1711,7 +1727,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             throw new IllegalStateException("mKernelCpuThreadReader is null");
         }
         ArrayList<KernelCpuThreadReader.ProcessCpuUsage> processCpuUsages =
-                this.mKernelCpuThreadReader.getProcessCpuUsageByUids();
+                this.mKernelCpuThreadReader.getProcessCpuUsageDiffed();
         if (processCpuUsages == null) {
             throw new IllegalStateException("processCpuUsages is null");
         }
@@ -1958,7 +1974,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         pulledData.add(e);
     }
 
-    private void pullSDCardInfo(int tagId, long elapsedNanos, long wallClockNanos,
+    private void pullExternalStorageInfo(int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
         StorageManager storageManager = mContext.getSystemService(StorageManager.class);
         if (storageManager != null) {
@@ -1966,13 +1982,65 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             for (VolumeInfo vol : volumes) {
                 final String envState = VolumeInfo.getEnvironmentForState(vol.getState());
                 final DiskInfo diskInfo = vol.getDisk();
-                if (diskInfo != null && diskInfo.isSd()) {
+                if (diskInfo != null) {
                     if (envState.equals(Environment.MEDIA_MOUNTED)) {
+                        // Get the type of the volume, if it is adoptable or portable.
+                        int volumeType = StatsLog.EXTERNAL_STORAGE_INFO__VOLUME_TYPE__OTHER;
+                        if (vol.getType() == TYPE_PUBLIC) {
+                            volumeType = StatsLog.EXTERNAL_STORAGE_INFO__VOLUME_TYPE__PUBLIC;
+                        } else if (vol.getType() == TYPE_PRIVATE) {
+                            volumeType = StatsLog.EXTERNAL_STORAGE_INFO__VOLUME_TYPE__PRIVATE;
+                        }
+                        // Get the type of external storage inserted in the device (sd cards,
+                        // usb, etc)
+                        int externalStorageType;
+                        if (diskInfo.isSd()) {
+                            externalStorageType = StorageEnums.SD_CARD;
+                        } else if (diskInfo.isUsb()) {
+                            externalStorageType = StorageEnums.USB;
+                        } else {
+                            externalStorageType = StorageEnums.OTHER;
+                        }
                         StatsLogEventWrapper e =
                                 new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
-                        e.writeInt(vol.getType() + 1);
+                        e.writeInt(externalStorageType);
+                        e.writeInt(volumeType);
                         e.writeLong(diskInfo.size);
                         pulledData.add(e);
+                    }
+                }
+            }
+        }
+    }
+
+    private void pullAppsOnExternalStorageInfo(int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        PackageManager pm = mContext.getPackageManager();
+        StorageManager storage = mContext.getSystemService(StorageManager.class);
+        List<ApplicationInfo> apps = pm.getInstalledApplications(/* flags = */ 0);
+        for (ApplicationInfo appInfo : apps) {
+            UUID storageUuid = appInfo.storageUuid;
+            if (storageUuid != null) {
+                VolumeInfo volumeInfo = storage.findVolumeByUuid(appInfo.storageUuid.toString());
+                if (volumeInfo != null) {
+                    DiskInfo diskInfo = volumeInfo.getDisk();
+                    if (diskInfo != null) {
+                        int externalStorageType = -1;
+                        if (diskInfo.isSd()) {
+                            externalStorageType = StorageEnums.SD_CARD;
+                        } else if (diskInfo.isUsb()) {
+                            externalStorageType = StorageEnums.USB;
+                        } else if (appInfo.isExternal()) {
+                            externalStorageType = StorageEnums.OTHER;
+                        }
+                        // App is installed on external storage.
+                        if (externalStorageType != -1) {
+                            StatsLogEventWrapper e =
+                                    new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+                            e.writeInt(externalStorageType);
+                            e.writeString(appInfo.packageName);
+                            pulledData.add(e);
+                        }
                     }
                 }
             }
@@ -2066,6 +2134,10 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             case StatsLog.PROCESS_MEMORY_HIGH_WATER_MARK: {
                 pullProcessMemoryHighWaterMark(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.SYSTEM_ION_HEAP_SIZE: {
+                pullSystemIonHeapSize(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
             case StatsLog.BINDER_CALLS: {
@@ -2171,8 +2243,12 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 pullTimeZoneDataInfo(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
-            case StatsLog.SDCARD_INFO: {
-                pullSDCardInfo(tagId, elapsedNanos, wallClockNanos, ret);
+            case StatsLog.EXTERNAL_STORAGE_INFO: {
+                pullExternalStorageInfo(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.APPS_ON_EXTERNAL_STORAGE_INFO: {
+                pullAppsOnExternalStorageInfo(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
             default:

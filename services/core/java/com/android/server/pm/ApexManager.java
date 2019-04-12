@@ -27,6 +27,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.PackageParser;
 import android.content.pm.PackageParser.PackageParserException;
 import android.os.RemoteException;
@@ -41,6 +42,7 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -94,7 +96,8 @@ class ApexManager {
                     }
                     try {
                         list.add(PackageParser.generatePackageInfoFromApex(
-                                new File(ai.packagePath), true /* collect certs */));
+                                new File(ai.packagePath), PackageManager.GET_META_DATA
+                                | PackageManager.GET_SIGNING_CERTIFICATES));
                     } catch (PackageParserException pe) {
                         throw new IllegalStateException("Unable to parse: " + ai, pe);
                     }
@@ -132,6 +135,17 @@ class ApexManager {
     Collection<PackageInfo> getActivePackages() {
         populateActivePackagesCacheIfNeeded();
         return mActivePackagesCache.values();
+    }
+
+    /**
+     * Checks if {@code packageName} is an apex package.
+     *
+     * @param packageName package to check.
+     * @return {@code true} if {@code packageName} is an apex package.
+     */
+    boolean isApexPackage(String packageName) {
+        populateActivePackagesCacheIfNeeded();
+        return mActivePackagesCache.containsKey(packageName);
     }
 
     /**
@@ -241,6 +255,23 @@ class ApexManager {
             return true;
         } catch (RemoteException re) {
             Slog.e(TAG, "Unable to contact apexservice", re);
+            return false;
+        }
+    }
+
+    /**
+     * Uninstalls given {@code apexPackage}.
+     *
+     * <p>NOTE. Device must be rebooted in order for uninstall to take effect.
+     *
+     * @param apexPackagePath package to uninstall.
+     * @return {@code true} upon successful uninstall, {@code false} otherwise.
+     */
+    boolean uninstallApex(String apexPackagePath) {
+        try {
+            mApexService.unstagePackages(Collections.singletonList(apexPackagePath));
+            return true;
+        } catch (Exception e) {
             return false;
         }
     }

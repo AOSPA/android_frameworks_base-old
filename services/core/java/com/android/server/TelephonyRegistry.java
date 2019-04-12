@@ -73,10 +73,13 @@ import com.android.server.am.BatteryStatsService;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.OptionalInt;
+import java.util.stream.Collectors;
 
 /**
  * Since phone process can be restarted, this class provides a centralized place
@@ -258,8 +261,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
     static final int ENFORCE_PHONE_STATE_PERMISSION_MASK =
                 PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR
                         | PhoneStateListener.LISTEN_MESSAGE_WAITING_INDICATOR
-                        | PhoneStateListener.LISTEN_EMERGENCY_NUMBER_LIST
-                        | PhoneStateListener.LISTEN_ACTIVE_DATA_SUBID_CHANGE;
+                        | PhoneStateListener.LISTEN_EMERGENCY_NUMBER_LIST;
 
     static final int PRECISE_PHONE_STATE_PERMISSION_MASK =
                 PhoneStateListener.LISTEN_PRECISE_CALL_STATE |
@@ -819,7 +821,11 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                             remove(r.binder);
                         }
                     }
-                    if ((events & PhoneStateListener.LISTEN_ACTIVE_DATA_SUBID_CHANGE) != 0) {
+                    if ((events & PhoneStateListener
+                            .LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE) != 0
+                            && TelephonyPermissions.checkReadPhoneStateOnAnyActiveSub(
+                                    r.context, r.callerPid, r.callerUid, r.callingPackage,
+                            "listen_active_data_subid_change")) {
                         try {
                             r.callback.onActiveDataSubIdChanged(mActiveDataSubId);
                         } catch (RemoteException ex) {
@@ -1153,17 +1159,28 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
 
     @Override
     public void notifyCarrierNetworkChange(boolean active) {
-        enforceNotifyPermissionOrCarrierPrivilege("notifyCarrierNetworkChange()");
+        // only CarrierService with carrier privilege rule should have the permission.
+        int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        try {
+            subId = Arrays.stream(SubscriptionManager.from(mContext)
+                    .getActiveSubscriptionIdList())
+                    .filter(i -> TelephonyPermissions.checkCarrierPrivilegeForSubId(i))
+                    .findFirst().getAsInt();
+        } catch (NoSuchElementException ex) {
+            log("notifyCarrierNetworkChange without carrier privilege");
+        }
+        int phoneId = SubscriptionManager.getPhoneId(subId);
 
         if (VDBG) {
-            log("notifyCarrierNetworkChange: active=" + active);
+            log("notifyCarrierNetworkChange: active=" + active + "subId: " + subId);
         }
 
         synchronized (mRecords) {
             mCarrierNetworkChangeState = active;
             for (Record r : mRecords) {
                 if (r.matchPhoneStateListenerEvent(
-                        PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE)) {
+                        PhoneStateListener.LISTEN_CARRIER_NETWORK_CHANGE) &&
+                        idMatch(r.subId, subId, phoneId)) {
                     try {
                         r.callback.onCarrierNetworkChange(active);
                     } catch (RemoteException ex) {
@@ -1455,7 +1472,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         synchronized (mRecords) {
             mPreciseDataConnectionState = new PreciseDataConnectionState(
                     TelephonyManager.DATA_UNKNOWN,TelephonyManager.NETWORK_TYPE_UNKNOWN,
-                    ApnSetting.getApnTypesBitmaskFromString(apnType), "", null,
+                    ApnSetting.getApnTypesBitmaskFromString(apnType), null, null,
                     DataFailCause.NONE);
             for (Record r : mRecords) {
                 if (r.matchPhoneStateListenerEvent(
@@ -1471,7 +1488,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         }
         broadcastDataConnectionFailed(apnType, subId);
         broadcastPreciseDataConnectionStateChanged(TelephonyManager.DATA_UNKNOWN,
-                TelephonyManager.NETWORK_TYPE_UNKNOWN, apnType, "", null,
+                TelephonyManager.NETWORK_TYPE_UNKNOWN, apnType, null, null,
                 DataFailCause.NONE);
     }
 
@@ -1550,6 +1567,13 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                 log("notifyPreciseCallState: mCallQuality is null, skipping call attributes");
                 notifyCallAttributes = false;
             } else {
+                // If the precise call state is no longer active, reset the call network type and
+                // call quality.
+                if (mPreciseCallState.getForegroundCallState()
+                        != PreciseCallState.PRECISE_CALL_STATE_ACTIVE) {
+                    mCallNetworkType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+                    mCallQuality = new CallQuality();
+                }
                 mCallAttributes = new CallAttributes(mPreciseCallState, mCallNetworkType,
                         mCallQuality);
             }
@@ -1743,12 +1767,23 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
             log("notifyActiveDataSubIdChanged: activeDataSubId=" + activeDataSubId);
         }
 
+        // Create a copy to prevent the IPC call while checking carrier privilege under the lock.
+        List<Record> copiedRecords;
         synchronized (mRecords) {
-            mActiveDataSubId = activeDataSubId;
+            copiedRecords = new ArrayList<>(mRecords);
+        }
+        mActiveDataSubId = activeDataSubId;
 
-            for (Record r : mRecords) {
-                if (r.matchPhoneStateListenerEvent(
-                        PhoneStateListener.LISTEN_ACTIVE_DATA_SUBID_CHANGE)) {
+        // Filter the record that does not listen to this change or does not have the permission.
+        copiedRecords = copiedRecords.stream().filter(r -> r.matchPhoneStateListenerEvent(
+                PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE)
+                && TelephonyPermissions.checkReadPhoneStateOnAnyActiveSub(
+                        mContext, r.callerPid, r.callerUid, r.callingPackage,
+                "notifyActiveDataSubIdChanged")).collect(Collectors.toCollection(ArrayList::new));
+
+        synchronized (mRecords) {
+            for (Record r : copiedRecords) {
+                if (mRecords.contains(r)) {
                     try {
                         r.callback.onActiveDataSubIdChanged(activeDataSubId);
                     } catch (RemoteException ex) {
@@ -1795,7 +1830,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
         synchronized (mRecords) {
             TelephonyManager tm = (TelephonyManager) mContext.getSystemService(
                     Context.TELEPHONY_SERVICE);
-            mEmergencyNumberList = tm.getCurrentEmergencyNumberList();
+            mEmergencyNumberList = tm.getEmergencyNumberList();
 
             for (Record r : mRecords) {
                 if (r.matchPhoneStateListenerEvent(
@@ -1872,7 +1907,7 @@ public class TelephonyRegistry extends ITelephonyRegistry.Stub {
                 pw.println("mDataConnectionState=" + mDataConnectionState[i]);
                 pw.println("mCellLocation=" + mCellLocation[i]);
                 pw.println("mCellInfo=" + mCellInfo.get(i));
-                pw.println("mImsCallDisconnectCause=" + mImsReasonInfo.get(i).toString());
+                pw.println("mImsCallDisconnectCause=" + mImsReasonInfo.get(i));
                 pw.decreaseIndent();
             }
             pw.println("mCallNetworkType=" + mCallNetworkType);

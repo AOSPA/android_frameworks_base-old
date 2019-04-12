@@ -69,7 +69,7 @@ import java.lang.annotation.RetentionPolicy;
  * }
  *
  * // Draw text to the canvas
- * Bitmap bmp = new Bitmap.createBitmap(240, totalHeight, Bitmap.Config.ARGB_8888);
+ * Bitmap bmp = Bitmap.createBitmap(240, totalHeight, Bitmap.Config.ARGB_8888);
  * Canvas c = new Canvas(bmp);
  * float yOffset = 0f;
  * int prevOffset = 0;
@@ -177,10 +177,10 @@ public class LineBreaker {
     /**
      * Helper class for creating a {@link LineBreaker}.
      */
-    public static class Builder {
+    public static final class Builder {
         private @BreakStrategy int mBreakStrategy = BREAK_STRATEGY_SIMPLE;
         private @HyphenationFrequency int mHyphenationFrequency = HYPHENATION_FREQUENCY_NONE;
-        private @JustificationMode int mJustified = JUSTIFICATION_MODE_NONE;
+        private @JustificationMode int mJustificationMode = JUSTIFICATION_MODE_NONE;
         private @Nullable int[] mIndents = null;
 
         /**
@@ -189,7 +189,7 @@ public class LineBreaker {
          * You can change the line breaking behavior by setting break strategy. The default value is
          * {@link #BREAK_STRATEGY_SIMPLE}.
          */
-        public Builder setBreakStrategy(@BreakStrategy int breakStrategy) {
+        public @NonNull Builder setBreakStrategy(@BreakStrategy int breakStrategy) {
             mBreakStrategy = breakStrategy;
             return this;
         }
@@ -200,7 +200,8 @@ public class LineBreaker {
          * You can change the amount of automatic hyphenation used. The default value is
          * {@link #HYPHENATION_FREQUENCY_NONE}.
          */
-        public Builder setHyphenationFrequency(@HyphenationFrequency int hyphenationFrequency) {
+        public @NonNull Builder setHyphenationFrequency(
+                @HyphenationFrequency int hyphenationFrequency) {
             mHyphenationFrequency = hyphenationFrequency;
             return this;
         }
@@ -212,8 +213,8 @@ public class LineBreaker {
          * internal parameters for justification.
          * The default value is {@link #JUSTIFICATION_MODE_NONE}
          */
-        public Builder setJustified(@JustificationMode int justified) {
-            mJustified = justified;
+        public @NonNull Builder setJustificationMode(@JustificationMode int justificationMode) {
+            mJustificationMode = justificationMode;
             return this;
         }
 
@@ -224,7 +225,7 @@ public class LineBreaker {
          * amount is the sum of both left and right indentations. For lines past the last element in
          * the array, the indentation amount of the last element is used.
          */
-        public Builder setIndents(@Nullable int[] indents) {
+        public @NonNull Builder setIndents(@Nullable int[] indents) {
             mIndents = indents;
             return this;
         }
@@ -234,8 +235,9 @@ public class LineBreaker {
          *
          * You can reuse the Builder instance even after calling this method.
          */
-        public LineBreaker build() {
-            return new LineBreaker(mBreakStrategy, mHyphenationFrequency, mJustified, mIndents);
+        public @NonNull LineBreaker build() {
+            return new LineBreaker(mBreakStrategy, mHyphenationFrequency, mJustificationMode,
+                    mIndents);
         }
     }
 
@@ -246,8 +248,8 @@ public class LineBreaker {
         private @FloatRange(from = 0.0f) float mWidth = 0;
         private @FloatRange(from = 0.0f) float mFirstWidth = 0;
         private @IntRange(from = 0) int mFirstWidthLineCount = 0;
-        private @Nullable int[] mVariableTabStops = null;
-        private @IntRange(from = 0) int mDefaultTabStop = 0;
+        private @Nullable float[] mVariableTabStops = null;
+        private @FloatRange(from = 0) float mDefaultTabStop = 0;
 
         public ParagraphConstraints() {}
 
@@ -282,8 +284,8 @@ public class LineBreaker {
          * @see #getTabStops()
          * @see #getDefaultTabStop()
          */
-        public void setTabStops(@Nullable int[] tabStops,
-                @Px @IntRange(from = 0) int defaultTabStop) {
+        public void setTabStops(@Nullable float[] tabStops,
+                @Px @FloatRange(from = 0) float defaultTabStop) {
             mVariableTabStops = tabStops;
             mDefaultTabStop = defaultTabStop;
         }
@@ -318,18 +320,18 @@ public class LineBreaker {
         /**
          * Returns the array of tab stops in pixels.
          *
-         * @see #setTabStops(int[], int)
+         * @see #setTabStops(float[], int)
          */
-        public @Nullable int[] getTabStops() {
+        public @Nullable float[] getTabStops() {
             return mVariableTabStops;
         }
 
         /**
          * Returns the default tab stops in pixels.
          *
-         * @see #setTabStop(int[], int)
+         * @see #setTabStop(float[], int)
          */
-        public @Px @IntRange(from = 0) int getDefaultTabStop() {
+        public @Px @FloatRange(from = 0) float getDefaultTabStop() {
             return mDefaultTabStop;
         }
     }
@@ -340,11 +342,16 @@ public class LineBreaker {
      */
     public static class Result {
         // Following two contstant must be synced with minikin's line breaker.
+        // TODO(nona): Remove these constatns by introducing native methods.
         private static final int TAB_MASK = 0x20000000;
         private static final int HYPHEN_MASK = 0xFF;
+        private static final int START_HYPHEN_MASK = 0x18;  // 0b11000
+        private static final int END_HYPHEN_MASK = 0x7;  // 0b00111
+        private static final int START_HYPHEN_BITS_SHIFT = 3;
 
-        private static final NativeAllocationRegistry sRegistry = new NativeAllocationRegistry(
-                Result.class.getClassLoader(), nGetReleaseResultFunc(), 32);
+        private static final NativeAllocationRegistry sRegistry =
+                NativeAllocationRegistry.createMalloced(
+                Result.class.getClassLoader(), nGetReleaseResultFunc());
         private final long mPtr;
 
         private Result(long ptr) {
@@ -412,22 +419,35 @@ public class LineBreaker {
         }
 
         /**
-         * Returns a packed packed hyphen edit for the line.
+         * Returns a start hyphen edit for the line.
          *
          * @param lineIndex an index of the line.
-         * @return a packed hyphen edit for the line.
+         * @return a start hyphen edit for the line.
          *
-         * @see android.text.Hyphenator#unpackStartHyphenEdit(int)
-         * @see android.text.Hyphenator#unpackEndHyphenEdit(int)
-         * @see android.text.Hyphenator#packHyphenEdit(int,int)
+         * @see android.graphics.Paint#setStartHyphenEdit
+         * @see android.graphics.Paint#getStartHyphenEdit
          */
-        public int getLineHyphenEdit(int lineIndex) {
-            return (nGetLineFlag(mPtr, lineIndex) & HYPHEN_MASK);
+        public int getStartLineHyphenEdit(int lineIndex) {
+            return (nGetLineFlag(mPtr, lineIndex) & START_HYPHEN_MASK) >> START_HYPHEN_BITS_SHIFT;
+        }
+
+        /**
+         * Returns an end hyphen edit for the line.
+         *
+         * @param lineIndex an index of the line.
+         * @return an end hyphen edit for the line.
+         *
+         * @see android.graphics.Paint#setEndHyphenEdit
+         * @see android.graphics.Paint#getEndHyphenEdit
+         */
+        public int getEndLineHyphenEdit(int lineIndex) {
+            return nGetLineFlag(mPtr, lineIndex) & END_HYPHEN_MASK;
         }
     }
 
-    private static final NativeAllocationRegistry sRegistry = new NativeAllocationRegistry(
-            LineBreaker.class.getClassLoader(), nGetReleaseFunc(), 64);
+    private static final NativeAllocationRegistry sRegistry =
+            NativeAllocationRegistry.createMalloced(
+            LineBreaker.class.getClassLoader(), nGetReleaseFunc());
 
     private final long mNativePtr;
 
@@ -451,7 +471,7 @@ public class LineBreaker {
      * @param constraints for a single paragraph
      * @param lineNumber a line number of this paragraph
      */
-    public Result computeLineBreaks(
+    public @NonNull Result computeLineBreaks(
             @NonNull MeasuredText measuredPara,
             @NonNull ParagraphConstraints constraints,
             @IntRange(from = 0) int lineNumber) {
@@ -495,8 +515,8 @@ public class LineBreaker {
             @FloatRange(from = 0.0f) float firstWidth,
             @IntRange(from = 0) int firstWidthLineCount,
             @FloatRange(from = 0.0f) float restWidth,
-            @Nullable int[] variableTabStops,
-            int defaultTabStop,
+            @Nullable float[] variableTabStops,
+            float defaultTabStop,
             @IntRange(from = 0) int indentsOffset);
 
     // Result accessors

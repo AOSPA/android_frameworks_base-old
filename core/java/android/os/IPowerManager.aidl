@@ -34,6 +34,7 @@ interface IPowerManager
             String historyTag);
     void acquireWakeLockWithUid(IBinder lock, int flags, String tag, String packageName,
             int uidtoblame);
+    @UnsupportedAppUsage
     void releaseWakeLock(IBinder lock, int flags);
     void updateWakeLockUids(IBinder lock, in int[] uids);
     oneway void powerHint(int hintId, int data);
@@ -41,21 +42,25 @@ interface IPowerManager
     void updateWakeLockWorkSource(IBinder lock, in WorkSource ws, String historyTag);
     boolean isWakeLockLevelSupported(int level);
 
+    @UnsupportedAppUsage
     void userActivity(long time, int event, int flags);
     void wakeUp(long time, int reason, String details, String opPackageName);
+    @UnsupportedAppUsage
     void goToSleep(long time, int reason, int flags);
     void nap(long time);
+    @UnsupportedAppUsage
     boolean isInteractive();
     boolean isPowerSaveMode();
     PowerSaveState getPowerSaveState(int serviceType);
-    boolean setPowerSaveMode(boolean mode);
-    boolean setDynamicPowerSavings(boolean dynamicPowerSavingsEnabled, int disableThreshold);
+    boolean setPowerSaveModeEnabled(boolean mode);
+    boolean setDynamicPowerSaveHint(boolean powerSaveHint, int disableThreshold);
     boolean setAdaptivePowerSavePolicy(in BatterySaverPolicyConfig config);
     boolean setAdaptivePowerSaveEnabled(boolean enabled);
-    int getPowerSaveMode();
+    int getPowerSaveModeTrigger();
     boolean isDeviceIdleMode();
     boolean isLightDeviceIdleMode();
 
+    @UnsupportedAppUsage
     void reboot(boolean confirm, String reason, boolean wait);
     void rebootSafeMode(boolean confirm, boolean wait);
     void shutdown(boolean confirm, String reason, boolean wait);

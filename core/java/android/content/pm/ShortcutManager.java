@@ -15,8 +15,10 @@
  */
 package android.content.pm;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
@@ -565,6 +567,7 @@ public class ShortcutManager {
      */
     @NonNull
     @SystemApi
+    @RequiresPermission(Manifest.permission.MANAGE_APP_PREDICTIONS)
     public List<ShareShortcutInfo> getShareTargets(@NonNull IntentFilter filter) {
         try {
             return mService.getShareTargets(mContext.getPackageName(), filter,
@@ -600,15 +603,17 @@ public class ShortcutManager {
             mTargetComponent = targetComponent;
         }
 
-        private ShareShortcutInfo(Parcel in) {
+        private ShareShortcutInfo(@NonNull Parcel in) {
             mShortcutInfo = in.readParcelable(ShortcutInfo.class.getClassLoader());
             mTargetComponent = in.readParcelable(ComponentName.class.getClassLoader());
         }
 
+        @NonNull
         public ShortcutInfo getShortcutInfo() {
             return mShortcutInfo;
         }
 
+        @NonNull
         public ComponentName getTargetComponent() {
             return mTargetComponent;
         }
@@ -619,12 +624,12 @@ public class ShortcutManager {
         }
 
         @Override
-        public void writeToParcel(Parcel dest, int flags) {
+        public void writeToParcel(@NonNull Parcel dest, int flags) {
             dest.writeParcelable(mShortcutInfo, flags);
             dest.writeParcelable(mTargetComponent, flags);
         }
 
-        public static final Parcelable.Creator<ShareShortcutInfo> CREATOR =
+        public static final @NonNull Parcelable.Creator<ShareShortcutInfo> CREATOR =
                 new Parcelable.Creator<ShareShortcutInfo>() {
                     public ShareShortcutInfo createFromParcel(Parcel in) {
                         return new ShareShortcutInfo(in);

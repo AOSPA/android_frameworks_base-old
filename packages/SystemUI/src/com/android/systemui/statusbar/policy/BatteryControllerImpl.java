@@ -226,7 +226,7 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
 
         String percentage = NumberFormat.getPercentInstance().format((double) mLevel / 100.0);
         return PowerUtil.getBatteryRemainingShortStringFormatted(
-                mContext, mEstimate.estimateMillis);
+                mContext, mEstimate.getEstimateMillis());
     }
 
     private void updateEstimateInBackground() {
@@ -237,10 +237,10 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
 
         mFetchingEstimate = true;
         Dependency.get(Dependency.BG_HANDLER).post(() -> {
-            mEstimate = mEstimates.getEstimate();
+            // Only fetch the estimate if they are enabled
+            mEstimate = mEstimates.isHybridNotificationEnabled() ? mEstimates.getEstimate() : null;
             mLastEstimateTimestamp = System.currentTimeMillis();
             mFetchingEstimate = false;
-
             Dependency.get(Dependency.MAIN_HANDLER).post(this::notifyEstimateFetchCallbacks);
         });
     }

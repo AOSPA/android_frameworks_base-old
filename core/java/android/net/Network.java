@@ -16,6 +16,7 @@
 
 package android.net;
 
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
@@ -125,7 +126,7 @@ public class Network implements Parcelable {
      */
     @SystemApi
     @TestApi
-    public Network(Network that) {
+    public Network(@NonNull Network that) {
         this(that.netId, that.mPrivateDnsBypass);
     }
 
@@ -163,7 +164,7 @@ public class Network implements Parcelable {
      */
     @TestApi
     @SystemApi
-    public Network getPrivateDnsBypassingCopy() {
+    public @NonNull Network getPrivateDnsBypassingCopy() {
         return new Network(netId, true);
     }
 
@@ -470,7 +471,7 @@ public class Network implements Parcelable {
         dest.writeInt(netId);
     }
 
-    public static final Creator<Network> CREATOR =
+    public static final @android.annotation.NonNull Creator<Network> CREATOR =
         new Creator<Network>() {
             public Network createFromParcel(Parcel in) {
                 int netId = in.readInt();

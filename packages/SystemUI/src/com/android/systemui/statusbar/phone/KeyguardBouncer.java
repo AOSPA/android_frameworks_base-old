@@ -88,6 +88,7 @@ public class KeyguardBouncer {
     private int mBouncerPromptReason;
     private boolean mIsAnimatingAway;
     private boolean mIsScrimmed;
+    private ViewGroup mLockIconContainer;
 
     public KeyguardBouncer(Context context, ViewMediatorCallback callback,
             LockPatternUtils lockPatternUtils, ViewGroup container,
@@ -122,6 +123,7 @@ public class KeyguardBouncer {
             return;
         }
         ensureView();
+        mIsScrimmed = isScrimmed;
 
         // On the keyguard, we want to show the bouncer when the user drags up, but it's
         // not correct to end the falsing session. We still need to verify if those touches
@@ -131,13 +133,13 @@ public class KeyguardBouncer {
         if (isScrimmed) {
             setExpansion(EXPANSION_VISIBLE);
         }
-        mIsScrimmed = isScrimmed;
 
         if (resetSecuritySelection) {
             // showPrimarySecurityScreen() updates the current security method. This is needed in
             // case we are already showing and the current security method changed.
-            mKeyguardView.showPrimarySecurityScreen();
+            showPrimarySecurityScreen();
         }
+
         if (mRoot.getVisibility() == View.VISIBLE || mShowingSoon) {
             return;
         }
@@ -167,8 +169,12 @@ public class KeyguardBouncer {
         mCallback.onBouncerVisiblityChanged(true /* shown */);
     }
 
-    public boolean isShowingScrimmed() {
-        return isShowing() && mIsScrimmed;
+    public boolean isScrimmed() {
+        return mIsScrimmed;
+    }
+
+    public ViewGroup getLockIconContainer() {
+        return mRoot == null || mRoot.getVisibility() != View.VISIBLE ? null : mLockIconContainer;
     }
 
     /**
@@ -276,6 +282,7 @@ public class KeyguardBouncer {
                 StatsLog.KEYGUARD_BOUNCER_STATE_CHANGED__STATE__HIDDEN);
             mDismissCallbackRegistry.notifyDismissCancelled();
         }
+        mIsScrimmed = false;
         mFalsingManager.onBouncerHidden();
         mCallback.onBouncerVisiblityChanged(false /* shown */);
         cancelShowRunnable();
@@ -327,6 +334,11 @@ public class KeyguardBouncer {
                 && mExpansion == EXPANSION_VISIBLE && !isAnimatingAway();
     }
 
+    public boolean isPartiallyVisible() {
+        return (mShowingSoon || (mRoot != null && mRoot.getVisibility() == View.VISIBLE))
+                && mExpansion != EXPANSION_HIDDEN && !isAnimatingAway();
+    }
+
     /**
      * @return {@code true} when bouncer's pre-hide animation already started but isn't completely
      *         hidden yet, {@code false} otherwise.
@@ -339,9 +351,18 @@ public class KeyguardBouncer {
         boolean wasInitialized = mRoot != null;
         ensureView();
         if (wasInitialized) {
-            mKeyguardView.showPrimarySecurityScreen();
+            showPrimarySecurityScreen();
         }
         mBouncerPromptReason = mCallback.getBouncerPromptReason();
+    }
+
+    private void showPrimarySecurityScreen() {
+        mKeyguardView.showPrimarySecurityScreen();
+        KeyguardSecurityView keyguardSecurityView = mKeyguardView.getCurrentSecurityView();
+        if (keyguardSecurityView != null) {
+            mLockIconContainer = ((ViewGroup) keyguardSecurityView)
+                    .findViewById(R.id.lock_icon_container);
+        }
     }
 
     /**
@@ -408,6 +429,8 @@ public class KeyguardBouncer {
         mStatusBarHeight = mRoot.getResources().getDimensionPixelOffset(
                 com.android.systemui.R.dimen.status_bar_height);
         mRoot.setVisibility(View.INVISIBLE);
+        mRoot.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight,
+                oldBottom) -> mExpansionCallback.onLayout());
         mRoot.setAccessibilityPaneTitle(mKeyguardView.getAccessibilityTitleForCurrentMode());
 
         final WindowInsets rootInsets = mRoot.getRootWindowInsets();
@@ -488,5 +511,6 @@ public class KeyguardBouncer {
         void onFullyShown();
         void onStartingToHide();
         void onFullyHidden();
+        void onLayout();
     }
 }

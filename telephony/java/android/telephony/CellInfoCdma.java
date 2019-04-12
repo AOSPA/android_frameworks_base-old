@@ -68,8 +68,8 @@ public final class CellInfoCdma extends CellInfo implements Parcelable {
     }
 
     /** @hide */
-    public CellInfoCdma(android.hardware.radio.V1_4.CellInfo ci) {
-        super(ci);
+    public CellInfoCdma(android.hardware.radio.V1_4.CellInfo ci, long timeStamp) {
+        super(ci, timeStamp);
         final android.hardware.radio.V1_2.CellInfoCdma cic = ci.info.cdma();
         mCellIdentityCdma = new CellIdentityCdma(cic.cellIdentityCdma);
         mCellSignalStrengthCdma =
@@ -90,6 +90,15 @@ public final class CellInfoCdma extends CellInfo implements Parcelable {
     public CellSignalStrengthCdma getCellSignalStrength() {
         return mCellSignalStrengthCdma;
     }
+
+    /** @hide */
+    @Override
+    public CellInfo sanitizeLocationInfo() {
+        CellInfoCdma result = new CellInfoCdma(this);
+        result.mCellIdentityCdma = mCellIdentityCdma.sanitizeLocationInfo();
+        return result;
+    }
+
     /** @hide */
     public void setCellSignalStrength(CellSignalStrengthCdma css) {
         mCellSignalStrengthCdma = css;
@@ -156,7 +165,7 @@ public final class CellInfoCdma extends CellInfo implements Parcelable {
     }
 
     /** Implement the Parcelable interface */
-    public static final Creator<CellInfoCdma> CREATOR = new Creator<CellInfoCdma>() {
+    public static final @android.annotation.NonNull Creator<CellInfoCdma> CREATOR = new Creator<CellInfoCdma>() {
         @Override
         public CellInfoCdma createFromParcel(Parcel in) {
             in.readInt(); // Skip past token, we know what it is

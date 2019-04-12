@@ -20,7 +20,6 @@
 #include "renderthread/EglManager.h"
 #include "renderthread/VulkanManager.h"
 
-#include <SkToSRGBColorFilter.h>
 #include <gui/Surface.h>
 #include <ui/Fence.h>
 #include <ui/GraphicBuffer.h>
@@ -29,6 +28,7 @@
 #include "hwui/Bitmap.h"
 #include "utils/Color.h"
 #include "utils/MathUtils.h"
+#include "utils/TraceUtils.h"
 
 using namespace android::uirenderer::renderthread;
 
@@ -84,6 +84,7 @@ CopyResult Readback::copyHWBitmapInto(Bitmap* hwBitmap, SkBitmap* bitmap) {
 }
 
 CopyResult Readback::copyLayerInto(DeferredLayerUpdater* deferredLayer, SkBitmap* bitmap) {
+    ATRACE_CALL();
     if (!mRenderThread.getGrContext()) {
         return CopyResult::UnknownError;
     }
@@ -104,6 +105,7 @@ CopyResult Readback::copyLayerInto(DeferredLayerUpdater* deferredLayer, SkBitmap
 
 CopyResult Readback::copyImageInto(const sk_sp<SkImage>& image, Matrix4& texTransform,
                                    const Rect& srcRect, SkBitmap* bitmap) {
+    ATRACE_CALL();
     if (Properties::getRenderPipelineType() == RenderPipelineType::SkiaGL) {
         mRenderThread.requireGlContext();
     } else {

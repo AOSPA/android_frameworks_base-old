@@ -29,6 +29,7 @@ import static android.os.UserManagerInternal.CAMERA_DISABLED_GLOBALLY;
 import static android.os.UserManagerInternal.CAMERA_DISABLED_LOCALLY;
 import static android.os.UserManagerInternal.CAMERA_NOT_DISABLED;
 
+import static com.android.internal.widget.LockPatternUtils.EscrowTokenStateChangeCallback;
 import static com.android.server.testutils.TestUtils.assertExpectException;
 
 import static org.mockito.Matchers.any;
@@ -84,9 +85,10 @@ import android.security.keystore.AttestationUtils;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.test.MoreAsserts;
-import android.test.suitebuilder.annotation.SmallTest;
 import android.util.ArraySet;
 import android.util.Pair;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.R;
 import com.android.internal.widget.LockPatternUtils;
@@ -98,7 +100,6 @@ import com.android.server.pm.UserRestrictionsUtils;
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
 import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import java.io.File;
@@ -240,29 +241,23 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         final Map<Pair<String, UserHandle>, Bundle> appRestrictions = new HashMap<>();
 
         // UM.setApplicationRestrictions() will save to appRestrictions.
-        doAnswer(new Answer<Void>() {
-            @Override
-            public Void answer(InvocationOnMock invocation) throws Throwable {
-                String pkg = (String) invocation.getArguments()[0];
-                Bundle bundle = (Bundle) invocation.getArguments()[1];
-                UserHandle user = (UserHandle) invocation.getArguments()[2];
+        doAnswer((Answer<Void>) invocation -> {
+            String pkg = (String) invocation.getArguments()[0];
+            Bundle bundle = (Bundle) invocation.getArguments()[1];
+            UserHandle user = (UserHandle) invocation.getArguments()[2];
 
-                appRestrictions.put(Pair.create(pkg, user), bundle);
+            appRestrictions.put(Pair.create(pkg, user), bundle);
 
-                return null;
-            }
+            return null;
         }).when(getServices().userManager).setApplicationRestrictions(
                 anyString(), nullable(Bundle.class), any(UserHandle.class));
 
         // UM.getApplicationRestrictions() will read from appRestrictions.
-        doAnswer(new Answer<Bundle>() {
-            @Override
-            public Bundle answer(InvocationOnMock invocation) throws Throwable {
-                String pkg = (String) invocation.getArguments()[0];
-                UserHandle user = (UserHandle) invocation.getArguments()[1];
+        doAnswer((Answer<Bundle>) invocation -> {
+            String pkg = (String) invocation.getArguments()[0];
+            UserHandle user = (UserHandle) invocation.getArguments()[1];
 
-                return appRestrictions.get(Pair.create(pkg, user));
-            }
+            return appRestrictions.get(Pair.create(pkg, user));
         }).when(getServices().userManager).getApplicationRestrictions(
                 anyString(), any(UserHandle.class));
 
@@ -2241,11 +2236,13 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         intent = dpm.createAdminSupportIntent(UserManager.DISALLOW_ADJUST_VOLUME);
         assertNull(intent);
 
-        // Permission that is set by device owner returns correct intent
-        when(getServices().userManager.getUserRestrictionSource(
+        // UM.getUserRestrictionSources() will return a list of size 1 with the caller resource.
+        doAnswer((Answer<List<UserManager.EnforcingUser>>) invocation -> Collections.singletonList(
+                new UserManager.EnforcingUser(
+                        UserHandle.myUserId(), UserManager.RESTRICTION_SOURCE_DEVICE_OWNER))
+        ).when(getServices().userManager).getUserRestrictionSources(
                 eq(UserManager.DISALLOW_ADJUST_VOLUME),
-                eq(UserHandle.getUserHandleForUid(mContext.binder.callingUid))))
-                .thenReturn(UserManager.RESTRICTION_SOURCE_DEVICE_OWNER);
+                eq(UserHandle.getUserHandleForUid(UserHandle.myUserId())));
         intent = dpm.createAdminSupportIntent(UserManager.DISALLOW_ADJUST_VOLUME);
         assertNotNull(intent);
         assertEquals(Settings.ACTION_SHOW_ADMIN_SUPPORT_DETAILS, intent.getAction());
@@ -4157,8 +4154,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         final byte[] token = new byte[32];
         final long handle = 123456;
         final String password = "password";
-        when(getServices().lockPatternUtils.addEscrowToken(eq(token), eq(UserHandle.USER_SYSTEM)))
-            .thenReturn(handle);
+        when(getServices().lockPatternUtils.addEscrowToken(eq(token), eq(UserHandle.USER_SYSTEM),
+                nullable(EscrowTokenStateChangeCallback.class)))
+                .thenReturn(handle);
         assertTrue(dpm.setResetPasswordToken(admin1, token));
 
         // test password activation
@@ -5019,8 +5017,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         configureContextForAccess(mContext, false);
 
         assertExpectException(SecurityException.class, /* messageRegex= */ null,
-                () -> dpm.setProfileOwnerCanAccessDeviceIdsForUser(admin2,
-                        UserHandle.of(DpmMockContext.CALLER_UID)));
+                () -> dpm.setProfileOwnerCanAccessDeviceIds(admin2));
     }
 
     public void testGrantDeviceIdsAccess_notByAuthorizedCaller() throws Exception {
@@ -5028,8 +5025,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         configureContextForAccess(mContext, false);
 
         assertExpectException(SecurityException.class, /* messageRegex= */ null,
-                () -> dpm.setProfileOwnerCanAccessDeviceIdsForUser(admin1,
-                        UserHandle.of(DpmMockContext.CALLER_UID)));
+                () -> dpm.setProfileOwnerCanAccessDeviceIds(admin1));
     }
 
     public void testGrantDeviceIdsAccess_byAuthorizedSystemCaller() throws Exception {
@@ -5058,8 +5054,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                         DpmMockContext.CALLER_MANAGED_PROVISIONING_UID);
         try {
             runAsCaller(mServiceContext, dpms, dpm -> {
-                dpm.setProfileOwnerCanAccessDeviceIdsForUser(admin1,
-                        UserHandle.of(DpmMockContext.CALLER_USER_HANDLE));
+                dpm.setProfileOwnerCanAccessDeviceIds(admin1);
             });
         } finally {
             mServiceContext.binder.restoreCallingIdentity(ident);
@@ -5199,7 +5194,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_currentUserNoPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_PASSWORD_COMPLEXITY);
         when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
 
@@ -5209,7 +5204,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_currentUserHasPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_PASSWORD_COMPLEXITY);
         when(getServices().userManager.getCredentialOwnerProfile(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(DpmMockContext.CALLER_USER_HANDLE);
         dpms.mUserPasswordMetrics.put(
@@ -5222,7 +5217,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testGetPasswordComplexity_unifiedChallengeReturnsParentUserPassword() {
         when(getServices().userManager.isUserUnlocked(DpmMockContext.CALLER_USER_HANDLE))
                 .thenReturn(true);
-        mServiceContext.permissions.add(permission.REQUEST_SCREEN_LOCK_COMPLEXITY);
+        mServiceContext.permissions.add(permission.REQUEST_PASSWORD_COMPLEXITY);
 
         UserInfo parentUser = new UserInfo();
         parentUser.id = DpmMockContext.CALLER_USER_HANDLE + 10;
@@ -5312,7 +5307,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mServiceContext.binder.callingUid =
                 UserHandle.getUid(DpmMockContext.CALLER_USER_HANDLE, DpmMockContext.SYSTEM_UID);
         runAsCaller(mServiceContext, dpms, dpm -> {
-            dpm.setProfileOwnerCanAccessDeviceIdsForUser(who, UserHandle.of(userId));
+            dpm.setProfileOwnerCanAccessDeviceIds(who);
         });
         mServiceContext.binder.restoreCallingIdentity(ident);
     }

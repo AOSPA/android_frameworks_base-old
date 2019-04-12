@@ -16,6 +16,7 @@
 
 package android.nfc.cardemulation;
 
+import android.annotation.NonNull;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.app.Activity;
@@ -33,6 +34,7 @@ import android.util.Log;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * This class can be used to query the state of
@@ -47,6 +49,7 @@ import java.util.List;
  * on the device.
  */
 public final class CardEmulation {
+    private static final Pattern AID_PATTERN = Pattern.compile("[0-9A-Fa-f]{10,32}\\*?\\#?");
     static final String TAG = "CardEmulation";
 
     /**
@@ -359,7 +362,7 @@ public final class CardEmulation {
      * @param service The component name of the service
      * @return whether the registration was successful.
      */
-    public boolean unsetOffHostForService(ComponentName service) {
+    public boolean unsetOffHostForService(@NonNull ComponentName service) {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         if (adapter == null) {
             return false;
@@ -405,7 +408,8 @@ public final class CardEmulation {
      * @param offHostSecureElement Secure Element to register the AID to
      * @return whether the registration was successful.
      */
-    public boolean setOffHostForService(ComponentName service, String offHostSecureElement) {
+    public boolean setOffHostForService(@NonNull ComponentName service,
+            @NonNull String offHostSecureElement) {
         boolean validSecureElement = false;
 
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
@@ -730,7 +734,7 @@ public final class CardEmulation {
         }
 
         // Verify hex characters
-        if (!aid.matches("[0-9A-Fa-f]{10,32}\\*?\\#?")) {
+        if (!AID_PATTERN.matcher(aid).matches()) {
             Log.e(TAG, "AID " + aid + " is not a valid AID.");
             return false;
         }

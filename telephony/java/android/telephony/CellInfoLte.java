@@ -71,8 +71,8 @@ public final class CellInfoLte extends CellInfo implements Parcelable {
     }
 
     /** @hide */
-    public CellInfoLte(android.hardware.radio.V1_4.CellInfo ci) {
-        super(ci);
+    public CellInfoLte(android.hardware.radio.V1_4.CellInfo ci, long timeStamp) {
+        super(ci, timeStamp);
         final android.hardware.radio.V1_4.CellInfoLte cil = ci.info.lte();
         mCellIdentityLte = new CellIdentityLte(cil.base.cellIdentityLte);
         mCellSignalStrengthLte = new CellSignalStrengthLte(cil.base.signalStrengthLte);
@@ -96,6 +96,15 @@ public final class CellInfoLte extends CellInfo implements Parcelable {
         if (DBG) log("getCellSignalStrength: " + mCellSignalStrengthLte);
         return mCellSignalStrengthLte;
     }
+
+    /** @hide */
+    @Override
+    public CellInfo sanitizeLocationInfo() {
+        CellInfoLte result = new CellInfoLte(this);
+        result.mCellIdentityLte = mCellIdentityLte.sanitizeLocationInfo();
+        return result;
+    }
+
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public void setCellSignalStrength(CellSignalStrengthLte css) {
@@ -179,7 +188,7 @@ public final class CellInfoLte extends CellInfo implements Parcelable {
     }
 
     /** Implement the Parcelable interface */
-    public static final Creator<CellInfoLte> CREATOR = new Creator<CellInfoLte>() {
+    public static final @android.annotation.NonNull Creator<CellInfoLte> CREATOR = new Creator<CellInfoLte>() {
         @Override
         public CellInfoLte createFromParcel(Parcel in) {
             in.readInt(); // Skip past token, we know what it is

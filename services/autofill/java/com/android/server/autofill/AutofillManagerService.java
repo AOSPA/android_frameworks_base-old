@@ -38,9 +38,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.graphics.Rect;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcelable;
@@ -60,6 +62,7 @@ import android.util.ArrayMap;
 import android.util.LocalLog;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillManager.SmartSuggestionMode;
@@ -71,6 +74,8 @@ import android.view.autofill.IAutoFillManagerClient;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.infra.AbstractRemoteService;
+import com.android.internal.infra.GlobalWhitelistState;
+import com.android.internal.infra.WhitelistHelper;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
@@ -79,6 +84,7 @@ import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.autofill.ui.AutoFillUI;
 import com.android.server.infra.AbstractMasterSystemService;
+import com.android.server.infra.FrameworkResourcesServiceNameResolver;
 import com.android.server.infra.SecureSettingsServiceNameResolver;
 
 import java.io.FileDescriptor;
@@ -131,6 +137,12 @@ public final class AutofillManagerService
     @GuardedBy("sLock")
     private static int sVisibleDatasetsMaxCount = 0;
 
+    /**
+     * Object used to set the name of the augmented autofill service.
+     */
+    @NonNull
+    final FrameworkResourcesServiceNameResolver mAugmentedAutofillResolver;
+
     private final AutoFillUI mUi;
 
     private final LocalLog mRequestsHistory = new LocalLog(20);
@@ -138,6 +150,7 @@ public final class AutofillManagerService
     private final LocalLog mWtfHistory = new LocalLog(50);
 
     private final AutofillCompatState mAutofillCompatState = new AutofillCompatState();
+
     private final LocalService mLocalService = new LocalService();
     private final ActivityManagerInternal mAm;
 
@@ -170,6 +183,8 @@ public final class AutofillManagerService
     @GuardedBy("mLock")
     int mAugmentedServiceRequestTimeoutMs;
 
+    final AugmentedAutofillState mAugmentedAutofillState = new AugmentedAutofillState();
+
     public AutofillManagerService(Context context) {
         super(context,
                 new SecureSettingsServiceNameResolver(context, Settings.Secure.AUTOFILL_SERVICE),
@@ -179,7 +194,7 @@ public final class AutofillManagerService
 
         DeviceConfig.addOnPropertyChangedListener(DeviceConfig.NAMESPACE_AUTOFILL,
                 ActivityThread.currentApplication().getMainExecutor(),
-                (namespace, key, value) -> onDeviceConfigChange(key, value));
+                (namespace, key, value) -> onDeviceConfigChange(key));
 
         setLogLevelFromSettings();
         setMaxPartitionsFromSettings();
@@ -189,6 +204,26 @@ public final class AutofillManagerService
         final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         context.registerReceiver(mBroadcastReceiver, filter, null, FgThread.getHandler());
+
+        mAugmentedAutofillResolver = new FrameworkResourcesServiceNameResolver(getContext(),
+                com.android.internal.R.string.config_defaultAugmentedAutofillService);
+        mAugmentedAutofillResolver.setOnTemporaryServiceNameChangedCallback(
+                (u, s, t) -> onAugmentedServiceNameChanged(u, s, t));
+
+        if (mSupportedSmartSuggestionModes != AutofillManager.FLAG_SMART_SUGGESTION_OFF) {
+            final UserManager um = getContext().getSystemService(UserManager.class);
+            final List<UserInfo> users = um.getUsers();
+            for (int i = 0; i < users.size(); i++) {
+                final int userId = users.get(i).id;
+                // Must eager load the services so they bind to the augmented autofill service
+                getServiceForUserLocked(userId);
+
+                // And also set the global state
+                mAugmentedAutofillState.setServiceInfo(userId,
+                        mAugmentedAutofillResolver.getServiceName(userId),
+                        mAugmentedAutofillResolver.isTemporary(userId));
+            }
+        }
     }
 
     @Override // from AbstractMasterSystemService
@@ -235,7 +270,7 @@ public final class AutofillManagerService
         }
     }
 
-    private void onDeviceConfigChange(@NonNull String key, @Nullable String value) {
+    private void onDeviceConfigChange(@NonNull String key) {
         switch (key) {
             case AutofillManager.DEVICE_CONFIG_AUTOFILL_SMART_SUGGESTION_SUPPORTED_MODES:
             case AutofillManager.DEVICE_CONFIG_AUGMENTED_SERVICE_IDLE_UNBIND_TIMEOUT:
@@ -244,6 +279,14 @@ public final class AutofillManagerService
                 break;
             default:
                 Slog.i(mTag, "Ignoring change on " + key);
+        }
+    }
+
+    private void onAugmentedServiceNameChanged(@UserIdInt int userId, @Nullable String serviceName,
+            boolean isTemporary) {
+        mAugmentedAutofillState.setServiceInfo(userId, serviceName, isTemporary);
+        synchronized (mLock) {
+            getServiceForUserLocked(userId).updateRemoteAugmentedAutofillService();
         }
     }
 
@@ -479,13 +522,16 @@ public final class AutofillManagerService
 
     private void setDeviceConfigProperties() {
         synchronized (mLock) {
-            mAugmentedServiceIdleUnbindTimeoutMs = Helper.getIntDeviceConfigProperty(
+            mAugmentedServiceIdleUnbindTimeoutMs = DeviceConfig.getInt(
+                    DeviceConfig.NAMESPACE_AUTOFILL,
                     AutofillManager.DEVICE_CONFIG_AUGMENTED_SERVICE_IDLE_UNBIND_TIMEOUT,
                     (int) AbstractRemoteService.PERMANENT_BOUND_TIMEOUT_MS);
-            mAugmentedServiceRequestTimeoutMs = Helper.getIntDeviceConfigProperty(
+            mAugmentedServiceRequestTimeoutMs = DeviceConfig.getInt(
+                    DeviceConfig.NAMESPACE_AUTOFILL,
                     AutofillManager.DEVICE_CONFIG_AUGMENTED_SERVICE_REQUEST_TIMEOUT,
                     DEFAULT_AUGMENTED_AUTOFILL_REQUEST_TIMEOUT_MILLIS);
-            mSupportedSmartSuggestionModes = Helper.getIntDeviceConfigProperty(
+            mSupportedSmartSuggestionModes = DeviceConfig.getInt(
+                    DeviceConfig.NAMESPACE_AUTOFILL,
                     AutofillManager.DEVICE_CONFIG_AUTOFILL_SMART_SUGGESTION_SUPPORTED_MODES,
                     AutofillManager.FLAG_SMART_SUGGESTION_SYSTEM);
             if (verbose) {
@@ -507,7 +553,7 @@ public final class AutofillManagerService
                 new FieldClassificationStrategy(getContext(), UserHandle.USER_CURRENT);
 
         strategy.calculateScores(callback, Arrays.asList(AutofillValue.forText(value1)),
-                new String[] { value2 }, null, algorithmName, null, null, null);
+                new String[] { value2 }, new String[] { null }, algorithmName, null, null, null);
     }
 
     // Called by Shell command.
@@ -535,24 +581,42 @@ public final class AutofillManagerService
                     + MAX_TEMP_AUGMENTED_SERVICE_DURATION_MS + " (called with " + durationMs + ")");
         }
 
-        synchronized (mLock) {
-            final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
-            if (service != null) {
-                service.mAugmentedAutofillResolver.setTemporaryService(userId, serviceName,
-                        durationMs);
-            }
-        }
+        mAugmentedAutofillResolver.setTemporaryService(userId, serviceName, durationMs);
     }
 
     // Called by Shell command
     void resetTemporaryAugmentedAutofillService(@UserIdInt int userId) {
         enforceCallingPermissionForManagement();
+        mAugmentedAutofillResolver.resetTemporaryService(userId);
+    }
+
+    // Called by Shell command
+    boolean isDefaultAugmentedServiceEnabled(@UserIdInt int userId) {
+        enforceCallingPermissionForManagement();
+        return mAugmentedAutofillResolver.isDefaultServiceEnabled(userId);
+    }
+
+    // Called by Shell command
+    boolean setDefaultAugmentedServiceEnabled(@UserIdInt int userId, boolean enabled) {
+        Slog.i(mTag, "setDefaultAugmentedServiceEnabled() for userId " + userId + ": " + enabled);
+        enforceCallingPermissionForManagement();
+
         synchronized (mLock) {
             final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
             if (service != null) {
-                service.mAugmentedAutofillResolver.resetTemporaryService(userId);
+                final boolean changed = mAugmentedAutofillResolver
+                        .setDefaultServiceEnabled(userId, enabled);
+                if (changed) {
+                    service.updateRemoteAugmentedAutofillService();
+                    return true;
+                } else {
+                    if (debug) {
+                        Slog.d(TAG, "setDefaultAugmentedServiceEnabled(): already " + enabled);
+                    }
+                }
             }
         }
+        return false;
     }
 
     private void setLoggingLevelsLocked(boolean debug, boolean verbose) {
@@ -631,6 +695,14 @@ public final class AutofillManagerService
 
     private void send(@NonNull IResultReceiver receiver, boolean value) {
         send(receiver, value ? 1 : 0);
+    }
+
+    private void send(@NonNull IResultReceiver receiver, int value1, int value2) {
+        try {
+            receiver.send(value1, SyncResultReceiver.bundleFor(value2));
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Error async reporting result to client: " + e);
+        }
     }
 
     @Nullable
@@ -731,15 +803,7 @@ public final class AutofillManagerService
             final boolean compatModeEnabled = mAutofillCompatState.isCompatibilityModeRequested(
                     packageName, versionCode, userId);
             final AutofillOptions options = new AutofillOptions(loggingLevel, compatModeEnabled);
-
-            synchronized (mLock) {
-                final AutofillManagerServiceImpl service =
-                        getServiceForUserLocked(UserHandle.getCallingUserId());
-                if (service != null) {
-                    service.setAugmentedAutofillWhitelistLocked(options, packageName);
-                }
-            }
-
+            mAugmentedAutofillState.injectAugmentedAutofillInfo(options, userId, packageName);
             return options;
         }
     }
@@ -882,14 +946,99 @@ public final class AutofillManagerService
         }
     }
 
+    /**
+     * Augmented autofill metadata associated with all services.
+     *
+     * <p>This object is defined here instead of on each {@link AutofillManagerServiceImpl} because
+     * it cannot hold a lock on the main lock when
+     * {@link AugmentedAutofillState#injectAugmentedAutofillInfo(AutofillOptions, int, String)}
+     * is called by external services.
+     */
+    static final class AugmentedAutofillState extends GlobalWhitelistState {
+
+        @GuardedBy("mGlobalWhitelistStateLock")
+        private final SparseArray<String> mServicePackages = new SparseArray<>();
+        @GuardedBy("mGlobalWhitelistStateLock")
+        private final SparseBooleanArray mTemporaryServices = new SparseBooleanArray();
+
+        private void setServiceInfo(@UserIdInt int userId, @Nullable String serviceName,
+                boolean isTemporary) {
+            synchronized (mGlobalWhitelistStateLock) {
+                if (isTemporary) {
+                    mTemporaryServices.put(userId, true);
+                } else {
+                    mTemporaryServices.delete(userId);
+                }
+                if (serviceName != null) {
+                    final ComponentName componentName =
+                            ComponentName.unflattenFromString(serviceName);
+                    if (componentName == null) {
+                        Slog.w(TAG, "setServiceInfo(): invalid name: " + serviceName);
+                        mServicePackages.remove(userId);
+                    } else {
+                        mServicePackages.put(userId, componentName.getPackageName());
+                    }
+                } else {
+                    mServicePackages.remove(userId);
+                }
+            }
+        }
+
+        public void injectAugmentedAutofillInfo(@NonNull AutofillOptions options,
+                @UserIdInt int userId, @NonNull String packageName) {
+            synchronized (mGlobalWhitelistStateLock) {
+                if (mWhitelisterHelpers == null) return;
+                final WhitelistHelper helper = mWhitelisterHelpers.get(userId);
+                if (helper != null) {
+                    options.augmentedAutofillEnabled = helper.isWhitelisted(packageName);
+                    options.whitelistedActivitiesForAugmentedAutofill = helper
+                            .getWhitelistedComponents(packageName);
+                }
+            }
+        }
+
+        @Override
+        public boolean isWhitelisted(@UserIdInt int userId, @NonNull ComponentName componentName) {
+            synchronized (mGlobalWhitelistStateLock) {
+                if (!super.isWhitelisted(userId, componentName)) return false;
+
+                if (Build.IS_USER && mTemporaryServices.get(userId)) {
+                    final String packageName = componentName.getPackageName();
+                    if (!packageName.equals(mServicePackages.get(userId))) {
+                        Slog.w(TAG, "Ignoring package " + packageName + " for augmented autofill "
+                                + "while using temporary service " + mServicePackages.get(userId));
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public void dump(@NonNull String prefix, @NonNull PrintWriter pw) {
+            super.dump(prefix, pw);
+
+            synchronized (mGlobalWhitelistStateLock) {
+                if (mServicePackages.size() > 0) {
+                    pw.print(prefix); pw.print("Service packages: "); pw.println(mServicePackages);
+                }
+                if (mTemporaryServices.size() > 0) {
+                    pw.print(prefix); pw.print("Temp services: "); pw.println(mTemporaryServices);
+                }
+            }
+        }
+    }
+
     final class AutoFillManagerServiceStub extends IAutoFillManager.Stub {
         @Override
-        public void addClient(IAutoFillManagerClient client, int userId,
-                @NonNull IResultReceiver receiver) {
+        public void addClient(IAutoFillManagerClient client, ComponentName componentName,
+                int userId, IResultReceiver receiver) {
             int flags = 0;
             synchronized (mLock) {
-                if (getServiceForUserLocked(userId).addClientLocked(client)) {
-                    flags |= AutofillManager.FLAG_ADD_CLIENT_ENABLED;
+                final int enabledFlags = getServiceForUserLocked(userId).addClientLocked(client,
+                        componentName);
+                if (enabledFlags != 0) {
+                    flags |= enabledFlags;
                 }
                 if (sDebug) {
                     flags |= AutofillManager.FLAG_ADD_CLIENT_DEBUG;
@@ -953,14 +1102,20 @@ public final class AutofillManagerService
             // TODO(b/113281366): add a callback method on AM to be notified when a task is finished
             // so we can clean up sessions kept alive
             final int taskId = mAm.getTaskIdForActivity(activityToken, false);
-            final int sessionId;
+            final long result;
             synchronized (mLock) {
                 final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
-                sessionId = service.startSessionLocked(activityToken, taskId, getCallingUid(),
+                result = service.startSessionLocked(activityToken, taskId, getCallingUid(),
                         appCallback, autofillId, bounds, value, hasCallback, componentName,
                         compatMode, mAllowInstantService, flags);
             }
-            send(receiver, sessionId);
+            final int sessionId = (int) result;
+            final int resultFlags = (int) (result >> 32);
+            if (resultFlags != 0) {
+                send(receiver, sessionId, resultFlags);
+            } else {
+                send(receiver, sessionId);
+            }
         }
 
         @Override
@@ -1282,6 +1437,7 @@ public final class AutofillManagerService
                     pw.print(" sVerbose: "); pw.println(realVerbose);
                     // Dump per-user services
                     dumpLocked("", pw);
+                    mAugmentedAutofillResolver.dumpShort(pw); pw.println();
                     pw.print("Max partitions per session: "); pw.println(sPartitionMaxCount);
                     pw.print("Max visible datasets: "); pw.println(sVisibleDatasetsMaxCount);
                     if (sFullScreenMode != null) {
@@ -1309,6 +1465,8 @@ public final class AutofillManagerService
                         pw.println(); pw.println("WTF history:"); pw.println();
                         mWtfHistory.reverseDump(fd, pw, args);
                     }
+                    pw.println("Augmented Autofill State: ");
+                    mAugmentedAutofillState.dump(prefix, pw);
                 }
             } finally {
                 sDebug = realDebug;

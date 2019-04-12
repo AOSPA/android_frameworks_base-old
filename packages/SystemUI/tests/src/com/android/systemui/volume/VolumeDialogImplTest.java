@@ -16,37 +16,26 @@
 
 package com.android.systemui.volume;
 
-import static android.media.AudioManager.RINGER_MODE_NORMAL;
-import static android.media.AudioManager.RINGER_MODE_SILENT;
-import static android.media.AudioManager.RINGER_MODE_VIBRATE;
-import static android.media.AudioManager.STREAM_RING;
-
-import static com.android.systemui.volume.Events.DISMISS_REASON_UNKNOWN;
-import static com.android.systemui.volume.Events.SHOW_REASON_UNKNOWN;
 import static com.android.systemui.volume.VolumeDialogControllerImpl.STREAMS;
 
 import static junit.framework.Assert.assertTrue;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import android.app.KeyguardManager;
 import android.media.AudioManager;
 import android.os.SystemClock;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
-import android.text.TextUtils;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityManager;
-import android.widget.ImageView;
 
-import com.android.systemui.R;
+import androidx.test.filters.SmallTest;
+
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.plugins.VolumeDialogController.State;
@@ -129,6 +118,17 @@ public class VolumeDialogImplTest extends SysuiTestCase {
     }
 
     @Test
+    public void testComputeTimeout_tooltip() {
+        Mockito.reset(mAccessibilityMgr);
+        mDialog.showCaptionsTooltip();
+        verify(mAccessibilityMgr).getRecommendedTimeoutMillis(
+                VolumeDialogImpl.DIALOG_ODI_CAPTIONS_TOOLTIP_TIMEOUT_MILLIS,
+                AccessibilityManager.FLAG_CONTENT_CONTROLS
+                | AccessibilityManager.FLAG_CONTENT_TEXT);
+    }
+
+
+    @Test
     public void testComputeTimeout_withHovering() {
         Mockito.reset(mAccessibilityMgr);
         View dialog = mDialog.getDialogView();
@@ -155,6 +155,16 @@ public class VolumeDialogImplTest extends SysuiTestCase {
                 VolumeDialogImpl.DIALOG_SAFETYWARNING_TIMEOUT_MILLIS,
                 AccessibilityManager.FLAG_CONTENT_TEXT
                         | AccessibilityManager.FLAG_CONTENT_CONTROLS);
+    }
+
+    @Test
+    public void testComputeTimeout_standard() {
+        Mockito.reset(mAccessibilityMgr);
+        mDialog.tryToRemoveCaptionsTooltip();
+        mDialog.rescheduleTimeoutH();
+        verify(mAccessibilityMgr).getRecommendedTimeoutMillis(
+                VolumeDialogImpl.DIALOG_TIMEOUT_MILLIS,
+                AccessibilityManager.FLAG_CONTENT_CONTROLS);
     }
 
 /*

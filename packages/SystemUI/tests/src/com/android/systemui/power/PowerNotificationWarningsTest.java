@@ -30,8 +30,10 @@ import static org.mockito.Mockito.verify;
 
 import android.app.Notification;
 import android.app.NotificationManager;
-import android.support.test.runner.AndroidJUnit4;
+import android.os.BatteryManager;
 import android.test.suitebuilder.annotation.SmallTest;
+
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.systemui.SysuiTestCase;
@@ -56,6 +58,9 @@ public class PowerNotificationWarningsTest extends SysuiTestCase {
         // Test Instance.
         mContext.addMockSystemService(NotificationManager.class, mMockNotificationManager);
         mPowerNotificationWarnings = new PowerNotificationWarnings(mContext);
+        BatteryStateSnapshot snapshot = new BatteryStateSnapshot(100, false, false, 1,
+                BatteryManager.BATTERY_HEALTH_GOOD, 5, 15);
+        mPowerNotificationWarnings.updateSnapshot(snapshot);
     }
 
     @Test

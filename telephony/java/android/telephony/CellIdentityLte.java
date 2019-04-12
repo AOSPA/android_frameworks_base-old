@@ -113,6 +113,13 @@ public final class CellIdentityLte extends CellIdentity {
                 cid.mMncStr, cid.mAlphaLong, cid.mAlphaShort);
     }
 
+    /** @hide */
+    public CellIdentityLte sanitizeLocationInfo() {
+        return new CellIdentityLte(CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE,
+                CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE,
+                mMccStr, mMncStr, mAlphaLong, mAlphaShort);
+    }
+
     CellIdentityLte copy() {
         return new CellIdentityLte(this);
     }
@@ -294,7 +301,7 @@ public final class CellIdentityLte extends CellIdentity {
 
     /** Implement the Parcelable interface */
     @SuppressWarnings("hiding")
-    public static final Creator<CellIdentityLte> CREATOR =
+    public static final @android.annotation.NonNull Creator<CellIdentityLte> CREATOR =
             new Creator<CellIdentityLte>() {
                 @Override
                 public CellIdentityLte createFromParcel(Parcel in) {

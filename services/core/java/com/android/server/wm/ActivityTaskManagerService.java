@@ -191,6 +191,7 @@ import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.StrictMode;
@@ -243,6 +244,7 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.AttributeCache;
+import com.android.server.DeviceIdleController;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
@@ -425,6 +427,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     private static final long START_AS_CALLER_TOKEN_EXPIRED_TIMEOUT =
             START_AS_CALLER_TOKEN_TIMEOUT_IMPL + 20 * MINUTE_IN_MILLIS;
 
+    // How long to whitelist the Services for when requested.
+    private static final int SERVICE_LAUNCH_IDLE_WHITELIST_DURATION_MS = 5 * 1000;
+
     // Activity tokens of system activities that are delegating their call to
     // #startActivityByCaller, keyed by the permissionToken granted to the delegate.
     final HashMap<IBinder, IBinder> mStartActivitySources = new HashMap<>();
@@ -437,6 +442,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     // Keeps track of the active voice interaction service component, notified from
     // VoiceInteractionManagerService
     ComponentName mActiveVoiceInteractionServiceComponent;
+
+    // A map userId and all its companion app uids
+    private final Map<Integer, Set<Integer>> mCompanionAppUidsMap = new ArrayMap<>();
 
     VrController mVrController;
     KeyguardController mKeyguardController;
@@ -748,6 +756,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mWindowManager.setSupportsPictureInPicture(mSupportsPictureInPicture);
             mWindowManager.setSupportsFreeformWindowManagement(mSupportsFreeformWindowManagement);
             mWindowManager.setIsPc(isPc);
+            mWindowManager.mRoot.onSettingsRetrieved();
             // This happens before any activities are started, so we can change global configuration
             // in-place.
             updateConfigurationLocked(configuration, null, true);
@@ -774,6 +783,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     public WindowManagerGlobalLock getGlobalLock() {
         return mGlobalLock;
+    }
+
+    /** For test purpose only. */
+    @VisibleForTesting
+    public ActivityTaskManagerInternal getAtmInternal() {
+        return mInternal;
     }
 
     public void initialize(IntentFirewall intentFirewall, PendingIntentController intentController,
@@ -948,7 +963,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         @Override
         public void onUnlockUser(int userId) {
             synchronized (mService.getGlobalLock()) {
-                mService.mStackSupervisor.mLaunchParamsPersister.onUnlockUser(userId);
+                mService.mStackSupervisor.onUserUnlocked(userId);
             }
         }
 
@@ -1634,6 +1649,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
+    public final void activityTopResumedStateLost() {
+        final long origId = Binder.clearCallingIdentity();
+        synchronized (mGlobalLock) {
+            mStackSupervisor.handleTopResumedStateReleased(false /* timeout */);
+        }
+        Binder.restoreCallingIdentity(origId);
+    }
+
+    @Override
     public final void activityPaused(IBinder token) {
         final long origId = Binder.clearCallingIdentity();
         synchronized (mGlobalLock) {
@@ -1657,13 +1681,32 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         final long origId = Binder.clearCallingIdentity();
 
+        String restartingName = null;
+        int restartingUid = 0;
+        final ActivityRecord r;
         synchronized (mGlobalLock) {
-            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            r = ActivityRecord.isInStackLocked(token);
             if (r != null) {
+                if (r.attachedToProcess()
+                        && r.isState(ActivityStack.ActivityState.RESTARTING_PROCESS)) {
+                    // The activity was requested to restart from
+                    // {@link #restartActivityProcessIfVisible}.
+                    restartingName = r.app.mName;
+                    restartingUid = r.app.mUid;
+                }
                 r.activityStoppedLocked(icicle, persistentState, description);
             }
         }
 
+        if (restartingName != null) {
+            // In order to let the foreground activity can be restarted with its saved state from
+            // {@link android.app.Activity#onSaveInstanceState}, the kill operation is postponed
+            // until the activity reports stopped with the state. And the activity record will be
+            // kept because the record state is restarting, then the activity will be restarted
+            // immediately if it is still the top one.
+            mStackSupervisor.removeRestartTimeouts(r);
+            mAmInternal.killProcess(restartingName, restartingUid, "restartActivityProcess");
+        }
         mAmInternal.trimApplications();
 
         Binder.restoreCallingIdentity(origId);
@@ -2005,6 +2048,23 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
+    public void restartActivityProcessIfVisible(IBinder activityToken) {
+        mAmInternal.enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "restartActivityProcess()");
+        final long callingId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final ActivityRecord r = ActivityRecord.isInStackLocked(activityToken);
+                if (r == null) {
+                    return;
+                }
+                r.restartProcessIfVisible();
+            }
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
+    }
+
+    @Override
     public boolean removeTask(int taskId) {
         enforceCallerIsRecentsOrHasPermission(REMOVE_TASKS, "removeTask()");
         synchronized (mGlobalLock) {
@@ -2024,7 +2084,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         synchronized (mGlobalLock) {
             final long ident = Binder.clearCallingIdentity();
             try {
-                getRecentTasks().removeAllVisibleTasks();
+                getRecentTasks().removeAllVisibleTasks(mAmInternal.getCurrentUserId());
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -2915,7 +2975,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (TextUtils.equals(pae.intent.getAction(),
                     android.service.voice.VoiceInteractionService.SERVICE_INTERFACE)) {
                 pae.intent.putExtras(pae.extras);
-                mContext.startServiceAsUser(pae.intent, new UserHandle(pae.userHandle));
+
+                startVoiceInteractionServiceAsUser(pae.intent, pae.userHandle, "AssistContext");
             } else {
                 pae.intent.replaceExtras(pae.extras);
                 pae.intent.setFlags(FLAG_ACTIVITY_NEW_TASK
@@ -2931,6 +2992,34 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    /**
+     * Workaround for historical API which starts the Assist service with a non-foreground
+     * {@code startService()} call.
+     */
+    private void startVoiceInteractionServiceAsUser(
+            Intent intent, int userHandle, String reason) {
+        // Resolve the intent to find out which package we need to whitelist.
+        ResolveInfo resolveInfo =
+                mContext.getPackageManager().resolveServiceAsUser(intent, 0, userHandle);
+        if (resolveInfo == null || resolveInfo.serviceInfo == null) {
+            Slog.e(TAG, "VoiceInteractionService intent does not resolve. Not starting.");
+            return;
+        }
+        intent.setPackage(resolveInfo.serviceInfo.packageName);
+
+        // Whitelist background services temporarily.
+        LocalServices.getService(DeviceIdleController.LocalService.class)
+                .addPowerSaveTempWhitelistApp(Process.myUid(), intent.getPackage(),
+                        SERVICE_LAUNCH_IDLE_WHITELIST_DURATION_MS, userHandle, false, reason);
+
+        // Finally, try to start the service.
+        try {
+            mContext.startServiceAsUser(intent, UserHandle.of(userHandle));
+        } catch (RuntimeException e) {
+            Slog.e(TAG, "VoiceInteractionService failed to start.", e);
         }
     }
 
@@ -5157,7 +5246,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 // the ATMS lock held.
                 final Message msg = PooledLambda.obtainMessage(
                         ActivityManagerInternal::killAllBackgroundProcessesExcept, mAmInternal,
-                        N, ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
+                        N, ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND);
                 mH.sendMessage(msg);
             }
         }
@@ -5199,6 +5288,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     boolean isBackgroundActivityStartsEnabled() {
         return mAmInternal.isBackgroundActivityStartsEnabled();
+    }
+
+    boolean isPackageNameWhitelistedForBgActivityStarts(String packageName) {
+        return mAmInternal.isPackageNameWhitelistedForBgActivityStarts(packageName);
     }
 
     void enableScreenAfterBoot(boolean booted) {
@@ -5719,15 +5812,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     WindowProcessController getProcessController(int pid, int uid) {
-        final ArrayMap<String, SparseArray<WindowProcessController>> pmap = mProcessNames.getMap();
-        for (int i = pmap.size()-1; i >= 0; i--) {
-            final SparseArray<WindowProcessController> procs = pmap.valueAt(i);
-            for (int j = procs.size() - 1; j >= 0; j--) {
-                final WindowProcessController proc = procs.valueAt(j);
-                if (UserHandle.isApp(uid) && proc.getPid() == pid && proc.mUid == uid) {
-                    return proc;
-                }
-            }
+        final WindowProcessController proc = mPidMap.get(pid);
+        if (proc == null) return null;
+        if (UserHandle.isApp(uid) && proc.mUid == uid) {
+            return proc;
         }
         return null;
     }
@@ -5817,6 +5905,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         } finally {
             StrictMode.setThreadPolicy(oldPolicy);
         }
+    }
+
+    boolean isAssociatedCompanionApp(int userId, int uid) {
+        final Set<Integer> allUids = mCompanionAppUidsMap.get(userId);
+        if (allUids == null) {
+            return false;
+        }
+        return allUids.contains(uid);
     }
 
     final class H extends Handler {
@@ -6431,6 +6527,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public boolean startHomeActivity(int userId, String reason) {
             synchronized (mGlobalLock) {
                 return mRootActivityContainer.startHomeOnDisplay(userId, reason, DEFAULT_DISPLAY);
+            }
+        }
+
+        @Override
+        public boolean startHomeOnDisplay(int userId, String reason, int displayId,
+                boolean allowInstrumenting, boolean fromHomeKey) {
+            synchronized (mGlobalLock) {
+                return mRootActivityContainer.startHomeOnDisplay(userId, reason, displayId,
+                        allowInstrumenting, fromHomeKey);
             }
         }
 
@@ -7181,6 +7286,21 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public void setDeviceOwnerPackageName(String deviceOwnerPkg) {
             synchronized (mGlobalLock) {
                 ActivityTaskManagerService.this.setDeviceOwnerPackageName(deviceOwnerPkg);
+            }
+        }
+
+        @Override
+        public void setCompanionAppPackages(int userId, Set<String> companionAppPackages) {
+            // Translate package names into UIDs
+            final Set<Integer> result = new HashSet<>();
+            for (String pkg : companionAppPackages) {
+                final int uid = getPackageManagerInternalLocked().getPackageUid(pkg, 0, userId);
+                if (uid >= 0) {
+                    result.add(uid);
+                }
+            }
+            synchronized (mGlobalLock) {
+                mCompanionAppUidsMap.put(userId, result);
             }
         }
     }

@@ -129,10 +129,19 @@ public class HwAudioSource extends PlayerBase {
      * Starts the playback from {@link AudioDeviceInfo}.
      */
     public void start() {
+        Preconditions.checkState(!isPlaying(), "HwAudioSource is currently playing");
         baseStart();
         mNativeHandle = AudioSystem.startAudioSource(
                 mAudioDeviceInfo.getPort().activeConfig(),
                 mAudioAttributes);
+    }
+
+    /**
+     * Checks whether the HwAudioSource player is playing.
+     * @return true if currently playing, false otherwise
+     */
+    public boolean isPlaying() {
+        return mNativeHandle != 0;
     }
 
     /**
@@ -165,7 +174,7 @@ public class HwAudioSource extends PlayerBase {
      * If the audio attributes are not set with {@link #setAudioAttributes(AudioAttributes)},
      * attributes comprising {@link AudioAttributes#USAGE_MEDIA} will be used.
      */
-    public static class Builder {
+    public static final class Builder {
         private AudioAttributes mAudioAttributes;
         private AudioDeviceInfo mAudioDeviceInfo;
 
@@ -214,15 +223,5 @@ public class HwAudioSource extends PlayerBase {
             }
             return new HwAudioSource(mAudioDeviceInfo, mAudioAttributes);
         }
-    }
-
-    /**
-     * Eliminate {@link #deprecateStreamTypeForPlayback(int, String, String)} in API list.
-     * TODO: remove this pseudo-override function
-     * @hide
-     */
-    public static void deprecateStreamTypeForPlayback(int streamType, String className,
-            String opName) throws IllegalArgumentException {
-        // Do nothing.
     }
 }

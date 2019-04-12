@@ -183,6 +183,7 @@ import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
+import java.nio.file.Files;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -332,7 +333,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     String[] mInstrumentedSplitAppDirs = null;
     String mInstrumentedLibDir = null;
     boolean mSystemThread = false;
-    boolean mJitEnabled = false;
     boolean mSomeActivitiesChanged = false;
     boolean mUpdatingSystemConfig = false;
     /* package */ boolean mHiddenApiWarningShown = false;
@@ -1696,7 +1696,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int SUICIDE                 = 130;
         @UnsupportedAppUsage
         public static final int REMOVE_PROVIDER         = 131;
-        public static final int ENABLE_JIT              = 132;
         public static final int DISPATCH_PACKAGE_BROADCAST = 133;
         @UnsupportedAppUsage
         public static final int SCHEDULE_CRASH          = 134;
@@ -1746,7 +1745,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case DESTROY_BACKUP_AGENT: return "DESTROY_BACKUP_AGENT";
                     case SUICIDE: return "SUICIDE";
                     case REMOVE_PROVIDER: return "REMOVE_PROVIDER";
-                    case ENABLE_JIT: return "ENABLE_JIT";
                     case DISPATCH_PACKAGE_BROADCAST: return "DISPATCH_PACKAGE_BROADCAST";
                     case SCHEDULE_CRASH: return "SCHEDULE_CRASH";
                     case DUMP_HEAP: return "DUMP_HEAP";
@@ -1857,9 +1855,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "providerRemove");
                     completeRemoveProvider((ProviderRefCount)msg.obj);
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
-                    break;
-                case ENABLE_JIT:
-                    ensureJitEnabled();
                     break;
                 case DISPATCH_PACKAGE_BROADCAST:
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "broadcastPackage");
@@ -1996,7 +1991,6 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (stopProfiling) {
                 mProfiler.stopProfiling();
             }
-            ensureJitEnabled();
             return false;
         }
     }
@@ -2107,6 +2101,16 @@ public final class ActivityThread extends ClientTransactionHandler {
     public final LoadedApk getPackageInfo(String packageName, CompatibilityInfo compatInfo,
             int flags, int userId) {
         final boolean differentUser = (UserHandle.myUserId() != userId);
+        ApplicationInfo ai;
+        try {
+            ai = getPackageManager().getApplicationInfo(packageName,
+                    PackageManager.GET_SHARED_LIBRARY_FILES
+                            | PackageManager.MATCH_DEBUG_TRIAGED_MISSING,
+                    (userId < 0) ? UserHandle.myUserId() : userId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
         synchronized (mResourcesManager) {
             WeakReference<LoadedApk> ref;
             if (differentUser) {
@@ -2119,11 +2123,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
 
             LoadedApk packageInfo = ref != null ? ref.get() : null;
-            //Slog.i(TAG, "getPackageInfo " + packageName + ": " + packageInfo);
-            //if (packageInfo != null) Slog.i(TAG, "isUptoDate " + packageInfo.mResDir
-            //        + ": " + packageInfo.mResources.getAssets().isUpToDate());
-            if (packageInfo != null && (packageInfo.mResources == null
-                    || packageInfo.mResources.getAssets().isUpToDate())) {
+            if (ai != null && packageInfo != null && isLoadedApkUpToDate(packageInfo, ai)) {
                 if (packageInfo.isSecurityViolation()
                         && (flags&Context.CONTEXT_IGNORE_SECURITY) == 0) {
                     throw new SecurityException(
@@ -2134,16 +2134,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                 }
                 return packageInfo;
             }
-        }
-
-        ApplicationInfo ai = null;
-        try {
-            ai = getPackageManager().getApplicationInfo(packageName,
-                    PackageManager.GET_SHARED_LIBRARY_FILES
-                            | PackageManager.MATCH_DEBUG_TRIAGED_MISSING,
-                    (userId < 0) ? UserHandle.myUserId() : userId);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
         }
 
         if (ai != null) {
@@ -2216,35 +2206,57 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
 
             LoadedApk packageInfo = ref != null ? ref.get() : null;
-            if (packageInfo == null || (packageInfo.mResources != null
-                    && !packageInfo.mResources.getAssets().isUpToDate())) {
-                if (localLOGV) Slog.v(TAG, (includeCode ? "Loading code package "
+
+            boolean isUpToDate = packageInfo != null && isLoadedApkUpToDate(packageInfo, aInfo);
+
+            if (isUpToDate) {
+                return packageInfo;
+            }
+
+            if (localLOGV) {
+                Slog.v(TAG, (includeCode ? "Loading code package "
                         : "Loading resource-only package ") + aInfo.packageName
                         + " (in " + (mBoundApplication != null
-                                ? mBoundApplication.processName : null)
+                        ? mBoundApplication.processName : null)
                         + ")");
-                packageInfo =
-                    new LoadedApk(this, aInfo, compatInfo, baseLoader,
-                            securityViolation, includeCode &&
-                            (aInfo.flags&ApplicationInfo.FLAG_HAS_CODE) != 0, registerPackage);
-
-                if (mSystemThread && "android".equals(aInfo.packageName)) {
-                    packageInfo.installSystemApplicationInfo(aInfo,
-                            getSystemContext().mPackageInfo.getClassLoader());
-                }
-
-                if (differentUser) {
-                    // Caching not supported across users
-                } else if (includeCode) {
-                    mPackages.put(aInfo.packageName,
-                            new WeakReference<LoadedApk>(packageInfo));
-                } else {
-                    mResourcePackages.put(aInfo.packageName,
-                            new WeakReference<LoadedApk>(packageInfo));
-                }
             }
+
+            packageInfo =
+                    new LoadedApk(this, aInfo, compatInfo, baseLoader,
+                            securityViolation, includeCode
+                            && (aInfo.flags & ApplicationInfo.FLAG_HAS_CODE) != 0, registerPackage);
+
+            if (mSystemThread && "android".equals(aInfo.packageName)) {
+                packageInfo.installSystemApplicationInfo(aInfo,
+                        getSystemContext().mPackageInfo.getClassLoader());
+            }
+
+            if (differentUser) {
+                // Caching not supported across users
+            } else if (includeCode) {
+                mPackages.put(aInfo.packageName,
+                        new WeakReference<LoadedApk>(packageInfo));
+            } else {
+                mResourcePackages.put(aInfo.packageName,
+                        new WeakReference<LoadedApk>(packageInfo));
+            }
+
             return packageInfo;
         }
+    }
+
+    /**
+     * Compares overlay/resource directories for a LoadedApk to determine if it's up to date
+     * with the given ApplicationInfo.
+     */
+    private boolean isLoadedApkUpToDate(LoadedApk loadedApk, ApplicationInfo appInfo) {
+        Resources packageResources = loadedApk.mResources;
+        String[] overlayDirs = ArrayUtils.defeatNullable(loadedApk.getOverlayDirs());
+        String[] resourceDirs = ArrayUtils.defeatNullable(appInfo.resourceDirs);
+
+        return (packageResources == null || packageResources.getAssets().isUpToDate())
+                && overlayDirs.length == resourceDirs.length
+                && ArrayUtils.containsAll(overlayDirs, resourceDirs);
     }
 
     @UnsupportedAppUsage
@@ -2327,13 +2339,6 @@ public final class ActivityThread extends ClientTransactionHandler {
 
             // give ourselves a default profiler
             mProfiler = new Profiler();
-        }
-    }
-
-    void ensureJitEnabled() {
-        if (!mJitEnabled) {
-            mJitEnabled = true;
-            dalvik.system.VMRuntime.getRuntime().startJitCompilation();
         }
     }
 
@@ -3782,7 +3787,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                         ActivityManager.getService().serviceDoneExecuting(
                                 data.token, SERVICE_DONE_EXECUTING_ANON, 0, 0);
                     }
-                    ensureJitEnabled();
                 } catch (RemoteException ex) {
                     throw ex.rethrowFromSystemServer();
                 }
@@ -3896,7 +3900,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
                 }
-                ensureJitEnabled();
             } catch (Exception e) {
                 if (!mInstrumentation.onException(s, e)) {
                     throw new RuntimeException(
@@ -5450,19 +5453,25 @@ public final class ActivityThread extends ClientTransactionHandler {
             ref = mResourcePackages.get(ai.packageName);
             resApk = ref != null ? ref.get() : null;
         }
+
+        final String[] oldResDirs = new String[2];
+
         if (apk != null) {
+            oldResDirs[0] = apk.getResDir();
             final ArrayList<String> oldPaths = new ArrayList<>();
             LoadedApk.makePaths(this, apk.getApplicationInfo(), oldPaths);
             apk.updateApplicationInfo(ai, oldPaths);
         }
         if (resApk != null) {
+            oldResDirs[1] = resApk.getResDir();
             final ArrayList<String> oldPaths = new ArrayList<>();
             LoadedApk.makePaths(this, resApk.getApplicationInfo(), oldPaths);
             resApk.updateApplicationInfo(ai, oldPaths);
         }
+
         synchronized (mResourcesManager) {
             // Update all affected Resources objects to use new ResourcesImpl
-            mResourcesManager.applyNewResourceDirsLocked(ai.sourceDir, ai.resourceDirs);
+            mResourcesManager.applyNewResourceDirsLocked(ai, oldResDirs);
         }
 
         ApplicationPackageManager.configurationChanged();
@@ -5715,9 +5724,17 @@ public final class ActivityThread extends ClientTransactionHandler {
                                         }
                                     }
                                 }
+
+                                final String[] oldResDirs = { pkgInfo.getResDir() };
+
                                 final ArrayList<String> oldPaths = new ArrayList<>();
                                 LoadedApk.makePaths(this, pkgInfo.getApplicationInfo(), oldPaths);
                                 pkgInfo.updateApplicationInfo(aInfo, oldPaths);
+
+                                synchronized (mResourcesManager) {
+                                    // Update affected Resources objects to use new ResourcesImpl
+                                    mResourcesManager.applyNewResourceDirsLocked(aInfo, oldResDirs);
+                                }
                             } catch (RemoteException e) {
                             }
                         }
@@ -5871,6 +5888,11 @@ public final class ActivityThread extends ClientTransactionHandler {
         BoostFramework ux_perf = null;
         // Register the UI Thread as a sensitive thread to the runtime.
         VMRuntime.registerSensitiveThread();
+        // In the case the stack depth property exists, pass it down to the runtime.
+        String property = SystemProperties.get("debug.allocTracker.stackDepth");
+        if (property.length() != 0) {
+            VMDebug.setAllocTrackerStackDepth(Integer.parseInt(property));
+        }
         if (data.trackAllocation) {
             DdmVmInternal.enableRecentAllocations(true);
         }
@@ -5900,6 +5922,10 @@ public final class ActivityThread extends ClientTransactionHandler {
         android.ddm.DdmHandleAppName.setAppName(data.processName,
                                                 UserHandle.myUserId());
         VMRuntime.setProcessPackageName(data.appInfo.packageName);
+
+        // Pass data directory path to ART. This is used for caching information and
+        // should be set before any application code is loaded.
+        VMRuntime.setProcessDataDirectory(data.appInfo.dataDir);
 
         if (mProfiler.profileFd != null) {
             mProfiler.startProfiling();
@@ -6195,9 +6221,6 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (!data.restrictedBackupMode) {
                 if (!ArrayUtils.isEmpty(data.providers)) {
                     installContentProviders(app, data.providers);
-                    // For process that contains content providers, we want to
-                    // ensure that the JIT is enabled "at some point".
-                    mH.sendEmptyMessageDelayed(H.ENABLE_JIT, 10*1000);
                 }
             }
 
@@ -6839,12 +6862,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         sCurrentActivityThread = this;
         mSystemThread = system;
         if (!system) {
-            ViewRootImpl.addFirstDrawHandler(new Runnable() {
-                @Override
-                public void run() {
-                    ensureJitEnabled();
-                }
-            });
             android.ddm.DdmHandleAppName.setAppName("<pre-initialized>",
                                                     UserHandle.myUserId());
             RuntimeInit.setApplicationObject(mAppThread.asBinder());
@@ -6957,9 +6974,6 @@ public final class ActivityThread extends ClientTransactionHandler {
             // If feature is disabled, we don't need to install
             if (!DEPRECATE_DATA_COLUMNS) return;
 
-            // If app is modern enough, we don't need to install
-            if (VMRuntime.getRuntime().getTargetSdkVersion() >= Build.VERSION_CODES.Q) return;
-
             // Install interception and make sure it sticks!
             Os def = null;
             do {
@@ -6982,6 +6996,23 @@ public final class ActivityThread extends ClientTransactionHandler {
                 fd.setInt$(cr.openFileDescriptor(uri,
                         FileUtils.translateModePosixToString(mode)).detachFd());
                 return fd;
+            } catch (SecurityException e) {
+                throw new ErrnoException(e.getMessage(), OsConstants.EACCES);
+            } catch (FileNotFoundException e) {
+                throw new ErrnoException(e.getMessage(), OsConstants.ENOENT);
+            }
+        }
+
+        private void deleteDeprecatedDataPath(String path) throws ErrnoException {
+            final Uri uri = ContentResolver.translateDeprecatedDataPath(path);
+            Log.v(TAG, "Redirecting " + path + " to " + uri);
+
+            final ContentResolver cr = currentActivityThread().getApplication()
+                    .getContentResolver();
+            try {
+                if (cr.delete(uri, null, null) == 0) {
+                    throw new FileNotFoundException();
+                }
             } catch (SecurityException e) {
                 throw new ErrnoException(e.getMessage(), OsConstants.EACCES);
             } catch (FileNotFoundException e) {
@@ -7021,6 +7052,42 @@ public final class ActivityThread extends ClientTransactionHandler {
                 }
             } else {
                 return super.stat(path);
+            }
+        }
+
+        @Override
+        public void unlink(String path) throws ErrnoException {
+            if (path != null && path.startsWith(DEPRECATE_DATA_PREFIX)) {
+                deleteDeprecatedDataPath(path);
+            } else {
+                super.unlink(path);
+            }
+        }
+
+        @Override
+        public void remove(String path) throws ErrnoException {
+            if (path != null && path.startsWith(DEPRECATE_DATA_PREFIX)) {
+                deleteDeprecatedDataPath(path);
+            } else {
+                super.remove(path);
+            }
+        }
+
+        @Override
+        public void rename(String oldPath, String newPath) throws ErrnoException {
+            try {
+                super.rename(oldPath, newPath);
+            } catch (ErrnoException e) {
+                if (e.errno == OsConstants.EXDEV) {
+                    Log.v(TAG, "Recovering failed rename " + oldPath + " to " + newPath);
+                    try {
+                        Files.move(new File(oldPath).toPath(), new File(newPath).toPath());
+                    } catch (IOException e2) {
+                        throw e;
+                    }
+                } else {
+                    throw e;
+                }
             }
         }
     }

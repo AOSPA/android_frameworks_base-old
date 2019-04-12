@@ -39,7 +39,6 @@ static jclass   gBitmap_class;
 static jfieldID gBitmap_nativePtr;
 static jmethodID gBitmap_constructorMethodID;
 static jmethodID gBitmap_reinitMethodID;
-static jmethodID gBitmap_getAllocationByteCountMethodID;
 
 namespace android {
 
@@ -193,11 +192,6 @@ void reinitBitmap(JNIEnv* env, jobject javaBitmap, const SkImageInfo& info,
             info.width(), info.height(), isPremultiplied);
 }
 
-int getBitmapAllocationByteCount(JNIEnv* env, jobject javaBitmap)
-{
-    return env->CallIntMethod(javaBitmap, gBitmap_getAllocationByteCountMethodID);
-}
-
 jobject createBitmap(JNIEnv* env, Bitmap* bitmap,
         int bitmapCreateFlags, jbyteArray ninePatchChunk, jobject ninePatchInsets,
         int density) {
@@ -206,13 +200,14 @@ jobject createBitmap(JNIEnv* env, Bitmap* bitmap,
     // The caller needs to have already set the alpha type properly, so the
     // native SkBitmap stays in sync with the Java Bitmap.
     assert_premultiplied(bitmap->info(), isPremultiplied);
+    bool fromMalloc = bitmap->pixelStorageType() == PixelStorageType::Heap;
     BitmapWrapper* bitmapWrapper = new BitmapWrapper(bitmap);
     if (!isMutable) {
         bitmapWrapper->bitmap().setImmutable();
     }
     jobject obj = env->NewObject(gBitmap_class, gBitmap_constructorMethodID,
             reinterpret_cast<jlong>(bitmapWrapper), bitmap->width(), bitmap->height(), density,
-            isPremultiplied, ninePatchChunk, ninePatchInsets);
+            isPremultiplied, ninePatchChunk, ninePatchInsets, fromMalloc);
 
     if (env->ExceptionCheck() != 0) {
         ALOGE("*** Uncaught exception returned from Java call!\n");
@@ -235,8 +230,7 @@ Bitmap& toBitmap(JNIEnv* env, jobject bitmap) {
     return localBitmap->bitmap();
 }
 
-Bitmap& toBitmap(JNIEnv* env, jlong bitmapHandle) {
-    SkASSERT(env);
+Bitmap& toBitmap(jlong bitmapHandle) {
     LocalScopedBitmap localBitmap(bitmapHandle);
     return localBitmap->bitmap();
 }
@@ -1224,9 +1218,8 @@ int register_android_graphics_Bitmap(JNIEnv* env)
 {
     gBitmap_class = MakeGlobalRefOrDie(env, FindClassOrDie(env, "android/graphics/Bitmap"));
     gBitmap_nativePtr = GetFieldIDOrDie(env, gBitmap_class, "mNativePtr", "J");
-    gBitmap_constructorMethodID = GetMethodIDOrDie(env, gBitmap_class, "<init>", "(JIIIZ[BLandroid/graphics/NinePatch$InsetStruct;)V");
+    gBitmap_constructorMethodID = GetMethodIDOrDie(env, gBitmap_class, "<init>", "(JIIIZ[BLandroid/graphics/NinePatch$InsetStruct;Z)V");
     gBitmap_reinitMethodID = GetMethodIDOrDie(env, gBitmap_class, "reinit", "(IIZ)V");
-    gBitmap_getAllocationByteCountMethodID = GetMethodIDOrDie(env, gBitmap_class, "getAllocationByteCount", "()I");
     return android::RegisterMethodsOrDie(env, "android/graphics/Bitmap", gBitmapMethods,
                                          NELEM(gBitmapMethods));
 }

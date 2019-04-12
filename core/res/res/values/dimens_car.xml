@@ -21,6 +21,7 @@
     <dimen name="car_fullscreen_user_pod_height">356dp</dimen>
     <dimen name="car_fullscreen_user_pod_image_avatar_width">96dp</dimen>
     <dimen name="car_fullscreen_user_pod_image_avatar_height">96dp</dimen>
+    <dimen name="car_large_avatar_size">96dp</dimen>
 
 
     <!-- Application Bar -->
@@ -101,5 +102,8 @@
 
     <!-- Progress Bar -->
     <dimen name="car_progress_bar_height">@dimen/car_seekbar_height</dimen>
+
+    <!-- TextView -->
+    <dimen name="car_textview_fading_edge_length">40dp</dimen>
 
 </resources>

@@ -277,9 +277,13 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         default void hideBiometricDialog() { }
 
         /**
-        * @see IStatusBar#onDisplayReady(int)
-        */
+         * @see IStatusBar#onDisplayReady(int)
+         */
         default void onDisplayReady(int displayId) { }
+        /**
+         * @see DisplayManager.DisplayListener#onDisplayRemoved(int)
+         */
+        default void onDisplayRemoved(int displayId) { }
     }
 
     @VisibleForTesting
@@ -296,6 +300,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     public void onDisplayRemoved(int displayId) {
         synchronized (mLock) {
             mDisplayDisabled.remove(displayId);
+        }
+        // This callback is registered with {@link #mHandler} that already posts to run on main
+        // thread, so it is safe to dispatch directly.
+        for (int i = mCallbacks.size() - 1; i >= 0; i--) {
+            mCallbacks.get(i).onDisplayRemoved(displayId);
         }
     }
 
@@ -587,7 +596,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     @Override
     public void appTransitionCancelled(int displayId) {
         synchronized (mLock) {
-            mHandler.obtainMessage(MSG_APP_TRANSITION_CANCELLED, displayId).sendToTarget();
+            mHandler.obtainMessage(MSG_APP_TRANSITION_CANCELLED, displayId, 0 /* unused */)
+                    .sendToTarget();
         }
     }
 
@@ -615,7 +625,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     @Override
     public void appTransitionFinished(int displayId) {
         synchronized (mLock) {
-            mHandler.obtainMessage(MSG_APP_TRANSITION_FINISHED, displayId).sendToTarget();
+            mHandler.obtainMessage(MSG_APP_TRANSITION_FINISHED, displayId, 0 /* unused */)
+                    .sendToTarget();
         }
     }
 

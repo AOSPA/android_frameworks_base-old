@@ -92,7 +92,8 @@ public class SettingsBackupTest {
                     Settings.System.VOLUME_SYSTEM, // deprecated since API 2?
                     Settings.System.VOLUME_VOICE, // deprecated since API 2?
                     Settings.System.WHEN_TO_MAKE_WIFI_CALLS, // bug?
-                    Settings.System.WINDOW_ORIENTATION_LISTENER_LOG // used for debugging only
+                    Settings.System.WINDOW_ORIENTATION_LISTENER_LOG, // used for debugging only
+                    Settings.System.PEAK_REFRESH_RATE // depends on hardware capabilities
                     );
 
     private static final Set<String> BACKUP_BLACKLISTED_GLOBAL_SETTINGS =
@@ -116,7 +117,6 @@ public class SettingsBackupTest {
                     Settings.Global.ANOMALY_CONFIG_VERSION,
                     Settings.Global.APN_DB_UPDATE_CONTENT_URL,
                     Settings.Global.APN_DB_UPDATE_METADATA_URL,
-                    Settings.Global.APPLY_RAMPING_RINGER,
                     Settings.Global.APP_BINDING_CONSTANTS,
                     Settings.Global.APP_IDLE_CONSTANTS,
                     Settings.Global.APP_OPS_CONSTANTS,
@@ -129,7 +129,7 @@ public class SettingsBackupTest {
                     Settings.Global.AUTOFILL_LOGGING_LEVEL,
                     Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE,
                     Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
-                    Settings.Global.AUTOMATIC_POWER_SAVER_MODE,
+                    Settings.Global.AUTOMATIC_POWER_SAVE_MODE,
                     Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED,
                     Settings.Global.BATTERY_CHARGING_STATE_UPDATE_DELAY,
                     Settings.Global.BROADCAST_BG_CONSTANTS,
@@ -286,7 +286,6 @@ public class SettingsBackupTest {
                     Settings.Global.HDMI_CONTROL_ENABLED,
                     Settings.Global.HDMI_SYSTEM_AUDIO_CONTROL_ENABLED,
                     Settings.Global.HEADS_UP_NOTIFICATIONS_ENABLED,
-                    Settings.Global.HIDDEN_API_ACCESS_LOG_SAMPLING_RATE,
                     Settings.Global.HIDDEN_API_POLICY,
                     Settings.Global.HIDE_ERROR_DIALOGS,
                     Settings.Global.HTTP_PROXY,
@@ -465,6 +464,7 @@ public class SettingsBackupTest {
                     Settings.Global.TETHER_SUPPORTED,
                     Settings.Global.TETHER_ENABLE_LEGACY_DHCP_SERVER,
                     Settings.Global.TEXT_CLASSIFIER_CONSTANTS,
+                    Settings.Global.TEXT_CLASSIFIER_ACTION_MODEL_PARAMS,
                     Settings.Global.THEATER_MODE_ON,
                     Settings.Global.TIME_ONLY_MODE_CONSTANTS,
                     Settings.Global.TRANSITION_ANIMATION_SCALE,
@@ -487,6 +487,7 @@ public class SettingsBackupTest {
                     Settings.Global.GPU_DEBUG_APP,
                     Settings.Global.GPU_DEBUG_LAYERS,
                     Settings.Global.GPU_DEBUG_LAYERS_GLES,
+                    Settings.Global.GLOBAL_SETTINGS_ANGLE_DEBUG_PACKAGE,
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_ALL_ANGLE,
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_PKGS,
                     Settings.Global.GLOBAL_SETTINGS_ANGLE_GL_DRIVER_SELECTION_VALUES,
@@ -609,7 +610,6 @@ public class SettingsBackupTest {
                  Settings.Secure.BACKUP_ENABLED,
                  Settings.Secure.BACKUP_PROVISIONED,
                  Settings.Secure.BACKUP_TRANSPORT,
-                 Settings.Secure.CALL_REDIRECTION_DEFAULT_APPLICATION,
                  Settings.Secure.CALL_SCREENING_DEFAULT_COMPONENT,
                  Settings.Secure.CAMERA_LIFT_TRIGGER_ENABLED, // Candidate for backup?
                  Settings.Secure.CARRIER_APPS_HANDLED,
@@ -620,7 +620,6 @@ public class SettingsBackupTest {
                  Settings.Secure.DEFAULT_INPUT_METHOD,
                  Settings.Secure.DEVICE_PAIRED,
                  Settings.Secure.DIALER_DEFAULT_APPLICATION,
-                 Settings.Secure.DISABLE_AIRPLANE_MODE_AFTER_SP_DISABLED,
                  Settings.Secure.DISABLED_PRINT_SERVICES,
                  Settings.Secure.DISABLED_SYSTEM_INPUT_METHODS,
                  Settings.Secure.DISPLAY_DENSITY_FORCED,
@@ -640,23 +639,23 @@ public class SettingsBackupTest {
                  Settings.Secure.LAST_SETUP_SHOWN,
                  Settings.Secure.LOCATION_CHANGER,
                  Settings.Secure.LOCATION_MODE,
+                 Settings.Secure.LOCATION_PERMISSIONS_UPGRADE_TO_Q_MODE,
                  Settings.Secure.LOCK_SCREEN_ALLOW_REMOTE_INPUT, // Candidate?
                  Settings.Secure.LOCK_SCREEN_LOCK_AFTER_TIMEOUT,
                  Settings.Secure.LOCK_TO_APP_EXIT_LOCKED,
-                 Settings.Secure.MAINTAIN_AIRPLANE_MODE_AFTER_SP_DISABLED,
-                 Settings.Secure.MAINTAIN_LOCATION_AFTER_SP_DISABLED,
                  Settings.Secure.MANAGED_PROFILE_CONTACT_REMOTE_SEARCH,
                  Settings.Secure.MULTI_PRESS_TIMEOUT,
                  Settings.Secure.NFC_PAYMENT_FOREGROUND,
                  Settings.Secure.NIGHT_DISPLAY_ACTIVATED,
                  Settings.Secure.NIGHT_DISPLAY_LAST_ACTIVATED_TIME,
                  Settings.Secure.NUM_ROTATION_SUGGESTIONS_ACCEPTED,
+                 Settings.Secure.ODI_CAPTIONS_ENABLED,
+                 Settings.Secure.ODI_CAPTIONS_OPTED_OUT,
                  Settings.Secure.PACKAGE_VERIFIER_STATE,
                  Settings.Secure.PACKAGE_VERIFIER_USER_CONSENT,
                  Settings.Secure.PARENTAL_CONTROL_LAST_UPDATE,
                  Settings.Secure.PAYMENT_SERVICE_SEARCH_URI,
                  Settings.Secure.PRINT_SERVICE_SEARCH_URI,
-                 Settings.Secure.REENABLE_LOCATION_AFTER_SP_DISABLED,
                  Settings.Secure.SCREENSAVER_DEFAULT_COMPONENT, // Candidate?
                  Settings.Secure.SEARCH_GLOBAL_SEARCH_ACTIVITY,
                  Settings.Secure.SEARCH_MAX_RESULTS_PER_SOURCE,
@@ -680,7 +679,6 @@ public class SettingsBackupTest {
                  Settings.Secure.SELECTED_INPUT_METHOD_SUBTYPE,
                  Settings.Secure.SELECTED_SPELL_CHECKER,  // Intentionally removed in Q
                  Settings.Secure.SELECTED_SPELL_CHECKER_SUBTYPE,  // Intentionally removed in Q
-                 Settings.Secure.SENSOR_PRIVACY_SENSOR_STATE,
                  Settings.Secure.SETTINGS_CLASSNAME,
                  Settings.Secure.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING, // candidate?
                  Settings.Secure.SHOW_ROTATION_SUGGESTIONS,

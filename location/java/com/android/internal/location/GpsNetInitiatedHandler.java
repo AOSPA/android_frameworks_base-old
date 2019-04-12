@@ -118,8 +118,8 @@ public class GpsNetInitiatedHandler {
     static private boolean mIsHexInput = true;
 
     // End time of emergency call, and extension, if set
-    private long mCallEndElapsedRealtimeMillis = 0;
-    private long mEmergencyExtensionMillis = 0;
+    private volatile long mCallEndElapsedRealtimeMillis = 0;
+    private volatile long mEmergencyExtensionMillis = 0;
 
     public static class GpsNiNotification
     {
@@ -238,14 +238,19 @@ public class GpsNetInitiatedHandler {
      *    window after the end of that call.
      * 3. If the device is in a emergency callback state, this is provided by querying
      *    TelephonyManager.
+     * 4. If the user has recently sent an Emergency SMS and telephony reports that it is in
+     *    emergency SMS mode, this is provided by querying TelephonyManager.
      * @return true if is considered in user initiated emergency mode for NI purposes
      */
     public boolean getInEmergency() {
         boolean isInEmergencyExtension =
-                (SystemClock.elapsedRealtime() - mCallEndElapsedRealtimeMillis) <
-                        mEmergencyExtensionMillis;
+                (mCallEndElapsedRealtimeMillis > 0)
+                && ((SystemClock.elapsedRealtime() - mCallEndElapsedRealtimeMillis)
+                        < mEmergencyExtensionMillis);
         boolean isInEmergencyCallback = mTelephonyManager.getEmergencyCallbackMode();
-        return mIsInEmergencyCall || isInEmergencyCallback || isInEmergencyExtension;
+        boolean isInEmergencySmsMode = mTelephonyManager.isInEmergencySmsMode();
+        return mIsInEmergencyCall || isInEmergencyCallback || isInEmergencyExtension
+                || isInEmergencySmsMode;
     }
 
     public void setEmergencyExtensionSeconds(int emergencyExtensionSeconds) {

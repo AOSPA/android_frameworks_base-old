@@ -25,14 +25,15 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import android.os.Parcel;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.net.InetAddress;
 import java.util.Random;
-
-import org.junit.runner.RunWith;
-import org.junit.Test;
 
 @RunWith(AndroidJUnit4.class)
 @SmallTest
@@ -230,7 +231,6 @@ public class IpPrefixTest {
         assertFalse(p.contains(Address("2001:db8:f00::ace:d00e")));
         assertFalse(p.contains(Address("2001:db8:f00::bad:d00d")));
         assertFalse(p.contains(Address("2001:4868:4860::8888")));
-        assertFalse(p.contains((InetAddress)null));
         assertFalse(p.contains(Address("8.8.8.8")));
 
         p = new IpPrefix("192.0.2.0/23");

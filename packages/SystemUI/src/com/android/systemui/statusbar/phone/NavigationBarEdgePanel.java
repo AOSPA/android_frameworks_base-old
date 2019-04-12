@@ -17,23 +17,22 @@
 package com.android.systemui.statusbar.phone;
 
 import android.animation.ObjectAnimator;
-import android.annotation.NonNull;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.PixelFormat;
+import android.os.SystemClock;
+import android.os.VibrationEffect;
 import android.util.FloatProperty;
 import android.util.MathUtils;
-import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.WindowManager;
 
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.statusbar.VibratorHelper;
 
 public class NavigationBarEdgePanel extends View {
-    private static final String TAG = "NavigationBarEdgePanel";
 
     // TODO: read from resources once drawing is finalized.
     private static final boolean SHOW_PROTECTION_STROKE = true;
@@ -48,6 +47,9 @@ public class NavigationBarEdgePanel extends View {
     private static final float START_POINTING_RATIO = 0.3f;
     private static final float POINTEDNESS_BEFORE_SNAP_RATIO = 0.4f;
     private static final int ANIM_DURATION_MS = 150;
+    private static final long HAPTIC_TIMEOUT_MS = 200;
+
+    private final VibratorHelper mVibratorHelper;
 
     private final Paint mPaint = new Paint();
     private final Paint mProtectionPaint = new Paint();
@@ -60,11 +62,15 @@ public class NavigationBarEdgePanel extends View {
     private final float mPointExtent;
     private final float mHeight;
     private final float mStrokeThickness;
-    private final boolean mIsLeftPanel;
 
-    private float mStartY;
+    private final float mSwipeThreshold;
+
+    private boolean mIsLeftPanel;
+
     private float mStartX;
 
+    private boolean mDragSlopPassed;
+    private long mLastSlopHapticTime;
     private boolean mGestureDetected;
     private boolean mArrowsPointLeft;
     private float mGestureLength;
@@ -100,27 +106,10 @@ public class NavigationBarEdgePanel extends View {
                 }
             };
 
-    public static NavigationBarEdgePanel create(@NonNull Context context, int width, int height,
-            int gravity) {
-        final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(width, height,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_TOUCHABLE_WHEN_WAKING
-                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                    | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
-                PixelFormat.TRANSLUCENT);
-        lp.gravity = gravity;
-        lp.setTitle(TAG + context.getDisplayId());
-        lp.accessibilityTitle = context.getString(R.string.nav_bar_edge_panel);
-        lp.windowAnimations = 0;
-        NavigationBarEdgePanel panel = new NavigationBarEdgePanel(
-                context, (gravity & Gravity.LEFT) == Gravity.LEFT);
-        panel.setLayoutParams(lp);
-        return panel;
-    }
-
-    private NavigationBarEdgePanel(Context context, boolean isLeftPanel) {
+    public NavigationBarEdgePanel(Context context) {
         super(context);
+
+        mVibratorHelper = Dependency.get(VibratorHelper.class);
 
         mEndAnimator = ObjectAnimator.ofFloat(this, DRAG_PROGRESS, 1f);
         mEndAnimator.setAutoCancel(true);
@@ -149,42 +138,14 @@ public class NavigationBarEdgePanel extends View {
 
         // Both panels arrow point the same way
         mArrowsPointLeft = getLayoutDirection() == LAYOUT_DIRECTION_LTR;
+
+        mSwipeThreshold = context.getResources()
+                .getDimension(R.dimen.navigation_edge_action_drag_threshold);
+        setVisibility(GONE);
+    }
+
+    public void setIsLeftPanel(boolean isLeftPanel) {
         mIsLeftPanel = isLeftPanel;
-    }
-
-    public void setWindowFlag(int flags, boolean enable) {
-        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) getLayoutParams();
-        if (lp == null || enable == ((lp.flags & flags) != 0)) {
-            return;
-        }
-        if (enable) {
-            lp.flags |= flags;
-        } else {
-            lp.flags &= ~flags;
-        }
-        updateLayout(lp);
-    }
-
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN : {
-                show(event.getX(), event.getY());
-                break;
-            }
-            case MotionEvent.ACTION_MOVE: {
-                handleNewSwipePoint(event.getX());
-                break;
-            }
-            // Fall through
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL: {
-                hide();
-                break;
-            }
-        }
-
-        return false;
     }
 
     @Override
@@ -194,7 +155,7 @@ public class NavigationBarEdgePanel extends View {
         canvas.save();
         canvas.translate(
                 mIsLeftPanel ? edgeOffset : getWidth() - edgeOffset,
-                mStartY - mHeight * 0.5f);
+                (getHeight() - mHeight) * 0.5f);
 
         float outsideX = mArrowsPointLeft ? animatedOffset : 0;
         float middleX = mArrowsPointLeft ? 0 : animatedOffset;
@@ -217,15 +178,6 @@ public class NavigationBarEdgePanel extends View {
         mGestureLength = getWidth();
     }
 
-    public void setDimensions(int width, int height) {
-        final WindowManager.LayoutParams lp = (WindowManager.LayoutParams) getLayoutParams();
-        if (lp.width != width || lp.height != height) {
-            lp.width = width;
-            lp.height = height;
-            updateLayout(lp);
-        }
-    }
-
     private void setLegProgress(float progress) {
         mLegProgress = progress;
         invalidate();
@@ -245,23 +197,49 @@ public class NavigationBarEdgePanel extends View {
     }
 
     private void hide() {
-        animate().alpha(0f).setDuration(ANIM_DURATION_MS);
+        animate().alpha(0f).setDuration(ANIM_DURATION_MS)
+                .withEndAction(() -> setVisibility(GONE));
     }
 
-    private void show(float x, float y) {
-        mEndAnimator.cancel();
-        mLegAnimator.cancel();
-        setLegProgress(0f);
-        setDragProgress(0f);
-        setAlpha(1f);
-
-        float halfHeight = mHeight * 0.5f;
-        mStartY = MathUtils.constrain(y, halfHeight, getHeight() - halfHeight);
-        mStartX = x;
+    /**
+     * Updates the UI based on the motion events passed in device co-ordinates
+     */
+    public void handleTouch(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN : {
+                mDragSlopPassed = false;
+                mEndAnimator.cancel();
+                mLegAnimator.cancel();
+                animate().cancel();
+                setLegProgress(0f);
+                setDragProgress(0f);
+                mStartX = event.getX();
+                setVisibility(VISIBLE);
+                break;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                handleNewSwipePoint(event.getX());
+                break;
+            }
+            // Fall through
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                hide();
+                break;
+            }
+        }
     }
 
     private void handleNewSwipePoint(float x) {
         float dist = MathUtils.abs(x - mStartX);
+
+        // Apply a haptic on drag slop passed
+        if (!mDragSlopPassed && dist > mSwipeThreshold) {
+            mDragSlopPassed = true;
+            mVibratorHelper.vibrate(VibrationEffect.EFFECT_TICK);
+            mLastSlopHapticTime = SystemClock.uptimeMillis();
+            setAlpha(1f);
+        }
 
         setDragProgress(MathUtils.constrainedMap(
                 0, 1.0f,
@@ -286,18 +264,16 @@ public class NavigationBarEdgePanel extends View {
             }
         } else {
             if (!mGestureDetected) {
-                performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                // Prevent another haptic if it was just used
+                if (SystemClock.uptimeMillis() - mLastSlopHapticTime > HAPTIC_TIMEOUT_MS) {
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                }
                 mGestureDetected = true;
 
                 mLegAnimator.setFloatValues(1f);
                 mLegAnimator.start();
             }
         }
-    }
-
-    private void updateLayout(WindowManager.LayoutParams lp) {
-        WindowManager wm = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
-        wm.updateViewLayout(this, lp);
     }
 
     private float dp(float dp) {

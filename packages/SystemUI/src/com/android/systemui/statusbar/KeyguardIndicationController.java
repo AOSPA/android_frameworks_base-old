@@ -308,11 +308,23 @@ public class KeyguardIndicationController implements StateListener {
             // Walk down a precedence-ordered list of what indication
             // should be shown based on user or device state
             if (mDozing) {
+                // When dozing we ignore any text color and use white instead, because
+                // colors can be hard to read in low brightness.
+                mTextView.setTextColor(Color.WHITE);
                 if (!TextUtils.isEmpty(mTransientIndication)) {
-                    mTextView.setTextColor(Color.WHITE);
                     mTextView.switchIndication(mTransientIndication);
+                } else if (mPowerPluggedIn) {
+                    String indication = computePowerIndication();
+                    if (animate) {
+                        animateText(mTextView, indication);
+                    } else {
+                        mTextView.switchIndication(indication);
+                    }
+                } else {
+                    String percentage = NumberFormat.getPercentInstance()
+                            .format(mBatteryLevel / 100f);
+                    mTextView.switchIndication(percentage);
                 }
-                updateAlphas();
                 return;
             }
 
@@ -350,14 +362,6 @@ public class KeyguardIndicationController implements StateListener {
                 mTextView.switchIndication(mRestingIndication);
                 mTextView.setTextColor(mInitialTextColorState);
             }
-        }
-    }
-
-    private void updateAlphas() {
-        if (!TextUtils.isEmpty(mTransientIndication)) {
-            mTextView.setAlpha(1f);
-        } else {
-            mTextView.setAlpha(1f - mDarkAmount);
         }
     }
 
@@ -523,14 +527,6 @@ public class KeyguardIndicationController implements StateListener {
         pw.println("  computePowerIndication(): " + computePowerIndication());
     }
 
-    public void setDarkAmount(float darkAmount) {
-        if (mDarkAmount == darkAmount) {
-            return;
-        }
-        mDarkAmount = darkAmount;
-        updateAlphas();
-    }
-
     @Override
     public void onStateChanged(int newState) {
         // don't care
@@ -581,13 +577,12 @@ public class KeyguardIndicationController implements StateListener {
             if (!updateMonitor.isUnlockingWithBiometricAllowed()) {
                 return;
             }
-            ColorStateList errorColorState = Utils.getColorError(mContext);
             if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
                 mStatusBarKeyguardViewManager.showBouncerMessage(helpString,
-                        errorColorState);
+                        mInitialTextColorState);
             } else if (updateMonitor.isScreenOn()) {
                 mLockIcon.setTransientBiometricsError(true);
-                showTransientIndication(helpString, errorColorState);
+                showTransientIndication(helpString);
                 hideTransientIndicationDelayed(TRANSIENT_BIOMETRIC_ERROR_TIMEOUT);
                 mHandler.removeMessages(MSG_CLEAR_BIOMETRIC_MSG);
                 mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_CLEAR_BIOMETRIC_MSG),
@@ -605,7 +600,6 @@ public class KeyguardIndicationController implements StateListener {
             if (shouldSuppressBiometricError(msgId, biometricSourceType, updateMonitor)) {
                 return;
             }
-            ColorStateList errorColorState = Utils.getColorError(mContext);
             if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
                 // When swiping up right after receiving a biometric error, the bouncer calls
                 // authenticate leading to the same message being shown again on the bouncer.
@@ -613,10 +607,10 @@ public class KeyguardIndicationController implements StateListener {
                 // generic.
                 if (mLastSuccessiveErrorMessage != msgId) {
                     mStatusBarKeyguardViewManager.showBouncerMessage(errString,
-                            errorColorState);
+                            mInitialTextColorState);
                 }
             } else if (updateMonitor.isScreenOn()) {
-                showTransientIndication(errString, errorColorState);
+                showTransientIndication(errString);
                 // We want to keep this message around in case the screen was off
                 hideTransientIndicationDelayed(HIDE_DELAY_MS);
             } else {
@@ -666,6 +660,9 @@ public class KeyguardIndicationController implements StateListener {
         public void onBiometricRunningStateChanged(boolean running,
                 BiometricSourceType biometricSourceType) {
             if (running) {
+                // Let's hide any previous messages when authentication starts, otherwise
+                // multiple auth attempts would overlap.
+                hideTransientIndication();
                 mMessageToShowOnScreenOn = null;
             }
         }
@@ -674,6 +671,7 @@ public class KeyguardIndicationController implements StateListener {
         public void onBiometricAuthenticated(int userId, BiometricSourceType biometricSourceType) {
             super.onBiometricAuthenticated(userId, biometricSourceType);
             mLastSuccessiveErrorMessage = -1;
+            mHandler.sendEmptyMessage(MSG_HIDE_TRANSIENT);
         }
 
         @Override

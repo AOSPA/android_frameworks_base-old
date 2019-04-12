@@ -43,14 +43,6 @@ import com.android.settingslib.wifi.AccessPoint.Speed;
 
 public class AccessPointPreference extends Preference {
 
-    private static final int[] STATE_SECURED_OWE = {
-            R.attr.state_encrypted_owe
-    };
-
-    private static final int[] STATE_SECURED_SAE = {
-            R.attr.state_encrypted_sae
-    };
-
     private static final int[] STATE_SECURED = {
             R.attr.state_encrypted
     };
@@ -82,6 +74,9 @@ public class AccessPointPreference extends Preference {
     private AccessPoint mAccessPoint;
     private Drawable mBadge;
     private int mLevel;
+    private int mWifiGeneration;
+    private boolean mTwtSupport;
+    private boolean mVhtMax8SpatialStreamsSupport;
     private CharSequence mContentDescription;
     private int mDefaultIconResId;
     private int mWifiSpeed = Speed.NONE;
@@ -182,14 +177,14 @@ public class AccessPointPreference extends Preference {
         notifyChanged();
     }
 
-    protected void updateIcon(int level, Context context) {
+    protected void updateIcon(int level, int generation, boolean isReady, Context context) {
         if (level == -1) {
             safeSetDefaultIcon();
             return;
         }
         TronUtils.logWifiSettingsSpeed(context, mWifiSpeed);
 
-        Drawable drawable = mIconInjector.getIcon(level);
+        Drawable drawable = mIconInjector.getIcon(level, generation, isReady);
         if (!mForSavedNetworks && drawable != null) {
             drawable.setTintList(Utils.getColorAttr(context, android.R.attr.colorControlNormal));
             setIcon(drawable);
@@ -208,10 +203,8 @@ public class AccessPointPreference extends Preference {
         if (frictionImageView == null || mFrictionSld == null) {
             return;
         }
-        if (mAccessPoint.getSecurity() == AccessPoint.SECURITY_SAE) {
-            mFrictionSld.setState(STATE_SECURED_SAE);
-        } else if ((mAccessPoint.getSecurity() != AccessPoint.SECURITY_NONE)
-                && (mAccessPoint.getSecurity() != AccessPoint.SECURITY_OWE)) {
+        if (mAccessPoint.getSecurity() != AccessPoint.SECURITY_NONE &&
+            mAccessPoint.getSecurity() != AccessPoint.SECURITY_OWE) {
             mFrictionSld.setState(STATE_SECURED);
         } else if (mAccessPoint.isMetered()) {
             mFrictionSld.setState(STATE_METERED);
@@ -242,21 +235,40 @@ public class AccessPointPreference extends Preference {
      * Updates the title and summary; may indirectly call notifyChanged().
      */
     public void refresh() {
-        setTitle(this, mAccessPoint, mForSavedNetworks);
+        setTitle(this, mAccessPoint);
         final Context context = getContext();
         int level = mAccessPoint.getLevel();
         int wifiSpeed = mAccessPoint.getSpeed();
-        if (level != mLevel || wifiSpeed != mWifiSpeed) {
+        int wifiGeneration = mAccessPoint.getWifiGeneration();
+        boolean vhtMax8SpatialStreamsSupport = mAccessPoint.isVhtMax8SpatialStreamsSupported();
+        boolean twtSupport = mAccessPoint.isTwtSupported();
+
+        if (level != mLevel ||
+            wifiSpeed != mWifiSpeed ||
+            wifiGeneration != mWifiGeneration ||
+            mVhtMax8SpatialStreamsSupport != vhtMax8SpatialStreamsSupport ||
+            mTwtSupport != twtSupport) {
             mLevel = level;
             mWifiSpeed = wifiSpeed;
-            updateIcon(mLevel, context);
+            mWifiGeneration = wifiGeneration;
+            mVhtMax8SpatialStreamsSupport = vhtMax8SpatialStreamsSupport;
+            mTwtSupport = twtSupport;
+            updateIcon(mLevel, mWifiGeneration, mVhtMax8SpatialStreamsSupport &&  mTwtSupport, context);
             notifyChanged();
         }
 
         updateBadge(context);
 
-        setSummary(mForSavedNetworks ? mAccessPoint.getSavedNetworkSummary()
-                : mAccessPoint.getSettingsSummary());
+        String summary = mForSavedNetworks ? mAccessPoint.getSavedNetworkSummary()
+                                           : mAccessPoint.getSettingsSummary();
+
+        if (mAccessPoint.getSecurity() == AccessPoint.SECURITY_SAE) {
+           summary = "WPA3(SAE) " + summary;
+        } else if (mAccessPoint.getSecurity() == AccessPoint.SECURITY_OWE) {
+           summary = "WPA3(OWE) " + summary;
+        }
+
+        setSummary(summary);
 
         mContentDescription = buildContentDescription(getContext(), this /* pref */, mAccessPoint);
     }
@@ -272,12 +284,8 @@ public class AccessPointPreference extends Preference {
     }
 
     @VisibleForTesting
-    static void setTitle(AccessPointPreference preference, AccessPoint ap, boolean savedNetworks) {
-        if (savedNetworks) {
-            preference.setTitle(ap.getConfigName());
-        } else {
-            preference.setTitle(ap.getTitle());
-        }
+    static void setTitle(AccessPointPreference preference, AccessPoint ap) {
+        preference.setTitle(ap.getTitle());
     }
 
     /**
@@ -344,8 +352,8 @@ public class AccessPointPreference extends Preference {
             mContext = context;
         }
 
-        public Drawable getIcon(int level) {
-            return mContext.getDrawable(Utils.getWifiIconResource(level));
+        public Drawable getIcon(int level, int generation, boolean isReady) {
+            return mContext.getDrawable(Utils.getWifiIconResource(level, generation, isReady));
         }
     }
 }

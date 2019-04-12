@@ -17,6 +17,7 @@
 package com.android.server.connectivity;
 
 import android.net.ConnectivityManager;
+import android.net.IDnsResolver;
 import android.net.INetd;
 import android.net.InetAddresses;
 import android.net.InterfaceConfiguration;
@@ -66,6 +67,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
         NetworkInfo.State.SUSPENDED,
     };
 
+    private final IDnsResolver mDnsResolver;
     private final INetd mNetd;
     private final INetworkManagementService mNMService;
 
@@ -85,7 +87,9 @@ public class Nat464Xlat extends BaseNetworkObserver {
     private Inet6Address mIPv6Address;
     private State mState = State.IDLE;
 
-    public Nat464Xlat(NetworkAgentInfo nai, INetd netd, INetworkManagementService nmService) {
+    public Nat464Xlat(NetworkAgentInfo nai, INetd netd, IDnsResolver dnsResolver,
+            INetworkManagementService nmService) {
+        mDnsResolver = dnsResolver;
         mNetd = netd;
         mNMService = nmService;
         mNetwork = nai;
@@ -109,8 +113,8 @@ public class Nat464Xlat extends BaseNetworkObserver {
         // Only run clat on networks that have a global IPv6 address and don't have a native IPv4
         // address.
         LinkProperties lp = nai.linkProperties;
-        final boolean isIpv6OnlyNetwork = (lp != null) && lp.hasGlobalIPv6Address()
-                && !lp.hasIPv4Address();
+        final boolean isIpv6OnlyNetwork = (lp != null) && lp.hasGlobalIpv6Address()
+                && !lp.hasIpv4Address();
 
         // If the network tells us it doesn't use clat, respect that.
         final boolean skip464xlat = (nai.netMisc() != null) && nai.netMisc().skip464xlat;
@@ -271,7 +275,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
 
     private void startPrefixDiscovery() {
         try {
-            mNetd.resolverStartPrefix64Discovery(getNetId());
+            mDnsResolver.startPrefix64Discovery(getNetId());
             mState = State.DISCOVERING;
         } catch (RemoteException | ServiceSpecificException e) {
             Slog.e(TAG, "Error starting prefix discovery on netId " + getNetId() + ": " + e);
@@ -280,7 +284,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
 
     private void stopPrefixDiscovery() {
         try {
-            mNetd.resolverStopPrefix64Discovery(getNetId());
+            mDnsResolver.stopPrefix64Discovery(getNetId());
         } catch (RemoteException | ServiceSpecificException e) {
             Slog.e(TAG, "Error stopping prefix discovery on netId " + getNetId() + ": " + e);
         }

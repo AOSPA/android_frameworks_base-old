@@ -414,7 +414,7 @@ public abstract class WindowManagerInternal {
         OnHardKeyboardStatusChangeListener listener);
 
     /** Returns true if a stack in the windowing mode is currently visible. */
-    public abstract boolean isStackVisible(int windowingMode);
+    public abstract boolean isStackVisibleLw(int windowingMode);
 
     /**
      * Requests the window manager to resend the windows for accessibility.
@@ -474,4 +474,9 @@ public abstract class WindowManagerInternal {
      * Return the display Id for given window.
      */
     public abstract int getDisplayIdForWindow(IBinder windowToken);
+
+    /**
+     * Checks whether this display should support showing system decorations.
+     */
+    public abstract boolean shouldShowSystemDecorOnDisplay(int displayId);
 }

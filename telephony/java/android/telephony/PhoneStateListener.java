@@ -292,17 +292,19 @@ public class PhoneStateListener {
     public static final int LISTEN_PHONE_CAPABILITY_CHANGE                 = 0x00200000;
 
     /**
-     *  Listen for changes to active data subId. Active data subscription
-     *  is whichever is being used for Internet data. For most of the case, it's
-     *  default data subscription but it could be others. For example, when data is
-     *  switched to opportunistic subscription, that becomes the active data sub.
+     *  Listen for changes to active data subId. Active data subscription is
+     *  the current subscription used to setup Cellular Internet data. For example,
+     *  it could be the current active opportunistic subscription in use, or the
+     *  subscription user selected as default data subscription in DSDS mode.
      *
-     *  Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE
-     *  READ_PHONE_STATE}
-     *  @see #onActiveDataSubIdChanged
-     *  @hide
+     *  Requires Permission: No permission is required to listen, but notification requires
+     *  {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} or the calling
+     *  app has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges})
+     *  on any active subscription.
+     *
+     *  @see #onActiveDataSubscriptionIdChanged
      */
-    public static final int LISTEN_ACTIVE_DATA_SUBID_CHANGE               = 0x00400000;
+    public static final int LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE = 0x00400000;
 
     /**
      *  Listen for changes to the radio power state.
@@ -609,7 +611,7 @@ public class PhoneStateListener {
     @RequiresPermission((android.Manifest.permission.READ_PRECISE_PHONE_STATE))
     @SystemApi
     public void onPreciseDataConnectionStateChanged(
-            PreciseDataConnectionState dataConnectionState) {
+            @NonNull PreciseDataConnectionState dataConnectionState) {
         // default implementation empty
     }
 
@@ -709,12 +711,11 @@ public class PhoneStateListener {
     /**
      * Callback invoked when active data subId changes. Requires
      * the READ_PHONE_STATE permission.
-     * @param subId current data subId used for Internet data. It will be default data subscription
-     *              most cases. And it could be other subscriptions for example opportunistic
-     *              subscription if data is switched onto it.
-     * @hide
+     * @param subId current subscription used to setup Cellular Internet data.
+     *              For example, it could be the current active opportunistic subscription in use,
+     *              or the subscription user selected as default data subscription in DSDS mode.
      */
-    public void onActiveDataSubIdChanged(int subId) {
+    public void onActiveDataSubscriptionIdChanged(int subId) {
         // default implementation empty
     }
 
@@ -1003,7 +1004,7 @@ public class PhoneStateListener {
             if (psl == null) return;
 
             Binder.withCleanCallingIdentity(
-                    () -> mExecutor.execute(() -> psl.onActiveDataSubIdChanged(subId)));
+                    () -> mExecutor.execute(() -> psl.onActiveDataSubscriptionIdChanged(subId)));
         }
 
         public void onImsCallDisconnectCauseChanged(ImsReasonInfo disconnectCause) {

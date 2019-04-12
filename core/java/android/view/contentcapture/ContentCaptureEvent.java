@@ -16,6 +16,7 @@
 package android.view.contentcapture;
 
 import static android.view.contentcapture.ContentCaptureHelper.getSanitizedString;
+import static android.view.contentcapture.ContentCaptureSession.NO_SESSION_ID;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -126,25 +127,25 @@ public final class ContentCaptureEvent implements Parcelable {
     @Retention(RetentionPolicy.SOURCE)
     public @interface EventType{}
 
-    private final @NonNull String mSessionId;
+    private final int mSessionId;
     private final int mType;
     private final long mEventTime;
     private @Nullable AutofillId mId;
     private @Nullable ArrayList<AutofillId> mIds;
     private @Nullable ViewNode mNode;
     private @Nullable CharSequence mText;
-    private @Nullable String mParentSessionId;
+    private int mParentSessionId = NO_SESSION_ID;
     private @Nullable ContentCaptureContext mClientContext;
 
     /** @hide */
-    public ContentCaptureEvent(@NonNull String sessionId, int type, long eventTime) {
+    public ContentCaptureEvent(int sessionId, int type, long eventTime) {
         mSessionId = sessionId;
         mType = type;
         mEventTime = eventTime;
     }
 
     /** @hide */
-    public ContentCaptureEvent(@NonNull String sessionId, int type) {
+    public ContentCaptureEvent(int sessionId, int type) {
         this(sessionId, type, System.currentTimeMillis());
     }
 
@@ -185,7 +186,7 @@ public final class ContentCaptureEvent implements Parcelable {
      *
      * @hide
      */
-    public ContentCaptureEvent setParentSessionId(@NonNull String parentSessionId) {
+    public ContentCaptureEvent setParentSessionId(int parentSessionId) {
         mParentSessionId = parentSessionId;
         return this;
     }
@@ -202,7 +203,7 @@ public final class ContentCaptureEvent implements Parcelable {
 
     /** @hide */
     @NonNull
-    public String getSessionId() {
+    public int getSessionId() {
         return mSessionId;
     }
 
@@ -212,7 +213,7 @@ public final class ContentCaptureEvent implements Parcelable {
      * @hide
      */
     @Nullable
-    public String getParentSessionId() {
+    public int getParentSessionId() {
         return mParentSessionId;
     }
 
@@ -303,6 +304,47 @@ public final class ContentCaptureEvent implements Parcelable {
         return mText;
     }
 
+    /**
+     * Merges event of the same type, either {@link #TYPE_VIEW_TEXT_CHANGED}
+     * or {@link #TYPE_VIEW_DISAPPEARED}.
+     *
+     * @hide
+     */
+    public void mergeEvent(@NonNull ContentCaptureEvent event) {
+        Preconditions.checkNotNull(event);
+        final int eventType = event.getType();
+        if (mType != eventType) {
+            Log.e(TAG, "mergeEvent(" + getTypeAsString(eventType) + ") cannot be merged "
+                    + "with different eventType=" + getTypeAsString(mType));
+            return;
+        }
+
+        if (eventType == TYPE_VIEW_DISAPPEARED) {
+            final List<AutofillId> ids = event.getIds();
+            final AutofillId id = event.getId();
+            if (ids != null) {
+                if (id != null) {
+                    Log.w(TAG, "got TYPE_VIEW_DISAPPEARED event with both id and ids: " + event);
+                }
+                for (int i = 0; i < ids.size(); i++) {
+                    addAutofillId(ids.get(i));
+                }
+                return;
+            }
+            if (id != null) {
+                addAutofillId(id);
+                return;
+            }
+            throw new IllegalArgumentException("mergeEvent(): got "
+                    + "TYPE_VIEW_DISAPPEARED event with neither id or ids: " + event);
+        } else if (eventType == TYPE_VIEW_TEXT_CHANGED) {
+            setText(event.getText());
+        } else {
+            Log.e(TAG, "mergeEvent(" + getTypeAsString(eventType)
+                    + ") does not support this event type.");
+        }
+    }
+
     /** @hide */
     public void dump(@NonNull PrintWriter pw) {
         pw.print("type="); pw.print(getTypeAsString(mType));
@@ -316,10 +358,10 @@ public final class ContentCaptureEvent implements Parcelable {
         if (mNode != null) {
             pw.print(", mNode.id="); pw.print(mNode.getAutofillId());
         }
-        if (mSessionId != null) {
+        if (mSessionId != NO_SESSION_ID) {
             pw.print(", sessionId="); pw.print(mSessionId);
         }
-        if (mParentSessionId != null) {
+        if (mParentSessionId != NO_SESSION_ID) {
             pw.print(", parentSessionId="); pw.print(mParentSessionId);
         }
         if (mText != null) {
@@ -336,7 +378,7 @@ public final class ContentCaptureEvent implements Parcelable {
         final StringBuilder string = new StringBuilder("ContentCaptureEvent[type=")
                 .append(getTypeAsString(mType));
         string.append(", session=").append(mSessionId);
-        if (mType == TYPE_SESSION_STARTED && mParentSessionId != null) {
+        if (mType == TYPE_SESSION_STARTED && mParentSessionId != NO_SESSION_ID) {
             string.append(", parent=").append(mParentSessionId);
         }
         if (mId != null) {
@@ -368,7 +410,7 @@ public final class ContentCaptureEvent implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel parcel, int flags) {
-        parcel.writeString(mSessionId);
+        parcel.writeInt(mSessionId);
         parcel.writeInt(mType);
         parcel.writeLong(mEventTime);
         parcel.writeParcelable(mId, flags);
@@ -376,19 +418,20 @@ public final class ContentCaptureEvent implements Parcelable {
         ViewNode.writeToParcel(parcel, mNode, flags);
         parcel.writeCharSequence(mText);
         if (mType == TYPE_SESSION_STARTED || mType == TYPE_SESSION_FINISHED) {
-            parcel.writeString(mParentSessionId);
+            parcel.writeInt(mParentSessionId);
         }
         if (mType == TYPE_SESSION_STARTED || mType == TYPE_CONTEXT_UPDATED) {
             parcel.writeParcelable(mClientContext, flags);
         }
     }
 
-    public static final Parcelable.Creator<ContentCaptureEvent> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<ContentCaptureEvent> CREATOR =
             new Parcelable.Creator<ContentCaptureEvent>() {
 
         @Override
+        @NonNull
         public ContentCaptureEvent createFromParcel(Parcel parcel) {
-            final String sessionId = parcel.readString();
+            final int sessionId = parcel.readInt();
             final int type = parcel.readInt();
             final long eventTime  = parcel.readLong();
             final ContentCaptureEvent event = new ContentCaptureEvent(sessionId, type, eventTime);
@@ -406,7 +449,7 @@ public final class ContentCaptureEvent implements Parcelable {
             }
             event.setText(parcel.readCharSequence());
             if (type == TYPE_SESSION_STARTED || type == TYPE_SESSION_FINISHED) {
-                event.setParentSessionId(parcel.readString());
+                event.setParentSessionId(parcel.readInt());
             }
             if (type == TYPE_SESSION_STARTED || type == TYPE_CONTEXT_UPDATED) {
                 event.setClientContext(parcel.readParcelable(null));
@@ -415,6 +458,7 @@ public final class ContentCaptureEvent implements Parcelable {
         }
 
         @Override
+        @NonNull
         public ContentCaptureEvent[] newArray(int size) {
             return new ContentCaptureEvent[size];
         }

@@ -19,12 +19,18 @@ package com.android.server;
 import static com.android.server.PackageWatchdog.TRIGGER_FAILURE_COUNT;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import android.content.Context;
 import android.content.pm.VersionedPackage;
+import android.os.Handler;
+import android.os.RemoteException;
 import android.os.test.TestLooper;
-import android.support.test.InstrumentationRegistry;
+import android.util.AtomicFile;
+
+import androidx.test.InstrumentationRegistry;
 
 import com.android.server.PackageWatchdog.PackageHealthObserver;
 import com.android.server.PackageWatchdog.PackageHealthObserverImpact;
@@ -35,11 +41,14 @@ import org.junit.Test;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
-// TODO(zezeozue): Write test without using PackageWatchdog#getPackages. Just rely on
+// TODO: Write test without using PackageWatchdog#getPackages. Just rely on
 // behavior of observers receiving crash notifications or not to determine if it's registered
+// TODO: Use Truth in tests.
 /**
  * Test PackageWatchdog.
  */
@@ -438,9 +447,155 @@ public class PackageWatchdogTest {
         assertEquals(0, observer2.mFailedPackages.size());
     }
 
+    /**
+     * Test package passing explicit health checks does not fail and vice versa.
+     */
+    @Test
+    public void testExplicitHealthChecks() throws Exception {
+        TestController controller = new TestController();
+        PackageWatchdog watchdog = createWatchdog(controller, true /* withPackagesReady */);
+        TestObserver observer1 = new TestObserver(OBSERVER_NAME_1,
+                PackageHealthObserverImpact.USER_IMPACT_HIGH);
+        TestObserver observer2 = new TestObserver(OBSERVER_NAME_2,
+                PackageHealthObserverImpact.USER_IMPACT_HIGH);
+        TestObserver observer3 = new TestObserver(OBSERVER_NAME_3,
+                PackageHealthObserverImpact.USER_IMPACT_HIGH);
+
+
+        // Start observing with explicit health checks for APP_A and APP_B respectively
+        // with observer1 and observer2
+        controller.setSupportedPackages(Arrays.asList(APP_A, APP_B));
+        watchdog.startObservingHealth(observer1, Arrays.asList(APP_A), SHORT_DURATION);
+        watchdog.startObservingHealth(observer2, Arrays.asList(APP_B), SHORT_DURATION);
+
+        // Run handler so requests are dispatched to the controller
+        mTestLooper.dispatchAll();
+
+        // Verify we requested health checks for APP_A and APP_B
+        List<String> requestedPackages = controller.getRequestedPackages();
+        assertEquals(2, requestedPackages.size());
+        assertEquals(APP_A, requestedPackages.get(0));
+        assertEquals(APP_B, requestedPackages.get(1));
+
+        // Then health check passed for APP_A (observer1 is aware)
+        controller.setPackagePassed(APP_A);
+
+        // Then start observing APP_A with explicit health checks for observer3.
+        // Observer3 didn't exist when we got the explicit health check above, so
+        // it starts out with a non-passing explicit health check and has to wait for a pass
+        // otherwise it would be notified of APP_A failure on expiry
+        watchdog.startObservingHealth(observer3, Arrays.asList(APP_A), SHORT_DURATION);
+
+        // Then expire observers
+        Thread.sleep(SHORT_DURATION);
+        // Run handler so package failures are dispatched to observers
+        mTestLooper.dispatchAll();
+
+        // Verify we cancelled all requests on expiry
+        assertEquals(0, controller.getRequestedPackages().size());
+
+        // Verify observer1 is not notified
+        assertEquals(0, observer1.mFailedPackages.size());
+
+        // Verify observer2 is notifed because health checks for APP_B never passed
+        assertEquals(1, observer2.mFailedPackages.size());
+        assertEquals(APP_B, observer2.mFailedPackages.get(0));
+
+        // Verify observer3 is notifed because health checks for APP_A did not pass before expiry
+        assertEquals(1, observer3.mFailedPackages.size());
+        assertEquals(APP_A, observer3.mFailedPackages.get(0));
+    }
+
+    /**
+     * Test explicit health check state can be disabled and enabled correctly.
+     */
+    @Test
+    public void testExplicitHealthCheckStateChanges() throws Exception {
+        TestController controller = new TestController();
+        PackageWatchdog watchdog = createWatchdog(controller, true /* withPackagesReady */);
+        TestObserver observer = new TestObserver(OBSERVER_NAME_1,
+                PackageHealthObserverImpact.USER_IMPACT_MEDIUM);
+
+        // Start observing with explicit health checks for APP_A and APP_B
+        controller.setSupportedPackages(Arrays.asList(APP_A, APP_B, APP_C));
+        watchdog.startObservingHealth(observer, Arrays.asList(APP_A), SHORT_DURATION);
+        watchdog.startObservingHealth(observer, Arrays.asList(APP_B), LONG_DURATION);
+
+        // Run handler so requests are dispatched to the controller
+        mTestLooper.dispatchAll();
+
+        // Verify we requested health checks for APP_A and APP_B
+        List<String> requestedPackages = controller.getRequestedPackages();
+        assertEquals(2, requestedPackages.size());
+        assertEquals(APP_A, requestedPackages.get(0));
+        assertEquals(APP_B, requestedPackages.get(1));
+
+        // Disable explicit health checks (marks APP_A and APP_B as passed)
+        watchdog.setExplicitHealthCheckEnabled(false);
+
+        // Run handler so requests/cancellations are dispatched to the controller
+        mTestLooper.dispatchAll();
+
+        // Verify all checks are cancelled
+        assertEquals(0, controller.getRequestedPackages().size());
+
+        // Then expire APP_A
+        Thread.sleep(SHORT_DURATION);
+        mTestLooper.dispatchAll();
+
+        // Verify APP_A is not failed (APP_B) is not expired yet
+        assertEquals(0, observer.mFailedPackages.size());
+
+        // Re-enable explicit health checks
+        watchdog.setExplicitHealthCheckEnabled(true);
+
+        // Run handler so requests/cancellations are dispatched to the controller
+        mTestLooper.dispatchAll();
+
+        // Verify no requests are made cos APP_A is expired and APP_B was marked as passed
+        assertEquals(0, controller.getRequestedPackages().size());
+
+        // Then set new supported packages
+        controller.setSupportedPackages(Arrays.asList(APP_C));
+        // Start observing APP_A and APP_C; only APP_C has support for explicit health checks
+        watchdog.startObservingHealth(observer, Arrays.asList(APP_A, APP_C), SHORT_DURATION);
+
+        // Run handler so requests/cancellations are dispatched to the controller
+        mTestLooper.dispatchAll();
+
+        // Verify requests are only made for APP_C
+        requestedPackages = controller.getRequestedPackages();
+        assertEquals(1, requestedPackages.size());
+        assertEquals(APP_C, requestedPackages.get(0));
+
+        // Then expire APP_A and APP_C
+        Thread.sleep(SHORT_DURATION);
+        mTestLooper.dispatchAll();
+
+        // Verify only APP_C is failed because explicit health checks was not supported for APP_A
+        assertEquals(1, observer.mFailedPackages.size());
+        assertEquals(APP_C, observer.mFailedPackages.get(0));
+    }
+
     private PackageWatchdog createWatchdog() {
-        return new PackageWatchdog(InstrumentationRegistry.getContext(),
-                mTestLooper.getLooper());
+        return createWatchdog(new TestController(), true /* withPackagesReady */);
+    }
+
+    private PackageWatchdog createWatchdog(TestController controller, boolean withPackagesReady) {
+        Context context = InstrumentationRegistry.getContext();
+        AtomicFile policyFile =
+                new AtomicFile(new File(context.getFilesDir(), "package-watchdog.xml"));
+        Handler handler = new Handler(mTestLooper.getLooper());
+        PackageWatchdog watchdog =
+                new PackageWatchdog(context, policyFile, handler, handler, controller);
+        // Verify controller is not automatically started
+        assertFalse(controller.mIsEnabled);
+        if (withPackagesReady) {
+            watchdog.onPackagesReady();
+            // Verify controller by default is started when packages are ready
+            assertTrue(controller.mIsEnabled);
+        }
+        return watchdog;
     }
 
     private static class TestObserver implements PackageHealthObserver {
@@ -469,6 +624,71 @@ public class PackageWatchdogTest {
 
         public String getName() {
             return mName;
+        }
+    }
+
+    private static class TestController extends ExplicitHealthCheckController {
+        TestController() {
+            super(null /* controller */);
+        }
+
+        private boolean mIsEnabled;
+        private List<String> mSupportedPackages = new ArrayList<>();
+        private List<String> mRequestedPackages = new ArrayList<>();
+        private Runnable mStateChangedRunnable;
+        private Consumer<String> mPassedConsumer;
+
+        @Override
+        public void request(String packageName) throws RemoteException {
+            if (!mRequestedPackages.contains(packageName)) {
+                mRequestedPackages.add(packageName);
+            }
+        }
+
+        @Override
+        public void cancel(String packageName) throws RemoteException {
+            mRequestedPackages.remove(packageName);
+        }
+
+        @Override
+        public void getSupportedPackages(Consumer<List<String>> consumer) throws RemoteException {
+            consumer.accept(mIsEnabled ? mSupportedPackages : Collections.emptyList());
+        }
+
+        @Override
+        public void getRequestedPackages(Consumer<List<String>> consumer) throws RemoteException {
+            // Pass copy to prevent ConcurrentModificationException during test
+            consumer.accept(
+                    mIsEnabled ? new ArrayList<>(mRequestedPackages) : Collections.emptyList());
+        }
+
+        @Override
+        public void setEnabled(boolean enabled) {
+            mIsEnabled = enabled;
+            mStateChangedRunnable.run();
+        }
+
+        @Override
+        public void setCallbacks(Runnable stateChangedRunnable, Consumer<String> passedConsumer) {
+            mStateChangedRunnable = stateChangedRunnable;
+            mPassedConsumer = passedConsumer;
+        }
+
+        public void setSupportedPackages(List<String> packages) {
+            mSupportedPackages.clear();
+            mSupportedPackages.addAll(packages);
+        }
+
+        public void setPackagePassed(String packageName) {
+            mPassedConsumer.accept(packageName);
+        }
+
+        public List<String> getRequestedPackages() {
+            if (mIsEnabled) {
+                return mRequestedPackages;
+            } else {
+                return Collections.emptyList();
+            }
         }
     }
 }

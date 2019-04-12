@@ -135,7 +135,7 @@ public class AidGroup implements Parcelable {
     }
 
     @UnsupportedAppUsage
-    public static final Parcelable.Creator<AidGroup> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<AidGroup> CREATOR =
             new Parcelable.Creator<AidGroup>() {
 
         @Override

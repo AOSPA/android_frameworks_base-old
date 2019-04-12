@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -30,12 +31,13 @@ import static org.mockito.Mockito.when;
 
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardHostView;
@@ -335,11 +337,25 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testIsShowingScrimmed() {
+    public void testIsShowingScrimmed_true() {
+        doAnswer(invocation -> {
+            assertThat(mBouncer.isScrimmed()).isTrue();
+            return null;
+        }).when(mExpansionCallback).onFullyShown();
         mBouncer.show(false /* resetSecuritySelection */, true /* animate */);
-        assertThat(mBouncer.isShowingScrimmed()).isTrue();
+        assertThat(mBouncer.isScrimmed()).isTrue();
+        mBouncer.hide(false /* destroyView */);
+        assertThat(mBouncer.isScrimmed()).isFalse();
+    }
+
+    @Test
+    public void testIsShowingScrimmed_false() {
+        doAnswer(invocation -> {
+            assertThat(mBouncer.isScrimmed()).isFalse();
+            return null;
+        }).when(mExpansionCallback).onFullyShown();
         mBouncer.show(false /* resetSecuritySelection */, false /* animate */);
-        assertThat(mBouncer.isShowingScrimmed()).isFalse();
+        assertThat(mBouncer.isScrimmed()).isFalse();
     }
 
     @Test

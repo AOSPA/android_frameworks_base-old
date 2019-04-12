@@ -26,6 +26,7 @@
 
 using namespace testing;
 using android::sp;
+using android::util::ProtoReader;
 using std::make_shared;
 using std::set;
 using std::shared_ptr;
@@ -2500,6 +2501,37 @@ TEST(ValueMetricProducerTest, TestBucketIncludingUnknownConditionIsInvalid) {
     EXPECT_EQ(0UL, valueProducer->mPastBuckets.size());
 }
 
+TEST(ValueMetricProducerTest, TestFullBucketResetWhenLastBucketInvalid) {
+    ValueMetric metric = ValueMetricProducerTestHelper::createMetric();
+
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
+    EXPECT_CALL(*pullerManager, Pull(tagId, _))
+            // Initialization.
+            .WillOnce(Invoke([](int tagId, vector<std::shared_ptr<LogEvent>>* data) {
+                data->clear();
+                data->push_back(ValueMetricProducerTestHelper::createEvent(bucketStartTimeNs, 1));
+                return true;
+            }))
+            // notifyAppUpgrade.
+            .WillOnce(Invoke([](int tagId, vector<std::shared_ptr<LogEvent>>* data) {
+                data->clear();
+                data->push_back(ValueMetricProducerTestHelper::createEvent(
+                        bucketStartTimeNs + bucketSizeNs / 2, 10));
+                return true;
+            }));
+    sp<ValueMetricProducer> valueProducer =
+            ValueMetricProducerTestHelper::createValueProducerNoConditions(pullerManager, metric);
+    ASSERT_EQ(0UL, valueProducer->mCurrentFullBucket.size());
+
+    valueProducer->notifyAppUpgrade(bucketStartTimeNs + bucketSizeNs / 2, "com.foo", 10000, 1);
+    ASSERT_EQ(1UL, valueProducer->mCurrentFullBucket.size());
+
+    vector<shared_ptr<LogEvent>> allData;
+    allData.push_back(ValueMetricProducerTestHelper::createEvent(bucket3StartTimeNs + 1, 4));
+    valueProducer->onDataPulled(allData, /** fails */ false, bucket3StartTimeNs + 1);
+    ASSERT_EQ(0UL, valueProducer->mCurrentFullBucket.size());
+}
+
 TEST(ValueMetricProducerTest, TestBucketBoundariesOnConditionChange) {
     ValueMetric metric = ValueMetricProducerTestHelper::createMetricWithCondition();
     sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
@@ -2699,12 +2731,12 @@ static StatsLogReport outputStreamToProto(ProtoOutputStream* proto) {
     vector<uint8_t> bytes;
     bytes.resize(proto->size());
     size_t pos = 0;
-    auto iter = proto->data();
-    while (iter.readBuffer() != NULL) {
-        size_t toRead = iter.currentToRead();
-        std::memcpy(&((bytes)[pos]), iter.readBuffer(), toRead);
+    sp<ProtoReader> reader = proto->data();
+    while (reader->readBuffer() != NULL) {
+        size_t toRead = reader->currentToRead();
+        std::memcpy(&((bytes)[pos]), reader->readBuffer(), toRead);
         pos += toRead;
-        iter.rp()->move(toRead);
+        reader->move(toRead);
     }
 
     StatsLogReport report;

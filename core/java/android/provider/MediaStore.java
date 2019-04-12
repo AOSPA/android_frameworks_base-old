@@ -31,6 +31,7 @@ import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
 import android.app.AppGlobals;
 import android.content.ClipData;
+import android.content.ContentInterface;
 import android.content.ContentProviderClient;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -98,7 +99,7 @@ public final class MediaStore {
     /** The authority for the media provider */
     public static final String AUTHORITY = "media";
     /** A content:// style uri to the authority for the media provider */
-    public static final Uri AUTHORITY_URI = Uri.parse("content://" + AUTHORITY);
+    public static final @NonNull Uri AUTHORITY_URI = Uri.parse("content://" + AUTHORITY);
 
     /**
      * Volume name used for content on "internal" storage of device. This
@@ -115,9 +116,9 @@ public final class MediaStore {
      */
     public static final String VOLUME_EXTERNAL = "external";
 
-    /** {@hide} */ @TestApi
+    /** {@hide} */
     public static final String SCAN_FILE_CALL = "scan_file";
-    /** {@hide} */ @TestApi
+    /** {@hide} */
     public static final String SCAN_VOLUME_CALL = "scan_volume";
 
     /**
@@ -126,7 +127,6 @@ public final class MediaStore {
      *
      * {@hide}
      */
-    @TestApi
     public static final String EXTRA_ORIGINATED_FROM_SHELL =
             "android.intent.extra.originated_from_shell";
 
@@ -136,6 +136,7 @@ public final class MediaStore {
      * removing nomedia files
      * @hide
      */
+    @Deprecated
     public static final String UNHIDE_CALL = "unhide";
 
     /**
@@ -145,6 +146,8 @@ public final class MediaStore {
      */
     public static final String RETRANSLATE_CALL = "update_titles";
 
+    /** {@hide} */
+    public static final String GET_VERSION_CALL = "get_version";
     /** {@hide} */
     public static final String GET_DOCUMENT_URI_CALL = "get_document_uri";
     /** {@hide} */
@@ -529,7 +532,6 @@ public final class MediaStore {
      *
      * @see MediaColumns#IS_PENDING
      * @see MediaStore#setIncludePending(Uri)
-     * @see MediaStore#createPending(Context, PendingParams)
      */
     public static @NonNull Uri setIncludePending(@NonNull Uri uri) {
         return setIncludePending(uri.buildUpon()).build();
@@ -586,7 +588,9 @@ public final class MediaStore {
      * @see MediaColumns#IS_PENDING
      * @see MediaStore#setIncludePending(Uri)
      * @see MediaStore#createPending(Context, PendingParams)
+     * @removed
      */
+    @Deprecated
     public static @NonNull Uri createPending(@NonNull Context context,
             @NonNull PendingParams params) {
         return context.getContentResolver().insert(params.insertUri, params.insertValues);
@@ -599,14 +603,19 @@ public final class MediaStore {
      *
      * @param uri token which was previously returned from
      *            {@link #createPending(Context, PendingParams)}.
+     * @removed
      */
+    @Deprecated
     public static @NonNull PendingSession openPending(@NonNull Context context, @NonNull Uri uri) {
         return new PendingSession(context, uri);
     }
 
     /**
      * Parameters that describe a pending media item.
+     *
+     * @removed
      */
+    @Deprecated
     public static class PendingParams {
         /** {@hide} */
         public final Uri insertUri;
@@ -711,7 +720,10 @@ public final class MediaStore {
      * expected to have a short lifetime, and owners should either
      * {@link PendingSession#publish()} or {@link PendingSession#abandon()} a
      * pending item within a few hours after first creating it.
+     *
+     * @removed
      */
+    @Deprecated
     public static class PendingSession implements AutoCloseable {
         /** {@hide} */
         private final Context mContext;
@@ -862,7 +874,7 @@ public final class MediaStore {
      */
     public interface MediaColumns extends BaseColumns {
         /**
-         * Path to the media item on disk.
+         * Absolute filesystem path to the media item on disk.
          * <p>
          * Note that apps may not have filesystem permissions to directly access
          * this path. Instead of trying to open this path directly, apps should
@@ -873,9 +885,7 @@ public final class MediaStore {
          *             access this path. Instead of trying to open this path
          *             directly, apps should use
          *             {@link ContentResolver#openFileDescriptor(Uri, String)}
-         *             to gain access. This value will always be {@code NULL}
-         *             for apps targeting
-         *             {@link android.os.Build.VERSION_CODES#Q} or higher.
+         *             to gain access.
          */
         @Deprecated
         @Column(Cursor.FIELD_TYPE_STRING)
@@ -909,6 +919,10 @@ public final class MediaStore {
 
         /**
          * The display name of the media item.
+         * <p>
+         * For example, an item stored at
+         * {@code /storage/0000-0000/DCIM/Vacation/IMG1024.JPG} would have a
+         * display name of {@code IMG1024.JPG}.
          */
         @Column(Cursor.FIELD_TYPE_STRING)
         public static final String DISPLAY_NAME = "_display_name";
@@ -974,11 +988,10 @@ public final class MediaStore {
 
         /**
          * Flag indicating if a media item is pending, and still being inserted
-         * by its owner.
+         * by its owner. While this flag is set, only the owner of the item can
+         * open the underlying file; requests from other apps will be rejected.
          *
-         * @see MediaColumns#IS_PENDING
          * @see MediaStore#setIncludePending(Uri)
-         * @see MediaStore#createPending(Context, PendingParams)
          */
         @Column(Cursor.FIELD_TYPE_INTEGER)
         public static final String IS_PENDING = "is_pending";
@@ -998,12 +1011,8 @@ public final class MediaStore {
 
         /**
          * The time the media item should be considered expired. Typically only
-         * meaningful in the context of {@link #IS_PENDING} or
-         * {@link #IS_TRASHED}.
-         *
-         * @removed
+         * meaningful in the context of {@link #IS_PENDING}.
          */
-        @Deprecated
         @CurrentTimeSecondsLong
         @Column(Cursor.FIELD_TYPE_INTEGER)
         public static final String DATE_EXPIRES = "date_expires";
@@ -1028,21 +1037,53 @@ public final class MediaStore {
         public static final String OWNER_PACKAGE_NAME = "owner_package_name";
 
         /**
+         * Relative path of this media item within the storage device where it
+         * is persisted. For example, an item stored at
+         * {@code /storage/0000-0000/DCIM/Vacation/IMG1024.JPG} would have a
+         * path of {@code DCIM/Vacation}.
+         * <p>
+         * This value should only be used for organizational purposes, and you
+         * should not attempt to construct or access a raw filesystem path using
+         * this value. If you need to open a media item, use an API like
+         * {@link ContentResolver#openFileDescriptor(Uri, String)}.
+         * <p>
+         * When this value is set to {@code NULL} during an
+         * {@link ContentResolver#insert} operation, the newly created item will
+         * be placed in a relevant default location based on the type of media
+         * being inserted. For example, a {@code image/jpeg} item will be placed
+         * under {@link Environment#DIRECTORY_PICTURES}.
+         * <p>
+         * You can modify this column during an {@link ContentResolver#update}
+         * call, which will move the underlying file on disk.
+         * <p>
+         * In both cases above, content must be placed under a top-level
+         * directory that is relevant to the media type. For example, attempting
+         * to place a {@code audio/mpeg} file under
+         * {@link Environment#DIRECTORY_PICTURES} will be rejected.
+         */
+        @Column(Cursor.FIELD_TYPE_STRING)
+        public static final String RELATIVE_PATH = "relative_path";
+
+        /**
          * The primary directory name this media exists under. The value may be
          * {@code NULL} if the media doesn't have a primary directory name.
          *
-         * @see PendingParams#setPrimaryDirectory(String)
+         * @removed
+         * @deprecated Replaced by {@link #RELATIVE_PATH}.
          */
         @Column(Cursor.FIELD_TYPE_STRING)
+        @Deprecated
         public static final String PRIMARY_DIRECTORY = "primary_directory";
 
         /**
          * The secondary directory name this media exists under. The value may
          * be {@code NULL} if the media doesn't have a secondary directory name.
          *
-         * @see PendingParams#setSecondaryDirectory(String)
+         * @removed
+         * @deprecated Replaced by {@link #RELATIVE_PATH}.
          */
         @Column(Cursor.FIELD_TYPE_STRING)
+        @Deprecated
         public static final String SECONDARY_DIRECTORY = "secondary_directory";
 
         /**
@@ -1292,12 +1333,7 @@ public final class MediaStore {
     }
 
     /**
-     * Container for downloaded files.
-     *
-     * <p>
-     * Querying for downloads from this table will return files contributed via
-     * {@link PendingSession} and also ones which were downloaded using
-     * {@link android.app.DownloadManager} APIs.
+     * Collection of downloaded items.
      */
     public static final class Downloads implements DownloadColumns {
         private Downloads() {}
@@ -1305,6 +1341,7 @@ public final class MediaStore {
         /**
          * The content:// style URI for the internal storage.
          */
+        @NonNull
         public static final Uri INTERNAL_CONTENT_URI =
                 getContentUri("internal");
 
@@ -1312,6 +1349,7 @@ public final class MediaStore {
          * The content:// style URI for the "primary" external storage
          * volume.
          */
+        @NonNull
         public static final Uri EXTERNAL_CONTENT_URI =
                 getContentUri("external");
 
@@ -1336,13 +1374,18 @@ public final class MediaStore {
          * @param volumeName the name of the volume to get the URI for
          * @return the URI to the image media table on the given volume
          */
-        public static Uri getContentUri(String volumeName) {
+        public static @NonNull Uri getContentUri(@NonNull String volumeName) {
             return AUTHORITY_URI.buildUpon().appendPath(volumeName)
                     .appendPath("downloads").build();
         }
 
         /** @hide */
-        public static Uri getContentUriForPath(@NonNull String path) {
+        public static @NonNull Uri getContentUri(@NonNull String volumeName, long id) {
+            return ContentUris.withAppendedId(getContentUri(volumeName), id);
+        }
+
+        /** @hide */
+        public static @NonNull Uri getContentUriForPath(@NonNull String path) {
             return getContentUri(getVolumeName(new File(path)));
         }
 
@@ -1620,9 +1663,9 @@ public final class MediaStore {
              * @param name The name of the image
              * @param description The description of the image
              * @return The URL to the newly created image
-             * @deprecated inserting of images should be performed through
-             *             {@link MediaStore#createPending(Context, PendingParams)},
-             *             which offers richer control over lifecycle.
+             * @deprecated inserting of images should be performed using
+             *             {@link MediaColumns#IS_PENDING}, which offers richer
+             *             control over lifecycle.
              */
             @Deprecated
             public static final String insertImage(ContentResolver cr, String imagePath,
@@ -1651,9 +1694,9 @@ public final class MediaStore {
              * @param description The description of the image
              * @return The URL to the newly created image, or <code>null</code> if the image failed to be stored
              *              for any reason.
-             * @deprecated inserting of images should be performed through
-             *             {@link MediaStore#createPending(Context, PendingParams)},
-             *             which offers richer control over lifecycle.
+             * @deprecated inserting of images should be performed using
+             *             {@link MediaColumns#IS_PENDING}, which offers richer
+             *             control over lifecycle.
              */
             @Deprecated
             public static final String insertImage(ContentResolver cr, Bitmap source,
@@ -1670,11 +1713,9 @@ public final class MediaStore {
                     url = cr.insert(EXTERNAL_CONTENT_URI, values);
 
                     if (source != null) {
-                        OutputStream imageOut = cr.openOutputStream(url);
-                        try {
-                            source.compress(Bitmap.CompressFormat.JPEG, 50, imageOut);
-                        } finally {
-                            imageOut.close();
+                        try (OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(
+                                cr.openFile(url, "w", null))) {
+                            source.compress(Bitmap.CompressFormat.JPEG, 50, out);
                         }
 
                         long id = ContentUris.parseId(url);
@@ -1711,6 +1752,11 @@ public final class MediaStore {
             public static Uri getContentUri(String volumeName) {
                 return AUTHORITY_URI.buildUpon().appendPath(volumeName).appendPath("images")
                         .appendPath("media").build();
+            }
+
+            /** @hide */
+            public static @NonNull Uri getContentUri(@NonNull String volumeName, long id) {
+                return ContentUris.withAppendedId(getContentUri(volumeName), id);
             }
 
             /**
@@ -1910,9 +1956,7 @@ public final class MediaStore {
              *             access this path. Instead of trying to open this path
              *             directly, apps should use
              *             {@link ContentResolver#loadThumbnail}
-             *             to gain access. This value will always be
-             *             {@code NULL} for apps targeting
-             *             {@link android.os.Build.VERSION_CODES#Q} or higher.
+             *             to gain access.
              */
             @Deprecated
             @Column(Cursor.FIELD_TYPE_STRING)
@@ -2201,6 +2245,11 @@ public final class MediaStore {
                         .appendPath("media").build();
             }
 
+            /** @hide */
+            public static @NonNull Uri getContentUri(@NonNull String volumeName, long id) {
+                return ContentUris.withAppendedId(getContentUri(volumeName), id);
+            }
+
             /**
              * Get the content:// style URI for the given audio media file.
              *
@@ -2388,9 +2437,7 @@ public final class MediaStore {
              *             access this path. Instead of trying to open this path
              *             directly, apps should use
              *             {@link ContentResolver#openFileDescriptor(Uri, String)}
-             *             to gain access. This value will always be
-             *             {@code NULL} for apps targeting
-             *             {@link android.os.Build.VERSION_CODES#Q} or higher.
+             *             to gain access.
              */
             @Deprecated
             @Column(Cursor.FIELD_TYPE_STRING)
@@ -2680,9 +2727,7 @@ public final class MediaStore {
              *             access this path. Instead of trying to open this path
              *             directly, apps should use
              *             {@link ContentResolver#loadThumbnail}
-             *             to gain access. This value will always be
-             *             {@code NULL} for apps targeting
-             *             {@link android.os.Build.VERSION_CODES#Q} or higher.
+             *             to gain access.
              */
             @Deprecated
             @Column(Cursor.FIELD_TYPE_STRING)
@@ -2769,9 +2814,7 @@ public final class MediaStore {
              *             access this path. Instead of trying to open this path
              *             directly, apps should use
              *             {@link ContentResolver#loadThumbnail}
-             *             to gain access. This value will always be
-             *             {@code NULL} for apps targeting
-             *             {@link android.os.Build.VERSION_CODES#Q} or higher.
+             *             to gain access.
              */
             @Deprecated
             @Column(Cursor.FIELD_TYPE_STRING)
@@ -2979,6 +3022,11 @@ public final class MediaStore {
                         .appendPath("media").build();
             }
 
+            /** @hide */
+            public static @NonNull Uri getContentUri(@NonNull String volumeName, long id) {
+                return ContentUris.withAppendedId(getContentUri(volumeName), id);
+            }
+
             /**
              * The content:// style URI for the internal storage.
              */
@@ -3134,9 +3182,7 @@ public final class MediaStore {
              *             access this path. Instead of trying to open this path
              *             directly, apps should use
              *             {@link ContentResolver#openFileDescriptor(Uri, String)}
-             *             to gain access. This value will always be
-             *             {@code NULL} for apps targeting
-             *             {@link android.os.Build.VERSION_CODES#Q} or higher.
+             *             to gain access.
              */
             @Deprecated
             @Column(Cursor.FIELD_TYPE_STRING)
@@ -3180,7 +3226,7 @@ public final class MediaStore {
      * {@link MediaStore.Images.Media#getContentUri(String)} to query media at
      * that location.
      */
-    public static @NonNull Set<String> getAllVolumeNames(Context context) {
+    public static @NonNull Set<String> getAllVolumeNames(@NonNull Context context) {
         final StorageManager sm = context.getSystemService(StorageManager.class);
         final Set<String> volumeNames = new ArraySet<>();
         volumeNames.add(VOLUME_INTERNAL);
@@ -3322,21 +3368,45 @@ public final class MediaStore {
     public static final String MEDIA_IGNORE_FILENAME = ".nomedia";
 
     /**
-     * Get the media provider's version.
-     * Applications that import data from the media provider into their own caches
-     * can use this to detect that the media provider changed, and reimport data
-     * as needed. No other assumptions should be made about the meaning of the version.
-     * @param context Context to use for performing the query.
-     * @return A version string, or null if the version could not be determined.
+     * Return an opaque version string describing the {@link MediaStore} state.
+     * <p>
+     * Applications that import data from {@link MediaStore} into their own
+     * caches can use this to detect that {@link MediaStore} has undergone
+     * substantial changes, and that data should be rescanned.
+     * <p>
+     * No other assumptions should be made about the meaning of the version.
+     * <p>
+     * This method returns the version for {@link MediaStore#VOLUME_EXTERNAL};
+     * to obtain a version for a different volume, use
+     * {@link #getVersion(Context, String)}.
      */
-    public static String getVersion(Context context) {
-        final Uri uri = AUTHORITY_URI.buildUpon().appendPath("none").appendPath("version").build();
-        try (Cursor c = context.getContentResolver().query(uri, null, null, null, null)) {
-            if (c.moveToFirst()) {
-                return c.getString(0);
-            }
+    public static @NonNull String getVersion(@NonNull Context context) {
+        return getVersion(context, VOLUME_EXTERNAL);
+    }
+
+    /**
+     * Return an opaque version string describing the {@link MediaStore} state.
+     * <p>
+     * Applications that import data from {@link MediaStore} into their own
+     * caches can use this to detect that {@link MediaStore} has undergone
+     * substantial changes, and that data should be rescanned.
+     * <p>
+     * No other assumptions should be made about the meaning of the version.
+     *
+     * @param volumeName specific volume to obtain an opaque version string for.
+     *            Must be one of the values returned from
+     *            {@link #getAllVolumeNames(Context)}.
+     */
+    public static @NonNull String getVersion(@NonNull Context context, @NonNull String volumeName) {
+        final ContentResolver resolver = context.getContentResolver();
+        try (ContentProviderClient client = resolver.acquireContentProviderClient(AUTHORITY)) {
+            final Bundle in = new Bundle();
+            in.putString(Intent.EXTRA_TEXT, volumeName);
+            final Bundle out = client.call(GET_VERSION_CALL, null, in);
+            return out.getString(Intent.EXTRA_TEXT);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
         }
-        return null;
     }
 
     /**
@@ -3354,7 +3424,7 @@ public final class MediaStore {
      *         if no equivalent was found.
      * @see #getMediaUri(Context, Uri)
      */
-    public static Uri getDocumentUri(Context context, Uri mediaUri) {
+    public static @Nullable Uri getDocumentUri(@NonNull Context context, @NonNull Uri mediaUri) {
         final ContentResolver resolver = context.getContentResolver();
         final List<UriPermission> uriPermissions = resolver.getPersistedUriPermissions();
 
@@ -3384,7 +3454,7 @@ public final class MediaStore {
      *         equivalent was found.
      * @see #getDocumentUri(Context, Uri)
      */
-    public static Uri getMediaUri(Context context, Uri documentUri) {
+    public static @Nullable Uri getMediaUri(@NonNull Context context, @NonNull Uri documentUri) {
         final ContentResolver resolver = context.getContentResolver();
         final List<UriPermission> uriPermissions = resolver.getPersistedUriPermissions();
 
@@ -3451,6 +3521,39 @@ public final class MediaStore {
             }
         } else {
             throw new IOException("User " + user + " must be unlocked and running");
+        }
+    }
+
+    /** @hide */
+    @TestApi
+    public static Uri scanFile(Context context, File file) {
+        return scan(context, SCAN_FILE_CALL, file, false);
+    }
+
+    /** @hide */
+    @TestApi
+    public static Uri scanFileFromShell(Context context, File file) {
+        return scan(context, SCAN_FILE_CALL, file, true);
+    }
+
+    /** @hide */
+    @TestApi
+    public static void scanVolume(Context context, File file) {
+        scan(context, SCAN_VOLUME_CALL, file, false);
+    }
+
+    /** @hide */
+    private static Uri scan(Context context, String method, File file,
+            boolean originatedFromShell) {
+        final ContentResolver resolver = context.getContentResolver();
+        try (ContentProviderClient client = resolver.acquireContentProviderClient(AUTHORITY)) {
+            final Bundle in = new Bundle();
+            in.putParcelable(Intent.EXTRA_STREAM, Uri.fromFile(file));
+            in.putBoolean(EXTRA_ORIGINATED_FROM_SHELL, originatedFromShell);
+            final Bundle out = client.call(method, null, in);
+            return out.getParcelable(Intent.EXTRA_STREAM);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
         }
     }
 }

@@ -59,9 +59,9 @@ import android.net.wifi.WifiManager.LocalOnlyHotspotReservation;
 import android.net.wifi.WifiManager.LocalOnlyHotspotSubscription;
 import android.net.wifi.WifiManager.NetworkRequestMatchCallback;
 import android.net.wifi.WifiManager.NetworkRequestUserSelectionCallback;
+import android.net.wifi.WifiManager.OnWifiUsabilityStatsListener;
 import android.net.wifi.WifiManager.SoftApCallback;
 import android.net.wifi.WifiManager.TrafficStateCallback;
-import android.net.wifi.WifiManager.WifiUsabilityStatsListener;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -105,7 +105,7 @@ public class WifiManagerTest {
     @Mock SoftApCallback mSoftApCallback;
     @Mock TrafficStateCallback mTrafficStateCallback;
     @Mock NetworkRequestMatchCallback mNetworkRequestMatchCallback;
-    @Mock WifiUsabilityStatsListener mWifiUsabilityStatsListener;
+    @Mock OnWifiUsabilityStatsListener mOnWifiUsabilityStatsListener;
 
     private Executor mExecutor;
     private Handler mHandler;
@@ -1348,29 +1348,29 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
     }
 
     /**
-     * Verify the call to addWifiUsabilityStatsListener goes to WifiServiceImpl.
+     * Verify the call to addOnWifiUsabilityStatsListener goes to WifiServiceImpl.
      */
     @Test
-    public void addWifiUsabilityStatsListeneroesToWifiServiceImpl() throws Exception {
+    public void addOnWifiUsabilityStatsListeneroesToWifiServiceImpl() throws Exception {
         mExecutor = new SynchronousExecutor();
-        mWifiManager.addWifiUsabilityStatsListener(mExecutor, mWifiUsabilityStatsListener);
-        verify(mWifiService).addWifiUsabilityStatsListener(any(IBinder.class),
-                any(IWifiUsabilityStatsListener.Stub.class), anyInt());
+        mWifiManager.addOnWifiUsabilityStatsListener(mExecutor, mOnWifiUsabilityStatsListener);
+        verify(mWifiService).addOnWifiUsabilityStatsListener(any(IBinder.class),
+                any(IOnWifiUsabilityStatsListener.Stub.class), anyInt());
     }
 
     /**
-     * Verify the call to removeWifiUsabilityStatsListener goes to WifiServiceImpl.
+     * Verify the call to removeOnWifiUsabilityStatsListener goes to WifiServiceImpl.
      */
     @Test
-    public void removeWifiUsabilityListenerGoesToWifiServiceImpl() throws Exception {
+    public void removeOnWifiUsabilityListenerGoesToWifiServiceImpl() throws Exception {
         ArgumentCaptor<Integer> listenerIdentifier = ArgumentCaptor.forClass(Integer.class);
         mExecutor = new SynchronousExecutor();
-        mWifiManager.addWifiUsabilityStatsListener(mExecutor, mWifiUsabilityStatsListener);
-        verify(mWifiService).addWifiUsabilityStatsListener(any(IBinder.class),
-                any(IWifiUsabilityStatsListener.Stub.class), listenerIdentifier.capture());
+        mWifiManager.addOnWifiUsabilityStatsListener(mExecutor, mOnWifiUsabilityStatsListener);
+        verify(mWifiService).addOnWifiUsabilityStatsListener(any(IBinder.class),
+                any(IOnWifiUsabilityStatsListener.Stub.class), listenerIdentifier.capture());
 
-        mWifiManager.removeWifiUsabilityStatsListener(mWifiUsabilityStatsListener);
-        verify(mWifiService).removeWifiUsabilityStatsListener(
+        mWifiManager.removeOnWifiUsabilityStatsListener(mOnWifiUsabilityStatsListener);
+        verify(mWifiService).removeOnWifiUsabilityStatsListener(
                 eq((int) listenerIdentifier.getValue()));
     }
 
@@ -1381,5 +1381,61 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
         public void execute(Runnable r) {
             r.run();
         }
+    }
+
+    /**
+     * Test behavior of isEnhancedOpenSupported
+     * @throws Exception
+     */
+    @Test
+    public void testIsEnhancedOpenSupported() throws Exception {
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(WifiManager.WIFI_FEATURE_OWE));
+        assertTrue(mWifiManager.isEnhancedOpenSupported());
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_OWE));
+        assertFalse(mWifiManager.isEnhancedOpenSupported());
+    }
+
+    /**
+     * Test behavior of isWpa3SaeSupported
+     * @throws Exception
+     */
+    @Test
+    public void testIsWpa3SaeSupported() throws Exception {
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(WifiManager.WIFI_FEATURE_WPA3_SAE));
+        assertTrue(mWifiManager.isWpa3SaeSupported());
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_WPA3_SAE));
+        assertFalse(mWifiManager.isWpa3SaeSupported());
+    }
+
+    /**
+     * Test behavior of isWpa3SuiteBSupported
+     * @throws Exception
+     */
+    @Test
+    public void testIsWpa3SuiteBSupported() throws Exception {
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(WifiManager.WIFI_FEATURE_WPA3_SUITE_B));
+        assertTrue(mWifiManager.isWpa3SuiteBSupported());
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_WPA3_SUITE_B));
+        assertFalse(mWifiManager.isWpa3SuiteBSupported());
+    }
+
+    /**
+     * Test behavior of isEasyConnectSupported
+     * @throws Exception
+     */
+    @Test
+    public void testIsEasyConnectSupported() throws Exception {
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(WifiManager.WIFI_FEATURE_DPP));
+        assertTrue(mWifiManager.isEasyConnectSupported());
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_DPP));
+        assertFalse(mWifiManager.isEasyConnectSupported());
     }
 }

@@ -40,6 +40,7 @@ import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
 import android.view.RemoteAnimationAdapter;
 import android.view.IRotationWatcher;
+import android.view.ISystemGestureExclusionListener;
 import android.view.IWallpaperVisibilityListener;
 import android.view.IWindowSession;
 import android.view.IWindowSessionCallback;
@@ -74,10 +75,13 @@ interface IWindowManager
 
     IWindowSession openSession(in IWindowSessionCallback callback);
 
+    @UnsupportedAppUsage
     void getInitialDisplaySize(int displayId, out Point size);
+    @UnsupportedAppUsage
     void getBaseDisplaySize(int displayId, out Point size);
     void setForcedDisplaySize(int displayId, int width, int height);
     void clearForcedDisplaySize(int displayId);
+    @UnsupportedAppUsage
     int getInitialDisplayDensity(int displayId);
     int getBaseDisplayDensity(int displayId);
     void setForcedDisplayDensityForUser(int displayId, int density, int userId);
@@ -97,17 +101,21 @@ interface IWindowManager
      * used for recents, where generating the thumbnails of the specs takes a non-trivial amount of
      * time, so we want to move that off the critical path for starting the new activity.
      */
+    @UnsupportedAppUsage
     void overridePendingAppTransitionMultiThumbFuture(
             IAppTransitionAnimationSpecsFuture specsFuture, IRemoteCallback startedCallback,
             boolean scaleUp, int displayId);
+    @UnsupportedAppUsage
     void overridePendingAppTransitionRemote(in RemoteAnimationAdapter remoteAnimationAdapter,
             int displayId);
+    @UnsupportedAppUsage
     void executeAppTransition();
 
     /**
       * Used by system ui to report that recents has shown itself.
       * @deprecated to be removed once prebuilts are updated
       */
+    @UnsupportedAppUsage
     void endProlongedAnimations();
 
     void startFreezingScreen(int exitAnim, int enterAnim);
@@ -119,8 +127,10 @@ interface IWindowManager
     /** @deprecated use Activity.setShowWhenLocked instead. */
     void reenableKeyguard(IBinder token, int userId);
     void exitKeyguardSecurely(IOnKeyguardExitResult callback);
+    @UnsupportedAppUsage
     boolean isKeyguardLocked();
-    boolean isKeyguardSecure();
+    @UnsupportedAppUsage
+    boolean isKeyguardSecure(int userId);
     void dismissKeyguard(IKeyguardDismissCallback callback, CharSequence message);
 
     // Requires INTERACT_ACROSS_USERS_FULL permission
@@ -129,9 +139,13 @@ interface IWindowManager
     void closeSystemDialogs(String reason);
 
     // These can only be called with the SET_ANIMATON_SCALE permission.
+    @UnsupportedAppUsage
     float getAnimationScale(int which);
+    @UnsupportedAppUsage
     float[] getAnimationScales();
+    @UnsupportedAppUsage
     void setAnimationScale(int which, float scale);
+    @UnsupportedAppUsage
     void setAnimationScales(in float[] scales);
 
     float getCurrentAnimatorScale();
@@ -150,6 +164,7 @@ interface IWindowManager
     // should be enabled.  The 'enabled' value is null or blank for
     // the system default (differs per build variant) or any valid
     // boolean string as parsed by SystemProperties.getBoolean().
+    @UnsupportedAppUsage
     void setStrictModeVisualIndicatorPreference(String enabled);
 
     /**
@@ -188,6 +203,7 @@ interface IWindowManager
      * Remove a rotation watcher set using watchRotation.
      * @hide
      */
+    @UnsupportedAppUsage
     void removeRotationWatcher(IRotationWatcher watcher);
 
     /**
@@ -203,12 +219,14 @@ interface IWindowManager
      * Equivalent to calling {@link #freezeDisplayRotation(int, int)} with {@link
      * android.view.Display#DEFAULT_DISPLAY} and given rotation.
      */
+    @UnsupportedAppUsage
     void freezeRotation(int rotation);
 
     /**
      * Equivalent to calling {@link #thawDisplayRotation(int)} with {@link
      * android.view.Display#DEFAULT_DISPLAY}.
      */
+    @UnsupportedAppUsage
     void thawRotation();
 
     /**
@@ -264,6 +282,18 @@ interface IWindowManager
         int displayId);
 
     /**
+     * Registers a system gesture exclusion listener for a given display.
+     */
+    void registerSystemGestureExclusionListener(ISystemGestureExclusionListener listener,
+        int displayId);
+
+    /**
+     * Unregisters a system gesture exclusion listener for a given display.
+     */
+    void unregisterSystemGestureExclusionListener(ISystemGestureExclusionListener listener,
+        int displayId);
+
+    /**
      * Used only for assist -- request a screenshot of the current application.
      */
     boolean requestAssistScreenshot(IAssistDataReceiver receiver);
@@ -272,6 +302,16 @@ interface IWindowManager
      * Called by the status bar to notify Views of changes to System UI visiblity.
      */
     oneway void statusBarVisibilityChanged(int displayId, int visibility);
+
+    /**
+    * When set to {@code true} the system bars will always be shown. This is true even if an app
+    * requests to be fullscreen by setting the system ui visibility flags. The
+    * functionality was added for the automotive case as a way to guarantee required content stays
+    * on screen at all times.
+    *
+    * @hide
+    */
+    oneway void setForceShowSystemBars(boolean show);
 
     /**
      * Called by System UI to notify of changes to the visibility of Recents.
@@ -286,11 +326,13 @@ interface IWindowManager
     /**
      * Called by System UI to notify of changes to the visibility and height of the shelf.
      */
+    @UnsupportedAppUsage
     void setShelfHeight(boolean visible, int shelfHeight);
 
     /**
      * Called by System UI to enable or disable haptic feedback on the navigation bar buttons.
      */
+    @UnsupportedAppUsage
     void setNavBarVirtualKeyHapticFeedbackEnabled(boolean enabled);
 
     /**
@@ -298,6 +340,7 @@ interface IWindowManager
      *
      * @param displayId the id of display to check if there is a software navigation bar.
      */
+    @UnsupportedAppUsage
     boolean hasNavigationBar(int displayId);
 
     /**
@@ -308,11 +351,13 @@ interface IWindowManager
     /**
      * Lock the device immediately with the specified options (can be null).
      */
+    @UnsupportedAppUsage
     void lockNow(in Bundle options);
 
     /**
      * Device is in safe mode.
      */
+    @UnsupportedAppUsage
     boolean isSafeModeEnabled();
 
     /**
@@ -340,6 +385,7 @@ interface IWindowManager
      * @return the dock side the current docked stack is at; must be one of the
      *         WindowManagerGlobal.DOCKED_* values
      */
+    @UnsupportedAppUsage
     int getDockedStackSide();
 
     /**
@@ -352,6 +398,7 @@ interface IWindowManager
      * Registers a listener that will be called when the dock divider changes its visibility or when
      * the docked stack gets added/removed.
      */
+    @UnsupportedAppUsage
     void registerDockedStackListener(IDockedStackListener listener);
 
     /**
@@ -378,6 +425,7 @@ interface IWindowManager
     /**
      * Retrieves the current stable insets from the primary display.
      */
+    @UnsupportedAppUsage
     void getStableInsets(int displayId, out Rect outInsets);
 
     /**
@@ -400,6 +448,7 @@ interface IWindowManager
     /**
      * Create an input consumer by name and display id.
      */
+    @UnsupportedAppUsage
     void createInputConsumer(IBinder token, String name, int displayId,
         out InputChannel inputChannel);
 
@@ -407,6 +456,7 @@ interface IWindowManager
      * Destroy an input consumer by name and display id.
      * This method will also dispose the input channels associated with that InputConsumer.
      */
+    @UnsupportedAppUsage
     boolean destroyInputConsumer(String name, int displayId);
 
     /**

@@ -18,6 +18,8 @@ package android.processor.view.inspector;
 
 import static javax.tools.Diagnostic.Kind.ERROR;
 
+import androidx.annotation.NonNull;
+
 import com.squareup.javapoet.ClassName;
 
 import java.io.IOException;
@@ -34,26 +36,20 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
-
+import javax.lang.model.util.ElementFilter;
 
 /**
  * An annotation processor for the platform inspectable annotations.
  *
- * It mostly delegates to {@link ModelProcessor} and {@link InspectionCompanionGenerator}. This
- * modular architecture allows the core generation code to be reused for comparable annotations
- * outside the platform, such as in AndroidX.
+ * It mostly delegates to {@link InspectablePropertyProcessor} and
+ * {@link InspectionCompanionGenerator}. This modular architecture allows the core generation code
+ * to be reused for comparable annotations outside the platform.
  *
- * @see android.view.inspector.InspectableNodeName
  * @see android.view.inspector.InspectableProperty
  */
-@SupportedAnnotationTypes({
-        PlatformInspectableProcessor.NODE_NAME_QUALIFIED_NAME,
-        PlatformInspectableProcessor.PROPERTY_QUALIFIED_NAME
-})
+@SupportedAnnotationTypes({PlatformInspectableProcessor.ANNOTATION_QUALIFIED_NAME})
 public final class PlatformInspectableProcessor extends AbstractProcessor {
-    static final String NODE_NAME_QUALIFIED_NAME =
-            "android.view.inspector.InspectableNodeName";
-    static final String PROPERTY_QUALIFIED_NAME =
+    static final String ANNOTATION_QUALIFIED_NAME =
             "android.view.inspector.InspectableProperty";
 
     @Override
@@ -62,22 +58,14 @@ public final class PlatformInspectableProcessor extends AbstractProcessor {
     }
 
     @Override
-    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+    public boolean process(
+            @NonNull Set<? extends TypeElement> annotations,
+            @NonNull RoundEnvironment roundEnv) {
         final Map<String, InspectableClassModel> modelMap = new HashMap<>();
 
         for (TypeElement annotation : annotations) {
-            if (annotation.getQualifiedName().contentEquals(NODE_NAME_QUALIFIED_NAME)) {
-                runModelProcessor(
-                        roundEnv.getElementsAnnotatedWith(annotation),
-                        new InspectableNodeNameProcessor(NODE_NAME_QUALIFIED_NAME, processingEnv),
-                        modelMap);
-
-            } else if (annotation.getQualifiedName().contentEquals(PROPERTY_QUALIFIED_NAME)) {
-                runModelProcessor(
-                        roundEnv.getElementsAnnotatedWith(annotation),
-                        new InspectablePropertyProcessor(PROPERTY_QUALIFIED_NAME, processingEnv),
-                        modelMap);
-
+            if (annotation.getQualifiedName().contentEquals(ANNOTATION_QUALIFIED_NAME)) {
+                processProperties(roundEnv.getElementsAnnotatedWith(annotation), modelMap);
             } else {
                 fail("Unexpected annotation type", annotation);
             }
@@ -101,16 +89,17 @@ public final class PlatformInspectableProcessor extends AbstractProcessor {
     }
 
     /**
-     * Run a {@link ModelProcessor} for a set of elements
+     * Runs {@link PlatformInspectableProcessor} on a set of annotated elements.
      *
-     * @param elements Elements to process, should be annotated correctly
-     * @param processor The processor to use
-     * @param modelMap A map of qualified class names to models
+     * @param elements A set of annotated elements to process
+     * @param modelMap A map of qualified class names to class models to update
      */
-    private void runModelProcessor(
-            Set<? extends Element> elements,
-            ModelProcessor processor,
-            Map<String, InspectableClassModel> modelMap) {
+    private void processProperties(
+            @NonNull Set<? extends Element> elements,
+            @NonNull Map<String, InspectableClassModel> modelMap) {
+        final InspectablePropertyProcessor processor =
+                new InspectablePropertyProcessor(ANNOTATION_QUALIFIED_NAME, processingEnv);
+
         for (Element element : elements) {
             final Optional<TypeElement> classElement = enclosingClassElement(element);
 
@@ -127,10 +116,35 @@ public final class PlatformInspectableProcessor extends AbstractProcessor {
 
             final InspectableClassModel model = modelMap.computeIfAbsent(
                     classElement.get().getQualifiedName().toString(),
-                    k -> new InspectableClassModel(ClassName.get(classElement.get())));
+                    k -> {
+                        if (hasNestedInspectionCompanion(classElement.get())) {
+                            fail(
+                                    String.format(
+                                            "Class %s already has an inspection companion.",
+                                            classElement.get().getQualifiedName().toString()),
+                                    element);
+                        }
+                        return new InspectableClassModel(ClassName.get(classElement.get()));
+                    });
 
             processor.process(element, model);
         }
+    }
+
+    /**
+     * Determine if a class has a nested class named {@code InspectionCompanion}.
+     *
+     * @param typeElement A type element representing the class to check
+     * @return f the class contains a class named {@code InspectionCompanion}
+     */
+    private static boolean hasNestedInspectionCompanion(@NonNull TypeElement typeElement) {
+        for (TypeElement nestedClass : ElementFilter.typesIn(typeElement.getEnclosedElements())) {
+            if (nestedClass.getSimpleName().toString().equals("InspectionCompanion")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -141,7 +155,8 @@ public final class PlatformInspectableProcessor extends AbstractProcessor {
      * @param element An element to search from
      * @return A TypeElement of the nearest enclosing class or an empty optional
      */
-    private static Optional<TypeElement> enclosingClassElement(Element element) {
+    @NonNull
+    private static Optional<TypeElement> enclosingClassElement(@NonNull Element element) {
         Element cursor = element;
 
         while (cursor != null) {
@@ -160,7 +175,7 @@ public final class PlatformInspectableProcessor extends AbstractProcessor {
      *
      * @param message Message to print
      */
-    private void fail(String message) {
+    private void fail(@NonNull String message) {
         processingEnv.getMessager().printMessage(ERROR, message);
     }
 
@@ -170,7 +185,7 @@ public final class PlatformInspectableProcessor extends AbstractProcessor {
      * @param message Message to print
      * @param element The element that failed
      */
-    private void fail(String message, Element element) {
+    private void fail(@NonNull String message, @NonNull Element element) {
         processingEnv.getMessager().printMessage(ERROR, message, element);
     }
 }

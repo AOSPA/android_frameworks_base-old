@@ -109,6 +109,13 @@ public final class CellIdentityCdma extends CellIdentity {
         return new CellIdentityCdma(this);
     }
 
+    /** @hide */
+    public CellIdentityCdma sanitizeLocationInfo() {
+        return new CellIdentityCdma(CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE,
+                CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE,
+                mAlphaLong, mAlphaShort);
+    }
+
     /**
      * Take the latitude and longitude in 1/4 seconds and see if
      * the reported location is on Null Island.
@@ -244,7 +251,7 @@ public final class CellIdentityCdma extends CellIdentity {
 
     /** Implement the Parcelable interface */
     @SuppressWarnings("hiding")
-    public static final Creator<CellIdentityCdma> CREATOR =
+    public static final @android.annotation.NonNull Creator<CellIdentityCdma> CREATOR =
             new Creator<CellIdentityCdma>() {
         @Override
         public CellIdentityCdma createFromParcel(Parcel in) {

@@ -74,36 +74,48 @@ public class WifiUsabilityStatsEntryTest {
 
     private static WifiUsabilityStatsEntry createResult() {
         return new WifiUsabilityStatsEntry(
-                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+                14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, true
         );
     }
 
     private static void assertWifiUsabilityStatsEntryEquals(
             WifiUsabilityStatsEntry expected,
             WifiUsabilityStatsEntry actual) {
-        assertEquals(expected.timeStampMs, actual.timeStampMs);
-        assertEquals(expected.rssi, actual.rssi);
-        assertEquals(expected.linkSpeedMbps, actual.linkSpeedMbps);
-        assertEquals(expected.totalTxSuccess, actual.totalTxSuccess);
-        assertEquals(expected.totalTxRetries, actual.totalTxRetries);
-        assertEquals(expected.totalTxBad, actual.totalTxBad);
-        assertEquals(expected.totalRxSuccess, actual.totalRxSuccess);
-        assertEquals(expected.totalRadioOnTimeMs, actual.totalRadioOnTimeMs);
-        assertEquals(expected.totalRadioTxTimeMs, actual.totalRadioTxTimeMs);
-        assertEquals(expected.totalRadioRxTimeMs, actual.totalRadioRxTimeMs);
-        assertEquals(expected.totalScanTimeMs, actual.totalScanTimeMs);
-        assertEquals(expected.totalNanScanTimeMs, actual.totalNanScanTimeMs);
-        assertEquals(expected.totalBackgroundScanTimeMs, actual.totalBackgroundScanTimeMs);
-        assertEquals(expected.totalRoamScanTimeMs, actual.totalRoamScanTimeMs);
-        assertEquals(expected.totalPnoScanTimeMs, actual.totalPnoScanTimeMs);
-        assertEquals(expected.totalHotspot2ScanTimeMs, actual.totalHotspot2ScanTimeMs);
-        assertEquals(expected.totalCcaBusyFreqTimeMs, actual.totalCcaBusyFreqTimeMs);
-        assertEquals(expected.totalRadioOnFreqTimeMs, actual.totalRadioOnFreqTimeMs);
-        assertEquals(expected.totalBeaconRx, actual.totalBeaconRx);
-        assertEquals(expected.probeStatusSinceLastUpdate, actual.probeStatusSinceLastUpdate);
-        assertEquals(expected.probeElapsedTimeMsSinceLastUpdate,
-                actual.probeElapsedTimeMsSinceLastUpdate);
-        assertEquals(expected.probeMcsRateSinceLastUpdate, actual.probeMcsRateSinceLastUpdate);
-        assertEquals(expected.rxLinkSpeedMbps, actual.rxLinkSpeedMbps);
+        assertEquals(expected.getTimeStampMillis(), actual.getTimeStampMillis());
+        assertEquals(expected.getRssi(), actual.getRssi());
+        assertEquals(expected.getLinkSpeedMbps(), actual.getLinkSpeedMbps());
+        assertEquals(expected.getTotalTxSuccess(), actual.getTotalTxSuccess());
+        assertEquals(expected.getTotalTxRetries(), actual.getTotalTxRetries());
+        assertEquals(expected.getTotalTxBad(), actual.getTotalTxBad());
+        assertEquals(expected.getTotalRxSuccess(), actual.getTotalRxSuccess());
+        assertEquals(expected.getTotalRadioOnTimeMillis(), actual.getTotalRadioOnTimeMillis());
+        assertEquals(expected.getTotalRadioTxTimeMillis(), actual.getTotalRadioTxTimeMillis());
+        assertEquals(expected.getTotalRadioRxTimeMillis(), actual.getTotalRadioRxTimeMillis());
+        assertEquals(expected.getTotalScanTimeMillis(), actual.getTotalScanTimeMillis());
+        assertEquals(expected.getTotalNanScanTimeMillis(), actual.getTotalNanScanTimeMillis());
+        assertEquals(expected.getTotalBackgroundScanTimeMillis(),
+                actual.getTotalBackgroundScanTimeMillis());
+        assertEquals(expected.getTotalRoamScanTimeMillis(), actual.getTotalRoamScanTimeMillis());
+        assertEquals(expected.getTotalPnoScanTimeMillis(), actual.getTotalPnoScanTimeMillis());
+        assertEquals(expected.getTotalHotspot2ScanTimeMillis(),
+                actual.getTotalHotspot2ScanTimeMillis());
+        assertEquals(expected.getTotalCcaBusyFreqTimeMillis(),
+                actual.getTotalCcaBusyFreqTimeMillis());
+        assertEquals(expected.getTotalRadioOnFreqTimeMillis(),
+                actual.getTotalRadioOnFreqTimeMillis());
+        assertEquals(expected.getTotalBeaconRx(), actual.getTotalBeaconRx());
+        assertEquals(expected.getProbeStatusSinceLastUpdate(),
+                actual.getProbeStatusSinceLastUpdate());
+        assertEquals(expected.getProbeElapsedTimeSinceLastUpdateMillis(),
+                actual.getProbeElapsedTimeSinceLastUpdateMillis());
+        assertEquals(expected.getProbeMcsRateSinceLastUpdate(),
+                actual.getProbeMcsRateSinceLastUpdate());
+        assertEquals(expected.getRxLinkSpeedMbps(), actual.getRxLinkSpeedMbps());
+        assertEquals(expected.getCellularDataNetworkType(), actual.getCellularDataNetworkType());
+        assertEquals(expected.getCellularSignalStrengthDbm(),
+                actual.getCellularSignalStrengthDbm());
+        assertEquals(expected.getCellularSignalStrengthDb(), actual.getCellularSignalStrengthDb());
+        assertEquals(expected.isSameRegisteredCell(), actual.isSameRegisteredCell());
     }
 }

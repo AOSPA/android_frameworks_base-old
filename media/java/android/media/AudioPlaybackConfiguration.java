@@ -43,8 +43,6 @@ public final class AudioPlaybackConfiguration implements Parcelable {
     /** @hide */
     public static final int PLAYER_PIID_INVALID = -1;
     /** @hide */
-    public static final int PLAYER_PIID_UNASSIGNED = 0;
-    /** @hide */
     public static final int PLAYER_UPID_INVALID = -1;
 
     // information about the implementation
@@ -430,7 +428,7 @@ public final class AudioPlaybackConfiguration implements Parcelable {
                 + " -- attr:" + apc.mPlayerAttr);
     }
 
-    public static final Parcelable.Creator<AudioPlaybackConfiguration> CREATOR
+    public static final @android.annotation.NonNull Parcelable.Creator<AudioPlaybackConfiguration> CREATOR
             = new Parcelable.Creator<AudioPlaybackConfiguration>() {
         /**
          * Rebuilds an AudioPlaybackConfiguration previously stored with writeToParcel().

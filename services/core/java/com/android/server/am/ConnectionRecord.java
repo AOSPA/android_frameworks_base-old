@@ -109,6 +109,14 @@ final class ConnectionRecord {
         clientPackageName = _clientPackageName;
     }
 
+    public boolean hasFlag(final int flag) {
+        return (flags & flag) != 0;
+    }
+
+    public boolean notHasFlag(final int flag) {
+        return (flags & flag) == 0;
+    }
+
     public void startAssociationIfNeeded() {
         // If we don't already have an active association, create one...  but only if this
         // is an association between two different processes.
@@ -191,6 +199,9 @@ final class ConnectionRecord {
         }
         if ((flags&Context.BIND_TREAT_LIKE_ACTIVITY) != 0) {
             sb.append("LACT ");
+        }
+        if ((flags & Context.BIND_SCHEDULE_LIKE_TOP_APP) != 0) {
+            sb.append("SLTA ");
         }
         if ((flags&Context.BIND_VISIBLE) != 0) {
             sb.append("VIS ");

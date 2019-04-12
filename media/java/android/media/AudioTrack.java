@@ -17,9 +17,12 @@
 package android.media;
 
 import android.annotation.CallbackExecutor;
+import android.annotation.FloatRange;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.os.Binder;
 import android.os.Build;
@@ -389,6 +392,14 @@ public class AudioTrack extends PlayerBase
      * Indicates whether the track is intended to play in offload mode.
      */
     private boolean mOffloaded = false;
+    /**
+     * When offloaded track: delay for decoder in frames
+     */
+    private int mOffloadDelayFrames = 0;
+    /**
+     * When offloaded track: padding for decoder in frames
+     */
+    private int mOffloadPaddingFrames = 0;
 
     //--------------------------------
     // Used exclusively by native code
@@ -827,7 +838,7 @@ public class AudioTrack extends PlayerBase
          * @return the same Builder instance.
          * @throws IllegalArgumentException
          */
-        public @NonNull Builder setBufferSizeInBytes(int bufferSizeInBytes)
+        public @NonNull Builder setBufferSizeInBytes(@IntRange(from = 0) int bufferSizeInBytes)
                 throws IllegalArgumentException {
             if (bufferSizeInBytes <= 0) {
                 throw new IllegalArgumentException("Invalid buffer size " + bufferSizeInBytes);
@@ -865,7 +876,7 @@ public class AudioTrack extends PlayerBase
          * @return the same Builder instance.
          * @throws IllegalArgumentException
          */
-        public @NonNull Builder setSessionId(int sessionId)
+        public @NonNull Builder setSessionId(@IntRange(from = 1) int sessionId)
                 throws IllegalArgumentException {
             if ((sessionId != AudioManager.AUDIO_SESSION_ID_GENERATE) && (sessionId < 1)) {
                 throw new IllegalArgumentException("Invalid audio session ID " + sessionId);
@@ -903,8 +914,9 @@ public class AudioTrack extends PlayerBase
         /**
          * Sets whether this track will play through the offloaded audio path.
          * When set to true, at build time, the audio format will be checked against
-         * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat)} to verify the audio format
-         * used by this track is supported on the device's offload path (if any).
+         * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat,AudioAttributes)}
+         * to verify the audio format used by this track is supported on the device's offload
+         * path (if any).
          * <br>Offload is only supported for media audio streams, and therefore requires that
          * the usage be {@link AudioAttributes#USAGE_MEDIA}.
          * @param offload true to require the offload path for playback.
@@ -968,7 +980,7 @@ public class AudioTrack extends PlayerBase
                     throw new UnsupportedOperationException(
                             "Cannot create AudioTrack, offload requires USAGE_MEDIA");
                 }
-                if (!AudioSystem.isOffloadSupported(mFormat)) {
+                if (!AudioSystem.isOffloadSupported(mFormat, mAttributes)) {
                     throw new UnsupportedOperationException(
                             "Cannot create AudioTrack, offload format not supported");
                 }
@@ -1003,11 +1015,12 @@ public class AudioTrack extends PlayerBase
      * frame indicates the number of samples per channel, e.g. 100 frames for a stereo compressed
      * stream corresponds to 200 decoded interleaved PCM samples.
      * @param delayInFrames number of frames to be ignored at the beginning of the stream. A value
-     *     of 0 indicates no padding is to be applied.
-     * @param paddingInFrames number of frames to be ignored at the end of the stream. A value of 0
      *     of 0 indicates no delay is to be applied.
+     * @param paddingInFrames number of frames to be ignored at the end of the stream. A value of 0
+     *     of 0 indicates no padding is to be applied.
      */
-    public void setOffloadDelayPadding(int delayInFrames, int paddingInFrames) {
+    public void setOffloadDelayPadding(@IntRange(from = 0) int delayInFrames,
+            @IntRange(from = 0) int paddingInFrames) {
         if (paddingInFrames < 0) {
             throw new IllegalArgumentException("Illegal negative padding");
         }
@@ -1020,7 +1033,45 @@ public class AudioTrack extends PlayerBase
         if (mState == STATE_UNINITIALIZED) {
             throw new IllegalStateException("Uninitialized track");
         }
+        mOffloadDelayFrames = delayInFrames;
+        mOffloadPaddingFrames = paddingInFrames;
         native_set_delay_padding(delayInFrames, paddingInFrames);
+    }
+
+    /**
+     * Return the decoder delay of an offloaded track, expressed in frames, previously set with
+     * {@link #setOffloadDelayPadding(int, int)}, or 0 if it was never modified.
+     * <p>This delay indicates the number of frames to be ignored at the beginning of the stream.
+     * This value can only be queried on a track successfully initialized with
+     * {@link AudioTrack.Builder#setOffloadedPlayback(boolean)}.
+     * @return decoder delay expressed in frames.
+     */
+    public @IntRange(from = 0) int getOffloadDelay() {
+        if (!mOffloaded) {
+            throw new IllegalStateException("Illegal query of delay on non-offloaded track");
+        }
+        if (mState == STATE_UNINITIALIZED) {
+            throw new IllegalStateException("Illegal query of delay on uninitialized track");
+        }
+        return mOffloadDelayFrames;
+    }
+
+    /**
+     * Return the decoder padding of an offloaded track, expressed in frames, previously set with
+     * {@link #setOffloadDelayPadding(int, int)}, or 0 if it was never modified.
+     * <p>This padding indicates the number of frames to be ignored at the end of the stream.
+     * This value can only be queried on a track successfully initialized with
+     * {@link AudioTrack.Builder#setOffloadedPlayback(boolean)}.
+     * @return decoder padding expressed in frames.
+     */
+    public @IntRange(from = 0) int getOffloadPadding() {
+        if (!mOffloaded) {
+            throw new IllegalStateException("Illegal query of padding on non-offloaded track");
+        }
+        if (mState == STATE_UNINITIALIZED) {
+            throw new IllegalStateException("Illegal query of padding on uninitialized track");
+        }
+        return mOffloadPaddingFrames;
     }
 
     /**
@@ -1037,6 +1088,15 @@ public class AudioTrack extends PlayerBase
             throw new IllegalStateException("Uninitialized track");
         }
         native_set_eos();
+    }
+
+    /**
+     * Returns whether the track was built with {@link Builder#setOffloadedPlayback(boolean)} set
+     * to {@code true}.
+     * @return true if the track is using offloaded playback.
+     */
+    public boolean isOffloadedPlayback() {
+        return mOffloaded;
     }
 
     /**
@@ -1491,7 +1551,7 @@ public class AudioTrack extends PlayerBase
      * @return current size in frames of the <code>AudioTrack</code> buffer.
      * @throws IllegalStateException if track is not initialized.
      */
-    public int getBufferSizeInFrames() {
+    public @IntRange (from = 0) int getBufferSizeInFrames() {
         return native_get_buffer_size_frames();
     }
 
@@ -1518,7 +1578,7 @@ public class AudioTrack extends PlayerBase
      *    {@link #ERROR_BAD_VALUE}, {@link #ERROR_INVALID_OPERATION}
      * @throws IllegalStateException if track is not initialized.
      */
-    public int setBufferSizeInFrames(int bufferSizeInFrames) {
+    public int setBufferSizeInFrames(@IntRange (from = 0) int bufferSizeInFrames) {
         if (mDataLoadMode == MODE_STATIC || mState == STATE_UNINITIALIZED) {
             return ERROR_INVALID_OPERATION;
         }
@@ -1547,7 +1607,7 @@ public class AudioTrack extends PlayerBase
      *  @return maximum size in frames of the <code>AudioTrack</code> buffer.
      *  @throws IllegalStateException if track is not initialized.
      */
-    public int getBufferCapacityInFrames() {
+    public @IntRange (from = 0) int getBufferCapacityInFrames() {
         return native_get_buffer_capacity_frames();
     }
 
@@ -2054,7 +2114,7 @@ public class AudioTrack extends PlayerBase
      * @return error code or success, see {@link #SUCCESS}, {@link #ERROR_BAD_VALUE},
      *    {@link #ERROR_INVALID_OPERATION}
      */
-    public int setPlaybackHeadPosition(int positionInFrames) {
+    public int setPlaybackHeadPosition(@IntRange (from = 0) int positionInFrames) {
         if (mDataLoadMode == MODE_STREAM || mState == STATE_UNINITIALIZED ||
                 getPlayState() == PLAYSTATE_PLAYING) {
             return ERROR_INVALID_OPERATION;
@@ -2096,7 +2156,8 @@ public class AudioTrack extends PlayerBase
      * @return error code or success, see {@link #SUCCESS}, {@link #ERROR_BAD_VALUE},
      *    {@link #ERROR_INVALID_OPERATION}
      */
-    public int setLoopPoints(int startInFrames, int endInFrames, int loopCount) {
+    public int setLoopPoints(@IntRange (from = 0) int startInFrames,
+            @IntRange (from = 0) int endInFrames, @IntRange (from = -1) int loopCount) {
         if (mDataLoadMode == MODE_STREAM || mState == STATE_UNINITIALIZED ||
                 getPlayState() == PLAYSTATE_PLAYING) {
             return ERROR_INVALID_OPERATION;
@@ -2849,7 +2910,7 @@ public class AudioTrack extends PlayerBase
      * @return error code or success, see {@link #SUCCESS},
      *    {@link #ERROR_INVALID_OPERATION}, {@link #ERROR}
      */
-    public int setAuxEffectSendLevel(float level) {
+    public int setAuxEffectSendLevel(@FloatRange(from = 0.0) float level) {
         if (mState == STATE_UNINITIALIZED) {
             return ERROR_INVALID_OPERATION;
         }
@@ -3095,28 +3156,30 @@ public class AudioTrack extends PlayerBase
          * gets invalidated by the system to prevent any other offload.
          * @param track the {@link AudioTrack} on which the event happened.
          */
-        public void onTearDown(AudioTrack track) { }
+        public void onTearDown(@NonNull AudioTrack track) { }
         /**
          * Called when all the buffers of an offloaded track that were queued in the audio system
          * (e.g. the combination of the Android audio framework and the device's audio hardware)
          * have been played after {@link AudioTrack#stop()} has been called.
          * @param track the {@link AudioTrack} on which the event happened.
          */
-        public void onPresentationEnded(AudioTrack track) { }
+        public void onPresentationEnded(@NonNull AudioTrack track) { }
         /**
          * Called when more audio data can be written without blocking on an offloaded track.
          * @param track the {@link AudioTrack} on which the event happened.
          * @param sizeInFrames the number of frames available to write without blocking.
          *   Note that the frame size of a compressed stream is 1 byte.
          */
-        public void onDataRequest(AudioTrack track, int sizeInFrames) { }
+        public void onDataRequest(@NonNull AudioTrack track, @IntRange(from = 0) int sizeInFrames) {
+        }
     }
 
     /**
      * Registers a callback for the notification of stream events.
      * This callback can only be registered for instances operating in offloaded mode
      * (see {@link AudioTrack.Builder#setOffloadedPlayback(boolean)} and
-     * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat)} for more details).
+     * {@link AudioManager#isOffloadedPlaybackSupported(AudioFormat,AudioAttributes)} for
+     * more details).
      * @param executor {@link Executor} to handle the callbacks.
      * @param eventCallback the callback to receive the stream event notifications.
      */
@@ -3520,41 +3583,103 @@ public class AudioTrack extends PlayerBase
     {
         private MetricsConstants() {}
 
-        /**
-         * Key to extract the Stream Type for this track
-         * from the {@link AudioTrack#getMetrics} return value.
-         * The value is a String.
-         */
-        public static final String STREAMTYPE = "android.media.audiotrack.streamtype";
+        // MM_PREFIX is slightly different than TAG, used to avoid cut-n-paste errors.
+        private static final String MM_PREFIX = "android.media.audiotrack.";
 
         /**
-         * Key to extract the Content Type for this track
+         * Key to extract the stream type for this track
          * from the {@link AudioTrack#getMetrics} return value.
-         * The value is a String.
+         * This value may not exist in API level {@link android.os.Build.VERSION_CODES#P}.
+         * The value is a {@code String}.
          */
-        public static final String CONTENTTYPE = "android.media.audiotrack.type";
+        public static final String STREAMTYPE = MM_PREFIX + "streamtype";
 
         /**
-         * Key to extract the Content Type for this track
+         * Key to extract the attribute content type for this track
          * from the {@link AudioTrack#getMetrics} return value.
-         * The value is a String.
+         * The value is a {@code String}.
          */
-        public static final String USAGE = "android.media.audiotrack.usage";
+        public static final String CONTENTTYPE = MM_PREFIX + "type";
+
+        /**
+         * Key to extract the attribute usage for this track
+         * from the {@link AudioTrack#getMetrics} return value.
+         * The value is a {@code String}.
+         */
+        public static final String USAGE = MM_PREFIX + "usage";
 
         /**
          * Key to extract the sample rate for this track in Hz
          * from the {@link AudioTrack#getMetrics} return value.
-         * The value is an integer.
+         * The value is an {@code int}.
+         * @deprecated This does not work. Use {@link AudioTrack#getSampleRate()} instead.
          */
+        @Deprecated
         public static final String SAMPLERATE = "android.media.audiorecord.samplerate";
 
         /**
-         * Key to extract the channel mask information for this track
+         * Key to extract the native channel mask information for this track
          * from the {@link AudioTrack#getMetrics} return value.
          *
-         * The value is a Long integer.
+         * The value is a {@code long}.
+         * @deprecated This does not work. Use {@link AudioTrack#getFormat()} and read from
+         * the returned format instead.
          */
+        @Deprecated
         public static final String CHANNELMASK = "android.media.audiorecord.channelmask";
 
+        /**
+         * Use for testing only. Do not expose.
+         * The current sample rate.
+         * The value is an {@code int}.
+         * @hide
+         */
+        @TestApi
+        public static final String SAMPLE_RATE = MM_PREFIX + "sampleRate";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The native channel mask.
+         * The value is a {@code long}.
+         * @hide
+         */
+        @TestApi
+        public static final String CHANNEL_MASK = MM_PREFIX + "channelMask";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The output audio data encoding.
+         * The value is a {@code String}.
+         * @hide
+         */
+        @TestApi
+        public static final String ENCODING = MM_PREFIX + "encoding";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The port id of this track port in audioserver.
+         * The value is an {@code int}.
+         * @hide
+         */
+        @TestApi
+        public static final String PORT_ID = MM_PREFIX + "portId";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The buffer frameCount.
+         * The value is an {@code int}.
+         * @hide
+         */
+        @TestApi
+        public static final String FRAME_COUNT = MM_PREFIX + "frameCount";
+
+        /**
+         * Use for testing only. Do not expose.
+         * The actual track attributes used.
+         * The value is a {@code String}.
+         * @hide
+         */
+        @TestApi
+        public static final String ATTRIBUTES = MM_PREFIX + "attributes";
     }
 }
