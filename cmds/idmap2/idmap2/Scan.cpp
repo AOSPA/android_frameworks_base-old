@@ -211,7 +211,8 @@ Result<Unit> Scan(const std::vector<std::string>& args) {
 
       const auto create_ok = Create(create_args);
       if (!create_ok) {
-        return Error(create_ok.GetError(), "failed to create idmap");
+          continue;
+          //return Error(create_ok.GetError(), "failed to create idmap");
       }
     }
 
