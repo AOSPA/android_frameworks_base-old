@@ -135,11 +135,6 @@ cc_library_shared {
         "libnativehelper_compat_libc++",
         "liblog",
         "libvndksupport",
-
-        "libmedia",
-        "libmedia_omx",
-        "libstagefright",
-        "libmediaplayerservice",
     ],
 
     header_libs: [
