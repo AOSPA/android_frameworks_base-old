@@ -24,6 +24,7 @@ import android.hardware.radio.ICloseHandle;
 import android.hardware.radio.ITuner;
 import android.hardware.radio.ITunerCallback;
 import android.hardware.radio.RadioManager;
+import android.hardware.radio.RadioTuner;
 import android.hidl.manager.V1_0.IServiceManager;
 import android.hidl.manager.V1_0.IServiceNotification;
 import android.os.IHwBinder.DeathRecipient;
@@ -49,6 +50,7 @@ public class BroadcastRadioService {
     @GuardedBy("mLock")
     private final Map<String, Integer> mServiceNameToModuleIdMap = new HashMap<>();
 
+    // Map from module ID to RadioModule created by mServiceListener.onRegistration().
     @GuardedBy("mLock")
     private final Map<Integer, RadioModule> mModules = new HashMap<>();
 
@@ -72,7 +74,10 @@ public class BroadcastRadioService {
                 }
                 Slog.v(TAG, "loaded broadcast radio module " + moduleId + ": " + serviceName
                         + " (HAL 2.0)");
-                mModules.put(moduleId, module);
+                RadioModule prevModule = mModules.put(moduleId, module);
+                if (prevModule != null) {
+                    prevModule.closeSessions(RadioTuner.ERROR_HARDWARE_FAILURE);
+                }
 
                 if (newService) {
                     mServiceNameToModuleIdMap.put(serviceName, moduleId);
@@ -95,7 +100,10 @@ public class BroadcastRadioService {
             Slog.v(TAG, "serviceDied(" + cookie + ")");
             synchronized (mLock) {
                 int moduleId = (int) cookie;
-                mModules.remove(moduleId);
+                RadioModule prevModule = mModules.remove(moduleId);
+                if (prevModule != null) {
+                    prevModule.closeSessions(RadioTuner.ERROR_HARDWARE_FAILURE);
+                }
 
                 for (Map.Entry<String, Integer> entry : mServiceNameToModuleIdMap.entrySet()) {
                     if (entry.getValue() == moduleId) {
@@ -152,16 +160,16 @@ public class BroadcastRadioService {
         RadioModule module = null;
         synchronized (mLock) {
             module = mModules.get(moduleId);
-        }
-        if (module == null) {
-            throw new IllegalArgumentException("Invalid module ID");
+            if (module == null) {
+                throw new IllegalArgumentException("Invalid module ID");
+            }
         }
 
-        TunerSession session = module.openSession(callback);
+        TunerSession tunerSession = module.openSession(callback);
         if (legacyConfig != null) {
-            session.setConfiguration(legacyConfig);
+            tunerSession.setConfiguration(legacyConfig);
         }
-        return session;
+        return tunerSession;
     }
 
     public ICloseHandle addAnnouncementListener(@NonNull int[] enabledTypes,

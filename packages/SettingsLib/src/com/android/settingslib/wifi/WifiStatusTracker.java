@@ -74,6 +74,9 @@ public class WifiStatusTracker extends ConnectivityManager.NetworkCallback {
     public int rssi;
     public int level;
     public String statusLabel;
+    public int wifiGeneration;
+    public boolean vhtMax8SpatialStreamsSupport;
+    public boolean twtSupport;
 
     public WifiStatusTracker(Context context, WifiManager wifiManager,
             NetworkScoreManager networkScoreManager, ConnectivityManager connectivityManager,
@@ -125,6 +128,9 @@ public class WifiStatusTracker extends ConnectivityManager.NetworkCallback {
                     }
                     updateRssi(mWifiInfo.getRssi());
                     maybeRequestNetworkScore();
+                    wifiGeneration = mWifiInfo.getWifiGeneration();
+                    vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
+                    twtSupport = mWifiInfo.isTwtSupported();
                 }
             }
             updateStatusLabel();

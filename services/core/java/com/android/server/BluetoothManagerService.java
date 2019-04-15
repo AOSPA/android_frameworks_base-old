@@ -1542,7 +1542,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             mContext.enforceCallingOrSelfPermission(
                    BLUETOOTH_PRIVILEGED_PERM, "Need BLUETOOTH PRIVILEGED permission");
         }
-
+        persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
         try {
             if (mBluetooth != null) {
                 // Clear registered LE apps to force shut-off

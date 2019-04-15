@@ -1350,7 +1350,8 @@ public final class ActiveServices {
                     if (!r.isForeground) {
                         final ServiceMap smap = getServiceMapLocked(r.userId);
                         if (smap != null) {
-                            ActiveForegroundApp active = smap.mActiveForegroundApps.get(r.packageName);
+                            ActiveForegroundApp active = smap.mActiveForegroundApps
+                                    .get(r.packageName);
                             if (active == null) {
                                 active = new ActiveForegroundApp();
                                 active.mPackageName = r.packageName;
@@ -1484,7 +1485,6 @@ public final class ActiveServices {
             if (sr.isForeground || sr.fgRequired) {
                 anyForeground = true;
                 fgServiceTypes |= sr.foregroundServiceType;
-                break;
             }
         }
         mAm.updateProcessForegroundLocked(proc, anyForeground, fgServiceTypes, oomAdj);
@@ -1531,8 +1531,9 @@ public final class ActiveServices {
         boolean anyClientActivities = false;
         for (int i=proc.services.size()-1; i>=0 && !anyClientActivities; i--) {
             ServiceRecord sr = proc.services.valueAt(i);
-            for (int conni=sr.connections.size()-1; conni>=0 && !anyClientActivities; conni--) {
-                ArrayList<ConnectionRecord> clist = sr.connections.valueAt(conni);
+            ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = sr.getConnections();
+            for (int conni = connections.size() - 1; conni >= 0 && !anyClientActivities; conni--) {
+                ArrayList<ConnectionRecord> clist = connections.valueAt(conni);
                 for (int cri=clist.size()-1; cri>=0; cri--) {
                     ConnectionRecord cr = clist.get(cri);
                     if (cr.binding.client == null || cr.binding.client == proc) {
@@ -1759,10 +1760,10 @@ public final class ActiveServices {
                     callerApp.uid, callerApp.processName, callingPackage);
 
             IBinder binder = connection.asBinder();
-            ArrayList<ConnectionRecord> clist = s.connections.get(binder);
+            ArrayList<ConnectionRecord> clist = s.getConnections().get(binder);
             if (clist == null) {
                 clist = new ArrayList<ConnectionRecord>();
-                s.connections.put(binder, clist);
+                s.putConnection(binder, clist);
             }
             clist.add(c);
             b.connections.add(c);
@@ -1811,7 +1812,7 @@ public final class ActiveServices {
                                 || (callerApp.getCurProcState() <= ActivityManager.PROCESS_STATE_TOP
                                         && (flags & Context.BIND_TREAT_LIKE_ACTIVITY) != 0),
                         b.client);
-                mAm.updateOomAdjLocked(s.app, true);
+                mAm.updateOomAdjLocked();
             }
 
             if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Bind " + s + " with " + b
@@ -1862,8 +1863,9 @@ public final class ActiveServices {
                     b.binder = service;
                     b.requested = true;
                     b.received = true;
-                    for (int conni=r.connections.size()-1; conni>=0; conni--) {
-                        ArrayList<ConnectionRecord> clist = r.connections.valueAt(conni);
+                    ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
+                    for (int conni = connections.size() - 1; conni >= 0; conni--) {
+                        ArrayList<ConnectionRecord> clist = connections.valueAt(conni);
                         for (int i=0; i<clist.size(); i++) {
                             ConnectionRecord c = clist.get(i);
                             if (!filter.equals(c.binding.intent.intent)) {
@@ -2794,6 +2796,10 @@ public final class ActiveServices {
 
         updateServiceClientActivitiesLocked(app, null, true);
 
+        if (newService && created) {
+            app.addBoundClientUidsOfNewService(r);
+        }
+
         // If the service is in the started state, and there are no
         // pending arguments, then fake up one so its onStartCommand() will
         // be called.
@@ -2953,8 +2959,9 @@ public final class ActiveServices {
 
         // Report to all of the connections that the service is no longer
         // available.
-        for (int conni=r.connections.size()-1; conni>=0; conni--) {
-            ArrayList<ConnectionRecord> c = r.connections.valueAt(conni);
+        ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
+        for (int conni = connections.size() - 1; conni >= 0; conni--) {
+            ArrayList<ConnectionRecord> c = connections.valueAt(conni);
             for (int i=0; i<c.size(); i++) {
                 ConnectionRecord cr = c.get(i);
                 // There is still a connection to the service that is
@@ -3085,6 +3092,7 @@ public final class ActiveServices {
                 r.stats.stopLaunchedLocked();
             }
             r.app.services.remove(r);
+            r.app.updateBoundClientUids();
             if (r.whitelistManager) {
                 updateWhitelistManagerLocked(r.app);
             }
@@ -3137,11 +3145,11 @@ public final class ActiveServices {
         IBinder binder = c.conn.asBinder();
         AppBindRecord b = c.binding;
         ServiceRecord s = b.service;
-        ArrayList<ConnectionRecord> clist = s.connections.get(binder);
+        ArrayList<ConnectionRecord> clist = s.getConnections().get(binder);
         if (clist != null) {
             clist.remove(c);
             if (clist.size() == 0) {
-                s.connections.remove(binder);
+                s.removeConnection(binder);
             }
         }
         b.connections.remove(c);
@@ -3366,6 +3374,7 @@ public final class ActiveServices {
             if (finishing) {
                 if (r.app != null && !r.app.isPersistent()) {
                     r.app.services.remove(r);
+                    r.app.updateBoundClientUids();
                     if (r.whitelistManager) {
                         updateWhitelistManagerLocked(r.app);
                     }
@@ -3461,6 +3470,7 @@ public final class ActiveServices {
                 Slog.i(TAG, "  Force stopping service " + service);
                 if (service.app != null && !service.app.isPersistent()) {
                     service.app.services.remove(service);
+                    service.app.updateBoundClientUids();
                     if (service.whitelistManager) {
                         updateWhitelistManagerLocked(service.app);
                     }
@@ -3576,8 +3586,9 @@ public final class ActiveServices {
                 Iterator<ServiceRecord> it = app.services.iterator();
                 while (it.hasNext()) {
                     ServiceRecord r = it.next();
-                    for (int conni=r.connections.size()-1; conni>=0; conni--) {
-                        ArrayList<ConnectionRecord> cl = r.connections.valueAt(conni);
+                    ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
+                    for (int conni=connections.size()-1; conni>=0; conni--) {
+                        ArrayList<ConnectionRecord> cl = connections.valueAt(conni);
                         for (int i=0; i<cl.size(); i++) {
                             ConnectionRecord c = cl.get(i);
                             if (c.binding.client != app) {
@@ -3614,6 +3625,7 @@ public final class ActiveServices {
             }
             if (sr.app != app && sr.app != null && !sr.app.isPersistent()) {
                 sr.app.services.remove(sr);
+                sr.app.updateBoundClientUids();
             }
             sr.setProcess(null);
             sr.isolatedProc = null;
@@ -3677,6 +3689,7 @@ public final class ActiveServices {
             // so make sure the service is cleaned out of it.
             if (!app.isPersistent()) {
                 app.services.removeAt(i);
+                app.updateBoundClientUids();
             }
 
             // Sanity check: if the service listed for the app is not one
@@ -3727,6 +3740,7 @@ public final class ActiveServices {
 
         if (!allowRestart) {
             app.services.clear();
+            app.clearBoundClientUids();
 
             // Make sure there are no more restarting services for this process.
             for (int i=mRestartingServices.size()-1; i>=0; i--) {
@@ -3773,7 +3787,7 @@ public final class ActiveServices {
         info.foreground = r.isForeground;
         info.activeSince = r.createRealTime;
         info.started = r.startRequested;
-        info.clientCount = r.connections.size();
+        info.clientCount = r.getConnections().size();
         info.crashCount = r.crashCount;
         info.lastActivityTime = r.lastActivity;
         if (r.isForeground) {
@@ -3789,8 +3803,9 @@ public final class ActiveServices {
             info.flags |= ActivityManager.RunningServiceInfo.FLAG_PERSISTENT_PROCESS;
         }
 
-        for (int conni=r.connections.size()-1; conni>=0; conni--) {
-            ArrayList<ConnectionRecord> connl = r.connections.valueAt(conni);
+        ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
+        for (int conni = connections.size() - 1; conni >= 0; conni--) {
+            ArrayList<ConnectionRecord> connl = connections.valueAt(conni);
             for (int i=0; i<connl.size(); i++) {
                 ConnectionRecord conn = connl.get(i);
                 if (conn.clientLabel != 0) {
@@ -3859,9 +3874,10 @@ public final class ActiveServices {
     public PendingIntent getRunningServiceControlPanelLocked(ComponentName name) {
         int userId = UserHandle.getUserId(Binder.getCallingUid());
         ServiceRecord r = getServiceByNameLocked(name, userId);
+        ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
         if (r != null) {
-            for (int conni=r.connections.size()-1; conni>=0; conni--) {
-                ArrayList<ConnectionRecord> conn = r.connections.valueAt(conni);
+            for (int conni = connections.size() - 1; conni >= 0; conni--) {
+                ArrayList<ConnectionRecord> conn = connections.valueAt(conni);
                 for (int i=0; i<conn.size(); i++) {
                     if (conn.get(i).clientIntent != null) {
                         return conn.get(i).clientIntent;
@@ -4152,11 +4168,12 @@ public final class ActiveServices {
                 pw.print(" started=");
                 pw.print(r.startRequested);
                 pw.print(" connections=");
-                pw.println(r.connections.size());
-                if (r.connections.size() > 0) {
+                ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
+                pw.println(connections.size());
+                if (connections.size() > 0) {
                     pw.println("    Connections:");
-                    for (int conni=0; conni<r.connections.size(); conni++) {
-                        ArrayList<ConnectionRecord> clist = r.connections.valueAt(conni);
+                    for (int conni = 0; conni < connections.size(); conni++) {
+                        ArrayList<ConnectionRecord> clist = connections.valueAt(conni);
                         for (int i = 0; i < clist.size(); i++) {
                             ConnectionRecord conn = clist.get(i);
                             pw.print("      ");

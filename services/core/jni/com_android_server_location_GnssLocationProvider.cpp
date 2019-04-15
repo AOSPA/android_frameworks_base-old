@@ -52,7 +52,7 @@ static jmethodID method_reportStatus;
 static jmethodID method_reportSvStatus;
 static jmethodID method_reportAGpsStatus;
 static jmethodID method_reportNmea;
-static jmethodID method_setEngineCapabilities;
+static jmethodID method_setTopHalCapabilities;
 static jmethodID method_setGnssYearOfHardware;
 static jmethodID method_setGnssHardwareModelName;
 static jmethodID method_xtraDownloadRequest;
@@ -71,7 +71,7 @@ static jmethodID method_reportMeasurementData;
 static jmethodID method_reportNavigationMessages;
 static jmethodID method_reportLocationBatch;
 static jmethodID method_reportGnssServiceDied;
-static jmethodID method_setMeasurementCorrectionsCapabilities;
+static jmethodID method_setSubHalMeasurementCorrectionsCapabilities;
 static jmethodID method_correctionsGetLatitudeDegrees;
 static jmethodID method_correctionsGetLongitudeDegrees;
 static jmethodID method_correctionsGetAltitudeMeters;
@@ -754,7 +754,7 @@ Return <void> GnssCallback::gnssSetCapabilitesCbImpl(uint32_t capabilities,
     ALOGD("%s: capabilities=%du, hasSubHalCapabilityFlags=%d\n", __func__, capabilities,
         hasSubHalCapabilityFlags);
     JNIEnv* env = getJniEnv();
-    env->CallVoidMethod(mCallbacksObj, method_setEngineCapabilities, capabilities,
+    env->CallVoidMethod(mCallbacksObj, method_setTopHalCapabilities, capabilities,
             boolToJbool(hasSubHalCapabilityFlags));
     checkAndClearExceptionFromCallback(env, __FUNCTION__);
     return Void();
@@ -1237,7 +1237,8 @@ struct MeasurementCorrectionsCallback : public IMeasurementCorrectionsCallback {
 Return<void> MeasurementCorrectionsCallback::setCapabilitiesCb(uint32_t capabilities) {
     ALOGD("%s: %du\n", __func__, capabilities);
     JNIEnv* env = getJniEnv();
-    env->CallVoidMethod(mCallbacksObj, method_setMeasurementCorrectionsCapabilities, capabilities);
+    env->CallVoidMethod(mCallbacksObj, method_setSubHalMeasurementCorrectionsCapabilities,
+                        capabilities);
     checkAndClearExceptionFromCallback(env, __FUNCTION__);
     return Void();
 }
@@ -1541,7 +1542,7 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
     method_reportSvStatus = env->GetMethodID(clazz, "reportSvStatus", "(I[I[F[F[F[F)V");
     method_reportAGpsStatus = env->GetMethodID(clazz, "reportAGpsStatus", "(II[B)V");
     method_reportNmea = env->GetMethodID(clazz, "reportNmea", "(J)V");
-    method_setEngineCapabilities = env->GetMethodID(clazz, "setEngineCapabilities", "(IZ)V");
+    method_setTopHalCapabilities = env->GetMethodID(clazz, "setTopHalCapabilities", "(IZ)V");
     method_setGnssYearOfHardware = env->GetMethodID(clazz, "setGnssYearOfHardware", "(I)V");
     method_setGnssHardwareModelName = env->GetMethodID(clazz, "setGnssHardwareModelName",
             "(Ljava/lang/String;)V");
@@ -1581,8 +1582,8 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
             "(Ljava/lang/String;BLjava/lang/String;BLjava/lang/String;BZZ)V");
     method_isInEmergencySession = env->GetMethodID(clazz, "isInEmergencySession", "()Z");
 
-    method_setMeasurementCorrectionsCapabilities = env->GetMethodID(clazz,
-            "setMeasurementCorrectionsCapabilities", "(I)V");
+    method_setSubHalMeasurementCorrectionsCapabilities = env->GetMethodID(clazz,
+            "setSubHalMeasurementCorrectionsCapabilities", "(I)V");
 
     jclass measCorrClass = env->FindClass("android/location/GnssMeasurementCorrections");
     method_correctionsGetLatitudeDegrees = env->GetMethodID(
@@ -1700,8 +1701,12 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
         gnssNavigationMessageIface = gnssNavigationMessage;
     }
 
-    if (gnssHal_V2_0 != nullptr) {
-        // TODO: getExtensionGnssMeasurement_1_1 from gnssHal_V2_0
+    // Allow all causal combinations between IGnss.hal and IGnssMeasurement.hal. That means,
+    // 2.0@IGnss can be paired with {1.0, 1,1, 2.0}@IGnssMeasurement
+    // 1.1@IGnss can be paired {1.0, 1.1}@IGnssMeasurement
+    // 1.0@IGnss is paired with 1.0@IGnssMeasurement
+    gnssMeasurementIface = nullptr;
+    if (gnssHal_V2_0 != nullptr && gnssMeasurementIface == nullptr) {
         auto gnssMeasurement = gnssHal_V2_0->getExtensionGnssMeasurement_2_0();
         if (!gnssMeasurement.isOk()) {
             ALOGD("Unable to get a handle to GnssMeasurement_V2_0");
@@ -1710,13 +1715,8 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
             gnssMeasurementIface_V1_1 = gnssMeasurementIface_V2_0;
             gnssMeasurementIface = gnssMeasurementIface_V2_0;
         }
-        auto gnssCorrections = gnssHal_V2_0->getExtensionMeasurementCorrections();
-        if (!gnssCorrections.isOk()) {
-            ALOGD("Unable to get a handle to GnssMeasurementCorrections interface");
-        } else {
-            gnssCorrectionsIface = gnssCorrections;
-        }
-    } else if (gnssHal_V1_1 != nullptr) {
+    }
+    if (gnssHal_V1_1 != nullptr && gnssMeasurementIface == nullptr) {
          auto gnssMeasurement = gnssHal_V1_1->getExtensionGnssMeasurement_1_1();
          if (!gnssMeasurement.isOk()) {
              ALOGD("Unable to get a handle to GnssMeasurement_V1_1");
@@ -1724,13 +1724,23 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
              gnssMeasurementIface_V1_1 = gnssMeasurement;
              gnssMeasurementIface = gnssMeasurementIface_V1_1;
          }
-    } else {
-         auto gnssMeasurement_V1_0 = gnssHal->getExtensionGnssMeasurement();
-         if (!gnssMeasurement_V1_0.isOk()) {
+    }
+    if (gnssMeasurementIface == nullptr) {
+         auto gnssMeasurement = gnssHal->getExtensionGnssMeasurement();
+         if (!gnssMeasurement.isOk()) {
              ALOGD("Unable to get a handle to GnssMeasurement");
          } else {
-             gnssMeasurementIface = gnssMeasurement_V1_0;
+             gnssMeasurementIface = gnssMeasurement;
          }
+    }
+
+    if (gnssHal_V2_0 != nullptr) {
+        auto gnssCorrections = gnssHal_V2_0->getExtensionMeasurementCorrections();
+        if (!gnssCorrections.isOk()) {
+            ALOGD("Unable to get a handle to GnssMeasurementCorrections interface");
+        } else {
+            gnssCorrectionsIface = gnssCorrections;
+        }
     }
 
     if (gnssHal_V2_0 != nullptr) {

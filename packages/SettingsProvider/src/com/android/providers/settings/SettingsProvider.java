@@ -16,6 +16,7 @@
 
 package com.android.providers.settings;
 
+import static android.os.Process.INVALID_UID;
 import static android.os.Process.ROOT_UID;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
@@ -1074,8 +1075,7 @@ public class SettingsProvider extends ContentProvider {
             Slog.v(LOG_TAG, "getConfigSetting(" + name + ")");
         }
 
-        // TODO(b/117663715): Ensure the caller can access the setting.
-        // enforceReadPermission(READ_DEVICE_CONFIG);
+        DeviceConfig.enforceReadPermission(getContext(), /*namespace=*/name.split("/")[0]);
 
         // Get the value.
         synchronized (mLock) {
@@ -2778,7 +2778,7 @@ public class SettingsProvider extends ContentProvider {
                         boolean someSettingChanged = false;
                         Setting setting = settingsState.getSettingLocked(name);
                         if (!SettingsState.isSystemPackage(getContext(),
-                                setting.getPackageName())) {
+                                setting.getPackageName(), INVALID_UID, userId)) {
                             if (prefix != null && !setting.getName().startsWith(prefix)) {
                                 continue;
                             }
@@ -2798,7 +2798,7 @@ public class SettingsProvider extends ContentProvider {
                         boolean someSettingChanged = false;
                         Setting setting = settingsState.getSettingLocked(name);
                         if (!SettingsState.isSystemPackage(getContext(),
-                                setting.getPackageName())) {
+                                setting.getPackageName(), INVALID_UID, userId)) {
                             if (prefix != null && !setting.getName().startsWith(prefix)) {
                                 continue;
                             }
@@ -4340,7 +4340,7 @@ public class SettingsProvider extends ContentProvider {
                     // Migrate the swipe up setting only if it is set
                     final SettingsState secureSettings = getSecureSettingsLocked(userId);
                     final Setting swipeUpSetting = secureSettings.getSettingLocked(
-                            Secure.SWIPE_UP_TO_SWITCH_APPS_ENABLED);
+                            "swipe_up_to_switch_apps_enabled");
                     if (swipeUpSetting != null && !swipeUpSetting.isNull()) {
                         navBarMode = swipeUpSetting.getValue().equals("1")
                                 ? NAV_BAR_MODE_2BUTTON
@@ -4421,7 +4421,7 @@ public class SettingsProvider extends ContentProvider {
                 }
                 try {
                     final boolean systemSet = SettingsState.isSystemPackage(getContext(),
-                            setting.getPackageName(), callingUid);
+                            setting.getPackageName(), callingUid, userId);
                     if (systemSet) {
                         settings.insertSettingLocked(name, setting.getValue(),
                                 setting.getTag(), true, setting.getPackageName());

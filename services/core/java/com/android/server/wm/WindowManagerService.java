@@ -73,6 +73,7 @@ import static com.android.internal.util.LatencyTracker.ACTION_ROTATE_SCREEN;
 import static com.android.server.LockGuard.INDEX_WINDOW;
 import static com.android.server.LockGuard.installLock;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_BOOT;
@@ -1396,11 +1397,9 @@ public class WindowManagerService extends IWindowManager.Stub
                 return WindowManagerGlobal.ADD_INVALID_DISPLAY;
             }
 
-            final boolean hasStatusBarServicePermission =
-                    mContext.checkCallingOrSelfPermission(permission.STATUS_BAR_SERVICE)
-                            == PackageManager.PERMISSION_GRANTED;
             final DisplayPolicy displayPolicy = displayContent.getDisplayPolicy();
-            displayPolicy.adjustWindowParamsLw(win, win.mAttrs, hasStatusBarServicePermission);
+            displayPolicy.adjustWindowParamsLw(win, win.mAttrs, Binder.getCallingPid(),
+                    Binder.getCallingUid());
             win.setShowToOwnerOnlyLocked(mPolicy.checkShowToOwnerOnly(attrs));
 
             res = displayPolicy.prepareAddWindowLw(win, attrs);
@@ -1936,6 +1935,11 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    private boolean hasStatusBarPermission(int pid, int uid) {
+        return mContext.checkPermission(permission.STATUS_BAR, pid, uid)
+                        == PackageManager.PERMISSION_GRANTED;
+    }
+
     public int relayoutWindow(Session session, IWindow client, int seq, LayoutParams attrs,
             int requestedWidth, int requestedHeight, int viewVisibility, int flags,
             long frameNumber, Rect outFrame, Rect outOverscanInsets, Rect outContentInsets,
@@ -1944,13 +1948,8 @@ public class WindowManagerService extends IWindowManager.Stub
             SurfaceControl outSurfaceControl, InsetsState outInsetsState) {
         int result = 0;
         boolean configChanged;
-        final boolean hasStatusBarPermission =
-                mContext.checkCallingOrSelfPermission(permission.STATUS_BAR)
-                        == PackageManager.PERMISSION_GRANTED;
-        final boolean hasStatusBarServicePermission =
-                mContext.checkCallingOrSelfPermission(permission.STATUS_BAR_SERVICE)
-                        == PackageManager.PERMISSION_GRANTED;
-
+        final int pid = Binder.getCallingPid();
+        final int uid = Binder.getCallingUid();
         long origId = Binder.clearCallingIdentity();
         final int displayId;
         synchronized (mGlobalLock) {
@@ -1977,13 +1976,13 @@ public class WindowManagerService extends IWindowManager.Stub
             int attrChanges = 0;
             int flagChanges = 0;
             if (attrs != null) {
-                displayPolicy.adjustWindowParamsLw(win, attrs, hasStatusBarServicePermission);
+                displayPolicy.adjustWindowParamsLw(win, attrs, pid, uid);
                 // if they don't have the permission, mask out the status bar bits
                 if (seq == win.mSeq) {
                     int systemUiVisibility = attrs.systemUiVisibility
                             | attrs.subtreeSystemUiVisibility;
                     if ((systemUiVisibility & DISABLE_MASK) != 0) {
-                        if (!hasStatusBarPermission) {
+                        if (!hasStatusBarPermission(pid, uid)) {
                             systemUiVisibility &= ~DISABLE_MASK;
                         }
                     }
@@ -2054,7 +2053,6 @@ public class WindowManagerService extends IWindowManager.Stub
                             && viewVisibility == View.VISIBLE;
             boolean imMayMove = (flagChanges & (FLAG_ALT_FOCUSABLE_IM | FLAG_NOT_FOCUSABLE)) != 0
                     || becameVisible;
-            final boolean isDefaultDisplay = win.isDefaultDisplay();
             boolean focusMayChange = win.mViewVisibility != viewVisibility
                     || ((flagChanges & FLAG_NOT_FOCUSABLE) != 0)
                     || (!win.mRelayoutCalled);
@@ -4542,6 +4540,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int SET_RUNNING_REMOTE_ANIMATION = 59;
         public static final int ANIMATION_FAILSAFE = 60;
         public static final int RECOMPUTE_FOCUS = 61;
+        public static final int ON_POINTER_DOWN_OUTSIDE_FOCUS = 62;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -4930,6 +4929,13 @@ public class WindowManagerService extends IWindowManager.Stub
                     synchronized (mGlobalLock) {
                         updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
                                 true /* updateInputWindows */);
+                    }
+                    break;
+                }
+                case ON_POINTER_DOWN_OUTSIDE_FOCUS: {
+                    synchronized (mGlobalLock) {
+                        final IBinder touchedToken = (IBinder) msg.obj;
+                        onPointerDownOutsideFocusLocked(touchedToken);
                     }
                     break;
                 }
@@ -6725,24 +6731,23 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     /**
-     * Update a tap exclude region with a rectangular area in the window identified by the provided
-     * id. Touches down on this region will not:
+     * Update a tap exclude region in the window identified by the provided id. Touches down on this
+     * region will not:
      * <ol>
      * <li>Switch focus to this window.</li>
      * <li>Move the display of this window to top.</li>
      * <li>Send the touch events to this window.</li>
      * </ol>
-     * Passing an empty rect will remove the area from the exclude region of this window.
+     * Passing an invalid region will remove the area from the exclude region of this window.
      */
-    void updateTapExcludeRegion(IWindow client, int regionId, int left, int top, int width,
-            int height) {
+    void updateTapExcludeRegion(IWindow client, int regionId, Region region) {
         synchronized (mGlobalLock) {
             final WindowState callingWin = windowForClientLocked(null, client, false);
             if (callingWin == null) {
                 Slog.w(TAG_WM, "Bad requesting window " + client);
                 return;
             }
-            callingWin.updateTapExcludeRegion(regionId, left, top, width, height);
+            callingWin.updateTapExcludeRegion(regionId, region);
         }
     }
 
@@ -7245,11 +7250,9 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public boolean isStackVisible(int windowingMode) {
-            synchronized (mGlobalLock) {
-                final DisplayContent dc = getDefaultDisplayContentLocked();
-                return dc.isStackVisible(windowingMode);
-            }
+        public boolean isStackVisibleLw(int windowingMode) {
+            final DisplayContent dc = getDefaultDisplayContentLocked();
+            return dc.isStackVisible(windowingMode);
         }
 
         @Override
@@ -7557,22 +7560,24 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public boolean injectInputAfterTransactionsApplied(InputEvent ev, int mode) {
-        boolean shouldWaitForAnimComplete = false;
+        boolean shouldWaitForAnimToComplete = false;
         if (ev instanceof KeyEvent) {
             KeyEvent keyEvent = (KeyEvent) ev;
-            shouldWaitForAnimComplete = keyEvent.getSource() == InputDevice.SOURCE_MOUSE
+            shouldWaitForAnimToComplete = keyEvent.getSource() == InputDevice.SOURCE_MOUSE
                     || keyEvent.getAction() == KeyEvent.ACTION_DOWN;
         } else if (ev instanceof MotionEvent) {
             MotionEvent motionEvent = (MotionEvent) ev;
-            shouldWaitForAnimComplete = motionEvent.getSource() == InputDevice.SOURCE_MOUSE
+            shouldWaitForAnimToComplete = motionEvent.getSource() == InputDevice.SOURCE_MOUSE
                     || motionEvent.getAction() == MotionEvent.ACTION_DOWN;
         }
 
-        if (shouldWaitForAnimComplete) {
+        if (shouldWaitForAnimToComplete) {
             waitForAnimationsToComplete();
 
             synchronized (mGlobalLock) {
                 mWindowPlacerLocked.performSurfacePlacementIfScheduled();
+                mRoot.forAllDisplays(displayContent ->
+                        displayContent.getInputMonitor().updateInputWindowsImmediately());
             }
 
             new SurfaceControl.Transaction().syncInputWindows().apply(true);
@@ -7602,6 +7607,39 @@ public class WindowManagerService extends IWindowManager.Stub
     void onAnimationFinished() {
         synchronized (mGlobalLock) {
             mGlobalLock.notifyAll();
+        }
+    }
+
+    private void onPointerDownOutsideFocusLocked(IBinder touchedToken) {
+        final WindowState touchedWindow = windowForClientLocked(null, touchedToken, false);
+        if (touchedWindow == null) {
+            return;
+        }
+
+        final DisplayContent displayContent = touchedWindow.getDisplayContent();
+        if (displayContent == null) {
+            return;
+        }
+
+        if (!touchedWindow.canReceiveKeys()) {
+            // If the window that received the input event cannot receive keys, don't move the
+            // display it's on to the top since that window won't be able to get focus anyway.
+            return;
+        }
+
+        final WindowContainer parent = displayContent.getParent();
+        if (parent != null && parent.getTopChild() != displayContent) {
+            parent.positionChildAt(WindowContainer.POSITION_TOP, displayContent,
+                    true /* includingParents */);
+            // For compatibility, only the topmost activity is allowed to be resumed for pre-Q
+            // app. Ensure the topmost activities are resumed whenever a display is moved to top.
+            // TODO(b/123761773): Investigate whether we can move this into
+            // RootActivityContainer#updateTopResumedActivityIfNeeded(). Currently, it is risky
+            // to do so because it seems possible to resume activities as part of a larger
+            // transaction and it's too early to resume based on current order when performing
+            // updateTopResumedActivityIfNeeded().
+            displayContent.mAcitvityDisplay.ensureActivitiesVisible(null /* starting */,
+                    0 /* configChanges */, !PRESERVE_WINDOWS, true /* notifyClients */);
         }
     }
 }

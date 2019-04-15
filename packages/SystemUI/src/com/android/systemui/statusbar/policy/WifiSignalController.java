@@ -39,6 +39,10 @@ public class WifiSignalController extends
         SignalController<WifiSignalController.WifiState, SignalController.IconGroup> {
     private final boolean mHasMobileData;
     private final WifiStatusTracker mWifiTracker;
+    private final IconGroup mDefaultWifiIconGroup;
+    private final IconGroup mWifi4IconGroup;
+    private final IconGroup mWifi5IconGroup;
+    private final IconGroup mWifi6IconGroup;
 
     public WifiSignalController(Context context, boolean hasMobileData,
             CallbackHandler callbackHandler, NetworkControllerImpl networkController,
@@ -56,8 +60,8 @@ public class WifiSignalController extends
         if (wifiManager != null) {
             wifiManager.registerTrafficStateCallback(new WifiTrafficStateCallback(), null);
         }
-        // WiFi only has one state.
-        mCurrentState.iconGroup = mLastState.iconGroup = new IconGroup(
+
+        mDefaultWifiIconGroup = new IconGroup(
                 "Wi-Fi Icons",
                 WifiIcons.WIFI_SIGNAL_STRENGTH,
                 WifiIcons.QS_WIFI_SIGNAL_STRENGTH,
@@ -68,6 +72,44 @@ public class WifiSignalController extends
                 WifiIcons.QS_WIFI_NO_NETWORK,
                 AccessibilityContentDescriptions.WIFI_NO_CONNECTION
                 );
+
+        mWifi4IconGroup = new IconGroup(
+                "Wi-Fi 4 Icons",
+                WifiIcons.WIFI_4_SIGNAL_STRENGTH,
+                WifiIcons.QS_WIFI_4_SIGNAL_STRENGTH,
+                AccessibilityContentDescriptions.WIFI_CONNECTION_STRENGTH,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                AccessibilityContentDescriptions.WIFI_NO_CONNECTION
+                );
+
+        mWifi5IconGroup = new IconGroup(
+                "Wi-Fi 5 Icons",
+                WifiIcons.WIFI_5_SIGNAL_STRENGTH,
+                WifiIcons.QS_WIFI_5_SIGNAL_STRENGTH,
+                AccessibilityContentDescriptions.WIFI_CONNECTION_STRENGTH,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                AccessibilityContentDescriptions.WIFI_NO_CONNECTION
+                );
+
+        mWifi6IconGroup = new IconGroup(
+                "Wi-Fi 6 Icons",
+                WifiIcons.WIFI_6_SIGNAL_STRENGTH,
+                WifiIcons.QS_WIFI_6_SIGNAL_STRENGTH,
+                AccessibilityContentDescriptions.WIFI_CONNECTION_STRENGTH,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                AccessibilityContentDescriptions.WIFI_NO_CONNECTION
+                );
+
+        mCurrentState.iconGroup = mLastState.iconGroup = mDefaultWifiIconGroup;
     }
 
     @Override
@@ -100,6 +142,19 @@ public class WifiSignalController extends
                 wifiDesc, mCurrentState.isTransient, mCurrentState.statusLabel);
     }
 
+
+    private void updateIconGroup() {
+	if (mCurrentState.wifiGenerationVersion == 4) {
+            mCurrentState.iconGroup = mWifi4IconGroup;
+        } else if (mCurrentState.wifiGenerationVersion == 5) {
+            mCurrentState.iconGroup = mCurrentState.isReady ? mWifi6IconGroup : mWifi5IconGroup;
+        } else if (mCurrentState.wifiGenerationVersion == 6) {
+            mCurrentState.iconGroup = mWifi6IconGroup;
+        } else {
+            mCurrentState.iconGroup = mDefaultWifiIconGroup;
+        }
+
+    }
     /**
      * Extract wifi state directly from broadcasts about changes in wifi state.
      */
@@ -111,6 +166,10 @@ public class WifiSignalController extends
         mCurrentState.rssi = mWifiTracker.rssi;
         mCurrentState.level = mWifiTracker.level;
         mCurrentState.statusLabel = mWifiTracker.statusLabel;
+        mCurrentState.wifiGenerationVersion = mWifiTracker.wifiGeneration;
+        mCurrentState.isReady = (mWifiTracker.vhtMax8SpatialStreamsSupport
+                                    && mWifiTracker.twtSupport);
+        updateIconGroup();
         notifyListenersIfNecessary();
     }
 
@@ -142,12 +201,16 @@ public class WifiSignalController extends
         String ssid;
         boolean isTransient;
         String statusLabel;
+        int wifiGenerationVersion;
+        boolean isReady;
 
         @Override
         public void copyFrom(State s) {
             super.copyFrom(s);
             WifiState state = (WifiState) s;
             ssid = state.ssid;
+            wifiGenerationVersion = state.wifiGenerationVersion;
+            isReady = state.isReady;
             isTransient = state.isTransient;
             statusLabel = state.statusLabel;
         }
@@ -156,6 +219,8 @@ public class WifiSignalController extends
         protected void toString(StringBuilder builder) {
             super.toString(builder);
             builder.append(",ssid=").append(ssid)
+                .append(",wifiGenerationVersion=").append(wifiGenerationVersion)
+                .append(",isReady=").append(isReady)
                 .append(",isTransient=").append(isTransient)
                 .append(",statusLabel=").append(statusLabel);
         }
@@ -167,6 +232,8 @@ public class WifiSignalController extends
             }
             WifiState other = (WifiState) o;
             return Objects.equals(other.ssid, ssid)
+                    && other.wifiGenerationVersion == wifiGenerationVersion
+                    && other.isReady == isReady
                     && other.isTransient == isTransient
                     && TextUtils.equals(other.statusLabel, statusLabel);
         }

@@ -53,6 +53,7 @@ import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.Pair;
 
 import androidx.annotation.NonNull;
 
@@ -65,8 +66,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -183,6 +186,17 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private static final int PSK_WPA2 = 2;
     private static final int PSK_WPA_WPA2 = 3;
 
+    private static final int LEGACY_CAPABLE_BSSID = 0;
+    private static final int HT_CAPABLE_BSSID = 1;
+    private static final int VHT_CAPABLE_BSSID = 2;
+    private static final int HE_CAPABLE_BSSID = 3;
+    private static final int MAX_CAPABLE_BSSID = Integer.MAX_VALUE;
+
+    private static final int WIFI_GENERATION_LEGACY = 0;
+    private static final int WIFI_GENERATION_4 = 4;
+    private static final int WIFI_GENERATION_5 = 5;
+    private static final int WIFI_GENERATION_6 = 6;
+
     /**
      * The number of distinct wifi levels.
      *
@@ -198,6 +212,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     private final Context mContext;
 
+    private WifiManager mWifiManager;
+    private WifiManager.ActionListener mConnectListener;
+
     private String ssid;
     private String bssid;
     private int security;
@@ -208,6 +225,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private WifiConfiguration mConfig;
 
     private int mRssi = UNREACHABLE_RSSI;
+
+    private int mWifiGeneration = WIFI_GENERATION_LEGACY;
+    private boolean mTwtSupport = false;
+    private boolean mVhtMax8SpatialStreamsSupport = false;
 
     private WifiInfo mInfo;
     private NetworkInfo mNetworkInfo;
@@ -299,6 +320,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         // Calculate required fields
         updateKey();
         updateBestRssiInfo();
+        updateWifiGeneration();
     }
 
     /**
@@ -840,6 +862,74 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
     }
 
+    private int getMaxCapability(ScanResult result) {
+        if (isVerboseLoggingEnabled()) {
+            Log.i(TAG, "SSID: "+ result.SSID +", bssid: "+ result.BSSID +", capabilities: "+ result.capabilities);
+        }
+
+        if (result.capabilities.contains("WFA-HE")) {
+            return HE_CAPABLE_BSSID;
+        } else if (result.capabilities.contains("WFA-VHT")) {
+            return VHT_CAPABLE_BSSID;
+        } else if (result.capabilities.contains("WFA-HT")) {
+            return HT_CAPABLE_BSSID;
+        } else {
+            return LEGACY_CAPABLE_BSSID;
+        }
+    }
+
+    /**
+     * Updates {@link #mWifiGeneration}.
+     *
+     * <p>If the given connection is active, the existing value of {@link #mWifiGeneration} will be returned.
+     * If the given AccessPoint is not active, a value will be calculated from previous scan
+     * results, based on minimum capability for all BSSIDs.
+     */
+    private void updateWifiGeneration() {
+        if (this.isActive()) {
+            return;
+        }
+
+        int currBssidMaxCapability;
+        int scanResultsMinCapability = MAX_CAPABLE_BSSID;
+
+        mTwtSupport = false;
+        mVhtMax8SpatialStreamsSupport = false;
+        for (ScanResult result : mScanResults) {
+            currBssidMaxCapability = getMaxCapability(result);
+            if (currBssidMaxCapability < scanResultsMinCapability) {
+                scanResultsMinCapability = currBssidMaxCapability;
+            }
+        }
+
+        switch (scanResultsMinCapability) {
+            case HE_CAPABLE_BSSID:
+                mWifiGeneration = WIFI_GENERATION_6;
+                break;
+            case VHT_CAPABLE_BSSID:
+                mWifiGeneration = WIFI_GENERATION_5;
+                break;
+            case HT_CAPABLE_BSSID:
+                mWifiGeneration = WIFI_GENERATION_4;
+                break;
+            default:
+                mWifiGeneration = WIFI_GENERATION_LEGACY;
+                break;
+        }
+    }
+
+    public int getWifiGeneration() {
+        return mWifiGeneration;
+    }
+
+    public boolean isTwtSupported() {
+        return mTwtSupport;
+    }
+
+    public boolean isVhtMax8SpatialStreamsSupported() {
+        return mVhtMax8SpatialStreamsSupport;
+    }
+
     /**
      * Returns if the network should be considered metered.
      */
@@ -1140,8 +1230,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
     /**
      * Starts the OSU Provisioning flow.
      */
-    public void startOsuProvisioning() {
-        mContext.getSystemService(WifiManager.class).startSubscriptionProvisioning(
+    public void startOsuProvisioning(@Nullable WifiManager.ActionListener connectListener) {
+        mConnectListener = connectListener;
+
+        getWifiManager().startSubscriptionProvisioning(
                 mOsuProvider,
                 mContext.getMainExecutor(),
                 new AccessPointProvisioningCallback()
@@ -1266,6 +1358,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         mScanResults.clear();
         mScanResults.addAll(scanResults);
         updateBestRssiInfo();
+        updateWifiGeneration();
         int newLevel = getLevel();
 
         // If newLevel is 0, there will be no displayed Preference since the AP is unreachable
@@ -1331,6 +1424,14 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 // are still seen, we will investigate further.
                 update(config); // Notifies the AccessPointListener of the change
             }
+            if (mWifiGeneration != info.getWifiGeneration() ||
+                mTwtSupport != info.isTwtSupported() ||
+                mVhtMax8SpatialStreamsSupport != info.isVhtMax8SpatialStreamsSupported()) {
+                mWifiGeneration = info.getWifiGeneration();
+                mTwtSupport = info.isTwtSupported();
+                mVhtMax8SpatialStreamsSupport = info.isVhtMax8SpatialStreamsSupported();
+                updated = true;
+            }
             if (mRssi != info.getRssi() && info.getRssi() != WifiInfo.INVALID_RSSI) {
                 mRssi = info.getRssi();
                 updated = true;
@@ -1344,6 +1445,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
             updated = true;
             mInfo = null;
             mNetworkInfo = null;
+            updateWifiGeneration();
         }
         if (updated && mAccessPointListener != null) {
             ThreadUtils.postOnMainThread(() -> {
@@ -1622,12 +1724,20 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return string;
     }
 
+    private WifiManager getWifiManager() {
+        if (mWifiManager == null) {
+            mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+        }
+        return mWifiManager;
+    }
+
     /**
      * Callbacks relaying changes to the AccessPoint representation.
      *
      * <p>All methods are invoked on the Main Thread.
      */
     public interface AccessPointListener {
+
         /**
          * Indicates a change to the externally visible state of the AccessPoint trigger by an
          * update of ScanResults, saved configuration state, connection state, or score
@@ -1644,7 +1754,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
          *                    changed
          */
         @MainThread void onAccessPointChanged(AccessPoint accessPoint);
-
         /**
          * Indicates the "wifi pie signal level" has changed, retrieved via calls to
          * {@link AccessPoint#getLevel()}.
@@ -1726,11 +1835,46 @@ public class AccessPoint implements Comparable<AccessPoint> {
             mOsuProvisioningComplete = true;
             mOsuFailure = null;
             mOsuStatus = null;
+
             ThreadUtils.postOnMainThread(() -> {
                 if (mAccessPointListener != null) {
                     mAccessPointListener.onAccessPointChanged(AccessPoint.this);
                 }
             });
+
+            // Connect to the freshly provisioned network.
+            WifiManager wifiManager = getWifiManager();
+
+            PasspointConfiguration passpointConfig = wifiManager
+                    .getMatchingPasspointConfigsForOsuProviders(Collections.singleton(mOsuProvider))
+                    .get(mOsuProvider);
+            if (passpointConfig == null) {
+                Log.e(TAG, "Missing PasspointConfiguration for newly provisioned network!");
+                if (mConnectListener != null) {
+                    mConnectListener.onFailure(0);
+                }
+                return;
+            }
+
+            String fqdn = passpointConfig.getHomeSp().getFqdn();
+            for (Pair<WifiConfiguration, Map<Integer, List<ScanResult>>> pairing :
+                    wifiManager.getAllMatchingWifiConfigs(wifiManager.getScanResults())) {
+                WifiConfiguration config = pairing.first;
+                if (TextUtils.equals(config.FQDN, fqdn)) {
+                    List<ScanResult> homeScans =
+                            pairing.second.get(WifiManager.PASSPOINT_HOME_NETWORK);
+                    List<ScanResult> roamingScans =
+                            pairing.second.get(WifiManager.PASSPOINT_ROAMING_NETWORK);
+
+                    AccessPoint connectionAp =
+                            new AccessPoint(mContext, config, homeScans, roamingScans);
+                    wifiManager.connect(connectionAp.getConfig(), mConnectListener);
+                    return;
+                }
+            }
+            if (mConnectListener != null) {
+                mConnectListener.onFailure(0);
+            }
         }
     }
 }

@@ -17,16 +17,18 @@
 package com.android.dynsystem;
 
 import static android.os.image.DynamicSystemClient.KEY_SYSTEM_SIZE;
-import static android.os.image.DynamicSystemClient.KEY_SYSTEM_URL;
 import static android.os.image.DynamicSystemClient.KEY_USERDATA_SIZE;
 
 import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.image.DynamicSystemClient;
+import android.util.FeatureFlagUtils;
 import android.util.Log;
 
 
@@ -48,6 +50,12 @@ public class VerificationActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (!featureFlagEnabled()) {
+            Log.w(TAG, FeatureFlagUtils.DYNAMIC_SYSTEM + " not enabled; activity aborted.");
+            finish();
+            return;
+        }
 
         KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
 
@@ -81,21 +89,26 @@ public class VerificationActivity extends Activity {
         // retrieve data from calling intent
         Intent callingIntent = getIntent();
 
-        String url = callingIntent.getStringExtra(KEY_SYSTEM_URL);
+        Uri url = callingIntent.getData();
         long systemSize = callingIntent.getLongExtra(KEY_SYSTEM_SIZE, 0);
         long userdataSize = callingIntent.getLongExtra(KEY_USERDATA_SIZE, 0);
 
-        sVerifiedUrl = url;
+        sVerifiedUrl = url.toString();
 
         // start service
         Intent intent = new Intent(this, DynamicSystemInstallationService.class);
+        intent.setData(url);
         intent.setAction(DynamicSystemClient.ACTION_START_INSTALL);
-        intent.putExtra(KEY_SYSTEM_URL, url);
         intent.putExtra(KEY_SYSTEM_SIZE, systemSize);
         intent.putExtra(KEY_USERDATA_SIZE, userdataSize);
 
         Log.d(TAG, "Starting Installation Service");
         startServiceAsUser(intent, UserHandle.SYSTEM);
+    }
+
+    private boolean featureFlagEnabled() {
+        return SystemProperties.getBoolean(
+                FeatureFlagUtils.PERSIST_PREFIX + FeatureFlagUtils.DYNAMIC_SYSTEM, false);
     }
 
     static boolean isVerified(String url) {

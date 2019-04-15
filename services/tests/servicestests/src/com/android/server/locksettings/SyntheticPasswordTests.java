@@ -33,6 +33,9 @@ import static org.mockito.Mockito.verify;
 import android.app.admin.PasswordMetrics;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.platform.test.annotations.Presubmit;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.VerifyCredentialResponse;
@@ -48,6 +51,8 @@ import java.util.ArrayList;
 /**
  * runtest frameworks-services -c com.android.server.locksettings.SyntheticPasswordTests
  */
+@SmallTest
+@Presubmit
 public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
 
     public static final byte[] PAYLOAD = new byte[] {1, 2, -1, -2, 55};
@@ -353,8 +358,8 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
 
         // Verify DPM gets notified about new device lock
         mService.mHandler.runWithScissors(() -> {}, 0 /*now*/); // Flush runnables on handler
-        PasswordMetrics metric = PasswordMetrics.computeForPassword(pattern);
-        metric.quality = PASSWORD_QUALITY_SOMETHING;
+        final PasswordMetrics metric = PasswordMetrics.computeForCredential(
+                LockPatternUtils.CREDENTIAL_TYPE_PATTERN, pattern);
         verify(mDevicePolicyManager).setActivePasswordState(metric, PRIMARY_USER_ID);
 
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
