@@ -218,8 +218,7 @@ public class DisplayPolicy {
     private final ImmersiveModeConfirmation mImmersiveModeConfirmation;
     private final ScreenshotHelper mScreenshotHelper;
 
-    private static final boolean SCROLL_BOOST_SS_ENABLE =
-                    SystemProperties.getBoolean("vendor.perf.gestureflingboost.enable", false);
+    private static boolean SCROLL_BOOST_SS_ENABLE = false;
 
     /*
      * @hide
@@ -227,6 +226,7 @@ public class DisplayPolicy {
     BoostFramework mPerfBoostDrag = null;
     BoostFramework mPerfBoostFling = null;
     BoostFramework mPerfBoostPrefling = null;
+    BoostFramework mPerf = new BoostFramework();
     private boolean mIsPerfBoostFlingAcquired;
 
     private final Object mServiceAcquireLock = new Object();
@@ -474,6 +474,9 @@ public class DisplayPolicy {
             mScreenOnEarly = true;
             mScreenOnFully = true;
         }
+
+        if (mPerf != null)
+                SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
 
         final Looper looper = UiThread.getHandler().getLooper();
         mHandler = new PolicyHandler(looper);

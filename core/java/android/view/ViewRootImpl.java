@@ -219,8 +219,7 @@ public final class ViewRootImpl implements ViewParent,
     public static final String PROPERTY_EMULATOR_WIN_OUTSET_BOTTOM_PX =
             "ro.emu.win_outset_bottom_px";
 
-    private final boolean SCROLL_BOOST_SS_ENABLE =
-                    SystemProperties.getBoolean("vendor.perf.gestureflingboost.enable", false);
+    private boolean SCROLL_BOOST_SS_ENABLE = false;
 
     /**
      * Maximum time we allow the user to roll the trackball enough to generate
@@ -688,6 +687,9 @@ public final class ViewRootImpl implements ViewParent,
 
         loadSystemProperties();
         mPerf = new BoostFramework(context);
+
+        if (mPerf != null)
+                SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
     }
 
     public static void addFirstDrawHandler(Runnable callback) {
