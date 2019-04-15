@@ -40,8 +40,6 @@
 #include <cutils/properties.h>
 #include <utils/Log.h>
 
-#define LIBRARY_PATH_PREFIX "/vendor/lib/"
-
 namespace android
 {
 
@@ -67,7 +65,7 @@ typedef struct dlLibHandler {
  */
 static dlLibHandler mDlLibHandler = {
     NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, "ro.vendor.at_library"
+    NULL, NULL, "libqti-at.so"
 };
 
 // ----------------------------------------------------------------------------
@@ -75,21 +73,9 @@ static dlLibHandler mDlLibHandler = {
 static void
 com_android_internal_app_ActivityTrigger_native_at_init()
 {
-    char buf[PROPERTY_VALUE_MAX];
     bool errored = false;
 
-    /* Retrieve name of vendor library */
-    if (property_get(mDlLibHandler.dlname, buf, NULL) <= 0) {
-        return;
-    }
-
-    /* Sanity check - ensure */
-    buf[PROPERTY_VALUE_MAX-1] = '\0';
-    if (strstr(buf, "/") != NULL) {
-        return;
-    }
-
-    mDlLibHandler.dlhandle = dlopen(buf, RTLD_NOW | RTLD_LOCAL);
+    mDlLibHandler.dlhandle = dlopen(mDlLibHandler.dlname, RTLD_NOW | RTLD_LOCAL);
     if (mDlLibHandler.dlhandle == NULL) {
         return;
     }
