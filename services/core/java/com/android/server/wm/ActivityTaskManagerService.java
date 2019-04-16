@@ -6112,11 +6112,17 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public void notifyAppTransitionStarting(SparseIntArray reasons, long timestamp) {
+        public void notifyAppTransitionStarting(SparseIntArray reasons,
+                long timestamp) {
             synchronized (mGlobalLock) {
                 mStackSupervisor.getActivityMetricsLogger().notifyTransitionStarting(
                         reasons, timestamp);
             }
+        }
+
+        @Override
+        public void notifySingleTaskDisplayDrawn(int displayId) {
+            mTaskChangeNotificationController.notifySingleTaskDisplayDrawn(displayId);
         }
 
         @Override

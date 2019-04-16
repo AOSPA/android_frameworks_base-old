@@ -196,7 +196,8 @@ public class TaskStackChangeListeners extends TaskStackListener {
     }
 
     @Override
-    public void onSizeCompatModeActivityChanged(int displayId, IBinder activityToken) {
+    public void onSizeCompatModeActivityChanged(int displayId, IBinder activityToken)
+            throws RemoteException {
         mHandler.obtainMessage(H.ON_SIZE_COMPAT_MODE_ACTIVITY_CHANGED, displayId, 0 /* unused */,
                 activityToken).sendToTarget();
     }
@@ -204,6 +205,11 @@ public class TaskStackChangeListeners extends TaskStackListener {
     @Override
     public void onTaskDisplayChanged(int taskId, int newDisplayId) throws RemoteException {
         mHandler.obtainMessage(H.ON_TASK_DISPLAY_CHANGED, taskId, newDisplayId).sendToTarget();
+    }
+
+    public void onSingleTaskDisplayDrawn(int displayId) throws RemoteException {
+        mHandler.obtainMessage(H.ON_SINGLE_TASK_DISPLAY_DRAWN, displayId,
+                0 /* unused */).sendToTarget();
     }
 
     private final class H extends Handler {
@@ -226,6 +232,7 @@ public class TaskStackChangeListeners extends TaskStackListener {
         private static final int ON_SIZE_COMPAT_MODE_ACTIVITY_CHANGED = 17;
         private static final int ON_BACK_PRESSED_ON_TASK_ROOT = 18;
         private static final int ON_TASK_DISPLAY_CHANGED = 19;
+        private static final int ON_SINGLE_TASK_DISPLAY_DRAWN = 20;
 
 
         public H(Looper looper) {
@@ -365,6 +372,12 @@ public class TaskStackChangeListeners extends TaskStackListener {
                     case ON_TASK_DISPLAY_CHANGED: {
                         for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
                             mTaskStackListeners.get(i).onTaskDisplayChanged(msg.arg1, msg.arg2);
+                        }
+                        break;
+                    }
+                    case ON_SINGLE_TASK_DISPLAY_DRAWN: {
+                        for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
+                            mTaskStackListeners.get(i).onSingleTaskDisplayDrawn(msg.arg1);
                         }
                         break;
                     }
