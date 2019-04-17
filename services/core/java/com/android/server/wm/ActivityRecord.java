@@ -702,13 +702,13 @@ public final class ActivityRecord extends ConfigurationContainer {
         }
     }
 
-    void scheduleTopResumedActivityChanged(boolean onTop) {
+    boolean scheduleTopResumedActivityChanged(boolean onTop) {
         if (!attachedToProcess()) {
             if (DEBUG_STATES) {
                 Slog.w(TAG, "Can't report activity position update - client not running"
                                 + ", activityRecord=" + this);
             }
-            return;
+            return false;
         }
         try {
             if (DEBUG_STATES) {
@@ -719,7 +719,9 @@ public final class ActivityRecord extends ConfigurationContainer {
                     TopResumedActivityChangeItem.obtain(onTop));
         } catch (RemoteException e) {
             // If process died, whatever.
+            return false;
         }
+        return true;
     }
 
     void updateMultiWindowMode() {
@@ -896,7 +898,7 @@ public final class ActivityRecord extends ConfigurationContainer {
             name = intent.getComponent().flattenToShortString();
         }
 
-        private static ActivityRecord tokenToActivityRecordLocked(Token token) {
+        private static @Nullable ActivityRecord tokenToActivityRecordLocked(Token token) {
             if (token == null) {
                 return null;
             }
@@ -924,7 +926,7 @@ public final class ActivityRecord extends ConfigurationContainer {
         }
     }
 
-    static ActivityRecord forTokenLocked(IBinder token) {
+    static @Nullable ActivityRecord forTokenLocked(IBinder token) {
         try {
             return Token.tokenToActivityRecordLocked((Token)token);
         } catch (ClassCastException e) {
@@ -1631,8 +1633,8 @@ public final class ActivityRecord extends ConfigurationContainer {
             try {
                 ArrayList<ReferrerIntent> ar = new ArrayList<>(1);
                 ar.add(rintent);
-                mAtmService.getLifecycleManager().scheduleTransaction(
-                        app.getThread(), appToken, NewIntentItem.obtain(ar, mState == PAUSED));
+                mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
+                        NewIntentItem.obtain(ar));
                 unsent = false;
             } catch (RemoteException e) {
                 Slog.w(TAG, "Exception thrown sending new intent to " + this, e);
@@ -2163,10 +2165,13 @@ public final class ActivityRecord extends ConfigurationContainer {
     static void activityResumedLocked(IBinder token) {
         final ActivityRecord r = ActivityRecord.forTokenLocked(token);
         if (DEBUG_SAVED_STATE) Slog.i(TAG_STATES, "Resumed activity; dropping state of: " + r);
-        if (r != null) {
-            r.icicle = null;
-            r.haveState = false;
+        if (r == null) {
+            // If an app reports resumed after a long delay, the record on server side might have
+            // been removed (e.g. destroy timeout), so the token could be null.
+            return;
         }
+        r.icicle = null;
+        r.haveState = false;
 
         final ActivityDisplay display = r.getDisplay();
         if (display != null) {
@@ -3457,7 +3462,6 @@ public final class ActivityRecord extends ConfigurationContainer {
             transaction.addCallback(callbackItem);
             transaction.setLifecycleStateRequest(lifecycleItem);
             mAtmService.getLifecycleManager().scheduleTransaction(transaction);
-            mStackSupervisor.updateTopResumedActivityIfNeeded();
             // Note: don't need to call pauseIfSleepingLocked() here, because the caller will only
             // request resume if this activity is currently resumed, which implies we aren't
             // sleeping.
