@@ -71,6 +71,7 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
+import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
@@ -91,6 +92,8 @@ public class BubbleControllerTest extends SysuiTestCase {
 
     @Mock
     private NotificationEntryManager mNotificationEntryManager;
+    @Mock
+    private NotificationGroupManager mNotificationGroupManager;
     @Mock
     private WindowManager mWindowManager;
     @Mock
@@ -157,6 +160,7 @@ public class BubbleControllerTest extends SysuiTestCase {
 
         // Return non-null notification data from the NEM
         when(mNotificationEntryManager.getNotificationData()).thenReturn(mNotificationData);
+        when(mNotificationData.get(mRow.getEntry().key)).thenReturn(mRow.getEntry());
         when(mNotificationData.getChannel(mRow.getEntry().key)).thenReturn(mRow.getEntry().channel);
 
         mZenModeConfig.suppressedVisualEffects = 0;
@@ -171,9 +175,14 @@ public class BubbleControllerTest extends SysuiTestCase {
                 mock(HeadsUpManager.class),
                 mock(NotificationInterruptionStateProvider.HeadsUpSuppressor.class));
         mBubbleData = new BubbleData(mContext);
-        mBubbleController = new TestableBubbleController(mContext, mStatusBarWindowController,
-                mBubbleData, mConfigurationController, interruptionStateProvider,
-                mZenModeController, mLockscreenUserManager);
+        mBubbleController = new TestableBubbleController(mContext,
+                mStatusBarWindowController,
+                mBubbleData,
+                mConfigurationController,
+                interruptionStateProvider,
+                mZenModeController,
+                mLockscreenUserManager,
+                mNotificationGroupManager);
         mBubbleController.setBubbleStateChangeListener(mBubbleStateChangeListener);
         mBubbleController.setExpandListener(mBubbleExpandListener);
 
@@ -599,10 +608,11 @@ public class BubbleControllerTest extends SysuiTestCase {
                 ConfigurationController configurationController,
                 NotificationInterruptionStateProvider interruptionStateProvider,
                 ZenModeController zenModeController,
-                NotificationLockscreenUserManager lockscreenUserManager) {
+                NotificationLockscreenUserManager lockscreenUserManager,
+                NotificationGroupManager groupManager) {
             super(context, statusBarWindowController, data, Runnable::run,
                     configurationController, interruptionStateProvider, zenModeController,
-                    lockscreenUserManager);
+                    lockscreenUserManager, groupManager);
         }
     }
 
