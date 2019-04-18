@@ -97,11 +97,17 @@ public:
         return task.get_future().get();
     };
 
+    // For testing purposes only, blocks until all worker threads are parked.
+    static void waitForIdle();
+
 private:
+    static CommonPool& instance();
+
     CommonPool();
     ~CommonPool() {}
 
     void enqueue(Task&&);
+    void doWaitForIdle();
 
     void workerLoop();
 

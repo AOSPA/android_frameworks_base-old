@@ -17,6 +17,7 @@ package com.android.systemui.statusbar.phone;
 
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
+import android.content.res.Resources;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.PointF;
@@ -140,6 +141,7 @@ public class EdgeBackGestureHandler implements DisplayListener {
     private WindowManager.LayoutParams mEdgePanelLp;
 
     public EdgeBackGestureHandler(Context context, OverviewProxyService overviewProxyService) {
+        final Resources res = context.getResources();
         mContext = context;
         mDisplayId = context.getDisplayId();
         mMainExecutor = context.getMainExecutor();
@@ -148,10 +150,9 @@ public class EdgeBackGestureHandler implements DisplayListener {
 
         mEdgeWidth = QuickStepContract.getEdgeSensitivityWidth(context);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mSwipeThreshold = context.getResources()
-                .getDimension(R.dimen.navigation_edge_action_drag_threshold);
+        mSwipeThreshold = res.getDimension(R.dimen.navigation_edge_action_drag_threshold);
 
-        mNavBarHeight = context.getResources().getDimensionPixelSize(R.dimen.navigation_bar_height);
+        mNavBarHeight = res.getDimensionPixelSize(R.dimen.navigation_bar_frame_height);
     }
 
     /**
@@ -204,6 +205,7 @@ public class EdgeBackGestureHandler implements DisplayListener {
 
         if (!mIsEnabled) {
             WindowManagerWrapper.getInstance().removePinnedStackListener(mImeChangedListener);
+            mContext.getSystemService(DisplayManager.class).unregisterDisplayListener(this);
 
             try {
                 WindowManagerGlobal.getWindowManagerService()
@@ -215,6 +217,8 @@ public class EdgeBackGestureHandler implements DisplayListener {
 
         } else {
             updateDisplaySize();
+            mContext.getSystemService(DisplayManager.class).registerDisplayListener(this,
+                    mContext.getMainThreadHandler());
 
             try {
                 WindowManagerWrapper.getInstance().addPinnedStackListener(mImeChangedListener);
@@ -344,7 +348,8 @@ public class EdgeBackGestureHandler implements DisplayListener {
 
     private void updateDisplaySize() {
         mContext.getSystemService(DisplayManager.class)
-                .getDisplay(mDisplayId).getRealSize(mDisplaySize);
+                .getDisplay(mDisplayId)
+                .getRealSize(mDisplaySize);
     }
 
     private void sendEvent(int action, int code) {

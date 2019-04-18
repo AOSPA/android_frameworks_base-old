@@ -3796,6 +3796,7 @@ public class TelephonyManager {
      * @hide
      * nobody seems to call this.
      */
+    @TestApi
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getLine1AlphaTag() {
         return getLine1AlphaTag(getSubId());
@@ -8958,6 +8959,27 @@ public class TelephonyManager {
         }
 
         return retval;
+    }
+
+    /**
+     * Determines the {@link PhoneAccountHandle} associated with a subscription Id.
+     *
+     * @param subscriptionId The subscription Id to check.
+     * @return The {@link PhoneAccountHandle} associated with a subscription Id, or {@code null} if
+     * there is no associated {@link PhoneAccountHandle}.
+     * @hide
+     */
+    public @Nullable PhoneAccountHandle getPhoneAccountHandleForSubscriptionId(int subscriptionId) {
+        PhoneAccountHandle returnValue = null;
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                returnValue = service.getPhoneAccountHandleForSubscriptionId(subscriptionId);
+            }
+        } catch (RemoteException e) {
+        }
+
+        return returnValue;
     }
 
     private int getSubIdForPhoneAccountHandle(PhoneAccountHandle phoneAccountHandle) {

@@ -216,7 +216,28 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
         }
 
         mBubbleData = data;
+        mBubbleData.setListener(mBubbleDataListener);
         mSurfaceSynchronizer = synchronizer;
+    }
+
+    /**
+     * BubbleStackView is lazily created by this method the first time a Bubble is added. This
+     * method initializes the stack view and adds it to the StatusBar just above the scrim.
+     */
+    private void ensureStackViewCreated() {
+        if (mStackView == null) {
+            mStackView = new BubbleStackView(mContext, mBubbleData, mSurfaceSynchronizer);
+            ViewGroup sbv = mStatusBarWindowController.getStatusBarView();
+            // TODO(b/130237686): When you expand the shade on top of expanded bubble, there is no
+            //  scrim between bubble and the shade
+            int bubblePosition = sbv.indexOfChild(sbv.findViewById(R.id.scrim_behind)) + 1;
+            sbv.addView(mStackView, bubblePosition,
+                    new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
+            if (mExpandListener != null) {
+                mStackView.setExpandListener(mExpandListener);
+            }
+            mStackView.setOnBlockedListener(this);
+        }
     }
 
     @Override
@@ -324,28 +345,15 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
     /**
      * Adds or updates a bubble associated with the provided notification entry.
      *
-     * @param notif          the notification associated with this bubble.
-     * @param updatePosition whether this update should promote the bubble to the top of the stack.
+     * @param notif the notification associated with this bubble.
      */
-    public void updateBubble(NotificationEntry notif, boolean updatePosition) {
+    void updateBubble(NotificationEntry notif) {
         if (mStackView != null && mBubbleData.getBubble(notif.key) != null) {
             // It's an update
-            mStackView.updateBubble(notif, updatePosition);
+            mStackView.updateBubble(notif);
         } else {
-            if (mStackView == null) {
-                mStackView = new BubbleStackView(mContext, mBubbleData, mSurfaceSynchronizer);
-                ViewGroup sbv = mStatusBarWindowController.getStatusBarView();
-                // XXX: Bug when you expand the shade on top of expanded bubble, there is no scrim
-                // between bubble and the shade
-                int bubblePosition = sbv.indexOfChild(sbv.findViewById(R.id.scrim_behind)) + 1;
-                sbv.addView(mStackView, bubblePosition,
-                        new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
-                if (mExpandListener != null) {
-                    mStackView.setExpandListener(mExpandListener);
-                }
-                mStackView.setOnBlockedListener(this);
-            }
             // It's new
+            ensureStackViewCreated();
             mStackView.addBubble(notif);
         }
         if (shouldAutoExpand(notif)) {
@@ -403,7 +411,7 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
                 return;
             }
             if (entry.isBubble() && mNotificationInterruptionStateProvider.shouldBubbleUp(entry)) {
-                updateBubble(entry, true /* updatePosition */);
+                updateBubble(entry);
             }
         }
 
@@ -416,7 +424,7 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
                     && alertAgain(entry, entry.notification.getNotification())) {
                 entry.setShowInShadeWhenBubble(true);
                 entry.setBubbleDismissed(false); // updates come back as bubbles even if dismissed
-                updateBubble(entry, true /* updatePosition */);
+                updateBubble(entry);
                 mStackView.updateDotVisibility(entry.key);
             }
         }
@@ -436,6 +444,47 @@ public class BubbleController implements BubbleExpandedView.OnBubbleBlockedListe
                 // This was a cancel so we should remove the bubble
                 removeBubble(entry.key, DISMISS_NOTIF_CANCEL);
             }
+        }
+    };
+
+    private final BubbleData.Listener mBubbleDataListener = new BubbleData.Listener() {
+        @Override
+        public void onBubbleAdded(Bubble bubble) {
+
+        }
+
+        @Override
+        public void onBubbleRemoved(Bubble bubble, int reason) {
+
+        }
+
+        public void onBubbleUpdated(Bubble bubble) {
+
+        }
+
+        @Override
+        public void onOrderChanged(List<Bubble> bubbles) {
+
+        }
+
+        @Override
+        public void onSelectionChanged(Bubble selectedBubble) {
+
+        }
+
+        @Override
+        public void onExpandedChanged(boolean expanded) {
+
+        }
+
+        @Override
+        public void showFlyoutText(Bubble bubble, String text) {
+
+        }
+
+        @Override
+        public void apply() {
+
         }
     };
 

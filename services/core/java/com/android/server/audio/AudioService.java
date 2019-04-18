@@ -858,8 +858,7 @@ public class AudioService extends IAudioService.Stub
 
     public void onSystemReady() {
         mSystemReady = true;
-        sendMsg(mAudioHandler, MSG_LOAD_SOUND_EFFECTS, SENDMSG_QUEUE,
-                0, 0, null, 0);
+        scheduleLoadSoundEffects();
 
         mDeviceBroker.onSystemReady();
 
@@ -1972,7 +1971,7 @@ public class AudioService extends IAudioService.Stub
             return;
         }
         for (final int groupedStream : avg.getLegacyStreamTypes()) {
-            setStreamVolume(stream, index, flags, callingPackage, callingPackage,
+            setStreamVolume(groupedStream, index, flags, callingPackage, callingPackage,
                             Binder.getCallingUid());
         }
     }
@@ -3248,6 +3247,14 @@ public class AudioService extends IAudioService.Stub
     }
 
     /**
+     * Schedule loading samples into the soundpool.
+     * This method can be overridden to schedule loading at a later time.
+     */
+    protected void scheduleLoadSoundEffects() {
+        sendMsg(mAudioHandler, MSG_LOAD_SOUND_EFFECTS, SENDMSG_QUEUE, 0, 0, null, 0);
+    }
+
+    /**
      *  Unloads samples from the sound pool.
      *  This method can be called to free some memory when
      *  sound effects are disabled.
@@ -3386,8 +3393,14 @@ public class AudioService extends IAudioService.Stub
 
         final boolean stateChanged = mDeviceBroker.setSpeakerphoneOn(on, eventSource);
         if (stateChanged) {
-            mContext.sendBroadcast(new Intent(AudioManager.ACTION_SPEAKERPHONE_STATE_CHANGED)
-                    .setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY));
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                mContext.sendBroadcastAsUser(
+                        new Intent(AudioManager.ACTION_SPEAKERPHONE_STATE_CHANGED)
+                                .setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY), UserHandle.ALL);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
         }
     }
 

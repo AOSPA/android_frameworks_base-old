@@ -456,10 +456,13 @@ public final class SurfaceControl implements Parcelable {
     public static class ScreenshotGraphicBuffer {
         private final GraphicBuffer mGraphicBuffer;
         private final ColorSpace mColorSpace;
+        private final boolean mContainsSecureLayers;
 
-        public ScreenshotGraphicBuffer(GraphicBuffer graphicBuffer, ColorSpace colorSpace) {
+        public ScreenshotGraphicBuffer(GraphicBuffer graphicBuffer, ColorSpace colorSpace,
+                boolean containsSecureLayers) {
             mGraphicBuffer = graphicBuffer;
             mColorSpace = colorSpace;
+            mContainsSecureLayers = containsSecureLayers;
         }
 
        /**
@@ -470,13 +473,16 @@ public final class SurfaceControl implements Parcelable {
         * @param usage Hint indicating how the buffer will be used
         * @param unwrappedNativeObject The native object of GraphicBuffer
         * @param namedColorSpace Integer value of a named color space {@link ColorSpace.Named}
+        * @param containsSecureLayer Indicates whether this graphic buffer contains captured contents
+        *        of secure layers, in which case the screenshot should not be persisted.
         */
         private static ScreenshotGraphicBuffer createFromNative(int width, int height, int format,
-                int usage, long unwrappedNativeObject, int namedColorSpace) {
+                int usage, long unwrappedNativeObject, int namedColorSpace,
+                boolean containsSecureLayers) {
             GraphicBuffer graphicBuffer = GraphicBuffer.createFromExisting(width, height, format,
                     usage, unwrappedNativeObject);
             ColorSpace colorSpace = ColorSpace.get(ColorSpace.Named.values()[namedColorSpace]);
-            return new ScreenshotGraphicBuffer(graphicBuffer, colorSpace);
+            return new ScreenshotGraphicBuffer(graphicBuffer, colorSpace, containsSecureLayers);
         }
 
         public ColorSpace getColorSpace() {
@@ -485,6 +491,10 @@ public final class SurfaceControl implements Parcelable {
 
         public GraphicBuffer getGraphicBuffer() {
             return mGraphicBuffer;
+        }
+
+        public boolean containsSecureLayers() {
+            return mContainsSecureLayers;
         }
     }
 

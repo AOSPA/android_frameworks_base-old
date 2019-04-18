@@ -1031,6 +1031,9 @@
     <!-- Boolean indicating whether display white balance is supported. -->
     <bool name="config_displayWhiteBalanceAvailable">false</bool>
 
+    <!-- Boolean indicating whether display white balance should be enabled by default. -->
+    <bool name="config_displayWhiteBalanceEnabledDefault">false</bool>
+
     <!-- Minimum color temperature, in Kelvin, supported by display white balance. -->
     <integer name="config_displayWhiteBalanceColorTemperatureMin">4000</integer>
 
@@ -3257,6 +3260,10 @@
     <!-- Controls the size of the back gesture inset. -->
     <dimen name="config_backGestureInset">0dp</dimen>
 
+    <!-- Controls whether the navbar needs a scrim with
+         {@link Window#setEnsureNavigationBarContrastWhenTransparent}. -->
+    <bool name="config_navBarNeedsScrim">true</bool>
+
     <!-- Default insets [LEFT/RIGHTxTOP/BOTTOM] from the screen edge for picture-in-picture windows.
          These values are in DPs and will be converted to pixel sizes internally. -->
     <string translatable="false" name="config_defaultPictureInPictureScreenEdgeInsets">16x16</string>
@@ -3350,6 +3357,9 @@
 
     <!-- True if the device supports system decorations on secondary displays. -->
     <bool name="config_supportsSystemDecorsOnSecondaryDisplays">true</bool>
+
+    <!-- True if the device supports insecure lock screen. -->
+    <bool name="config_supportsInsecureLockScreen">true</bool>
 
     <!-- True if the device requires AppWidgetService even if it does not have
          the PackageManager.FEATURE_APP_WIDGETS feature -->
@@ -3563,6 +3573,12 @@
          Example: "com.android.captions/.SystemCaptionsService"
     -->
     <string name="config_defaultSystemCaptionsService" translatable="false"></string>
+
+    <!-- The component name for the system-wide captions manager service.
+         This service must be trusted, as the system binds to it and keeps it running.
+         Example: "com.android.captions/.SystemCaptionsManagerService"
+    -->
+    <string name="config_defaultSystemCaptionsManagerService" translatable="false"></string>
 
     <!-- The package name for the incident report approver app.
         This app is usually PermissionController or an app that replaces it.  When

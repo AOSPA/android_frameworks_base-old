@@ -71,8 +71,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
+import android.app.AutomaticZenRule;
 import android.app.IActivityManager;
 import android.app.INotificationManager;
 import android.app.ITransientNotification;
@@ -117,6 +119,7 @@ import android.service.notification.NotificationListenerService;
 import android.service.notification.NotificationStats;
 import android.service.notification.NotifyingApp;
 import android.service.notification.StatusBarNotification;
+import android.service.notification.ZenPolicy;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableContext;
@@ -345,6 +348,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mPackageManagerClient.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
         when(mUgmInternal.newUriPermissionOwner(anyString())).thenReturn(mPermOwner);
         when(mPackageManager.getPackagesForUid(mUid)).thenReturn(new String[]{PKG});
+        when(mPackageManagerClient.getPackagesForUid(anyInt())).thenReturn(new String[]{PKG});
 
         // write to a test file; the system file isn't readable from tests
         mFile = new File(mContext.getCacheDir(), "test.xml");
@@ -2887,7 +2891,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testApplyEnqueuedAdjustmentFromAssistant_importance_onTime() throws Exception {
+    public void testApplyEnqueuedAdjustmentFromAssistant_importance() throws Exception {
         final NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
         mService.addEnqueuedNotification(r);
         NotificationManagerService.WorkerHandler handler = mock(
@@ -2902,25 +2906,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mBinderService.applyEnqueuedAdjustmentFromAssistant(null, adjustment);
 
         assertEquals(IMPORTANCE_LOW, r.getImportance());
-    }
-
-    @Test
-    public void testApplyEnqueuedAdjustmentFromAssistant_importance_tooLate() throws Exception {
-        final NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
-        mService.addNotification(r);
-        NotificationManagerService.WorkerHandler handler = mock(
-                NotificationManagerService.WorkerHandler.class);
-        mService.setHandler(handler);
-        when(mAssistants.isSameUser(eq(null), anyInt())).thenReturn(true);
-
-        Bundle signals = new Bundle();
-        signals.putInt(KEY_IMPORTANCE, IMPORTANCE_LOW);
-        Adjustment adjustment = new Adjustment(
-                r.sbn.getPackageName(), r.getKey(), signals, "", r.getUser().getIdentifier());
-        mBinderService.applyEnqueuedAdjustmentFromAssistant(null, adjustment);
-
-        assertEquals(IMPORTANCE_DEFAULT, r.getImportance());
-        assertFalse(r.hasAdjustment(KEY_IMPORTANCE));
     }
 
     @Test
@@ -4305,6 +4290,36 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testFlagBubble() throws RemoteException {
+        // Bubbles are allowed!
+        mService.setPreferencesHelper(mPreferencesHelper);
+        when(mPreferencesHelper.areBubblesAllowed(anyString(), anyInt())).thenReturn(true);
+        when(mPreferencesHelper.getNotificationChannel(
+                anyString(), anyInt(), anyString(), anyBoolean())).thenReturn(
+                mTestNotificationChannel);
+        when(mPreferencesHelper.getImportance(anyString(), anyInt())).thenReturn(
+                mTestNotificationChannel.getImportance());
+
+        // Notif with bubble metadata but not our other misc requirements
+        NotificationRecord nr = generateNotificationRecord(mTestNotificationChannel,
+                null /* tvExtender */, true /* isBubble */);
+
+        // Say we're foreground
+        when(mActivityManager.getPackageImportance(nr.sbn.getPackageName())).thenReturn(
+                IMPORTANCE_FOREGROUND);
+
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag",
+                nr.sbn.getId(), nr.sbn.getNotification(), nr.sbn.getUserId());
+        waitForIdle();
+
+        StatusBarNotification[] notifs = mBinderService.getActiveNotifications(PKG);
+        assertEquals(1, notifs.length);
+        assertTrue((notifs[0].getNotification().flags & FLAG_BUBBLE) != 0);
+        assertTrue(mService.getNotificationRecord(
+                nr.sbn.getKey()).getNotification().isBubbleNotification());
+    }
+
+    @Test
     public void testFlagBubbleNotifs_flag_appForeground() throws RemoteException {
         // Bubbles are allowed!
         mService.setPreferencesHelper(mPreferencesHelper);
@@ -4934,22 +4949,26 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals(1, mService.getNotificationRecordCount());
     }
 
-    public void testGetAllowedAssistantCapabilities() throws Exception {
-        List<String> capabilities = mBinderService.getAllowedAssistantCapabilities(null);
+    @Test
+    public void testGetAllowedAssistantAdjustments() throws Exception {
+        List<String> capabilities = mBinderService.getAllowedAssistantAdjustments(null);
         assertNotNull(capabilities);
 
         for (int i = capabilities.size() - 1; i >= 0; i--) {
             String capability = capabilities.get(i);
-            mBinderService.disallowAssistantCapability(capability);
-            assertEquals(i + 1, mBinderService.getAllowedAssistantCapabilities(null).size());
-            List<String> currentCapabilities = mBinderService.getAllowedAssistantCapabilities(null);
+            mBinderService.disallowAssistantAdjustment(capability);
+            assertEquals(i + 1, mBinderService.getAllowedAssistantAdjustments(null).size());
+            List<String> currentCapabilities = mBinderService.getAllowedAssistantAdjustments(null);
             assertNotNull(currentCapabilities);
             assertFalse(currentCapabilities.contains(capability));
         }
     }
 
+    @Test
     public void testAdjustRestrictedKey() throws Exception {
         NotificationRecord r = generateNotificationRecord(mTestNotificationChannel);
+        mService.addNotification(r);
+        when(mAssistants.isSameUser(any(), anyInt())).thenReturn(true);
 
         when(mAssistants.isAdjustmentAllowed(KEY_IMPORTANCE)).thenReturn(true);
         when(mAssistants.isAdjustmentAllowed(KEY_USER_SENTIMENT)).thenReturn(false);
@@ -4967,6 +4986,34 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals(USER_SENTIMENT_NEUTRAL, r.getUserSentiment());
     }
 
+    @Test
+    public void testAutomaticZenRuleValidation_policyFilterAgreement() throws Exception {
+        when(mConditionProviders.isPackageOrComponentAllowed(anyString(), anyInt()))
+                .thenReturn(true);
+        mService.setZenHelper(mock(ZenModeHelper.class));
+        ComponentName owner = new ComponentName(mContext, this.getClass());
+        ZenPolicy zenPolicy = new ZenPolicy.Builder().allowAlarms(true).build();
+        boolean isEnabled = true;
+        AutomaticZenRule rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
+                zenPolicy, NotificationManager.INTERRUPTION_FILTER_NONE, isEnabled);
+
+        try {
+            mBinderService.addAutomaticZenRule(rule);
+            fail("Zen policy only applies to priority only mode");
+        } catch (IllegalArgumentException e) {
+            // yay
+        }
+
+        rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
+                zenPolicy, NotificationManager.INTERRUPTION_FILTER_PRIORITY, isEnabled);
+        mBinderService.addAutomaticZenRule(rule);
+
+        rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
+                null, NotificationManager.INTERRUPTION_FILTER_NONE, isEnabled);
+        mBinderService.addAutomaticZenRule(rule);
+    }
+
+    @Test
     public void testAreNotificationsEnabledForPackage_crossUser() throws Exception {
         try {
             mBinderService.areNotificationsEnabledForPackage(mContext.getPackageName(),
@@ -4983,6 +5030,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mUid + UserHandle.PER_USER_RANGE);
     }
 
+    @Test
     public void testAreBubblesAllowedForPackage_crossUser() throws Exception {
         try {
             mBinderService.areBubblesAllowedForPackage(mContext.getPackageName(),
