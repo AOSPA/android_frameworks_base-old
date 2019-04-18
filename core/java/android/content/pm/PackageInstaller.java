@@ -841,13 +841,12 @@ public class PackageInstaller {
      * installation (for example, the same split name), the APK in this session
      * will replace the existing APK.
      * <p>
-     * In such a case that multiple packages need to be commited simultaneously,
+     * In such a case that multiple packages need to be committed simultaneously,
      * multiple sessions can be referenced by a single multi-package session.
      * This session is created with no package name and calling
-     * {@link SessionParams#setMultiPackage()} with {@code true}. The
-     * individual session IDs can be added with {@link #addChildSessionId(int)}
-     * and commit of the multi-package session will result in all child sessions
-     * being committed atomically.
+     * {@link SessionParams#setMultiPackage()}. The individual session IDs can be
+     * added with {@link #addChildSessionId(int)} and commit of the multi-package
+     * session will result in all child sessions being committed atomically.
      */
     public static class Session implements Closeable {
         /** {@hide} */
@@ -1222,7 +1221,7 @@ public class PackageInstaller {
             try {
                 mSession.addChildSessionId(sessionId);
             } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
+                e.rethrowFromSystemServer();
             }
         }
 
@@ -1236,7 +1235,7 @@ public class PackageInstaller {
             try {
                 mSession.removeChildSessionId(sessionId);
             } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
+                e.rethrowFromSystemServer();
             }
         }
     }
@@ -1506,13 +1505,14 @@ public class PackageInstaller {
          * allows the app to hold that permission and whitelisting a soft restricted
          * permission allows the app to hold the permission in its full, unrestricted form.
          *
-         * <p>The whitelisted permissions would be applied as the {@link
-         * PackageManager#FLAG_PERMISSION_WHITELIST_INSTALLER installer whitelist}.
+         * <p> Permissions can also be immutably restricted which means that the whitelist
+         * state of the permission can be determined only at install time and cannot be
+         * changed on updated or at a later point via the package manager APIs.
          *
-         * @param permissions The restricted permissions to whitelist. Pass
-         * {@link #RESTRICTED_PERMISSIONS_ALL} to whitelist all permissions and
-         * <code>null</code> to clear. If you want to whitelist some permissions
-         * (not all) the list must contain at least one permission.
+         * <p>The whitelisted non-immutably restricted permissions would be added to
+         * the {@link PackageManager#FLAG_PERMISSION_WHITELIST_INSTALLER installer whitelist}
+         * while the immutably restricted permissions would be added to the {@link
+         * PackageManager#FLAG_PERMISSION_WHITELIST_SYSTEM system whitelist}
          *
          * @see PackageManager#addWhitelistedRestrictedPermission(String, String, int)
          * @see PackageManager#removeWhitelistedRestrictedPermission(String, String, int)

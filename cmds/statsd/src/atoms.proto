@@ -208,7 +208,7 @@ message Atom {
             119 [(log_from_module) = "docsui"];
         DocsUISearchTypeReported docs_ui_search_type_reported =
             120 [(log_from_module) = "docsui"];
-        DataStallEvent data_stall_event = 121;
+        DataStallEvent data_stall_event = 121 [(log_from_module) = "network_stack"];
         RescuePartyResetReported rescue_party_reset_reported = 122;
         SignedConfigReported signed_config_reported = 123;
         GnssNiEventReported gnss_ni_event_reported = 124;
@@ -257,7 +257,8 @@ message Atom {
         BluetoothSmpPairingEventReported bluetooth_smp_pairing_event_reported = 167;
         ScreenTimeoutExtensionReported screen_timeout_extension_reported = 168;
         ProcessStartTime process_start_time = 169;
-        PermissionGrantRequestResultReported permission_grant_request_result_reported = 170;
+        PermissionGrantRequestResultReported permission_grant_request_result_reported =
+            170 [(log_from_module) = "permissioncontroller"];
         BluetoothSocketConnectionStateChanged bluetooth_socket_connection_state_changed = 171;
         DeviceIdentifierAccessDenied device_identifier_access_denied = 172;
         BubbleDeveloperErrorReported bubble_developer_error_reported = 173;
@@ -267,9 +268,10 @@ message Atom {
         TouchGestureClassified touch_gesture_classified = 177;
         HiddenApiUsed hidden_api_used = 178 [(allow_from_any_uid) = true];
         StyleUIChanged style_ui_changed = 179;
-        PrivacyIndicatorsInteracted privacy_indicators_interacted = 180;
+        PrivacyIndicatorsInteracted privacy_indicators_interacted =
+	    180 [(log_from_module) = "permissioncontroller"];
         AppInstallOnExternalStorageReported app_install_on_external_storage_reported = 181;
-        NetworkStackReported network_stack_reported = 182;
+        NetworkStackReported network_stack_reported = 182 [(log_from_module) = "network_stack"];
         AppMovedStorageReported app_moved_storage_reported = 183;
         BiometricEnrolled biometric_enrolled = 184;
         SystemServerWatchdogOccurred system_server_watchdog_occurred = 185;
@@ -278,7 +280,7 @@ message Atom {
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10058
+    // Next: 10059
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -338,6 +340,8 @@ message Atom {
         GpuStatsAppInfo gpu_stats_app_info = 10055;
         SystemIonHeapSize system_ion_heap_size = 10056;
         AppsOnExternalStorageInfo apps_on_external_storage_info = 10057;
+        FaceSettings face_settings = 10058;
+        CoolingDevice cooling_device = 10059;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -408,17 +412,25 @@ message KeyValuePairsAtom {
  *   frameworks/base/services/core/java/com/android/server/stats/StatsCompanionService.java
  */
 message ThermalThrottlingStateChanged {
+    // The type of temperature being reported (CPU, GPU, SKIN, etc)
     optional android.os.TemperatureTypeEnum sensor_type = 1;
 
+    // Throttling state, this field is DEPRECATED
     enum State {
         UNKNOWN = 0;
-        START = 1;
-        STOP = 2;
+        START = 1; // START indicated that throttling was triggered.
+        STOP = 2; // STOP indicates that throttling was cleared.
     }
-
     optional State state = 2;
 
+    // Temperature in deci degrees celsius
     optional float temperature = 3;
+
+    // Severity of throttling
+    optional android.os.ThrottlingSeverityEnum severity = 4;
+
+    // Thermistor name
+    optional string sensor_name = 5;
 }
 
 /**
@@ -3122,6 +3134,8 @@ message BiometricAcquired {
     optional int32 acquire_info = 6;
     // Vendor-specific acquire info. Valid only if acquire_info == ACQUIRED_VENDOR.
     optional int32 acquire_info_vendor = 7;
+    // Dictates if this message should trigger additional debugging.
+    optional bool debug = 8;
 }
 
 /**
@@ -3158,6 +3172,8 @@ message BiometricAuthenticated {
     // AUTHENTICATED. for setRequireConfirmation(true), this is from PENDING_CONFIRMATION to
     // CONFIRMED.
     optional int64 latency_millis = 7;
+    // Dictates if this message should trigger additional debugging.
+    optional bool debug = 8;
 }
 
 /**
@@ -3183,6 +3199,8 @@ message BiometricErrorOccurred {
     // Vendor-specific error info. Valid only if acquire_info == ACQUIRED_VENDOR. These are defined
     // by the vendor and not specified by the HIDL interface.
     optional int32 error_info_vendor = 7;
+    // Dictates if this message should trigger additional debugging.
+    optional bool debug = 8;
 }
 
 /**
@@ -3195,6 +3213,8 @@ message BiometricSystemHealthIssueDetected {
     optional android.hardware.biometrics.ModalityEnum modality = 1;
     // Type of issue detected.
     optional android.hardware.biometrics.IssueEnum issue = 2;
+    // Dictates if this message should trigger additional debugging.
+    optional bool debug = 3;
 }
 
 /**
@@ -3947,8 +3967,7 @@ message BatteryLevel {
  * Pulls the temperature of various parts of the device.
  * The units are tenths of a degree Celsius. Eg: 30.3C is reported as 303.
  *
- * Pulled from:
- *   frameworks/base/cmds/statsd/src/external/ResourceThermalManagerPuller.cpp
+ * Pulled from StatsCompanionService.java
  */
 message Temperature {
     // The type of temperature being reported. Eg. CPU, GPU, SKIN, BATTERY, BCL_.
@@ -3960,6 +3979,9 @@ message Temperature {
     // Temperature in tenths of a degree C.
     // For BCL, it is decimillivolt, decimilliamps, and percentage * 10.
     optional int32 temperature_deci_celsius = 3;
+
+    // Relative severity of the throttling, see enum definition.
+    optional android.os.ThrottlingSeverityEnum severity = 4;
 }
 
 /**
@@ -5445,9 +5467,11 @@ message AttentionManagerServiceResultReported {
         UNKNOWN = 20;
         ATTENTION_SUCCESS_ABSENT = 0;
         ATTENTION_SUCCESS_PRESENT = 1;
-        ATTENTION_FAILURE_PREEMPTED = 2;
-        ATTENTION_FAILURE_TIMED_OUT = 3;
-        ATTENTION_FAILURE_UNKNOWN = 4;
+        ATTENTION_FAILURE_UNKNOWN = 2;
+        ATTENTION_FAILURE_CANCELLED = 3;
+        ATTENTION_FAILURE_PREEMPTED = 4;
+        ATTENTION_FAILURE_TIMED_OUT = 5;
+        ATTENTION_FAILURE_CAMERA_PERMISSION_ABSENT = 6;
     }
     optional AttentionCheckResult attention_check_result = 1 [default = UNKNOWN];
 }
@@ -5575,6 +5599,7 @@ message BubbleUIChanged {
         SWIPE_LEFT = 13;
         SWIPE_RIGHT = 14;
         STACK_EXPANDED = 15;
+        FLYOUT = 16;
     }
     optional Action action = 6;
 
@@ -5584,6 +5609,12 @@ message BubbleUIChanged {
 
     // Whether the bubble is unread. If it is unread, a dot is shown in the bubble stack icon.
     optional bool is_unread = 9;
+
+    // Whether the bubble is an on-going one.
+    optional bool is_ongoing = 10;
+
+    // Whether the bubble is produced by an app running in foreground.
+    optional bool is_foreground = 11;
 }
 
 /**
@@ -5909,4 +5940,40 @@ message AppsOnExternalStorageInfo {
     optional android.stats.storage.ExternalStorageType external_storage_type = 1;
     // The name of the package that is installed on the external storage.
     optional string package_name = 2;
+}
+
+/**
+ * Logs the settings related to Face.
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/stats
+ */
+message FaceSettings {
+    // Whether or not face unlock is allowed on Keyguard.
+    optional bool unlock_keyguard_enabled = 1;
+    // Whether or not face unlock dismisses the Keyguard.
+    optional bool unlock_dismisses_keyguard = 2;
+    // Whether or not face unlock requires attention.
+    optional bool unlock_attention_required = 3;
+    // Whether or not face unlock is allowed for apps (through BiometricPrompt).
+    optional bool unlock_app_enabled = 4;
+    // Whether or not face unlock always requires user confirmation.
+    optional bool unlock_always_require_confirmation = 5;
+    // Whether or not a diverse set of poses are required during enrollment.
+    optional bool unlock_diversity_required = 6;
+}
+
+/**
+ * Logs cooling devices maintained by the kernel.
+ *
+ * Pulled from StatsCompanionService.java
+ */
+message CoolingDevice {
+    // The type of cooling device being reported. Eg. CPU, GPU...
+    optional android.os.CoolingTypeEnum device_location = 1;
+    // The name of the cooling device source. Eg. CPU0
+    optional string device_name = 2;
+    // Current throttle state of the cooling device. The value can any unsigned
+    // integer between 0 and max_state defined in its driver. 0 means device is
+    // not in throttling, higher value means deeper throttling.
+    optional int32 state = 3;
 }

@@ -64,6 +64,7 @@ import android.os.BatteryStatsInternal;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CoolingDevice;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.Handler;
@@ -92,6 +93,7 @@ import android.os.UserManager;
 import android.os.storage.DiskInfo;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
+import android.provider.Settings;
 import android.stats.storage.StorageEnums;
 import android.telephony.ModemActivityInfo;
 import android.telephony.TelephonyManager;
@@ -1797,6 +1799,28 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 e.writeInt(temp.getType());
                 e.writeString(temp.getName());
                 e.writeInt((int) (temp.getValue() * 10));
+                e.writeInt(temp.getStatus());
+                pulledData.add(e);
+            }
+        } catch (RemoteException e) {
+            // Should not happen.
+            Slog.e(TAG, "Disconnected from thermal service. Cannot pull temperatures.");
+        } finally {
+            Binder.restoreCallingIdentity(callingToken);
+        }
+    }
+
+    private void pullCoolingDevices(int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        long callingToken = Binder.clearCallingIdentity();
+        try {
+            List<CoolingDevice> devices = sThermalService.getCurrentCoolingDevices();
+            for (CoolingDevice device : devices) {
+                StatsLogEventWrapper e =
+                        new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+                e.writeInt(device.getType());
+                e.writeString(device.getName());
+                e.writeInt((int) (device.getValue()));
                 pulledData.add(e);
             }
         } catch (RemoteException e) {
@@ -2057,6 +2081,43 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         }
     }
 
+    private void pullFaceSettings(int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        long callingToken = Binder.clearCallingIdentity();
+        try {
+            List<UserInfo> users = mContext.getSystemService(UserManager.class).getUsers();
+            int numUsers = users.size();
+            for (int userNum = 0; userNum < numUsers; userNum++) {
+                int userId = users.get(userNum).getUserHandle().getIdentifier();
+
+                StatsLogEventWrapper e =
+                        new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+                e.writeBoolean(Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.FACE_UNLOCK_KEYGUARD_ENABLED, 1,
+                        userId) != 0);
+                e.writeBoolean(Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.FACE_UNLOCK_DISMISSES_KEYGUARD,
+                        0, userId) != 0);
+                e.writeBoolean(Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.FACE_UNLOCK_ATTENTION_REQUIRED, 1,
+                        userId) != 0);
+                e.writeBoolean(Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.FACE_UNLOCK_APP_ENABLED, 1,
+                        userId) != 0);
+                e.writeBoolean(Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.FACE_UNLOCK_ALWAYS_REQUIRE_CONFIRMATION, 0,
+                        userId) != 0);
+                e.writeBoolean(Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.FACE_UNLOCK_DIVERSITY_REQUIRED, 1,
+                        userId) != 0);
+
+                pulledData.add(e);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(callingToken);
+        }
+    }
+
     /**
      * Pulls various data.
      */
@@ -2233,6 +2294,10 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 pullTemperature(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
+            case StatsLog.COOLING_DEVICE: {
+                pullCoolingDevices(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
             case StatsLog.DEBUG_ELAPSED_CLOCK: {
                 pullDebugElapsedClock(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
@@ -2259,6 +2324,10 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             case StatsLog.APPS_ON_EXTERNAL_STORAGE_INFO: {
                 pullAppsOnExternalStorageInfo(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.FACE_SETTINGS: {
+                pullFaceSettings(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
             default:
@@ -2493,12 +2562,9 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private static final class ThermalEventListener extends IThermalEventListener.Stub {
         @Override
         public void notifyThrottling(Temperature temp) {
-            boolean isThrottling = temp.getStatus() >= Temperature.THROTTLING_SEVERE;
             StatsLog.write(StatsLog.THERMAL_THROTTLING, temp.getType(),
-                    isThrottling ?
-                            StatsLog.THERMAL_THROTTLING_STATE_CHANGED__STATE__START :
-                            StatsLog.THERMAL_THROTTLING_STATE_CHANGED__STATE__STOP,
-                    temp.getValue());
+                    StatsLog.THERMAL_THROTTLING_STATE_CHANGED__STATE__UNKNOWN,
+                    temp.getValue(), temp.getStatus(), temp.getName());
         }
     }
 

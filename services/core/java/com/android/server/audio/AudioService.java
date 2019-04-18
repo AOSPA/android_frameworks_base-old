@@ -90,9 +90,8 @@ import android.media.audiofx.AudioEffect;
 import android.media.audiopolicy.AudioMix;
 import android.media.audiopolicy.AudioPolicy;
 import android.media.audiopolicy.AudioPolicyConfig;
-import android.media.audiopolicy.AudioProductStrategies;
+import android.media.audiopolicy.AudioProductStrategy;
 import android.media.audiopolicy.AudioVolumeGroup;
-import android.media.audiopolicy.AudioVolumeGroups;
 import android.media.audiopolicy.IAudioPolicyCallback;
 import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
@@ -283,11 +282,6 @@ public class AudioService extends IAudioService.Stub
     }
 
     private SettingsObserver mSettingsObserver;
-
-    /** @see AudioProductStrategies */
-    private static AudioProductStrategies sAudioProductStrategies;
-    /** @see AudioVolumeGroups */
-    private static AudioVolumeGroups sAudioVolumeGroups;
 
     private int mMode = AudioSystem.MODE_NORMAL;
     // protects mRingerMode
@@ -639,19 +633,17 @@ public class AudioService extends IAudioService.Stub
         mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
         mHasVibrator = mVibrator == null ? false : mVibrator.hasVibrator();
 
-        sAudioProductStrategies = new AudioProductStrategies();
-        sAudioVolumeGroups = new AudioVolumeGroups();
-
         // Initialize volume
         // Priority 1 - Android Property
         // Priority 2 - Audio Policy Service
         // Priority 3 - Default Value
-        if (sAudioProductStrategies.size() > 0) {
+        if (AudioProductStrategy.getAudioProductStrategies().size() > 0) {
             int numStreamTypes = AudioSystem.getNumStreamTypes();
 
             for (int streamType = numStreamTypes - 1; streamType >= 0; streamType--) {
                 AudioAttributes attr =
-                        sAudioProductStrategies.getAudioAttributesForLegacyStreamType(streamType);
+                        AudioProductStrategy.getAudioAttributesForStrategyWithLegacyStreamType(
+                                streamType);
                 int maxVolume = AudioSystem.getMaxVolumeIndexForAttributes(attr);
                 if (maxVolume != -1) {
                     MAX_STREAM_VOLUME[streamType] = maxVolume;
@@ -1026,19 +1018,21 @@ public class AudioService extends IAudioService.Stub
     }
 
     /**
-     * @return the {@link android.media.audiopolicy.AudioProductStrategies} discovered from the
+     * @return the {@link android.media.audiopolicy.AudioProductStrategy} discovered from the
      * platform configuration file.
      */
-    public @NonNull AudioProductStrategies getAudioProductStrategies() {
-        return sAudioProductStrategies;
+    @NonNull
+    public List<AudioProductStrategy> getAudioProductStrategies() {
+        return AudioProductStrategy.getAudioProductStrategies();
     }
 
     /**
-     * @return the {@link android.media.audiopolicy.AudioVolumeGroups} discovered from the
+     * @return the List of {@link android.media.audiopolicy.AudioVolumeGroup} discovered from the
      * platform configuration file.
      */
-    public @NonNull AudioVolumeGroups listAudioVolumeGroups() {
-        return sAudioVolumeGroups;
+    @NonNull
+    public List<AudioVolumeGroup> getAudioVolumeGroups() {
+        return AudioVolumeGroup.getAudioVolumeGroups();
     }
 
     private void checkAllAliasStreamVolumes() {
@@ -1528,9 +1522,15 @@ public class AudioService extends IAudioService.Stub
 
     private void adjustSuggestedStreamVolume(int direction, int suggestedStreamType, int flags,
             String callingPackage, String caller, int uid) {
-        sVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_ADJUST_SUGG_VOL, suggestedStreamType,
-                direction/*val1*/, flags/*val2*/, new StringBuilder(callingPackage)
-                        .append("/").append(caller).append(" uid:").append(uid).toString()));
+        if (DEBUG_VOL) Log.d(TAG, "adjustSuggestedStreamVolume() stream=" + suggestedStreamType
+                + ", flags=" + flags + ", caller=" + caller
+                + ", volControlStream=" + mVolumeControlStream
+                + ", userSelect=" + mUserSelectedVolumeControlStream);
+        if (direction != AudioManager.ADJUST_SAME) {
+            sVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_ADJUST_SUGG_VOL, suggestedStreamType,
+                    direction/*val1*/, flags/*val2*/, new StringBuilder(callingPackage)
+                    .append("/").append(caller).append(" uid:").append(uid).toString()));
+        }
         final int streamType;
         synchronized (mForceControlStreamLock) {
             if (DEBUG_VOL) Log.d(TAG, "adjustSuggestedStreamVolume() stream=" + suggestedStreamType
@@ -1958,15 +1958,15 @@ public class AudioService extends IAudioService.Stub
         enforceModifyAudioRoutingPermission();
         Preconditions.checkNotNull(attr, "attr must not be null");
         // @todo not hold the caller context, post message
-        int stream = sAudioProductStrategies.getLegacyStreamTypeForAudioAttributes(attr);
+        int stream = AudioProductStrategy.getLegacyStreamTypeForStrategyWithAudioAttributes(attr);
         final int device = getDeviceForStream(stream);
 
         int oldIndex = AudioSystem.getVolumeIndexForAttributes(attr, device);
 
         AudioSystem.setVolumeIndexForAttributes(attr, index, device);
 
-        final int volumeGroup = sAudioProductStrategies.getVolumeGroupIdForAttributes(attr);
-        final AudioVolumeGroup avg = sAudioVolumeGroups.getById(volumeGroup);
+        final int volumeGroup = getVolumeGroupIdForAttributes(attr);
+        final AudioVolumeGroup avg = getAudioVolumeGroupById(volumeGroup);
         if (avg == null) {
             return;
         }
@@ -1976,11 +1976,23 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    @Nullable
+    private AudioVolumeGroup getAudioVolumeGroupById(int volumeGroupId) {
+        for (final AudioVolumeGroup avg : AudioVolumeGroup.getAudioVolumeGroups()) {
+            if (avg.getId() == volumeGroupId) {
+                return avg;
+            }
+        }
+
+        Log.e(TAG, ": invalid volume group id: " + volumeGroupId + " requested");
+        return null;
+    }
+
     /** @see AudioManager#getVolumeIndexForAttributes(attr) */
     public int getVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
         enforceModifyAudioRoutingPermission();
         Preconditions.checkNotNull(attr, "attr must not be null");
-        int stream = sAudioProductStrategies.getLegacyStreamTypeForAudioAttributes(attr);
+        int stream = AudioProductStrategy.getLegacyStreamTypeForStrategyWithAudioAttributes(attr);
         final int device = getDeviceForStream(stream);
 
         return AudioSystem.getVolumeIndexForAttributes(attr, device);
@@ -2162,6 +2174,32 @@ public class AudioService extends IAudioService.Stub
         }
         sendVolumeUpdate(streamType, oldIndex, index, flags);
     }
+
+
+
+    private int getVolumeGroupIdForAttributes(@NonNull AudioAttributes attributes) {
+        Preconditions.checkNotNull(attributes, "attributes must not be null");
+        int volumeGroupId = getVolumeGroupIdForAttributesInt(attributes);
+        if (volumeGroupId != AudioVolumeGroup.DEFAULT_VOLUME_GROUP) {
+            return volumeGroupId;
+        }
+        // The default volume group is the one hosted by default product strategy, i.e.
+        // supporting Default Attributes
+        return getVolumeGroupIdForAttributesInt(AudioProductStrategy.sDefaultAttributes);
+    }
+
+    private int getVolumeGroupIdForAttributesInt(@NonNull AudioAttributes attributes) {
+        Preconditions.checkNotNull(attributes, "attributes must not be null");
+        for (final AudioProductStrategy productStrategy :
+                AudioProductStrategy.getAudioProductStrategies()) {
+            int volumeGroupId = productStrategy.getVolumeGroupIdForAudioAttributes(attributes);
+            if (volumeGroupId != AudioVolumeGroup.DEFAULT_VOLUME_GROUP) {
+                return volumeGroupId;
+            }
+        }
+        return AudioVolumeGroup.DEFAULT_VOLUME_GROUP;
+    }
+
 
     // No ringer or zen muted stream volumes can be changed unless it'll exit dnd
     private boolean volumeAdjustmentAllowedByDnd(int streamTypeAlias, int flags) {
@@ -3480,7 +3518,9 @@ public class AudioService extends IAudioService.Stub
                 !mSystemReady) {
             return;
         }
-        mDeviceBroker.startBluetoothScoForClient_Sync(cb, scoAudioMode, eventSource);
+        synchronized (mDeviceBroker.mSetModeLock) {
+            mDeviceBroker.startBluetoothScoForClient_Sync(cb, scoAudioMode, eventSource);
+        }
     }
 
     /** @see AudioManager#stopBluetoothSco() */
@@ -3493,7 +3533,9 @@ public class AudioService extends IAudioService.Stub
         final String eventSource =  new StringBuilder("stopBluetoothSco()")
                 .append(") from u/pid:").append(Binder.getCallingUid()).append("/")
                 .append(Binder.getCallingPid()).toString();
-        mDeviceBroker.stopBluetoothScoForClient_Sync(cb, eventSource);
+        synchronized (mDeviceBroker.mSetModeLock) {
+            mDeviceBroker.stopBluetoothScoForClient_Sync(cb, eventSource);
+        }
     }
 
 
@@ -5575,6 +5617,10 @@ public class AudioService extends IAudioService.Stub
         return mMediaFocusControl.getFocusRampTimeMs(focusGain, attr);
     }
 
+    /*package*/ boolean hasAudioFocusUsers() {
+        return mMediaFocusControl.hasAudioFocusUsers();
+    }
+
     //==========================================================================================
     private boolean readCameraSoundForced() {
         return SystemProperties.getBoolean("audio.camerasound.force", false) ||
@@ -6317,6 +6363,11 @@ public class AudioService extends IAudioService.Stub
         @Override
         public void adjustStreamVolumeForUid(int streamType, int direction, int flags,
                 String callingPackage, int uid) {
+            if (direction != AudioManager.ADJUST_SAME) {
+                sVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_ADJUST_VOL_UID, streamType,
+                        direction/*val1*/, flags/*val2*/, new StringBuilder(callingPackage)
+                        .append(" uid:").append(uid).toString()));
+            }
             adjustStreamVolume(streamType, direction, flags, callingPackage,
                     callingPackage, uid);
         }
@@ -6655,6 +6706,13 @@ public class AudioService extends IAudioService.Stub
                     duckingBehavior == AudioPolicy.FOCUS_POLICY_DUCKING_IN_POLICY);
         }
         return AudioManager.SUCCESS;
+    }
+
+    /** see AudioManager.hasRegisteredDynamicPolicy */
+    public boolean hasRegisteredDynamicPolicy() {
+        synchronized (mAudioPolicies) {
+            return !mAudioPolicies.isEmpty();
+        }
     }
 
     private final Object mExtVolumeControllerLock = new Object();

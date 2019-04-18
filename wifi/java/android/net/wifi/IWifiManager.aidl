@@ -76,7 +76,7 @@ interface IWifiManager
 
     boolean removePasspointConfiguration(in String fqdn, String packageName);
 
-    List<PasspointConfiguration> getPasspointConfigurations();
+    List<PasspointConfiguration> getPasspointConfigurations(in String packageName);
 
     List<WifiConfiguration> getWifiConfigsForPasspointProfiles(in List<String> fqdnList);
 

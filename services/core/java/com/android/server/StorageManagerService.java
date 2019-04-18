@@ -294,7 +294,6 @@ class StorageManagerService extends IStorageManager.Stub
     private static final String TAG_VOLUMES = "volumes";
     private static final String ATTR_VERSION = "version";
     private static final String ATTR_PRIMARY_STORAGE_UUID = "primaryStorageUuid";
-    private static final String ATTR_ISOLATED_STORAGE = "isolatedStorage";
     private static final String TAG_VOLUME = "volume";
     private static final String ATTR_TYPE = "type";
     private static final String ATTR_FS_UUID = "fsUuid";
@@ -349,10 +348,6 @@ class StorageManagerService extends IStorageManager.Stub
     private ArrayMap<String, VolumeRecord> mRecords = new ArrayMap<>();
     @GuardedBy("mLock")
     private String mPrimaryStorageUuid;
-
-    /** Flag indicating isolated storage state of last boot */
-    @GuardedBy("mLock")
-    private boolean mLastIsolatedStorage = false;
 
     /** Map from disk ID to latches */
     @GuardedBy("mLock")
@@ -1075,6 +1070,15 @@ class StorageManagerService extends IStorageManager.Stub
         mVold.onUserStarted(userId, packages, appIds, sandboxIds);
     }
 
+     private boolean supportsBlockCheckpoint() throws RemoteException {
+        // Only the system process is permitted to start checkpoints
+        if (Binder.getCallingUid() != android.os.Process.SYSTEM_UID) {
+            throw new SecurityException("no permission to check block based checkpoint support");
+        }
+
+        return mVold.supportsBlockCheckpoint();
+    }
+
     @Override
     public void onAwakeStateChanged(boolean isAwake) {
         // Ignored
@@ -1680,67 +1684,8 @@ class StorageManagerService extends IStorageManager.Stub
                 ServiceManager.getService(Context.APP_OPS_SERVICE));
         try {
             mIAppOpsService.startWatchingMode(OP_REQUEST_INSTALL_PACKAGES, null, mAppOpsCallback);
+            mIAppOpsService.startWatchingMode(OP_LEGACY_STORAGE, null, mAppOpsCallback);
         } catch (RemoteException e) {
-        }
-
-        synchronized (mLock) {
-            final boolean thisIsolatedStorage = StorageManager.hasIsolatedStorage();
-            if (mLastIsolatedStorage != thisIsolatedStorage) {
-                if (thisIsolatedStorage) {
-                    // This boot enables isolated storage; apply legacy behavior
-                    applyLegacyStorage();
-                }
-
-                // Always remember the new state we just booted with
-                writeSettingsLocked();
-            }
-
-            // Execute special logic to recover certain devices
-            recoverFrom128872367();
-        }
-    }
-
-    /**
-     * If we're enabling isolated storage, we need to remember which existing
-     * apps have already been using shared storage, and grant them legacy access
-     * to keep them running smoothly.
-     *
-     * @see com.android.server.pm.permission.PermissionManagerService
-     *      #applyLegacyStoragePermissionModel
-     */
-    private void applyLegacyStorage() {
-        final AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
-        final UserManagerInternal um = LocalServices.getService(UserManagerInternal.class);
-        for (int userId : um.getUserIds()) {
-            final UserHandle user = UserHandle.of(userId);
-            final PackageManager pm;
-            try {
-                pm = mContext.createPackageContextAsUser(mContext.getPackageName(), 0,
-                        user).getPackageManager();
-            } catch (PackageManager.NameNotFoundException e) {
-                throw new RuntimeException(e);
-            }
-
-            final List<PackageInfo> pkgs = pm.getPackagesHoldingPermissions(
-                    ALL_STORAGE_PERMISSIONS,
-                    MATCH_UNINSTALLED_PACKAGES | MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE
-                            | GET_PERMISSIONS);
-            for (PackageInfo pkg : pkgs) {
-                final int uid = pkg.applicationInfo.uid;
-                final String packageName = pkg.applicationInfo.packageName;
-
-                final long lastAccess = getLastAccessTime(appOps, uid, packageName, new int[] {
-                        AppOpsManager.OP_READ_EXTERNAL_STORAGE,
-                        AppOpsManager.OP_WRITE_EXTERNAL_STORAGE,
-                });
-
-                Log.d(TAG, "Found " + uid + " " + packageName
-                        + " with granted storage access, last accessed " + lastAccess);
-                if (lastAccess > 0) {
-                    appOps.setUidMode(AppOpsManager.OP_LEGACY_STORAGE, uid,
-                            AppOpsManager.MODE_ALLOWED);
-                }
-            }
         }
     }
 
@@ -1755,69 +1700,6 @@ class StorageManagerService extends IStorageManager.Stub
             }
         }
         return maxTime;
-    }
-
-    /**
-     * In b/128872367 we lost all app-ops on devices in the wild. This logic
-     * attempts to detect and recover from this by granting
-     * {@link AppOpsManager#OP_LEGACY_STORAGE} to any apps installed before
-     * isolated storage was enabled.
-     */
-    private void recoverFrom128872367() {
-        // We're interested in packages that were installed or updated between
-        // 1/1/2014 and 12/17/2018
-        final long START_TIMESTAMP = 1388534400000L;
-        final long END_TIMESTAMP = 1545004800000L;
-
-        final PackageManager pm = mContext.getPackageManager();
-        final AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
-        final UserManagerInternal um = LocalServices.getService(UserManagerInternal.class);
-
-        boolean activeDuringWindow = false;
-        List<PackageInfo> pendingHolders = new ArrayList<>();
-
-        for (int userId : um.getUserIds()) {
-            final List<PackageInfo> pkgs = pm.getInstalledPackagesAsUser(MATCH_UNINSTALLED_PACKAGES
-                    | MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE, userId);
-            for (PackageInfo pkg : pkgs) {
-                // Determine if any apps on this device had been installed or
-                // updated during the period where the feature was disabled
-                activeDuringWindow |= (pkg.firstInstallTime > START_TIMESTAMP
-                        && pkg.firstInstallTime < END_TIMESTAMP);
-                activeDuringWindow |= (pkg.lastUpdateTime > START_TIMESTAMP
-                        && pkg.lastUpdateTime < END_TIMESTAMP);
-
-                // This app should hold legacy op if they were installed before
-                // the cutoff; we only check the end boundary here so that
-                // include system apps, which are always installed on 1/1/2009.
-                final boolean shouldHold = (pkg.firstInstallTime < END_TIMESTAMP);
-                final boolean doesHold = (appOps.checkOpNoThrow(OP_LEGACY_STORAGE,
-                        pkg.applicationInfo.uid,
-                        pkg.applicationInfo.packageName) == MODE_ALLOWED);
-
-                if (doesHold) {
-                    Slog.d(TAG, "Found " + pkg + " holding legacy op; skipping recovery");
-                    return;
-                } else if (shouldHold) {
-                    Slog.d(TAG, "Found " + pkg + " that should hold legacy op");
-                    pendingHolders.add(pkg);
-                }
-            }
-        }
-
-        if (!activeDuringWindow) {
-            Slog.d(TAG, "No packages were active during the time window; skipping grants");
-            return;
-        }
-
-        // If we made it this far, nobody actually holds the legacy op, which
-        // means we probably lost the database, and we should grant the op to
-        // all the apps we identified.
-        for (PackageInfo pkg : pendingHolders) {
-            appOps.setMode(AppOpsManager.OP_LEGACY_STORAGE,
-                    pkg.applicationInfo.uid,
-                    pkg.applicationInfo.packageName, AppOpsManager.MODE_ALLOWED);
-        }
     }
 
     private void systemReady() {
@@ -1850,7 +1732,6 @@ class StorageManagerService extends IStorageManager.Stub
     private void readSettingsLocked() {
         mRecords.clear();
         mPrimaryStorageUuid = getDefaultPrimaryStorageUuid();
-        mLastIsolatedStorage = false;
 
         FileInputStream fis = null;
         try {
@@ -1872,9 +1753,6 @@ class StorageManagerService extends IStorageManager.Stub
                             mPrimaryStorageUuid = readStringAttribute(in,
                                     ATTR_PRIMARY_STORAGE_UUID);
                         }
-                        mLastIsolatedStorage = readBooleanAttribute(in,
-                                ATTR_ISOLATED_STORAGE, false);
-
                     } else if (TAG_VOLUME.equals(tag)) {
                         final VolumeRecord rec = readVolumeRecord(in);
                         mRecords.put(rec.fsUuid, rec);
@@ -1904,7 +1782,6 @@ class StorageManagerService extends IStorageManager.Stub
             out.startTag(null, TAG_VOLUMES);
             writeIntAttribute(out, ATTR_VERSION, VERSION_FIX_PRIMARY);
             writeStringAttribute(out, ATTR_PRIMARY_STORAGE_UUID, mPrimaryStorageUuid);
-            writeBooleanAttribute(out, ATTR_ISOLATED_STORAGE, StorageManager.hasIsolatedStorage());
             final int size = mRecords.size();
             for (int i = 0; i < size; i++) {
                 final VolumeRecord rec = mRecords.valueAt(i);
@@ -2183,37 +2060,45 @@ class StorageManagerService extends IStorageManager.Stub
         enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
 
         try {
-            mVold.fstrim(flags, new IVoldTaskListener.Stub() {
-                @Override
-                public void onStatus(int status, PersistableBundle extras) {
-                    dispatchOnStatus(listener, status, extras);
+            // Block based checkpoint process runs fstrim. So, if checkpoint is in progress
+            // (first boot after OTA), We skip idle maintenance and make sure the last
+            // fstrim time is still updated. If file based checkpoints are used, we run
+            // idle maintenance (GC + fstrim) regardless of checkpoint status.
+            if (!needsCheckpoint() || !supportsBlockCheckpoint()) {
+                mVold.fstrim(flags, new IVoldTaskListener.Stub() {
+                    @Override
+                    public void onStatus(int status, PersistableBundle extras) {
+                        dispatchOnStatus(listener, status, extras);
 
-                    // Ignore trim failures
-                    if (status != 0) return;
+                        // Ignore trim failures
+                        if (status != 0) return;
 
-                    final String path = extras.getString("path");
-                    final long bytes = extras.getLong("bytes");
-                    final long time = extras.getLong("time");
+                        final String path = extras.getString("path");
+                        final long bytes = extras.getLong("bytes");
+                        final long time = extras.getLong("time");
 
-                    final DropBoxManager dropBox = mContext.getSystemService(DropBoxManager.class);
-                    dropBox.addText(TAG_STORAGE_TRIM, scrubPath(path) + " " + bytes + " " + time);
+                        final DropBoxManager dropBox = mContext.getSystemService(DropBoxManager.class);
+                        dropBox.addText(TAG_STORAGE_TRIM, scrubPath(path) + " " + bytes + " " + time);
 
-                    synchronized (mLock) {
-                        final VolumeRecord rec = findRecordForPath(path);
-                        if (rec != null) {
-                            rec.lastTrimMillis = System.currentTimeMillis();
-                            writeSettingsLocked();
+                        synchronized (mLock) {
+                            final VolumeRecord rec = findRecordForPath(path);
+                            if (rec != null) {
+                                rec.lastTrimMillis = System.currentTimeMillis();
+                                writeSettingsLocked();
+                            }
                         }
                     }
-                }
 
-                @Override
-                public void onFinished(int status, PersistableBundle extras) {
-                    dispatchOnFinished(listener, status, extras);
+                    @Override
+                    public void onFinished(int status, PersistableBundle extras) {
+                        dispatchOnFinished(listener, status, extras);
 
-                    // TODO: benchmark when desired
-                }
-            });
+                        // TODO: benchmark when desired
+                    }
+                });
+            } else {
+                Slog.i(TAG, "Skipping fstrim - block based checkpoint in progress");
+            }
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }
@@ -2223,18 +2108,26 @@ class StorageManagerService extends IStorageManager.Stub
         enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
 
         try {
-            mVold.runIdleMaint(new IVoldTaskListener.Stub() {
-                @Override
-                public void onStatus(int status, PersistableBundle extras) {
-                    // Not currently used
-                }
-                @Override
-                public void onFinished(int status, PersistableBundle extras) {
-                    if (callback != null) {
-                        BackgroundThread.getHandler().post(callback);
+            // Block based checkpoint process runs fstrim. So, if checkpoint is in progress
+            // (first boot after OTA), We skip idle maintenance and make sure the last
+            // fstrim time is still updated. If file based checkpoints are used, we run
+            // idle maintenance (GC + fstrim) regardless of checkpoint status.
+            if (!needsCheckpoint() || !supportsBlockCheckpoint()) {
+                mVold.runIdleMaint(new IVoldTaskListener.Stub() {
+                    @Override
+                    public void onStatus(int status, PersistableBundle extras) {
+                        // Not currently used
                     }
-                }
-            });
+                    @Override
+                    public void onFinished(int status, PersistableBundle extras) {
+                        if (callback != null) {
+                            BackgroundThread.getHandler().post(callback);
+                        }
+                    }
+                });
+            } else {
+                Slog.i(TAG, "Skipping idle maintenance - block based checkpoint in progress");
+            }
         } catch (Exception e) {
             Slog.wtf(TAG, e);
         }
@@ -3476,7 +3369,7 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     private String translateInternal(String path, int pid, int uid, boolean toSystem) {
-        if (!ENABLE_ISOLATED_STORAGE) return path;
+        if (true) return path;
 
         if (path.contains("/../")) {
             throw new SecurityException("Shady looking path " + path);
@@ -3865,7 +3758,7 @@ class StorageManagerService extends IStorageManager.Stub
                 return Zygote.MOUNT_EXTERNAL_NONE;
             }
             if (mPmInternal.isInstantApp(packageName, UserHandle.getUserId(uid))) {
-                return Zygote.MOUNT_EXTERNAL_NONE;
+                return Zygote.MOUNT_EXTERNAL_DEFAULT;
             }
 
             // Determine if caller is holding runtime permission
@@ -3899,14 +3792,10 @@ class StorageManagerService extends IStorageManager.Stub
             // they hold the runtime permission
             final boolean hasLegacy = mIAppOpsService.checkOperation(OP_LEGACY_STORAGE,
                     uid, packageName) == MODE_ALLOWED;
-            // STOPSHIP: only use app-op once permission model has fully landed
-            final boolean requestedLegacy = !mIPackageManager
-                    .getApplicationInfo(packageName, 0, UserHandle.getUserId(uid))
-                    .isExternalStorageSandboxAllowed();
-            if ((hasLegacy || requestedLegacy) && hasStorage) {
+            if (hasLegacy && hasStorage) {
                 return Zygote.MOUNT_EXTERNAL_LEGACY;
             } else {
-                return Zygote.MOUNT_EXTERNAL_WRITE;
+                return Zygote.MOUNT_EXTERNAL_DEFAULT;
             }
         } catch (RemoteException e) {
             // Should not happen
