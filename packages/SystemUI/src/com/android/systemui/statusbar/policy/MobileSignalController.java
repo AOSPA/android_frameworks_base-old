@@ -26,6 +26,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings.Global;
 import android.telephony.ims.ImsMmTelManager;
+import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.PhoneStateListener;
@@ -141,12 +142,12 @@ public class MobileSignalController extends SignalController<
         NUM_LEVELS_ON_5G = FiveGServiceClient.getNumLevels(mContext);
 
         int phoneId = mSubscriptionInfo.getSimSlotIndex();
-        mImsManager = ImsManager.getInstance(mContext, phoneId);
         mImsManagerConnector = new ImsManager.Connector(mContext, phoneId,
                 new ImsManager.Connector.Listener() {
                     @Override
                     public void connectionReady(ImsManager manager) throws ImsException {
                         Log.d(mTag, "ImsManager: connection ready.");
+                        mImsManager = manager;
                         setListeners();
                     }
 
@@ -362,14 +363,14 @@ public class MobileSignalController extends SignalController<
     }
 
     private boolean isVolteSwitchOn() {
-        return mImsManager.isEnhanced4gLteModeSettingEnabledByUser();
+        return mImsManager != null && mImsManager.isEnhanced4gLteModeSettingEnabledByUser();
     }
 
     private int getVolteResId() {
         int resId = 0;
         int voiceNetTye = getVoiceNetworkType();
-
-        if ( mCurrentState.isVolteRegistered ) {
+        if ( (mCurrentState.voiceCapable || mCurrentState.videoCapable)
+                &&  mCurrentState.imsRegistered ) {
             resId = R.drawable.ic_volte;
         }else if ( mDataNetType == TelephonyManager.NETWORK_TYPE_LTE
                     || mDataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA
@@ -381,9 +382,17 @@ public class MobileSignalController extends SignalController<
     }
 
     private void setListeners() {
+        if (mImsManager == null) {
+            Log.e(mTag, "setListeners mImsManager is null");
+            return;
+        }
+
         try {
             mImsManager.addCapabilitiesCallback(mCapabilityCallback);
+            mImsManager.addRegistrationCallback(mImsRegistrationCallback);
             Log.d(mTag, "addCapabilitiesCallback " + mCapabilityCallback + " into " + mImsManager);
+            Log.d(mTag, "addRegistrationCallback " + mImsRegistrationCallback
+                    + " into " + mImsManager);
         } catch (ImsException e) {
             Log.d(mTag, "unable to addCapabilitiesCallback callback.");
         }
@@ -392,20 +401,30 @@ public class MobileSignalController extends SignalController<
 
     private void queryImsState() {
         TelephonyManager tm = mPhone.createForSubscriptionId(mSubscriptionInfo.getSubscriptionId());
-        boolean isVoiceCapable = tm.isVolteAvailable();
-        boolean isVideoCapable = tm.isVideoTelephonyAvailable();
-        Log.d(mTag, "tm=" + tm +" phone=" + mPhone
-                + " isVoiceCapable=" + isVoiceCapable
-                + " isVideoCapable=" +isVideoCapable);
-        if ( isVoiceCapable || isVideoCapable ) {
-            mCurrentState.isVolteRegistered = true;
+        mCurrentState.voiceCapable = tm.isVolteAvailable();
+        mCurrentState.videoCapable = tm.isVideoTelephonyAvailable();
+        mCurrentState.imsRegistered = mPhone.isImsRegistered(mSubscriptionInfo.getSubscriptionId());
+        if (DEBUG) {
+            Log.d(mTag, "queryImsState tm=" + tm + " phone=" + mPhone
+                    + " voiceCapable=" + mCurrentState.voiceCapable
+                    + " videoCapable=" + mCurrentState.videoCapable
+                    + " imsResitered=" + mCurrentState.imsRegistered);
         }
+        notifyListenersIfNecessary();
     }
 
     private void removeListeners() {
+        if (mImsManager == null) {
+            Log.e(mTag, "removeListeners mImsManager is null");
+            return;
+        }
+
         try {
             mImsManager.removeCapabilitiesCallback(mCapabilityCallback);
+            mImsManager.removeRegistrationListener(mImsRegistrationCallback);
             Log.d(mTag, "removeCapabilitiesCallback " + mCapabilityCallback
+                    + " from " + mImsManager);
+            Log.d(mTag, "removeRegistrationCallback " + mImsRegistrationCallback
                     + " from " + mImsManager);
         } catch (ImsException e) {
             Log.d(mTag, "unable to remove callback.");
@@ -944,17 +963,38 @@ public class MobileSignalController extends SignalController<
     private ImsMmTelManager.CapabilityCallback mCapabilityCallback = new ImsMmTelManager.CapabilityCallback() {
         @Override
         public void onCapabilitiesStatusChanged(MmTelFeature.MmTelCapabilities config) {
-            boolean isVoiceCapable =
+            mCurrentState.voiceCapable =
                     config.isCapable(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE);
-            boolean isVideoCapable =
+            mCurrentState.videoCapable =
                     config.isCapable(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VIDEO);
-            boolean isImsRegistered = mPhone.isImsRegistered(mSubscriptionInfo.getSubscriptionId());
-            mCurrentState.isVolteRegistered = isImsRegistered&&(isVoiceCapable||isVideoCapable);
-            Log.d(mTag, "onCapabilitiesStatusChanged isVoiceCapable=" + isVoiceCapable
-                    + " isVideoCapable=" + isVideoCapable
-                    + " isImsRegistered=" + isImsRegistered);
+            Log.d(mTag, "onCapabilitiesStatusChanged isVoiceCapable=" + mCurrentState.voiceCapable
+                    + " isVideoCapable=" + mCurrentState.videoCapable);
             notifyListenersIfNecessary();
         }
+    };
+
+    private final ImsMmTelManager.RegistrationCallback mImsRegistrationCallback =
+            new ImsMmTelManager.RegistrationCallback() {
+                @Override
+                public void onRegistered(int imsTransportType) {
+                    Log.d(mTag, "onRegistered imsTransportType=" + imsTransportType);
+                    mCurrentState.imsRegistered = true;
+                    notifyListenersIfNecessary();
+                }
+
+                @Override
+                public void onRegistering(int imsTransportType) {
+                    Log.d(mTag, "onRegistering imsTransportType=" + imsTransportType);
+                    mCurrentState.imsRegistered = false;
+                    notifyListenersIfNecessary();
+                }
+
+                @Override
+                public void onUnregistered(ImsReasonInfo info) {
+                    Log.d(mTag, "onDeregistered imsReasonInfo=" + info);
+                    mCurrentState.imsRegistered = false;
+                    notifyListenersIfNecessary();
+                }
     };
 
     private final BroadcastReceiver mVolteSwitchObserver = new BroadcastReceiver() {
@@ -995,7 +1035,9 @@ public class MobileSignalController extends SignalController<
         boolean isDefault;
         boolean userSetup;
         boolean roaming;
-        boolean isVolteRegistered;
+        boolean imsRegistered;
+        boolean voiceCapable;
+        boolean videoCapable;
 
 
         @Override
@@ -1012,7 +1054,9 @@ public class MobileSignalController extends SignalController<
             carrierNetworkChangeMode = state.carrierNetworkChangeMode;
             userSetup = state.userSetup;
             roaming = state.roaming;
-            isVolteRegistered = state.isVolteRegistered;
+            imsRegistered = state.imsRegistered;
+            voiceCapable = state.voiceCapable;
+            videoCapable = state.videoCapable;
         }
 
         @Override
@@ -1030,7 +1074,9 @@ public class MobileSignalController extends SignalController<
             builder.append("carrierNetworkChangeMode=").append(carrierNetworkChangeMode)
                     .append(',');
             builder.append("userSetup=").append(userSetup).append(',');
-            builder.append("isVolteRegistered=").append(isVolteRegistered);
+            builder.append("imsRegistered=").append(imsRegistered).append(',');
+            builder.append("voiceCapable=").append(voiceCapable).append(',');
+            builder.append("videoCapable=").append(videoCapable);
         }
 
         @Override
@@ -1046,7 +1092,9 @@ public class MobileSignalController extends SignalController<
                     && ((MobileState) o).userSetup == userSetup
                     && ((MobileState) o).isDefault == isDefault
                     && ((MobileState) o).roaming == roaming
-                    && ((MobileState) o).isVolteRegistered == isVolteRegistered;
+                    && ((MobileState) o).imsRegistered == imsRegistered
+                    && ((MobileState) o).voiceCapable == voiceCapable
+                    && ((MobileState) o).videoCapable == videoCapable;
         }
     }
 }
