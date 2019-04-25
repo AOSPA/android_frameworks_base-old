@@ -73,6 +73,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
@@ -139,9 +140,11 @@ public final class ActiveServices {
     // at the same time.
     final int mMaxStartingBackground;
 
+   //mPerf Object
+   public static BoostFramework mPerf = new BoostFramework();
+
     // Flag to reschedule the services during app launch. Disable by default.
-    private static final boolean SERVICE_RESCHEDULE
-            = SystemProperties.getBoolean("ro.vendor.qti.am.reschedule_service", false);
+    private static boolean SERVICE_RESCHEDULE = false;
 
     final SparseArray<ServiceMap> mServiceMap = new SparseArray<>();
 
@@ -366,6 +369,9 @@ public final class ActiveServices {
         }
         mMaxStartingBackground = maxBg > 0
                 ? maxBg : ActivityManager.isLowRamDeviceStatic() ? 1 : 8;
+
+        if(mPerf != null)
+            SERVICE_RESCHEDULE = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.am.reschedule_service", "false"));
     }
 
     void systemServicesReady() {

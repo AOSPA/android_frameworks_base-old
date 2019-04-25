@@ -649,6 +649,7 @@
 
     <!-- Added in Q -->
     <protected-broadcast android:name="android.content.pm.action.SESSION_UPDATED" />
+    <protected-broadcast android:name="android.settings.action.GRAYSCALE_CHANGED" />
 
     <!-- For CarIdlenessTracker -->
     <protected-broadcast android:name="com.android.server.jobscheduler.GARAGE_MODE_ON" />
@@ -758,7 +759,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_sendSms"
         android:description="@string/permdesc_sendSms"
-        android:permissionFlags="costsMoney"
+        android:permissionFlags="costsMoney|hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to receive SMS messages.
@@ -768,6 +769,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_receiveSms"
         android:description="@string/permdesc_receiveSms"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to read SMS messages.
@@ -777,6 +779,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readSms"
         android:description="@string/permdesc_readSms"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to receive WAP push messages.
@@ -786,6 +789,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_receiveWapPush"
         android:description="@string/permdesc_receiveWapPush"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to monitor incoming MMS messages.
@@ -795,6 +799,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_receiveMms"
         android:description="@string/permdesc_receiveMms"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- @SystemApi @TestApi Allows an application to read previously received cell broadcast
@@ -813,6 +818,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readCellBroadcasts"
         android:description="@string/permdesc_readCellBroadcasts"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- ====================================================================== -->
@@ -977,6 +983,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_readCallLog"
         android:description="@string/permdesc_readCallLog"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to write (but not read) the user's
@@ -996,6 +1003,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_writeCallLog"
         android:description="@string/permdesc_writeCallLog"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to see the number being dialed during an outgoing
@@ -1010,6 +1018,7 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_processOutgoingCalls"
         android:description="@string/permdesc_processOutgoingCalls"
+        android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
     <!-- ====================================================================== -->
@@ -1664,8 +1673,8 @@
         android:label="@string/permlab_bluetooth"
         android:protectionLevel="normal" />
 
-    <!-- @SystemApi Allows an application to suspend other apps, which will prevent the user
-         from using them until they are unsuspended.
+    <!-- @SystemApi @TestApi Allows an application to suspend other apps, which will prevent the
+         user from using them until they are unsuspended.
          @hide
     -->
     <permission android:name="android.permission.SUSPEND_APPS"
@@ -3460,6 +3469,12 @@
     <!-- @SystemApi Allows an application to change policy_fixed permissions.
     @hide -->
     <permission android:name="android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY"
+                android:protectionLevel="signature|installer" />
+
+    <!-- @SystemApi Allows an application to whitelist restricted permissions
+         on any of the whitelists.
+    @hide -->
+    <permission android:name="android.permission.WHITELIST_RESTRICTED_PERMISSIONS"
                 android:protectionLevel="signature|installer" />
 
     <!-- @hide Allows an application to observe permission changes. -->

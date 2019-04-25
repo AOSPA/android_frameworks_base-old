@@ -337,6 +337,7 @@
         <item>com.android.systemui.SliceBroadcastRelayHandler</item>
         <item>com.android.systemui.SizeCompatModeActivityController</item>
         <item>com.android.systemui.statusbar.notification.InstantAppNotifier</item>
+        <item>com.android.systemui.theme.ThemeOverlayController</item>
     </string-array>
 
     <!-- SystemUI vender service, used in config_systemUIServiceComponents. -->
@@ -351,7 +352,7 @@
     <!-- Nav bar button default ordering/layout -->
     <string name="config_navBarLayout" translatable="false">left[.5W],back[1WC];home;recent[1WC],right[.5W]</string>
     <string name="config_navBarLayoutQuickstep" translatable="false">back[1.7WC];home;contextual[1.7WC]</string>
-    <string name="config_navBarLayoutHandle" translatable="false">";home_handle;"</string>
+    <string name="config_navBarLayoutHandle" translatable="false">back[1.7WC];home_handle;ime_switcher[1.7WC]</string>
 
     <bool name="quick_settings_show_full_alarm">false</bool>
 
@@ -510,5 +511,8 @@
     </string-array>
 
     <integer name="ongoing_appops_dialog_max_apps">5</integer>
+
+    <!-- Launcher package name for overlaying icons. -->
+    <string name="launcher_overlayable_package" translatable="false">com.android.launcher3</string>
 
 </resources>
