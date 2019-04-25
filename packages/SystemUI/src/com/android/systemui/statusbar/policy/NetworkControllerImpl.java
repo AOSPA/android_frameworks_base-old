@@ -244,7 +244,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                         deviceProvisionedController.getCurrentUser()));
             }
         });
-        mFiveGServiceClient = new FiveGServiceClient(context);
+        mFiveGServiceClient = FiveGServiceClient.getInstance(context);
         ConnectivityManager.NetworkCallback callback = new ConnectivityManager.NetworkCallback(){
             private Network mLastNetwork;
             private NetworkCapabilities mLastNetworkCapabilities;
