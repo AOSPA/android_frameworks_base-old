@@ -53,6 +53,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
@@ -124,6 +125,8 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     private final static int DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP = 20;
     // The height of a window which has not in DIP.
     private final static int DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP = 5;
+
+    private static final int SCRIM_LIGHT = 0x99ffffff; // 60% white
 
     public static final ColorViewAttributes STATUS_BAR_COLOR_VIEW_ATTRIBUTES =
             new ColorViewAttributes(SYSTEM_UI_FLAG_FULLSCREEN, FLAG_TRANSLUCENT_STATUS,
@@ -205,8 +208,8 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     private final Interpolator mShowInterpolator;
     private final Interpolator mHideInterpolator;
     private final int mBarEnterExitDuration;
-    final boolean mForceWindowDrawsStatusBarBackground;
-    private final int mSemiTransparentStatusBarColor;
+    final boolean mForceWindowDrawsBarBackgrounds;
+    private final int mSemiTransparentBarColor;
 
     private final BackgroundFallback mBackgroundFallback = new BackgroundFallback();
 
@@ -242,6 +245,8 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     private boolean mWindowResizeCallbacksAdded = false;
     private Drawable.Callback mLastBackgroundDrawableCb = null;
     private BackdropFrameRenderer mBackdropFrameRenderer = null;
+    private Drawable mOriginalBackgroundDrawable;
+    private Drawable mLastOriginalBackgroundDrawable;
     private Drawable mResizingBackgroundDrawable;
     private Drawable mCaptionBackgroundDrawable;
     private Drawable mUserCaptionBackgroundDrawable;
@@ -257,6 +262,8 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     private final int mResizeShadowSize;
     private final Paint mVerticalResizeShadowPaint = new Paint();
     private final Paint mHorizontalResizeShadowPaint = new Paint();
+    private Insets mBackgroundInsets = Insets.NONE;
+    private Insets mLastBackgroundInsets = Insets.NONE;
 
     DecorView(Context context, int featureId, PhoneWindow window,
             WindowManager.LayoutParams params) {
@@ -270,10 +277,10 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
 
         mBarEnterExitDuration = context.getResources().getInteger(
                 R.integer.dock_enter_exit_duration);
-        mForceWindowDrawsStatusBarBackground = context.getResources().getBoolean(
+        mForceWindowDrawsBarBackgrounds = context.getResources().getBoolean(
                 R.bool.config_forceWindowDrawsStatusBarBackground)
                 && context.getApplicationInfo().targetSdkVersion >= N;
-        mSemiTransparentStatusBarColor = context.getResources().getColor(
+        mSemiTransparentBarColor = context.getResources().getColor(
                 R.color.system_bar_background_semi_transparent, null /* theme */);
 
         updateAvailableWidth();
@@ -948,8 +955,9 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     }
 
     public void setWindowBackground(Drawable drawable) {
-        if (getBackground() != drawable) {
-            setBackgroundDrawable(drawable);
+        if (mOriginalBackgroundDrawable != drawable) {
+            mOriginalBackgroundDrawable = drawable;
+            updateBackgroundDrawable();
             if (drawable != null) {
                 mResizingBackgroundDrawable = enforceNonTranslucentBackground(drawable,
                         mWindow.isTranslucent() || mWindow.isShowingWallpaper());
@@ -1114,9 +1122,10 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             boolean navBarToLeftEdge = isNavBarToLeftEdge(mLastBottomInset, mLastLeftInset);
             int navBarSize = getNavBarSize(mLastBottomInset, mLastRightInset, mLastLeftInset);
             updateColorViewInt(mNavigationColorViewState, sysUiVisibility,
-                    mWindow.mNavigationBarColor, mWindow.mNavigationBarDividerColor, navBarSize,
+                    calculateNavigationBarColor(), mWindow.mNavigationBarDividerColor, navBarSize,
                     navBarToRightEdge || navBarToLeftEdge, navBarToLeftEdge,
-                    0 /* sideInset */, animate && !disallowAnimate, false /* force */);
+                    0 /* sideInset */, animate && !disallowAnimate,
+                    mForceWindowDrawsBarBackgrounds);
 
             boolean statusBarNeedsRightInset = navBarToRightEdge
                     && mNavigationColorViewState.present;
@@ -1128,24 +1137,34 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
                     calculateStatusBarColor(), 0, mLastTopInset,
                     false /* matchVertical */, statusBarNeedsLeftInset, statusBarSideInset,
                     animate && !disallowAnimate,
-                    mForceWindowDrawsStatusBarBackground);
+                    mForceWindowDrawsBarBackgrounds);
         }
 
-        // When we expand the window with FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS, we still need
-        // to ensure that the rest of the view hierarchy doesn't notice it, unless they've
-        // explicitly asked for it.
-        boolean consumingNavBar =
-                (attrs.flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
+        // When we expand the window with FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS or
+        // mForceWindowDrawsBarBackgrounds, we still need to ensure that the rest of the view
+        // hierarchy doesn't notice it, unless they've explicitly asked for it.
+        //
+        // Note: We don't need to check for IN_SCREEN or INSET_DECOR because unlike the status bar,
+        // these flags wouldn't make the window draw behind the navigation bar, unless
+        // LAYOUT_HIDE_NAVIGATION was set.
+        boolean forceConsumingNavBar = (mForceWindowDrawsBarBackgrounds
+                        && (attrs.flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) == 0
                         && (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0
-                        && (sysUiVisibility & SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0
+                        && (sysUiVisibility & SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)
                 || mLastShouldAlwaysConsumeSystemBars;
 
+        boolean consumingNavBar =
+                ((attrs.flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
+                        && (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0
+                        && (sysUiVisibility & SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)
+                || forceConsumingNavBar;
+
         // If we didn't request fullscreen layout, but we still got it because of the
-        // mForceWindowDrawsStatusBarBackground flag, also consume top inset.
+        // mForceWindowDrawsBarBackgrounds flag, also consume top inset.
         boolean consumingStatusBar = (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) == 0
                 && (attrs.flags & FLAG_LAYOUT_IN_SCREEN) == 0
                 && (attrs.flags & FLAG_LAYOUT_INSET_DECOR) == 0
-                && mForceWindowDrawsStatusBarBackground
+                && mForceWindowDrawsBarBackgrounds
                 && mLastTopInset != 0
                 || mLastShouldAlwaysConsumeSystemBars;
 
@@ -1176,22 +1195,76 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             }
         }
 
+        if (forceConsumingNavBar) {
+            mBackgroundInsets = Insets.of(mLastLeftInset, 0, mLastRightInset, mLastBottomInset);
+        } else {
+            mBackgroundInsets = Insets.NONE;
+        }
+        updateBackgroundDrawable();
+
         if (insets != null) {
             insets = insets.consumeStableInsets();
         }
         return insets;
     }
 
-    private int calculateStatusBarColor() {
-        return calculateStatusBarColor(mWindow.getAttributes().flags,
-                mSemiTransparentStatusBarColor, mWindow.mStatusBarColor);
+    /**
+     * Updates the background drawable, applying padding to it in case we {@link #mBackgroundInsets}
+     * are set.
+     */
+    private void updateBackgroundDrawable() {
+        if (mBackgroundInsets.equals(mLastBackgroundInsets)
+                && mLastOriginalBackgroundDrawable == mOriginalBackgroundDrawable) {
+            return;
+        }
+        if (mOriginalBackgroundDrawable == null || mBackgroundInsets.equals(Insets.NONE)) {
+            setBackground(mOriginalBackgroundDrawable);
+        } else {
+            setBackground(new InsetDrawable(mOriginalBackgroundDrawable,
+                    mBackgroundInsets.left, mBackgroundInsets.top,
+                    mBackgroundInsets.right, mBackgroundInsets.bottom) {
+
+                /**
+                 * Return inner padding so we don't apply the padding again in
+                 * {@link DecorView#drawableChanged()}
+                 */
+                @Override
+                public boolean getPadding(Rect padding) {
+                    return getDrawable().getPadding(padding);
+                }
+            });
+        }
+        mLastBackgroundInsets = mBackgroundInsets;
+        mLastOriginalBackgroundDrawable = mOriginalBackgroundDrawable;
     }
 
-    public static int calculateStatusBarColor(int flags, int semiTransparentStatusBarColor,
-            int statusBarColor) {
-        return (flags & FLAG_TRANSLUCENT_STATUS) != 0 ? semiTransparentStatusBarColor
-                : (flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0 ? statusBarColor
-                : Color.BLACK;
+    private int calculateStatusBarColor() {
+        return calculateBarColor(mWindow.getAttributes().flags, FLAG_TRANSLUCENT_STATUS,
+                mSemiTransparentBarColor, mWindow.mStatusBarColor,
+                getWindowSystemUiVisibility(), SYSTEM_UI_FLAG_LIGHT_STATUS_BAR,
+                mWindow.mEnsureStatusBarContrastWhenTransparent);
+    }
+
+    private int calculateNavigationBarColor() {
+        return calculateBarColor(mWindow.getAttributes().flags, FLAG_TRANSLUCENT_NAVIGATION,
+                mSemiTransparentBarColor, mWindow.mNavigationBarColor,
+                getWindowSystemUiVisibility(), SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR,
+                mWindow.mEnsureNavigationBarContrastWhenTransparent
+                        && getContext().getResources().getBoolean(R.bool.config_navBarNeedsScrim));
+    }
+
+    public static int calculateBarColor(int flags, int translucentFlag, int semiTransparentBarColor,
+            int barColor, int sysuiVis, int lightSysuiFlag, boolean scrimTransparent) {
+        if ((flags & translucentFlag) != 0) {
+            return semiTransparentBarColor;
+        } else if ((flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) == 0) {
+            return Color.BLACK;
+        } else if (scrimTransparent && barColor == Color.TRANSPARENT) {
+            boolean light = (sysuiVis & lightSysuiFlag) != 0;
+            return light ? SCRIM_LIGHT : semiTransparentBarColor;
+        } else {
+            return barColor;
+        }
     }
 
     private int getCurrentColor(ColorViewState state) {

@@ -38,9 +38,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.Signature;
-import android.database.ContentObserver;
 import android.database.CursorWindow;
-import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -51,7 +50,6 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManagerInternal;
-import android.provider.Settings;
 import android.service.sms.FinancialSmsService;
 import android.telephony.IFinancialSmsCallback;
 import android.text.TextUtils;
@@ -87,6 +85,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 /**
  * Service for role management.
@@ -195,26 +194,15 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                     Slog.i(LOG_TAG, "Packages changed - re-running initial grants for user "
                             + userId);
                 }
-                performInitialGrantsIfNecessary(userId);
+                if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
+                        && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
+                    // Package is being upgraded - we're about to get ACTION_PACKAGE_ADDED
+                    return;
+                }
+                AsyncTask.THREAD_POOL_EXECUTOR.execute(
+                        () -> performInitialGrantsIfNecessaryAsync(userId));
             }
         }, UserHandle.ALL, intentFilter, null, null);
-
-        getContext().getContentResolver().registerContentObserver(
-                Settings.Global.getUriFor(Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED), false,
-                new ContentObserver(getContext().getMainThreadHandler()) {
-                    @Override
-                    public void onChange(boolean selfChange, Uri uri, int userId) {
-                        boolean killSwitchEnabled = Settings.Global.getInt(
-                                getContext().getContentResolver(),
-                                Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED, 0) == 1;
-                        for (int user : mUserManagerInternal.getUserIds()) {
-                            if (mUserManagerInternal.isUserRunning(user)) {
-                                getOrCreateControllerService(user)
-                                        .onSmsKillSwitchToggled(killSwitchEnabled);
-                            }
-                        }
-                    }
-                }, UserHandle.USER_ALL);
     }
 
     @Override
@@ -222,8 +210,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         performInitialGrantsIfNecessary(userId);
     }
 
-    @MainThread
-    private void performInitialGrantsIfNecessary(@UserIdInt int userId) {
+    private CompletableFuture<Void> performInitialGrantsIfNecessaryAsync(@UserIdInt int userId) {
         RoleUserState userState;
         userState = getOrCreateUserState(userId);
 
@@ -247,19 +234,26 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             getOrCreateControllerService(userId).grantDefaultRoles(FgThread.getExecutor(),
                     successful -> {
                         if (successful) {
+                            userState.setPackagesHash(packagesHash);
                             result.complete(null);
                         } else {
                             result.completeExceptionally(new RuntimeException());
                         }
                     });
-            try {
-                result.get(30, TimeUnit.SECONDS);
-                userState.setPackagesHash(packagesHash);
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                Slog.e(LOG_TAG, "Failed to grant defaults for user " + userId, e);
-            }
+            return result;
         } else if (DEBUG) {
             Slog.i(LOG_TAG, "Already ran grants for package state " + packagesHash);
+        }
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @MainThread
+    private void performInitialGrantsIfNecessary(@UserIdInt int userId) {
+        CompletableFuture<Void> result = performInitialGrantsIfNecessaryAsync(userId);
+        try {
+            result.get(30, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            Slog.e(LOG_TAG, "Failed to grant defaults for user " + userId, e);
         }
     }
 
@@ -787,19 +781,21 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         }
 
         @Override
-        public void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId) {
-            RemoteCallback callback = new RemoteCallback(result -> {
+        public void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId,
+                @NonNull Consumer<Boolean> callback) {
+            RemoteCallback remoteCallback = new RemoteCallback(result -> {
                 boolean successful = result != null;
                 if (!successful) {
                     Slog.e(LOG_TAG, "Failed to set default home: " + packageName);
                 }
+                callback.accept(successful);
             });
             if (packageName != null) {
                 getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_HOME,
-                        packageName, 0, callback);
+                        packageName, 0, remoteCallback);
             } else {
                 getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_HOME, 0,
-                        callback);
+                        remoteCallback);
             }
         }
     }

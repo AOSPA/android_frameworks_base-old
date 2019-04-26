@@ -21,7 +21,6 @@ import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 
 import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_SHOW_OVERVIEW_BUTTON;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_OPAQUE;
-import static com.android.systemui.statusbar.phone.NavigationBarInflaterView.NAV_BAR_VIEWS;
 
 import android.animation.LayoutTransition;
 import android.animation.LayoutTransition.TransitionListener;
@@ -133,6 +132,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     private boolean mUseCarModeUi = false;
     private boolean mInCarMode = false;
     private boolean mDockedStackExists;
+    private boolean mImeVisible;
 
     private final SparseArray<ButtonDispatcher> mButtonDispatchers = new SparseArray<>();
     private final ContextualButtonGroup mContextualButtonGroup;
@@ -465,10 +465,13 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         final boolean useAltBack =
                 (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
         final boolean isRtl = mConfiguration.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        float degrees = useAltBack
-                ? (isRtl ? 270 : -90)
-                : (isRtl ? 180 : 0);
+        float degrees = useAltBack ? (isRtl ? 90 : -90) : 0;
         if (drawable.getRotation() == degrees) {
+            return;
+        }
+
+        if (QuickStepContract.isGesturalMode(getContext())) {
+            drawable.setRotation(degrees);
             return;
         }
 
@@ -512,10 +515,13 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
     public void setNavigationIconHints(int hints) {
         if (hints == mNavigationIconHints) return;
-        final boolean backAlt = (hints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
-        if ((mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0 && !backAlt) {
-            mTransitionListener.onBackAltCleared();
+        final boolean newBackAlt = (hints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
+        final boolean oldBackAlt =
+                (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
+        if (newBackAlt != oldBackAlt) {
+            onImeVisibilityChanged(newBackAlt);
         }
+
         if (DEBUG) {
             android.widget.Toast.makeText(getContext(),
                 "Navigation icon hints = " + hints,
@@ -523,6 +529,14 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         }
         mNavigationIconHints = hints;
         updateNavButtonIcons();
+    }
+
+    private void onImeVisibilityChanged(boolean visible) {
+        if (!visible) {
+            mTransitionListener.onBackAltCleared();
+        }
+        mImeVisible = visible;
+        updateWindowTouchable();
     }
 
     public void setDisabledFlags(int disabledFlags) {
@@ -574,8 +588,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         // Always disable recents when alternate car mode UI is active and for secondary displays.
         boolean disableRecent = isRecentsButtonDisabled();
 
-        boolean disableBack = QuickStepContract.isGesturalMode(getContext())
-                || (((mDisabledFlags & View.STATUS_BAR_DISABLE_BACK) != 0) && !useAltBack);
+        boolean disableBack = !useAltBack && (QuickStepContract.isGesturalMode(getContext())
+                || ((mDisabledFlags & View.STATUS_BAR_DISABLE_BACK) != 0));
 
         // When screen pinning, don't hide back and home when connected service or back and
         // recents buttons when disconnected from launcher service in screen pinning mode,
@@ -715,6 +729,11 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         setWindowFlag(WindowManager.LayoutParams.FLAG_SLIPPERY, slippery);
     }
 
+    public void updateWindowTouchable() {
+        boolean touchable = mImeVisible || !QuickStepContract.isGesturalMode(getContext());
+        setWindowFlag(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, !touchable);
+    }
+
     private void setWindowFlag(int flags, boolean enable) {
         final ViewGroup navbarView = ((ViewGroup) getParent());
         if (navbarView == null) {
@@ -734,7 +753,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     }
 
     private void onOverlaysChanged() {
-        mNavigationInflaterView.onTuningChanged(NAV_BAR_VIEWS, null);
+        mNavigationInflaterView.setNavigationBarLayout(null);
 
         // Color adaption is tied with showing home handle, only avaliable if visible
         if (QuickStepContract.isGesturalMode(getContext())) {
@@ -1062,6 +1081,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         filter.addDataScheme("package");
         getContext().registerReceiver(mOverlaysChangedReceiver, filter);
         mEdgeBackGestureHandler.onNavBarAttached();
+        updateWindowTouchable();
     }
 
     @Override

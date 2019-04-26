@@ -38,6 +38,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
+import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
@@ -400,7 +401,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         @Override
         public void getOutline(View view, Outline outline) {
             if (mAmbientState.isDarkAtAll() || !mShowDarkShelf) {
-                outline.setRoundRect(mBackgroundAnimationRect, mCornerRadius);
+                float xProgress = mDarkXInterpolator.getInterpolation(
+                        (1 - mLinearDarkAmount) * mBackgroundXFactor);
+                outline.setRoundRect(mBackgroundAnimationRect,
+                        MathUtils.lerp(mCornerRadius / 2.0f, mCornerRadius,
+                                xProgress));
             } else {
                 ViewOutlineProvider.BACKGROUND.getOutline(view, outline);
             }
@@ -1691,8 +1696,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         ExpandableNotificationRow child = entry.getRow();
         boolean animate = mIsExpanded || isPinnedHeadsUp(child);
         // If the child is showing the notification menu snap to that
-        float targetLeft = child.getProvider().isMenuVisible() ? child.getTranslation() : 0;
-        mSwipeHelper.snapChildIfNeeded(child, animate, targetLeft);
+        if (child.getProvider() != null) {
+            float targetLeft = child.getProvider().isMenuVisible() ? child.getTranslation() : 0;
+            mSwipeHelper.snapChildIfNeeded(child, animate, targetLeft);
+        }
     }
 
     @Override
@@ -6143,8 +6150,24 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                         .setCategory(MetricsEvent.ACTION_REVEAL_GEAR)
                         .setType(MetricsEvent.TYPE_ACTION));
                 mHeadsUpManager.setMenuShown(notificationRow.getEntry(), true);
+                mSwipeHelper.onMenuShown(row);
+
+                // Check to see if we want to go directly to the notfication guts
+                NotificationMenuRowPlugin provider = notificationRow.getProvider();
+                if (provider.shouldShowGutsOnSnapOpen()) {
+                    MenuItem item = provider.menuItemToExposeOnSnap();
+                    if (item != null) {
+                        Point origin = provider.getRevealAnimationOrigin();
+                        mGutsManager.openGuts(row, origin.x, origin.y, item);
+                    } else  {
+                        Log.e(TAG, "Provider has shouldShowGutsOnSnapOpen, but provided no "
+                                + "menu item in menuItemtoExposeOnSnap. Skipping.");
+                    }
+
+                    // Close the menu row since we went directly to the guts
+                    resetExposedMenuView(false, true);
+                }
             }
-            mSwipeHelper.onMenuShown(row);
         }
     };
 
@@ -6275,11 +6298,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             mAmbientState.onDragFinished(animView);
             updateContinuousShadowDrawing();
             updateContinuousBackgroundDrawing();
-            NotificationMenuRowPlugin menuRow = mSwipeHelper.getCurrentMenuRow();
-            if (menuRow != null && targetLeft == 0) {
-                menuRow.resetMenu();
-                mSwipeHelper.clearCurrentMenuRow();
-            }
         }
 
         @Override

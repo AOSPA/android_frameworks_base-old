@@ -159,7 +159,7 @@ message Atom {
         BiometricAcquired biometric_acquired = 87;
         BiometricAuthenticated biometric_authenticated = 88;
         BiometricErrorOccurred biometric_error_occurred = 89;
-        Notification notification = 90;
+        // Atom number 90 is available for use.
         BatteryHealthSnapshot battery_health_snapshot = 91;
         SlowIo slow_io = 92;
         BatteryCausedShutdown battery_caused_shutdown = 93;
@@ -176,23 +176,38 @@ message Atom {
         FlagFlipUpdateOccurred flag_flip_update_occurred = 101;
         BinaryPushStateChanged binary_push_state_changed = 102;
         DevicePolicyEvent device_policy_event = 103;
-        DocsUIFileOperationCanceledReported docs_ui_file_op_canceled = 104;
-        DocsUIFileOperationCopyMoveModeReported docs_ui_file_op_copy_move_mode_reported = 105;
-        DocsUIFileOperationFailureReported docs_ui_file_op_failure = 106;
-        DocsUIFileOperationReported docs_ui_provider_file_op = 107;
-        DocsUIInvalidScopedAccessRequestReported docs_ui_invalid_scoped_access_request = 108;
-        DocsUILaunchReported docs_ui_launch_reported = 109;
-        DocsUIRootVisitedReported docs_ui_root_visited = 110;
-        DocsUIStartupMsReported docs_ui_startup_ms = 111;
-        DocsUIUserActionReported docs_ui_user_action_reported = 112;
+        DocsUIFileOperationCanceledReported docs_ui_file_op_canceled =
+            104 [(log_from_module) = "docsui"];
+        DocsUIFileOperationCopyMoveModeReported
+            docs_ui_file_op_copy_move_mode_reported =
+            105 [(log_from_module) = "docsui"];
+        DocsUIFileOperationFailureReported docs_ui_file_op_failure =
+            106 [(log_from_module) = "docsui"];
+        DocsUIFileOperationReported docs_ui_provider_file_op =
+            107 [(log_from_module) = "docsui"];
+        DocsUIInvalidScopedAccessRequestReported
+            docs_ui_invalid_scoped_access_request =
+            108 [(log_from_module) = "docsui"];
+        DocsUILaunchReported docs_ui_launch_reported =
+            109 [(log_from_module) = "docsui"];
+        DocsUIRootVisitedReported docs_ui_root_visited =
+            110 [(log_from_module) = "docsui"];
+        DocsUIStartupMsReported docs_ui_startup_ms =
+            111 [(log_from_module) = "docsui"];
+        DocsUIUserActionReported docs_ui_user_action_reported =
+            112 [(log_from_module) = "docsui"];
         WifiEnabledStateChanged wifi_enabled_state_changed = 113;
         WifiRunningStateChanged wifi_running_state_changed = 114;
         AppCompacted app_compacted = 115;
         NetworkDnsEventReported network_dns_event_reported = 116 [(log_from_module) = "resolv"];
-        DocsUIPickerLaunchedFromReported docs_ui_picker_launched_from_reported = 117;
-        DocsUIPickResultReported docs_ui_pick_result_reported = 118;
-        DocsUISearchModeReported docs_ui_search_mode_reported = 119;
-        DocsUISearchTypeReported docs_ui_search_type_reported = 120;
+        DocsUIPickerLaunchedFromReported docs_ui_picker_launched_from_reported =
+            117 [(log_from_module) = "docsui"];
+        DocsUIPickResultReported docs_ui_pick_result_reported =
+            118 [(log_from_module) = "docsui"];
+        DocsUISearchModeReported docs_ui_search_mode_reported =
+            119 [(log_from_module) = "docsui"];
+        DocsUISearchTypeReported docs_ui_search_type_reported =
+            120 [(log_from_module) = "docsui"];
         DataStallEvent data_stall_event = 121;
         RescuePartyResetReported rescue_party_reset_reported = 122;
         SignedConfigReported signed_config_reported = 123;
@@ -234,7 +249,7 @@ message Atom {
         BluetoothDeviceTxPowerLevelReported bluetooth_device_tx_power_level_reported = 159;
         BluetoothHciTimeoutReported bluetooth_hci_timeout_reported = 160;
         BluetoothQualityReportReported bluetooth_quality_report_reported = 161;
-        BluetoothManufacturerInfoReported bluetooth_device_info_reported = 162;
+        BluetoothDeviceInfoReported bluetooth_device_info_reported = 162;
         BluetoothRemoteVersionInfoReported bluetooth_remote_version_info_reported = 163;
         BluetoothSdpAttributeReported bluetooth_sdp_attribute_reported = 164;
         BluetoothBondStateChanged bluetooth_bond_state_changed = 165;
@@ -1935,7 +1950,7 @@ message BluetoothQualityReportReported {
  * Logged from:
  *     packages/apps/Bluetooth
  */
-message BluetoothManufacturerInfoReported {
+message BluetoothDeviceInfoReported {
     // An identifier that can be used to match events for this device.
     // Currently, this is a salted hash of the MAC address of this Bluetooth device.
     // Salt: Randomly generated 256 bit value
@@ -3199,76 +3214,6 @@ message BiometricEnrolled {
     optional bool success = 4;
 }
 
-message Notification {
-
-    // Type of notification event.
-    enum Type {
-        TYPE_UNKNOWN = 0;
-        // Notification became visible to the user.
-        TYPE_OPEN = 1;
-        // Notification became hidden.
-        TYPE_CLOSE = 2;
-        // Notification switched to detail mode.
-        TYPE_DETAIL = 3;
-        // Notification was clicked.
-        TYPE_ACTION = 4;
-        // Notification was dismissed.
-        TYPE_DISMISS = 5;
-        // Notification switched to summary mode. The enum value of 14 is to
-        // match that of metrics_constants.
-        TYPE_COLLAPSE = 14;
-    }
-    optional Type type = 1;
-
-    // Package name associated with the notification.
-    optional string package_name = 2;
-
-    // Tag associated with notification.
-    optional string tag = 3;
-
-    // Application-supplied ID associated with the notification.
-    optional int32 id = 4;
-
-    // Index of notification in the notification panel.
-    optional int32 shade_index = 5;
-
-    // The number of notifications in the notification panel.
-    optional int32 shade_count = 6;
-
-    // Importance for the notification.
-    optional int32 importance = 7;
-
-    // ID for the notification channel.
-    optional string channel_id = 8;
-
-    // Importance for the notification channel.
-    optional int32 channel_importance = 9;
-
-    // Application-supplied ID associated with the notifications group.
-    optional string group_id = 10;
-
-    // Whether notification was a group summary.
-    optional bool group_summary = 11;
-
-    // Reason for dismissal of a notification. This field is only meaningful for
-    // TYPE_DISMISS events.
-    optional int32 dismiss_reason = 12;
-
-    // The first post time of notification, stable across updates.
-    optional int64 creation_millis = 13;
-
-    // The most recent interruption time, or the creation time if no updates.
-    // Differs from update_millis because updates are filtered based on whether
-    // they actually interrupted the user.
-    optional int64 interruption_millis = 14;
-
-    // The most recent update time, or the creation time if no updates.
-    optional int64 update_millis = 15;
-
-    // The most recent visibility event.
-    optional int64 visible_millis = 16;
-}
-
 /*
  * Logs when a flag flip update occurrs. Used for mainline modules that update via flag flips.
  */
@@ -3321,13 +3266,12 @@ message BinaryPushStateChanged {
         INSTALLER_ROLLBACK_BOOT_TRIGGERED_FAILURE = 14;
         INSTALLER_ROLLBACK_SUCCESS = 15;
         INSTALLER_ROLLBACK_FAILURE = 16;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_REMOVE_FROM_QUEUE = 17;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_INITIATED = 18;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_SUCCESS = 19;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_FAILURE = 20;
-        INSTALL_STAGED_CANCEL_REQUESTED = 21;
-        INSTALL_STAGED_CANCEL_SUCCESS = 22;
-        INSTALL_STAGED_CANCEL_FAILURE = 23;
+        INSTALLER_ROLLBACK_STAGED_CANCEL_REQUESTED = 17;
+        INSTALLER_ROLLBACK_STAGED_CANCEL_SUCCESS = 18;
+        INSTALLER_ROLLBACK_STAGED_CANCEL_FAILURE = 19;
+        INSTALL_STAGED_CANCEL_REQUESTED = 20;
+        INSTALL_STAGED_CANCEL_SUCCESS = 21;
+        INSTALL_STAGED_CANCEL_FAILURE = 22;
     }
     optional State state = 6;
     // Possible experiment ids for monitoring this push.
@@ -4989,6 +4933,8 @@ message AppCompacted {
     UNKNOWN = 0;
     SOME = 1;
     FULL = 2;
+    PERSISTENT = 3;
+    BFGS = 4;
   }
   optional Action action = 3;
 
@@ -5453,6 +5399,8 @@ message PermissionGrantRequestResultReported {
         USER_DENIED_WITH_PREJUDICE = 7;
         // permission was automatically denied
         AUTO_DENIED = 8;
+        // permission request was ignored because permission is restricted
+        IGNORED_RESTRICTED_PERMISSION = 9;
     }
     // The result of the permission grant
     optional Result result = 6;
@@ -5814,13 +5762,12 @@ message TrainInfo {
         INSTALLER_ROLLBACK_BOOT_TRIGGERED_FAILURE = 14;
         INSTALLER_ROLLBACK_SUCCESS = 15;
         INSTALLER_ROLLBACK_FAILURE = 16;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_REMOVE_FROM_QUEUE = 17;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_INITIATED = 18;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_SUCCESS = 19;
-        INSTALLER_ROLLBACK_CANCEL_STAGED_DELETE_SESSION_FAILURE = 20;
-        INSTALL_STAGED_CANCEL_REQUESTED = 21;
-        INSTALL_STAGED_CANCEL_SUCCESS = 22;
-        INSTALL_STAGED_CANCEL_FAILURE = 23;
+        INSTALLER_ROLLBACK_STAGED_CANCEL_REQUESTED = 17;
+        INSTALLER_ROLLBACK_STAGED_CANCEL_SUCCESS = 18;
+        INSTALLER_ROLLBACK_STAGED_CANCEL_FAILURE = 19;
+        INSTALL_STAGED_CANCEL_REQUESTED = 20;
+        INSTALL_STAGED_CANCEL_SUCCESS = 21;
+        INSTALL_STAGED_CANCEL_FAILURE = 22;
     }
     optional Status status = 4;
 }

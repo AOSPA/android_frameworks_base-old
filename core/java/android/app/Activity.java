@@ -132,6 +132,7 @@ import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IVoiceInteractor;
@@ -820,8 +821,6 @@ public class Activity extends ContextThemeWrapper
     /** {@code true} if the activity lifecycle is in a state which supports picture-in-picture.
      * This only affects the client-side exception, the actual state check still happens in AMS. */
     private boolean mCanEnterPictureInPicture = false;
-    /** true if the activity is going through a transient pause */
-    /*package*/ boolean mTemporaryPause = false;
     /** true if the activity is being destroyed in order to recreate it with a new configuration */
     /*package*/ boolean mChangingConfigurations = false;
     @UnsupportedAppUsage
@@ -4904,6 +4903,17 @@ public class Activity extends ContextThemeWrapper
                 com.android.internal.R.styleable.ActivityTaskDescription_navigationBarColor, 0);
         if (navigationBarColor != 0) {
             mTaskDescription.setNavigationBarColor(navigationBarColor);
+        }
+
+        final int targetSdk = getApplicationInfo().targetSdkVersion;
+        final boolean targetPreQ = targetSdk < Build.VERSION_CODES.Q;
+        if (!targetPreQ) {
+            mTaskDescription.setEnsureStatusBarContrastWhenTransparent(a.getBoolean(
+                    R.styleable.ActivityTaskDescription_ensureStatusBarContrastWhenTransparent,
+                    false));
+            mTaskDescription.setEnsureNavigationBarContrastWhenTransparent(a.getBoolean(
+                    R.styleable.ActivityTaskDescription_ensureNavigationBarContrastWhenTransparent,
+                    true));
         }
 
         a.recycle();
