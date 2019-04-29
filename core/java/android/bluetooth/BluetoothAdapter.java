@@ -2566,9 +2566,6 @@ public final class BluetoothAdapter {
                 return true;
             }
             return false;
-        } else if (profile == BluetoothProfile.BA_TRANSMITTER) {
-            BluetoothBATransmitter baTransmitter = new BluetoothBATransmitter(context, listener);
-            return true;
         } else {
             return false;
         }
@@ -2653,10 +2650,6 @@ public final class BluetoothAdapter {
             case BluetoothProfile.HEARING_AID:
                 BluetoothHearingAid hearingAid = (BluetoothHearingAid) proxy;
                 hearingAid.close();
-                break;
-            case BluetoothProfile.BA_TRANSMITTER:
-                BluetoothBATransmitter baTransmitter = (BluetoothBATransmitter) proxy;
-                baTransmitter.close();
                 break;
         }
     }
