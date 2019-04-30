@@ -680,22 +680,6 @@ public class MobileSignalController extends SignalController<
         } else {
             mCurrentState.iconGroup = mDefaultIcons;
         }
-
-        if ( nr5GIconGroup == null && mConfig.alwaysShowNetworkTypeIcon) {
-            int iconType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
-            if ( isDataNetworkTypeAvailable() ) {
-                iconType = mDataNetType;
-            }else {
-                iconType = getVoiceNetworkType();
-            }
-
-            if (mNetworkToIconLookup.indexOfKey(iconType) >= 0) {
-                mCurrentState.iconGroup = mNetworkToIconLookup.get(iconType);
-            } else {
-                mCurrentState.iconGroup = mDefaultIcons;
-            }
-        }
-
         mCurrentState.dataConnected = mCurrentState.connected
                 && (mDataState == TelephonyManager.DATA_CONNECTED
                     || mMMSDataState == DataState.CONNECTED);
@@ -725,6 +709,23 @@ public class MobileSignalController extends SignalController<
                 && mCurrentState.dataSim
                 && !TextUtils.isEmpty(mServiceState.getDataOperatorAlphaShort())) {
             mCurrentState.networkNameData = mServiceState.getDataOperatorAlphaShort();
+        }
+
+
+        if ( mConfig.alwaysShowNetworkTypeIcon && nr5GIconGroup == null) {
+            int iconType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+            if ( mCurrentState.connected ) {
+                if (isDataNetworkTypeAvailable()) {
+                    iconType = mDataNetType;
+                } else {
+                    iconType = getVoiceNetworkType();
+                }
+            }
+            if (mNetworkToIconLookup.indexOfKey(iconType) >= 0) {
+                mCurrentState.iconGroup = mNetworkToIconLookup.get(iconType);
+            } else {
+                mCurrentState.iconGroup = mDefaultIcons;
+            }
         }
 
         notifyListenersIfNecessary();
