@@ -180,10 +180,6 @@ public class BatteryMeterView extends LinearLayout implements
         setClipChildren(false);
         setClipToPadding(false);
         Dependency.get(ConfigurationController.class).observe(viewAttachLifecycle(this), this);
-
-        // Needed for PorderDuff.Mode.CLEAR operations to work properly, but redraws don't happen
-        // enough to justify a hardware layer.
-        setLayerType(LAYER_TYPE_SOFTWARE, null);
     }
 
     private void setupLayoutTransition() {
@@ -405,10 +401,10 @@ public class BatteryMeterView extends LinearLayout implements
                 || mShowPercentMode == MODE_ON || mShowPercentMode == MODE_ESTIMATE) {
             if (!showing) {
                 mBatteryPercentView = loadPercentView();
-                if (mTextColor != 0) mBatteryPercentView.setTextColor(mTextColor);
                 if (mPercentageStyleId != 0) { // Only set if specified as attribute
                     mBatteryPercentView.setTextAppearance(mPercentageStyleId);
                 }
+                if (mTextColor != 0) mBatteryPercentView.setTextColor(mTextColor);
                 updatePercentText();
                 addView(mBatteryPercentView,
                         new ViewGroup.LayoutParams(

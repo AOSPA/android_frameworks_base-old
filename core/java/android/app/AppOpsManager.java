@@ -38,7 +38,6 @@ import android.os.Parcelable;
 import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.os.UserManager;
 import android.util.ArrayMap;
 import android.util.LongSparseArray;
@@ -824,9 +823,11 @@ public class AppOpsManager {
     public static final int OP_LEGACY_STORAGE = 87;
     /** @hide Accessing accessibility features */
     public static final int OP_ACCESS_ACCESSIBILITY = 88;
+    /** @hide Read the device identifiers (IMEI / MEID, IMSI, SIM / Build serial) */
+    public static final int OP_READ_DEVICE_IDENTIFIERS = 89;
     /** @hide */
     @UnsupportedAppUsage
-    public static final int _NUM_OP = 89;
+    public static final int _NUM_OP = 90;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1100,6 +1101,8 @@ public class AppOpsManager {
     /** @hide Interact with accessibility. */
     @SystemApi
     public static final String OPSTR_ACCESS_ACCESSIBILITY = "android:access_accessibility";
+    /** @hide Read device identifiers */
+    public static final String OPSTR_READ_DEVICE_IDENTIFIERS = "android:read_device_identifiers";
 
     // Warning: If an permission is added here it also has to be added to
     // com.android.packageinstaller.permission.utils.EventLogger
@@ -1260,6 +1263,7 @@ public class AppOpsManager {
             OP_WRITE_MEDIA_IMAGES,              // WRITE_MEDIA_IMAGES
             OP_LEGACY_STORAGE,                  // LEGACY_STORAGE
             OP_ACCESS_ACCESSIBILITY,            // ACCESS_ACCESSIBILITY
+            OP_READ_DEVICE_IDENTIFIERS,         // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1355,6 +1359,7 @@ public class AppOpsManager {
             OPSTR_WRITE_MEDIA_IMAGES,
             OPSTR_LEGACY_STORAGE,
             OPSTR_ACCESS_ACCESSIBILITY,
+            OPSTR_READ_DEVICE_IDENTIFIERS,
     };
 
     /**
@@ -1451,6 +1456,7 @@ public class AppOpsManager {
             "WRITE_MEDIA_IMAGES",
             "LEGACY_STORAGE",
             "ACCESS_ACCESSIBILITY",
+            "READ_DEVICE_IDENTIFIERS",
     };
 
     /**
@@ -1548,6 +1554,7 @@ public class AppOpsManager {
             null, // no permission for OP_WRITE_MEDIA_IMAGES
             null, // no permission for OP_LEGACY_STORAGE
             null, // no permission for OP_ACCESS_ACCESSIBILITY
+            null, // no direct permission for OP_READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1645,6 +1652,7 @@ public class AppOpsManager {
             null, // WRITE_MEDIA_IMAGES
             null, // LEGACY_STORAGE
             null, // ACCESS_ACCESSIBILITY
+            null, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1741,6 +1749,7 @@ public class AppOpsManager {
             false, // WRITE_MEDIA_IMAGES
             false, // LEGACY_STORAGE
             false, // ACCESS_ACCESSIBILITY
+            false, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1753,21 +1762,21 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // VIBRATE
             AppOpsManager.MODE_ALLOWED, // READ_CONTACTS
             AppOpsManager.MODE_ALLOWED, // WRITE_CONTACTS
-            AppOpsManager.MODE_DEFAULT, // READ_CALL_LOG
-            AppOpsManager.MODE_DEFAULT, // WRITE_CALL_LOG
+            AppOpsManager.MODE_ALLOWED, // READ_CALL_LOG
+            AppOpsManager.MODE_ALLOWED, // WRITE_CALL_LOG
             AppOpsManager.MODE_ALLOWED, // READ_CALENDAR
             AppOpsManager.MODE_ALLOWED, // WRITE_CALENDAR
             AppOpsManager.MODE_ALLOWED, // WIFI_SCAN
             AppOpsManager.MODE_ALLOWED, // POST_NOTIFICATION
             AppOpsManager.MODE_ALLOWED, // NEIGHBORING_CELLS
             AppOpsManager.MODE_ALLOWED, // CALL_PHONE
-            AppOpsManager.MODE_DEFAULT, // READ_SMS
+            AppOpsManager.MODE_ALLOWED, // READ_SMS
             AppOpsManager.MODE_IGNORED, // WRITE_SMS
-            AppOpsManager.MODE_DEFAULT, // RECEIVE_SMS
+            AppOpsManager.MODE_ALLOWED, // RECEIVE_SMS
             AppOpsManager.MODE_ALLOWED, // RECEIVE_EMERGENCY_BROADCAST
-            AppOpsManager.MODE_DEFAULT, // RECEIVE_MMS
-            AppOpsManager.MODE_DEFAULT, // RECEIVE_WAP_PUSH
-            AppOpsManager.MODE_DEFAULT, // SEND_SMS
+            AppOpsManager.MODE_ALLOWED, // RECEIVE_MMS
+            AppOpsManager.MODE_ALLOWED, // RECEIVE_WAP_PUSH
+            AppOpsManager.MODE_ALLOWED, // SEND_SMS
             AppOpsManager.MODE_ALLOWED, // READ_ICC_SMS
             AppOpsManager.MODE_ALLOWED, // WRITE_ICC_SMS
             AppOpsManager.MODE_DEFAULT, // WRITE_SETTINGS
@@ -1801,10 +1810,10 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // READ_PHONE_STATE
             AppOpsManager.MODE_ALLOWED, // ADD_VOICEMAIL
             AppOpsManager.MODE_ALLOWED, // USE_SIP
-            AppOpsManager.MODE_DEFAULT, // PROCESS_OUTGOING_CALLS
+            AppOpsManager.MODE_ALLOWED, // PROCESS_OUTGOING_CALLS
             AppOpsManager.MODE_ALLOWED, // USE_FINGERPRINT
             AppOpsManager.MODE_ALLOWED, // BODY_SENSORS
-            AppOpsManager.MODE_DEFAULT, // READ_CELL_BROADCASTS
+            AppOpsManager.MODE_ALLOWED, // READ_CELL_BROADCASTS
             AppOpsManager.MODE_ERRORED, // MOCK_LOCATION
             AppOpsManager.MODE_ALLOWED, // READ_EXTERNAL_STORAGE
             AppOpsManager.MODE_ALLOWED, // WRITE_EXTERNAL_STORAGE
@@ -1836,6 +1845,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ERRORED, // WRITE_MEDIA_IMAGES
             AppOpsManager.MODE_DEFAULT, // LEGACY_STORAGE
             AppOpsManager.MODE_ALLOWED, // ACCESS_ACCESSIBILITY
+            AppOpsManager.MODE_ERRORED, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1935,6 +1945,7 @@ public class AppOpsManager {
             false, // WRITE_MEDIA_IMAGES
             false, // LEGACY_STORAGE
             false, // ACCESS_ACCESSIBILITY
+            false, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -5209,7 +5220,6 @@ public class AppOpsManager {
      * @hide
      */
     public int noteProxyOpNoThrow(int op, String proxiedPackageName, int proxiedUid) {
-        logOperationIfNeeded(op, mContext.getOpPackageName(), proxiedPackageName);
         try {
             return mService.noteProxyOperation(op, Process.myUid(), mContext.getOpPackageName(),
                     proxiedUid, proxiedPackageName);
@@ -5238,7 +5248,6 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int noteOpNoThrow(int op, int uid, String packageName) {
-        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.noteOperation(op, uid, packageName);
         } catch (RemoteException e) {
@@ -5346,7 +5355,6 @@ public class AppOpsManager {
      * @hide
      */
     public int startOpNoThrow(int op, int uid, String packageName, boolean startIfModeDefault) {
-        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.startOperation(getToken(mService), op, uid, packageName,
                     startIfModeDefault);
@@ -5363,7 +5371,6 @@ public class AppOpsManager {
      * @hide
      */
     public void finishOp(int op, int uid, String packageName) {
-        logOperationIfNeeded(op, packageName, null);
         try {
             mService.finishOperation(getToken(mService), op, uid, packageName);
         } catch (RemoteException e) {
@@ -5702,46 +5709,5 @@ public class AppOpsManager {
         }
 
         return AppOpsManager.MODE_DEFAULT;
-    }
-
-    private static void logOperationIfNeeded(int op, String callingPackage, String proxiedPackage) {
-        // Check if debug logging propety is enabled.
-        if (!SystemProperties.getBoolean(DEBUG_LOGGING_ENABLE_PROP, false)) {
-            return;
-        }
-        // Check if this package should be logged.
-        String packages = SystemProperties.get(DEBUG_LOGGING_PACKAGES_PROP, "");
-        if (!"".equals(packages) && callingPackage != null) {
-            boolean found = false;
-            for (String pkg : packages.split(",")) {
-                if (callingPackage.equals(pkg)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return;
-            }
-        }
-        String opStr = opToName(op);
-        // Check if this app op should be logged
-        String logOps = SystemProperties.get(DEBUG_LOGGING_OPS_PROP, "");
-        if (!"".equals(logOps)) {
-            boolean found = false;
-            for (String logOp : logOps.split(",")) {
-                if (opStr.equals(logOp)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return;
-            }
-        }
-
-        // Log a stack trace
-        Exception here = new Exception("HERE!");
-        android.util.Log.i(DEBUG_LOGGING_TAG, "Note operation package= " + callingPackage
-                + " proxied= " + proxiedPackage + " op= " + opStr, here);
     }
 }

@@ -24,6 +24,8 @@ import static android.app.StatusBarManager.windowStateToString;
 
 import static com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
 import static com.android.systemui.shared.system.NavigationBarCompat.InteractionType;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NAV_BAR_HIDDEN;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_SCREEN_PINNING;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_OPAQUE;
@@ -121,6 +123,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private static final boolean DEBUG = false;
     private static final String EXTRA_DISABLE_STATE = "disabled_state";
     private static final String EXTRA_DISABLE2_STATE = "disabled2_state";
+    private static final String EXTRA_SYSTEM_UI_VISIBILITY = "system_ui_visibility";
 
     /** Allow some time inbetween the long press for back and recents. */
     private static final int LOCK_TO_APP_GESTURE_TOLERENCE = 200;
@@ -154,7 +157,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private Locale mLocale;
     private int mLayoutDirection;
 
-    private int mSystemUiVisibility;
+    private int mSystemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE;
     private LightBarController mLightBarController;
     private AutoHideController mAutoHideController;
 
@@ -275,6 +278,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         if (savedInstanceState != null) {
             mDisabledFlags1 = savedInstanceState.getInt(EXTRA_DISABLE_STATE, 0);
             mDisabledFlags2 = savedInstanceState.getInt(EXTRA_DISABLE2_STATE, 0);
+            mSystemUiVisibility = savedInstanceState.getInt(EXTRA_SYSTEM_UI_VISIBILITY, 0);
         }
         mAccessibilityManagerWrapper.addCallback(mAccessibilityListener);
 
@@ -314,6 +318,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         if (savedInstanceState != null) {
             mNavigationBarView.getLightTransitionsController().restoreState(savedInstanceState);
         }
+        mNavigationBarView.setNavigationIconHints(mNavigationIconHints);
 
         prepareNavigationBarView();
         checkNavBarModes();
@@ -360,6 +365,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         super.onSaveInstanceState(outState);
         outState.putInt(EXTRA_DISABLE_STATE, mDisabledFlags1);
         outState.putInt(EXTRA_DISABLE2_STATE, mDisabledFlags2);
+        outState.putInt(EXTRA_SYSTEM_UI_VISIBILITY, mSystemUiVisibility);
         if (mNavigationBarView != null) {
             mNavigationBarView.getLightTransitionsController().saveState(outState);
         }
@@ -457,8 +463,10 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             mNavigationBarWindowState = state;
             if (DEBUG_WINDOW_STATE) Log.d(TAG, "Navigation bar " + windowStateToString(state));
 
+            mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_NAV_BAR_HIDDEN,
+                    !isNavBarWindowVisible());
             mNavigationBarView.getRotateSuggestionButton()
-                    .onNavigationBarWindowVisibilityChange(state == WINDOW_STATE_SHOWING);
+                    .onNavigationBarWindowVisibilityChange(isNavBarWindowVisible());
         }
     }
 
@@ -487,13 +495,8 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         }
     }
 
-    /**
-     * Sets System UI flags to {@link NavigationBarFragment}.
-     *
-     * @see View#setSystemUiVisibility(int)
-     */
-    public void setSystemUiVisibility(int systemUiVisibility) {
-        mSystemUiVisibility = systemUiVisibility;
+    /** Restores the System UI flags saved state to {@link NavigationBarFragment}. */
+    public void restoreSystemUiVisibilityState() {
         final int barMode = computeBarMode(0, mSystemUiVisibility);
         if (barMode != -1) {
             mNavigationBarMode = barMode;
@@ -776,44 +779,52 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             IActivityTaskManager activityManager = ActivityTaskManager.getService();
             boolean touchExplorationEnabled = mAccessibilityManager.isTouchExplorationEnabled();
             boolean inLockTaskMode = activityManager.isInLockTaskMode();
-            if (inLockTaskMode && !touchExplorationEnabled) {
-                long time = System.currentTimeMillis();
+            boolean stopLockTaskMode = false;
+            try {
+                if (inLockTaskMode && !touchExplorationEnabled) {
+                    long time = System.currentTimeMillis();
 
-                // If we recently long-pressed the other button then they were
-                // long-pressed 'together'
-                if ((time - mLastLockToAppLongPress) < LOCK_TO_APP_GESTURE_TOLERENCE) {
-                    activityManager.stopSystemLockTaskMode();
-                    // When exiting refresh disabled flags.
-                    mNavigationBarView.updateNavButtonIcons();
-                    return true;
-                } else if (v.getId() == btnId1) {
-                    ButtonDispatcher button = btnId2 == R.id.recent_apps
-                            ? mNavigationBarView.getRecentsButton()
-                            : mNavigationBarView.getHomeButton();
-                    if (!button.getCurrentView().isPressed()) {
-                        // If we aren't pressing recents/home right now then they presses
-                        // won't be together, so send the standard long-press action.
+                    // If we recently long-pressed the other button then they were
+                    // long-pressed 'together'
+                    if ((time - mLastLockToAppLongPress) < LOCK_TO_APP_GESTURE_TOLERENCE) {
+                        stopLockTaskMode = true;
+                        return true;
+                    } else if (v.getId() == btnId1) {
+                        ButtonDispatcher button = btnId2 == R.id.recent_apps
+                                ? mNavigationBarView.getRecentsButton()
+                                : mNavigationBarView.getHomeButton();
+                        if (!button.getCurrentView().isPressed()) {
+                            // If we aren't pressing recents/home right now then they presses
+                            // won't be together, so send the standard long-press action.
+                            sendBackLongPress = true;
+                        }
+                    }
+                    mLastLockToAppLongPress = time;
+                } else {
+                    // If this is back still need to handle sending the long-press event.
+                    if (v.getId() == btnId1) {
                         sendBackLongPress = true;
+                    } else if (touchExplorationEnabled && inLockTaskMode) {
+                        // When in accessibility mode a long press that is recents/home (not back)
+                        // should stop lock task.
+                        stopLockTaskMode = true;
+                        return true;
+                    } else if (v.getId() == btnId2) {
+                        return btnId2 == R.id.recent_apps
+                                ? onLongPressRecents()
+                                : onHomeLongClick(
+                                        mNavigationBarView.getHomeButton().getCurrentView());
                     }
                 }
-                mLastLockToAppLongPress = time;
-            } else {
-                // If this is back still need to handle sending the long-press event.
-                if (v.getId() == btnId1) {
-                    sendBackLongPress = true;
-                } else if (touchExplorationEnabled && inLockTaskMode) {
-                    // When in accessibility mode a long press that is recents/home (not back)
-                    // should stop lock task.
+            } finally {
+                if (stopLockTaskMode) {
                     activityManager.stopSystemLockTaskMode();
                     // When exiting refresh disabled flags.
                     mNavigationBarView.updateNavButtonIcons();
-                    return true;
-                } else if (v.getId() == btnId2) {
-                    return btnId2 == R.id.recent_apps
-                            ? onLongPressRecents()
-                            : onHomeLongClick(mNavigationBarView.getHomeButton().getCurrentView());
+                    mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_SCREEN_PINNING, false);
                 }
             }
+
             if (sendBackLongPress) {
                 KeyButtonView keyButtonView = (KeyButtonView) v;
                 keyButtonView.sendEvent(KeyEvent.ACTION_DOWN, KeyEvent.FLAG_LONG_PRESS);
@@ -923,6 +934,10 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         } else {
             checkNavBarModes();
         }
+    }
+
+    public boolean isNavBarWindowVisible() {
+        return mNavigationBarWindowState == WINDOW_STATE_SHOWING;
     }
 
     /**

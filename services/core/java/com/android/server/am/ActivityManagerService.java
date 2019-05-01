@@ -1518,6 +1518,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private ParcelFileDescriptor[] mLifeMonitorFds;
 
+    static final HostingRecord sNullHostingRecord = new HostingRecord(null);
     /**
      * Used to notify activity lifecycle events.
      */
@@ -1983,7 +1984,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
                         false,
                         0,
-                        false);
+                        new HostingRecord("system"));
                 app.setPersistent(true);
                 app.pid = MY_PID;
                 app.getWindowProcessController().setPid(MY_PID);
@@ -1991,7 +1992,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 app.makeActive(mSystemThread.getApplicationThread(), mProcessStats);
                 mPidsSelfLocked.put(app.pid, app);
                 mProcessList.updateLruProcessLocked(app, false, null);
-                updateOomAdjLocked();
+                updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_NONE);
             }
         } catch (PackageManager.NameNotFoundException e) {
             throw new RuntimeException(
@@ -2476,7 +2477,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // bind background threads to little cores
         // this is expected to fail inside of framework tests because apps can't touch cpusets directly
         // make sure we've already adjusted system_server's internal view of itself first
-        updateOomAdjLocked();
+        updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_NONE);
         try {
             Process.setThreadGroupAndCpuset(BackgroundThread.get().getThreadId(),
                     Process.THREAD_GROUP_SYSTEM);
@@ -2915,8 +2916,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             info.seInfoUser = SELinuxUtil.COMPLETE_STR;
             info.targetSdkVersion = Build.VERSION.SDK_INT;
             ProcessRecord proc = mProcessList.startProcessLocked(processName, info /* info */,
-                    false /* knownToBeDead */, 0 /* intentFlags */, ""  /* hostingType */,
-                    null /* hostingName */, true /* allowWhileBooting */, true /* isolated */,
+                    false /* knownToBeDead */, 0 /* intentFlags */,
+                    sNullHostingRecord  /* hostingRecord */,
+                    true /* allowWhileBooting */, true /* isolated */,
                     uid, true /* keepIfLarge */, abiOverride, entryPoint, entryPointArgs,
                     crashHandler);
             return proc != null;
@@ -2926,11 +2928,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("this")
     final ProcessRecord startProcessLocked(String processName,
             ApplicationInfo info, boolean knownToBeDead, int intentFlags,
-            String hostingType, ComponentName hostingName, boolean allowWhileBooting,
+            HostingRecord hostingRecord, boolean allowWhileBooting,
             boolean isolated, boolean keepIfLarge) {
         return mProcessList.startProcessLocked(processName, info, knownToBeDead, intentFlags,
-                hostingType,
-                hostingName, allowWhileBooting, isolated, 0 /* isolatedUid */, keepIfLarge,
+                hostingRecord, allowWhileBooting, isolated, 0 /* isolatedUid */, keepIfLarge,
                 null /* ABI override */, null /* entryPoint */, null /* entryPointArgs */,
                 null /* crashHandler */);
     }
@@ -3446,10 +3447,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                                                                           0, null, 0, 0);
                         if (aInfo == null)
                             continue;
-                        empty_app = startProcessLocked(app_str, aInfo.applicationInfo, false, 0,
-                                                   "activity", null, false, false, true);
+                        empty_app = startProcessLocked(
+                            app_str,
+                            aInfo.applicationInfo,
+                            false /* knownToBeDead */,
+                            0 /* intentFlags */,
+                           sNullHostingRecord /* hostingRecord */,
+                           false /* allowWhileBooting */,
+                           false /* isolated */,
+                           true /* keepIfLarge */);
                         if (empty_app != null)
-                            updateOomAdjLocked(empty_app, true);
+                            updateOomAdjLocked(empty_app, true, OomAdjuster.OOM_ADJ_REASON_NONE);
                     } catch (Exception e) {
                         if (DEBUG_PROCESSES)
                             Slog.w(TAG, "Exception raised trying to start app as empty " + e);
@@ -3694,7 +3702,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             handleAppDiedLocked(app, false, true);
 
             if (doOomAdj) {
-                updateOomAdjLocked();
+                updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_END);
             }
             if (doLowMem) {
                 doLowMemReportIfNeededLocked(app);
@@ -4757,7 +4765,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             app.deathRecipient = adr;
         } catch (RemoteException e) {
             app.resetPackageList(mProcessStats);
-            mProcessList.startProcessLocked(app, "link fail", processName);
+            mProcessList.startProcessLocked(app,
+                    new HostingRecord("link fail", processName));
             return false;
         }
 
@@ -4996,7 +5005,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             app.resetPackageList(mProcessStats);
             app.unlinkDeathRecipient();
-            mProcessList.startProcessLocked(app, "bind fail", processName);
+            mProcessList.startProcessLocked(app, new HostingRecord("bind-fail", processName));
             return false;
         }
 
@@ -5065,7 +5074,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         if (!didSomething) {
-            updateOomAdjLocked();
+            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
             checkTime(startTime, "attachApplicationLocked: after updateOomAdjLocked");
         }
 
@@ -5078,8 +5087,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 app.startTime,
                 (int) (bindApplicationTimeMillis - app.startTime),
                 (int) (SystemClock.elapsedRealtime() - app.startTime),
-                app.hostingType,
-                (app.hostingNameStr != null ? app.hostingNameStr : ""));
+                app.hostingRecord.getType(),
+                (app.hostingRecord.getName() != null ? app.hostingRecord.getName() : ""));
         return true;
     }
 
@@ -5188,7 +5197,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 for (int ip=0; ip<NP; ip++) {
                     if (DEBUG_PROCESSES) Slog.v(TAG_PROCESSES, "Starting process on hold: "
                             + procs.get(ip));
-                    mProcessList.startProcessLocked(procs.get(ip), "on-hold", null);
+                    mProcessList.startProcessLocked(procs.get(ip), new HostingRecord("on-hold"));
                 }
             }
             if (mFactoryTest == FactoryTest.FACTORY_TEST_LOW_LEVEL) {
@@ -5548,7 +5557,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             mConstants.setOverrideMaxCachedProcesses(max);
         }
-        trimApplications();
+        trimApplications(OomAdjuster.OOM_ADJ_REASON_PROCESS_END);
     }
 
     @Override
@@ -5574,7 +5583,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 pr.forcingToImportant = null;
                 updateProcessForegroundLocked(pr, false, 0, false);
             }
-            updateOomAdjLocked();
+            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
         }
     }
 
@@ -5620,7 +5629,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             if (changed) {
-                updateOomAdjLocked();
+                updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
             }
         }
     }
@@ -6212,8 +6221,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void moveTaskToFront(int taskId, int flags, Bundle bOptions) {
-        mActivityTaskManager.moveTaskToFront(taskId, flags, bOptions);
+    public void moveTaskToFront(IApplicationThread appThread, String callingPackage, int taskId,
+            int flags, Bundle bOptions) {
+        mActivityTaskManager.moveTaskToFront(appThread, callingPackage, taskId, flags, bOptions);
     }
 
     /**
@@ -6776,7 +6786,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 checkTime(startTime, "getContentProviderImpl: before updateOomAdj");
                 final int verifiedAdj = cpr.proc.verifiedAdj;
-                boolean success = updateOomAdjLocked(cpr.proc, true);
+                boolean success = updateOomAdjLocked(cpr.proc, true,
+                        OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER);
                 // XXX things have changed so updateOomAdjLocked doesn't actually tell us
                 // if the process has been successfully adjusted.  So to reduce races with
                 // it, we will check whether the process still exists.  Note that this doesn't
@@ -6979,9 +6990,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                         } else {
                             checkTime(startTime, "getContentProviderImpl: before start process");
                             proc = startProcessLocked(cpi.processName,
-                                    cpr.appInfo, false, 0, "content provider",
+                                    cpr.appInfo, false, 0,
+                                    new HostingRecord("content provider",
                                     new ComponentName(cpi.applicationInfo.packageName,
-                                            cpi.name), false, false, false);
+                                            cpi.name)), false, false, false);
                             checkTime(startTime, "getContentProviderImpl: after start process");
                             if (proc == null) {
                                 Slog.w(TAG, "Unable to launch app "
@@ -7208,7 +7220,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     throw new NullPointerException("connection is null");
                 }
                 if (decProviderCountLocked(conn, null, null, stable)) {
-                    updateOomAdjLocked();
+                    updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_REMOVE_PROVIDER);
                 }
             }
         } finally {
@@ -7249,7 +7261,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             ContentProviderRecord localCpr = mProviderMap.getProviderByClass(comp, userId);
             if (localCpr.hasExternalProcessHandles()) {
                 if (localCpr.removeExternalProcessHandleLocked(token)) {
-                    updateOomAdjLocked();
+                    updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_REMOVE_PROVIDER);
                 } else {
                     Slog.e(TAG, "Attmpt to remove content provider " + localCpr
                             + " with no external reference for token: "
@@ -7316,7 +7328,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         dst.setProcess(r);
                         dst.notifyAll();
                     }
-                    updateOomAdjLocked(r, true);
+                    updateOomAdjLocked(r, true, OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER);
                     maybeUpdateProviderUsageStatsLocked(r, src.info.packageName,
                             src.info.authority);
                 }
@@ -7702,9 +7714,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         if (app == null) {
-            app = mProcessList.newProcessRecordLocked(info, customProcess, isolated, 0, false);
+            app = mProcessList.newProcessRecordLocked(info, customProcess, isolated, 0,
+                    new HostingRecord("added application",
+                            customProcess != null ? customProcess : info.processName));
             mProcessList.updateLruProcessLocked(app, false, null);
-            updateOomAdjLocked();
+            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
         }
 
         // This package really, really can not be stopped.
@@ -7723,9 +7737,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (app.thread == null && mPersistentStartingProcesses.indexOf(app) < 0) {
             mPersistentStartingProcesses.add(app);
-            mProcessList.startProcessLocked(app, "added application",
-                    customProcess != null ? customProcess : app.processName, disableHiddenApiChecks,
-                    mountExtStorageFull, abiOverride);
+            mProcessList.startProcessLocked(app, new HostingRecord("added application",
+                    customProcess != null ? customProcess : app.processName),
+                    disableHiddenApiChecks, mountExtStorageFull, abiOverride);
         }
 
         return app;
@@ -7799,7 +7813,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mActivityTaskManager.onScreenAwakeChanged(isAwake);
                 mOomAdjProfiler.onWakefulnessChanged(wakefulness);
             }
-            updateOomAdjLocked();
+            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
         }
     }
 
@@ -8379,7 +8393,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
                 if (changed) {
-                    updateOomAdjLocked(pr, true);
+                    updateOomAdjLocked(pr, true, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
                 }
             }
         } finally {
@@ -8409,7 +8423,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Slog.i(TAG, "Setting runningRemoteAnimation=" + pr.runningRemoteAnimation
                         + " for pid=" + pid);
             }
-            updateOomAdjLocked(pr, true);
+            updateOomAdjLocked(pr, true, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
         }
     }
 
@@ -13675,7 +13689,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             mProcessList.addProcessNameLocked(app);
             app.pendingStart = false;
-            mProcessList.startProcessLocked(app, "restart", app.processName);
+            mProcessList.startProcessLocked(app,
+                    new HostingRecord("restart", app.processName));
             return true;
         } else if (app.pid > 0 && app.pid != MY_PID) {
             // Goodbye!
@@ -14016,9 +14031,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                     (backupMode == ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL)
                             ? new ComponentName(app.packageName, app.backupAgentName)
                             : new ComponentName("android", "FullBackupAgent");
+
             // startProcessLocked() returns existing proc's record if it's already running
             ProcessRecord proc = startProcessLocked(app.processName, app,
-                    false, 0, "backup", hostingName, false, false, false);
+                    false, 0,
+                    new HostingRecord("backup", hostingName),
+                    false, false, false);
             if (proc == null) {
                 Slog.e(TAG, "Unable to start backup agent process " + r);
                 return false;
@@ -14039,7 +14057,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             mBackupTargets.put(targetUserId, r);
 
             // Try not to kill the process during backup
-            updateOomAdjLocked(proc, true);
+            updateOomAdjLocked(proc, true, OomAdjuster.OOM_ADJ_REASON_NONE);
 
             // If the process is already attached, schedule the creation of the backup agent now.
             // If it is not yet live, this will be done when it attaches to the framework.
@@ -14154,7 +14172,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 // Not backing this app up any more; reset its OOM adjustment
                 final ProcessRecord proc = backupTarget.app;
-                updateOomAdjLocked(proc, true);
+                updateOomAdjLocked(proc, true, OomAdjuster.OOM_ADJ_REASON_NONE);
                 proc.inFullBackup = false;
 
                 oldBackupUid = backupTarget != null ? backupTarget.appInfo.uid : -1;
@@ -14443,7 +14461,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             // If we actually concluded any broadcasts, we might now be able
             // to trim the recipients' apps from our working set
             if (doTrim) {
-                trimApplications();
+                trimApplications(OomAdjuster.OOM_ADJ_REASON_FINISH_RECEIVER);
                 return;
             }
 
@@ -15518,7 +15536,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     r.queue.processNextBroadcastLocked(/*fromMsg=*/ false, /*skipOomAdj=*/ true);
                 }
                 // updateOomAdjLocked() will be done here
-                trimApplicationsLocked();
+                trimApplicationsLocked(OomAdjuster.OOM_ADJ_REASON_FINISH_RECEIVER);
             }
 
         } finally {
@@ -16503,7 +16521,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             item.foregroundServiceTypes = fgServiceTypes;
 
             if (oomAdj) {
-                updateOomAdjLocked();
+                updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
             }
         }
     }
@@ -16551,11 +16569,13 @@ public class ActivityManagerService extends IActivityManager.Stub
      * @param app The process to update
      * @param oomAdjAll If it's ok to call updateOomAdjLocked() for all running apps
      *                  if necessary, or skip.
+     * @param oomAdjReason
      * @return whether updateOomAdjLocked(app) was successful.
      */
     @GuardedBy("this")
-    final boolean updateOomAdjLocked(ProcessRecord app, boolean oomAdjAll) {
-        return mOomAdjuster.updateOomAdjLocked(app, oomAdjAll);
+    final boolean updateOomAdjLocked(ProcessRecord app, boolean oomAdjAll,
+            String oomAdjReason) {
+        return mOomAdjuster.updateOomAdjLocked(app, oomAdjAll, oomAdjReason);
     }
 
     static final class ProcStatsRunnable implements Runnable {
@@ -16748,8 +16768,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @GuardedBy("this")
-    final void updateOomAdjLocked() {
-        mOomAdjuster.updateOomAdjLocked();
+    final void updateOomAdjLocked(String oomAdjReason) {
+        mOomAdjuster.updateOomAdjLocked(oomAdjReason);
     }
 
     @Override
@@ -17034,14 +17054,14 @@ public class ActivityManagerService extends IActivityManager.Stub
         mOomAdjuster.setUidTempWhitelistStateLocked(uid, onWhitelist);
     }
 
-    final void trimApplications() {
+    final void trimApplications(String oomAdjReason) {
         synchronized (this) {
-            trimApplicationsLocked();
+            trimApplicationsLocked(oomAdjReason);
         }
     }
 
     @GuardedBy("this")
-    final void trimApplicationsLocked() {
+    final void trimApplicationsLocked(String oomAdjReason) {
         // First remove any unused application processes whose package
         // has been removed.
         for (int i = mProcessList.mRemovedProcesses.size() - 1; i >= 0; i--) {
@@ -17073,7 +17093,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // Now update the oom adj for all processes. Don't skip this, since other callers
         // might be depending on it.
-        updateOomAdjLocked();
+        updateOomAdjLocked(oomAdjReason);
     }
 
     /** This method sends the specified signal to each of the persistent apps */
@@ -17682,7 +17702,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 pr.setHasOverlayUi(hasOverlayUi);
                 //Slog.i(TAG, "Setting hasOverlayUi=" + pr.hasOverlayUi + " for pid=" + pid);
-                updateOomAdjLocked(pr, true);
+                updateOomAdjLocked(pr, true, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
             }
         }
 
@@ -17839,7 +17859,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void trimApplications() {
-            ActivityManagerService.this.trimApplications();
+            ActivityManagerService.this.trimApplications(OomAdjuster.OOM_ADJ_REASON_ACTIVITY);
         }
 
         public void killProcessesForRemovedTask(ArrayList<Object> procsToKill) {
@@ -17891,7 +17911,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void updateOomAdj() {
             synchronized (ActivityManagerService.this) {
-                ActivityManagerService.this.updateOomAdjLocked();
+                ActivityManagerService.this.updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_NONE);
             }
         }
 
@@ -18227,8 +18247,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 synchronized (ActivityManagerService.this) {
                     startProcessLocked(processName, info, knownToBeDead, 0 /* intentFlags */,
-                            hostingType, hostingName, false /* allowWhileBooting */,
-                            false /* isolated */, true /* keepIfLarge */);
+                            new HostingRecord(hostingType, hostingName),
+                            false /* allowWhileBooting */, false /* isolated */,
+                            true /* keepIfLarge */);
                 }
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
