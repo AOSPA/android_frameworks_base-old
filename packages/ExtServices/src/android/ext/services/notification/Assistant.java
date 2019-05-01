@@ -238,7 +238,7 @@ public class Assistant extends NotificationAssistantService {
         }
         mSingleThreadExecutor.submit(() -> {
             NotificationEntry entry =
-                    new NotificationEntry(mPackageManager, sbn, channel, mSmsHelper);
+                    new NotificationEntry(mPackageManager, sbn.cloneLight(), channel, mSmsHelper);
             SmartActionsHelper.SmartSuggestions suggestions = mSmartActionsHelper.suggest(entry);
             if (DEBUG) {
                 Log.d(TAG, String.format(
@@ -272,6 +272,9 @@ public class Assistant extends NotificationAssistantService {
                 final int importance = entry.getImportance() < IMPORTANCE_LOW
                         ? entry.getImportance() : IMPORTANCE_LOW;
                 signals.putInt(KEY_IMPORTANCE, importance);
+            } else {
+                // Even if no change is made, send an identity adjustment for metric logging.
+                signals.putInt(KEY_IMPORTANCE, entry.getImportance());
             }
         }
 
@@ -293,7 +296,7 @@ public class Assistant extends NotificationAssistantService {
             Ranking ranking = getRanking(sbn.getKey(), rankingMap);
             if (ranking != null && ranking.getChannel() != null) {
                 NotificationEntry entry = new NotificationEntry(mPackageManager,
-                        sbn, ranking.getChannel(), mSmsHelper);
+                        sbn.cloneLight(), ranking.getChannel(), mSmsHelper);
                 String key = getKey(
                         sbn.getPackageName(), sbn.getUserId(), ranking.getChannel().getId());
                 ChannelImpressions ci = mkeyToImpressions.getOrDefault(key,
