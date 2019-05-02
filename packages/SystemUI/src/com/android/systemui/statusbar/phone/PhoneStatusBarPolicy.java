@@ -183,6 +183,11 @@ public class PhoneStatusBarPolicy
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
 
+        boolean isIeee80211acSupported =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ac_supported);
+        boolean isIeee80211axSupported =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ax_supported);
+
         // listen for user / profile change.
         try {
             ActivityManager.getService().registerUserSwitchObserver(mUserSwitchListener, TAG);
@@ -214,8 +219,16 @@ public class PhoneStatusBarPolicy
         mIconController.setIconVisibility(mSlotCast, false);
 
         // hotspot
-        mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+        if (isIeee80211axSupported) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
                 mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else if (isIeee80211acSupported) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        }
         mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
 
         // managed profile

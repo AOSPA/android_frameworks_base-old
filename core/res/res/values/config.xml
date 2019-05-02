@@ -711,6 +711,9 @@
     <!-- Wifi driver supports IEEE80211AC for softap -->
     <bool translatable="false" name="config_wifi_softap_ieee80211ac_supported">false</bool>
 
+    <!-- Wifi driver supports IEEE80211AX for softap -->
+    <bool translatable="false" name="config_wifi_softap_ieee80211ax_supported">false</bool>
+
     <!-- Indicates that local-only hotspot should be brought up at 5GHz.  This option is
          for automotive builds only (the one that have PackageManager#FEATURE_AUTOMOTIVE) -->
     <bool translatable="false" name="config_wifi_local_only_hotspot_5ghz">false</bool>
