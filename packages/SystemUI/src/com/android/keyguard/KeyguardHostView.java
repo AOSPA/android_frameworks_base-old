@@ -95,6 +95,21 @@ public class KeyguardHostView extends FrameLayout implements SecurityCallback {
                 }
             }
         }
+
+        @Override
+        public void onTrustChanged(int userId) {
+            boolean faceAutoUnlockEnabledByDefault = getResources().getBoolean(com.android.internal.R.bool.config_autoFaceUnlockEnabledByDefault);
+            boolean faceAutoUnlock = Settings.System.getIntForUser(getContext().getContentResolver(),
+                           Settings.System.FACE_AUTO_UNLOCK, faceAutoUnlockEnabledByDefault ? 1 : 0,
+                           UserHandle.USER_CURRENT) == 1;
+            if (userId != KeyguardUpdateMonitor.getCurrentUser()) return;
+            if (mKeyguardUpdateMonitor.getUserCanSkipBouncer(userId) &&
+                mKeyguardUpdateMonitor.getUserHasTrust(userId) &&
+                mKeyguardUpdateMonitor.isFaceTrusted() && faceAutoUnlock &&
+                !mKeyguardUpdateMonitor.isPocketLockVisible()) {
+                dismiss(false, userId);
+            }
+        }
     };
 
     // Whether the volume keys should be handled by keyguard. If true, then
