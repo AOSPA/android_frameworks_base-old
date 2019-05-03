@@ -3426,9 +3426,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         return mActivityTaskManager.startActivityFromRecents(taskId, bOptions);
     }
 
-    final int startActivityAsUserEmpty(IApplicationThread caller, String callingPackage,
-            Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
-            int startFlags, ProfilerInfo profilerInfo, Bundle options, int userId) {
+    public int startActivityAsUserEmpty(Bundle options) {
         ArrayList<String> pApps = options.getStringArrayList("start_empty_apps");
         if (pApps != null && pApps.size() > 0) {
             Iterator<String> apps_itr = pApps.iterator();
@@ -17596,6 +17594,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 String processName, String abiOverride, int uid, Runnable crashHandler) {
             return ActivityManagerService.this.startIsolatedProcess(entryPoint, entryPointArgs,
                     processName, abiOverride, uid, crashHandler);
+        }
+
+        @Override
+        public int startActivityAsUserEmpty(Bundle options) {
+            return ActivityManagerService.this.startActivityAsUserEmpty(options);
         }
 
         @Override
