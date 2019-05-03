@@ -149,6 +149,9 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.util.Arrays;
+import android.os.AsyncTask;
+
 // TODO: This class has become a dumping ground. Let's
 // - Move things relating to the hierarchy to RootWindowContainer
 // - Move things relating to activity life cycles to maybe a new class called ActivityLifeCycler
@@ -185,6 +188,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     public static boolean mIsPerfBoostAcquired = false;
     public static int mPerfHandle = -1;
     public BoostFramework mPerfBoost = null;
+    public BoostFramework mUxPerf = new BoostFramework();
 
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
     static final int RESTART_ACTIVITY_PROCESS_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 13;
@@ -1884,6 +1888,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 ActivityManagerInternal::killProcessesForRemovedTask, mService.mAmInternal,
                 procsToKill);
         mService.mH.sendMessage(m);
+
+        if(removeFromRecents) {
+            try {
+                new PreferredAppsTask().execute();
+            } catch (Exception e) {
+                Slog.v (TAG, "Exception: " + e);
+            }
+        }
+
     }
 
     /**
@@ -2901,4 +2914,30 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             mResult.dump(pw, prefix);
         }
     }
+
+    class PreferredAppsTask extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... params) {
+            String res = null;
+            final Intent intent = new Intent(Intent.ACTION_MAIN);
+            if (mUxPerf != null) {
+                res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
+                if (res == null)
+                    return null;
+                String[] p_apps = res.split("/");
+                if (p_apps.length != 0) {
+                    ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
+                    Bundle bParams = new Bundle();
+                    if (bParams == null)
+                        return null;
+                    bParams.putStringArrayList("start_empty_apps", apps_l);
+                    final Message msg = PooledLambda.obtainMessage(
+                                            ActivityManagerInternal::startActivityAsUserEmpty, mService.mAmInternal, bParams);
+                    mService.mH.sendMessage(msg);
+                }
+            }
+            return null;
+        }
+    }
+
 }
