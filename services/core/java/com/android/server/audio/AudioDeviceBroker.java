@@ -321,8 +321,6 @@ import java.util.ArrayList;
                         mForcedUseForCommExt = AudioSystem.FORCE_BT_SCO;
                         return;
                     }
-                    mForcedUseForCommExt = AudioSystem.FORCE_BT_SCO;
-                    return;
                 }
                 mForcedUseForComm = AudioSystem.FORCE_BT_SCO;
             } else if (mForcedUseForComm == AudioSystem.FORCE_BT_SCO) {
