@@ -159,6 +159,9 @@ std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // temperature
         {android::util::TEMPERATURE,
          {.puller = new StatsCompanionServicePuller(android::util::TEMPERATURE)}},
+        // cooling_device
+        {android::util::COOLING_DEVICE,
+         {.puller = new StatsCompanionServicePuller(android::util::COOLING_DEVICE)}},
         // binder_calls
         {android::util::BINDER_CALLS,
          {.additiveFields = {4, 5, 6, 8, 12},
@@ -254,6 +257,9 @@ std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // AppsOnExternalStorageInfo
         {android::util::APPS_ON_EXTERNAL_STORAGE_INFO,
          {.puller = new StatsCompanionServicePuller(android::util::APPS_ON_EXTERNAL_STORAGE_INFO)}},
+        // Face Settings
+        {android::util::FACE_SETTINGS,
+         {.puller = new StatsCompanionServicePuller(android::util::FACE_SETTINGS)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {
@@ -276,7 +282,8 @@ bool StatsPullerManager::Pull(int tagId, vector<shared_ptr<LogEvent>>* data) {
 }
 
 bool StatsPullerManager::PullerForMatcherExists(int tagId) const {
-    return kAllPullAtomInfo.find(tagId) != kAllPullAtomInfo.end();
+    // Vendor pulled atoms might be registered after we parse the config.
+    return isVendorPulledAtom(tagId) || kAllPullAtomInfo.find(tagId) != kAllPullAtomInfo.end();
 }
 
 void StatsPullerManager::updateAlarmLocked() {
@@ -449,9 +456,8 @@ void StatsPullerManager::RegisterPullerCallback(int32_t atomTag,
         const sp<IStatsPullerCallback>& callback) {
     AutoMutex _l(mLock);
     // Platform pullers cannot be changed.
-    if (atomTag < StatsdStats::kMaxPlatformAtomTag) {
-        VLOG("RegisterPullerCallback: atom tag %d is less than min tag %d",
-                atomTag, StatsdStats::kMaxPlatformAtomTag);
+    if (!isVendorPulledAtom(atomTag)) {
+        VLOG("RegisterPullerCallback: atom tag %d is not vendor pulled", atomTag);
         return;
     }
     VLOG("RegisterPullerCallback: adding puller for tag %d", atomTag);
@@ -462,7 +468,7 @@ void StatsPullerManager::RegisterPullerCallback(int32_t atomTag,
 void StatsPullerManager::UnregisterPullerCallback(int32_t atomTag) {
     AutoMutex _l(mLock);
     // Platform pullers cannot be changed.
-    if (atomTag < StatsdStats::kMaxPlatformAtomTag) {
+    if (!isVendorPulledAtom(atomTag)) {
         return;
     }
     StatsdStats::getInstance().notePullerCallbackRegistrationChanged(atomTag, /*registered=*/false);

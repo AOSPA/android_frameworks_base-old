@@ -288,9 +288,9 @@
     <string name="debug_monitoring_category" msgid="7640508148375798343">"Мониторинг"</string>
     <string name="strict_mode" msgid="1938795874357830695">"Строгий режим"</string>
     <string name="strict_mode_summary" msgid="142834318897332338">"Подсвечивать экран во время длительных операций"</string>
-    <string name="pointer_location" msgid="6084434787496938001">"Отображать касания"</string>
-    <string name="pointer_location_summary" msgid="840819275172753713">"Визуализировать на экране нажатия и жесты"</string>
-    <string name="show_touches" msgid="2642976305235070316">"Визуальный отклик"</string>
+    <string name="pointer_location" msgid="6084434787496938001">"Место нажатия"</string>
+    <string name="pointer_location_summary" msgid="840819275172753713">"Показывать данные нажатий и жестов"</string>
+    <string name="show_touches" msgid="2642976305235070316">"Показывать нажатия"</string>
     <string name="show_touches_summary" msgid="6101183132903926324">"Показывать места нажатия на экране"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Показ. обнов. поверхности"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Подсвечивать поверхности окон при обновлении"</string>
@@ -414,9 +414,9 @@
     <string name="install_other_apps" msgid="6986686991775883017">"Установка неизвестных приложений"</string>
     <string name="home" msgid="3256884684164448244">"Настройки"</string>
   <string-array name="battery_labels">
-    <item msgid="8494684293649631252">"0%"</item>
-    <item msgid="8934126114226089439">"50%"</item>
-    <item msgid="1286113608943010849">"100%"</item>
+    <item msgid="8494684293649631252">"0 %"</item>
+    <item msgid="8934126114226089439">"50 %"</item>
+    <item msgid="1286113608943010849">"100 %"</item>
   </string-array>
     <string name="charge_length_format" msgid="8978516217024434156">"<xliff:g id="ID_1">%1$s</xliff:g> назад"</string>
     <string name="remaining_length_format" msgid="7886337596669190587">"Осталось <xliff:g id="ID_1">%1$s</xliff:g>"</string>

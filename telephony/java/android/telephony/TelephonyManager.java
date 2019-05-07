@@ -10382,10 +10382,10 @@ public class TelephonyManager {
      * <p>Requires permission {@link android.Manifest.permission#READ_PHONE_STATE} or the calling
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
-     * @return Map including the key as the active subscription ID (Note: if there is no active
+     * @return Map including the keys as the active subscription IDs (Note: if there is no active
      * subscription, the key is {@link SubscriptionManager#getDefaultSubscriptionId}) and the value
-     * as the list of {@link EmergencyNumber}; null if this information is not available; or throw
-     * a SecurityException if the caller does not have the permission.
+     * as the list of {@link EmergencyNumber}; empty Map if this information is not available;
+     * or throw a SecurityException if the caller does not have the permission.
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     @NonNull
@@ -10435,10 +10435,10 @@ public class TelephonyManager {
      * <li>{@link EmergencyNumber#EMERGENCY_SERVICE_CATEGORY_MIEC} </li>
      * <li>{@link EmergencyNumber#EMERGENCY_SERVICE_CATEGORY_AIEC} </li>
      * </ol>
-     * @return Map including the key as the active subscription ID (Note: if there is no active
+     * @return Map including the keys as the active subscription IDs (Note: if there is no active
      * subscription, the key is {@link SubscriptionManager#getDefaultSubscriptionId}) and the value
-     * as the list of {@link EmergencyNumber}; null if this information is not available; or throw
-     * a SecurityException if the caller does not have the permission.
+     * as the list of {@link EmergencyNumber}; empty Map if this information is not available;
+     * or throw a SecurityException if the caller does not have the permission.
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     @NonNull
@@ -10953,5 +10953,34 @@ public class TelephonyManager {
             Log.e(TAG, "getRadioHalVersion() RemoteException", e);
         }
         return new Pair<Integer, Integer>(-1, -1);
+    }
+
+
+    /**
+     * Return whether MMS data is enabled. This will tell if framework will accept a MMS network
+     * request on a subId.
+     *
+     *  Mms is enabled if:
+     *  1) user data is turned on, or
+     *  2) MMS is un-metered for this subscription, or
+     *  3) alwaysAllowMms setting {@link SubscriptionManager#setAlwaysAllowMmsData} is turned on.
+     *
+     * @return whether MMS data is allowed.
+     *
+     * @hide
+     */
+    public boolean isMmsDataEnabled() {
+        String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isMmsDataEnabled(getSubId(), pkgForDebug);
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return false;
     }
 }

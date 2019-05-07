@@ -46,9 +46,9 @@ import android.view.contentcapture.ContentCaptureEvent;
 import android.view.contentcapture.ContentCaptureManager;
 import android.view.contentcapture.ContentCaptureSession;
 import android.view.contentcapture.ContentCaptureSessionId;
+import android.view.contentcapture.DataRemovalRequest;
 import android.view.contentcapture.IContentCaptureDirectManager;
 import android.view.contentcapture.MainContentCaptureSession;
-import android.view.contentcapture.UserDataRemovalRequest;
 
 import com.android.internal.os.IResultReceiver;
 
@@ -86,11 +86,28 @@ public abstract class ContentCaptureService extends Service {
      * <code>&lt;{@link
      * android.R.styleable#ContentCaptureService content-capture-service}&gt;</code> tag.
      *
-     * <p>This is a a sample XML file configuring a ContentCaptureService:
-     * <pre> &lt;content-capture-service
-     *     android:settingsActivity="foo.bar.SettingsActivity"
-     *     . . .
-     * /&gt;</pre>
+     * <p>Here's an example of how to use it on {@code AndroidManifest.xml}:
+     *
+     * <pre>
+     * &lt;service android:name=".MyContentCaptureService"
+     *     android:permission="android.permission.BIND_CONTENT_CAPTURE_SERVICE"&gt;
+     *   &lt;intent-filter&gt;
+     *     &lt;action android:name="android.service.contentcapture.ContentCaptureService" /&gt;
+     *   &lt;/intent-filter&gt;
+     *
+     *   &lt;meta-data
+     *       android:name="android.content_capture"
+     *       android:resource="@xml/my_content_capture_service"/&gt;
+     * &lt;/service&gt;
+     * </pre>
+     *
+     * <p>And then on {@code res/xml/my_content_capture_service.xml}:
+     *
+     * <pre>
+     *   &lt;content-capture-service xmlns:android="http://schemas.android.com/apk/res/android"
+     *       android:settingsActivity="my.package.MySettingsActivity"&gt;
+     *   &lt;/content-capture-service&gt;
+     * </pre>
      */
     public static final String SERVICE_META_DATA = "android.content_capture";
 
@@ -138,7 +155,7 @@ public abstract class ContentCaptureService extends Service {
         }
 
         @Override
-        public void onUserDataRemovalRequest(UserDataRemovalRequest request) {
+        public void onDataRemovalRequest(DataRemovalRequest request) {
             mHandler.sendMessage(
                     obtainMessage(ContentCaptureService::handleOnUserDataRemovalRequest,
                             ContentCaptureService.this, request));
@@ -288,12 +305,12 @@ public abstract class ContentCaptureService extends Service {
     }
 
     /**
-     * Notifies the service that the app requested to remove data associated with the user.
+     * Notifies the service that the app requested to remove content capture data.
      *
-     * @param request the user data requested to be removed
+     * @param request the content capture data requested to be removed
      */
-    public void onUserDataRemovalRequest(@NonNull UserDataRemovalRequest request) {
-        if (sVerbose) Log.v(TAG, "onUserDataRemovalRequest()");
+    public void onDataRemovalRequest(@NonNull DataRemovalRequest request) {
+        if (sVerbose) Log.v(TAG, "onDataRemovalRequest()");
     }
 
     /**
@@ -449,8 +466,8 @@ public abstract class ContentCaptureService extends Service {
         onDestroyContentCaptureSession(new ContentCaptureSessionId(sessionId));
     }
 
-    private void handleOnUserDataRemovalRequest(@NonNull UserDataRemovalRequest request) {
-        onUserDataRemovalRequest(request);
+    private void handleOnUserDataRemovalRequest(@NonNull DataRemovalRequest request) {
+        onDataRemovalRequest(request);
     }
 
     private void handleOnActivityEvent(@NonNull ActivityEvent event) {

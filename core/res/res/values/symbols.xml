@@ -1499,6 +1499,7 @@
   <java-symbol type="drawable" name="ic_settings_print" />
   <java-symbol type="drawable" name="ic_signal_location" />
   <java-symbol type="drawable" name="ic_info_outline_24" />
+  <java-symbol type="drawable" name="ic_qs_ui_mode_night" />
 
   <java-symbol type="drawable" name="stat_notify_mmcc_indication_icn" />
   <java-symbol type="drawable" name="autofilled_highlight"/>
@@ -2026,7 +2027,7 @@
   <java-symbol type="integer" name="config_networkNotifySwitchType" />
   <java-symbol type="array" name="config_networkNotifySwitches" />
   <java-symbol type="integer" name="config_networkAvoidBadWifi" />
-  <java-symbol type="string" name="config_networkDefaultCaptivePortalServerUrl" />
+  <java-symbol type="string" name="config_networkCaptivePortalServerUrl" />
   <java-symbol type="integer" name="config_networkWakeupPacketMark" />
   <java-symbol type="integer" name="config_networkWakeupPacketMask" />
   <java-symbol type="bool" name="config_apfDrop802_3Frames" />
@@ -2245,6 +2246,7 @@
   <java-symbol type="id" name="button_always" />
   <java-symbol type="id" name="button_app_settings" />
   <java-symbol type="integer" name="config_globalActionsKeyTimeout" />
+  <java-symbol type="integer" name="config_screenshotChordKeyTimeout" />
   <java-symbol type="integer" name="config_maxResolverActivityColumns" />
   <java-symbol type="array" name="config_notificationSignalExtractors" />
 
@@ -3203,6 +3205,7 @@
   <java-symbol type="array" name="config_convert_to_emergency_number_map" />
 
   <java-symbol type="array" name="config_nonBlockableNotificationPackages" />
+  <java-symbol type="array" name="config_priorityOnlyDndExemptPackages" />
 
   <java-symbol type="array" name="config_allowedManagedServicesOnLowRamDevices" />
 
@@ -3774,4 +3777,9 @@
   <!-- For DropBox -->
   <java-symbol type="integer" name="config_dropboxLowPriorityBroadcastRateLimitPeriod" />
   <java-symbol type="array" name="config_dropboxLowPriorityTags" />
+
+  <!-- For Privacy Type -->
+  <java-symbol type="drawable" name="perm_group_camera" />
+  <java-symbol type="drawable" name="perm_group_location" />
+  <java-symbol type="drawable" name="perm_group_microphone" />
 </resources>

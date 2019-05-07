@@ -17,30 +17,31 @@
 #pragma once
 
 #include "DamageAccumulator.h"
-#include "Lighting.h"
 #include "FrameInfo.h"
 #include "FrameInfoVisualizer.h"
 #include "FrameMetricsReporter.h"
 #include "IContextFactory.h"
 #include "IRenderPipeline.h"
 #include "LayerUpdateQueue.h"
-#include "RenderNode.h"
+#include "Lighting.h"
 #include "ReliableSurface.h"
+#include "RenderNode.h"
 #include "renderthread/RenderTask.h"
 #include "renderthread/RenderThread.h"
 
 #include <EGL/egl.h>
 #include <SkBitmap.h>
 #include <SkRect.h>
+#include <SkSize.h>
 #include <cutils/compiler.h>
 #include <gui/Surface.h>
 #include <utils/Functor.h>
 
 #include <functional>
+#include <future>
 #include <set>
 #include <string>
 #include <vector>
-#include <future>
 
 namespace android {
 namespace uirenderer {
@@ -112,7 +113,7 @@ public:
     void setSurface(sp<Surface>&& surface);
     bool pauseSurface();
     void setStopped(bool stopped);
-    bool hasSurface() { return mNativeSurface.get(); }
+    bool hasSurface() const { return mNativeSurface.get(); }
     void allocateBuffers();
 
     void setLightAlpha(uint8_t ambientShadowAlpha, uint8_t spotShadowAlpha);
@@ -187,9 +188,7 @@ public:
         mRenderPipeline->setPictureCapturedCallback(callback);
     }
 
-    void setForceDark(bool enable) {
-        mUseForceDark = enable;
-    }
+    void setForceDark(bool enable) { mUseForceDark = enable; }
 
     bool useForceDark() {
         // The force-dark override has the highest priority, followed by the disable setting
@@ -204,7 +203,10 @@ public:
         return mUseForceDark;
     }
 
-    void setRenderAheadDepth(int renderAhead);
+    // Must be called before setSurface
+    void setRenderAheadDepth(uint32_t renderAhead);
+
+    SkISize getNextFrameSize() const;
 
 private:
     CanvasContext(RenderThread& thread, bool translucent, RenderNode* rootRenderNode,
@@ -238,7 +240,7 @@ private:
     // painted onto its surface.
     bool mIsDirty = false;
     SwapBehavior mSwapBehavior = SwapBehavior::kSwap_default;
-    int mRenderAheadDepth = 0;
+    uint32_t mRenderAheadDepth = 0;
     struct SwapHistory {
         SkRect damage;
         nsecs_t vsyncTime;

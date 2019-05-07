@@ -140,7 +140,7 @@
     <string name="wfcSpnFormat_wifi" msgid="1892673884655959773">"Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_wo_hyphen" msgid="1336669776254502831">"Chiamate Wi-Fi"</string>
     <string name="wfcSpnFormat_vowifi" msgid="1765176406171272629">"VoWifi"</string>
-    <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Non attiva"</string>
+    <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Off"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="7335489823608689868">"Chiamata tramite Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="7081742743152286290">"Chiamata su rete mobile"</string>
     <string name="wfc_mode_wifi_only_summary" msgid="2379919155237869320">"Solo Wi-Fi"</string>
@@ -560,8 +560,8 @@
     <string name="face_acquired_too_far" msgid="1210969240069012510">"Avvicina il telefono."</string>
     <string name="face_acquired_too_high" msgid="3362395713403348013">"Sposta il telefono più in alto."</string>
     <string name="face_acquired_too_low" msgid="488983581737550912">"Sposta il telefono più in basso."</string>
-    <string name="face_acquired_too_right" msgid="941726879175375970">"Sposta il telefono a destra."</string>
-    <string name="face_acquired_too_left" msgid="5873592047381190672">"Sposta il telefono a sinistra."</string>
+    <string name="face_acquired_too_right" msgid="3667075962661863218">"Sposta il telefono verso sinistra."</string>
+    <string name="face_acquired_too_left" msgid="3148242963894703424">"Sposta il telefono verso destra."</string>
     <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Guarda lo schermo con gli occhi aperti."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Impossibile vedere il volto. Guarda il telefono."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Troppo movimento. Tieni fermo il telefono."</string>
@@ -661,7 +661,7 @@
     <string name="policylab_wipeData" msgid="3910545446758639713">"Cancellare tutti i dati"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="4306184096067756876">"Cancella i dati del tablet senza preavviso eseguendo un ripristino dati di fabbrica."</string>
     <string name="policydesc_wipeData" product="tv" msgid="5816221315214527028">"Consente di cancellare i dati della TV senza preavviso eseguendo un ripristino dei dati di fabbrica."</string>
-    <string name="policydesc_wipeData" product="default" msgid="5096895604574188391">"Cancella i dati del telefono senza preavviso eseguendo un ripristino dati di fabbrica."</string>
+    <string name="policydesc_wipeData" product="default" msgid="5096895604574188391">"Cancella i dati del telefono senza preavviso eseguendo un ripristino dei dati di fabbrica."</string>
     <string name="policylab_wipeData_secondaryUser" msgid="8362863289455531813">"Resettare i dati dell\'utente"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="6336255514635308054">"Resetta i dati dell\'utente sul tablet senza preavviso."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2086473496848351810">"Resetta i dati dell\'utente sulla TV senza preavviso."</string>

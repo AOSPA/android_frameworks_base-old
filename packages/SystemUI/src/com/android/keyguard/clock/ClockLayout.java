@@ -32,12 +32,12 @@ import com.android.keyguard.R;
  */
 public class ClockLayout extends FrameLayout {
 
+    private static final int ANALOG_CLOCK_SHIFT_FACTOR = 3;
     /**
      * Clock face views.
      */
     private View mDigitalClock;
     private View mAnalogClock;
-    private View mTypeClock;
 
     /**
      * Pixel shifting amplitidues used to prevent screen burn-in.
@@ -62,7 +62,6 @@ public class ClockLayout extends FrameLayout {
         super.onFinishInflate();
         mDigitalClock = findViewById(R.id.digital_clock);
         mAnalogClock = findViewById(R.id.analog_clock);
-        mTypeClock = findViewById(R.id.type_clock);
 
         // Get pixel shifting X, Y amplitudes from resources.
         Resources resources = getResources();
@@ -75,7 +74,14 @@ public class ClockLayout extends FrameLayout {
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        positionChildren();
+    }
 
+    void onTimeChanged() {
+        positionChildren();
+    }
+
+    private void positionChildren() {
         final float offsetX = getBurnInOffset(mBurnInPreventionOffsetX * 2, true)
                 - mBurnInPreventionOffsetX;
         final float offsetY = getBurnInOffset(mBurnInPreventionOffsetY * 2, false)
@@ -91,15 +97,9 @@ public class ClockLayout extends FrameLayout {
         // Put the analog clock in the middle of the screen.
         if (mAnalogClock != null) {
             mAnalogClock.setX(Math.max(0f, 0.5f * (getWidth() - mAnalogClock.getWidth()))
-                    + offsetX);
+                    + ANALOG_CLOCK_SHIFT_FACTOR * offsetX);
             mAnalogClock.setY(Math.max(0f, 0.5f * (getHeight() - mAnalogClock.getHeight()))
-                    + offsetY);
-        }
-
-        // Put the typographic clock part way down the screen.
-        if (mTypeClock != null) {
-            mTypeClock.setX(offsetX);
-            mTypeClock.setY(0.2f * getHeight() + offsetY);
+                    + ANALOG_CLOCK_SHIFT_FACTOR * offsetY);
         }
     }
 }
