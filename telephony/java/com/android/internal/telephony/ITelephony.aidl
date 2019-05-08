@@ -1594,7 +1594,7 @@ interface ITelephony {
     int getCardIdForDefaultEuicc(int subId, String callingPackage);
 
     /**
-     * Gets information about currently inserted UICCs and enabled eUICCs.
+     * Gets information about currently inserted UICCs and eUICCs.
      * <p>
      * Requires that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
      * <p>
@@ -1967,5 +1967,7 @@ interface ITelephony {
 
     boolean isModemEnabledForSlot(int slotIndex, String callingPackage);
 
-    boolean isMmsDataEnabled(int subId, String callingPackage);
+    boolean isDataEnabledForApn(int apnType, int subId, String callingPackage);
+
+    boolean isApnMetered(int apnType, int subId);
 }

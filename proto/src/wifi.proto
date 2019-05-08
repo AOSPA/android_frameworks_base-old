@@ -474,9 +474,6 @@ message WifiLog {
   // Number of times the SarManager failed to register SAR sensor listener
   optional int32 num_sar_sensor_registration_failures = 122;
 
-  // Histogram of the EAP method type of all installed Passpoint profiles
-  repeated PasspointProfileTypeCount installed_passpoint_profile_type = 123;
-
   // Hardware revision (EVT, DVT, PVT etc.)
   optional string hardware_revision = 124;
 
@@ -545,6 +542,15 @@ message WifiLog {
 
   // Number of times WifiManager#enableNetwork is called.
   optional int32 num_enable_network_calls = 146;
+
+  // Passpoint provison metrics
+  optional PasspointProvisionStats passpoint_provision_stats = 147;
+
+  // Histogram of the EAP method type of all installed Passpoint profiles for R1
+  repeated PasspointProfileTypeCount installed_passpoint_profile_type_for_r1 = 123;
+
+  // Histogram of the EAP method type of all installed Passpoint profiles for R2
+  repeated PasspointProfileTypeCount installed_passpoint_profile_type_for_r2 = 148;
 }
 
 // Information that gets logged for every WiFi connection.
@@ -2092,6 +2098,9 @@ message WifiUsabilityStats {
   // Firmware alert code. Only valid when the stats was triggered by a firmware
   // alert, otherwise -1.
   optional int32 firmware_alert_code = 4 [default = -1];
+
+  // Absolute milliseconds from device boot when these stats were sampled
+  optional int64 time_stamp_ms = 5;
 }
 
 message DeviceMobilityStatePnoScanStats {
@@ -2409,6 +2418,15 @@ message LinkProbeStats {
     optional int32 count = 2;
   }
 
+  // Counts the number of link probes for each experiment.
+  message ExperimentProbeCounts {
+    // The experiment ID.
+    optional string experiment_id = 1;
+
+    // The number of link probes triggered for this experiment.
+    optional int32 probe_count = 2;
+  }
+
   // Counts the occurrences of RSSI values when a link probe succeeds.
   repeated Int32Count success_rssi_counts = 1;
 
@@ -2432,6 +2450,9 @@ message LinkProbeStats {
 
   // Counts the occurrences of error codes for failed link probes.
   repeated LinkProbeFailureReasonCount failure_reason_counts = 8;
+
+  // Counts the number of link probes for each experiment.
+  repeated ExperimentProbeCounts experiment_probe_counts = 9;
 }
 
 // Stores the decisions that were made by a experiment when compared against another experiment
@@ -2533,4 +2554,107 @@ message WifiToggleStats {
 
   // Number of time Wi-Fi is turned off by normal apps
   optional int32 num_toggle_off_normal = 4;
+}
+
+// Information about the Passpoint provision metrics.
+message PasspointProvisionStats {
+  enum ProvisionFailureCode {
+    // provisioning failure for unknown reason.
+    OSU_FAILURE_UNKNOWN = 0;
+
+    // The reason code for Provisioning Failure due to connection failure to OSU AP.
+    OSU_FAILURE_AP_CONNECTION = 1;
+
+    // The reason code for invalid server URL address.
+    OSU_FAILURE_SERVER_URL_INVALID = 2;
+
+    // The reason code for provisioning failure due to connection failure to the server.
+    OSU_FAILURE_SERVER_CONNECTION = 3;
+
+    // The reason code for provisioning failure due to invalid server certificate.
+    OSU_FAILURE_SERVER_VALIDATION = 4;
+
+    // The reason code for provisioning failure due to invalid service provider.
+    OSU_FAILURE_SERVICE_PROVIDER_VERIFICATION = 5;
+
+    // The reason code for provisioning failure when a provisioning flow is aborted.
+    OSU_FAILURE_PROVISIONING_ABORTED = 6;
+
+    // The reason code for provisioning failure when a provisioning flow is not possible.
+    OSU_FAILURE_PROVISIONING_NOT_AVAILABLE = 7;
+
+    // The reason code for provisioning failure due to invalid web url format for an OSU web page.
+    OSU_FAILURE_INVALID_URL_FORMAT_FOR_OSU = 8;
+
+    // The reason code for provisioning failure when a command received is not the expected command
+    // type.
+    OSU_FAILURE_UNEXPECTED_COMMAND_TYPE = 9;
+
+    // The reason code for provisioning failure when a SOAP message is not the expected message
+    // type.
+    OSU_FAILURE_UNEXPECTED_SOAP_MESSAGE_TYPE = 10;
+
+    // The reason code for provisioning failure when a SOAP message exchange fails.
+    OSU_FAILURE_SOAP_MESSAGE_EXCHANGE = 11;
+
+    // The reason code for provisioning failure when a redirect listener fails to start.
+    OSU_FAILURE_START_REDIRECT_LISTENER = 12;
+
+    // The reason code for provisioning failure when a redirect listener timed out to receive a HTTP
+    // redirect response.
+    OSU_FAILURE_TIMED_OUT_REDIRECT_LISTENER = 13;
+
+    // The reason code for provisioning failure when there is no OSU activity to listen to intent.
+    OSU_FAILURE_NO_OSU_ACTIVITY_FOUND = 14;
+
+    // The reason code for provisioning failure when the status of a SOAP message is not the
+    // expected message status.
+    OSU_FAILURE_UNEXPECTED_SOAP_MESSAGE_STATUS = 15;
+
+    // The reason code for provisioning failure when there is no PPS MO.
+    OSU_FAILURE_NO_PPS_MO = 16;
+
+    // The reason code for provisioning failure when there is no AAAServerTrustRoot node in a PPS
+    // MO.
+    OSU_FAILURE_NO_AAA_SERVER_TRUST_ROOT_NODE = 17;
+
+    // The reason code for provisioning failure when there is no TrustRoot node for remediation
+    // server in a PPS MO.
+    OSU_FAILURE_NO_REMEDIATION_SERVER_TRUST_ROOT_NODE = 18;
+
+    // The reason code for provisioning failure when there is no TrustRoot node for policy server in
+    // a PPS MO.
+    OSU_FAILURE_NO_POLICY_SERVER_TRUST_ROOT_NODE = 19;
+
+    // The reason code for provisioning failure when failing to retrieve trust root certificates
+    // used for validating server certificate for AAA, Remediation and Policy server.
+    OSU_FAILURE_RETRIEVE_TRUST_ROOT_CERTIFICATES = 20;
+
+    // The reason code for provisioning failure when there is no trust root certificate for AAA
+    // server.
+    OSU_FAILURE_NO_AAA_TRUST_ROOT_CERTIFICATE = 21;
+
+    // The reason code for provisioning failure when a {@link PasspointConfiguration} is failed to
+    // install.
+    OSU_FAILURE_ADD_PASSPOINT_CONFIGURATION = 22;
+
+    // The reason code for provisioning failure when an {@link OsuProvider} is not found for
+    // provisioning.
+    OSU_FAILURE_OSU_PROVIDER_NOT_FOUND = 23;
+  }
+
+  // Number of passpoint provisioning success
+  optional int32 num_provision_success = 1;
+
+  // Count for passpoint provisioning failure
+  repeated ProvisionFailureCount provision_failure_count = 2;
+
+  // Number of occurrences of a specific passpoint provision failure code
+  message ProvisionFailureCount {
+    // Failure code
+    optional ProvisionFailureCode failure_code = 1;
+
+    // Number of failure for the failure_code.
+    optional int32 count = 2;
+  }
 }

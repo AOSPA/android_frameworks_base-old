@@ -43,6 +43,16 @@ import static android.net.util.DataStallUtils.DEFAULT_DATA_STALL_EVALUATION_TYPE
 import static android.net.util.DataStallUtils.DEFAULT_DATA_STALL_MIN_EVALUATE_TIME_MS;
 import static android.net.util.DataStallUtils.DEFAULT_DATA_STALL_VALID_DNS_TIME_THRESHOLD_MS;
 import static android.net.util.DataStallUtils.DEFAULT_DNS_LOG_SIZE;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_FALLBACK_PROBE_SPECS;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_FALLBACK_URL;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_HTTPS_URL;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_HTTP_URL;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_MODE;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_MODE_IGNORE;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_MODE_PROMPT;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_OTHER_FALLBACK_URLS;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_USER_AGENT;
+import static android.net.util.NetworkStackUtils.CAPTIVE_PORTAL_USE_HTTPS;
 import static android.net.util.NetworkStackUtils.NAMESPACE_CONNECTIVITY;
 import static android.net.util.NetworkStackUtils.isEmpty;
 
@@ -55,6 +65,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
 import android.net.ConnectivityManager;
+import android.net.DnsResolver;
 import android.net.INetworkMonitor;
 import android.net.INetworkMonitorCallbacks;
 import android.net.LinkProperties;
@@ -118,6 +129,7 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /**
@@ -132,8 +144,13 @@ public class NetworkMonitor extends StateMachine {
                                                       + "AppleWebKit/537.36 (KHTML, like Gecko) "
                                                       + "Chrome/60.0.3112.32 Safari/537.36";
 
+    @VisibleForTesting
+    static final String CONFIG_CAPTIVE_PORTAL_DNS_PROBE_TIMEOUT =
+            "captive_portal_dns_probe_timeout";
+
     private static final int SOCKET_TIMEOUT_MS = 10000;
     private static final int PROBE_TIMEOUT_MS  = 3000;
+
     enum EvaluationResult {
         VALIDATED(true),
         CAPTIVE_PORTAL(false);
@@ -1164,20 +1181,47 @@ public class NetworkMonitor extends StateMachine {
     }
 
     private boolean getIsCaptivePortalCheckEnabled() {
-        String symbol = Settings.Global.CAPTIVE_PORTAL_MODE;
-        int defaultValue = Settings.Global.CAPTIVE_PORTAL_MODE_PROMPT;
+        String symbol = CAPTIVE_PORTAL_MODE;
+        int defaultValue = CAPTIVE_PORTAL_MODE_PROMPT;
         int mode = mDependencies.getSetting(mContext, symbol, defaultValue);
-        return mode != Settings.Global.CAPTIVE_PORTAL_MODE_IGNORE;
+        return mode != CAPTIVE_PORTAL_MODE_IGNORE;
     }
 
     private boolean getUseHttpsValidation() {
-        return mDependencies.getSetting(mContext, Settings.Global.CAPTIVE_PORTAL_USE_HTTPS, 1) == 1;
+        return mDependencies.getDeviceConfigPropertyInt(NAMESPACE_CONNECTIVITY,
+                CAPTIVE_PORTAL_USE_HTTPS, 1) == 1;
     }
 
     private String getCaptivePortalServerHttpsUrl() {
         return getSettingFromResource(mContext, R.string.config_captive_portal_https_url,
-                R.string.default_captive_portal_https_url,
-                Settings.Global.CAPTIVE_PORTAL_HTTPS_URL);
+                R.string.default_captive_portal_https_url, CAPTIVE_PORTAL_HTTPS_URL);
+    }
+
+    private int getDnsProbeTimeout() {
+        return getIntSetting(mContext, R.integer.config_captive_portal_dns_probe_timeout,
+                CONFIG_CAPTIVE_PORTAL_DNS_PROBE_TIMEOUT,
+                R.integer.default_captive_portal_dns_probe_timeout);
+    }
+
+    /**
+     * Gets an integer setting from resources or device config
+     *
+     * configResource is used if set, followed by device config if set, followed by defaultResource.
+     * If none of these are set then an exception is thrown.
+     *
+     * TODO: move to a common location such as a ConfigUtils class.
+     * TODO(b/130324939): test that the resources can be overlayed by an RRO package.
+     */
+    @VisibleForTesting
+    int getIntSetting(@NonNull final Context context, @StringRes int configResource,
+            @NonNull String symbol, @StringRes int defaultResource) {
+        final Resources res = context.getResources();
+        try {
+            return res.getInteger(configResource);
+        } catch (Resources.NotFoundException e) {
+            return mDependencies.getDeviceConfigPropertyInt(NAMESPACE_CONNECTIVITY,
+                    symbol, res.getInteger(defaultResource));
+        }
     }
 
     /**
@@ -1189,8 +1233,7 @@ public class NetworkMonitor extends StateMachine {
      */
     public String getCaptivePortalServerHttpUrl() {
         return getSettingFromResource(mContext, R.string.config_captive_portal_http_url,
-                R.string.default_captive_portal_http_url,
-                Settings.Global.CAPTIVE_PORTAL_HTTP_URL);
+                R.string.default_captive_portal_http_url, CAPTIVE_PORTAL_HTTP_URL);
     }
 
     private int getConsecutiveDnsTimeoutThreshold() {
@@ -1219,13 +1262,13 @@ public class NetworkMonitor extends StateMachine {
 
     private URL[] makeCaptivePortalFallbackUrls() {
         try {
-            final String firstUrl = mDependencies.getSetting(mContext,
-                    Settings.Global.CAPTIVE_PORTAL_FALLBACK_URL, null);
+            final String firstUrl = mDependencies.getSetting(mContext, CAPTIVE_PORTAL_FALLBACK_URL,
+                    null);
 
             final URL[] settingProviderUrls;
             if (!TextUtils.isEmpty(firstUrl)) {
-                final String otherUrls = mDependencies.getSetting(mContext,
-                        Settings.Global.CAPTIVE_PORTAL_OTHER_FALLBACK_URLS, "");
+                final String otherUrls = mDependencies.getDeviceConfigProperty(
+                        NAMESPACE_CONNECTIVITY, CAPTIVE_PORTAL_OTHER_FALLBACK_URLS, "");
                 // otherUrls may be empty, but .split() ignores trailing empty strings
                 final String separator = ",";
                 final String[] urls = (firstUrl + separator + otherUrls).split(separator);
@@ -1245,8 +1288,9 @@ public class NetworkMonitor extends StateMachine {
 
     private CaptivePortalProbeSpec[] makeCaptivePortalFallbackProbeSpecs() {
         try {
-            final String settingsValue = mDependencies.getSetting(
-                    mContext, Settings.Global.CAPTIVE_PORTAL_FALLBACK_PROBE_SPECS, null);
+            final String settingsValue = mDependencies.getDeviceConfigProperty(
+                    NAMESPACE_CONNECTIVITY, CAPTIVE_PORTAL_FALLBACK_PROBE_SPECS, null);
+
             final CaptivePortalProbeSpec[] emptySpecs = new CaptivePortalProbeSpec[0];
             final CaptivePortalProbeSpec[] providerValue = TextUtils.isEmpty(settingsValue)
                     ? emptySpecs
@@ -1340,8 +1384,8 @@ public class NetworkMonitor extends StateMachine {
     }
 
     private String getCaptivePortalUserAgent() {
-        return mDependencies.getSetting(mContext,
-                Settings.Global.CAPTIVE_PORTAL_USER_AGENT, DEFAULT_USER_AGENT);
+        return mDependencies.getDeviceConfigProperty(NAMESPACE_CONNECTIVITY,
+                CAPTIVE_PORTAL_USER_AGENT, DEFAULT_USER_AGENT);
     }
 
     private URL nextFallbackUrl() {
@@ -1440,6 +1484,45 @@ public class NetworkMonitor extends StateMachine {
         return sendHttpProbe(url, probeType, null);
     }
 
+    /** Do a DNS lookup for the given server, or throw UnknownHostException after timeoutMs */
+    @VisibleForTesting
+    protected InetAddress[] sendDnsProbeWithTimeout(String host, int timeoutMs)
+                throws UnknownHostException {
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<List<InetAddress>> resultRef = new AtomicReference<>();
+        final DnsResolver.Callback<List<InetAddress>> callback =
+                    new DnsResolver.Callback<List<InetAddress>>() {
+            public void onAnswer(List<InetAddress> answer, int rcode) {
+                if (rcode == 0) {
+                    resultRef.set(answer);
+                }
+                latch.countDown();
+            }
+            public void onError(@NonNull DnsResolver.DnsException e) {
+                validationLog("DNS error resolving " + host + ": " + e.getMessage());
+                latch.countDown();
+            }
+        };
+
+        final int oldTag = TrafficStats.getAndSetThreadStatsTag(
+                TrafficStatsConstants.TAG_SYSTEM_PROBE);
+        mDependencies.getDnsResolver().query(mNetwork, host, DnsResolver.FLAG_EMPTY,
+                r -> r.run() /* executor */, null /* cancellationSignal */, callback);
+        TrafficStats.setThreadStatsTag(oldTag);
+
+        try {
+            latch.await(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+        }
+
+        List<InetAddress> result = resultRef.get();
+        if (result == null || result.size() == 0) {
+            throw new UnknownHostException(host);
+        }
+
+        return result.toArray(new InetAddress[0]);
+    }
+
     /** Do a DNS resolution of the given server. */
     private void sendDnsProbe(String host) {
         if (TextUtils.isEmpty(host)) {
@@ -1451,7 +1534,7 @@ public class NetworkMonitor extends StateMachine {
         int result;
         String connectInfo;
         try {
-            InetAddress[] addresses = mNetwork.getAllByName(host);
+            InetAddress[] addresses = sendDnsProbeWithTimeout(host, getDnsProbeTimeout());
             StringBuffer buffer = new StringBuffer();
             for (InetAddress address : addresses) {
                 buffer.append(',').append(address.getHostAddress());
@@ -1774,6 +1857,10 @@ public class NetworkMonitor extends StateMachine {
     static class Dependencies {
         public Network getPrivateDnsBypassNetwork(Network network) {
             return new OneAddressPerFamilyNetwork(network);
+        }
+
+        public DnsResolver getDnsResolver() {
+            return DnsResolver.getInstance();
         }
 
         public Random getRandom() {

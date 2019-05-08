@@ -228,6 +228,11 @@ public class AudioSystem
      */
     public static native int newAudioPlayerId();
 
+    /**
+     * Returns a new unused audio recorder ID
+     */
+    public static native int newAudioRecorderId();
+
 
     /*
      * Sets a group generic audio configuration parameters. The use of these parameters
@@ -355,6 +360,7 @@ public class AudioSystem
         /**
          * Callback for recording activity notifications events
          * @param event
+         * @param riid recording identifier
          * @param uid uid of the client app performing the recording
          * @param session
          * @param source
@@ -369,7 +375,7 @@ public class AudioSystem
          *          6: patch handle
          * @param packName package name of the client app performing the recording. NOT SUPPORTED
          */
-        void onRecordingConfigurationChanged(int event, int uid, int session, int source,
+        void onRecordingConfigurationChanged(int event, int riid, int uid, int session, int source,
                         int portId, boolean silenced, int[] recordingFormat,
                         AudioEffect.Descriptor[] clienteffects, AudioEffect.Descriptor[] effects,
                         int activeSource, String packName);
@@ -387,16 +393,23 @@ public class AudioSystem
     /**
      * Callback from native for recording configuration updates.
      * @param event
+     * @param riid
+     * @param uid
      * @param session
      * @param source
+     * @param portId
+     * @param silenced
      * @param recordingFormat see
-     *     {@link AudioRecordingCallback#onRecordingConfigurationChanged(int, int, int, int, int,\
-     boolean, int[], AudioEffect.Descriptor[], AudioEffect.Descriptor[], int, String)}
+     *     {@link AudioRecordingCallback#onRecordingConfigurationChanged(int, int, int, int, int, \
+     int, boolean, int[], AudioEffect.Descriptor[], AudioEffect.Descriptor[], int, String)}
      *     for the description of the record format.
+     * @param cleintEffects
+     * @param effects
+     * @param activeSource
      */
     @UnsupportedAppUsage
-    private static void recordingCallbackFromNative(int event, int uid, int session, int source,
-                          int portId, boolean silenced, int[] recordingFormat,
+    private static void recordingCallbackFromNative(int event, int riid, int uid, int session,
+                          int source, int portId, boolean silenced, int[] recordingFormat,
                           AudioEffect.Descriptor[] clientEffects, AudioEffect.Descriptor[] effects,
                           int activeSource) {
         AudioRecordingCallback cb = null;
@@ -409,7 +422,7 @@ public class AudioSystem
 
         if (cb != null) {
             // TODO receive package name from native
-            cb.onRecordingConfigurationChanged(event, uid, session, source, portId, silenced,
+            cb.onRecordingConfigurationChanged(event, riid, uid, session, source, portId, silenced,
                                         recordingFormat, clientEffects, effects, activeSource, "");
         }
     }

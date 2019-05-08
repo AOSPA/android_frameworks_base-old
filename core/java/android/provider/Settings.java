@@ -6057,9 +6057,8 @@ public final class Settings {
                 "unknown_sources_default_reversed";
 
         /**
-         * Comma-separated list of location providers that are accessible. Do not rely on
-         * this value being present or correct, or on ContentObserver notifications on the
-         * corresponding Uri.
+         * Comma-separated list of location providers that are enabled. Do not rely on this value
+         * being present or correct, or on ContentObserver notifications on the corresponding Uri.
          *
          * @deprecated The preferred methods for checking provider status and listening for changes
          * are via {@link LocationManager#isProviderEnabled(String)} and
@@ -6112,17 +6111,14 @@ public final class Settings {
 
         /**
          * Location mode is off.
-         *
-         * @deprecated See {@link #LOCATION_MODE}.
          */
-        @Deprecated
         public static final int LOCATION_MODE_OFF = 0;
 
         /**
          * This mode no longer has any distinct meaning, but is interpreted as the location mode is
          * on.
          *
-         * @deprecated See {@link #LOCATION_MODE_ON}.
+         * @deprecated See {@link #LOCATION_MODE}.
          */
         @Deprecated
         public static final int LOCATION_MODE_SENSORS_ONLY = 1;
@@ -6131,7 +6127,7 @@ public final class Settings {
          * This mode no longer has any distinct meaning, but is interpreted as the location mode is
          * on.
          *
-         * @deprecated See {@link #LOCATION_MODE_ON}.
+         * @deprecated See {@link #LOCATION_MODE}.
          */
         @Deprecated
         public static final int LOCATION_MODE_BATTERY_SAVING = 2;
@@ -6140,7 +6136,7 @@ public final class Settings {
          * This mode no longer has any distinct meaning, but is interpreted as the location mode is
          * on.
          *
-         * @deprecated See {@link #LOCATION_MODE_ON}.
+         * @deprecated See {@link #LOCATION_MODE}.
          */
         @Deprecated
         public static final int LOCATION_MODE_HIGH_ACCURACY = 3;
@@ -6148,9 +6144,9 @@ public final class Settings {
         /**
          * Location mode is on.
          *
-         * @deprecated See {@link #LOCATION_MODE}.
+         * @hide
          */
-        @Deprecated
+        @SystemApi
         public static final int LOCATION_MODE_ON = LOCATION_MODE_HIGH_ACCURACY;
 
         /**
@@ -7997,6 +7993,16 @@ public final class Settings {
                 "lock_screen_show_notifications";
 
         /**
+         * Indicates whether the lock screen should display silent notifications.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS =
+                "lock_screen_show_silent_notifications";
+
+        /**
          * List of TV inputs that are currently hidden. This is a string
          * containing the IDs of all hidden TV inputs. Each ID is encoded by
          * {@link android.net.Uri#encode(String)} and separated by ':'.
@@ -8852,6 +8858,7 @@ public final class Settings {
             LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS,
             LOCK_SCREEN_CUSTOM_CLOCK_FACE,
             LOCK_SCREEN_SHOW_NOTIFICATIONS,
+            LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS,
             ZEN_DURATION,
             SHOW_ZEN_UPGRADE_NOTIFICATION,
             SHOW_ZEN_SETTINGS_SUGGESTION,
@@ -9028,6 +9035,7 @@ public final class Settings {
             VALIDATORS.put(IN_CALL_NOTIFICATION_ENABLED, IN_CALL_NOTIFICATION_ENABLED_VALIDATOR);
             VALIDATORS.put(LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, BOOLEAN_VALIDATOR);
             VALIDATORS.put(LOCK_SCREEN_SHOW_NOTIFICATIONS, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS, BOOLEAN_VALIDATOR);
             VALIDATORS.put(ZEN_DURATION, ZEN_DURATION_VALIDATOR);
             VALIDATORS.put(SHOW_ZEN_UPGRADE_NOTIFICATION, BOOLEAN_VALIDATOR);
             VALIDATORS.put(SHOW_ZEN_SETTINGS_SUGGESTION, BOOLEAN_VALIDATOR);
@@ -11150,8 +11158,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final int CAPTIVE_PORTAL_MODE_IGNORE = 0;
 
         /**
@@ -11160,8 +11166,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final int CAPTIVE_PORTAL_MODE_PROMPT = 1;
 
         /**
@@ -11170,8 +11174,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final int CAPTIVE_PORTAL_MODE_AVOID = 2;
 
         /**
@@ -11181,8 +11183,6 @@ public final class Settings {
          * The default for this setting is CAPTIVE_PORTAL_MODE_PROMPT.
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_MODE = "captive_portal_mode";
 
         /**
@@ -11211,8 +11211,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_HTTPS_URL = "captive_portal_https_url";
 
         /**
@@ -11221,8 +11219,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_HTTP_URL = "captive_portal_http_url";
 
         /**
@@ -11231,8 +11227,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_FALLBACK_URL = "captive_portal_fallback_url";
 
         /**
@@ -11241,8 +11235,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_OTHER_FALLBACK_URLS =
                 "captive_portal_other_fallback_urls";
 
@@ -11252,8 +11244,6 @@ public final class Settings {
          * by "@@,@@".
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_FALLBACK_PROBE_SPECS =
                 "captive_portal_fallback_probe_specs";
 
@@ -11264,8 +11254,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_USE_HTTPS = "captive_portal_use_https";
 
         /**
@@ -11274,8 +11262,6 @@ public final class Settings {
          *
          * @hide
          */
-        @SystemApi
-        @TestApi
         public static final String CAPTIVE_PORTAL_USER_AGENT = "captive_portal_user_agent";
 
         /**
@@ -12692,6 +12678,45 @@ public final class Settings {
         public static final String DYNAMIC_POWER_SAVINGS_ENABLED = "dynamic_power_savings_enabled";
 
         /**
+         * A long value indicating how much longer the system battery is estimated to last in
+         * millis. See {@link #BATTERY_ESTIMATES_LAST_UPDATE_TIME} for the last time this value
+         * was updated.
+         *
+         * @hide
+         */
+        public static final String TIME_REMAINING_ESTIMATE_MILLIS =
+                "time_remaining_estimate_millis";
+
+        /**
+         * A boolean indicating whether {@link #TIME_REMAINING_ESTIMATE_MILLIS} is based customized
+         * to the devices usage or using global models. See
+         * {@link #BATTERY_ESTIMATES_LAST_UPDATE_TIME} for the last time this value was updated.
+         *
+         * @hide
+         */
+        public static final String TIME_REMAINING_ESTIMATE_BASED_ON_USAGE =
+                "time_remaining_estimate_based_on_usage";
+
+        /**
+         * A long value indicating how long the system battery takes to deplete from 100% to 0% on
+         * average based on historical drain rates. See {@link #BATTERY_ESTIMATES_LAST_UPDATE_TIME}
+         * for the last time this value was updated.
+         *
+         * @hide
+         */
+        public static final String AVERAGE_TIME_TO_DISCHARGE = "average_time_to_discharge";
+
+        /**
+         * A long indicating the epoch time in milliseconds when
+         * {@link #TIME_REMAINING_ESTIMATE_MILLIS}, {@link #TIME_REMAINING_ESTIMATE_BASED_ON_USAGE},
+         * and {@link #AVERAGE_TIME_TO_DISCHARGE} were last updated.
+         *
+         * @hide
+         */
+        public static final String BATTERY_ESTIMATES_LAST_UPDATE_TIME =
+                "battery_estimates_last_update_time";
+
+        /**
          * The max value for {@link #LOW_POWER_MODE_TRIGGER_LEVEL}. If this setting is not set
          * or the value is 0, the default max will be used.
          *
@@ -13557,6 +13582,28 @@ public final class Settings {
         private static final Validator AWARE_ALLOWED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
+         * Overrides internal R.integer.config_longPressOnPowerBehavior.
+         * Allowable values detailed in frameworks/base/core/res/res/values/config.xml.
+         * Used by PhoneWindowManager.
+         * @hide
+         */
+        public static final String POWER_BUTTON_LONG_PRESS =
+                "power_button_long_press";
+        private static final Validator POWER_BUTTON_LONG_PRESS_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 5);
+
+        /**
+         * Overrides internal R.integer.config_veryLongPressOnPowerBehavior.
+         * Allowable values detailed in frameworks/base/core/res/res/values/config.xml.
+         * Used by PhoneWindowManager.
+         * @hide
+         */
+        public static final String POWER_BUTTON_VERY_LONG_PRESS =
+                "power_button_very_long_press";
+        private static final Validator POWER_BUTTON_VERY_LONG_PRESS_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 1);
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -13669,6 +13716,8 @@ public final class Settings {
                     WIFI_PNO_RECENCY_SORTING_ENABLED_VALIDATOR);
             VALIDATORS.put(WIFI_LINK_PROBING_ENABLED, WIFI_LINK_PROBING_ENABLED_VALIDATOR);
             VALIDATORS.put(AWARE_ALLOWED, AWARE_ALLOWED_VALIDATOR);
+            VALIDATORS.put(POWER_BUTTON_LONG_PRESS, POWER_BUTTON_LONG_PRESS_VALIDATOR);
+            VALIDATORS.put(POWER_BUTTON_VERY_LONG_PRESS, POWER_BUTTON_VERY_LONG_PRESS_VALIDATOR);
         }
 
         /**
@@ -14674,6 +14723,19 @@ public final class Settings {
          */
         public static final String TEXT_CLASSIFIER_ACTION_MODEL_PARAMS =
                 "text_classifier_action_model_params";
+
+        /**
+         * The amount of time to suppress "power-off" from the power button after the device has
+         * woken due to a gesture (lifting the phone).  Since users have learned to hit the power
+         * button immediately when lifting their device, it can cause the device to turn off if a
+         * gesture has just woken the device. This value tells us the milliseconds to wait after
+         * a gesture before "power-off" via power-button is functional again. A value of 0 is no
+         * delay, and reverts to the old behavior.
+         *
+         * @hide
+         */
+        public static final String POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE =
+                "power_button_suppression_delay_after_gesture_wake";
     }
 
     /**

@@ -281,8 +281,8 @@
     <string name="permgrouplab_location" msgid="7275582855722310164">"Жайгашкан жер"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"түзмөктүн жайгашкан жерин аныктоого"</string>
     <string name="permgrouprequest_location" msgid="3788275734953323491">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосу бул түзмөктүн кайда жүргөнүн көрүп турганга уруксат бересизби?"</string>
-    <string name="permgrouprequestdetail_location" msgid="1347189607421252902">"Сиз бул колдонмону пайдаланып жатканда гана ал жайгашкан жериңизди көрө алат"</string>
-    <string name="permgroupbackgroundrequest_location" msgid="5039063878675613235">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосуна бул түзмөктүн жайгашкан жерине &lt;b&gt;дайыма&lt;/b&gt; кирүүгө уруксат бересизби?"</string>
+    <string name="permgrouprequestdetail_location" msgid="1347189607421252902">"Колдонмону колдонуп жаткан маалда гана, ал сиздин кайда жүргөнүңүздү билип турат."</string>
+    <string name="permgroupbackgroundrequest_location" msgid="5039063878675613235">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосу бул түзмөктүн жүргөн жерин &lt;b&gt;ар дайым&lt;/b&gt; билип турсунбу?"</string>
     <string name="permgroupbackgroundrequestdetail_location" msgid="4597006851453417387">"Колдонмону пайдаланып жаткан учурда гана ал жайгашкан жерди көрө алат"</string>
     <string name="permgrouplab_calendar" msgid="5863508437783683902">"Жылнаама"</string>
     <string name="permgroupdesc_calendar" msgid="3889615280211184106">"жылнаамаңызды пайдалануу"</string>
@@ -553,6 +553,9 @@
     <string name="permdesc_manageFace" msgid="8919637120670185330">"Колдонмого пайдалануу үчүн жүздүн үлгүлөрүн кошуу жана жок кылуу мүмкүндүгүн берет."</string>
     <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"жүздүн аныктыгын текшерүүчү аппараттык камсыздоону колдонуу"</string>
     <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"Колдонмого аныктыгын текшерүү үчүн жүздүн аныктыгын текшерүүчү аппараттык камсыздоону пайдалануу мүмкүндүгүн берет"</string>
+    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"Жүздүн аныктыгын текшерүү"</string>
+    <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"Жүзүңүздү кайра таанытыңыз."</string>
+    <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"Мыкты таануу үчүн, жүзүңүздү кайра таанытыңыз"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"Жүзүңүз жакшы тартылган жок. Кайра аракет кылыңыз."</string>
     <string name="face_acquired_too_bright" msgid="5005650874582450967">"Өтө жарык. Жарыктыкты азайтып көрүңүз."</string>
     <string name="face_acquired_too_dark" msgid="1966194696381394616">"Өтө караңгы. Жарыгыраак жерден тартып көрүңүз."</string>
@@ -1319,7 +1322,7 @@
     <string name="sim_done_button" msgid="827949989369963775">"Даяр"</string>
     <string name="sim_added_title" msgid="3719670512889674693">"SIM-карта кошулду"</string>
     <string name="sim_added_message" msgid="6599945301141050216">"Мобилдик түйүнкгө жетки алуу үчүн, түзмөгүңүздү өчүрүп кайра жандырыңыз."</string>
-    <string name="sim_restart_button" msgid="4722407842815232347">"Кайра баштоо"</string>
+    <string name="sim_restart_button" msgid="4722407842815232347">"Өчүрүп күйгүзүү"</string>
     <string name="install_carrier_app_notification_title" msgid="9056007111024059888">"Мобилдик кызматты жандыруу"</string>
     <string name="install_carrier_app_notification_text" msgid="3346681446158696001">"Жаңы SIM-картаны жандыруу үчүн байланыш операторунун колдонмосун жүктөп алыңыз"</string>
     <string name="install_carrier_app_notification_text_app_name" msgid="1196505084835248137">"Жаңы SIM-картаны жандыруу үчүн <xliff:g id="APP_NAME">%1$s</xliff:g> колдонмосун жүктөп алыңыз"</string>

@@ -24,8 +24,10 @@ import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
+import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -54,7 +56,6 @@ public class Environment {
 
     /** {@hide} */
     public static final String DIR_ANDROID = "Android";
-    private static final String DIR_SANDBOX = "sandbox";
     private static final String DIR_DATA = "data";
     private static final String DIR_MEDIA = "media";
     private static final String DIR_OBB = "obb";
@@ -126,10 +127,6 @@ public class Environment {
 
         public File[] buildExternalStoragePublicDirs(String type) {
             return buildPaths(getExternalDirs(), type);
-        }
-
-        public File[] buildExternalStorageAndroidSandboxDirs() {
-            return buildPaths(getExternalDirs(), DIR_ANDROID, DIR_SANDBOX);
         }
 
         public File[] buildExternalStorageAndroidDataDirs() {
@@ -534,7 +531,8 @@ public class Environment {
      * <p>
      * Writing to this path requires the
      * {@link android.Manifest.permission#WRITE_EXTERNAL_STORAGE} permission,
-     * and starting in {@link android.os.Build.VERSION_CODES#KITKAT}, read access requires the
+     * and starting in {@link android.os.Build.VERSION_CODES#KITKAT}, read
+     * access requires the
      * {@link android.Manifest.permission#READ_EXTERNAL_STORAGE} permission,
      * which is automatically granted if you hold the write permission.
      * <p>
@@ -556,7 +554,16 @@ public class Environment {
      *
      * @see #getExternalStorageState()
      * @see #isExternalStorageRemovable()
+     * @deprecated To improve user privacy, direct access to shared/external
+     *             storage devices is deprecated. When an app targets
+     *             {@link android.os.Build.VERSION_CODES#Q}, the path returned
+     *             from this method is no longer directly accessible to apps.
+     *             Apps can continue to access content stored on shared/external
+     *             storage by migrating to alternatives such as
+     *             {@link Context#getExternalFilesDir(String)},
+     *             {@link MediaStore}, or {@link Intent#ACTION_OPEN_DOCUMENT}.
      */
+    @Deprecated
     public static File getExternalStorageDirectory() {
         throwIfUserRequired();
         return sCurrentUser.getExternalDirs()[0];
@@ -832,19 +839,19 @@ public class Environment {
      * @return Returns the File path for the directory. Note that this directory
      *         may not yet exist, so you must make sure it exists before using
      *         it such as with {@link File#mkdirs File.mkdirs()}.
+     * @deprecated To improve user privacy, direct access to shared/external
+     *             storage devices is deprecated. When an app targets
+     *             {@link android.os.Build.VERSION_CODES#Q}, the path returned
+     *             from this method is no longer directly accessible to apps.
+     *             Apps can continue to access content stored on shared/external
+     *             storage by migrating to alternatives such as
+     *             {@link Context#getExternalFilesDir(String)},
+     *             {@link MediaStore}, or {@link Intent#ACTION_OPEN_DOCUMENT}.
      */
+    @Deprecated
     public static File getExternalStoragePublicDirectory(String type) {
         throwIfUserRequired();
         return sCurrentUser.buildExternalStoragePublicDirs(type)[0];
-    }
-
-    /**
-     * Returns the path for android-specific data on the SD card.
-     * @hide
-     */
-    public static File[] buildExternalStorageAndroidSandboxDirs() {
-        throwIfUserRequired();
-        return sCurrentUser.buildExternalStorageAndroidSandboxDirs();
     }
 
     /**
@@ -905,6 +912,12 @@ public class Environment {
     public static File[] buildExternalStorageAppCacheDirs(String packageName) {
         throwIfUserRequired();
         return sCurrentUser.buildExternalStorageAppCacheDirs(packageName);
+    }
+
+    /** @hide */
+    public static File[] buildExternalStoragePublicDirs(@NonNull String dirType) {
+        throwIfUserRequired();
+        return sCurrentUser.buildExternalStoragePublicDirs(dirType);
     }
 
     /**
@@ -1115,42 +1128,42 @@ public class Environment {
     }
 
     /**
-     * Returns whether the shared/external storage media at the given path is a
-     * sandboxed view that only contains files owned by the app.
+     * Returns whether the primary shared/external storage media is a legacy
+     * view that includes files not owned by the app.
      * <p>
      * This value may be different from the value requested by
-     * {@code allowExternalStorageSandbox} in the app's manifest, since an app
-     * may inherit its sandboxed state based on when it was first installed.
+     * {@code requestLegacyExternalStorage} in the app's manifest, since an app
+     * may inherit its legacy state based on when it was first installed.
      * <p>
-     * Sandboxed apps can continue to discover and read media belonging to other
-     * apps via {@link android.provider.MediaStore}.
+     * Non-legacy apps can continue to discover and read media belonging to
+     * other apps via {@link android.provider.MediaStore}.
      */
-    public static boolean isExternalStorageSandboxed() {
+    public static boolean isExternalStorageLegacy() {
         final File externalDir = sCurrentUser.getExternalDirs()[0];
-        return isExternalStorageSandboxed(externalDir);
+        return isExternalStorageLegacy(externalDir);
     }
 
     /**
      * Returns whether the shared/external storage media at the given path is a
-     * sandboxed view that only contains files owned by the app.
+     * legacy view that includes files not owned by the app.
      * <p>
      * This value may be different from the value requested by
-     * {@code allowExternalStorageSandbox} in the app's manifest, since an app
-     * may inherit its sandboxed state based on when it was first installed.
+     * {@code requestLegacyExternalStorage} in the app's manifest, since an app
+     * may inherit its legacy state based on when it was first installed.
      * <p>
-     * Sandboxed apps can continue to discover and read media belonging to other
-     * apps via {@link android.provider.MediaStore}.
+     * Non-legacy apps can continue to discover and read media belonging to
+     * other apps via {@link android.provider.MediaStore}.
      *
      * @throws IllegalArgumentException if the path is not a valid storage
      *             device.
      */
-    public static boolean isExternalStorageSandboxed(@NonNull File path) {
+    public static boolean isExternalStorageLegacy(@NonNull File path) {
         final Context context = AppGlobals.getInitialApplication();
         final AppOpsManager appOps = context.getSystemService(AppOpsManager.class);
 
         return appOps.checkOpNoThrow(AppOpsManager.OP_LEGACY_STORAGE,
                 context.getApplicationInfo().uid,
-                context.getOpPackageName()) != AppOpsManager.MODE_ALLOWED;
+                context.getOpPackageName()) == AppOpsManager.MODE_ALLOWED;
     }
 
     static File getDirectory(String variableName, String defaultPath) {

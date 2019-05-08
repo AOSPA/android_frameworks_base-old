@@ -115,8 +115,10 @@ public class NotificationLockscreenUserManagerImpl implements
 
                 updateLockscreenNotificationSetting();
                 updatePublicMode();
-                mPresenter.onUserSwitched(mCurrentUserId);
+                // The filtering needs to happen before the update call below in order to make sure
+                // the presenter has the updated notifications from the new user
                 getEntryManager().getNotificationData().filterAndSort();
+                mPresenter.onUserSwitched(mCurrentUserId);
 
                 for (UserChangedListener listener : mListeners) {
                     listener.onUserChanged(mCurrentUserId);
@@ -306,13 +308,19 @@ public class NotificationLockscreenUserManagerImpl implements
             return false;
         }
         boolean exceedsPriorityThreshold;
-        if (NotificationUtils.useNewInterruptionModel(mContext)) {
+        if (NotificationUtils.useNewInterruptionModel(mContext)
+                && hideSilentNotificationsOnLockscreen()) {
             exceedsPriorityThreshold = getEntryManager().getNotificationData().isHighPriority(sbn);
         } else {
             exceedsPriorityThreshold =
                     !getEntryManager().getNotificationData().isAmbient(sbn.getKey());
         }
         return mShowLockscreenNotifications && exceedsPriorityThreshold;
+    }
+
+    private boolean hideSilentNotificationsOnLockscreen() {
+        return Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS, 0) == 0;
     }
 
     private void setShowLockscreenNotifications(boolean show) {

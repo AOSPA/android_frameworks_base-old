@@ -1586,7 +1586,7 @@ class ProcessRecord implements WindowProcessListener {
                 mService.mBatteryStatsService.noteProcessAnr(processName, uid);
             }
 
-            if (isSilentAnr()) {
+            if (isSilentAnr() && !isDebugging()) {
                 kill("bg anr", true);
                 return;
             }

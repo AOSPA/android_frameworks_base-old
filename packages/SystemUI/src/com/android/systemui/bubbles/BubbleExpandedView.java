@@ -20,10 +20,12 @@ import static android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS;
 import static android.util.StatsLogInternal.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_MISSING;
 import static android.util.StatsLogInternal.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_NOT_RESIZABLE;
 import static android.util.StatsLogInternal.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__DOCUMENT_LAUNCH_NOT_ALWAYS;
+import static android.view.Display.INVALID_DISPLAY;
 
 import android.animation.LayoutTransition;
 import android.animation.ObjectAnimator;
 import android.annotation.Nullable;
+import android.app.ActivityOptions;
 import android.app.ActivityView;
 import android.app.INotificationManager;
 import android.app.Notification;
@@ -120,7 +122,11 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         public void onActivityViewReady(ActivityView view) {
             if (!mActivityViewReady) {
                 mActivityViewReady = true;
-                mActivityView.startActivity(mBubbleIntent);
+                // Custom options so there is no activity transition animation
+                ActivityOptions options = ActivityOptions.makeCustomAnimation(getContext(),
+                        0 /* enterResId */, 0 /* exitResId */);
+                // Post to keep the lifecycle normal
+                post(() -> mActivityView.startActivity(mBubbleIntent, options));
             }
         }
 
@@ -596,6 +602,16 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
 
     private boolean usingActivityView() {
         return mBubbleIntent != null && mActivityView != null;
+    }
+
+    /**
+     * @return the display id of the virtual display.
+     */
+    public int getVirtualDisplayId() {
+        if (usingActivityView()) {
+            return mActivityView.getVirtualDisplayId();
+        }
+        return INVALID_DISPLAY;
     }
 
     private void applyRowState(ExpandableNotificationRow view) {

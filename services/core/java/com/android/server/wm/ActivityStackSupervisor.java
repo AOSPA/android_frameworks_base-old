@@ -849,7 +849,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         mergedConfiguration.getOverrideConfiguration(), r.compat,
                         r.launchedFromPackage, task.voiceInteractor, proc.getReportedProcState(),
                         r.icicle, r.persistentState, results, newIntents,
-                        dc.isNextTransitionForward(), proc.createProfilerInfoIfNeeded()));
+                        dc.isNextTransitionForward(), proc.createProfilerInfoIfNeeded(),
+                                r.assistToken));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
@@ -2772,7 +2773,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         if (activityOptions != null) {
             activityType = activityOptions.getLaunchActivityType();
             windowingMode = activityOptions.getLaunchWindowingMode();
-            if (activityOptions.freezeRecentTasksReordering()) {
+            if (activityOptions.freezeRecentTasksReordering()
+                    && mRecentTasks.isCallerRecents(callingUid)) {
                 mRecentTasks.setFreezeTaskListReordering();
             }
         }

@@ -16,29 +16,43 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
+
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Color;
-import android.graphics.PorterDuff;
 import android.graphics.drawable.Animatable2;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
+import android.hardware.biometrics.BiometricSourceType;
 import android.util.AttributeSet;
-import android.view.ContextThemeWrapper;
+import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
+
+import androidx.annotation.Nullable;
 
 import com.android.internal.graphics.ColorUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.R;
+import com.android.systemui.dock.DockManager;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.KeyguardAffordanceView;
 import com.android.systemui.statusbar.policy.AccessibilityController;
+import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.UserInfoController.OnUserInfoChangedListener;
+
+import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * Manages the different states and animations of the unlock icon.
  */
-public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChangedListener {
+public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChangedListener,
+        StatusBarStateController.StateListener, ConfigurationController.ConfigurationListener,
+        UnlockMethodCache.OnUnlockMethodChangedListener {
 
     private static final int FP_DRAW_OFF_TIMEOUT = 800;
 
@@ -46,33 +60,122 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     private static final int STATE_LOCK_OPEN = 1;
     private static final int STATE_SCANNING_FACE = 2;
     private static final int STATE_BIOMETRICS_ERROR = 3;
+    private final ConfigurationController mConfigurationController;
+    private final StatusBarStateController mStatusBarStateController;
+    private final UnlockMethodCache mUnlockMethodCache;
+    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private final AccessibilityController mAccessibilityController;
+    private final DockManager mDockManager;
 
     private int mLastState = 0;
     private boolean mTransientBiometricsError;
     private boolean mScreenOn;
     private boolean mLastScreenOn;
-    private final UnlockMethodCache mUnlockMethodCache;
-    private AccessibilityController mAccessibilityController;
     private boolean mIsFaceUnlockState;
     private int mDensity;
     private boolean mPulsing;
     private boolean mDozing;
     private boolean mBouncerVisible;
+    private boolean mDocked;
     private boolean mLastDozing;
     private boolean mLastPulsing;
     private boolean mLastBouncerVisible;
+    private int mIconColor;
+    private float mDozeAmount;
 
     private final Runnable mDrawOffTimeout = () -> update(true /* forceUpdate */);
-    private float mDarkAmount;
+    private final DockManager.DockEventListener mDockEventListener =
+            new DockManager.DockEventListener() {
+                @Override
+                public void onEvent(int event) {
+                    boolean docked = event == DockManager.STATE_DOCKED
+                            || event == DockManager.STATE_DOCKED_HIDE;
+                    if (docked != mDocked) {
+                        mDocked = docked;
+                        update(true /* force */);
+                    }
+        }
+    };
 
-    public LockIcon(Context context, AttributeSet attrs) {
+    private final KeyguardUpdateMonitorCallback mUpdateMonitorCallback =
+            new KeyguardUpdateMonitorCallback() {
+                @Override
+                public void onScreenTurnedOn() {
+                    mScreenOn = true;
+                    update();
+                }
+
+                @Override
+                public void onScreenTurnedOff() {
+                    mScreenOn = false;
+                    update();
+                }
+
+                @Override
+                public void onKeyguardVisibilityChanged(boolean showing) {
+                    update();
+                }
+
+                @Override
+                public void onBiometricRunningStateChanged(boolean running,
+                        BiometricSourceType biometricSourceType) {
+                    update();
+                }
+
+                @Override
+                public void onStrongAuthStateChanged(int userId) {
+                    update();
+                }
+    };
+
+    @Inject
+    public LockIcon(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
+            StatusBarStateController statusBarStateController,
+            ConfigurationController configurationController,
+            AccessibilityController accessibilityController,
+            @Nullable DockManager dockManager) {
         super(context, attrs);
-        TypedArray typedArray = context.getTheme().obtainStyledAttributes(
-                attrs, new int[]{ R.attr.backgroundProtectedStyle }, 0, 0);
-        mContext = new ContextThemeWrapper(context,
-                typedArray.getResourceId(0, R.style.BackgroundProtectedStyle));
-        typedArray.recycle();
+        mContext = context;
         mUnlockMethodCache = UnlockMethodCache.getInstance(context);
+        mKeyguardUpdateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+        mAccessibilityController = accessibilityController;
+        mConfigurationController = configurationController;
+        mStatusBarStateController = statusBarStateController;
+        mDockManager = dockManager;
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mStatusBarStateController.addCallback(this);
+        mConfigurationController.addCallback(this);
+        mKeyguardUpdateMonitor.registerCallback(mUpdateMonitorCallback);
+        mUnlockMethodCache.addListener(this);
+        if (mDockManager != null) {
+            mDockManager.addListener(mDockEventListener);
+        }
+        onThemeChanged();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        mStatusBarStateController.removeCallback(this);
+        mConfigurationController.removeCallback(this);
+        mKeyguardUpdateMonitor.removeCallback(mUpdateMonitorCallback);
+        mUnlockMethodCache.removeListener(this);
+        if (mDockManager != null) {
+            mDockManager.removeListener(mDockEventListener);
+        }
+    }
+
+    @Override
+    public void onThemeChanged() {
+        TypedArray typedArray = mContext.getTheme().obtainStyledAttributes(
+                null, new int[]{ R.attr.wallpaperTextColor }, 0, 0);
+        mIconColor = typedArray.getColor(0, Color.WHITE);
+        typedArray.recycle();
+        updateDarkTint();
     }
 
     @Override
@@ -85,11 +188,6 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
      */
     public void setTransientBiometricsError(boolean transientBiometricsError) {
         mTransientBiometricsError = transientBiometricsError;
-        update();
-    }
-
-    public void setScreenOn(boolean screenOn) {
-        mScreenOn = screenOn;
         update();
     }
 
@@ -164,7 +262,8 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
             mLastBouncerVisible = mBouncerVisible;
         }
 
-        setVisibility(mDozing && !mPulsing ? GONE : VISIBLE);
+        boolean invisible = mDozing && (!mPulsing || mDocked);
+        setVisibility(invisible ? INVISIBLE : VISIBLE);
         updateClickability();
     }
 
@@ -175,19 +274,16 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         boolean canLock = mUnlockMethodCache.isMethodSecure()
                 && mUnlockMethodCache.canSkipBouncer();
         boolean clickToUnlock = mAccessibilityController.isAccessibilityEnabled();
-        boolean clickToForceLock = canLock && !clickToUnlock;
-        boolean longClickToForceLock = canLock && !clickToForceLock;
-        setClickable(clickToForceLock || clickToUnlock);
-        setLongClickable(longClickToForceLock);
+        setClickable(clickToUnlock);
+        setLongClickable(canLock && !clickToUnlock);
         setFocusable(mAccessibilityController.isAccessibilityEnabled());
     }
 
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
-        KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
-        boolean fingerprintRunning = updateMonitor.isFingerprintDetectionRunning();
-        boolean unlockingAllowed = updateMonitor.isUnlockingWithBiometricAllowed();
+        boolean fingerprintRunning = mKeyguardUpdateMonitor.isFingerprintDetectionRunning();
+        boolean unlockingAllowed = mKeyguardUpdateMonitor.isUnlockingWithBiometricAllowed();
         if (fingerprintRunning && unlockingAllowed) {
             AccessibilityNodeInfo.AccessibilityAction unlock
                     = new AccessibilityNodeInfo.AccessibilityAction(
@@ -202,10 +298,6 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
             info.setContentDescription(getContext().getString(
                 R.string.accessibility_scanning_face));
         }
-    }
-
-    public void setAccessibilityController(AccessibilityController accessibilityController) {
-        mAccessibilityController = accessibilityController;
     }
 
     private Drawable getIconForState(int state) {
@@ -273,17 +365,17 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         }
     }
 
-    public void setDarkAmount(float darkAmount) {
-        mDarkAmount = darkAmount;
+    @Override
+    public void onDozeAmountChanged(float linear, float eased) {
+        mDozeAmount = eased;
         updateDarkTint();
     }
 
     /**
      * When keyguard is in pulsing (AOD2) state.
      * @param pulsing {@code true} when pulsing.
-     * @param animated if transition should be animated.
      */
-    public void setPulsing(boolean pulsing, boolean animated) {
+    public void setPulsing(boolean pulsing) {
         mPulsing = pulsing;
         update();
     }
@@ -291,15 +383,15 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     /**
      * Sets the dozing state of the keyguard.
      */
-    public void setDozing(boolean dozing) {
+    @Override
+    public void onDozingChanged(boolean dozing) {
         mDozing = dozing;
         update();
     }
 
     private void updateDarkTint() {
-        Drawable drawable = getDrawable().mutate();
-        int color = ColorUtils.blendARGB(Color.TRANSPARENT, Color.WHITE, mDarkAmount);
-        drawable.setColorFilter(color, PorterDuff.Mode.SRC_ATOP);
+        int color = ColorUtils.blendARGB(mIconColor, Color.WHITE, mDozeAmount);
+        setImageTintList(ColorStateList.valueOf(color));
     }
 
     /**
@@ -310,6 +402,29 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
             return;
         }
         mBouncerVisible = bouncerVisible;
+        update();
+    }
+
+    @Override
+    public void onDensityOrFontScaleChanged() {
+        ViewGroup.LayoutParams lp = getLayoutParams();
+        if (lp == null) {
+            return;
+        }
+        lp.width = getResources().getDimensionPixelSize(R.dimen.keyguard_lock_width);
+        lp.height = getResources().getDimensionPixelSize(R.dimen.keyguard_lock_height);
+        setLayoutParams(lp);
+        update(true /* force */);
+    }
+
+    @Override
+    public void onLocaleListChanged() {
+        setContentDescription(getContext().getText(R.string.accessibility_unlock_button));
+        update(true /* force */);
+    }
+
+    @Override
+    public void onUnlockMethodStateChanged() {
         update();
     }
 }

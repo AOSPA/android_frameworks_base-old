@@ -46,6 +46,7 @@ import static android.content.Context.BIND_AUTO_CREATE;
 import static android.content.Context.BIND_FOREGROUND_SERVICE;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
 import static android.content.pm.PackageManager.FEATURE_TELEVISION;
+import static android.content.pm.PackageManager.MATCH_ALL;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AWARE;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -191,6 +192,7 @@ import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.IntArray;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.Xml;
@@ -308,8 +310,7 @@ public class NotificationManagerService extends SystemService {
     static final String[] DEFAULT_ALLOWED_ADJUSTMENTS = new String[] {
             Adjustment.KEY_IMPORTANCE,
             Adjustment.KEY_CONTEXTUAL_ACTIONS,
-            Adjustment.KEY_TEXT_REPLIES,
-            Adjustment.KEY_USER_SENTIMENT};
+            Adjustment.KEY_TEXT_REPLIES};
 
     static final String[] NON_BLOCKABLE_DEFAULT_ROLES = new String[] {
             RoleManager.ROLE_DIALER,
@@ -455,6 +456,7 @@ public class NotificationManagerService extends SystemService {
     private int mAutoGroupAtCount;
     private boolean mIsTelevision;
     private boolean mIsAutomotive;
+    private boolean mNotificationEffectsEnabledForAutomotive;
 
     private MetricsLogger mMetricsLogger;
     private TriPredicate<String, Integer, String> mAllowedManagedServicePackages;
@@ -1020,6 +1022,24 @@ public class NotificationManagerService extends SystemService {
                 }
             }
         }
+
+        @Override
+        public void onNotificationBubbleChanged(String key, boolean isBubble) {
+            synchronized (mNotificationLock) {
+                NotificationRecord r = mNotificationsByKey.get(key);
+                if (r != null) {
+                    final StatusBarNotification n = r.sbn;
+                    final int callingUid = n.getUid();
+                    final String pkg = n.getPackageName();
+                    if (isBubble && isNotificationAppropriateToBubble(r, pkg, callingUid,
+                            null /* oldEntry */)) {
+                        r.getNotification().flags |= FLAG_BUBBLE;
+                    } else {
+                        r.getNotification().flags &= ~FLAG_BUBBLE;
+                    }
+                }
+            }
+        }
     };
 
     @VisibleForTesting
@@ -1526,6 +1546,11 @@ public class NotificationManagerService extends SystemService {
     }
 
     @VisibleForTesting
+    void setNotificationEffectsEnabledForAutomotive(boolean isEnabled) {
+        mNotificationEffectsEnabledForAutomotive = isEnabled;
+    }
+
+    @VisibleForTesting
     void setIsTelevision(boolean isTelevision) {
         mIsTelevision = isTelevision;
     }
@@ -1686,6 +1711,8 @@ public class NotificationManagerService extends SystemService {
 
         mIsAutomotive =
                 mPackageManagerClient.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, 0);
+        mNotificationEffectsEnabledForAutomotive =
+                resources.getBoolean(R.bool.config_enableServerNotificationEffectsForAutomotive);
 
         mPreferencesHelper.lockChannelsForOEM(getContext().getResources().getStringArray(
                 com.android.internal.R.array.config_nonBlockableNotificationPackages));
@@ -1855,7 +1882,7 @@ public class NotificationManagerService extends SystemService {
             mWindowManagerInternal = LocalServices.getService(WindowManagerInternal.class);
             mZenModeHelper.onSystemReady();
             mRoleObserver = new RoleObserver(getContext().getSystemService(RoleManager.class),
-                    getContext().getMainExecutor());
+                    mPackageManager, getContext().getMainExecutor());
             mRoleObserver.init();
         } else if (phase == SystemService.PHASE_THIRD_PARTY_APPS_CAN_START) {
             // This observer will force an update when observe is called, causing us to
@@ -2856,8 +2883,7 @@ public class NotificationManagerService extends SystemService {
 
             // Reset notification preferences
             if (!fromApp) {
-                mPreferencesHelper.onPackagesChanged(
-                        true, UserHandle.getCallingUserId(), packages, uids);
+                mPreferencesHelper.clearData(packageName, uid);
             }
 
             handleSavePolicyFile();
@@ -4776,11 +4802,25 @@ public class NotificationManagerService extends SystemService {
     private void flagNotificationForBubbles(NotificationRecord r, String pkg, int userId,
             NotificationRecord oldRecord) {
         Notification notification = r.getNotification();
+        if (isNotificationAppropriateToBubble(r, pkg, userId, oldRecord)) {
+            notification.flags |= FLAG_BUBBLE;
+        } else {
+            notification.flags &= ~FLAG_BUBBLE;
+        }
+    }
 
-        // Does the app want to bubble & have permission to bubble?
+    /**
+     * @return whether the provided notification record is allowed to be represented as a bubble.
+     */
+    private boolean isNotificationAppropriateToBubble(NotificationRecord r, String pkg, int userId,
+            NotificationRecord oldRecord) {
+        Notification notification = r.getNotification();
+
+        // Does the app want to bubble & is able to bubble
         boolean canBubble = notification.getBubbleMetadata() != null
                 && mPreferencesHelper.areBubblesAllowed(pkg, userId)
-                && r.getChannel().canBubble();
+                && r.getChannel().canBubble()
+                && !mActivityManager.isLowRamDevice();
 
         // Is the app in the foreground?
         final boolean appIsForeground =
@@ -4801,12 +4841,7 @@ public class NotificationManagerService extends SystemService {
         // OR something that was previously a bubble & still exists
         boolean bubbleUpdate = oldRecord != null
                 && (oldRecord.getNotification().flags & FLAG_BUBBLE) != 0;
-
-        if (canBubble && (notificationAppropriateToBubble || appIsForeground || bubbleUpdate)) {
-            notification.flags |= FLAG_BUBBLE;
-        } else {
-            notification.flags &= ~FLAG_BUBBLE;
-        }
+        return canBubble && (notificationAppropriateToBubble || appIsForeground || bubbleUpdate);
     }
 
     private void doChannelWarningToast(CharSequence toastText) {
@@ -5563,6 +5598,9 @@ public class NotificationManagerService extends SystemService {
     @VisibleForTesting
     @GuardedBy("mNotificationLock")
     void buzzBeepBlinkLocked(NotificationRecord record) {
+        if (mIsAutomotive && !mNotificationEffectsEnabledForAutomotive) {
+            return;
+        }
         boolean buzz = false;
         boolean beep = false;
         boolean blink = false;
@@ -6335,9 +6373,14 @@ public class NotificationManagerService extends SystemService {
 
         // tell the app
         if (sendDelete) {
-            if (r.getNotification().deleteIntent != null) {
+            final PendingIntent deleteIntent = r.getNotification().deleteIntent;
+            if (deleteIntent != null) {
                 try {
-                    r.getNotification().deleteIntent.send();
+                    // make sure deleteIntent cannot be used to start activities from background
+                    LocalServices.getService(ActivityManagerInternal.class)
+                            .clearPendingIntentAllowBgActivityStarts(deleteIntent.getTarget(),
+                            WHITELIST_TOKEN);
+                    deleteIntent.send();
                 } catch (PendingIntent.CanceledException ex) {
                     // do nothing - there's no relevant way to recover, and
                     //     no reason to let this propagate
@@ -7309,7 +7352,7 @@ public class NotificationManagerService extends SystemService {
 
         private static final String ATT_USER_SET = "user_set";
         // TODO: STOPSHIP (b/127994217) switch to final value when onboarding flow is implemented
-        private static final String TAG_ALLOWED_ADJUSTMENT_TYPES = "allowed_adjustments_tmp";
+        private static final String TAG_ALLOWED_ADJUSTMENT_TYPES = "allowed_adjustments_tmp2";
         private static final String ATT_TYPES = "types";
 
         private final Object mLock = new Object();
@@ -8179,11 +8222,14 @@ public class NotificationManagerService extends SystemService {
         private ArrayMap<String, ArrayMap<Integer, ArraySet<String>>> mNonBlockableDefaultApps;
 
         private final RoleManager mRm;
+        private final IPackageManager mPm;
         private final Executor mExecutor;
 
         RoleObserver(@NonNull RoleManager roleManager,
+                @NonNull IPackageManager pkgMgr,
                 @NonNull @CallbackExecutor Executor executor) {
             mRm = roleManager;
+            mPm = pkgMgr;
             mExecutor = executor;
         }
 
@@ -8197,8 +8243,12 @@ public class NotificationManagerService extends SystemService {
                     Integer userId = users.get(j).getUserHandle().getIdentifier();
                     ArraySet<String> approvedForUserId = new ArraySet<>(mRm.getRoleHoldersAsUser(
                             NON_BLOCKABLE_DEFAULT_ROLES[i], UserHandle.of(userId)));
+                    ArraySet<Pair<String, Integer>> approvedAppUids = new ArraySet<>();
+                    for (String pkg : approvedForUserId) {
+                        approvedAppUids.add(new Pair(pkg, getUidForPackage(pkg, userId)));
+                    }
                     userToApprovedList.put(userId, approvedForUserId);
-                    mPreferencesHelper.updateDefaultApps(userId, null, approvedForUserId);
+                    mPreferencesHelper.updateDefaultApps(userId, null, approvedAppUids);
                 }
             }
 
@@ -8241,7 +8291,7 @@ public class NotificationManagerService extends SystemService {
                     prevApprovedForRole.getOrDefault(user.getIdentifier(), new ArraySet<>());
 
             ArraySet<String> toRemove = new ArraySet<>();
-            ArraySet<String> toAdd = new ArraySet<>();
+            ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
 
             for (String previous : previouslyApproved) {
                 if (!roleHolders.contains(previous)) {
@@ -8250,7 +8300,8 @@ public class NotificationManagerService extends SystemService {
             }
             for (String nowApproved : roleHolders) {
                 if (!previouslyApproved.contains(nowApproved)) {
-                    toAdd.add(nowApproved);
+                    toAdd.add(new Pair(nowApproved,
+                            getUidForPackage(nowApproved, user.getIdentifier())));
                 }
             }
 
@@ -8263,6 +8314,15 @@ public class NotificationManagerService extends SystemService {
 
             // RoleManager is the source of truth for this data so we don't need to trigger a
             // write of the notification policy xml for this change
+        }
+
+        private int getUidForPackage(String pkg, int userId) {
+            try {
+                return mPm.getPackageUid(pkg, MATCH_ALL, userId);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "role manager has bad default " + pkg + " " + userId);
+            }
+            return -1;
         }
     }
 

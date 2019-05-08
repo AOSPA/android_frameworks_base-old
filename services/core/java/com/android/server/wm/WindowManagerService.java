@@ -7369,6 +7369,13 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
+        public int getTopFocusedDisplayId() {
+            synchronized (mGlobalLock) {
+                return mRoot.getTopFocusedDisplayContent().getDisplayId();
+            }
+        }
+
+        @Override
         public boolean shouldShowSystemDecorOnDisplay(int displayId) {
             synchronized (mGlobalLock) {
                 return WindowManagerService.this.shouldShowSystemDecors(displayId);
@@ -7572,18 +7579,22 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         if (shouldWaitForAnimToComplete) {
-            waitForAnimationsToComplete();
-
-            synchronized (mGlobalLock) {
-                mWindowPlacerLocked.performSurfacePlacementIfScheduled();
-                mRoot.forAllDisplays(displayContent ->
-                        displayContent.getInputMonitor().updateInputWindowsImmediately());
-            }
-
-            new SurfaceControl.Transaction().syncInputWindows().apply(true);
+            syncInputTransactions();
         }
 
         return LocalServices.getService(InputManagerInternal.class).injectInputEvent(ev, mode);
+    }
+
+    @Override
+    public void syncInputTransactions() {
+        waitForAnimationsToComplete();
+
+        synchronized (mGlobalLock) {
+            mWindowPlacerLocked.performSurfacePlacementIfScheduled();
+            mRoot.forAllDisplays(displayContent ->
+                    displayContent.getInputMonitor().updateInputWindowsImmediately());
+        }
+        new SurfaceControl.Transaction().syncInputWindows().apply(true);
     }
 
     private void waitForAnimationsToComplete() {
