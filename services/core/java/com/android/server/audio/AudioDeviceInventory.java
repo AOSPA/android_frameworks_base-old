@@ -829,7 +829,7 @@ public final class AudioDeviceInventory {
                 return 0;
             }
             mDeviceBroker.postBroadcastBecomingNoisy();
-            delay = SystemProperties.getInt("vendor.audio.noisy.broadcast.delay", 700);
+            delay = SystemProperties.getInt("audio.sys.noisy.broadcast.delay", 700);
         }
 
         return delay;
