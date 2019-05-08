@@ -43,6 +43,8 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.WirelessUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.statusbar.policy.FiveGServiceClient;
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +72,7 @@ public class CarrierTextController {
     private Context mContext;
     private CharSequence mSeparator;
     private WakefulnessLifecycle mWakefulnessLifecycle;
+    private FiveGServiceClient mFiveGServiceClient;
     private final WakefulnessLifecycle.Observer mWakefulnessObserver =
             new WakefulnessLifecycle.Observer() {
                 @Override
@@ -313,7 +316,7 @@ public class CarrierTextController {
             IccCardConstants.State simState = mKeyguardUpdateMonitor.getSimState(subId);
             CharSequence carrierName = subs.get(i).getCarrierName();
             if ( showCustomizeName ) {
-                carrierName = getCustomizeCarrierName(carrierName, subId);
+                carrierName = getCustomizeCarrierName(carrierName, subs.get(i));
             }
             CharSequence carrierTextForSimState = getCarrierTextForSimState(simState, carrierName);
             if (DEBUG) {
@@ -637,10 +640,22 @@ public class CarrierTextController {
         default void finishedWakingUp() {};
     }
 
-    private String getCustomizeCarrierName(CharSequence originCarrierName, int subId) {
+    private String getCustomizeCarrierName(CharSequence originCarrierName,
+                                           SubscriptionInfo sub) {
         StringBuilder newCarrierName = new StringBuilder();
-        int networkType = getNetworkType(subId);
+        int networkType = getNetworkType(sub.getSubscriptionId());
         String networkClass = networkClassToString(TelephonyManager.getNetworkClass(networkType));
+
+        if ( mFiveGServiceClient == null ) {
+            mFiveGServiceClient = FiveGServiceClient.getInstance(mContext);
+            mFiveGServiceClient.registerCallback(mCallback);
+        }
+        FiveGServiceState fiveGServiceState =
+                mFiveGServiceClient.getCurrentServiceState(sub.getSimSlotIndex());
+        if ( fiveGServiceState.isConnectedOnNsaMode() ) {
+            networkClass =
+                    mContext.getResources().getString(R.string.data_connection_5g);
+        }
 
         if (!TextUtils.isEmpty(originCarrierName)) {
             String[] names = originCarrierName.toString().split(mSeparator.toString(), 2);
