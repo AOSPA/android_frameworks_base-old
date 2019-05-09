@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 
@@ -44,14 +45,18 @@ public class RootWindowContainerTests extends WindowTestsBase {
     private static final int FAKE_CALLING_UID = 667;
 
     @Test
-    public void testIsAnyNonToastWindowVisibleForUid_oneToastOneNonToastBothVisible() {
+    public void testIsAnyNonToastWindowVisibleForUid_oneToastOneAppStartOneNonToastBothVisible() {
         final WindowState toastyToast = createWindow(null, TYPE_TOAST, "toast", FAKE_CALLING_UID);
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app", FAKE_CALLING_UID);
+        final WindowState appStart = createWindow(null, TYPE_APPLICATION_STARTING, "appStarting",
+                FAKE_CALLING_UID);
         toastyToast.mHasSurface = true;
         app.mHasSurface = true;
+        appStart.mHasSurface = true;
 
-        assertTrue(toastyToast.isVisible());
-        assertTrue(app.isVisible());
+        assertTrue(toastyToast.isVisibleNow());
+        assertTrue(app.isVisibleNow());
+        assertTrue(appStart.isVisibleNow());
         assertTrue(mWm.mRoot.isAnyNonToastWindowVisibleForUid(FAKE_CALLING_UID));
     }
 
@@ -60,7 +65,17 @@ public class RootWindowContainerTests extends WindowTestsBase {
         final WindowState toastyToast = createWindow(null, TYPE_TOAST, "toast", FAKE_CALLING_UID);
         toastyToast.mHasSurface = true;
 
-        assertTrue(toastyToast.isVisible());
+        assertTrue(toastyToast.isVisibleNow());
+        assertFalse(mWm.mRoot.isAnyNonToastWindowVisibleForUid(FAKE_CALLING_UID));
+    }
+
+    @Test
+    public void testIsAnyNonToastWindowVisibleForUid_onlyAppStartingVisible() {
+        final WindowState appStart = createWindow(null, TYPE_APPLICATION_STARTING, "appStarting",
+                FAKE_CALLING_UID);
+        appStart.mHasSurface = true;
+
+        assertTrue(appStart.isVisibleNow());
         assertFalse(mWm.mRoot.isAnyNonToastWindowVisibleForUid(FAKE_CALLING_UID));
     }
 
@@ -69,8 +84,8 @@ public class RootWindowContainerTests extends WindowTestsBase {
         final WindowState topBar = createWindow(null, TYPE_STATUS_BAR, "topBar", FAKE_CALLING_UID);
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app", FAKE_CALLING_UID);
 
-        assertFalse(topBar.isVisible());
-        assertFalse(app.isVisible());
+        assertFalse(topBar.isVisibleNow());
+        assertFalse(app.isVisibleNow());
         assertFalse(mWm.mRoot.isAnyNonToastWindowVisibleForUid(FAKE_CALLING_UID));
     }
 

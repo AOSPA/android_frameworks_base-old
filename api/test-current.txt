@@ -498,12 +498,13 @@ package android.app.prediction {
   }
 
   public static final class AppTarget.Builder {
-    ctor public AppTarget.Builder(@NonNull android.app.prediction.AppTargetId);
+    ctor public AppTarget.Builder(@NonNull android.app.prediction.AppTargetId, @NonNull String, @NonNull android.os.UserHandle);
+    ctor public AppTarget.Builder(@NonNull android.app.prediction.AppTargetId, @NonNull android.content.pm.ShortcutInfo);
     method @NonNull public android.app.prediction.AppTarget build();
     method @NonNull public android.app.prediction.AppTarget.Builder setClassName(@NonNull String);
     method @NonNull public android.app.prediction.AppTarget.Builder setRank(@IntRange(from=0) int);
-    method @NonNull public android.app.prediction.AppTarget.Builder setTarget(@NonNull String, @NonNull android.os.UserHandle);
-    method @NonNull public android.app.prediction.AppTarget.Builder setTarget(@NonNull android.content.pm.ShortcutInfo);
+    method @Deprecated @NonNull public android.app.prediction.AppTarget.Builder setTarget(@NonNull String, @NonNull android.os.UserHandle);
+    method @Deprecated @NonNull public android.app.prediction.AppTarget.Builder setTarget(@NonNull android.content.pm.ShortcutInfo);
   }
 
   public final class AppTargetEvent implements android.os.Parcelable {
@@ -628,6 +629,7 @@ package android.content {
     method public int getUserId();
     method public void setAutofillOptions(@Nullable android.content.AutofillOptions);
     method public void setContentCaptureOptions(@Nullable android.content.ContentCaptureOptions);
+    field public static final String BUGREPORT_SERVICE = "bugreport";
     field public static final String ROLLBACK_SERVICE = "rollback";
     field public static final String TEST_NETWORK_SERVICE = "test_network";
   }
@@ -1073,6 +1075,19 @@ package android.location {
 
 package android.media {
 
+  public final class AudioFocusInfo implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public android.media.AudioAttributes getAttributes();
+    method @NonNull public String getClientId();
+    method public int getClientUid();
+    method public int getFlags();
+    method public int getGainRequest();
+    method public int getLossReceived();
+    method @NonNull public String getPackageName();
+    method public void writeToParcel(android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.media.AudioFocusInfo> CREATOR;
+  }
+
   public final class AudioFocusRequest {
     method @Nullable public android.media.AudioManager.OnAudioFocusChangeListener getOnAudioFocusChangeListener();
   }
@@ -1082,6 +1097,16 @@ package android.media {
     method public static int channelCountFromOutChannelMask(int);
     method public static int getBytesPerSample(int);
     method public static boolean isEncodingLinearPcm(int);
+  }
+
+  public class AudioManager {
+    method @RequiresPermission("android.permission.MODIFY_AUDIO_ROUTING") public int dispatchAudioFocusChange(@NonNull android.media.AudioFocusInfo, int, @NonNull android.media.audiopolicy.AudioPolicy);
+    method public boolean hasRegisteredDynamicPolicy();
+    method @RequiresPermission("android.permission.MODIFY_AUDIO_ROUTING") public int registerAudioPolicy(@NonNull android.media.audiopolicy.AudioPolicy);
+    method @RequiresPermission("android.permission.MODIFY_AUDIO_ROUTING") public void setFocusRequestResult(@NonNull android.media.AudioFocusInfo, int, @NonNull android.media.audiopolicy.AudioPolicy);
+    method @RequiresPermission("android.permission.MODIFY_AUDIO_ROUTING") public void unregisterAudioPolicy(@NonNull android.media.audiopolicy.AudioPolicy);
+    method @RequiresPermission("android.permission.MODIFY_AUDIO_ROUTING") public void unregisterAudioPolicyAsync(@NonNull android.media.audiopolicy.AudioPolicy);
+    field public static final int SUCCESS = 0; // 0x0
   }
 
   public static final class AudioRecord.MetricsConstants {
@@ -1107,29 +1132,6 @@ package android.media {
     field public static final String SAMPLE_RATE = "android.media.audiotrack.sampleRate";
   }
 
-  public final class BufferingParams implements android.os.Parcelable {
-    method public int describeContents();
-    method public int getInitialMarkMs();
-    method public int getResumePlaybackMarkMs();
-    method public void writeToParcel(android.os.Parcel, int);
-    field @NonNull public static final android.os.Parcelable.Creator<android.media.BufferingParams> CREATOR;
-  }
-
-  public static class BufferingParams.Builder {
-    ctor public BufferingParams.Builder();
-    ctor public BufferingParams.Builder(android.media.BufferingParams);
-    method public android.media.BufferingParams build();
-    method public android.media.BufferingParams.Builder setInitialMarkMs(int);
-    method public android.media.BufferingParams.Builder setResumePlaybackMarkMs(int);
-  }
-
-  public class FileDataSourceDesc extends android.media.DataSourceDesc {
-    method public long getLength();
-    method public long getOffset();
-    method @NonNull public android.os.ParcelFileDescriptor getParcelFileDescriptor();
-    field public static final long FD_LENGTH_UNKNOWN = 576460752303423487L; // 0x7ffffffffffffffL
-  }
-
   public static final class MediaCodecInfo.VideoCapabilities.PerformancePoint {
     ctor public MediaCodecInfo.VideoCapabilities.PerformancePoint(int, int, int, int, @NonNull android.util.Size);
     ctor public MediaCodecInfo.VideoCapabilities.PerformancePoint(@NonNull android.media.MediaCodecInfo.VideoCapabilities.PerformancePoint, @NonNull android.util.Size);
@@ -1138,26 +1140,9 @@ package android.media {
     method public int getMaxMacroBlocks();
   }
 
-  public class MediaPlayer2 implements android.media.AudioRouting java.lang.AutoCloseable {
-    method public android.media.MediaPlayer2.DrmInfo getDrmInfo(@NonNull android.media.DataSourceDesc);
-    method public android.media.MediaDrm.KeyRequest getDrmKeyRequest(@NonNull android.media.DataSourceDesc, @Nullable byte[], @Nullable byte[], @Nullable String, int, @Nullable java.util.Map<java.lang.String,java.lang.String>) throws android.media.MediaPlayer2.NoDrmSchemeException;
-    method public String getDrmPropertyString(@NonNull android.media.DataSourceDesc, @NonNull String) throws android.media.MediaPlayer2.NoDrmSchemeException;
-    method @NonNull public Object prepareDrm(@NonNull android.media.DataSourceDesc, @NonNull java.util.UUID);
-    method public byte[] provideDrmKeyResponse(@NonNull android.media.DataSourceDesc, @Nullable byte[], @NonNull byte[]) throws android.media.DeniedByServerException, android.media.MediaPlayer2.NoDrmSchemeException;
-    method public void releaseDrm(@NonNull android.media.DataSourceDesc) throws android.media.MediaPlayer2.NoDrmSchemeException;
-    method public void restoreDrmKeys(@NonNull android.media.DataSourceDesc, @NonNull byte[]) throws android.media.MediaPlayer2.NoDrmSchemeException;
-    method public void setDrmPropertyString(@NonNull android.media.DataSourceDesc, @NonNull String, @NonNull String) throws android.media.MediaPlayer2.NoDrmSchemeException;
-  }
-
   public final class PlaybackParams implements android.os.Parcelable {
     method public int getAudioStretchMode();
     method public android.media.PlaybackParams setAudioStretchMode(int);
-  }
-
-  public class UriDataSourceDesc extends android.media.DataSourceDesc {
-    method @Nullable public java.util.List<java.net.HttpCookie> getCookies();
-    method @Nullable public java.util.Map<java.lang.String,java.lang.String> getHeaders();
-    method @NonNull public android.net.Uri getUri();
   }
 
   public static final class VolumeShaper.Configuration.Builder {
@@ -1197,6 +1182,93 @@ package android.media.audiofx {
 
   public static interface AudioEffect.OnParameterChangeListener {
     method public void onParameterChange(android.media.audiofx.AudioEffect, int, byte[], byte[]);
+  }
+
+}
+
+package android.media.audiopolicy {
+
+  public class AudioMix {
+    method public int getMixState();
+    field public static final int MIX_STATE_DISABLED = -1; // 0xffffffff
+    field public static final int MIX_STATE_IDLE = 0; // 0x0
+    field public static final int MIX_STATE_MIXING = 1; // 0x1
+    field public static final int ROUTE_FLAG_LOOP_BACK = 2; // 0x2
+    field public static final int ROUTE_FLAG_RENDER = 1; // 0x1
+  }
+
+  public static class AudioMix.Builder {
+    ctor public AudioMix.Builder(android.media.audiopolicy.AudioMixingRule) throws java.lang.IllegalArgumentException;
+    method public android.media.audiopolicy.AudioMix build() throws java.lang.IllegalArgumentException;
+    method public android.media.audiopolicy.AudioMix.Builder setDevice(@NonNull android.media.AudioDeviceInfo) throws java.lang.IllegalArgumentException;
+    method public android.media.audiopolicy.AudioMix.Builder setFormat(android.media.AudioFormat) throws java.lang.IllegalArgumentException;
+    method public android.media.audiopolicy.AudioMix.Builder setRouteFlags(int) throws java.lang.IllegalArgumentException;
+  }
+
+  public class AudioMixingRule {
+    field public static final int RULE_MATCH_ATTRIBUTE_CAPTURE_PRESET = 2; // 0x2
+    field public static final int RULE_MATCH_ATTRIBUTE_USAGE = 1; // 0x1
+    field public static final int RULE_MATCH_UID = 4; // 0x4
+  }
+
+  public static class AudioMixingRule.Builder {
+    ctor public AudioMixingRule.Builder();
+    method public android.media.audiopolicy.AudioMixingRule.Builder addMixRule(int, Object) throws java.lang.IllegalArgumentException;
+    method public android.media.audiopolicy.AudioMixingRule.Builder addRule(android.media.AudioAttributes, int) throws java.lang.IllegalArgumentException;
+    method @NonNull public android.media.audiopolicy.AudioMixingRule.Builder allowPrivilegedPlaybackCapture(boolean);
+    method public android.media.audiopolicy.AudioMixingRule build();
+    method public android.media.audiopolicy.AudioMixingRule.Builder excludeMixRule(int, Object) throws java.lang.IllegalArgumentException;
+    method public android.media.audiopolicy.AudioMixingRule.Builder excludeRule(android.media.AudioAttributes, int) throws java.lang.IllegalArgumentException;
+  }
+
+  public class AudioPolicy {
+    method public int attachMixes(@NonNull java.util.List<android.media.audiopolicy.AudioMix>);
+    method public android.media.AudioRecord createAudioRecordSink(android.media.audiopolicy.AudioMix) throws java.lang.IllegalArgumentException;
+    method public android.media.AudioTrack createAudioTrackSource(android.media.audiopolicy.AudioMix) throws java.lang.IllegalArgumentException;
+    method public int detachMixes(@NonNull java.util.List<android.media.audiopolicy.AudioMix>);
+    method public int getFocusDuckingBehavior();
+    method public int getStatus();
+    method public boolean removeUidDeviceAffinity(int);
+    method public int setFocusDuckingBehavior(int) throws java.lang.IllegalArgumentException, java.lang.IllegalStateException;
+    method public void setRegistration(String);
+    method public boolean setUidDeviceAffinity(int, @NonNull java.util.List<android.media.AudioDeviceInfo>);
+    method public String toLogFriendlyString();
+    field public static final int FOCUS_POLICY_DUCKING_DEFAULT = 0; // 0x0
+    field public static final int FOCUS_POLICY_DUCKING_IN_APP = 0; // 0x0
+    field public static final int FOCUS_POLICY_DUCKING_IN_POLICY = 1; // 0x1
+    field public static final int POLICY_STATUS_REGISTERED = 2; // 0x2
+    field public static final int POLICY_STATUS_UNREGISTERED = 1; // 0x1
+  }
+
+  public abstract static class AudioPolicy.AudioPolicyFocusListener {
+    ctor public AudioPolicy.AudioPolicyFocusListener();
+    method public void onAudioFocusAbandon(android.media.AudioFocusInfo);
+    method public void onAudioFocusGrant(android.media.AudioFocusInfo, int);
+    method public void onAudioFocusLoss(android.media.AudioFocusInfo, boolean);
+    method public void onAudioFocusRequest(android.media.AudioFocusInfo, int);
+  }
+
+  public abstract static class AudioPolicy.AudioPolicyStatusListener {
+    ctor public AudioPolicy.AudioPolicyStatusListener();
+    method public void onMixStateUpdate(android.media.audiopolicy.AudioMix);
+    method public void onStatusChange();
+  }
+
+  public abstract static class AudioPolicy.AudioPolicyVolumeCallback {
+    ctor public AudioPolicy.AudioPolicyVolumeCallback();
+    method public void onVolumeAdjustment(int);
+  }
+
+  public static class AudioPolicy.Builder {
+    ctor public AudioPolicy.Builder(android.content.Context);
+    method @NonNull public android.media.audiopolicy.AudioPolicy.Builder addMix(@NonNull android.media.audiopolicy.AudioMix) throws java.lang.IllegalArgumentException;
+    method @NonNull public android.media.audiopolicy.AudioPolicy build();
+    method public void setAudioPolicyFocusListener(android.media.audiopolicy.AudioPolicy.AudioPolicyFocusListener);
+    method public void setAudioPolicyStatusListener(android.media.audiopolicy.AudioPolicy.AudioPolicyStatusListener);
+    method @NonNull public android.media.audiopolicy.AudioPolicy.Builder setAudioPolicyVolumeCallback(@NonNull android.media.audiopolicy.AudioPolicy.AudioPolicyVolumeCallback);
+    method @NonNull public android.media.audiopolicy.AudioPolicy.Builder setIsAudioFocusPolicy(boolean);
+    method @NonNull public android.media.audiopolicy.AudioPolicy.Builder setIsTestFocusPolicy(boolean);
+    method @NonNull public android.media.audiopolicy.AudioPolicy.Builder setLooper(@NonNull android.os.Looper) throws java.lang.IllegalArgumentException;
   }
 
 }
@@ -1365,6 +1437,7 @@ package android.net {
   }
 
   public class TestNetworkManager {
+    method public android.net.TestNetworkInterface createTapInterface();
     method public android.net.TestNetworkInterface createTunInterface(@NonNull android.net.LinkAddress[]);
     method public void setupTestNetwork(@NonNull String, @NonNull android.os.IBinder);
     method public void teardownTestNetwork(@NonNull android.net.Network);
@@ -1375,9 +1448,6 @@ package android.net {
     method public static long getLoopbackRxPackets();
     method public static long getLoopbackTxBytes();
     method public static long getLoopbackTxPackets();
-    field public static final int TAG_SYSTEM_DHCP = -192; // 0xffffff40
-    field public static final int TAG_SYSTEM_DHCP_SERVER = -186; // 0xffffff46
-    field public static final int TAG_SYSTEM_PROBE = -190; // 0xffffff42
   }
 
 }
@@ -1572,6 +1642,34 @@ package android.os {
 
   public class BatteryManager {
     method @RequiresPermission("android.permission.POWER_SAVER") public boolean setChargingStateUpdateDelayMillis(int);
+  }
+
+  public final class BugreportManager {
+    method @RequiresPermission(android.Manifest.permission.DUMP) public void cancelBugreport();
+    method @RequiresPermission(android.Manifest.permission.DUMP) public void startBugreport(@NonNull android.os.ParcelFileDescriptor, @Nullable android.os.ParcelFileDescriptor, @NonNull android.os.BugreportParams, @NonNull java.util.concurrent.Executor, @NonNull android.os.BugreportManager.BugreportCallback);
+  }
+
+  public abstract static class BugreportManager.BugreportCallback {
+    ctor public BugreportManager.BugreportCallback();
+    method public void onError(int);
+    method public void onFinished();
+    method public void onProgress(@FloatRange(from=0.0f, to=100.0f) float);
+    field public static final int BUGREPORT_ERROR_ANOTHER_REPORT_IN_PROGRESS = 5; // 0x5
+    field public static final int BUGREPORT_ERROR_INVALID_INPUT = 1; // 0x1
+    field public static final int BUGREPORT_ERROR_RUNTIME = 2; // 0x2
+    field public static final int BUGREPORT_ERROR_USER_CONSENT_TIMED_OUT = 4; // 0x4
+    field public static final int BUGREPORT_ERROR_USER_DENIED_CONSENT = 3; // 0x3
+  }
+
+  public final class BugreportParams {
+    ctor public BugreportParams(int);
+    method public int getMode();
+    field public static final int BUGREPORT_MODE_FULL = 0; // 0x0
+    field public static final int BUGREPORT_MODE_INTERACTIVE = 1; // 0x1
+    field public static final int BUGREPORT_MODE_REMOTE = 2; // 0x2
+    field public static final int BUGREPORT_MODE_TELEPHONY = 4; // 0x4
+    field public static final int BUGREPORT_MODE_WEAR = 3; // 0x3
+    field public static final int BUGREPORT_MODE_WIFI = 5; // 0x5
   }
 
   public class Build {
@@ -2100,7 +2198,6 @@ package android.provider {
 
   public final class DeviceConfig {
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static void addOnPropertiesChangedListener(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.provider.DeviceConfig.OnPropertiesChangedListener);
-    method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static void addOnPropertyChangedListener(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.provider.DeviceConfig.OnPropertyChangedListener);
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static boolean getBoolean(@NonNull String, @NonNull String, boolean);
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static float getFloat(@NonNull String, @NonNull String, float);
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static int getInt(@NonNull String, @NonNull String, int);
@@ -2108,7 +2205,6 @@ package android.provider {
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static String getProperty(@NonNull String, @NonNull String);
     method @RequiresPermission("android.permission.READ_DEVICE_CONFIG") public static String getString(@NonNull String, @NonNull String, @Nullable String);
     method public static void removeOnPropertiesChangedListener(@NonNull android.provider.DeviceConfig.OnPropertiesChangedListener);
-    method public static void removeOnPropertyChangedListener(@NonNull android.provider.DeviceConfig.OnPropertyChangedListener);
     method @RequiresPermission(android.Manifest.permission.WRITE_DEVICE_CONFIG) public static void resetToDefaults(int, @Nullable String);
     method @RequiresPermission(android.Manifest.permission.WRITE_DEVICE_CONFIG) public static boolean setProperty(@NonNull String, @NonNull String, @Nullable String, boolean);
     field public static final String NAMESPACE_AUTOFILL = "autofill";
@@ -2120,10 +2216,6 @@ package android.provider {
 
   public static interface DeviceConfig.OnPropertiesChangedListener {
     method public void onPropertiesChanged(@NonNull android.provider.DeviceConfig.Properties);
-  }
-
-  public static interface DeviceConfig.OnPropertyChangedListener {
-    method public void onPropertyChanged(@NonNull String, @NonNull String, @Nullable String);
   }
 
   public static class DeviceConfig.Properties {
@@ -2439,9 +2531,9 @@ package android.service.contentcapture {
     method public void onConnected();
     method public void onContentCaptureEvent(@NonNull android.view.contentcapture.ContentCaptureSessionId, @NonNull android.view.contentcapture.ContentCaptureEvent);
     method public void onCreateContentCaptureSession(@NonNull android.view.contentcapture.ContentCaptureContext, @NonNull android.view.contentcapture.ContentCaptureSessionId);
+    method public void onDataRemovalRequest(@NonNull android.view.contentcapture.DataRemovalRequest);
     method public void onDestroyContentCaptureSession(@NonNull android.view.contentcapture.ContentCaptureSessionId);
     method public void onDisconnected();
-    method public void onUserDataRemovalRequest(@NonNull android.view.contentcapture.UserDataRemovalRequest);
     method public final void setContentCaptureConditions(@NonNull String, @Nullable java.util.Set<android.view.contentcapture.ContentCaptureCondition>);
     method public final void setContentCaptureWhitelist(@Nullable java.util.Set<java.lang.String>, @Nullable java.util.Set<android.content.ComponentName>);
     field public static final String SERVICE_INTERFACE = "android.service.contentcapture.ContentCaptureService";
@@ -2751,8 +2843,6 @@ package android.telephony.mbms.vendor {
     method public int cancelDownload(android.telephony.mbms.DownloadRequest) throws android.os.RemoteException;
     method public void dispose(int) throws android.os.RemoteException;
     method public int download(android.telephony.mbms.DownloadRequest) throws android.os.RemoteException;
-    method public static String getDefaultTransactionName(int);
-    method public String getTransactionName(int);
     method public int initialize(int, android.telephony.mbms.MbmsDownloadSessionCallback) throws android.os.RemoteException;
     method @NonNull public java.util.List<android.telephony.mbms.DownloadRequest> listPendingDownloads(int) throws android.os.RemoteException;
     method public void onAppCallbackDied(int, int);
@@ -2780,9 +2870,7 @@ package android.telephony.mbms.vendor {
     ctor public MbmsStreamingServiceBase();
     method public android.os.IBinder asBinder();
     method public void dispose(int) throws android.os.RemoteException;
-    method public static String getDefaultTransactionName(int);
     method @Nullable public android.net.Uri getPlaybackUri(int, String) throws android.os.RemoteException;
-    method public String getTransactionName(int);
     method public int initialize(android.telephony.mbms.MbmsStreamingSessionCallback, int) throws android.os.RemoteException;
     method public void onAppCallbackDied(int, int);
     method public boolean onTransact(int, android.os.Parcel, android.os.Parcel, int) throws android.os.RemoteException;

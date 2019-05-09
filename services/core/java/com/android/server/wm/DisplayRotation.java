@@ -193,9 +193,9 @@ public class DisplayRotation {
             mSettingsObserver = new SettingsObserver(uiHandler);
             mSettingsObserver.observe();
         }
-        /* Register for WIFI Display Intents in a spearte thread
+        /* Register for WIFI Display Intents in a separate thread
          * to avoid possible deadlock between ActivityManager and
-         * WndowManager global locks*/
+         * WindowManager global locks*/
         Thread t = new Thread(){
             public void run() {
                 context.registerReceiver(new BroadcastReceiver(){

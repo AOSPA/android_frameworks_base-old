@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -55,6 +56,7 @@ import java.util.List;
  * @hide
  * AudioPolicy provides access to the management of audio routing and audio focus.
  */
+@TestApi
 @SystemApi
 public class AudioPolicy {
 
@@ -237,6 +239,7 @@ public class AudioPolicy {
         }
 
         /**
+         * @hide
          * Test method to declare whether this audio focus policy is for test purposes only.
          * Having a test policy registered will disable the current focus policy and replace it
          * with this test policy. When unregistered, the previous focus policy will be restored.
@@ -245,6 +248,7 @@ public class AudioPolicy {
          * @param isTestFocusPolicy true if the focus policy to register is for testing purposes.
          * @return the same Builder instance
          */
+        @TestApi
         @NonNull
         public Builder setIsTestFocusPolicy(boolean isTestFocusPolicy) {
             mIsTestFocusPolicy = isTestFocusPolicy;
@@ -412,6 +416,7 @@ public class AudioPolicy {
      * @param devices list of devices to which the audio stream of the application may be routed.
      * @return true if the change was successful, false otherwise.
      */
+    @TestApi
     @SystemApi
     public boolean setUidDeviceAffinity(int uid, @NonNull List<AudioDeviceInfo> devices) {
         if (devices == null) {
@@ -453,6 +458,7 @@ public class AudioPolicy {
      * @param uid UID of the application affected.
      * @return true if the change was successful, false otherwise.
      */
+    @TestApi
     @SystemApi
     public boolean removeUidDeviceAffinity(int uid) {
         synchronized (mLock) {
