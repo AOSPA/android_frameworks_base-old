@@ -840,6 +840,13 @@ public final class ActiveServices {
                         sb.append(compName);
                         Slog.w(TAG, sb.toString());
                         stopping.add(service);
+
+                        // If the app is under bg restrictions, also make sure that
+                        // any notification is dismissed
+                        if (appRestrictedAnyInBackground(
+                                service.appInfo.uid, service.packageName)) {
+                            cancelForegroundNotificationLocked(service);
+                        }
                     }
                 }
             }
@@ -1244,6 +1251,10 @@ public final class ActiveServices {
         }
     }
 
+    private boolean appIsTopLocked(int uid) {
+        return mAm.getUidState(uid) <= ActivityManager.PROCESS_STATE_TOP;
+    }
+
     /**
      * @param id Notification ID.  Zero === exit foreground state for the given service.
      */
@@ -1330,8 +1341,11 @@ public final class ActiveServices {
                         throw new SecurityException("Foreground not allowed as per app op");
                 }
 
-                if (!ignoreForeground &&
-                        appRestrictedAnyInBackground(r.appInfo.uid, r.packageName)) {
+                // Apps that are TOP or effectively similar may call startForeground() on
+                // their services even if they are restricted from doing that while in bg.
+                if (!ignoreForeground
+                        && !appIsTopLocked(r.appInfo.uid)
+                        && appRestrictedAnyInBackground(r.appInfo.uid, r.packageName)) {
                     Slog.w(TAG,
                             "Service.startForeground() not allowed due to bg restriction: service "
                             + r.shortInstanceName);
@@ -3907,8 +3921,11 @@ public final class ActiveServices {
 
     void serviceTimeout(ProcessRecord proc) {
         String anrMessage = null;
-
         synchronized(mAm) {
+            if (proc.isDebugging()) {
+                // The app's being debugged, ignore timeout.
+                return;
+            }
             if (proc.executingServices.size() == 0 || proc.thread == null) {
                 return;
             }

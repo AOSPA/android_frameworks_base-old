@@ -19,6 +19,7 @@ package android.app;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
+import static android.view.Display.INVALID_DISPLAY;
 
 import android.annotation.NonNull;
 import android.annotation.TestApi;
@@ -254,6 +255,34 @@ public class ActivityView extends ViewGroup {
     }
 
     /**
+     * Launch a new activity into this container.
+     * <p>Activity resolved by the provided {@link PendingIntent} must have
+     * {@link android.R.attr#resizeableActivity} attribute set to {@code true} in order to be
+     * launched here. Also, if activity is not owned by the owner of this container, it must allow
+     * embedding and the caller must have permission to embed.
+     * <p>Note: This class must finish initializing and
+     * {@link StateCallback#onActivityViewReady(ActivityView)} callback must be triggered before
+     * this method can be called.
+     *
+     * @param pendingIntent Intent used to launch an activity.
+     * @param options options for the activity
+     *
+     * @see StateCallback
+     * @see #startActivity(Intent)
+     */
+    public void startActivity(@NonNull PendingIntent pendingIntent,
+            @NonNull ActivityOptions options) {
+        options.setLaunchDisplayId(mVirtualDisplay.getDisplay().getDisplayId());
+        try {
+            pendingIntent.send(null /* context */, 0 /* code */, null /* intent */,
+                    null /* onFinished */, null /* handler */, null /* requiredPermission */,
+                    options.toBundle());
+        } catch (PendingIntent.CanceledException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * Check if container is ready to launch and create {@link ActivityOptions} to target the
      * virtual display.
      */
@@ -374,6 +403,16 @@ public class ActivityView extends ViewGroup {
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         mSurfaceView.setVisibility(visibility);
+    }
+
+    /**
+     * @return the display id of the virtual display.
+     */
+    public int getVirtualDisplayId() {
+        if (mVirtualDisplay != null) {
+            return mVirtualDisplay.getDisplay().getDisplayId();
+        }
+        return INVALID_DISPLAY;
     }
 
     /**

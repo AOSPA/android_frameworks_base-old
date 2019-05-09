@@ -1201,7 +1201,7 @@ public final class ViewRootImpl implements ViewParent,
 
         if (useAutoDark) {
             boolean forceDarkAllowedDefault =
-                    SystemProperties.getBoolean("debug.hwui.force_dark", false);
+                    SystemProperties.getBoolean(ThreadedRenderer.DEBUG_FORCE_DARK, false);
             TypedArray a = mContext.obtainStyledAttributes(R.styleable.Theme);
             useAutoDark = a.getBoolean(R.styleable.Theme_isLightTheme, true)
                     && a.getBoolean(R.styleable.Theme_forceDarkAllowed, forceDarkAllowedDefault);
@@ -2824,10 +2824,14 @@ public final class ViewRootImpl implements ViewParent,
             hasWindowFocus = mUpcomingWindowFocus;
             inTouchMode = mUpcomingInTouchMode;
         }
-        if (hasWindowFocus) {
-            mInsetsController.onWindowFocusGained();
-        } else {
-            mInsetsController.onWindowFocusLost();
+        if (sNewInsetsMode != NEW_INSETS_MODE_NONE) {
+            // TODO (b/131181940): Make sure this doesn't leak Activity with mActivityConfigCallback
+            // config changes.
+            if (hasWindowFocus) {
+                mInsetsController.onWindowFocusGained();
+            } else {
+                mInsetsController.onWindowFocusLost();
+            }
         }
 
         if (mAdded) {
@@ -8843,6 +8847,15 @@ public final class ViewRootImpl implements ViewParent,
             if (viewRootImpl != null && viewRootImpl.mView != null) {
                 viewRootImpl.getAccessibilityInteractionController()
                         .clearAccessibilityFocusClientThread();
+            }
+        }
+
+        @Override
+        public void notifyOutsideTouch() {
+            ViewRootImpl viewRootImpl = mViewRootImpl.get();
+            if (viewRootImpl != null && viewRootImpl.mView != null) {
+                viewRootImpl.getAccessibilityInteractionController()
+                        .notifyOutsideTouchClientThread();
             }
         }
     }

@@ -23,13 +23,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.database.ContentObserver;
-import android.location.LocationManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.UserHandle;
-import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -49,17 +46,13 @@ class GnssVisibilityControl {
     private static final String TAG = "GnssVisibilityControl";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    // Constants related to non-framework (NFW) location access permission proxy apps.
-    private static final String NFW_PROXY_APP_PKG_ACTIVITY_NAME_SUFFIX =
-            ".NonFrameworkLocationAccessActivity";
-    private static final String NFW_INTENT_ACTION_NFW_LOCATION_ACCESS_SUFFIX =
-            ".intent.action.NON_FRAMEWORK_LOCATION_ACCESS";
-    private static final String NFW_INTENT_TYPE = "text/plain";
-
     private static final String LOCATION_PERMISSION_NAME =
             "android.permission.ACCESS_FINE_LOCATION";
 
     private static final String[] NO_LOCATION_ENABLED_PROXY_APPS = new String[0];
+
+    // Max wait time for synchronous method onGpsEnabledChanged() to run.
+    private static final long ON_GPS_ENABLED_CHANGED_TIMEOUT_MILLIS = 3 * 1000;
 
     // Wakelocks
     private static final String WAKELOCK_KEY = TAG;
@@ -72,7 +65,7 @@ class GnssVisibilityControl {
     private final Handler mHandler;
     private final Context mContext;
 
-    private boolean mIsDeviceLocationSettingsEnabled;
+    private boolean mIsGpsEnabled;
 
     // Number of non-framework location access proxy apps is expected to be small (< 5).
     private static final int ARRAY_MAP_INITIAL_CAPACITY_PROXY_APP_TO_LOCATION_PERMISSIONS = 7;
@@ -95,6 +88,30 @@ class GnssVisibilityControl {
         runOnHandler(this::handleInitialize);
     }
 
+    void onGpsEnabledChanged(boolean isEnabled) {
+        // The GnssLocationProvider's methods: handleEnable() calls this method after native_init()
+        // and handleDisable() calls this method before native_cleanup(). This method must be
+        // executed synchronously so that the NFW location access permissions are disabled in
+        // the HAL before native_cleanup() method is called.
+        //
+        // NOTE: Since improper use of runWithScissors() method can result in deadlocks, the method
+        // doc recommends limiting its use to cases where some initialization steps need to be
+        // executed in sequence before continuing which fits this scenario.
+        if (mHandler.runWithScissors(() -> handleGpsEnabledChanged(isEnabled),
+                ON_GPS_ENABLED_CHANGED_TIMEOUT_MILLIS)) {
+            return;
+        }
+
+        // After timeout, the method remains posted in the queue and hence future enable/disable
+        // calls to this method will all get executed in the correct sequence. But this timeout
+        // situation should not even arise because runWithScissors() will run in the caller's
+        // thread without blocking as it is the same thread as mHandler's thread.
+        if (!isEnabled) {
+            Log.w(TAG, "Native call to disable non-framework location access in GNSS HAL may"
+                    + " get executed after native_cleanup().");
+        }
+    }
+
     void updateProxyApps(List<String> nfwLocationAccessProxyApps) {
         runOnHandler(() -> handleUpdateProxyApps(nfwLocationAccessProxyApps));
     }
@@ -110,12 +127,6 @@ class GnssVisibilityControl {
     private void handleInitialize() {
         disableNfwLocationAccess(); // Disable until config properties are loaded.
         listenForProxyAppsPackageUpdates();
-        listenForDeviceLocationSettingsUpdate();
-        mIsDeviceLocationSettingsEnabled = getDeviceLocationSettings();
-    }
-
-    private boolean getDeviceLocationSettings() {
-        return mContext.getSystemService(LocationManager.class).isLocationEnabled();
     }
 
     private void listenForProxyAppsPackageUpdates() {
@@ -143,18 +154,6 @@ class GnssVisibilityControl {
                 }
             }
         }, UserHandle.ALL, intentFilter, null, mHandler);
-    }
-
-    private void listenForDeviceLocationSettingsUpdate() {
-        mContext.getContentResolver().registerContentObserver(
-                Settings.Secure.getUriFor(Settings.Secure.LOCATION_MODE),
-                true,
-                new ContentObserver(mHandler) {
-                    @Override
-                    public void onChange(boolean selfChange) {
-                        handleDeviceLocationSettingsUpdated();
-                    }
-                }, UserHandle.USER_ALL);
     }
 
     private void handleProxyAppPackageUpdate(String pkgName, String action) {
@@ -213,22 +212,21 @@ class GnssVisibilityControl {
         return false;
     }
 
-    private void handleDeviceLocationSettingsUpdated() {
-        final boolean enabled = getDeviceLocationSettings();
-        Log.i(TAG, "Device location settings enabled: " + enabled);
+    private void handleGpsEnabledChanged(boolean isEnabled) {
+        if (DEBUG) Log.d(TAG, "handleGpsEnabledChanged, isEnabled: " + isEnabled);
 
-        if (mIsDeviceLocationSettingsEnabled == enabled) {
+        if (mIsGpsEnabled == isEnabled) {
             return;
         }
 
-        mIsDeviceLocationSettingsEnabled = enabled;
-        if (!mIsDeviceLocationSettingsEnabled) {
+        mIsGpsEnabled = isEnabled;
+        if (!mIsGpsEnabled) {
             disableNfwLocationAccess();
             return;
         }
 
-        // When device location settings was disabled, we already set the proxy app list
-        // to empty in GNSS HAL. Update only if the proxy app list is not empty.
+        // When GNSS was disabled, we already set the proxy app list to empty in GNSS HAL.
+        // Update only if the proxy app list is not empty.
         String[] locationPermissionEnabledProxyApps = getLocationPermissionEnabledProxyApps();
         if (locationPermissionEnabledProxyApps.length != 0) {
             setNfwLocationAccessProxyAppsInGnssHal(locationPermissionEnabledProxyApps);
@@ -290,6 +288,18 @@ class GnssVisibilityControl {
                     return "<Unknown>";
             }
         }
+
+        private boolean isRequestAccepted() {
+            return mResponseType != NfwNotification.NFW_RESPONSE_TYPE_REJECTED;
+        }
+
+        private boolean isRequestAttributedToProxyApp() {
+            return !TextUtils.isEmpty(mProxyAppPackageName);
+        }
+
+        private boolean isEmergencyRequestNotification() {
+            return mInEmergencyMode && !isRequestAttributedToProxyApp();
+        }
     }
 
     private void handlePermissionsChanged(int uid) {
@@ -335,7 +345,7 @@ class GnssVisibilityControl {
     }
 
     private void updateNfwLocationAccessProxyAppsInGnssHal() {
-        if (!mIsDeviceLocationSettingsEnabled) {
+        if (!mIsGpsEnabled) {
             return; // Keep non-framework location access disabled.
         }
         setNfwLocationAccessProxyAppsInGnssHal(getLocationPermissionEnabledProxyApps());
@@ -378,20 +388,37 @@ class GnssVisibilityControl {
     private void handleNfwNotification(NfwNotification nfwNotification) {
         if (DEBUG) Log.d(TAG, "Non-framework location access notification: " + nfwNotification);
 
-        final String proxyAppPackageName = nfwNotification.mProxyAppPackageName;
-        Boolean isLocationPermissionEnabled = mProxyAppToLocationPermissions.get(
-                proxyAppPackageName);
-        boolean isLocationRequestAccepted =
-                nfwNotification.mResponseType != NfwNotification.NFW_RESPONSE_TYPE_REJECTED;
-        boolean isPermissionMismatched;
-        if (isLocationPermissionEnabled == null) {
-            isPermissionMismatched = isLocationRequestAccepted;
-        } else {
-            isPermissionMismatched = (isLocationPermissionEnabled != isLocationRequestAccepted);
+        if (nfwNotification.isEmergencyRequestNotification()) {
+            handleEmergencyNfwNotification(nfwNotification);
+            return;
         }
+
+        final String proxyAppPackageName = nfwNotification.mProxyAppPackageName;
+        final Boolean isLocationPermissionEnabled = mProxyAppToLocationPermissions.get(
+                proxyAppPackageName);
+        final boolean isLocationRequestAccepted = nfwNotification.isRequestAccepted();
+        final boolean isPermissionMismatched =
+                (isLocationPermissionEnabled == null) ? isLocationRequestAccepted
+                        : (isLocationPermissionEnabled != isLocationRequestAccepted);
         logEvent(nfwNotification, isPermissionMismatched);
 
-        if (TextUtils.isEmpty(proxyAppPackageName)) {
+        if (!nfwNotification.isRequestAttributedToProxyApp()) {
+            // Handle cases where GNSS HAL implementation correctly rejected NFW location request.
+            // 1. GNSS HAL implementation doesn't provide location to any NFW location use cases.
+            //    There is no Location Attribution App configured in the framework.
+            // 2. GNSS HAL implementation doesn't provide location to some NFW location use cases.
+            //    Location Attribution Apps are configured only for the supported NFW location
+            //    use cases. All other use cases which are not supported (and always rejected) by
+            //    the GNSS HAL implementation will have proxyAppPackageName set to empty string.
+            if (!isLocationRequestAccepted) {
+                if (DEBUG) {
+                    Log.d(TAG, "Non-framework location request rejected. ProxyAppPackageName field"
+                            + " is not set in the notification: " + nfwNotification + ". Number of"
+                            + " configured proxy apps: " + mProxyAppToLocationPermissions.size());
+                }
+                return;
+            }
+
             Log.e(TAG, "ProxyAppPackageName field is not set. AppOps service not notified "
                     + "for non-framework location access notification: " + nfwNotification);
             return;
@@ -423,6 +450,16 @@ class GnssVisibilityControl {
                     + nfwNotification.getResponseTypeAsString() + " for notification: "
                     + nfwNotification);
         }
+    }
+
+    private void handleEmergencyNfwNotification(NfwNotification nfwNotification) {
+        boolean isPermissionMismatched =
+                (nfwNotification.mResponseType == NfwNotification.NFW_RESPONSE_TYPE_REJECTED);
+        if (isPermissionMismatched) {
+            Log.e(TAG, "Emergency non-framework location request incorrectly rejected."
+                    + " Notification: " + nfwNotification);
+        }
+        logEvent(nfwNotification, isPermissionMismatched);
     }
 
     private void logEvent(NfwNotification notification, boolean isPermissionMismatched) {

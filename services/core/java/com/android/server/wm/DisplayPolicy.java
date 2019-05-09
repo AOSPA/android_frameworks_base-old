@@ -113,7 +113,10 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Px;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
+import android.app.LoadedApk;
+import android.app.ResourcesManager;
 import android.app.StatusBarManager;
 import android.content.Context;
 import android.content.Intent;
@@ -213,6 +216,8 @@ public class DisplayPolicy {
     private final Object mLock;
     private final Handler mHandler;
 
+    private Resources mCurrentUserResources;
+
     private final boolean mCarDockEnablesAccelerometer;
     private final boolean mDeskDockEnablesAccelerometer;
     private final AccessibilityManager mAccessibilityManager;
@@ -282,6 +287,9 @@ public class DisplayPolicy {
     private int[] mNavigationBarHeightForRotationInCarMode = new int[4];
     private int[] mNavigationBarWidthForRotationInCarMode = new int[4];
 
+    /** See {@link #getNavigationBarFrameHeight} */
+    private int[] mNavigationBarFrameHeightForRotationDefault = new int[4];
+
     /** Cached value of {@link ScreenShapeHelper#getWindowOutsetBottomPx} */
     @Px private int mWindowOutsetBottom;
 
@@ -299,10 +307,6 @@ public class DisplayPolicy {
                     mAccessibilityManager.notifyAccessibilityButtonVisibilityChanged(visible);
                 }
             };
-
-    // EXPERIMENT TODO(b/113952590): Remove once experiment in bug is completed
-    private NavigationBarExperiments mExperiments = new NavigationBarExperiments();
-    // EXPERIMENT END
 
     @GuardedBy("mHandler")
     private SleepToken mDreamingSleepToken;
@@ -912,6 +916,10 @@ public class DisplayPolicy {
                         (int) attrs.hideTimeoutMilliseconds,
                         AccessibilityManager.FLAG_CONTENT_TEXT);
                 attrs.windowAnimations = com.android.internal.R.style.Animation_Toast;
+                // Toast can show with below conditions when the screen is locked.
+                if (canToastShowWhenLocked(callingPid)) {
+                    attrs.flags |= WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+                }
                 break;
         }
 
@@ -919,6 +927,16 @@ public class DisplayPolicy {
             // The status bar is the only window allowed to exhibit keyguard behavior.
             attrs.privateFlags &= ~WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
         }
+    }
+
+    /**
+     * @return {@code true} if the calling activity initiate toast and is visible with
+     * {@link WindowManager.LayoutParams#FLAG_SHOW_WHEN_LOCKED} flag.
+     */
+    boolean canToastShowWhenLocked(int callingPid) {
+        return mDisplayContent.forAllWindows(w -> {
+            return callingPid == w.mSession.mPid && w.isVisible() && w.canShowWhenLocked();
+        }, true /* traverseTopToBottom */);
     }
 
     /**
@@ -1697,11 +1715,9 @@ public class DisplayPolicy {
             // It's a system nav bar or a portrait screen; nav bar goes on bottom.
             final int top = cutoutSafeUnrestricted.bottom
                     - getNavigationBarHeight(rotation, uiMode);
-            // EXPERIMENT TODO(b/113952590): Remove once experiment in bug is completed
             final int topNavBar = cutoutSafeUnrestricted.bottom
-                    - mExperiments.getNavigationBarFrameHeight();
+                    - getNavigationBarFrameHeight(rotation, uiMode);
             navigationFrame.set(0, topNavBar, displayWidth, displayFrames.mUnrestricted.bottom);
-            // EXPERIMENT END
             displayFrames.mStable.bottom = displayFrames.mStableFullscreen.bottom = top;
             if (transientNavBarShowing) {
                 mNavigationBarController.setBarShowingLw(true);
@@ -1724,11 +1740,7 @@ public class DisplayPolicy {
             // Landscape screen; nav bar goes to the right.
             final int left = cutoutSafeUnrestricted.right
                     - getNavigationBarWidth(rotation, uiMode);
-            // EXPERIMENT TODO(b/113952590): Remove once experiment in bug is completed
-            final int leftNavBar = cutoutSafeUnrestricted.right
-                    - mExperiments.getNavigationBarFrameWidth();
-            navigationFrame.set(leftNavBar, 0, displayFrames.mUnrestricted.right, displayHeight);
-            // EXPERIMENT END
+            navigationFrame.set(left, 0, displayFrames.mUnrestricted.right, displayHeight);
             displayFrames.mStable.right = displayFrames.mStableFullscreen.right = left;
             if (transientNavBarShowing) {
                 mNavigationBarController.setBarShowingLw(true);
@@ -1751,11 +1763,7 @@ public class DisplayPolicy {
             // Seascape screen; nav bar goes to the left.
             final int right = cutoutSafeUnrestricted.left
                     + getNavigationBarWidth(rotation, uiMode);
-            // EXPERIMENT TODO(b/113952590): Remove once experiment in bug is completed
-            final int rightNavBar = cutoutSafeUnrestricted.left
-                    + mExperiments.getNavigationBarFrameWidth();
-            navigationFrame.set(displayFrames.mUnrestricted.left, 0, rightNavBar, displayHeight);
-            // EXPERIMENT END
+            navigationFrame.set(displayFrames.mUnrestricted.left, 0, right, displayHeight);
             displayFrames.mStable.left = displayFrames.mStableFullscreen.left = right;
             if (transientNavBarShowing) {
                 mNavigationBarController.setBarShowingLw(true);
@@ -1963,10 +1971,21 @@ public class DisplayPolicy {
                 }
             }
 
-            // EXPERIMENT TODO(b/113952590): Remove once experiment in bug is completed
-            // Offset the ime to avoid overlapping with the nav bar
-            mExperiments.offsetWindowFramesForNavBar(mNavigationBarPosition, win);
-            // EXPERIMENT END
+            // In case the navigation bar is on the bottom, we use the frame height instead of the
+            // regular height for the insets we send to the IME as we need some space to show
+            // additional buttons in SystemUI when the IME is up.
+            if (mNavigationBarPosition == NAV_BAR_BOTTOM) {
+                final int rotation = displayFrames.mRotation;
+                final int uimode = mService.mPolicy.getUiMode();
+                final int navHeightOffset = getNavigationBarFrameHeight(rotation, uimode)
+                        - getNavigationBarHeight(rotation, uimode);
+                if (navHeightOffset > 0) {
+                    cf.bottom -= navHeightOffset;
+                    sf.bottom -= navHeightOffset;
+                    vf.bottom -= navHeightOffset;
+                    dcf.bottom -= navHeightOffset;
+                }
+            }
 
             // IM dock windows always go to the bottom of the screen.
             attrs.gravity = Gravity.BOTTOM;
@@ -2680,9 +2699,17 @@ public class DisplayPolicy {
     }
 
     /**
+     * Called when the user is switched.
+     */
+    public void switchUser() {
+        updateCurrentUserResources();
+    }
+
+    /**
      * Called when the resource overlays change.
      */
     public void onOverlayChangedLw() {
+        updateCurrentUserResources();
         onConfigurationChanged();
         mSystemGestures.onConfigurationChanged();
     }
@@ -2693,12 +2720,12 @@ public class DisplayPolicy {
     public void onConfigurationChanged() {
         final DisplayRotation displayRotation = mDisplayContent.getDisplayRotation();
 
-        final Context uiContext = getSystemUiContext();
-        final Resources res = uiContext.getResources();
+        final Resources res = getCurrentUserResources();
         final int portraitRotation = displayRotation.getPortraitRotation();
         final int upsideDownRotation = displayRotation.getUpsideDownRotation();
         final int landscapeRotation = displayRotation.getLandscapeRotation();
         final int seascapeRotation = displayRotation.getSeascapeRotation();
+        final int uiMode = mService.mPolicy.getUiMode();
 
         if (hasStatusBar()) {
             mStatusBarHeightForRotation[portraitRotation] =
@@ -2721,6 +2748,14 @@ public class DisplayPolicy {
         mNavigationBarHeightForRotationDefault[landscapeRotation] =
         mNavigationBarHeightForRotationDefault[seascapeRotation] =
                 res.getDimensionPixelSize(R.dimen.navigation_bar_height_landscape);
+
+        // Height of the navigation bar frame when presented horizontally at bottom
+        mNavigationBarFrameHeightForRotationDefault[portraitRotation] =
+        mNavigationBarFrameHeightForRotationDefault[upsideDownRotation] =
+                res.getDimensionPixelSize(R.dimen.navigation_bar_frame_height);
+        mNavigationBarFrameHeightForRotationDefault[landscapeRotation] =
+        mNavigationBarFrameHeightForRotationDefault[seascapeRotation] =
+                res.getDimensionPixelSize(R.dimen.navigation_bar_frame_height_landscape);
 
         // Width of the navigation bar when presented vertically along one side
         mNavigationBarWidthForRotationDefault[portraitRotation] =
@@ -2750,31 +2785,59 @@ public class DisplayPolicy {
         mSideGestureInset = res.getDimensionPixelSize(R.dimen.config_backGestureInset);
         mNavigationBarLetsThroughTaps = res.getBoolean(R.bool.config_navBarTapThrough);
 
-        // EXPERIMENT TODO(b/113952590): Remove once experiment in bug is completed
-        mExperiments.onConfigurationChanged(uiContext);
-        // EXPERIMENT END
-
-        // EXPERIMENT: TODO(b/113952590): Replace with real code after experiment.
-        // This should calculate how much above the frame we accept gestures. Currently,
-        // we extend the frame to capture the gestures, so this is 0.
-        mBottomGestureAdditionalInset = mExperiments.getNavigationBarFrameHeight()
-                - mExperiments.getNavigationBarFrameHeight();
-        // EXPERIMENT END
+        // This should calculate how much above the frame we accept gestures.
+        mBottomGestureAdditionalInset = Math.max(0,
+                res.getDimensionPixelSize(R.dimen.navigation_bar_gesture_height)
+                        - getNavigationBarFrameHeight(portraitRotation, uiMode));
 
         updateConfigurationAndScreenSizeDependentBehaviors();
         mWindowOutsetBottom = ScreenShapeHelper.getWindowOutsetBottomPx(mContext.getResources());
     }
 
     void updateConfigurationAndScreenSizeDependentBehaviors() {
-        final Context uiContext = getSystemUiContext();
-        final Resources res = uiContext.getResources();
+        final Resources res = getCurrentUserResources();
         mNavigationBarCanMove =
                 mDisplayContent.mBaseDisplayWidth != mDisplayContent.mBaseDisplayHeight
                         && res.getBoolean(R.bool.config_navBarCanMove);
     }
 
+    /**
+     * Updates the current user's resources to pick up any changes for the current user (including
+     * overlay paths)
+     */
+    private void updateCurrentUserResources() {
+        final int userId = mService.mAmInternal.getCurrentUserId();
+        final Context uiContext = getSystemUiContext();
+        final LoadedApk pi = ActivityThread.currentActivityThread().getPackageInfo(
+                uiContext.getPackageName(), null, 0, userId);
+
+        // Create the resources from the current-user package info
+        // (see ContextImpl.createDisplayContext)
+        mCurrentUserResources = ResourcesManager.getInstance().getResources(null,
+                pi.getResDir(),
+                null /* splitResDirs */,
+                pi.getOverlayDirs(),
+                pi.getApplicationInfo().sharedLibraryFiles,
+                mDisplayContent.getDisplayId(),
+                null /* overrideConfig */,
+                uiContext.getResources().getCompatibilityInfo(),
+                null /* classLoader */);
+    }
+
     @VisibleForTesting
-    Context getSystemUiContext() {
+    Resources getCurrentUserResources() {
+        if (mCurrentUserResources == null) {
+            updateCurrentUserResources();
+        }
+        return mCurrentUserResources;
+    }
+
+    @VisibleForTesting
+    Context getContext() {
+        return mContext;
+    }
+
+    private Context getSystemUiContext() {
         final Context uiContext = ActivityThread.currentActivityThread().getSystemUiContext();
         return mDisplayContent.isDefaultDisplay
                 ? uiContext : uiContext.createDisplayContext(mDisplayContent.getDisplay());
@@ -2821,6 +2884,26 @@ public class DisplayPolicy {
             return mNavigationBarHeightForRotationInCarMode[rotation];
         } else {
             return mNavigationBarHeightForRotationDefault[rotation];
+        }
+    }
+
+    /**
+     * Get the Navigation Bar Frame height. This dimension is the height of the navigation bar that
+     * is used for spacing to show additional buttons on the navigation bar (such as the ime
+     * switcher when ime is visible) while {@link #getNavigationBarHeight} is used for the visible
+     * height that we send to the app as content insets that can be smaller.
+     * <p>
+     * In car mode it will return the same height as {@link #getNavigationBarHeight}
+     *
+     * @param rotation specifies rotation to return dimension from
+     * @param uiMode to determine if in car mode
+     * @return navigation bar frame height
+     */
+    private int getNavigationBarFrameHeight(int rotation, int uiMode) {
+        if (ALTERNATE_CAR_MODE_NAV_SIZE && (uiMode & UI_MODE_TYPE_MASK) == UI_MODE_TYPE_CAR) {
+            return mNavigationBarHeightForRotationInCarMode[rotation];
+        } else {
+            return mNavigationBarFrameHeightForRotationDefault[rotation];
         }
     }
 

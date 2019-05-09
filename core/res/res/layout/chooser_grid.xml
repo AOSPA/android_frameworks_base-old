@@ -25,9 +25,11 @@
     android:id="@id/contentPanel">
 
     <RelativeLayout
+        android:id="@+id/chooser_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alwaysShow="true"
+        android:elevation="1dp"
         android:background="@drawable/bottomsheet_background">
 
         <ImageView
@@ -41,21 +43,6 @@
             android:layout_centerHorizontal="true"
             android:layout_alignParentTop="true" />
 
-        <TextView android:id="@+id/profile_button"
-                  android:layout_width="wrap_content"
-                  android:layout_height="48dp"
-                  android:layout_marginEnd="8dp"
-                  android:paddingStart="8dp"
-                  android:paddingEnd="8dp"
-                  android:visibility="gone"
-                  style="?attr/borderlessButtonStyle"
-                  android:textAppearance="?attr/textAppearanceButton"
-                  android:textColor="?attr/colorAccent"
-                  android:gravity="center_vertical"
-                  android:layout_below="@id/drag"
-                  android:layout_alignParentRight="true"
-                  android:singleLine="true"/>
-
         <TextView android:id="@+id/title"
                   android:layout_height="wrap_content"
                   android:layout_width="wrap_content"
@@ -67,7 +54,7 @@
                   android:paddingBottom="@dimen/chooser_view_spacing"
                   android:paddingLeft="24dp"
                   android:paddingRight="24dp"
-                  android:layout_below="@id/profile_button"
+                  android:layout_below="@id/drag"
                   android:layout_centerHorizontal="true"/>
     </RelativeLayout>
 
@@ -76,11 +63,11 @@
         android:layout_height="match_parent"
         android:id="@+id/resolver_list"
         android:clipToPadding="false"
-        android:scrollbarStyle="outsideOverlay"
         android:background="?attr/colorBackgroundFloating"
+        android:scrollbars="none"
         android:listSelector="@color/transparent"
         android:divider="@null"
-        android:scrollIndicators="top"
+        android:elevation="1dp"
         android:nestedScrollingEnabled="true"/>
 
     <TextView android:id="@+id/empty"
@@ -91,6 +78,7 @@
               android:text="@string/noApplications"
               android:padding="@dimen/chooser_edge_margin_normal"
               android:gravity="center"
+              android:elevation="1dp"
               android:visibility="gone"/>
 
 </com.android.internal.widget.ResolverDrawerLayout>

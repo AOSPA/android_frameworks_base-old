@@ -65,6 +65,7 @@ import android.net.Uri;
 import android.os.BadParcelableException;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.GraphicsEnvironment;
 import android.os.Handler;
 import android.os.IBinder;
@@ -127,6 +128,7 @@ import android.view.autofill.AutofillPopupWindow;
 import android.view.autofill.IAutofillWindowPresenter;
 import android.view.contentcapture.ContentCaptureContext;
 import android.view.contentcapture.ContentCaptureManager;
+import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
@@ -147,8 +149,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 
 /**
@@ -723,7 +728,7 @@ public class Activity extends ContextThemeWrapper
         Window.Callback, KeyEvent.Callback,
         OnCreateContextMenuListener, ComponentCallbacks2,
         Window.OnWindowDismissedCallback, WindowControllerCallback,
-        AutofillManager.AutofillClient {
+        AutofillManager.AutofillClient, ContentCaptureManager.ContentCaptureClient {
     private static final String TAG = "Activity";
     private static final boolean DEBUG_LIFECYCLE = false;
 
@@ -773,6 +778,8 @@ public class Activity extends ContextThemeWrapper
     private static final int LOG_AM_ON_RESTART_CALLED = 30058;
     private static final int LOG_AM_ON_DESTROY_CALLED = 30060;
     private static final int LOG_AM_ON_ACTIVITY_RESULT_CALLED = 30062;
+    private static final int LOG_AM_ON_TOP_RESUMED_GAINED_CALLED = 30064;
+    private static final int LOG_AM_ON_TOP_RESUMED_LOST_CALLED = 30065;
 
     private static class ManagedDialog {
         Dialog mDialog;
@@ -785,6 +792,7 @@ public class Activity extends ContextThemeWrapper
     private Instrumentation mInstrumentation;
     @UnsupportedAppUsage
     private IBinder mToken;
+    private IBinder mAssistToken;
     @UnsupportedAppUsage
     private int mIdent;
     @UnsupportedAppUsage
@@ -863,7 +871,7 @@ public class Activity extends ContextThemeWrapper
     private boolean mEnableDefaultActionBarUp;
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
-    private VoiceInteractor mVoiceInteractor;
+    VoiceInteractor mVoiceInteractor;
 
     @UnsupportedAppUsage
     private CharSequence mTitle;
@@ -1120,6 +1128,12 @@ public class Activity extends ContextThemeWrapper
     /** @hide */
     @Override
     public final AutofillClient getAutofillClient() {
+        return this;
+    }
+
+    /** @hide */
+    @Override
+    public final ContentCaptureClient getContentCaptureClient() {
         return this;
     }
 
@@ -1840,11 +1854,21 @@ public class Activity extends ContextThemeWrapper
     public void onTopResumedActivityChanged(boolean isTopResumedActivity) {
     }
 
+    final void performTopResumedActivityChanged(boolean isTopResumedActivity, String reason) {
+        onTopResumedActivityChanged(isTopResumedActivity);
+
+        writeEventLog(isTopResumedActivity
+                ? LOG_AM_ON_TOP_RESUMED_GAINED_CALLED : LOG_AM_ON_TOP_RESUMED_LOST_CALLED, reason);
+    }
+
     void setVoiceInteractor(IVoiceInteractor voiceInteractor) {
         if (mVoiceInteractor != null) {
-            for (Request activeRequest: mVoiceInteractor.getActiveRequests()) {
-                activeRequest.cancel();
-                activeRequest.clear();
+            final Request[] requests = mVoiceInteractor.getActiveRequests();
+            if (requests != null) {
+                for (Request activeRequest : mVoiceInteractor.getActiveRequests()) {
+                    activeRequest.cancel();
+                    activeRequest.clear();
+                }
             }
         }
         if (voiceInteractor == null) {
@@ -2298,6 +2322,54 @@ public class Activity extends ContextThemeWrapper
      */
     public void onProvideAssistContent(AssistContent outContent) {
     }
+
+    /**
+     * Returns the list of direct actions supported by the app.
+     *
+     * <p>You should return the list of actions that could be executed in the
+     * current context, which is in the current state of the app. If the actions
+     * that could be executed by the app changes you should report that via
+     * calling {@link VoiceInteractor#notifyDirectActionsChanged()}.
+     *
+     * <p>To get the voice interactor you need to call {@link #getVoiceInteractor()}
+     * which would return non <code>null<c/ode> only if there is an ongoing voice
+     * interaction session. You an also detect when the voice interactor is no
+     * longer valid because the voice interaction session that is backing is finished
+     * by calling {@link VoiceInteractor#registerOnDestroyedCallback(Executor, Runnable)}.
+     *
+     * <p>This method will be called only after {@link #onStart()} is being called and
+     * before {@link #onStop()} is being called.
+     *
+     * <p>You should pass to the callback the currently supported direct actions which
+     * cannot be <code>null</code> or contain <code>null</null> elements.
+     *
+     * <p>You should return the action list as soon as possible to ensure the consumer,
+     * for example the assistant, is as responsive as possible which would improve user
+     * experience of your app.
+     *
+     * @param cancellationSignal A signal to cancel the operation in progress.
+     * @param callback The callback to send the action list. The actions list cannot
+     *     contain <code>null</code> elements.
+     */
+    public void onGetDirectActions(@NonNull CancellationSignal cancellationSignal,
+            @NonNull Consumer<List<DirectAction>> callback) {
+        callback.accept(Collections.emptyList());
+    }
+
+    /**
+     * This is called to perform an action previously defined by the app.
+     * Apps also have access to {@link #getVoiceInteractor()} to follow up on the action.
+     *
+     * @param actionId The ID for the action
+     * @param arguments Any additional arguments provided by the caller
+     * @param cancellationSignal A signal to cancel the operation in progress.
+     * @param resultListener The callback to provide the result back to the caller
+     *
+     * @see #onGetDirectActions(CancellationSignal, Consumer)
+     */
+    public void onPerformDirectAction(@NonNull String actionId,
+            @NonNull Bundle arguments, @NonNull CancellationSignal cancellationSignal,
+            @NonNull Consumer<Bundle> resultListener) { }
 
     /**
      * Request the Keyboard Shortcuts screen to show up. This will trigger
@@ -4902,11 +4974,11 @@ public class Activity extends ContextThemeWrapper
         final boolean targetPreQ = targetSdk < Build.VERSION_CODES.Q;
         if (!targetPreQ) {
             mTaskDescription.setEnsureStatusBarContrastWhenTransparent(a.getBoolean(
-                    R.styleable.ActivityTaskDescription_ensuringStatusBarContrastWhenTransparent,
+                    R.styleable.ActivityTaskDescription_enforceStatusBarContrast,
                     false));
             mTaskDescription.setEnsureNavigationBarContrastWhenTransparent(a.getBoolean(
                     R.styleable
-                            .ActivityTaskDescription_ensuringNavigationBarContrastWhenTransparent,
+                            .ActivityTaskDescription_enforceNavigationBarContrast,
                     true));
         }
 
@@ -6502,6 +6574,12 @@ public class Activity extends ContextThemeWrapper
         return getComponentName();
     }
 
+    /** @hide */
+    @Override
+    public final ComponentName contentCaptureClientGetComponentName() {
+        return getComponentName();
+    }
+
     /**
      * Retrieve a {@link SharedPreferences} object for accessing preferences
      * that are private to this activity.  This simply calls the underlying
@@ -7604,7 +7682,7 @@ public class Activity extends ContextThemeWrapper
             CharSequence title, Activity parent, String id,
             NonConfigurationInstances lastNonConfigurationInstances,
             Configuration config, String referrer, IVoiceInteractor voiceInteractor,
-            Window window, ActivityConfigCallback activityConfigCallback) {
+            Window window, ActivityConfigCallback activityConfigCallback, IBinder assistToken) {
         attachBaseContext(context);
 
         mFragments.attachHost(null /*parent*/);
@@ -7625,6 +7703,7 @@ public class Activity extends ContextThemeWrapper
         mMainThread = aThread;
         mInstrumentation = instr;
         mToken = token;
+        mAssistToken = assistToken;
         mIdent = ident;
         mApplication = application;
         mIntent = intent;
@@ -7673,6 +7752,11 @@ public class Activity extends ContextThemeWrapper
     @UnsupportedAppUsage
     public final IBinder getActivityToken() {
         return mParent != null ? mParent.getActivityToken() : mToken;
+    }
+
+    /** @hide */
+    public final IBinder getAssistToken() {
+        return mParent != null ? mParent.getAssistToken() : mAssistToken;
     }
 
     /** @hide */

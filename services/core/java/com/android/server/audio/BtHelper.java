@@ -828,10 +828,9 @@ public class BtHelper {
         @GuardedBy("BtHelper.this")
         void incCount(int scoAudioMode) {
             Log.i(TAG, "In incCount(), mStartcount = " + mStartcount);
-            boolean ScoState = requestScoState(BluetoothHeadset.STATE_AUDIO_CONNECTED,
-                                                scoAudioMode);
-            if (!ScoState) {
-                Log.e(TAG, "In incCount(), requestScoState failed returning");
+            if (!requestScoState(BluetoothHeadset.STATE_AUDIO_CONNECTED, scoAudioMode)) {
+                Log.e(TAG, "Request sco connected with scoAudioMode("
+                        + scoAudioMode + ") failed");
                 return;
             }
             if (mStartcount == 0) {
@@ -875,7 +874,9 @@ public class BtHelper {
                         Log.w(TAG, "decCount() going to 0 but not registered to binder");
                     }
                 }
-                boolean ScoState = requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED, 0);
+                if (!requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED, 0)) {
+                    Log.w(TAG, "Request sco disconnected with scoAudioMode(0) failed");
+                }
             }
         }
 
@@ -937,7 +938,7 @@ public class BtHelper {
             if (clientCount != 0) {
                 Log.i(TAG, "requestScoState: state=" + state + ", scoAudioMode=" + scoAudioMode
                         + ", clientCount=" + clientCount);
-                return false;
+                return true;
             }
             if (state == BluetoothHeadset.STATE_AUDIO_CONNECTED) {
                 // Make sure that the state transitions to CONNECTING even if we cannot initiate
@@ -945,13 +946,12 @@ public class BtHelper {
                 broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_CONNECTING);
                 // Accept SCO audio activation only in NORMAL audio mode or if the mode is
                 // currently controlled by the same client process.
-                int modeOwnerPid =  mDeviceBroker.getSetModeDeathHandlers().isEmpty()
-                        ? 0 : mDeviceBroker.getSetModeDeathHandlers().get(0).getPid();
+                final int modeOwnerPid =  mDeviceBroker.getModeOwnerPid();
                 if (modeOwnerPid != 0 && (modeOwnerPid != mCreatorPid)) {
                     Log.w(TAG, "requestScoState: audio mode is not NORMAL and modeOwnerPid "
                             + modeOwnerPid + " != creatorPid " + mCreatorPid);
                     broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
-                    return false ;
+                    return false;
                 }
                 switch (mScoAudioState) {
                     case SCO_STATE_INACTIVE:

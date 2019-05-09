@@ -114,7 +114,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,dark,saver,work,cast,night
+        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -352,7 +352,7 @@
     <!-- Nav bar button default ordering/layout -->
     <string name="config_navBarLayout" translatable="false">left[.5W],back[1WC];home;recent[1WC],right[.5W]</string>
     <string name="config_navBarLayoutQuickstep" translatable="false">back[1.7WC];home;contextual[1.7WC]</string>
-    <string name="config_navBarLayoutHandle" translatable="false">back[1.7WC];home_handle;ime_switcher[1.7WC]</string>
+    <string name="config_navBarLayoutHandle" translatable="false">start_contextual[.1WC];home_handle;ime_switcher[.1WC]</string>
 
     <bool name="quick_settings_show_full_alarm">false</bool>
 
@@ -493,6 +493,10 @@
     <!-- Smart replies in notifications: Maximum number of smart actions to show in notifications.
          -->
     <integer name="config_smart_replies_in_notifications_max_num_actions">-1</integer>
+
+    <!-- Smart replies in notifications: Delay (ms) before smart suggestions are clickable, since
+         they were added. -->
+    <integer name="config_smart_replies_in_notifications_onclick_init_delay">200</integer>
 
     <!-- Screenshot editing default activity.  Must handle ACTION_EDIT image/png intents.
          Blank sends the user to the Chooser first.

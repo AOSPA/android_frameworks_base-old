@@ -196,7 +196,7 @@
     <string name="power_dialog" product="tv" msgid="6153888706430556356">"Chaguo za runinga"</string>
     <string name="power_dialog" product="default" msgid="1319919075463988638">"Machaguo ya simu"</string>
     <string name="silent_mode" msgid="7167703389802618663">"Hali ya kimya"</string>
-    <string name="turn_on_radio" msgid="3912793092339962371">"Washa mtandao-hewa"</string>
+    <string name="turn_on_radio" msgid="3912793092339962371">"Washa mtandaopepe"</string>
     <string name="turn_off_radio" msgid="8198784949987062346">"Zima pasiwaya"</string>
     <string name="screen_lock" msgid="799094655496098153">"Funga skrini"</string>
     <string name="power_off" msgid="4266614107412865048">"Zima"</string>
@@ -227,7 +227,7 @@
     <string name="global_action_emergency" msgid="7112311161137421166">"Dharura"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Ripoti ya hitilafu"</string>
     <string name="global_action_logout" msgid="935179188218826050">"Maliza kipindi"</string>
-    <string name="global_action_screenshot" msgid="8329831278085426283">"Picha ya skrini"</string>
+    <string name="global_action_screenshot" msgid="8329831278085426283">"Pichaskrini"</string>
     <string name="bugreport_title" msgid="5981047024855257269">"Ripoti ya hitilafu"</string>
     <string name="bugreport_message" msgid="398447048750350456">"Hii itakusanya maelezo kuhusu hali ya kifaa chako kwa sasa, na itume kama barua pepe. Itachukua muda mfupi tangu ripoti ya hitilafu ianze kuzalishwa hadi iwe tayari kutumwa; vumilia."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"Ripoti ya kushirikiana"</string>
@@ -553,6 +553,9 @@
     <string name="permdesc_manageFace" msgid="8919637120670185330">"Huruhusu programu iombe njia za kuongeza na kufuta violezo vya uso vitakavyotumiwa."</string>
     <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"tumia maunzi ya kuthibistiha uso"</string>
     <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"Huruhusu programu ithibitishe uso kwa kutumia maunzi ya kuthibitisha"</string>
+    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"Utambuzi wa Uso"</string>
+    <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"Sajili uso wako tena"</string>
+    <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"Ili kuimarisha utambuzi, tafadhali sajili uso wako tena"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"Imeshindwa kunasa data sahihi ya uso. Jaribu tena."</string>
     <string name="face_acquired_too_bright" msgid="5005650874582450967">"Inang\'aa mno. Jaribu mwangaza hafifu"</string>
     <string name="face_acquired_too_dark" msgid="1966194696381394616">"Hakuna mwangaza wa kutosha. Jaribu kuongeza mwangaza."</string>
@@ -1278,13 +1281,13 @@
     <item msgid="8257233890381651999">"VPN"</item>
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"aina ya mtandao isiyojulikana"</string>
-    <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"Haikuweza kuunganisha kwa Mtandao-Hewa"</string>
+    <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"Imeshindwa kuunganisha Wi-Fi"</string>
     <string name="wifi_watchdog_network_disabled_detailed" msgid="4917472096696322767">" inao muunganisho duni wa wavuti."</string>
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"Ungepenga kuruhusu muunganisho?"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"Programu ya %1$s ingependa kuunganisha kwenye Mtandao wa Wifi wa %2$s"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"Programu"</string>
     <string name="wifi_p2p_dialog_title" msgid="97611782659324517">"Wi-Fi Moja kwa Moja"</string>
-    <string name="wifi_p2p_turnon_message" msgid="2909250942299627244">"Anzisha Wi-Fi Moja kwa Moja. Hii itazima mteja/mtandao-hewa wa Wi-Fi."</string>
+    <string name="wifi_p2p_turnon_message" msgid="2909250942299627244">"Anzisha Wi-Fi Moja kwa Moja. Hii itazima kiteja cha Wi-Fi/mtandaopepe."</string>
     <string name="wifi_p2p_failed_message" msgid="3763669677935623084">"Haikuweza kuanzisha Wi-Fi Moja kwa Moja."</string>
     <string name="wifi_p2p_enabled_notification_title" msgid="2068321881673734886">"Wi-Fi Moja kwa Moja imewashwa"</string>
     <string name="wifi_p2p_enabled_notification_message" msgid="8064677407830620023">"Gusa ili uweke mipangilio"</string>
@@ -1472,7 +1475,7 @@
     <string name="disable_tether_notification_title" msgid="7526977944111313195">"Umezima kipengele cha kusambaza mtandao"</string>
     <string name="disable_tether_notification_message" msgid="2913366428516852495">"Wasiliana na msimamizi wako ili upate maelezo zaidi"</string>
     <string name="back_button_label" msgid="2300470004503343439">"Nyuma"</string>
-    <string name="next_button_label" msgid="1080555104677992408">"Ifuatayo"</string>
+    <string name="next_button_label" msgid="1080555104677992408">"Endelea"</string>
     <string name="skip_button_label" msgid="1275362299471631819">"Ruka"</string>
     <string name="no_matches" msgid="8129421908915840737">"Hakuna vinavyolingana"</string>
     <string name="find_on_page" msgid="1946799233822820384">"Pata kwenye ukurasa"</string>

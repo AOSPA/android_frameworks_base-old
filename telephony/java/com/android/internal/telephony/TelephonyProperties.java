@@ -224,6 +224,13 @@ public interface TelephonyProperties
      */
     static final String PROPERTY_VIDEOCALL_AUDIO_OUTPUT = "persist.radio.call.audio.output";
 
+    /** 'true' if the carrier text from opportunistic subscription should be used to display
+     * on UI.
+     *
+     */
+    String DISPLAY_OPPORTUNISTIC_SUBSCRIPTION_CARRIER_TEXT_PROPERTY_NAME =
+            "persist.radio.display_opportunistic_carrier";
+
     /**
      * Used when Presence app sends Dial intent with specific schema
      * If true: skip schema parsing and use Tel schema

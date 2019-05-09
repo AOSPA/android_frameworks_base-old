@@ -572,6 +572,15 @@
     <!-- Integer size limit, in KB, for a single WifiLogger ringbuffer, in verbose logging mode -->
     <integer translatable="false" name="config_wifi_logger_ring_buffer_verbose_size_limit_kb">1024</integer>
 
+    <!-- Array indicating wifi fatal firmware alert error code list from driver -->
+    <integer-array translatable="false" name="config_wifi_fatal_firmware_alert_error_code_list">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        -->
+    </integer-array>
+
     <!-- Boolean indicating whether or not wifi should turn off when emergency call is made -->
     <bool translatable="false" name="config_wifi_turn_off_during_emergency_call">false</bool>
 
@@ -747,6 +756,10 @@
     <bool name="config_annoy_dianne">true</bool>
 
     <!-- XXXXXX END OF RESOURCES USING WRONG NAMING CONVENTION -->
+
+    <!-- If this is true, notification effects will be played by the notification server.
+         When false, car notification effects will be handled elsewhere. -->
+    <bool name="config_enableServerNotificationEffectsForAutomotive">false</bool>
 
     <!-- If this is true, the screen will come on when you unplug usb/power/whatever. -->
     <bool name="config_unplugTurnsOnScreen">false</bool>
@@ -1097,6 +1110,7 @@
             2 - Power off (with confirmation)
             3 - Power off (without confirmation)
             4 - Go to voice assist
+            5 - Go to assistant (Settings.Secure.ASSISTANT)
     -->
     <integer name="config_longPressOnPowerBehavior">1</integer>
 
@@ -2534,9 +2548,10 @@
          mirror the content of the default display. -->
     <bool name="config_localDisplaysMirrorContent">true</bool>
 
-    <!-- Indicates whether local non-default displays are private.
-         {@see android.view.Display#FLAG_PRIVATE} -->
-    <bool name="config_localDisplaysPrivate">false</bool>
+    <!-- Controls if local secondary displays should be private or not. Value specified in the array
+         represents physical port address of each display and display in this list will be marked
+         as private. {@see android.view.Display#FLAG_PRIVATE} -->
+    <integer-array translatable="false" name="config_localPrivateDisplayPorts"></integer-array>
 
     <!-- The default mode for the default display. One of the following values (See Display.java):
              0 - COLOR_MODE_DEFAULT
