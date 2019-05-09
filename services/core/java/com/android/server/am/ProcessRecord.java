@@ -1215,8 +1215,8 @@ class ProcessRecord implements WindowProcessListener {
                 !mAllowBackgroundActivityStartsTokens.isEmpty());
     }
 
-    void addBoundClientUids(ArraySet<Integer> clientUids) {
-        mBoundClientUids.addAll(clientUids);
+    void addBoundClientUid(int clientUid) {
+        mBoundClientUids.add(clientUid);
         mWindowProcessController.setBoundClientUids(mBoundClientUids);
     }
 

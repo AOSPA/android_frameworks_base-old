@@ -113,7 +113,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Px;
 import android.app.ActivityManager;
-import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
 import android.app.LoadedApk;
 import android.app.ResourcesManager;
@@ -136,6 +135,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.BoostFramework;
 import android.util.ArraySet;
+import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.view.DisplayCutout;
@@ -3203,7 +3203,9 @@ public class DisplayPolicy {
                 WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_HOME, mNonDockedStackBounds);
         mService.getStackBounds(
                 WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD, mDockedStackBounds);
-        final int visibility = updateSystemBarsLw(win, mLastSystemUiFlags, tmpVisibility);
+        final Pair<Integer, Boolean> result =
+                updateSystemBarsLw(win, mLastSystemUiFlags, tmpVisibility);
+        final int visibility = result.first;
         final int diff = visibility ^ mLastSystemUiFlags;
         final int fullscreenDiff = fullscreenVisibility ^ mLastFullscreenStackSysUiFlags;
         final int dockedDiff = dockedVisibility ^ mLastDockedStackSysUiFlags;
@@ -3223,13 +3225,14 @@ public class DisplayPolicy {
         mLastDockedStackBounds.set(mDockedStackBounds);
         final Rect fullscreenStackBounds = new Rect(mNonDockedStackBounds);
         final Rect dockedStackBounds = new Rect(mDockedStackBounds);
+        final boolean isNavbarColorManagedByIme = result.second;
         mHandler.post(() -> {
             StatusBarManagerInternal statusBar = getStatusBarManagerInternal();
             if (statusBar != null) {
                 final int displayId = getDisplayId();
                 statusBar.setSystemUiVisibility(displayId, visibility, fullscreenVisibility,
                         dockedVisibility, 0xffffffff, fullscreenStackBounds,
-                        dockedStackBounds, win.toString());
+                        dockedStackBounds, isNavbarColorManagedByIme, win.toString());
                 statusBar.topAppWindowChanged(displayId, needsMenu);
             }
         });
@@ -3312,7 +3315,7 @@ public class DisplayPolicy {
         return vis;
     }
 
-    private int updateSystemBarsLw(WindowState win, int oldVis, int vis) {
+    private Pair<Integer, Boolean> updateSystemBarsLw(WindowState win, int oldVis, int vis) {
         final boolean dockedStackVisible =
                 mDisplayContent.isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
         final boolean freeformStackVisible =
@@ -3445,8 +3448,11 @@ public class DisplayPolicy {
         vis = updateLightNavigationBarLw(vis, mTopFullscreenOpaqueWindowState,
                 mTopFullscreenOpaqueOrDimmingWindowState,
                 mDisplayContent.mInputMethodWindow, navColorWin);
+        // Navbar color is controlled by the IME.
+        final boolean isManagedByIme =
+                navColorWin != null && navColorWin == mDisplayContent.mInputMethodWindow;
 
-        return vis;
+        return Pair.create(vis, isManagedByIme);
     }
 
     private boolean drawsBarBackground(int vis, WindowState win, BarController controller,
