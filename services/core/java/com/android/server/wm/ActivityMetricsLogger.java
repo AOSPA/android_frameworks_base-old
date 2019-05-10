@@ -409,7 +409,7 @@ class ActivityMetricsLogger {
 
         final boolean otherWindowModesLaunching =
                 mWindowingModeTransitionInfo.size() > 0 && info == null;
-        if ((!isLoggableResultCode(resultCode) || launchedActivity == null || !processSwitch
+        if ((!isLoggableResultCode(resultCode) || launchedActivity == null
                 || windowingMode == WINDOWING_MODE_UNDEFINED) && !otherWindowModesLaunching) {
             // Failed to launch or it was not a process switch, so we don't care about the timing.
             reset(true /* abort */, info, "failed to launch or not a process switch");
