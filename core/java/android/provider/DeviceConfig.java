@@ -159,6 +159,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_INTELLIGENCE_ATTENTION = "intelligence_attention";
 
     /**
+     * Definitions for properties related to Content Suggestions.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_INTELLIGENCE_CONTENT_SUGGESTIONS =
+            "intelligence_content_suggestions";
+
+    /**
      * Namespace for all media native related features.
      *
      * @hide
@@ -265,6 +273,13 @@ public final class DeviceConfig {
      * @hide
      */
     public static final String NAMESPACE_CONTACTS_PROVIDER = "contacts_provider";
+
+    /**
+     * Namespace for settings ui related features
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_SETTINGS_UI = "settings_ui";
 
     /**
      * List of namespaces which can be read without READ_DEVICE_CONFIG permission

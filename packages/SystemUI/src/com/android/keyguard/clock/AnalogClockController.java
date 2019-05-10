@@ -21,6 +21,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Paint.Style;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextClock;
@@ -53,6 +54,11 @@ public class AnalogClockController implements ClockPlugin {
     private final SysuiColorExtractor mColorExtractor;
 
     /**
+     * Computes preferred position of clock.
+     */
+    private final SmallClockPosition mClockPosition;
+
+    /**
      * Renders preview from clock view.
      */
     private final ViewPreviewer mRenderer = new ViewPreviewer();
@@ -61,7 +67,6 @@ public class AnalogClockController implements ClockPlugin {
      * Custom clock shown on AOD screen and behind stack scroller on lock.
      */
     private ClockLayout mBigClockView;
-    private TextClock mDigitalClock;
     private ImageClock mAnalogClock;
 
     /**
@@ -69,11 +74,6 @@ public class AnalogClockController implements ClockPlugin {
      */
     private View mView;
     private TextClock mLockClock;
-
-    /**
-     * Controller for transition to dark state.
-     */
-    private CrossFadeDarkController mDarkController;
 
     /**
      * Create a BubbleClockController instance.
@@ -87,29 +87,26 @@ public class AnalogClockController implements ClockPlugin {
         mResources = res;
         mLayoutInflater = inflater;
         mColorExtractor = colorExtractor;
+        mClockPosition = new SmallClockPosition(res);
     }
 
     private void createViews() {
         mBigClockView = (ClockLayout) mLayoutInflater.inflate(R.layout.analog_clock, null);
         mAnalogClock = mBigClockView.findViewById(R.id.analog_clock);
-        mDigitalClock = mBigClockView.findViewById(R.id.digital_clock);
 
         mView = mLayoutInflater.inflate(R.layout.digital_clock, null);
         mLockClock = mView.findViewById(R.id.lock_screen_clock);
-        mLockClock.setVisibility(View.GONE);
-
-        mDarkController = new CrossFadeDarkController(mDigitalClock, mLockClock);
+        final int textSize = mResources.getDimensionPixelSize(R.dimen.widget_title_font_size);
+        mLockClock.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
     }
 
 
     @Override
     public void onDestroyView() {
         mBigClockView = null;
-        mDigitalClock = null;
         mAnalogClock = null;
         mView = null;
         mLockClock = null;
-        mDarkController = null;
     }
 
     @Override
@@ -161,12 +158,15 @@ public class AnalogClockController implements ClockPlugin {
     }
 
     @Override
+    public int getPreferredY(int totalHeight) {
+        return mClockPosition.getPreferredY();
+    }
+
+    @Override
     public void setStyle(Style style) {}
 
     @Override
-    public void setTextColor(int color) {
-        mLockClock.setTextColor(color);
-    }
+    public void setTextColor(int color) { }
 
     @Override
     public void setColorPalette(boolean supportsDarkText, int[] colorPalette) {
@@ -174,7 +174,7 @@ public class AnalogClockController implements ClockPlugin {
             return;
         }
         final int length = colorPalette.length;
-        mDigitalClock.setTextColor(colorPalette[Math.max(0, length - 5)]);
+        mLockClock.setTextColor(colorPalette[Math.max(0, length - 2)]);
         mAnalogClock.setClockColors(colorPalette[Math.max(0, length - 5)],
                 colorPalette[Math.max(0, length - 2)]);
     }
@@ -183,13 +183,13 @@ public class AnalogClockController implements ClockPlugin {
     public void onTimeTick() {
         mAnalogClock.onTimeChanged();
         mBigClockView.onTimeChanged();
-        mDigitalClock.refresh();
         mLockClock.refresh();
     }
 
     @Override
     public void setDarkAmount(float darkAmount) {
-        mDarkController.setDarkAmount(darkAmount);
+        mClockPosition.setDarkAmount(darkAmount);
+        mBigClockView.setDarkAmount(darkAmount);
     }
 
     @Override
@@ -199,6 +199,6 @@ public class AnalogClockController implements ClockPlugin {
 
     @Override
     public boolean shouldShowStatusArea() {
-        return false;
+        return true;
     }
 }

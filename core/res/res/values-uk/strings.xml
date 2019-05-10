@@ -559,6 +559,9 @@
     <string name="permdesc_manageFace" msgid="8919637120670185330">"Додаток може активувати способи додавання й видалення шаблонів облич."</string>
     <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"застосовувати обладнання для автентифікації облич"</string>
     <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"Додаток може застосовувати обладнання для автентифікації облич"</string>
+    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"Автентифікація за обличчям"</string>
+    <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"Повторно проскануйте обличчя"</string>
+    <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"Повторно проскануйте обличчя для ефективнішого розпізнавання"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"Не вдалося чітко зняти обличчя. Повторіть спробу."</string>
     <string name="face_acquired_too_bright" msgid="5005650874582450967">"Занадто яскраво. Потрібно менше світла."</string>
     <string name="face_acquired_too_dark" msgid="1966194696381394616">"Занадто темно. Потрібно більше світла."</string>
@@ -1970,7 +1973,7 @@
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Торкніться, щоб розблокувати"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Під’єднано до пристрою <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>
     <string name="usb_mtp_launch_notification_description" msgid="8541876176425411358">"Торкніться, щоб переглянути файли"</string>
-    <string name="app_info" msgid="6856026610594615344">"Про додаток"</string>
+    <string name="app_info" msgid="6856026610594615344">"Про додатки"</string>
     <string name="negative_duration" msgid="5688706061127375131">"-<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="demo_starting_message" msgid="5268556852031489931">"Запуск демонстрації…"</string>
     <string name="demo_restarting_message" msgid="952118052531642451">"Скидання налаштувань пристрою…"</string>

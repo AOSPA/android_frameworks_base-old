@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <frameworks/base/cmds/statsd/src/active_config_list.pb.h>
 #include "anomaly/AlarmMonitor.h"
 #include "anomaly/AlarmTracker.h"
 #include "anomaly/AnomalyTracker.h"
@@ -139,21 +138,10 @@ public:
         return mIsActive;
     }
 
-    inline void getActiveMetrics(std::vector<MetricProducer*>& metrics) const {
-        for (const auto& metric : mAllMetricProducers) {
-            if (metric->isActive()) {
-                metrics.push_back(metric.get());
-            }
-        }
-    }
+    void loadActiveConfig(const ActiveConfig& config, int64_t currentTimeNs);
 
-    inline void prepForShutDown(int64_t currentTimeNs) {
-        for (const auto& metric : mAllMetricProducers) {
-            metric->prepActiveForBootIfNecessary(currentTimeNs);
-        }
-    }
-
-    void setActiveMetrics(ActiveConfig config, int64_t currentTimeNs);
+    void writeActiveConfigToProtoOutputStream(
+            int64_t currentTimeNs, ProtoOutputStream* proto);
 
 private:
     // For test only.
@@ -266,9 +254,12 @@ private:
     FRIEND_TEST(GaugeMetricE2eTest, TestMultipleFieldsForPushedEvent);
     FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvents);
     FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvent_LateAlarm);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEventsWithActivation);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEventsNoCondition);
     FRIEND_TEST(GaugeMetricE2eTest, TestConditionChangeToTrueSamplePulledEvents);
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents);
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm);
+    FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation);
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_NoLink_OR_CombinationCondition);
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_Link_OR_CombinationCondition);
     FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_OR_CombinationCondition);
@@ -296,6 +287,9 @@ private:
 
     FRIEND_TEST(StatsLogProcessorTest, TestActiveConfigMetricDiskWriteRead);
     FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBoot);
+    FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBootMultipleActivations);
+    FRIEND_TEST(StatsLogProcessorTest,
+            TestActivationOnBootMultipleActivationsDifferentActivationTypes);
 };
 
 }  // namespace statsd

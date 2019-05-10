@@ -191,20 +191,11 @@ public:
     void setForceDark(bool enable) { mUseForceDark = enable; }
 
     bool useForceDark() {
-        // The force-dark override has the highest priority, followed by the disable setting
-        // for the feature as a whole, followed last by whether or not this context has had
-        // force dark set (typically automatically done via UIMode)
-        if (Properties::forceDarkMode) {
-            return true;
-        }
-        if (!Properties::enableForceDarkSupport) {
-            return false;
-        }
         return mUseForceDark;
     }
 
     // Must be called before setSurface
-    void setRenderAheadDepth(uint32_t renderAhead);
+    void setRenderAheadDepth(int renderAhead);
 
     SkISize getNextFrameSize() const;
 
@@ -221,7 +212,7 @@ private:
 
     bool isSwapChainStuffed();
     bool surfaceRequiresRedraw();
-    void applyRenderAheadSettings();
+    void setPresentTime();
 
     SkRect computeDirtyRect(const Frame& frame, SkRect* dirty);
 
@@ -240,7 +231,9 @@ private:
     // painted onto its surface.
     bool mIsDirty = false;
     SwapBehavior mSwapBehavior = SwapBehavior::kSwap_default;
+    bool mFixedRenderAhead = false;
     uint32_t mRenderAheadDepth = 0;
+    uint32_t mRenderAheadCapacity = 0;
     struct SwapHistory {
         SkRect damage;
         nsecs_t vsyncTime;

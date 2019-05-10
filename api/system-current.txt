@@ -1635,7 +1635,7 @@ package android.content.pm {
     method @NonNull @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS) public java.util.List<android.content.pm.ResolveInfo> queryIntentServicesAsUser(@NonNull android.content.Intent, int, @NonNull android.os.UserHandle);
     method public abstract void registerDexModule(@NonNull String, @Nullable android.content.pm.PackageManager.DexModuleRegisterCallback);
     method @RequiresPermission("android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS") public abstract void removeOnPermissionsChangeListener(@NonNull android.content.pm.PackageManager.OnPermissionsChangedListener);
-    method @Deprecated public void replacePreferredActivity(@NonNull android.content.IntentFilter, int, @NonNull java.util.List<android.content.ComponentName>, @NonNull android.content.ComponentName);
+    method public void replacePreferredActivity(@NonNull android.content.IntentFilter, int, @NonNull java.util.List<android.content.ComponentName>, @NonNull android.content.ComponentName);
     method @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS) public abstract void revokeRuntimePermission(@NonNull String, @NonNull String, @NonNull android.os.UserHandle);
     method public void sendDeviceCustomizationReadyBroadcast();
     method @RequiresPermission(allOf={android.Manifest.permission.SET_PREFERRED_APPLICATIONS, android.Manifest.permission.INTERACT_ACROSS_USERS_FULL}) public abstract boolean setDefaultBrowserPackageNameAsUser(@Nullable String, int);
@@ -1655,6 +1655,7 @@ package android.content.pm {
     field public static final String FEATURE_TELEPHONY_CARRIERLOCK = "android.hardware.telephony.carrierlock";
     field public static final int FLAG_PERMISSION_APPLY_RESTRICTION = 16384; // 0x4000
     field public static final int FLAG_PERMISSION_GRANTED_BY_DEFAULT = 32; // 0x20
+    field public static final int FLAG_PERMISSION_GRANTED_BY_ROLE = 32768; // 0x8000
     field public static final int FLAG_PERMISSION_POLICY_FIXED = 4; // 0x4
     field public static final int FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT = 2048; // 0x800
     field public static final int FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT = 4096; // 0x1000
@@ -1714,7 +1715,6 @@ package android.content.pm {
     field public static final int MATCH_ANY_USER = 4194304; // 0x400000
     field public static final int MATCH_FACTORY_ONLY = 2097152; // 0x200000
     field public static final int MATCH_INSTANT = 8388608; // 0x800000
-    field public static boolean RESTRICTED_PERMISSIONS_ENABLED;
     field public static final int RESTRICTION_HIDE_FROM_SUGGESTIONS = 1; // 0x1
     field public static final int RESTRICTION_HIDE_NOTIFICATIONS = 2; // 0x2
     field public static final int RESTRICTION_NONE = 0; // 0x0
@@ -1729,7 +1729,7 @@ package android.content.pm {
     method public void onPermissionsChanged(int);
   }
 
-  @IntDef(prefix={"FLAG_PERMISSION_"}, value={android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET, android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED, android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED, android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE, android.content.pm.PackageManager.FLAG_PERMISSION_SYSTEM_FIXED, android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT, android.content.pm.PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED, android.content.pm.PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_DENIED, android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT, android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT, android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT, android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION}) @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE) public static @interface PackageManager.PermissionFlags {
+  @IntDef(prefix={"FLAG_PERMISSION_"}, value={android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET, android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED, android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED, android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE, android.content.pm.PackageManager.FLAG_PERMISSION_SYSTEM_FIXED, android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT, android.content.pm.PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED, android.content.pm.PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_DENIED, android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT, android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT, android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT, android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION, android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_ROLE}) @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE) public static @interface PackageManager.PermissionFlags {
   }
 
   public class PermissionGroupInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
@@ -3079,16 +3079,15 @@ package android.location {
   }
 
   public final class GnssCapabilities {
-    method public boolean hasCapability(int);
-    field public static final int GEOFENCING = 2; // 0x2
-    field public static final int LOW_POWER_MODE = 0; // 0x0
-    field public static final int MEASUREMENTS = 3; // 0x3
-    field public static final int MEASUREMENT_CORRECTIONS = 5; // 0x5
-    field public static final int MEASUREMENT_CORRECTIONS_EXCESS_PATH_LENGTH = 7; // 0x7
-    field public static final int MEASUREMENT_CORRECTIONS_LOS_SATS = 6; // 0x6
-    field public static final int MEASUREMENT_CORRECTIONS_REFLECTING_PLANE = 8; // 0x8
-    field public static final int NAV_MESSAGES = 4; // 0x4
-    field public static final int SATELLITE_BLACKLIST = 1; // 0x1
+    method public boolean hasGeofencing();
+    method public boolean hasLowPowerMode();
+    method public boolean hasMeasurementCorrections();
+    method public boolean hasMeasurementCorrectionsExcessPathLength();
+    method public boolean hasMeasurementCorrectionsLosSats();
+    method public boolean hasMeasurementCorrectionsReflectingPane();
+    method public boolean hasMeasurements();
+    method public boolean hasNavMessages();
+    method public boolean hasSatelliteBlacklist();
   }
 
   public final class GnssMeasurementCorrections implements android.os.Parcelable {
@@ -3399,7 +3398,7 @@ package android.location {
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public void flushGnssBatch();
     method @Nullable public String getExtraLocationControllerPackage();
     method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public int getGnssBatchSize();
-    method @Nullable public android.location.GnssCapabilities getGnssCapabilities();
+    method @NonNull @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public android.location.GnssCapabilities getGnssCapabilities();
     method @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public void injectGnssMeasurementCorrections(@NonNull android.location.GnssMeasurementCorrections);
     method public boolean isExtraLocationControllerPackageEnabled();
     method public boolean isLocationEnabledForUser(@NonNull android.os.UserHandle);
@@ -5373,10 +5372,6 @@ package android.os {
     field @NonNull public static final android.os.Parcelable.Creator<android.os.IncidentReportArgs> CREATOR;
   }
 
-  public final class LocaleList implements android.os.Parcelable {
-    method public static boolean isPseudoLocale(@Nullable android.icu.util.ULocale);
-  }
-
   public final class NativeHandle implements java.io.Closeable {
     ctor public NativeHandle();
     ctor public NativeHandle(@NonNull java.io.FileDescriptor, boolean);
@@ -5665,18 +5660,17 @@ package android.permission {
 
   public abstract class PermissionControllerService extends android.app.Service {
     ctor public PermissionControllerService();
-    method public final void attachBaseContext(android.content.Context);
     method @NonNull public final android.os.IBinder onBind(android.content.Intent);
-    method public abstract int onCountPermissionApps(@NonNull java.util.List<java.lang.String>, int);
-    method @NonNull public abstract java.util.List<android.permission.RuntimePermissionPresentationInfo> onGetAppPermissions(@NonNull String);
-    method @NonNull public abstract java.util.List<android.permission.RuntimePermissionUsageInfo> onGetPermissionUsages(boolean, long);
-    method public abstract void onGetRuntimePermissionsBackup(@NonNull android.os.UserHandle, @NonNull java.io.OutputStream);
-    method public abstract void onGrantOrUpgradeDefaultRuntimePermissions();
-    method @BinderThread public abstract boolean onRestoreDelayedRuntimePermissionsBackup(@NonNull String, @NonNull android.os.UserHandle);
-    method @BinderThread public abstract void onRestoreRuntimePermissionsBackup(@NonNull android.os.UserHandle, @NonNull java.io.InputStream);
-    method public abstract void onRevokeRuntimePermission(@NonNull String, @NonNull String);
-    method @NonNull public abstract java.util.Map<java.lang.String,java.util.List<java.lang.String>> onRevokeRuntimePermissions(@NonNull java.util.Map<java.lang.String,java.util.List<java.lang.String>>, boolean, int, @NonNull String);
-    method public abstract boolean onSetRuntimePermissionGrantStateByDeviceAdmin(@NonNull String, @NonNull String, @NonNull String, int);
+    method @BinderThread public abstract void onCountPermissionApps(@NonNull java.util.List<java.lang.String>, int, @NonNull java.util.function.IntConsumer);
+    method @BinderThread public abstract void onGetAppPermissions(@NonNull String, @NonNull java.util.function.Consumer<java.util.List<android.permission.RuntimePermissionPresentationInfo>>);
+    method @BinderThread public abstract void onGetPermissionUsages(boolean, long, @NonNull java.util.function.Consumer<java.util.List<android.permission.RuntimePermissionUsageInfo>>);
+    method @BinderThread public abstract void onGetRuntimePermissionsBackup(@NonNull android.os.UserHandle, @NonNull java.io.OutputStream, @NonNull Runnable);
+    method @BinderThread public abstract void onGrantOrUpgradeDefaultRuntimePermissions(@NonNull Runnable);
+    method @BinderThread public abstract void onRestoreDelayedRuntimePermissionsBackup(@NonNull String, @NonNull android.os.UserHandle, @NonNull java.util.function.Consumer<java.lang.Boolean>);
+    method @BinderThread public abstract void onRestoreRuntimePermissionsBackup(@NonNull android.os.UserHandle, @NonNull java.io.InputStream, @NonNull Runnable);
+    method @BinderThread public abstract void onRevokeRuntimePermission(@NonNull String, @NonNull String, @NonNull Runnable);
+    method @BinderThread public abstract void onRevokeRuntimePermissions(@NonNull java.util.Map<java.lang.String,java.util.List<java.lang.String>>, boolean, int, @NonNull String, @NonNull java.util.function.Consumer<java.util.Map<java.lang.String,java.util.List<java.lang.String>>>);
+    method @BinderThread public abstract void onSetRuntimePermissionGrantStateByDeviceAdmin(@NonNull String, @NonNull String, @NonNull String, int, @NonNull java.util.function.Consumer<java.lang.Boolean>);
     field public static final String SERVICE_INTERFACE = "android.permission.PermissionControllerService";
   }
 
@@ -6018,17 +6012,6 @@ package android.provider {
     method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public static void resetToDefaults(@NonNull android.content.ContentResolver, @Nullable String);
     field public static final String APP_STANDBY_ENABLED = "app_standby_enabled";
     field public static final String AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES = "autofill_compat_mode_allowed_packages";
-    field public static final String CAPTIVE_PORTAL_FALLBACK_PROBE_SPECS = "captive_portal_fallback_probe_specs";
-    field public static final String CAPTIVE_PORTAL_FALLBACK_URL = "captive_portal_fallback_url";
-    field public static final String CAPTIVE_PORTAL_HTTPS_URL = "captive_portal_https_url";
-    field public static final String CAPTIVE_PORTAL_HTTP_URL = "captive_portal_http_url";
-    field public static final String CAPTIVE_PORTAL_MODE = "captive_portal_mode";
-    field public static final int CAPTIVE_PORTAL_MODE_AVOID = 2; // 0x2
-    field public static final int CAPTIVE_PORTAL_MODE_IGNORE = 0; // 0x0
-    field public static final int CAPTIVE_PORTAL_MODE_PROMPT = 1; // 0x1
-    field public static final String CAPTIVE_PORTAL_OTHER_FALLBACK_URLS = "captive_portal_other_fallback_urls";
-    field public static final String CAPTIVE_PORTAL_USER_AGENT = "captive_portal_user_agent";
-    field public static final String CAPTIVE_PORTAL_USE_HTTPS = "captive_portal_use_https";
     field public static final String CARRIER_APP_NAMES = "carrier_app_names";
     field public static final String CARRIER_APP_WHITELIST = "carrier_app_whitelist";
     field public static final String DEFAULT_SM_DP_PLUS = "default_sm_dp_plus";
@@ -6063,6 +6046,7 @@ package android.provider {
     field public static final String LAST_SETUP_SHOWN = "last_setup_shown";
     field public static final String LOCATION_ACCESS_CHECK_DELAY_MILLIS = "location_access_check_delay_millis";
     field public static final String LOCATION_ACCESS_CHECK_INTERVAL_MILLIS = "location_access_check_interval_millis";
+    field public static final int LOCATION_MODE_ON = 3; // 0x3
     field public static final String LOCATION_PERMISSIONS_UPGRADE_TO_Q_MODE = "location_permissions_upgrade_to_q_mode";
     field public static final String LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS = "lock_screen_allow_private_notifications";
     field public static final String LOCK_SCREEN_SHOW_NOTIFICATIONS = "lock_screen_show_notifications";
@@ -6856,19 +6840,19 @@ package android.service.watchdog {
     method @NonNull public final android.os.IBinder onBind(@NonNull android.content.Intent);
     method public abstract void onCancelHealthCheck(@NonNull String);
     method @NonNull public abstract java.util.List<java.lang.String> onGetRequestedPackages();
-    method @NonNull public abstract java.util.List<android.service.watchdog.PackageInfo> onGetSupportedPackages();
+    method @NonNull public abstract java.util.List<android.service.watchdog.ExplicitHealthCheckService.PackageConfig> onGetSupportedPackages();
     method public abstract void onRequestHealthCheck(@NonNull String);
     field public static final String BIND_PERMISSION = "android.permission.BIND_EXPLICIT_HEALTH_CHECK_SERVICE";
     field public static final String SERVICE_INTERFACE = "android.service.watchdog.ExplicitHealthCheckService";
   }
 
-  public final class PackageInfo implements android.os.Parcelable {
-    ctor public PackageInfo(@NonNull String, long);
+  public static final class ExplicitHealthCheckService.PackageConfig implements android.os.Parcelable {
+    ctor public ExplicitHealthCheckService.PackageConfig(@NonNull String, long);
     method public int describeContents();
     method public long getHealthCheckTimeoutMillis();
     method @NonNull public String getPackageName();
     method public void writeToParcel(android.os.Parcel, int);
-    field @NonNull public static final android.os.Parcelable.Creator<android.service.watchdog.PackageInfo> CREATOR;
+    field @NonNull public static final android.os.Parcelable.Creator<android.service.watchdog.ExplicitHealthCheckService.PackageConfig> CREATOR;
   }
 
 }
@@ -9484,7 +9468,7 @@ package android.view {
 package android.view.accessibility {
 
   public final class AccessibilityManager {
-    method public int getAccessibilityWindowId(android.os.IBinder);
+    method public int getAccessibilityWindowId(@Nullable android.os.IBinder);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACCESSIBILITY) public void performAccessibilityShortcut();
   }
 

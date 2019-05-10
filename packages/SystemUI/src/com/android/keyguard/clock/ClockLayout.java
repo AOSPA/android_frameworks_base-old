@@ -20,9 +20,9 @@ import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInOffset;
 import android.content.Context;
 import android.content.res.Resources;
 import android.util.AttributeSet;
+import android.util.MathUtils;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.FrameLayout.LayoutParams;
 
 import com.android.keyguard.R;
 
@@ -36,14 +36,15 @@ public class ClockLayout extends FrameLayout {
     /**
      * Clock face views.
      */
-    private View mDigitalClock;
     private View mAnalogClock;
 
     /**
-     * Pixel shifting amplitidues used to prevent screen burn-in.
+     * Pixel shifting amplitudes used to prevent screen burn-in.
      */
     private int mBurnInPreventionOffsetX;
     private int mBurnInPreventionOffsetY;
+
+    private float mDarkAmount;
 
     public ClockLayout(Context context) {
         this(context, null);
@@ -60,7 +61,6 @@ public class ClockLayout extends FrameLayout {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mDigitalClock = findViewById(R.id.digital_clock);
         mAnalogClock = findViewById(R.id.analog_clock);
 
         // Get pixel shifting X, Y amplitudes from resources.
@@ -81,18 +81,21 @@ public class ClockLayout extends FrameLayout {
         positionChildren();
     }
 
-    private void positionChildren() {
-        final float offsetX = getBurnInOffset(mBurnInPreventionOffsetX * 2, true)
-                - mBurnInPreventionOffsetX;
-        final float offsetY = getBurnInOffset(mBurnInPreventionOffsetY * 2, false)
-                - mBurnInPreventionOffsetY;
+    /**
+     * See {@link com.android.systemui.plugins.ClockPlugin#setDarkAmount(float)}.
+     */
+    void setDarkAmount(float darkAmount) {
+        mDarkAmount = darkAmount;
+        positionChildren();
+    }
 
-        // Put digital clock in two left corner of the screen.
-        if (mDigitalClock != null) {
-            LayoutParams params = (LayoutParams) mDigitalClock.getLayoutParams();
-            mDigitalClock.setX(offsetX + params.leftMargin);
-            mDigitalClock.setY(offsetY + params.topMargin);
-        }
+    private void positionChildren() {
+        final float offsetX = MathUtils.lerp(0f,
+                getBurnInOffset(mBurnInPreventionOffsetX * 2, true) - mBurnInPreventionOffsetX,
+                mDarkAmount);
+        final float offsetY = MathUtils.lerp(0f,
+                getBurnInOffset(mBurnInPreventionOffsetY * 2, false) - mBurnInPreventionOffsetY,
+                mDarkAmount);
 
         // Put the analog clock in the middle of the screen.
         if (mAnalogClock != null) {
