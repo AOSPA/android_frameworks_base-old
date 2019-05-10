@@ -922,8 +922,12 @@ public final class ActivityRecord extends ConfigurationContainer {
         }
     }
 
+    static boolean isResolverActivity(String className) {
+        return ResolverActivity.class.getName().equals(className);
+    }
+
     boolean isResolverActivity() {
-        return ResolverActivity.class.getName().equals(mActivityComponent.getClassName());
+        return isResolverActivity(mActivityComponent.getClassName());
     }
 
     boolean isResolverOrChildActivity() {
@@ -2331,7 +2335,9 @@ public final class ActivityRecord extends ConfigurationContainer {
                 return;
             }
 
-            if (configChanges == 0 && mAppWindowToken.okToDisplay()) {
+            // Window configuration changes only effect windows, so don't require a screen freeze.
+            int freezableConfigChanges = configChanges & ~(CONFIG_WINDOW_CONFIGURATION);
+            if (freezableConfigChanges == 0 && mAppWindowToken.okToDisplay()) {
                 if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Skipping set freeze of " + appToken);
                 return;
             }

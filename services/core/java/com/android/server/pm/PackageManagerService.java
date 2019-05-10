@@ -11757,7 +11757,12 @@ public class PackageManagerService extends IPackageManager.Stub
                     "Code and resource paths haven't been set correctly");
         }
 
-        if (mApexManager.isApexPackage(pkg.packageName)) {
+        // Check that there is an APEX package with the same name only during install/first boot
+        // after OTA.
+        final boolean isUserInstall = (scanFlags & SCAN_BOOTING) == 0;
+        final boolean isFirstBootOrUpgrade = (scanFlags & SCAN_FIRST_BOOT_OR_UPGRADE) != 0;
+        if ((isUserInstall || isFirstBootOrUpgrade)
+                && mApexManager.isApexPackage(pkg.packageName)) {
             throw new PackageManagerException(INSTALL_FAILED_DUPLICATE_PACKAGE,
                     pkg.packageName + " is an APEX package and can't be installed as an APK.");
         }
@@ -13694,30 +13699,44 @@ public class PackageManagerService extends IPackageManager.Stub
         return unactionedPackages.toArray(new String[0]);
     }
 
-    @Override
-    public String[] setPackagesSuspendedAsUser(String[] packageNames, boolean suspended,
-            PersistableBundle appExtras, PersistableBundle launcherExtras,
-            SuspendDialogInfo dialogInfo, String callingPackage, int userId) {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.SUSPEND_APPS,
-                "setPackagesSuspendedAsUser");
+    private void enforceCanSetPackagesSuspendedAsUser(String callingPackage, int callingUid,
+            int userId, String callingMethod) {
+        if (callingUid == Process.ROOT_UID || callingUid == Process.SYSTEM_UID) {
+            return;
+        }
 
-        final int callingUid = Binder.getCallingUid();
+        final String ownerPackage = mProtectedPackages.getDeviceOwnerOrProfileOwnerPackage(userId);
+        if (ownerPackage != null) {
+            final int ownerUid = getPackageUid(ownerPackage, 0, userId);
+            if (ownerUid == callingUid) {
+                return;
+            }
+            throw new UnsupportedOperationException("Cannot suspend/unsuspend packages. User "
+                    + userId + " has an active DO or PO");
+        }
+
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.SUSPEND_APPS,
+                callingMethod);
+
         final int packageUid = getPackageUid(callingPackage, 0, userId);
-        final boolean allowedCallingUid = callingUid == Process.ROOT_UID
-                || callingUid == Process.SYSTEM_UID;
         final boolean allowedPackageUid = packageUid == callingUid;
         final boolean allowedShell = callingUid == SHELL_UID
                 && UserHandle.isSameApp(packageUid, callingUid);
 
-        if (!allowedCallingUid && !allowedShell && !allowedPackageUid) {
+        if (!allowedShell && !allowedPackageUid) {
             throw new SecurityException("Calling package " + callingPackage + " in user "
                     + userId + " does not belong to calling uid " + callingUid);
         }
-        if (!PLATFORM_PACKAGE_NAME.equals(callingPackage)
-                && mProtectedPackages.getDeviceOwnerOrProfileOwnerPackage(userId) != null) {
-            throw new UnsupportedOperationException("Cannot suspend/unsuspend packages. User "
-                    + userId + " has an active DO or PO");
-        }
+    }
+
+    @Override
+    public String[] setPackagesSuspendedAsUser(String[] packageNames, boolean suspended,
+            PersistableBundle appExtras, PersistableBundle launcherExtras,
+            SuspendDialogInfo dialogInfo, String callingPackage, int userId) {
+        final int callingUid = Binder.getCallingUid();
+        enforceCanSetPackagesSuspendedAsUser(callingPackage, callingUid, userId,
+                "setPackagesSuspendedAsUser");
+
         if (ArrayUtils.isEmpty(packageNames)) {
             return packageNames;
         }
@@ -15027,12 +15046,14 @@ public class PackageManagerService extends IPackageManager.Stub
         final int installReason;
         @Nullable
         MultiPackageInstallParams mParentInstallParams;
+        final long requiredInstalledVersionCode;
 
         InstallParams(OriginInfo origin, MoveInfo move, IPackageInstallObserver2 observer,
                 int installFlags, String installerPackageName, String volumeUuid,
                 VerificationInfo verificationInfo, UserHandle user, String packageAbiOverride,
                 String[] grantedPermissions, List<String> whitelistedRestrictedPermissions,
-                PackageParser.SigningDetails signingDetails, int installReason) {
+                PackageParser.SigningDetails signingDetails, int installReason,
+                long requiredInstalledVersionCode) {
             super(user);
             this.origin = origin;
             this.move = move;
@@ -15046,6 +15067,7 @@ public class PackageManagerService extends IPackageManager.Stub
             this.whitelistedRestrictedPermissions = whitelistedRestrictedPermissions;
             this.signingDetails = signingDetails;
             this.installReason = installReason;
+            this.requiredInstalledVersionCode = requiredInstalledVersionCode;
         }
 
         InstallParams(ActiveInstallSession activeInstallSession) {
@@ -15076,6 +15098,8 @@ public class PackageManagerService extends IPackageManager.Stub
             whitelistedRestrictedPermissions = activeInstallSession.getSessionParams()
                     .whitelistedRestrictedPermissions;
             signingDetails = activeInstallSession.getSigningDetails();
+            requiredInstalledVersionCode = activeInstallSession.getSessionParams()
+                    .requiredInstalledVersionCode;
         }
 
         @Override
@@ -15101,6 +15125,23 @@ public class PackageManagerService extends IPackageManager.Stub
                     PackageSetting ps = mSettings.mPackages.get(packageName);
                     if (ps != null) {
                         dataOwnerPkg = ps.pkg;
+                    }
+                }
+
+                if (requiredInstalledVersionCode != PackageManager.VERSION_CODE_HIGHEST) {
+                    if (dataOwnerPkg == null) {
+                        Slog.w(TAG, "Required installed version code was "
+                                + requiredInstalledVersionCode
+                                + " but package is not installed");
+                        return PackageHelper.RECOMMEND_FAILED_WRONG_INSTALLED_VERSION;
+                    }
+
+                    if (dataOwnerPkg.getLongVersionCode() != requiredInstalledVersionCode) {
+                        Slog.w(TAG, "Required installed version code was "
+                                + requiredInstalledVersionCode
+                                + " but actual installed version is "
+                                + dataOwnerPkg.getLongVersionCode());
+                        return PackageHelper.RECOMMEND_FAILED_WRONG_INSTALLED_VERSION;
                     }
                 }
 
@@ -15230,6 +15271,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     loc = installLocationPolicy(pkgLite);
                     if (loc == PackageHelper.RECOMMEND_FAILED_VERSION_DOWNGRADE) {
                         ret = PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE;
+                    } else if (loc == PackageHelper.RECOMMEND_FAILED_WRONG_INSTALLED_VERSION) {
+                        ret = PackageManager.INSTALL_FAILED_WRONG_INSTALLED_VERSION;
                     } else if (!onInt) {
                         // Override install location with flags
                         if (loc == PackageHelper.RECOMMEND_INSTALL_EXTERNAL) {
@@ -20116,6 +20159,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             final Intent intent = new Intent(Intent.ACTION_PREFERRED_ACTIVITY_CHANGED);
             intent.putExtra(Intent.EXTRA_USER_HANDLE, userId);
+            intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
             try {
                 am.broadcastIntent(null, intent, null, null,
                         0, null, null, null, android.app.AppOpsManager.OP_NONE,
@@ -23389,7 +23433,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 installerPackageName, volumeUuid, null /*verificationInfo*/, user,
                 packageAbiOverride, null /*grantedPermissions*/,
                 null /*whitelistedRestrictedPermissions*/, PackageParser.SigningDetails.UNKNOWN,
-                PackageManager.INSTALL_REASON_UNKNOWN);
+                PackageManager.INSTALL_REASON_UNKNOWN, PackageManager.VERSION_CODE_HIGHEST);
         params.setTraceMethod("movePackage").setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
 
@@ -24012,6 +24056,18 @@ public class PackageManagerService extends IPackageManager.Stub
             } catch (Exception e) {
             }
             return 0;
+        }
+
+        @Override
+        public int getTargetSdkVersionForPackage(String packageName)
+                throws RemoteException {
+            int callingUser = UserHandle.getUserId(Binder.getCallingUid());
+            ApplicationInfo info = getApplicationInfo(packageName, 0, callingUser);
+            if (info == null) {
+                throw new RemoteException(
+                        "Couldn't get ApplicationInfo for package " + packageName);
+            }
+            return info.targetSdkVersion;
         }
 
         @Override

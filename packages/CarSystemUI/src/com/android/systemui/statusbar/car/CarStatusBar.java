@@ -36,6 +36,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
@@ -59,7 +60,7 @@ import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.classifier.FalsingLog;
-import com.android.systemui.classifier.FalsingManager;
+import com.android.systemui.classifier.FalsingManagerFactory;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.qs.car.CarQSFragment;
@@ -570,15 +571,33 @@ public class CarStatusBar extends StatusBar implements
      * notification shade this method also makes the view invisible after animation ends.
      */
     private void animateNotificationPanel(float velocity, boolean isClosing) {
-        Rect rect = mNotificationList.getClipBounds();
-        if (rect == null) {
-            return;
-        }
-        float from = rect.bottom;
         float to = 0;
         if (!isClosing) {
             to = mNotificationView.getHeight();
         }
+
+        Rect rect = mNotificationList.getClipBounds();
+        if (rect != null) {
+            float from = rect.bottom;
+            animate(from, to, velocity, isClosing);
+            return;
+        }
+
+        // We will only be here if the shade is being opened programmatically.
+        ViewTreeObserver notificationTreeObserver = mNotificationView.getViewTreeObserver();
+        notificationTreeObserver.addOnGlobalLayoutListener(
+                new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        ViewTreeObserver obs = mNotificationView.getViewTreeObserver();
+                        obs.removeOnGlobalLayoutListener(this);
+                        float to = mNotificationView.getHeight();
+                        animate(/* from= */ 0, to, velocity, isClosing);
+                    }
+                });
+    }
+
+    private void animate(float from, float to, float velocity, boolean isClosing) {
         if (mIsNotificationAnimating) {
             return;
         }
@@ -794,7 +813,7 @@ public class CarStatusBar extends StatusBar implements
             KeyguardUpdateMonitor.getInstance(mContext).dump(fd, pw, args);
         }
 
-        FalsingManager.getInstance(mContext).dump(pw);
+        FalsingManagerFactory.getInstance(mContext).dump(pw);
         FalsingLog.dump(pw);
 
         pw.println("SharedPreferences:");
@@ -951,12 +970,10 @@ public class CarStatusBar extends StatusBar implements
         return mContext.getDrawable(com.android.internal.R.drawable.default_wallpaper);
     }
 
-    /** Returns true if the current user makes it through the setup wizard, false otherwise. */
-    private boolean getIsUserSetup() {
-        return mUserSetup;
-    }
-
     private void setNotificationViewClipBounds(int height) {
+        if (height > mNotificationView.getHeight()) {
+            height = mNotificationView.getHeight();
+        }
         Rect clipBounds = new Rect();
         clipBounds.set(0, 0, mNotificationView.getWidth(), height);
         // Sets the clip region on the notification list view.
@@ -980,7 +997,6 @@ public class CarStatusBar extends StatusBar implements
         }
     }
 
-    private static final int SWIPE_UP_MIN_DISTANCE = 75;
     private static final int SWIPE_DOWN_MIN_DISTANCE = 25;
     private static final int SWIPE_MAX_OFF_PATH = 75;
     private static final int SWIPE_THRESHOLD_VELOCITY = 200;
@@ -1035,8 +1051,10 @@ public class CarStatusBar extends StatusBar implements
 
         @Override
         public boolean onSingleTapUp(MotionEvent motionEvent) {
-            animateNotificationPanel(DEFAULT_FLING_VELOCITY, true);
-            return false;
+            if (mPanelExpanded) {
+                animateNotificationPanel(DEFAULT_FLING_VELOCITY, true);
+            }
+            return true;
         }
 
         @Override
@@ -1109,7 +1127,9 @@ public class CarStatusBar extends StatusBar implements
         @Override
         public boolean onSingleTapUp(MotionEvent e) {
             mClosingVelocity = DEFAULT_FLING_VELOCITY;
-            close();
+            if (mPanelExpanded) {
+                close();
+            }
             return super.onSingleTapUp(e);
         }
 

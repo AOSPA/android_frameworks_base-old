@@ -86,11 +86,6 @@ public abstract class PackageManager {
     /** {@hide} */
     public static final boolean APPLY_DEFAULT_TO_DEVICE_PROTECTED_STORAGE = true;
 
-    /** {@hide} */
-    @TestApi
-    // STOPSHIP: Remove this once we get a Play prebuilt.
-    public static boolean RESTRICTED_PERMISSIONS_ENABLED = false;
-
     /**
      * This exception is thrown when a given package, application, or component
      * name cannot be found.
@@ -1422,6 +1417,14 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_FAILED_MULTIPACKAGE_INCONSISTENCY = -120;
+
+    /**
+     * Installation failed return code: the required installed version code
+     * does not match the currently installed package version code.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_WRONG_INSTALLED_VERSION = -121;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
@@ -6918,6 +6921,7 @@ public abstract class PackageManager {
             case INSTALL_FAILED_BAD_DEX_METADATA: return "INSTALL_FAILED_BAD_DEX_METADATA";
             case INSTALL_FAILED_MISSING_SPLIT: return "INSTALL_FAILED_MISSING_SPLIT";
             case INSTALL_FAILED_BAD_SIGNATURE: return "INSTALL_FAILED_BAD_SIGNATURE";
+            case INSTALL_FAILED_WRONG_INSTALLED_VERSION: return "INSTALL_FAILED_WRONG_INSTALLED_VERSION";
             default: return Integer.toString(status);
         }
     }

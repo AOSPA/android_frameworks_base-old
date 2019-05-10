@@ -3457,10 +3457,25 @@ public final class Settings {
          */
         public static final String DISPLAY_COLOR_MODE = "display_color_mode";
 
-        private static final Validator DISPLAY_COLOR_MODE_VALIDATOR =
-                new SettingsValidators.InclusiveIntegerRangeValidator(
-                        ColorDisplayManager.COLOR_MODE_NATURAL,
-                        ColorDisplayManager.COLOR_MODE_AUTOMATIC);
+        private static final Validator DISPLAY_COLOR_MODE_VALIDATOR = new Validator() {
+            @Override
+            public boolean validate(@Nullable String value) {
+                // Assume the actual validation that this device can properly handle this kind of
+                // color mode further down in ColorDisplayManager / ColorDisplayService.
+                try {
+                    final int setting = Integer.parseInt(value);
+                    final boolean isInFrameworkRange =
+                            setting >= ColorDisplayManager.COLOR_MODE_NATURAL
+                                    && setting <= ColorDisplayManager.COLOR_MODE_AUTOMATIC;
+                    final boolean isInVendorRange =
+                            setting >= ColorDisplayManager.VENDOR_COLOR_MODE_RANGE_MIN
+                                    && setting <= ColorDisplayManager.VENDOR_COLOR_MODE_RANGE_MAX;
+                    return isInFrameworkRange || isInVendorRange;
+                } catch (NumberFormatException | NullPointerException e) {
+                    return false;
+                }
+            }
+        };
 
         /**
          * The user selected peak refresh rate in frames per second.
@@ -6498,6 +6513,21 @@ public final class Settings {
                 new SettingsValidators.ComponentNameListValidator(":");
 
         /**
+         * Whether the Global Actions Panel is enabled.
+         * @hide
+         */
+        public static final String GLOBAL_ACTIONS_PANEL_ENABLED = "global_actions_panel_enabled";
+
+        private static final Validator GLOBAL_ACTIONS_PANEL_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
+
+        /**
+         * Whether the Global Actions Panel can be toggled on or off in Settings.
+         * @hide
+         */
+        public static final String GLOBAL_ACTIONS_PANEL_AVAILABLE =
+                "global_actions_panel_available";
+
+        /**
          * Whether the hush gesture has ever been used
          * @hide
          */
@@ -7776,6 +7806,9 @@ public final class Settings {
          */
         public static final String UI_NIGHT_MODE = "ui_night_mode";
 
+        private static final Validator UI_NIGHT_MODE_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 2);
+
         /**
          * Whether screensavers are enabled.
          * @hide
@@ -8251,6 +8284,16 @@ public final class Settings {
                 "face_unlock_always_require_confirmation";
 
         private static final Validator FACE_UNLOCK_ALWAYS_REQUIRE_CONFIRMATION_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
+         * Whether or not the face unlock education screen has been shown to the user.
+         * @hide
+         */
+        public static final String FACE_UNLOCK_EDUCATION_INFO_DISPLAYED =
+                "face_unlock_education_info_displayed";
+
+        private static final Validator FACE_UNLOCK_EDUCATION_INFO_DISPLAYED_VALIDATOR =
                 BOOLEAN_VALIDATOR;
 
         /**
@@ -8923,6 +8966,7 @@ public final class Settings {
             ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS,
             NOTIFICATION_NEW_INTERRUPTION_MODEL,
             TRUST_AGENTS_EXTEND_UNLOCK,
+            UI_NIGHT_MODE,
             LOCK_SCREEN_WHEN_TRUST_LOST,
             SKIP_GESTURE,
             SILENCE_GESTURE,
@@ -8933,7 +8977,8 @@ public final class Settings {
             SILENCE_NOTIFICATION_GESTURE_COUNT,
             SILENCE_CALL_GESTURE_COUNT,
             SILENCE_TIMER_GESTURE_COUNT,
-            DARK_MODE_DIALOG_SEEN
+            DARK_MODE_DIALOG_SEEN,
+            GLOBAL_ACTIONS_PANEL_ENABLED
         };
 
         /**
@@ -9059,6 +9104,8 @@ public final class Settings {
             VALIDATORS.put(FACE_UNLOCK_APP_ENABLED, FACE_UNLOCK_APP_ENABLED_VALIDATOR);
             VALIDATORS.put(FACE_UNLOCK_ALWAYS_REQUIRE_CONFIRMATION,
                     FACE_UNLOCK_ALWAYS_REQUIRE_CONFIRMATION_VALIDATOR);
+            VALIDATORS.put(FACE_UNLOCK_EDUCATION_INFO_DISPLAYED,
+                    FACE_UNLOCK_EDUCATION_INFO_DISPLAYED_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_ENABLED, ASSIST_GESTURE_ENABLED_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_SILENCE_ALERTS_ENABLED,
                     ASSIST_GESTURE_SILENCE_ALERTS_ENABLED_VALIDATOR);
@@ -9117,6 +9164,8 @@ public final class Settings {
             VALIDATORS.put(SILENCE_NOTIFICATION_GESTURE_COUNT, SILENCE_GESTURE_COUNT_VALIDATOR);
             VALIDATORS.put(ODI_CAPTIONS_ENABLED, ODI_CAPTIONS_ENABLED_VALIDATOR);
             VALIDATORS.put(DARK_MODE_DIALOG_SEEN, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(UI_NIGHT_MODE, UI_NIGHT_MODE_VALIDATOR);
+            VALIDATORS.put(GLOBAL_ACTIONS_PANEL_ENABLED, GLOBAL_ACTIONS_PANEL_ENABLED_VALIDATOR);
         }
 
         /**
@@ -11892,6 +11941,7 @@ public final class Settings {
          * sync_adapter_duration            (long)
          * exempted_sync_duration           (long)
          * system_interaction_duration      (long)
+         * initial_foreground_service_start_duration (long)
          * stable_charging_threshold        (long)
          *
          * idle_duration        (long) // This is deprecated and used to circumvent b/26355386.
@@ -12064,26 +12114,27 @@ public final class Settings {
          * entity_list_default use ":" as delimiter for values. Ex:
          *
          * <pre>
-         * smart_linkify_enabled                            (boolean)
-         * system_textclassifier_enabled                    (boolean)
+         * classify_text_max_range_length                   (int)
+         * detect_language_from_text_enabled                (boolean)
+         * entity_list_default                              (String[])
+         * entity_list_editable                             (String[])
+         * entity_list_not_editable                         (String[])
+         * generate_links_log_sample_rate                   (int)
+         * generate_links_max_text_length                   (int)
+         * in_app_conversation_action_types_default         (String[])
+         * lang_id_context_settings                         (float[])
+         * lang_id_threshold_override                       (float)
+         * local_textclassifier_enabled                     (boolean)
          * model_dark_launch_enabled                        (boolean)
-         * smart_selection_enabled                          (boolean)
-         * smart_text_share_enabled                         (boolean)
+         * notification_conversation_action_types_default   (String[])
          * smart_linkify_enabled                            (boolean)
          * smart_select_animation_enabled                   (boolean)
+         * smart_selection_enabled                          (boolean)
+         * smart_text_share_enabled                         (boolean)
          * suggest_selection_max_range_length               (int)
-         * classify_text_max_range_length                   (int)
-         * generate_links_max_text_length                   (int)
-         * generate_links_log_sample_rate                   (int)
-         * entity_list_default                              (String[])
-         * entity_list_not_editable                         (String[])
-         * entity_list_editable                             (String[])
-         * in_app_conversation_action_types_default         (String[])
-         * notification_conversation_action_types_default   (String[])
-         * lang_id_threshold_override                       (float)
+         * system_textclassifier_enabled                    (boolean)
          * template_intent_factory_enabled                  (boolean)
          * translate_in_classification_enabled              (boolean)
-         * detect_language_from_text_enabled                (boolean)
          * </pre>
          *
          * <p>

@@ -844,6 +844,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
         }
         if (mAudioCapturePolicy != null) {
             AudioManager.unregisterAudioPolicyAsyncStatic(mAudioCapturePolicy);
+            mAudioCapturePolicy = null;
         }
         native_release();
         mState = STATE_UNINITIALIZED;
