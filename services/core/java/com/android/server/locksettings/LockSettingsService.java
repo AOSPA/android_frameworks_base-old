@@ -3073,15 +3073,11 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
 
         private void reportDeviceSetupComplete() {
-            // TODO(b/130235467) Uncomment the following code after the call to
-            // reportDeviceSetupComplete() stops causing system service to crash.
-            /*
             try {
                 getGateKeeperService().reportDeviceSetupComplete();
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failure reporting to IGateKeeperService", e);
             }
-            */
         }
 
         /**
