@@ -1193,6 +1193,20 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         }
     }
 
+    /**
+     * Returns best effort count of visible notifications.
+     */
+    public int getVisibleNotificationCount() {
+        int count = 0;
+        for (int i = 0; i < getChildCount(); i++) {
+            final View child = getChildAt(i);
+            if (child.getVisibility() != View.GONE && child instanceof ExpandableNotificationRow) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     private boolean isCurrentlyAnimating() {
         return mStateAnimator.isRunning();
@@ -2484,9 +2498,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
      */
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     private void updateBackgroundBounds() {
-        getLocationInWindow(mTempInt2);
-        int left = mTempInt2[0] + mSidePaddings;
-        int right = mTempInt2[0] + getWidth() - mSidePaddings;
+        int left = mSidePaddings;
+        int right = getWidth() - mSidePaddings;
         for (NotificationSection section : mSections) {
             section.getBounds().left = left;
             section.getBounds().right = right;
@@ -4848,8 +4861,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
      * If the shelf should be visible when the device is in ambient mode (dozing.)
      */
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    public void setShowDarkShelf(boolean showDarkShelf) {
-        mShowDarkShelf = showDarkShelf;
+    public void showDarkShelf() {
+        mShowDarkShelf = true;
     }
 
     private void updateDarkShelfVisibility() {
@@ -6342,13 +6355,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         @Override
         public boolean canChildBeDismissedInDirection(View v, boolean isRightOrDown) {
-            boolean isValidDirection;
-            if (NotificationUtils.useNewInterruptionModel(mContext)) {
-                isValidDirection = mDismissRtl ? !isRightOrDown : isRightOrDown;
-            } else {
-                isValidDirection = true;
-            }
-            return isValidDirection && canChildBeDismissed(v);
+            //TODO: b/131242807 for why this doesn't do anything with direction
+            return canChildBeDismissed(v);
         }
     };
 

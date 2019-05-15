@@ -83,6 +83,7 @@ import android.util.SparseArray;
 import android.util.Spline;
 import android.view.Display;
 import android.view.DisplayInfo;
+import android.view.DisplayAddress;
 import android.view.Surface;
 import android.view.SurfaceControl;
 
@@ -213,6 +214,7 @@ public final class DisplayManagerService extends SystemService {
     private final SparseArray<LogicalDisplay> mLogicalDisplays =
             new SparseArray<LogicalDisplay>();
     private int mNextNonDefaultDisplayId = Display.DEFAULT_DISPLAY + 1;
+    private int mNextBuiltInDisplayId = 4096;
 
     // List of all display transaction listeners.
     private final CopyOnWriteArrayList<DisplayTransactionListener> mDisplayTransactionListeners =
@@ -989,7 +991,7 @@ public final class DisplayManagerService extends SystemService {
             return null;
         }
 
-        final int displayId = assignDisplayIdLocked(isDefault);
+        final int displayId = assignDisplayIdLocked(isDefault, deviceInfo.address);
         final int layerStack = assignLayerStackLocked(displayId);
 
         LogicalDisplay display = new LogicalDisplay(displayId, layerStack, device);
@@ -1020,6 +1022,19 @@ public final class DisplayManagerService extends SystemService {
 
     private int assignDisplayIdLocked(boolean isDefault) {
         return isDefault ? Display.DEFAULT_DISPLAY : mNextNonDefaultDisplayId++;
+    }
+
+    private int assignDisplayIdLocked(boolean isDefault, DisplayAddress address) {
+        boolean isDisplayBuiltIn = false;
+        if (address instanceof DisplayAddress.Physical) {
+          isDisplayBuiltIn =
+                   (((DisplayAddress.Physical) address).getPort() < 0);
+        }
+        if (!isDefault && isDisplayBuiltIn) {
+            return mNextBuiltInDisplayId++;
+        }
+
+        return assignDisplayIdLocked(isDefault);
     }
 
     private int assignLayerStackLocked(int displayId) {

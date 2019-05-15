@@ -21,138 +21,77 @@ import static com.android.systemui.util.leak.RotationUtils.ROTATION_NONE;
 import static com.android.systemui.util.leak.RotationUtils.ROTATION_SEASCAPE;
 
 import android.content.Context;
-import android.text.TextUtils;
 import android.util.AttributeSet;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.android.systemui.HardwareBgDrawable;
-import com.android.systemui.MultiListLayout;
-import com.android.systemui.util.leak.RotationUtils;
-
-import java.util.ArrayList;
-import java.util.Locale;
+import com.android.internal.annotations.VisibleForTesting;
 
 /**
  * Grid-based implementation of the button layout created by the global actions dialog.
  */
-public class GlobalActionsGridLayout extends MultiListLayout {
-
-    boolean mBackgroundsSet;
-
+public class GlobalActionsGridLayout extends GlobalActionsLayout {
     public GlobalActionsGridLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
 
-    private void setBackgrounds() {
-        int gridBackgroundColor = getResources().getColor(
-                com.android.systemui.R.color.global_actions_grid_background, null);
-        int separatedBackgroundColor = getResources().getColor(
-                com.android.systemui.R.color.global_actions_separated_background, null);
-        HardwareBgDrawable listBackground  = new HardwareBgDrawable(true, true, getContext());
-        HardwareBgDrawable separatedBackground = new HardwareBgDrawable(true, true, getContext());
-        listBackground.setTint(gridBackgroundColor);
-        separatedBackground.setTint(separatedBackgroundColor);
-        getListView().setBackground(listBackground);
-        getSeparatedView().setBackground(separatedBackground);
-    }
-
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-
-        // backgrounds set only once, the first time onMeasure is called after inflation
-        if (getListView() != null && !mBackgroundsSet) {
-            setBackgrounds();
-            mBackgroundsSet = true;
-        }
-    }
-
-    /**
-     * Sets the number of items expected to be rendered in the list container. This allows the
-     * layout to correctly determine which parent containers will be used for items before they have
-     * beenadded to the layout.
-     * @param count The number of items expected.
-     */
-    public void setExpectedListItemCount(int count) {
-        getListView().setExpectedCount(count);
+    @VisibleForTesting
+    protected void setupListView() {
+        ListGridLayout listView = getListView();
+        listView.setExpectedCount(mAdapter.countListItems());
+        listView.setReverseSublists(shouldReverseSublists());
+        listView.setReverseItems(shouldReverseListItems());
+        listView.setSwapRowsAndColumns(shouldSwapRowsAndColumns());
     }
 
     @Override
     public void onUpdateList() {
+        setupListView();
         super.onUpdateList();
-        ArrayList<GlobalActionsDialog.Action> separatedActions =
-                mAdapter.getSeparatedItems();
-        ArrayList<GlobalActionsDialog.Action> listActions = mAdapter.getListItems();
-        setExpectedListItemCount(listActions.size());
-        int rotation = RotationUtils.getRotation(mContext);
-
-        boolean reverse = false; // should we add items to parents in the reverse order?
-        if (rotation == ROTATION_NONE
-                || rotation == ROTATION_SEASCAPE) {
-            reverse = !reverse; // if we're in portrait or seascape, reverse items
-        }
-        if (TextUtils.getLayoutDirectionFromLocale(Locale.getDefault())
-                == View.LAYOUT_DIRECTION_RTL) {
-            reverse = !reverse; // if we're in an RTL language, reverse items (again)
-        }
-
-        for (int i = 0; i < mAdapter.getCount(); i++) {
-            Object action = mAdapter.getItem(i);
-            int separatedIndex = separatedActions.indexOf(action);
-            ViewGroup parent;
-            if (separatedIndex != -1) {
-                parent = getParentView(true, separatedIndex, rotation);
-            } else {
-                int listIndex = listActions.indexOf(action);
-                parent = getParentView(false, listIndex, rotation);
-            }
-            View v = mAdapter.getView(i, null, parent);
-            final int pos = i;
-            v.setOnClickListener(view -> mAdapter.onClickItem(pos));
-            v.setOnLongClickListener(view -> mAdapter.onLongClickItem(pos));
-            if (reverse) {
-                parent.addView(v, 0); // reverse order of items
-            } else {
-                parent.addView(v);
-            }
-        }
-        updateSnapPosition();
-        updateSeparatedButtonSize();
+        updateSeparatedItemSize();
     }
 
-    private void updateSeparatedButtonSize() {
+    /**
+     * If the separated view contains only one item, expand the bounds of that item to take up the
+     * entire view, so that the whole thing is touch-able.
+     */
+    @VisibleForTesting
+    protected void updateSeparatedItemSize() {
         ViewGroup separated = getSeparatedView();
+        if (separated.getChildCount() == 0) {
+            return;
+        }
+        View firstChild = separated.getChildAt(0);
+        ViewGroup.LayoutParams childParams = firstChild.getLayoutParams();
+
         if (separated.getChildCount() == 1) {
-            View onlyChild = separated.getChildAt(0);
-            ViewGroup.LayoutParams childParams = onlyChild.getLayoutParams();
             childParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
             childParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
-        }
-    }
-
-    @Override
-    protected ViewGroup getSeparatedView() {
-        return findViewById(com.android.systemui.R.id.separated_button);
-    }
-
-    private void updateSnapPosition() {
-        if (mSnapToEdge) {
-            setPadding(0, 0, 0, 0);
-            if (mRotation == ROTATION_LANDSCAPE) {
-                setGravity(Gravity.RIGHT);
-            } else if (mRotation == ROTATION_SEASCAPE) {
-                setGravity(Gravity.LEFT);
-            } else {
-                setGravity(Gravity.BOTTOM);
-            }
+        } else {
+            childParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            childParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
         }
     }
 
     @Override
     protected ListGridLayout getListView() {
-        return findViewById(android.R.id.list);
+        return (ListGridLayout) super.getListView();
+    }
+
+    @Override
+    protected void removeAllListViews() {
+        ListGridLayout list = getListView();
+        if (list != null) {
+            list.removeAllItems();
+        }
+    }
+
+    @Override
+    protected void addToListView(View v, boolean reverse) {
+        ListGridLayout list = getListView();
+        if (list != null) {
+            list.addItem(v);
+        }
     }
 
     @Override
@@ -167,30 +106,46 @@ public class GlobalActionsGridLayout extends MultiListLayout {
         }
     }
 
-    public ViewGroup getParentView(boolean separated, int index, int rotation) {
-        if (separated) {
-            return getSeparatedView();
-        } else {
-            switch (rotation) {
-                case ROTATION_LANDSCAPE:
-                    return getListView().getParentView(index, false, true);
-                case ROTATION_SEASCAPE:
-                    return getListView().getParentView(index, true, true);
-                default:
-                    return getListView().getParentView(index, false, false);
-            }
+    /**
+     * Determines whether the ListGridLayout should fill sublists in the reverse order.
+     * Used to account for sublist ordering changing between landscape and seascape views.
+     */
+    @VisibleForTesting
+    protected boolean shouldReverseSublists() {
+        if (getCurrentRotation() == ROTATION_SEASCAPE) {
+            return true;
         }
+        return false;
     }
 
     /**
-     * Not ued in this implementation of the Global Actions Menu, but necessary for some others.
+     * Determines whether the ListGridLayout should fill rows first instead of columns.
+     * Used to account for vertical/horizontal changes due to landscape or seascape rotations.
      */
-    @Override
-    public void setDivisionView(View v) {
-        // do nothing
+    @VisibleForTesting
+    protected boolean shouldSwapRowsAndColumns() {
+        if (getCurrentRotation() == ROTATION_NONE) {
+            return false;
+        }
+        return true;
     }
 
-    private float getAnimationDistance() {
+    @Override
+    protected boolean shouldReverseListItems() {
+        int rotation = getCurrentRotation();
+        boolean reverse = false; // should we add items to parents in the reverse order?
+        if (rotation == ROTATION_NONE
+                || rotation == ROTATION_SEASCAPE) {
+            reverse = !reverse; // if we're in portrait or seascape, reverse items
+        }
+        if (getCurrentLayoutDirection() == View.LAYOUT_DIRECTION_RTL) {
+            reverse = !reverse; // if we're in an RTL language, reverse items (again)
+        }
+        return reverse;
+    }
+
+    @VisibleForTesting
+    protected float getAnimationDistance() {
         int rows = getListView().getRowCount();
         float gridItemSize = getContext().getResources().getDimension(
                 com.android.systemui.R.dimen.global_actions_grid_item_height);
@@ -199,7 +154,7 @@ public class GlobalActionsGridLayout extends MultiListLayout {
 
     @Override
     public float getAnimationOffsetX() {
-        switch (RotationUtils.getRotation(getContext())) {
+        switch (getCurrentRotation()) {
             case ROTATION_LANDSCAPE:
                 return getAnimationDistance();
             case ROTATION_SEASCAPE:
@@ -211,7 +166,7 @@ public class GlobalActionsGridLayout extends MultiListLayout {
 
     @Override
     public float getAnimationOffsetY() {
-        if (RotationUtils.getRotation(mContext) == ROTATION_NONE) {
+        if (getCurrentRotation() == ROTATION_NONE) {
             return getAnimationDistance();
         }
         return 0;

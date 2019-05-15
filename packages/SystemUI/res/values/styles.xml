@@ -224,6 +224,7 @@
 
     <style name="TextAppearance.QS.Status" parent="TextAppearance.QS.TileLabel.Secondary">
         <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">@color/dark_mode_qs_icon_color_single_tone</item>
     </style>
 
     <style name="TextAppearance.AppOpsDialog" />
@@ -317,10 +318,6 @@
         <item name="android:windowIsFloating">true</item>
     </style>
 
-    <style name="volume_dialog_theme" parent="qs_theme">
-        <item name="android:windowIsFloating">false</item>
-    </style>
-
     <style name="systemui_theme_remote_input" parent="@android:style/Theme.DeviceDefault.Light">
         <item name="android:colorAccent">@color/remote_input_accent</item>
     </style>
@@ -371,6 +368,17 @@
         <item name="fillColor">@color/dark_mode_icon_color_dual_tone_fill</item>
         <item name="singleToneColor">@color/dark_mode_icon_color_single_tone</item>
     </style>
+    <style name="QSHeaderDarkTheme">
+        <item name="backgroundColor">@color/dark_mode_qs_icon_color_dual_tone_background</item>
+        <item name="fillColor">@color/dark_mode_qs_icon_color_dual_tone_fill</item>
+        <item name="singleToneColor">@color/dark_mode_qs_icon_color_single_tone</item>
+    </style>
+
+    <style name="QSHeaderTheme" parent="@style/Theme.SystemUI">
+        <item name="lightIconTheme">@style/DualToneLightTheme</item>
+        <item name="darkIconTheme">@style/QSHeaderDarkTheme</item>
+    </style>
+
     <style name="QSIconTheme">
         <item name="backgroundColor">?android:attr/textColorHint</item>
         <item name="fillColor">?android:attr/textColorPrimary</item>
@@ -426,20 +434,14 @@
     <style name="TunerPreferenceTheme" parent="@style/PreferenceThemeOverlay.SettingsBase">
     </style>
 
-    <style name="TextAppearance.NotificationInfo">
-        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
-        <item name="android:textColor">@color/notification_primary_text_color</item>
-    </style>
-
-    <style name="TextAppearance.NotificationInfo.Primary">
-        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
-        <item name="android:textSize">16sp</item>
-        <item name="android:alpha">0.87</item>
-    </style>
-
     <style name="TextAppearance.NotificationInfo.Confirmation">
         <item name="android:textSize">14sp</item>
         <item name="android:alpha">0.87</item>
+    </style>
+
+    <style name="TextAppearance.NotificationInfo">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">@color/notification_primary_text_color</item>
     </style>
 
     <style name="TextAppearance.NotificationInfo.Secondary">
@@ -447,34 +449,54 @@
         <item name="android:alpha">0.54</item>
     </style>
 
-    <style name="TextAppearance.NotificationInfo.ButtonLabel">
-        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:alpha">0.54</item>
-        <item name="android:paddingTop">4dp</item>
-        <item name="android:paddingBottom">16dp</item>
-    </style>
-
-    <style name="TextAppearance.NotificationInfo.HintText">
-        <item name="android:textSize">12sp</item>
-        <item name="android:alpha">0.54</item>
-    </style>
-
-    <style name="TextAppearance.NotificationInfo.Secondary.Warning">
-        <item name="android:textColor">?android:attr/colorError</item>
-    </style>
-
-    <style name="TextAppearance.NotificationInfo.Secondary.Link">
-        <item name="android:textColor">?android:attr/colorAccent</item>
-    </style>
-
     <style name="TextAppearance.NotificationInfo.Button">
-        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
         <item name="android:textSize">16sp</item>
         <item name="android:textColor">?android:attr/colorAccent</item>
         <item name="android:background">@drawable/btn_borderless_rect</item>
-        <item name="android:gravity">center</item>
+        <item name="android:gravity">center_vertical</item>
         <item name="android:focusable">true</item>
+    </style>
+
+    <style name="TextAppearance.NotificationImportanceChannel">
+        <item name="android:textSize">@dimen/notification_importance_channel_text</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:textColor">@color/notification_guts_header_text_color</item>
+        <item name="android:textSize">@dimen/notification_importance_channel_text</item>
+    </style>
+
+    <style name="TextAppearance.NotificationImportanceChannelGroup">
+        <item name="android:textSize">@dimen/notification_importance_channel_group_text</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">@color/notification_guts_sub_text_color</item>
+        <item name="android:textSize">@dimen/notification_importance_channel_group_text</item>
+    </style>
+
+    <style name="TextAppearance.NotificationImportanceHeader">
+        <item name="android:textSize">@dimen/notification_importance_header_text</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">@color/notification_guts_header_text_color</item>
+    </style>
+
+    <style name="TextAppearance.NotificationImportanceDetail">
+        <item name="android:textSize">@dimen/notification_importance_description_text</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">@color/notification_guts_sub_text_color</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="TextAppearance.NotificationImportanceButton">
+        <item name="android:textSize">@dimen/notification_importance_button_text</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="TextAppearance.NotificationImportanceButton.Selected" parent="TextAppearance.NotificationImportanceButton">
+        <item name="android:textColor">?android:attr/colorAccent</item>
+    </style>
+
+    <style name="TextAppearance.NotificationImportanceButton.Unselected" parent="TextAppearance.NotificationImportanceButton">
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
 
     <style name="TextAppearance.HeadsUpStatusBarText"

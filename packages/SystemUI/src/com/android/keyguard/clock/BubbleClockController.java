@@ -21,6 +21,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Paint.Style;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextClock;
@@ -53,6 +54,11 @@ public class BubbleClockController implements ClockPlugin {
     private final SysuiColorExtractor mColorExtractor;
 
     /**
+     * Computes preferred position of clock.
+     */
+    private final SmallClockPosition mClockPosition;
+
+    /**
      * Renders preview from clock view.
      */
     private final ViewPreviewer mRenderer = new ViewPreviewer();
@@ -61,7 +67,6 @@ public class BubbleClockController implements ClockPlugin {
      * Custom clock shown on AOD screen and behind stack scroller on lock.
      */
     private ClockLayout mView;
-    private TextClock mDigitalClock;
     private ImageClock mAnalogClock;
 
     /**
@@ -69,11 +74,6 @@ public class BubbleClockController implements ClockPlugin {
      */
     private View mLockClockContainer;
     private TextClock mLockClock;
-
-    /**
-     * Controller for transition to dark state.
-     */
-    private CrossFadeDarkController mDarkController;
 
     /**
      * Create a BubbleClockController instance.
@@ -87,28 +87,25 @@ public class BubbleClockController implements ClockPlugin {
         mResources = res;
         mLayoutInflater = inflater;
         mColorExtractor = colorExtractor;
+        mClockPosition = new SmallClockPosition(res);
     }
 
     private void createViews() {
         mView = (ClockLayout) mLayoutInflater.inflate(R.layout.bubble_clock, null);
-        mDigitalClock = (TextClock) mView.findViewById(R.id.digital_clock);
         mAnalogClock = (ImageClock) mView.findViewById(R.id.analog_clock);
 
         mLockClockContainer = mLayoutInflater.inflate(R.layout.digital_clock, null);
         mLockClock = (TextClock) mLockClockContainer.findViewById(R.id.lock_screen_clock);
-        mLockClock.setVisibility(View.GONE);
-
-        mDarkController = new CrossFadeDarkController(mDigitalClock, mLockClock);
+        final int textSize = mResources.getDimensionPixelSize(R.dimen.widget_title_font_size);
+        mLockClock.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
     }
 
     @Override
     public void onDestroyView() {
         mView = null;
-        mDigitalClock = null;
         mAnalogClock = null;
         mLockClockContainer = null;
         mLockClock = null;
-        mDarkController = null;
     }
 
     @Override
@@ -160,12 +157,15 @@ public class BubbleClockController implements ClockPlugin {
     }
 
     @Override
+    public int getPreferredY(int totalHeight) {
+        return mClockPosition.getPreferredY();
+    }
+
+    @Override
     public void setStyle(Style style) {}
 
     @Override
-    public void setTextColor(int color) {
-        mLockClock.setTextColor(color);
-    }
+    public void setTextColor(int color) { }
 
     @Override
     public void setColorPalette(boolean supportsDarkText, int[] colorPalette) {
@@ -173,21 +173,21 @@ public class BubbleClockController implements ClockPlugin {
             return;
         }
         final int length = colorPalette.length;
-        mDigitalClock.setTextColor(colorPalette[Math.max(0, length - 6)]);
-        mAnalogClock.setClockColors(colorPalette[Math.max(0, length - 6)],
-                colorPalette[Math.max(0, length - 3)]);
+        final int color = colorPalette[Math.max(0, length - 3)];
+        mLockClock.setTextColor(color);
+        mAnalogClock.setClockColors(color, color);
     }
 
     @Override
     public void setDarkAmount(float darkAmount) {
-        mDarkController.setDarkAmount(darkAmount);
+        mClockPosition.setDarkAmount(darkAmount);
+        mView.setDarkAmount(darkAmount);
     }
 
     @Override
     public void onTimeTick() {
         mAnalogClock.onTimeChanged();
         mView.onTimeChanged();
-        mDigitalClock.refresh();
         mLockClock.refresh();
     }
 
@@ -198,6 +198,6 @@ public class BubbleClockController implements ClockPlugin {
 
     @Override
     public boolean shouldShowStatusArea() {
-        return false;
+        return true;
     }
 }

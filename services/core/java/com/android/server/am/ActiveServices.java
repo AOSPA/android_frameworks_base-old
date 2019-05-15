@@ -646,7 +646,7 @@ public final class ActiveServices {
         }
 
         if (allowBackgroundActivityStarts) {
-            r.hasStartedWhitelistingBgActivityStarts = true;
+            r.setHasStartedWhitelistingBgActivityStarts(true);
             scheduleCleanUpHasStartedWhitelistingBgActivityStartsLocked(r);
         }
 
@@ -773,11 +773,6 @@ public final class ActiveServices {
         }
         service.callStart = false;
 
-        // the service will not necessarily be brought down, so only clear the whitelisting state
-        // for start-based bg activity starts now, and drop any existing future cleanup callback
-        service.setHasStartedWhitelistingBgActivityStarts(false);
-        mAm.mHandler.removeCallbacks(service.startedWhitelistingBgActivityStartsCleanUp);
-
         bringDownServiceIfNeededLocked(service, false, false);
     }
 
@@ -840,6 +835,13 @@ public final class ActiveServices {
                         sb.append(compName);
                         Slog.w(TAG, sb.toString());
                         stopping.add(service);
+
+                        // If the app is under bg restrictions, also make sure that
+                        // any notification is dismissed
+                        if (appRestrictedAnyInBackground(
+                                service.appInfo.uid, service.packageName)) {
+                            cancelForegroundNotificationLocked(service);
+                        }
                     }
                 }
             }
@@ -1244,6 +1246,10 @@ public final class ActiveServices {
         }
     }
 
+    private boolean appIsTopLocked(int uid) {
+        return mAm.getUidState(uid) <= ActivityManager.PROCESS_STATE_TOP;
+    }
+
     /**
      * @param id Notification ID.  Zero === exit foreground state for the given service.
      */
@@ -1330,8 +1336,11 @@ public final class ActiveServices {
                         throw new SecurityException("Foreground not allowed as per app op");
                 }
 
-                if (!ignoreForeground &&
-                        appRestrictedAnyInBackground(r.appInfo.uid, r.packageName)) {
+                // Apps that are TOP or effectively similar may call startForeground() on
+                // their services even if they are restricted from doing that while in bg.
+                if (!ignoreForeground
+                        && !appIsTopLocked(r.appInfo.uid)
+                        && appRestrictedAnyInBackground(r.appInfo.uid, r.packageName)) {
                     Slog.w(TAG,
                             "Service.startForeground() not allowed due to bg restriction: service "
                             + r.shortInstanceName);
@@ -1766,12 +1775,7 @@ public final class ActiveServices {
                     callerApp.uid, callerApp.processName, callingPackage);
 
             IBinder binder = connection.asBinder();
-            ArrayList<ConnectionRecord> clist = s.getConnections().get(binder);
-            if (clist == null) {
-                clist = new ArrayList<ConnectionRecord>();
-                s.putConnection(binder, clist);
-            }
-            clist.add(c);
+            s.addConnection(binder, c);
             b.connections.add(c);
             if (activity != null) {
                 activity.addConnection(c);
@@ -1790,9 +1794,9 @@ public final class ActiveServices {
             if (s.app != null) {
                 updateServiceClientActivitiesLocked(s.app, c, true);
             }
-            clist = mServiceConnections.get(binder);
+            ArrayList<ConnectionRecord> clist = mServiceConnections.get(binder);
             if (clist == null) {
-                clist = new ArrayList<ConnectionRecord>();
+                clist = new ArrayList<>();
                 mServiceConnections.put(binder, clist);
             }
             clist.add(c);
@@ -3891,8 +3895,8 @@ public final class ActiveServices {
     public PendingIntent getRunningServiceControlPanelLocked(ComponentName name) {
         int userId = UserHandle.getUserId(Binder.getCallingUid());
         ServiceRecord r = getServiceByNameLocked(name, userId);
-        ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
         if (r != null) {
+            ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();
             for (int conni = connections.size() - 1; conni >= 0; conni--) {
                 ArrayList<ConnectionRecord> conn = connections.valueAt(conni);
                 for (int i=0; i<conn.size(); i++) {
@@ -3907,8 +3911,11 @@ public final class ActiveServices {
 
     void serviceTimeout(ProcessRecord proc) {
         String anrMessage = null;
-
         synchronized(mAm) {
+            if (proc.isDebugging()) {
+                // The app's being debugged, ignore timeout.
+                return;
+            }
             if (proc.executingServices.size() == 0 || proc.thread == null) {
                 return;
             }

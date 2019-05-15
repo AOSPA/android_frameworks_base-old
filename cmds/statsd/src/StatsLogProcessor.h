@@ -89,11 +89,11 @@ public:
     void WriteDataToDisk(const DumpReportReason dumpReportReason,
                          const DumpLatency dumpLatency);
 
-    /* Persist metric activation status onto disk. */
-    void WriteMetricsActivationToDisk(int64_t currentTimeNs);
+    /* Persist configs containing metrics with active activations to disk. */
+    void SaveActiveConfigsToDisk(int64_t currentTimeNs);
 
-    /* Load metric activation status from disk. */
-    void LoadMetricsActivationFromDisk();
+    /* Load configs containing metrics with active activations from disk. */
+    void LoadActiveConfigsFromDisk();
 
     // Reset all configs.
     void resetConfigs();
@@ -221,6 +221,9 @@ private:
     FRIEND_TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge);
     FRIEND_TEST(StatsLogProcessorTest, TestActiveConfigMetricDiskWriteRead);
     FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBoot);
+    FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBootMultipleActivations);
+    FRIEND_TEST(StatsLogProcessorTest,
+            TestActivationOnBootMultipleActivationsDifferentActivationTypes);
 
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration1);
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration2);
@@ -235,9 +238,12 @@ private:
     FRIEND_TEST(GaugeMetricE2eTest, TestMultipleFieldsForPushedEvent);
     FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvents);
     FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvent_LateAlarm);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEventsWithActivation);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEventsNoCondition);
     FRIEND_TEST(GaugeMetricE2eTest, TestConditionChangeToTrueSamplePulledEvents);
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents);
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm);
+    FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation);
 
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_NoLink_OR_CombinationCondition);
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_Link_OR_CombinationCondition);

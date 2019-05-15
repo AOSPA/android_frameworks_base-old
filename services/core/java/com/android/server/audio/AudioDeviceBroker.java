@@ -43,7 +43,6 @@ import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
 
-import java.util.ArrayList;
 
 /** @hide */
 /*package*/ final class AudioDeviceBroker {
@@ -321,8 +320,6 @@ import java.util.ArrayList;
                         mForcedUseForCommExt = AudioSystem.FORCE_BT_SCO;
                         return;
                     }
-                    mForcedUseForCommExt = AudioSystem.FORCE_BT_SCO;
-                    return;
                 }
                 mForcedUseForComm = AudioSystem.FORCE_BT_SCO;
             } else if (mForcedUseForComm == AudioSystem.FORCE_BT_SCO) {
@@ -405,24 +402,29 @@ import java.util.ArrayList;
         mAudioService.postAccessoryPlugMediaUnmute(device);
     }
 
-    /*package*/ AudioService.VolumeStreamState getStreamState(int streamType) {
-        return mAudioService.getStreamState(streamType);
+    /*package*/ int getVssVolumeForDevice(int streamType, int device) {
+        return mAudioService.getVssVolumeForDevice(streamType, device);
     }
 
-    /*package*/ ArrayList<AudioService.SetModeDeathHandler> getSetModeDeathHandlers() {
-        return mAudioService.mSetModeDeathHandlers;
+    /*package*/ int getModeOwnerPid() {
+        return mAudioService.getModeOwnerPid();
     }
 
     /*package*/ int getDeviceForStream(int streamType) {
         return mAudioService.getDeviceForStream(streamType);
     }
 
-    /*package*/ void setDeviceVolume(AudioService.VolumeStreamState streamState, int device) {
-        mAudioService.setDeviceVolume(streamState, device);
+    /*package*/ void postApplyVolumeOnDevice(int streamType, int device, String caller) {
+        mAudioService.postApplyVolumeOnDevice(streamType, device, caller);
     }
 
-    /*packages*/ void observeDevicesForAllStreams() {
-        mAudioService.observeDevicesForAllStreams();
+    /*package*/ void postSetVolumeIndexOnDevice(int streamType, int vssVolIndex, int device,
+                                                String caller) {
+        mAudioService.postSetVolumeIndexOnDevice(streamType, vssVolIndex, device, caller);
+    }
+
+    /*packages*/ void postObserveDevicesForAllStreams() {
+        mAudioService.postObserveDevicesForAllStreams();
     }
 
     /*package*/ boolean isInCommunication() {
@@ -441,8 +443,9 @@ import java.util.ArrayList;
         mAudioService.checkMusicActive(deviceType, caller);
     }
 
-    /*package*/ void checkVolumeCecOnHdmiConnection(int state, String caller) {
-        mAudioService.checkVolumeCecOnHdmiConnection(state, caller);
+    /*package*/ void checkVolumeCecOnHdmiConnection(
+            @AudioService.ConnectionState  int state, String caller) {
+        mAudioService.postCheckVolumeCecOnHdmiConnection(state, caller);
     }
 
     /*package*/ boolean hasAudioFocusUsers() {
@@ -747,7 +750,8 @@ import java.util.ArrayList;
                 case MSG_IL_SET_HEARING_AID_CONNECTION_STATE:
                     synchronized (mDeviceStateLock) {
                         mDeviceInventory.onSetHearingAidConnectionState(
-                                (BluetoothDevice) msg.obj, msg.arg1);
+                                (BluetoothDevice) msg.obj, msg.arg1,
+                                mAudioService.getHearingAidStreamType());
                     }
                     break;
                 case MSG_BT_HEADSET_CNCT_FAILED:
@@ -796,7 +800,7 @@ import java.util.ArrayList;
                 case MSG_L_SCOCLIENT_DIED:
                     synchronized (mSetModeLock) {
                         synchronized (mDeviceStateLock) {
-                            mBtHelper.scoClientDied(msg.arg1);
+                            mBtHelper.scoClientDied(msg.obj);
                         }
                     }
                     break;

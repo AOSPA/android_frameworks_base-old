@@ -1215,8 +1215,8 @@ class ProcessRecord implements WindowProcessListener {
                 !mAllowBackgroundActivityStartsTokens.isEmpty());
     }
 
-    void addBoundClientUids(ArraySet<Integer> clientUids) {
-        mBoundClientUids.addAll(clientUids);
+    void addBoundClientUid(int clientUid) {
+        mBoundClientUids.add(clientUid);
         mWindowProcessController.setBoundClientUids(mBoundClientUids);
     }
 
@@ -1586,7 +1586,7 @@ class ProcessRecord implements WindowProcessListener {
                 mService.mBatteryStatsService.noteProcessAnr(processName, uid);
             }
 
-            if (isSilentAnr()) {
+            if (isSilentAnr() && !isDebugging()) {
                 kill("bg anr", true);
                 return;
             }

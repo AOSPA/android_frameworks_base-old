@@ -87,8 +87,8 @@ public abstract class PackageManager {
     public static final boolean APPLY_DEFAULT_TO_DEVICE_PROTECTED_STORAGE = true;
 
     /** {@hide} */
-    @SystemApi
     @TestApi
+    // STOPSHIP: Remove this once we get a Play prebuilt.
     public static boolean RESTRICTED_PERMISSIONS_ENABLED = false;
 
     /**
@@ -2030,9 +2030,10 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the Vulkan native API
-     * will enumerate at least one {@code VkPhysicalDevice}, and the feature version will indicate
-     * what level of optional hardware features limits it supports.
+     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the Vulkan
+     * implementation on this device is hardware accelerated, and the Vulkan native API will
+     * enumerate at least one {@code VkPhysicalDevice}, and the feature version will indicate what
+     * level of optional hardware features limits it supports.
      * <p>
      * Level 0 includes the base Vulkan requirements as well as:
      * <ul><li>{@code VkPhysicalDeviceFeatures::textureCompressionETC2}</li></ul>
@@ -2057,10 +2058,10 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the Vulkan native API
-     * will enumerate at least one {@code VkPhysicalDevice}, and the feature version will indicate
-     * what level of optional compute features that device supports beyond the Vulkan 1.0
-     * requirements.
+     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the Vulkan
+     * implementation on this device is hardware accelerated, and the Vulkan native API will
+     * enumerate at least one {@code VkPhysicalDevice}, and the feature version will indicate what
+     * level of optional compute features that device supports beyond the Vulkan 1.0 requirements.
      * <p>
      * Compute level 0 indicates:
      * <ul>
@@ -2075,10 +2076,11 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature(String, int)}: The version of this feature indicates the highest
-     * {@code VkPhysicalDeviceProperties::apiVersion} supported by the physical devices that support
-     * the hardware level indicated by {@link #FEATURE_VULKAN_HARDWARE_LEVEL}. The feature version
-     * uses the same encoding as Vulkan version numbers:
+     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the Vulkan
+     * implementation on this device is hardware accelerated, and the feature version will indicate
+     * the highest {@code VkPhysicalDeviceProperties::apiVersion} supported by the physical devices
+     * that support the hardware level indicated by {@link #FEATURE_VULKAN_HARDWARE_LEVEL}. The
+     * feature version uses the same encoding as Vulkan version numbers:
      * <ul>
      * <li>Major version number in bits 31-22</li>
      * <li>Minor version number in bits 21-12</li>
@@ -3141,6 +3143,14 @@ public abstract class PackageManager {
     @SystemApi
     public static final int FLAG_PERMISSION_APPLY_RESTRICTION =  1 << 14;
 
+    /**
+     * Permission flag: The permission is granted because the application holds a role.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final int FLAG_PERMISSION_GRANTED_BY_ROLE =  1 << 15;
 
     /**
      * Permission flags: Bitwise or of all permission flags allowing an
@@ -3181,7 +3191,8 @@ public abstract class PackageManager {
             | FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT
             | FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT
             | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT
-            | FLAG_PERMISSION_APPLY_RESTRICTION;
+            | FLAG_PERMISSION_APPLY_RESTRICTION
+            | FLAG_PERMISSION_GRANTED_BY_ROLE;
 
     /**
      * Injected activity in app that forwards user to setting activity of that app.
@@ -3945,7 +3956,8 @@ public abstract class PackageManager {
             FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT,
             FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT,
             FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT,
-            FLAG_PERMISSION_APPLY_RESTRICTION
+            FLAG_PERMISSION_APPLY_RESTRICTION,
+            FLAG_PERMISSION_GRANTED_BY_ROLE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PermissionFlags {}
@@ -6166,15 +6178,7 @@ public abstract class PackageManager {
      * @param activity The component name of the activity that is to be preferred.
      *
      * @hide
-     *
-     * @deprecated This function no longer does anything. It is the platform's
-     * responsibility to assign preferred activities and this cannot be modified
-     * directly. To determine the activities resolved by the platform, use
-     * {@link #resolveActivity} or {@link #queryIntentActivities}. To configure
-     * an app to be responsible for a particular role and to check current role
-     * holders, see {@link android.app.role.RoleManager}.
      */
-    @Deprecated
     @SystemApi
     public void replacePreferredActivity(@NonNull IntentFilter filter, int match,
             @NonNull List<ComponentName> set, @NonNull ComponentName activity) {
@@ -7028,7 +7032,8 @@ public abstract class PackageManager {
             case FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT: return "RESTRICTION_INSTALLER_EXEMPT";
             case FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT: return "RESTRICTION_SYSTEM_EXEMPT";
             case FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT: return "RESTRICTION_UPGRADE_EXEMPT";
-            case FLAG_PERMISSION_APPLY_RESTRICTION: return "FLAG_PERMISSION_APPLY_RESTRICTION";
+            case FLAG_PERMISSION_APPLY_RESTRICTION: return "APPLY_RESTRICTION";
+            case FLAG_PERMISSION_GRANTED_BY_ROLE: return "GRANTED_BY_ROLE";
             default: return Integer.toString(flag);
         }
     }

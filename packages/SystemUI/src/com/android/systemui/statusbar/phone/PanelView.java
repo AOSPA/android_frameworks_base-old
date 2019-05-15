@@ -50,12 +50,12 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
+import com.android.systemui.statusbar.phone.NotificationPanelView.PanelExpansionListener;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import android.util.BoostFramework;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.function.BiConsumer;
 
 public abstract class PanelView extends FrameLayout {
     public static final boolean DEBUG = PanelBar.DEBUG;
@@ -70,7 +70,7 @@ public abstract class PanelView extends FrameLayout {
     private boolean mVibrateOnOpening;
     protected boolean mLaunchingNotification;
     private int mFixedDuration = NO_FIXED_DURATION;
-    private BiConsumer<Float, Boolean> mExpansionListener;
+    protected PanelExpansionListener mExpansionListener;
 
     private final void logf(String fmt, Object... args) {
         Log.v(TAG, (mViewName != null ? (mViewName + ": ") : "") + String.format(fmt, args));
@@ -1134,7 +1134,6 @@ public abstract class PanelView extends FrameLayout {
 
         View[] viewsToAnimate = {
                 mKeyguardBottomArea.getIndicationArea(),
-                mKeyguardBottomArea.getLockIcon(),
                 mStatusBar.getAmbientIndicationContainer()};
         for (View v : viewsToAnimate) {
             if (v == null) {
@@ -1182,28 +1181,25 @@ public abstract class PanelView extends FrameLayout {
 
     private ValueAnimator createHeightAnimator(float targetHeight) {
         ValueAnimator animator = ValueAnimator.ofFloat(mExpandedHeight, targetHeight);
-        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                setExpandedHeightInternal((Float) animation.getAnimatedValue());
-            }
-        });
+        animator.addUpdateListener(
+                animation -> setExpandedHeightInternal((float) animation.getAnimatedValue()));
         return animator;
     }
 
     protected void notifyBarPanelExpansionChanged() {
+        float fraction = mInstantExpanding ? 1 : mExpandedFraction;
         if (mBar != null) {
-            mBar.panelExpansionChanged(mExpandedFraction, mExpandedFraction > 0f
+            mBar.panelExpansionChanged(fraction, fraction > 0f
                     || mPeekAnimator != null || mInstantExpanding
                     || isPanelVisibleBecauseOfHeadsUp() || mTracking || mHeightAnimator != null);
         }
         if (mExpansionListener != null) {
-            mExpansionListener.accept(mExpandedFraction, mTracking);
+            mExpansionListener.onPanelExpansionChanged(fraction, mTracking);
         }
     }
 
-    public void setExpansionListener(BiConsumer<Float, Boolean> consumer) {
-        mExpansionListener = consumer;
+    public void setExpansionListener(PanelExpansionListener panelExpansionListener) {
+        mExpansionListener = panelExpansionListener;
     }
 
     protected abstract boolean isPanelVisibleBecauseOfHeadsUp();

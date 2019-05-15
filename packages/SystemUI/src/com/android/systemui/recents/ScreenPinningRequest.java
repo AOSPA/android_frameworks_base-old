@@ -16,7 +16,6 @@
 
 package com.android.systemui.recents;
 
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_SCREEN_PINNING;
 import static com.android.systemui.util.leak.RotationUtils.ROTATION_LANDSCAPE;
 import static com.android.systemui.util.leak.RotationUtils.ROTATION_SEASCAPE;
 
@@ -48,14 +47,17 @@ import android.widget.TextView;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SysUiServiceProvider;
+import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.WindowManagerWrapper;
 import com.android.systemui.statusbar.phone.NavigationBarView;
+import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.leak.RotationUtils;
 
 import java.util.ArrayList;
 
-public class ScreenPinningRequest implements View.OnClickListener {
+public class ScreenPinningRequest implements View.OnClickListener,
+        NavigationModeController.ModeChangedListener {
 
     private final Context mContext;
 
@@ -64,6 +66,7 @@ public class ScreenPinningRequest implements View.OnClickListener {
     private final OverviewProxyService mOverviewProxyService;
 
     private RequestWindowView mRequestWindow;
+    private int mNavBarMode;
 
     // Id of task to be pinned or locked.
     private int taskId;
@@ -75,6 +78,7 @@ public class ScreenPinningRequest implements View.OnClickListener {
         mWindowManager = (WindowManager)
                 mContext.getSystemService(Context.WINDOW_SERVICE);
         mOverviewProxyService = Dependency.get(OverviewProxyService.class);
+        mNavBarMode = Dependency.get(NavigationModeController.class).addListener(this);
     }
 
     public void clearPrompt() {
@@ -103,6 +107,11 @@ public class ScreenPinningRequest implements View.OnClickListener {
         mWindowManager.addView(mRequestWindow, lp);
     }
 
+    @Override
+    public void onNavigationModeChanged(int mode) {
+        mNavBarMode = mode;
+    }
+
     public void onConfigurationChanged() {
         if (mRequestWindow != null) {
             mRequestWindow.onConfigurationChanged();
@@ -129,7 +138,6 @@ public class ScreenPinningRequest implements View.OnClickListener {
         if (v.getId() == R.id.screen_pinning_ok_button || mRequestWindow == v) {
             try {
                 ActivityTaskManager.getService().startSystemLockTaskMode(taskId);
-                mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_SCREEN_PINNING, true);
             } catch (RemoteException e) {}
         }
         clearPrompt();
@@ -224,7 +232,9 @@ public class ScreenPinningRequest implements View.OnClickListener {
             mLayout.findViewById(R.id.screen_pinning_text_area)
                     .setLayoutDirection(View.LAYOUT_DIRECTION_LOCALE);
             View buttons = mLayout.findViewById(R.id.screen_pinning_buttons);
-            if (WindowManagerWrapper.getInstance().hasSoftNavigationBar(mContext.getDisplayId())) {
+            WindowManagerWrapper wm = WindowManagerWrapper.getInstance();
+            if (!QuickStepContract.isGesturalMode(mNavBarMode) 
+            	    && wm.hasSoftNavigationBar(mContext.getDisplayId())) {
                 buttons.setLayoutDirection(View.LAYOUT_DIRECTION_LOCALE);
                 swapChildrenIfRtlAndVertical(buttons);
             } else {
@@ -248,7 +258,9 @@ public class ScreenPinningRequest implements View.OnClickListener {
                     && navigationBarView.isRecentsButtonVisible();
             boolean touchExplorationEnabled = mAccessibilityService.isTouchExplorationEnabled();
             int descriptionStringResId;
-            if (recentsVisible) {
+            if (QuickStepContract.isGesturalMode(mNavBarMode)) {
+                descriptionStringResId = R.string.screen_pinning_description_gestural;
+            } else if (recentsVisible) {
                 mLayout.findViewById(R.id.screen_pinning_recents_group).setVisibility(VISIBLE);
                 mLayout.findViewById(R.id.screen_pinning_home_bg_light).setVisibility(INVISIBLE);
                 mLayout.findViewById(R.id.screen_pinning_home_bg).setVisibility(INVISIBLE);

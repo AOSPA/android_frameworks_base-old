@@ -599,6 +599,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     private static final String ODM_OVERLAY_DIR = "/odm/overlay";
 
+    private static final String OEM_OVERLAY_DIR = "/oem/overlay";
+
     /** Canonical intent used to identify what counts as a "web browser" app */
     private static final Intent sBrowserIntent;
     static {
@@ -938,6 +940,7 @@ public class PackageManagerService extends IPackageManager.Stub
     ComponentName mCustomResolverComponentName;
 
     boolean mResolverReplaced = false;
+    boolean mOkToReplacePersistentPackages = false;
 
     private final @Nullable ComponentName mIntentFilterVerifierComponent;
     private final @Nullable IntentFilterVerifier<ActivityIntentInfo> mIntentFilterVerifier;
@@ -952,6 +955,9 @@ public class PackageManagerService extends IPackageManager.Stub
     /** Activity used to install instant applications */
     ActivityInfo mInstantAppInstallerActivity;
     final ResolveInfo mInstantAppInstallerInfo = new ResolveInfo();
+
+    private final Map<String, Pair<PackageInstalledInfo, IPackageInstallObserver2>>
+            mNoKillInstallObservers = Collections.synchronizedMap(new HashMap<>());
 
     final SparseArray<IntentFilterVerificationState> mIntentFilterVerificationStates
             = new SparseArray<>();
@@ -1320,6 +1326,11 @@ public class PackageManagerService extends IPackageManager.Stub
     static final int INSTANT_APP_RESOLUTION_PHASE_TWO = 20;
     static final int ENABLE_ROLLBACK_STATUS = 21;
     static final int ENABLE_ROLLBACK_TIMEOUT = 22;
+    static final int DEFERRED_NO_KILL_POST_DELETE = 23;
+    static final int DEFERRED_NO_KILL_INSTALL_OBSERVER = 24;
+
+    static final int DEFERRED_NO_KILL_POST_DELETE_DELAY_MS = 3 * 1000;
+    static final int DEFERRED_NO_KILL_INSTALL_OBSERVER_DELAY_MS = 500;
 
     static final int WRITE_SETTINGS_DELAY = 10*1000;  // 10 seconds
 
@@ -1526,6 +1537,20 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
 
                     Trace.asyncTraceEnd(TRACE_TAG_PACKAGE_MANAGER, "postInstall", msg.arg1);
+                } break;
+                case DEFERRED_NO_KILL_POST_DELETE: {
+                    synchronized (mInstallLock) {
+                        InstallArgs args = (InstallArgs) msg.obj;
+                        if (args != null) {
+                            args.doPostDeleteLI(true);
+                        }
+                    }
+                } break;
+                case DEFERRED_NO_KILL_INSTALL_OBSERVER: {
+                    String packageName = (String) msg.obj;
+                    if (packageName != null) {
+                        notifyInstallObserver(packageName);
+                    }
                 } break;
                 case WRITE_SETTINGS: {
                     Process.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
@@ -1793,7 +1818,10 @@ public class PackageManagerService extends IPackageManager.Stub
             String[] grantedPermissions, List<String> whitelistedRestrictedPermissions,
             boolean launchedForRestore, String installerPackage,
             IPackageInstallObserver2 installObserver) {
-        if (res.returnCode == PackageManager.INSTALL_SUCCEEDED) {
+        final boolean succeeded = res.returnCode == PackageManager.INSTALL_SUCCEEDED;
+        final boolean update = res.removedInfo != null && res.removedInfo.removedPackage != null;
+
+        if (succeeded) {
             // Send the removed broadcasts
             if (res.removedInfo != null) {
                 res.removedInfo.sendPackageRemovedBroadcasts(killApp);
@@ -1821,8 +1849,6 @@ public class PackageManagerService extends IPackageManager.Stub
                         mPermissionCallback);
             }
 
-            final boolean update = res.removedInfo != null
-                    && res.removedInfo.removedPackage != null;
             final String installerPackageName =
                     res.installerPackageName != null
                             ? res.installerPackageName
@@ -2031,11 +2057,18 @@ public class PackageManagerService extends IPackageManager.Stub
                     getUnknownSourcesSettings());
 
             // Remove the replaced package's older resources safely now
-            // We delete after a gc for applications  on sdcard.
-            if (res.removedInfo != null && res.removedInfo.args != null) {
-                Runtime.getRuntime().gc();
-                synchronized (mInstallLock) {
-                    res.removedInfo.args.doPostDeleteLI(true);
+            InstallArgs args = res.removedInfo != null ? res.removedInfo.args : null;
+            if (args != null) {
+                if (!killApp) {
+                    // If we didn't kill the app, defer the deletion of code/resource files, since
+                    // they may still be in use by the running application. This mitigates problems
+                    // in cases where resources or code is loaded by a new Activity before
+                    // ApplicationInfo changes have propagated to all application threads.
+                    scheduleDeferredNoKillPostDelete(args);
+                } else {
+                    synchronized (mInstallLock) {
+                        args.doPostDeleteLI(true);
+                    }
                 }
             } else {
                 // Force a gc to clear up things. Ask for a background one, it's fine to go on
@@ -2058,16 +2091,60 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
 
-        // If someone is watching installs - notify them
+        final boolean deferInstallObserver = succeeded && update && !killApp;
+        if (deferInstallObserver) {
+            scheduleDeferredNoKillInstallObserver(res, installObserver);
+        } else {
+            notifyInstallObserver(res, installObserver);
+        }
+    }
+
+    @Override
+    public void notifyPackagesReplacedReceived(String[] packages) {
+        final int callingUid = Binder.getCallingUid();
+        final int callingUserId = UserHandle.getUserId(callingUid);
+
+        for (String packageName : packages) {
+            PackageSetting setting = mSettings.mPackages.get(packageName);
+            if (setting != null && filterAppAccessLPr(setting, callingUid, callingUserId)) {
+                notifyInstallObserver(packageName);
+            }
+        }
+    }
+
+    private void notifyInstallObserver(String packageName) {
+        Pair<PackageInstalledInfo, IPackageInstallObserver2> pair =
+                mNoKillInstallObservers.remove(packageName);
+
+        if (pair != null) {
+            notifyInstallObserver(pair.first, pair.second);
+        }
+    }
+
+    private void notifyInstallObserver(PackageInstalledInfo info,
+            IPackageInstallObserver2 installObserver) {
         if (installObserver != null) {
             try {
-                Bundle extras = extrasForInstallResult(res);
-                installObserver.onPackageInstalled(res.name, res.returnCode,
-                        res.returnMsg, extras);
+                Bundle extras = extrasForInstallResult(info);
+                installObserver.onPackageInstalled(info.name, info.returnCode,
+                        info.returnMsg, extras);
             } catch (RemoteException e) {
                 Slog.i(TAG, "Observer no longer exists.");
             }
         }
+    }
+
+    private void scheduleDeferredNoKillPostDelete(InstallArgs args) {
+        Message message = mHandler.obtainMessage(DEFERRED_NO_KILL_POST_DELETE, args);
+        mHandler.sendMessageDelayed(message, DEFERRED_NO_KILL_POST_DELETE_DELAY_MS);
+    }
+
+    private void scheduleDeferredNoKillInstallObserver(PackageInstalledInfo info,
+            IPackageInstallObserver2 observer) {
+        String packageName = info.pkg.packageName;
+        mNoKillInstallObservers.put(packageName, Pair.create(info, observer));
+        Message message = mHandler.obtainMessage(DEFERRED_NO_KILL_INSTALL_OBSERVER, packageName);
+        mHandler.sendMessageDelayed(message, DEFERRED_NO_KILL_INSTALL_OBSERVER_DELAY_MS);
     }
 
     /**
@@ -2300,6 +2377,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     public PackageManagerService(Context context, Installer installer,
             boolean factoryTest, boolean onlyCore) {
+        mApexManager = LocalServices.getService(ApexManager.class);
+
         LockGuard.installLock(mPackages, LockGuard.INDEX_PACKAGES);
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "create package manager");
         EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_START,
@@ -2558,6 +2637,13 @@ public class PackageManagerService extends IPackageManager.Stub
                     scanFlags
                     | SCAN_AS_SYSTEM
                     | SCAN_AS_ODM,
+                    0);
+            scanDirTracedLI(new File(OEM_OVERLAY_DIR),
+                    mDefParseFlags
+                    | PackageParser.PARSE_IS_SYSTEM_DIR,
+                    scanFlags
+                    | SCAN_AS_SYSTEM
+                    | SCAN_AS_OEM,
                     0);
 
             mParallelPackageParserCallback.findStaticOverlayPackages();
@@ -2839,28 +2925,50 @@ public class PackageManagerService extends IPackageManager.Stub
                 // Remove disable package settings for updated system apps that were
                 // removed via an OTA. If the update is no longer present, remove the
                 // app completely. Otherwise, revoke their system privileges.
-                for (String deletedAppName : possiblyDeletedUpdatedSystemApps) {
-                    PackageParser.Package deletedPkg = mPackages.get(deletedAppName);
-                    mSettings.removeDisabledSystemPackageLPw(deletedAppName);
+                for (int i = possiblyDeletedUpdatedSystemApps.size() - 1; i >= 0; --i) {
+                    final String packageName = possiblyDeletedUpdatedSystemApps.get(i);
+                    final PackageParser.Package pkg = mPackages.get(packageName);
                     final String msg;
-                    if (deletedPkg == null) {
+
+                    // remove from the disabled system list; do this first so any future
+                    // scans of this package are performed without this state
+                    mSettings.removeDisabledSystemPackageLPw(packageName);
+
+                    if (pkg == null) {
                         // should have found an update, but, we didn't; remove everything
-                        msg = "Updated system package " + deletedAppName
+                        msg = "Updated system package " + packageName
                                 + " no longer exists; removing its data";
                         // Actual deletion of code and data will be handled by later
                         // reconciliation step
                     } else {
                         // found an update; revoke system privileges
-                        msg = "Updated system package + " + deletedAppName
-                                + " no longer exists; revoking system privileges";
+                        msg = "Updated system package " + packageName
+                                + " no longer exists; rescanning package on data";
 
-                        // Don't do anything if a stub is removed from the system image. If
-                        // we were to remove the uncompressed version from the /data partition,
-                        // this is where it'd be done.
+                        // NOTE: We don't do anything special if a stub is removed from the
+                        // system image. But, if we were [like removing the uncompressed
+                        // version from the /data partition], this is where it'd be done.
 
-                        final PackageSetting deletedPs = mSettings.mPackages.get(deletedAppName);
-                        deletedPkg.applicationInfo.flags &= ~ApplicationInfo.FLAG_SYSTEM;
-                        deletedPs.pkgFlags &= ~ApplicationInfo.FLAG_SYSTEM;
+                        // remove the package from the system and re-scan it without any
+                        // special privileges
+                        removePackageLI(pkg, true);
+                        try {
+                            final File codePath = new File(pkg.applicationInfo.getCodePath());
+                            scanPackageTracedLI(codePath, 0, scanFlags, 0, null);
+                        } catch (PackageManagerException e) {
+                            Slog.e(TAG, "Failed to parse updated, ex-system package: "
+                                    + e.getMessage());
+                        }
+                    }
+
+                    // one final check. if we still have a package setting [ie. it was
+                    // previously scanned and known to the system], but, we don't have
+                    // a package [ie. there was an error scanning it from the /data
+                    // partition], completely remove the package data.
+                    final PackageSetting ps = mSettings.mPackages.get(packageName);
+                    if (ps != null && mPackages.get(packageName) == null) {
+                        removePackageDataLIF(ps, null, null, 0, false);
+
                     }
                     logCriticalInfo(Log.WARN, msg);
                 }
@@ -3216,7 +3324,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
-            mApexManager = new ApexManager(context);
             mInstallerService = new PackageInstallerService(context, this, mApexManager);
             final Pair<ComponentName, String> instantAppResolverComponent =
                     getInstantAppResolverLPr();
@@ -11650,6 +11757,11 @@ public class PackageManagerService extends IPackageManager.Stub
                     "Code and resource paths haven't been set correctly");
         }
 
+        if (mApexManager.isApexPackage(pkg.packageName)) {
+            throw new PackageManagerException(INSTALL_FAILED_DUPLICATE_PACKAGE,
+                    pkg.packageName + " is an APEX package and can't be installed as an APK.");
+        }
+
         // Make sure we're not adding any bogus keyset info
         final KeySetManagerService ksms = mSettings.mKeySetManagerService;
         ksms.assertScannedPackageValid(pkg);
@@ -17304,7 +17416,8 @@ public class PackageManagerService extends IPackageManager.Stub
                                         + " target SDK " + oldTargetSdk + " does.");
                     }
                     // Prevent persistent apps from being updated
-                    if ((oldPackage.applicationInfo.flags & ApplicationInfo.FLAG_PERSISTENT) != 0) {
+                    if (((oldPackage.applicationInfo.flags & ApplicationInfo.FLAG_PERSISTENT) != 0)
+                            && !mOkToReplacePersistentPackages) {
                         throw new PrepareFailure(PackageManager.INSTALL_FAILED_INVALID_APK,
                                 "Package " + oldPackage.packageName + " is a persistent app. "
                                         + "Persistent apps are not updateable.");
@@ -18749,6 +18862,7 @@ public class PackageManagerService extends IPackageManager.Stub
         boolean installedStateChanged = false;
         if (deletedPs != null) {
             if ((flags & PackageManager.DELETE_KEEP_DATA) == 0) {
+                final SparseBooleanArray changedUsers = new SparseBooleanArray();
                 synchronized (mPackages) {
                     clearIntentFilterVerificationsLPw(deletedPs.name, UserHandle.USER_ALL);
                     clearDefaultBrowserIfNeeded(packageName);
@@ -18780,10 +18894,9 @@ public class PackageManagerService extends IPackageManager.Stub
                             }
                         }
                     }
+                    clearPackagePreferredActivitiesLPw(
+                            deletedPs.name, changedUsers, UserHandle.USER_ALL);
                 }
-                final SparseBooleanArray changedUsers = new SparseBooleanArray();
-                clearPackagePreferredActivitiesLPw(
-                        deletedPs.name, changedUsers, UserHandle.USER_ALL);
                 if (changedUsers.size() > 0) {
                     updateDefaultHomeNotLocked(changedUsers);
                     postPreferredActivityChangedBroadcast(UserHandle.USER_ALL);
@@ -21452,7 +21565,6 @@ public class PackageManagerService extends IPackageManager.Stub
         storage.registerListener(mStorageListener);
 
         mInstallerService.systemReady();
-        mApexManager.systemReady();
         mPackageDexOptimizer.systemReady();
 
         getStorageManagerInternal().addExternalStoragePolicy(
@@ -21495,10 +21607,12 @@ public class PackageManagerService extends IPackageManager.Stub
 
         mModuleInfoProvider.systemReady();
 
+        mOkToReplacePersistentPackages = true;
         // Installer service might attempt to install some packages that have been staged for
         // installation on reboot. Make sure this is the last component to be call since the
         // installation might require other components to be ready.
         mInstallerService.restoreAndApplyStagedSessionIfNeeded();
+        mOkToReplacePersistentPackages = false;
     }
 
     public void waitForAppDataPrepared() {

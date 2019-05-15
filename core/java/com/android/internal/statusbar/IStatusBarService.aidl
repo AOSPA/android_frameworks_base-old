@@ -48,8 +48,7 @@ interface IStatusBarService
     void setIconVisibility(String slot, boolean visible);
     @UnsupportedAppUsage
     void removeIcon(String slot);
-    // TODO(b/117478341): support back button change when IME is showing on a external display.
-    void setImeWindowStatus(in IBinder token, int vis, int backDisposition,
+    void setImeWindowStatus(int displayId, in IBinder token, int vis, int backDisposition,
             boolean showImeSwitcher);
     void expandSettingsPanel(String subPanel);
 
@@ -77,6 +76,7 @@ interface IStatusBarService
             in int notificationLocation, boolean modifiedBeforeSending);
     void onNotificationSettingsViewed(String key);
     void setSystemUiVisibility(int displayId, int vis, int mask, String cause);
+    void onNotificationBubbleChanged(String key, boolean isBubble);
 
     void onGlobalActionsShown();
     void onGlobalActionsHidden();
@@ -103,7 +103,7 @@ interface IStatusBarService
     void showBiometricDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver, int type,
             boolean requireConfirmation, int userId);
     // Used to hide the dialog when a biometric is authenticated
-    void onBiometricAuthenticated(boolean authenticated);
+    void onBiometricAuthenticated(boolean authenticated, String failureReason);
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc
     void onBiometricHelp(String message);
     // Used to set a message - the dialog will dismiss after a certain amount of time

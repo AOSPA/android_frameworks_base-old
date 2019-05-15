@@ -341,7 +341,7 @@ TEST_F(ResourceParserTest, ParseAttrAndDeclareStyleableUnderConfigButRecordAsNoC
   std::string input = R"(
       <attr name="foo" />
       <declare-styleable name="bar">
-        <attr name="baz" />
+        <attr name="baz" format="reference"/>
       </declare-styleable>)";
   ASSERT_TRUE(TestParse(input, watch_config));
 
@@ -589,8 +589,7 @@ TEST_F(ResourceParserTest, ParseAttributesDeclareStyleable) {
   EXPECT_THAT(result.value().entry->visibility.level, Eq(Visibility::Level::kPublic));
 
   Attribute* attr = test::GetValue<Attribute>(&table_, "attr/bar");
-  ASSERT_THAT(attr, NotNull());
-  EXPECT_TRUE(attr->IsWeak());
+  ASSERT_THAT(attr, IsNull());
 
   attr = test::GetValue<Attribute>(&table_, "attr/bat");
   ASSERT_THAT(attr, NotNull());
@@ -971,6 +970,12 @@ TEST_F(ResourceParserTest, ParseOverlayablePolicy) {
         <policy type="signature">
           <item type="string" name="foz" />
         </policy>
+        <policy type="odm">
+          <item type="string" name="biz" />
+        </policy>
+        <policy type="oem">
+          <item type="string" name="buz" />
+        </policy>
       </overlayable>)";
   ASSERT_TRUE(TestParse(input));
 
@@ -1013,6 +1018,22 @@ TEST_F(ResourceParserTest, ParseOverlayablePolicy) {
   result_overlayable_item = search_result.value().entry->overlayable_item.value();
   EXPECT_THAT(result_overlayable_item.overlayable->name, Eq("Name"));
   EXPECT_THAT(result_overlayable_item.policies, Eq(OverlayableItem::Policy::kSignature));
+
+  search_result = table_.FindResource(test::ParseNameOrDie("string/biz"));
+  ASSERT_TRUE(search_result);
+  ASSERT_THAT(search_result.value().entry, NotNull());
+  ASSERT_TRUE(search_result.value().entry->overlayable_item);
+  result_overlayable_item = search_result.value().entry->overlayable_item.value();
+  EXPECT_THAT(result_overlayable_item.overlayable->name, Eq("Name"));
+  EXPECT_THAT(result_overlayable_item.policies, Eq(OverlayableItem::Policy::kOdm));
+
+  search_result = table_.FindResource(test::ParseNameOrDie("string/buz"));
+  ASSERT_TRUE(search_result);
+  ASSERT_THAT(search_result.value().entry, NotNull());
+  ASSERT_TRUE(search_result.value().entry->overlayable_item);
+  result_overlayable_item = search_result.value().entry->overlayable_item.value();
+  EXPECT_THAT(result_overlayable_item.overlayable->name, Eq("Name"));
+  EXPECT_THAT(result_overlayable_item.policies, Eq(OverlayableItem::Policy::kOem));
 }
 
 TEST_F(ResourceParserTest, ParseOverlayableNoPolicyError) {

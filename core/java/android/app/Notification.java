@@ -3165,8 +3165,8 @@ public class Notification implements Parcelable
     /**
      * Gets the {@link LocusId} associated with this notification.
      *
-     * <p>Used by the device's intelligence services to correlate objects (such as
-     * {@link ShortcutInfo} and {@link ContentCaptureContext}) that are correlated.
+     * <p>Used by the Android system to correlate objects (such as
+     * {@link ShortcutInfo} and {@link ContentCaptureContext}).
      */
     @Nullable
     public LocusId getLocusId() {
@@ -3534,8 +3534,8 @@ public class Notification implements Parcelable
          * Sets the {@link LocusId} associated with this notification.
          *
          * <p>This method should be called when the {@link LocusId} is used in other places (such
-         * as {@link ShortcutInfo} and {@link ContentCaptureContext}) so the device's intelligence
-         * services can correlate them.
+         * as {@link ShortcutInfo} and {@link ContentCaptureContext}) so the Android system can
+         * correlate them.
          */
         @NonNull
         public Builder setLocusId(@Nullable LocusId locusId) {
@@ -8642,22 +8642,11 @@ public class Notification implements Parcelable
         }
 
         /**
-         * @return whether this bubble should suppress the initial notification when it is posted.
-         *
-         * @see BubbleMetadata.Builder#setSuppressInitialNotification(boolean)
-         * @deprecated TO BE REMOVED, use {@link #getSuppressNotification()} instead.
-         */
-        @Deprecated
-        public boolean getSuppressInitialNotification() {
-            return (mFlags & FLAG_SUPPRESS_NOTIFICATION) != 0;
-        }
-
-        /**
          * @return whether this bubble should suppress the notification when it is posted.
          *
-         * @see BubbleMetadata.Builder#setSuppressInitialNotification(boolean)
+         * @see BubbleMetadata.Builder#setSuppressNotification(boolean)
          */
-        public boolean getSuppressNotification() {
+        public boolean isNotificationSuppressed() {
             return (mFlags & FLAG_SUPPRESS_NOTIFICATION) != 0;
         }
 
@@ -8804,27 +8793,6 @@ public class Notification implements Parcelable
             @NonNull
             public BubbleMetadata.Builder setAutoExpandBubble(boolean shouldExpand) {
                 setFlag(FLAG_AUTO_EXPAND_BUBBLE, shouldExpand);
-                return this;
-            }
-
-            /**
-             * If set and the app creating the bubble is in the foreground, the bubble will be
-             * posted <b>without</b> the associated notification in the notification shade.
-             * Subsequent update notifications to this bubble will post a notification in the shade.
-             *
-             * <p>If the app creating the bubble is not in the foreground this flag has no effect.
-             * </p>
-             *
-             * <p>Generally this flag should only be set if the user has performed an action to
-             * request or create a bubble.</p>
-             *
-             * @deprecated TO BE REMOVED, use {@link #setSuppressNotification(boolean)} instead.
-             */
-            @Deprecated
-            @NonNull
-            public BubbleMetadata.Builder setSuppressInitialNotification(
-                    boolean shouldSupressNotif) {
-                setFlag(FLAG_SUPPRESS_NOTIFICATION, shouldSupressNotif);
                 return this;
             }
 

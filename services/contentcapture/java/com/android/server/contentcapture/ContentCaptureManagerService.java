@@ -50,6 +50,7 @@ import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.DeviceConfig;
+import android.provider.DeviceConfig.Properties;
 import android.provider.Settings;
 import android.service.contentcapture.ActivityEvent.ActivityEventType;
 import android.util.ArraySet;
@@ -131,9 +132,9 @@ public final class ContentCaptureManagerService extends
                 com.android.internal.R.string.config_defaultContentCaptureService),
                 UserManager.DISALLOW_CONTENT_CAPTURE,
                 /*packageUpdatePolicy=*/ PACKAGE_UPDATE_POLICY_NO_REFRESH);
-        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.NAMESPACE_CONTENT_CAPTURE,
+        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_CONTENT_CAPTURE,
                 ActivityThread.currentApplication().getMainExecutor(),
-                (namespace, key, value) -> onDeviceConfigChange(key, value));
+                (properties) -> onDeviceConfigChange(properties));
         setDeviceConfigProperties();
 
         if (mDevCfgLogHistorySize > 0) {
@@ -255,23 +256,25 @@ public final class ContentCaptureManagerService extends
         return enabled;
     }
 
-    private void onDeviceConfigChange(@NonNull String key, @Nullable String value) {
-        switch (key) {
-            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_SERVICE_EXPLICITLY_ENABLED:
-                setDisabledByDeviceConfig(value);
-                return;
-            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOGGING_LEVEL:
-                setLoggingLevelFromDeviceConfig();
-                return;
-            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_MAX_BUFFER_SIZE:
-            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_FLUSH_FREQUENCY:
-            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOG_HISTORY_SIZE:
-            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_TEXT_CHANGE_FLUSH_FREQUENCY:
-            case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_UNBIND_TIMEOUT:
-                setFineTuneParamsFromDeviceConfig();
-                return;
-            default:
-                Slog.i(mTag, "Ignoring change on " + key);
+    private void onDeviceConfigChange(@NonNull Properties properties) {
+        for (String key : properties.getKeyset()) {
+            switch (key) {
+                case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_SERVICE_EXPLICITLY_ENABLED:
+                    setDisabledByDeviceConfig(properties.getString(key, null));
+                    return;
+                case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOGGING_LEVEL:
+                    setLoggingLevelFromDeviceConfig();
+                    return;
+                case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_MAX_BUFFER_SIZE:
+                case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_FLUSH_FREQUENCY:
+                case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_LOG_HISTORY_SIZE:
+                case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_TEXT_CHANGE_FLUSH_FREQUENCY:
+                case ContentCaptureManager.DEVICE_CONFIG_PROPERTY_IDLE_UNBIND_TIMEOUT:
+                    setFineTuneParamsFromDeviceConfig();
+                    return;
+                default:
+                    Slog.i(mTag, "Ignoring change on " + key);
+            }
         }
     }
 
@@ -781,36 +784,46 @@ public final class ContentCaptureManagerService extends
         @GuardedBy("mGlobalWhitelistStateLock")
         public ContentCaptureOptions getOptions(@UserIdInt int userId,
                 @NonNull String packageName) {
+            boolean packageWhitelisted;
+            ArraySet<ComponentName> whitelistedComponents = null;
             synchronized (mGlobalWhitelistStateLock) {
-                if (!isWhitelisted(userId, packageName)) {
-                    if (packageName.equals(mServicePackages.get(userId))) {
+                packageWhitelisted = isWhitelisted(userId, packageName);
+                if (!packageWhitelisted) {
+                    // Full package is not whitelisted: check individual components first
+                    whitelistedComponents = getWhitelistedComponents(userId, packageName);
+                    if (whitelistedComponents == null
+                            && packageName.equals(mServicePackages.get(userId))) {
+                        // No components whitelisted either, but let it go because it's the
+                        // service's own package
                         if (verbose) Slog.v(mTag, "getOptionsForPackage() lite for " + packageName);
                         return new ContentCaptureOptions(mDevCfgLoggingLevel);
                     }
-                    if (verbose) {
-                        Slog.v(mTag, "getOptionsForPackage(" + packageName + "): not whitelisted");
-                    }
+                }
+            } // synchronized
+
+            // Restrict what temporary services can whitelist
+            if (Build.IS_USER && mServiceNameResolver.isTemporary(userId)) {
+                if (!packageName.equals(mServicePackages.get(userId))) {
+                    Slog.w(mTag, "Ignoring package " + packageName + " while using temporary "
+                            + "service " + mServicePackages.get(userId));
                     return null;
                 }
-
-                final ArraySet<ComponentName> whitelistedComponents =
-                        getWhitelistedComponents(userId, packageName);
-                if (Build.IS_USER && mServiceNameResolver.isTemporary(userId)) {
-                    if (!packageName.equals(mServicePackages.get(userId))) {
-                        Slog.w(mTag, "Ignoring package " + packageName
-                                + " while using temporary service " + mServicePackages.get(userId));
-                        return null;
-                    }
-                }
-                final ContentCaptureOptions options = new ContentCaptureOptions(mDevCfgLoggingLevel,
-                        mDevCfgMaxBufferSize, mDevCfgIdleFlushingFrequencyMs,
-                        mDevCfgTextChangeFlushingFrequencyMs, mDevCfgLogHistorySize,
-                        whitelistedComponents);
-                if (verbose) {
-                    Slog.v(mTag, "getOptionsForPackage(" + packageName + "): " + options);
-                }
-                return options;
             }
+
+            if (!packageWhitelisted && whitelistedComponents == null) {
+                // No can do!
+                if (verbose) {
+                    Slog.v(mTag, "getOptionsForPackage(" + packageName + "): not whitelisted");
+                }
+                return null;
+            }
+
+            final ContentCaptureOptions options = new ContentCaptureOptions(mDevCfgLoggingLevel,
+                    mDevCfgMaxBufferSize, mDevCfgIdleFlushingFrequencyMs,
+                    mDevCfgTextChangeFlushingFrequencyMs, mDevCfgLogHistorySize,
+                    whitelistedComponents);
+            if (verbose) Slog.v(mTag, "getOptionsForPackage(" + packageName + "): " + options);
+            return options;
         }
 
         @Override

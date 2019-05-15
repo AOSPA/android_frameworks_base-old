@@ -35,6 +35,7 @@ import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.view.Display.TYPE_VIRTUAL;
 import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
@@ -163,6 +164,7 @@ import android.os.PowerManager;
 import android.os.PowerManager.ServiceType;
 import android.os.PowerManagerInternal;
 import android.os.PowerSaveState;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
@@ -5318,7 +5320,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     ": removed=" + win.mRemoved + " visible=" + win.isVisibleLw() +
                     " mHasSurface=" + win.mHasSurface +
                     " drawState=" + win.mWinAnimator.mDrawState);
-            if (win.mRemoved || !win.mHasSurface || !win.mPolicyVisibility) {
+            if (win.mRemoved || !win.mHasSurface || !win.isVisibleByPolicy()) {
                 // Window has been removed or hidden; no draw will now happen, so stop waiting.
                 if (DEBUG_SCREEN_ON) Slog.w(TAG_WM, "Aborted waiting for drawn: " + win);
                 mWaitingForDrawn.remove(win);
@@ -6900,8 +6902,19 @@ public class WindowManagerService extends IWindowManager.Stub
                         + "not exist: " + displayId);
                 return false;
             }
+            final Display display = displayContent.getDisplay();
+            if (isUntrustedVirtualDisplay(display)) {
+                return false;
+            }
             return displayContent.supportsSystemDecorations();
         }
+    }
+
+    /**
+     * @return {@code true} if the display is non-system created virtual display.
+     */
+    private static boolean isUntrustedVirtualDisplay(Display display) {
+        return display.getType() == TYPE_VIRTUAL && display.getOwnerUid() != Process.SYSTEM_UID;
     }
 
     @Override
@@ -6937,7 +6950,12 @@ public class WindowManagerService extends IWindowManager.Stub
                         + displayId);
                 return false;
             }
-            return mDisplayWindowSettings.shouldShowImeLocked(displayContent);
+            final Display display = displayContent.getDisplay();
+            if (isUntrustedVirtualDisplay(display)) {
+                return false;
+            }
+            return mDisplayWindowSettings.shouldShowImeLocked(displayContent)
+                    || mForceDesktopModeOnExternalDisplays;
         }
     }
 
@@ -7369,9 +7387,24 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
+        public int getTopFocusedDisplayId() {
+            synchronized (mGlobalLock) {
+                return mRoot.getTopFocusedDisplayContent().getDisplayId();
+            }
+        }
+
+        @Override
         public boolean shouldShowSystemDecorOnDisplay(int displayId) {
             synchronized (mGlobalLock) {
                 return WindowManagerService.this.shouldShowSystemDecors(displayId);
+            }
+        }
+
+        @Override
+        public boolean shouldShowIme(int displayId) {
+            synchronized (mGlobalLock) {
+                final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+                return mDisplayWindowSettings.shouldShowImeLocked(displayContent);
             }
         }
     }
@@ -7572,18 +7605,22 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         if (shouldWaitForAnimToComplete) {
-            waitForAnimationsToComplete();
-
-            synchronized (mGlobalLock) {
-                mWindowPlacerLocked.performSurfacePlacementIfScheduled();
-                mRoot.forAllDisplays(displayContent ->
-                        displayContent.getInputMonitor().updateInputWindowsImmediately());
-            }
-
-            new SurfaceControl.Transaction().syncInputWindows().apply(true);
+            syncInputTransactions();
         }
 
         return LocalServices.getService(InputManagerInternal.class).injectInputEvent(ev, mode);
+    }
+
+    @Override
+    public void syncInputTransactions() {
+        waitForAnimationsToComplete();
+
+        synchronized (mGlobalLock) {
+            mWindowPlacerLocked.performSurfacePlacementIfScheduled();
+            mRoot.forAllDisplays(displayContent ->
+                    displayContent.getInputMonitor().updateInputWindowsImmediately());
+        }
+        new SurfaceControl.Transaction().syncInputWindows().apply(true);
     }
 
     private void waitForAnimationsToComplete() {

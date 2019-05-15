@@ -67,6 +67,7 @@ import android.util.ArraySet;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.util.BoostFramework;
 import android.view.MotionEvent;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
@@ -191,6 +192,7 @@ class RecentTasks {
     private final HashMap<ComponentName, ActivityInfo> mTmpAvailActCache = new HashMap<>();
     private final HashMap<String, ApplicationInfo> mTmpAvailAppCache = new HashMap<>();
     private final SparseBooleanArray mTmpQuietProfileUserIds = new SparseBooleanArray();
+    private final BoostFramework mUxPerf = new BoostFramework();
 
     // TODO(b/127498985): This is currently a rough heuristic for interaction inside an app
     private final PointerEventListener mListener = new PointerEventListener() {
@@ -653,9 +655,11 @@ class RecentTasks {
     }
 
     void removeAllVisibleTasks(int userId) {
+        Set<Integer> profileIds = getProfileIds(userId);
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             final TaskRecord tr = mTasks.get(i);
-            if (tr.userId == userId && isVisibleRecentTask(tr)) {
+            if (!profileIds.contains(tr.userId)) continue;
+            if (isVisibleRecentTask(tr)) {
                 mTasks.remove(i);
                 notifyTaskRemoved(tr, true /* wasTrimmed */, true /* killProcess */);
             }
@@ -882,7 +886,7 @@ class RecentTasks {
 
             if (isVisibleRecentTask(tr)) {
                 numVisibleTasks++;
-                if (isInVisibleRange(tr, numVisibleTasks, withExcluded)) {
+                if (isInVisibleRange(tr, i, numVisibleTasks, withExcluded)) {
                     // Fall through
                 } else {
                     // Not in visible range
@@ -987,7 +991,7 @@ class RecentTasks {
             final TaskRecord tr = mTasks.get(i);
             if (isVisibleRecentTask(tr)) {
                 numVisibleTasks++;
-                if (isInVisibleRange(tr, numVisibleTasks, false /* skipExcludedCheck */)) {
+                if (isInVisibleRange(tr, i, numVisibleTasks, false /* skipExcludedCheck */)) {
                     res.put(tr.taskId, true);
                 }
             }
@@ -1156,6 +1160,13 @@ class RecentTasks {
     void remove(TaskRecord task) {
         mTasks.remove(task);
         notifyTaskRemoved(task, false /* wasTrimmed */, false /* killProcess */);
+        if (task != null) {
+            final String taskPkgName =
+                  task.getBaseIntent().getComponent().getPackageName();
+            if (mUxPerf != null) {
+                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, taskPkgName, 0);
+            }
+        }
     }
 
     /**
@@ -1208,7 +1219,7 @@ class RecentTasks {
                     continue;
                 } else {
                     numVisibleTasks++;
-                    if (isInVisibleRange(task, numVisibleTasks, false /* skipExcludedCheck */)
+                    if (isInVisibleRange(task, i, numVisibleTasks, false /* skipExcludedCheck */)
                             || !isTrimmable(task)) {
                         // Keep visible tasks in range
                         i++;
@@ -1323,7 +1334,7 @@ class RecentTasks {
     /**
      * @return whether the given visible task is within the policy range.
      */
-    private boolean isInVisibleRange(TaskRecord task, int numVisibleTasks,
+    private boolean isInVisibleRange(TaskRecord task, int taskIndex, int numVisibleTasks,
             boolean skipExcludedCheck) {
         if (!skipExcludedCheck) {
             // Keep the most recent task even if it is excluded from recents
@@ -1332,7 +1343,7 @@ class RecentTasks {
                             == FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
             if (isExcludeFromRecents) {
                 if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "\texcludeFromRecents=true");
-                return numVisibleTasks == 1;
+                return taskIndex == 0;
             }
         }
 

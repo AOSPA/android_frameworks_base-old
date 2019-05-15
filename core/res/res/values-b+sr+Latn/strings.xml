@@ -293,9 +293,9 @@
     <string name="permgrouplab_sms" msgid="228308803364967808">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="4656988620100940350">"šalje i pregleda SMS poruke"</string>
     <string name="permgrouprequest_sms" msgid="7168124215838204719">"Želite li da omogućite da &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; šalje i pregleda SMS-ove?"</string>
-    <string name="permgrouplab_storage" msgid="1971118770546336966">"Memorija"</string>
+    <string name="permgrouplab_storage" msgid="1971118770546336966">"Memorijski prostor"</string>
     <string name="permgroupdesc_storage" msgid="637758554581589203">"pristupa slikama, medijima i datotekama na uređaju"</string>
-    <string name="permgrouprequest_storage" msgid="7885942926944299560">"Želite li da omogućite da &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;pristupa slikama, medijskim datotekama i datotekama na uređaju?"</string>
+    <string name="permgrouprequest_storage" msgid="7885942926944299560">"Želite li da omogućite da &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; pristupa slikama, medijskim datotekama i datotekama na uređaju?"</string>
     <string name="permgrouplab_microphone" msgid="171539900250043464">"Mikrofon"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"snima zvuk"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"Želite li da omogućite da &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; snima zvuk?"</string>
@@ -556,6 +556,9 @@
     <string name="permdesc_manageFace" msgid="8919637120670185330">"Dozvoljava da aplikacija aktivira metode za dodavanje i brisanje šablona lica radi korišćenja."</string>
     <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"korišćenje hardv. za potvrdu identiteta pomoću lica"</string>
     <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"Dozvoljava da aplikacija koristi hardver za potvrdu identiteta pomoću lica"</string>
+    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"Potvrda identiteta licem"</string>
+    <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"Ponovo registrujte lice"</string>
+    <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"Da biste poboljšali prepoznavanje, ponovo registrujte lice"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"Snimanje lica nije uspelo. Probajte ponovo."</string>
     <string name="face_acquired_too_bright" msgid="5005650874582450967">"Previše je svetlo. Probajte sa slabijim osvetljenjem."</string>
     <string name="face_acquired_too_dark" msgid="1966194696381394616">"Pretamno je. Probajte sa jačim osvetljenjem."</string>

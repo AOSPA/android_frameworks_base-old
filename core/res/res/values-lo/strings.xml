@@ -553,6 +553,9 @@
     <string name="permdesc_manageFace" msgid="8919637120670185330">"ອະນຸຍາດໃຫ້ແອັບເປີດວິທີການຕ່າງໆເພື່ອເພີ່ມ ແລະ ລຶບແມ່ແບບໃບໜ້າສຳລັບການນຳໃຊ້."</string>
     <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"ໃຊ້ຮາດແວການກວດສອບຄວາມຖືກຕ້ອງດ້ວຍໃບໜ້າ"</string>
     <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"ອະນຸຍາດໃຫ້ແອັບໃຊ້ຮາດແວການກວດສອບຄວາມຖືກຕ້ອງດ້ວຍໃບໜ້າສຳລັບການກວດສອບຄວາມຖືກຕ້ອງ"</string>
+    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"ການພິສູດຢືນຢັນດ້ວຍໃບໜ້າ"</string>
+    <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"ລົງທະບຽນໃບໜ້າຂອງທ່ານຄືນໃໝ່"</string>
+    <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"ເພື່ອປັບປຸງການຈຳແນກ, ກະລຸນາລົງທະບຽນໃບໜ້າຂອງທ່ານຄືນໃໝ່."</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"ບໍ່ສາມາດບັນທຶກຂໍ້ມູນໃບໜ້າທີ່ຖືກຕ້ອງໄດ້. ກະລຸນາລອງໃໝ່."</string>
     <string name="face_acquired_too_bright" msgid="5005650874582450967">"ແຈ້ງເກີນໄປ. ລອງຄ່ອຍແສງໄຟລົງ."</string>
     <string name="face_acquired_too_dark" msgid="1966194696381394616">"ມືດເກີນ. ກະລຸນາລອງໃຊ້ສະພາບແສງທີ່ແຈ້ງຂຶ້ນ."</string>
@@ -560,10 +563,8 @@
     <string name="face_acquired_too_far" msgid="1210969240069012510">"ຍ້າຍໂທລະສັບເຂົ້າໄປໃກ້ຂຶ້ນ."</string>
     <string name="face_acquired_too_high" msgid="3362395713403348013">"ຍົກໂທລະສັບໃຫ້ສູງຂຶ້ນ."</string>
     <string name="face_acquired_too_low" msgid="488983581737550912">"ເລື່ອນໂທລະສັບຕ່ຳລົງ."</string>
-    <!-- no translation found for face_acquired_too_right (3667075962661863218) -->
-    <skip />
-    <!-- no translation found for face_acquired_too_left (3148242963894703424) -->
-    <skip />
+    <string name="face_acquired_too_right" msgid="3667075962661863218">"ຍ້າຍໂທລະສັບໄປທາງຊ້າຍ."</string>
+    <string name="face_acquired_too_left" msgid="3148242963894703424">"ຍ້າຍໂທລະສັບໄປທາງຂວາ."</string>
     <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"ກະລຸນາເບິ່ງໜ້າຈໍພ້ອມກັບເປີດຕາທ່ານ."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"ບໍ່ສາມາດເບິ່ງເຫັນໜ້າຂອງທ່ານໄດ້. ກະລຸນາເບິ່ງໂທລະສັບ."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"ເຄື່ອນໄຫວຫຼາຍເກີນໄປ. ກະລຸນາຖືໂທລະສັບໄວ້ຊື່ໆ."</string>
