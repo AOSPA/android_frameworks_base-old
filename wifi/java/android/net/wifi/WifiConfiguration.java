@@ -184,8 +184,8 @@ public class WifiConfiguration implements Parcelable {
 
         public static final String[] strings = { "NONE", "WPA_PSK", "WPA_EAP",
                 "IEEE8021X", "WPA2_PSK", "OSEN", "FT_PSK", "FT_EAP",
-                "SAE", "OWE", "SUITE_B_192", "FILS_SHA256", "FILS_SHA384",
-                "DPP", "WPA_PSK_SHA256", "WPA_EAP_SHA256",
+                "SAE", "OWE", "SUITE_B_192", "WPA_PSK_SHA256", "WPA_EAP_SHA256",
+                "FILS_SHA256", "FILS_SHA384", "DPP",
         };
     }
 
