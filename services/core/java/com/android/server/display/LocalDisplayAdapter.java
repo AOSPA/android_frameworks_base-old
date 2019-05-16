@@ -405,7 +405,9 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 mInfo.presentationDeadlineNanos = phys.presentationDeadlineNanos;
                 mInfo.state = mState;
                 mInfo.uniqueId = getUniqueId();
-                mInfo.address = DisplayAddress.fromPhysicalDisplayId(mPhysicalDisplayId);
+                final DisplayAddress.Physical physicalAddress =
+                        DisplayAddress.fromPhysicalDisplayId(mPhysicalDisplayId);
+                mInfo.address = physicalAddress;
 
                 // Assume that all built-in displays that have secure output (eg. HDCP) also
                 // support compositing from gralloc protected buffers.
@@ -415,6 +417,8 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 }
 
                 final Resources res = getOverlayContext().getResources();
+                final boolean isBuiltIn = ((mInfo.address) != null) ?
+                   (((DisplayAddress.Physical) mInfo.address).getPort() < 0) : false;
                 if (mIsInternal) {
                     mInfo.name = res.getString(
                             com.android.internal.R.string.display_manager_built_in_display_name);
@@ -436,6 +440,26 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                     mInfo.xDpi = phys.xDpi;
                     mInfo.yDpi = phys.yDpi;
                     mInfo.touch = DisplayDeviceInfo.TOUCH_INTERNAL;
+                } else if (isBuiltIn) {
+                    mInfo.type = Display.TYPE_BUILT_IN;
+                    mInfo.touch = DisplayDeviceInfo.TOUCH_INTERNAL;
+                    mInfo.name = getContext().getResources().getString(
+                            com.android.internal.R.string.display_manager_built_in_display_name);
+                    mInfo.flags |= DisplayDeviceInfo.FLAG_ROTATES_WITH_CONTENT;
+
+                    if (SystemProperties.getBoolean(
+                                    "vendor.display.builtin_presentation", false)) {
+                        mInfo.flags |= DisplayDeviceInfo.FLAG_PRESENTATION;
+                    } else {
+                        mInfo.flags |= DisplayDeviceInfo.FLAG_PRIVATE;
+                    }
+
+                    if (!SystemProperties.getBoolean(
+                                    "vendor.display.builtin_mirroring", false)) {
+                        mInfo.flags |= DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY;
+                    }
+
+                    mInfo.setAssumedDensityForExternalDisplay(phys.width, phys.height);
                 } else {
                     mInfo.displayCutout = null;
                     mInfo.type = Display.TYPE_HDMI;
@@ -462,7 +486,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY;
                     }
 
-                    if (res.getBoolean(com.android.internal.R.bool.config_localDisplaysPrivate)) {
+                    if (isDisplayPrivate(physicalAddress)) {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_PRIVATE;
                     }
                 }
@@ -796,6 +820,24 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 modes[i] = record.mMode;
             }
             return modes;
+        }
+
+        private boolean isDisplayPrivate(DisplayAddress.Physical physicalAddress) {
+            if (physicalAddress == null) {
+                return false;
+            }
+            final Resources res = getOverlayContext().getResources();
+            int[] ports = res.getIntArray(
+                    com.android.internal.R.array.config_localPrivateDisplayPorts);
+            if (ports != null) {
+                int port = physicalAddress.getPort();
+                for (int p : ports) {
+                    if (p == port) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 

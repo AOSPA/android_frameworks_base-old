@@ -476,7 +476,20 @@ public abstract class WindowManagerInternal {
     public abstract int getDisplayIdForWindow(IBinder windowToken);
 
     /**
-     * Checks whether this display should support showing system decorations.
+     * @return The top focused display ID.
+     */
+    public abstract int getTopFocusedDisplayId();
+
+    /**
+     * Checks if this display is configured and allowed to show system decorations.
      */
     public abstract boolean shouldShowSystemDecorOnDisplay(int displayId);
+
+    /**
+     * Indicates that the display should show IME.
+     *
+     * @param displayId The id of the display.
+     * @return {@code true} if the display should show IME when an input field become focused on it.
+     */
+    public abstract boolean shouldShowIme(int displayId);
 }

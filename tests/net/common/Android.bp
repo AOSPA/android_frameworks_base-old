@@ -18,9 +18,10 @@
 // They must be fast and stable, and exercise public or test APIs.
 java_library {
     name: "FrameworksNetCommonTests",
-    srcs: ["java/**/*.java"],
+    srcs: ["java/**/*.java", "java/**/*.kt"],
     static_libs: [
         "androidx.test.rules",
+        "frameworks-net-testutils",
         "junit",
     ],
     libs: [

@@ -797,6 +797,12 @@ class SettingsProtoDumpUtil {
                 Settings.Global.JOB_SCHEDULER_CONSTANTS,
                 GlobalSettingsProto.JOB_SCHEDULER_CONSTANTS);
         dumpSetting(s, p,
+                Settings.Global.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS,
+                GlobalSettingsProto.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS);
+        dumpSetting(s, p,
+                Settings.Global.JOB_SCHEDULER_TIME_CONTROLLER_CONSTANTS,
+                GlobalSettingsProto.JOB_SCHEDULER_TIME_CONTROLLER_CONSTANTS);
+        dumpSetting(s, p,
                 Settings.Global.KEEP_PROFILE_IN_BACKGROUND,
                 GlobalSettingsProto.KEEP_PROFILE_IN_BACKGROUND);
 
@@ -1239,6 +1245,8 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.SMS_SHORT_CODES_UPDATE_METADATA_URL,
                 GlobalSettingsProto.Sms.SHORT_CODES_UPDATE_METADATA_URL);
+        p.end(smsToken);
+
         final long soundsToken = p.start(GlobalSettingsProto.SOUNDS);
         dumpSetting(s, p,
                 Settings.Global.CAR_DOCK_SOUND,

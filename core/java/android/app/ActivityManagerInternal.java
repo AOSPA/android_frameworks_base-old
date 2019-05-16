@@ -80,6 +80,13 @@ public abstract class ActivityManagerInternal {
             IIntentSender target, IBinder whitelistToken, int flags);
 
     /**
+     * Voids {@link PendingIntent}'s privilege to be whitelisted to start activities from
+     * background.
+     */
+    public abstract void clearPendingIntentAllowBgActivityStarts(IIntentSender target,
+            IBinder whitelistToken);
+
+    /**
      * Allow DeviceIdleController to tell us about what apps are whitelisted.
      */
     public abstract void setDeviceIdleWhitelist(int[] allAppids, int[] exceptIdleAppids);
@@ -357,4 +364,7 @@ public abstract class ActivityManagerInternal {
      * Unregisters the specified {@code processObserver}.
      */
     public abstract void unregisterProcessObserver(IProcessObserver processObserver);
+
+    // Starts a process as empty.
+    public abstract int startActivityAsUserEmpty(Bundle options);
 }

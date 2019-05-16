@@ -30,6 +30,7 @@ import static com.android.systemui.Dependency.MAIN_HANDLER;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_ASLEEP;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_AWAKE;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_WAKING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BOUNCER_SHOWING;
 import static com.android.systemui.shared.system.WindowManagerWrapper.NAV_BAR_POS_INVALID;
 import static com.android.systemui.shared.system.WindowManagerWrapper.NAV_BAR_POS_LEFT;
 import static com.android.systemui.statusbar.NotificationLockscreenUserManager.PERMISSION_SELF;
@@ -166,6 +167,7 @@ import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.Snoo
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSFragment;
 import com.android.systemui.qs.QSPanel;
+import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.system.WindowManagerWrapper;
@@ -591,11 +593,12 @@ public class StatusBar extends SystemUI implements DemoMode,
                 updateScrimController();
             };
     private ActivityIntentHelper mActivityIntentHelper;
+    private ShadeController mShadeController;
 
     @Override
     public void onActiveStateChanged(int code, int uid, String packageName, boolean active) {
-        mForegroundServiceController.onAppOpChanged(code, uid, packageName, active);
         Dependency.get(MAIN_HANDLER).post(() -> {
+            mForegroundServiceController.onAppOpChanged(code, uid, packageName, active);
             mNotificationListController.updateNotificationsForAppOp(code, uid, packageName, active);
         });
     }
@@ -708,7 +711,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         setSystemUiVisibility(mDisplayId, result.mSystemUiVisibility,
                 result.mFullscreenStackSysUiVisibility, result.mDockedStackSysUiVisibility,
-                0xffffffff, result.mFullscreenStackBounds, result.mDockedStackBounds);
+                0xffffffff, result.mFullscreenStackBounds, result.mDockedStackBounds,
+                result.mNavbarColorManagedByIme);
         topAppWindowChanged(mDisplayId, result.mMenuVisible);
         // StatusBarManagerService has a back up of IME token and it's restored here.
         setImeWindowStatus(mDisplayId, result.mImeToken, result.mImeWindowVis,
@@ -879,7 +883,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mKeyguardIndicationController =
                 SystemUIFactory.getInstance().createKeyguardIndicationController(mContext,
                         mStatusBarWindow.findViewById(R.id.keyguard_indication_area),
-                        mNotificationPanel.getLockIcon());
+                        mStatusBarWindow.findViewById(R.id.lock_icon));
         mNotificationPanel.setKeyguardIndicationController(mKeyguardIndicationController);
 
         mAmbientIndicationContainer = mStatusBarWindow.findViewById(
@@ -1060,7 +1064,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         final StatusBarRemoteInputCallback mStatusBarRemoteInputCallback =
                 (StatusBarRemoteInputCallback) Dependency.get(
                         NotificationRemoteInputManager.Callback.class);
-        final ShadeController shadeController = Dependency.get(ShadeController.class);
+        mShadeController = Dependency.get(ShadeController.class);
         final ActivityStarter activityStarter = Dependency.get(ActivityStarter.class);
 
         mNotificationActivityStarter = new StatusBarNotificationActivityStarter(mContext,
@@ -1068,7 +1072,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 mHeadsUpManager, activityStarter, mActivityLaunchAnimator,
                 mBarService, mStatusBarStateController, mKeyguardManager, mDreamManager,
                 mRemoteInputManager, mStatusBarRemoteInputCallback, mGroupManager,
-                mLockscreenUserManager, shadeController, mKeyguardMonitor,
+                mLockscreenUserManager, mShadeController, mKeyguardMonitor,
                 mNotificationInterruptionStateProvider, mMetricsLogger,
                 new LockPatternUtils(mContext), Dependency.get(MAIN_HANDLER),
                 Dependency.get(BG_HANDLER), mActivityIntentHelper, mBubbleController);
@@ -1164,18 +1168,6 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     @Override
     public void onThemeChanged() {
-        // Recreate Indication controller because internal references changed
-        if (mKeyguardIndicationController != null) {
-            mKeyguardIndicationController.destroy();
-        }
-        mKeyguardIndicationController =
-                SystemUIFactory.getInstance().createKeyguardIndicationController(mContext,
-                        mStatusBarWindow.findViewById(R.id.keyguard_indication_area),
-                        mNotificationPanel.getLockIcon());
-        mNotificationPanel.setKeyguardIndicationController(mKeyguardIndicationController);
-        mKeyguardIndicationController
-                .setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
-        mKeyguardIndicationController.setVisible(mState == StatusBarState.KEYGUARD);
         if (mStatusBarKeyguardViewManager != null) {
             mStatusBarKeyguardViewManager.onThemeChanged();
         }
@@ -1222,7 +1214,8 @@ public class StatusBar extends SystemUI implements DemoMode,
                 mScrimController, this, UnlockMethodCache.getInstance(mContext),
                 new Handler(), mKeyguardUpdateMonitor, Dependency.get(TunerService.class));
         mStatusBarKeyguardViewManager = keyguardViewMediator.registerStatusBar(this,
-                getBouncerContainer(), mNotificationPanel, mBiometricUnlockController);
+                getBouncerContainer(), mNotificationPanel, mBiometricUnlockController,
+                mStatusBarWindow.findViewById(R.id.lock_icon_container));
         mKeyguardIndicationController
                 .setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
         mBiometricUnlockController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
@@ -1231,7 +1224,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         mKeyguardViewMediatorCallback = keyguardViewMediator.getViewMediatorCallback();
         mLightBarController.setBiometricUnlockController(mBiometricUnlockController);
         mMediaManager.setBiometricUnlockController(mBiometricUnlockController);
-        mNotificationPanel.setBouncer(mStatusBarKeyguardViewManager.getBouncer());
         Dependency.get(KeyguardDismissUtil.class).setDismissHandler(this::executeWhenUnlocked);
         Trace.endSection();
     }
@@ -2087,7 +2079,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     @Override // CommandQueue
     public void setSystemUiVisibility(int displayId, int vis, int fullscreenStackVis,
-            int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds) {
+            int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds,
+            boolean navbarColorManagedByIme) {
         if (displayId != mDisplayId) {
             return;
         }
@@ -2124,7 +2117,8 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
         }
         mLightBarController.onSystemUiVisibilityChanged(fullscreenStackVis, dockedStackVis,
-                mask, fullscreenStackBounds, dockedStackBounds, sbModeChanged, mStatusBarMode);
+                mask, fullscreenStackBounds, dockedStackBounds, sbModeChanged, mStatusBarMode,
+                navbarColorManagedByIme);
     }
 
     @Override
@@ -2245,11 +2239,12 @@ public class StatusBar extends SystemUI implements DemoMode,
         Log.v(TAG, "setLightsOn(" + on + ")");
         if (on) {
             setSystemUiVisibility(mDisplayId, 0, 0, 0, View.SYSTEM_UI_FLAG_LOW_PROFILE,
-                    mLastFullscreenStackBounds, mLastDockedStackBounds);
+                    mLastFullscreenStackBounds, mLastDockedStackBounds,
+                    false /* navbarColorManagedByIme */);
         } else {
             setSystemUiVisibility(mDisplayId, View.SYSTEM_UI_FLAG_LOW_PROFILE, 0, 0,
                     View.SYSTEM_UI_FLAG_LOW_PROFILE, mLastFullscreenStackBounds,
-                    mLastDockedStackBounds);
+                    mLastDockedStackBounds, false /* navbarColorManagedByIme */);
         }
     }
 
@@ -3292,6 +3287,11 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             return true;
         }
+        if (mStatusBarWindowController.hasAssistActiveSession()) {
+            // Back pressed during an assist session, cancel it.
+            mAssistManager.hideAssist();
+            return true;
+        }
         if (mState != StatusBarState.KEYGUARD && mState != StatusBarState.SHADE_LOCKED) {
             if (mNotificationPanel.canPanelBeCollapsed()) {
                 animateCollapsePanels();
@@ -3324,7 +3324,11 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     @Override
     public void showBouncer(boolean scrimmed) {
-        mStatusBarKeyguardViewManager.showBouncer(scrimmed);
+        if (!mIsOccluded && !scrimmed && mState == StatusBarState.KEYGUARD) {
+            animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE, true /* force */);
+        } else {
+            mStatusBarKeyguardViewManager.showBouncer(scrimmed);
+        }
     }
 
     @Override
@@ -3582,6 +3586,10 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (!mBouncerShowing) {
             updatePanelExpansionForKeyguard();
         }
+
+        // Notify overview proxy service of the new states
+        Dependency.get(OverviewProxyService.class).setSystemUiStateFlag(SYSUI_STATE_BOUNCER_SHOWING,
+                isBouncerShowing(), mContext.getDisplayId());
     }
 
     /**
@@ -3920,6 +3928,10 @@ public class StatusBar extends SystemUI implements DemoMode,
                 mScrimController.setWakeLockScreenSensorActive(true);
             }
 
+            if (reason == DozeLog.PULSE_REASON_DOCKING && mStatusBarWindow != null) {
+                mStatusBarWindow.suppressWakeUpGesture(true);
+            }
+
             boolean passiveAuthInterrupt = reason == DozeLog.PULSE_REASON_NOTIFICATION;
             // Set the state to pulsing, so ScrimController will know what to do once we ask it to
             // execute the transition. The pulse callback will then be invoked when the scrims
@@ -3939,6 +3951,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                     callback.onPulseFinished();
                     updateNotificationPanelTouchState();
                     mScrimController.setWakeLockScreenSensorActive(false);
+                    if (mStatusBarWindow != null) {
+                        mStatusBarWindow.suppressWakeUpGesture(false);
+                    }
                     setPulsing(false);
                 }
 
@@ -3947,6 +3962,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                     mKeyguardViewMediator.setPulsing(pulsing);
                     mNotificationPanel.setPulsing(pulsing);
                     mVisualStabilityManager.setPulsing(pulsing);
+                    mStatusBarWindow.setPulsing(pulsing);
                     mIgnoreTouchWhilePulsing = false;
                     if (mKeyguardUpdateMonitor != null && passiveAuthInterrupt) {
                         mKeyguardUpdateMonitor.onAuthInterruptDetected(pulsing /* active */);
@@ -4333,6 +4349,13 @@ public class StatusBar extends SystemUI implements DemoMode,
     @Override
     public void startPendingIntentDismissingKeyguard(
             final PendingIntent intent, @Nullable final Runnable intentSentUiThreadCallback) {
+        startPendingIntentDismissingKeyguard(intent, intentSentUiThreadCallback, null /* row */);
+    }
+
+    @Override
+    public void startPendingIntentDismissingKeyguard(
+            final PendingIntent intent, @Nullable final Runnable intentSentUiThreadCallback,
+            View associatedView) {
         final boolean afterKeyguardGone = intent.isActivity()
                 && mActivityIntentHelper.wouldLaunchResolverActivity(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
@@ -4340,7 +4363,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         executeActionDismissingKeyguard(() -> {
             try {
                 intent.send(null, 0, null, null, null, null, getActivityOptions(
-                        null /* animationAdapter */));
+                        mActivityLaunchAnimator.getLaunchAnimation(associatedView,
+                                mShadeController.isOccluded())));
             } catch (PendingIntent.CanceledException e) {
                 // the stack trace isn't very helpful here.
                 // Just log the exception message.
@@ -4414,6 +4438,13 @@ public class StatusBar extends SystemUI implements DemoMode,
      */
     public boolean isBouncerShowing() {
         return mBouncerShowing;
+    }
+
+    /**
+     * @return Whether the security bouncer from Keyguard is showing.
+     */
+    public boolean isBouncerShowingScrimmed() {
+        return isBouncerShowing() && mStatusBarKeyguardViewManager.bouncerNeedsScrimming();
     }
 
     /**

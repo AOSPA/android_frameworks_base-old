@@ -27,6 +27,7 @@ import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
+import android.os.SystemProperties;
 import android.telephony.CarrierConfigManager;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
@@ -40,9 +41,12 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.TelephonyIntents;
+import com.android.internal.telephony.TelephonyProperties;
 import com.android.settingslib.WirelessUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.statusbar.policy.FiveGServiceClient;
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +74,9 @@ public class CarrierTextController {
     private Context mContext;
     private CharSequence mSeparator;
     private WakefulnessLifecycle mWakefulnessLifecycle;
+    @VisibleForTesting
+    protected boolean mDisplayOpportunisticSubscriptionCarrierText;
+    private FiveGServiceClient mFiveGServiceClient;
     private final WakefulnessLifecycle.Observer mWakefulnessObserver =
             new WakefulnessLifecycle.Observer() {
                 @Override
@@ -247,7 +254,6 @@ public class CarrierTextController {
     }
 
     /**
-     * STOPSHIP(b/130246708) remove when no longer needed for testing purpose.
      * @param subscriptions
      */
     private void filterMobileSubscriptionInSameGroup(List<SubscriptionInfo> subscriptions) {
@@ -274,6 +280,35 @@ public class CarrierTextController {
         }
     }
 
+    /**
+     * updates if opportunistic sub carrier text should be displayed or not
+     *
+     */
+    @VisibleForTesting
+    public void updateDisplayOpportunisticSubscriptionCarrierText() {
+        mDisplayOpportunisticSubscriptionCarrierText = SystemProperties
+            .getBoolean(TelephonyProperties
+                .DISPLAY_OPPORTUNISTIC_SUBSCRIPTION_CARRIER_TEXT_PROPERTY_NAME, false);
+    }
+
+    protected List<SubscriptionInfo> getSubscriptionInfo() {
+        List<SubscriptionInfo> subs;
+        if (mDisplayOpportunisticSubscriptionCarrierText) {
+            SubscriptionManager subscriptionManager = ((SubscriptionManager) mContext
+                    .getSystemService(
+                    Context.TELEPHONY_SUBSCRIPTION_SERVICE));
+            subs = subscriptionManager.getActiveSubscriptionInfoList(false);
+            if (subs == null) {
+                subs = new ArrayList<>();
+            } else {
+                filterMobileSubscriptionInSameGroup(subs);
+            }
+        } else {
+            subs = mKeyguardUpdateMonitor.getSubscriptionInfo(false);
+        }
+        return subs;
+    }
+
     protected void updateCarrierText() {
         boolean allSimsMissing = true;
         boolean anySimReadyAndInService = false;
@@ -281,17 +316,7 @@ public class CarrierTextController {
         boolean showCustomizeName = getContext().getResources().getBoolean(
                 com.android.systemui.R.bool.config_show_customize_carrier_name);
         CharSequence displayText = null;
-
-        // STOPSHIP(b/130246708) revert to mKeyguardUpdateMonitor.getSubscriptionInfo(false).
-        SubscriptionManager subscriptionManager = ((SubscriptionManager) mContext.getSystemService(
-                Context.TELEPHONY_SUBSCRIPTION_SERVICE));
-        List<SubscriptionInfo> subs = subscriptionManager.getActiveSubscriptionInfoList(false);
-
-        if (subs == null) {
-            subs = new ArrayList<>();
-        } else {
-            filterMobileSubscriptionInSameGroup(subs);
-        }
+        List<SubscriptionInfo> subs = getSubscriptionInfo();
 
         final int numSubs = subs.size();
         final int[] subsIds = new int[numSubs];
@@ -313,7 +338,7 @@ public class CarrierTextController {
             IccCardConstants.State simState = mKeyguardUpdateMonitor.getSimState(subId);
             CharSequence carrierName = subs.get(i).getCarrierName();
             if ( showCustomizeName ) {
-                carrierName = getCustomizeCarrierName(carrierName, subId);
+                carrierName = getCustomizeCarrierName(carrierName, subs.get(i));
             }
             CharSequence carrierTextForSimState = getCarrierTextForSimState(simState, carrierName);
             if (DEBUG) {
@@ -390,7 +415,7 @@ public class CarrierTextController {
         }
 
         if (TextUtils.isEmpty(displayText) && !airplaneMode) {
-            displayText = TextUtils.join(mSeparator, carrierNames);
+            displayText = joinNotEmpty(mSeparator, carrierNames);
         }
         final CarrierTextCallbackInfo info = new CarrierTextCallbackInfo(
                 displayText,
@@ -553,6 +578,25 @@ public class CarrierTextController {
         }
     }
 
+    /**
+     * Joins the strings in a sequence using a separator. Empty strings are discarded with no extra
+     * separator added so there are no extra separators that are not needed.
+     */
+    private static CharSequence joinNotEmpty(CharSequence separator, CharSequence[] sequences) {
+        int length = sequences.length;
+        if (length == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            if (!TextUtils.isEmpty(sequences[i])) {
+                if (!TextUtils.isEmpty(sb)) {
+                    sb.append(separator);
+                }
+                sb.append(sequences[i]);
+            }
+        }
+        return sb.toString();
+    }
+
     private static List<CharSequence> append(List<CharSequence> list, CharSequence string) {
         if (!TextUtils.isEmpty(string)) {
             list.add(string);
@@ -637,10 +681,22 @@ public class CarrierTextController {
         default void finishedWakingUp() {};
     }
 
-    private String getCustomizeCarrierName(CharSequence originCarrierName, int subId) {
+    private String getCustomizeCarrierName(CharSequence originCarrierName,
+                                           SubscriptionInfo sub) {
         StringBuilder newCarrierName = new StringBuilder();
-        int networkType = getNetworkType(subId);
+        int networkType = getNetworkType(sub.getSubscriptionId());
         String networkClass = networkClassToString(TelephonyManager.getNetworkClass(networkType));
+
+        if ( mFiveGServiceClient == null ) {
+            mFiveGServiceClient = FiveGServiceClient.getInstance(mContext);
+            mFiveGServiceClient.registerCallback(mCallback);
+        }
+        FiveGServiceState fiveGServiceState =
+                mFiveGServiceClient.getCurrentServiceState(sub.getSimSlotIndex());
+        if ( fiveGServiceState.isConnectedOnNsaMode() ) {
+            networkClass =
+                    mContext.getResources().getString(R.string.data_connection_5g);
+        }
 
         if (!TextUtils.isEmpty(originCarrierName)) {
             String[] names = originCarrierName.toString().split(mSeparator.toString(), 2);

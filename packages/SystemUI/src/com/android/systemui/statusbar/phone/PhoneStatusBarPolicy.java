@@ -44,6 +44,7 @@ import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.UiOffloadThread;
 import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
+import com.android.systemui.privacy.PrivacyType;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
 import com.android.systemui.statusbar.CommandQueue;
@@ -183,6 +184,11 @@ public class PhoneStatusBarPolicy
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
 
+        boolean isIeee80211acSupported =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ac_supported);
+        boolean isIeee80211axSupported =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ax_supported);
+
         // listen for user / profile change.
         try {
             ActivityManager.getService().registerUserSwitchObserver(mUserSwitchListener, TAG);
@@ -214,8 +220,16 @@ public class PhoneStatusBarPolicy
         mIconController.setIconVisibility(mSlotCast, false);
 
         // hotspot
-        mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+        if (isIeee80211axSupported) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
                 mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else if (isIeee80211acSupported) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        }
         mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
 
         // managed profile
@@ -229,16 +243,19 @@ public class PhoneStatusBarPolicy
         mIconController.setIconVisibility(mSlotDataSaver, false);
 
         // privacy items
-        mIconController.setIcon(mSlotMicrophone, R.drawable.stat_sys_mic_none, null);
+        mIconController.setIcon(mSlotMicrophone, R.drawable.stat_sys_mic_none,
+                PrivacyType.TYPE_MICROPHONE.getName(mContext));
         mIconController.setIconVisibility(mSlotMicrophone, false);
-        mIconController.setIcon(mSlotCamera, R.drawable.stat_sys_camera, null);
+        mIconController.setIcon(mSlotCamera, R.drawable.stat_sys_camera,
+                PrivacyType.TYPE_CAMERA.getName(mContext));
         mIconController.setIconVisibility(mSlotCamera, false);
         mIconController.setIcon(mSlotLocation, LOCATION_STATUS_ICON_ID,
                 mContext.getString(R.string.accessibility_location_active));
         mIconController.setIconVisibility(mSlotLocation, false);
 
         // sensors off
-        mIconController.setIcon(mSlotSensorsOff, R.drawable.stat_sys_sensors_off, null);
+        mIconController.setIcon(mSlotSensorsOff, R.drawable.stat_sys_sensors_off,
+                mContext.getString(R.string.accessibility_sensors_off_active));
         mIconController.setIconVisibility(mSlotSensorsOff,
                 mSensorPrivacyController.isSensorPrivacyEnabled());
 

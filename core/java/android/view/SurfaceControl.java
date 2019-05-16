@@ -346,20 +346,6 @@ public final class SurfaceControl implements Parcelable {
     /* built-in physical display ids (keep in sync with ISurfaceComposer.h)
      * these are different from the logical display ids used elsewhere in the framework */
 
-    /**
-     * Built-in physical display id: Main display.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_MAIN = 0;
-
-    /**
-     * Built-in physical display id: Attached HDMI display.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_HDMI = 1;
-
     // Display power modes.
     /**
      * Display power mode off: used while blanking the screen.

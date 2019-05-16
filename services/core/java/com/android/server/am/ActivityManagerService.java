@@ -554,7 +554,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     /* UX perf event object */
     public static BoostFramework mUxPerf = new BoostFramework();
 
-    final OomAdjuster mOomAdjuster;
+    OomAdjuster mOomAdjuster;
+    final LowMemDetector mLowMemDetector;
 
     /** All system services */
     SystemServiceManager mSystemServiceManager;
@@ -1502,7 +1503,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     final ServiceThread mProcStartHandlerThread;
     final Handler mProcStartHandler;
 
-    final ActivityManagerConstants mConstants;
+    ActivityManagerConstants mConstants;
 
     // Encapsulates the global setting "hidden_api_blacklist_exemptions"
     final HiddenApiSettings mHiddenApiBlacklist;
@@ -1655,9 +1656,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } break;
             case UPDATE_HTTP_PROXY_MSG: {
-                synchronized (ActivityManagerService.this) {
-                    mProcessList.setAllHttpProxyLocked();
-                }
+                mProcessList.setAllHttpProxy();
             } break;
             case PROC_START_TIMEOUT_MSG: {
                 ProcessRecord app = (ProcessRecord)msg.obj;
@@ -1846,7 +1845,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             } break;
             }
         }
-    };
+    }
 
     static final int COLLECT_PSS_BG_MSG = 1;
 
@@ -2316,6 +2315,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 ? new ActivityManagerConstants(mContext, this, mHandler) : null;
         final ActiveUids activeUids = new ActiveUids(this, false /* postChangesToAtm */);
         mProcessList.init(this, activeUids);
+        mLowMemDetector = null;
         mOomAdjuster = new OomAdjuster(this, mProcessList, activeUids);
 
         mIntentFirewall = hasHandlerThread
@@ -2364,6 +2364,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mConstants = new ActivityManagerConstants(mContext, this, mHandler);
         final ActiveUids activeUids = new ActiveUids(this, true /* postChangesToAtm */);
         mProcessList.init(this, activeUids);
+        mLowMemDetector = new LowMemDetector(this);
         mOomAdjuster = new OomAdjuster(this, mProcessList, activeUids);
 
         // Broadcast policy parameters
@@ -3426,9 +3427,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         return mActivityTaskManager.startActivityFromRecents(taskId, bOptions);
     }
 
-    final int startActivityAsUserEmpty(IApplicationThread caller, String callingPackage,
-            Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
-            int startFlags, ProfilerInfo profilerInfo, Bundle options, int userId) {
+    public int startActivityAsUserEmpty(Bundle options) {
         ArrayList<String> pApps = options.getStringArrayList("start_empty_apps");
         if (pApps != null && pApps.size() > 0) {
             Iterator<String> apps_itr = pApps.iterator();
@@ -7965,8 +7964,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             boolean isDebuggable = "1".equals(SystemProperties.get(SYSTEM_DEBUGGABLE, "0"));
             if (!isDebuggable) {
-                if ((app.flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
-                    throw new SecurityException("Process not debuggable: " + app.packageName);
+                if (!app.isProfileableByShell()) {
+                    throw new SecurityException("Process not debuggable, "
+                            + "and not profileable by shell: " + app.packageName);
                 }
             }
             mProfileData.setProfileApp(processName);
@@ -13923,6 +13923,18 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new IllegalArgumentException("callingPackage cannot be null");
         }
 
+        // Ensure that instanceName, which is caller provided, does not contain
+        // unusual characters.
+        if (instanceName != null) {
+            for (int i = 0; i < instanceName.length(); ++i) {
+                char c = instanceName.charAt(i);
+                if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                            || (c >= '0' && c <= '9') || c == '_' || c == '.')) {
+                    throw new IllegalArgumentException("Illegal instanceName");
+                }
+            }
+        }
+
         synchronized(this) {
             return mServices.bindServiceLocked(caller, token, service,
                     resolvedType, connection, flags, instanceName, callingPackage, userId);
@@ -16598,25 +16610,29 @@ public class ActivityManagerService extends IActivityManager.Stub
     final boolean updateLowMemStateLocked(int numCached, int numEmpty, int numTrimming) {
         final int N = mProcessList.getLruSizeLocked();
         final long now = SystemClock.uptimeMillis();
-        // Now determine the memory trimming level of background processes.
-        // Unfortunately we need to start at the back of the list to do this
-        // properly.  We only do this if the number of background apps we
-        // are managing to keep around is less than half the maximum we desire;
-        // if we are keeping a good number around, we'll let them use whatever
-        // memory they want.
-        final int numCachedAndEmpty = numCached + numEmpty;
         int memFactor;
-        if (numCached <= mConstants.CUR_TRIM_CACHED_PROCESSES
-                && numEmpty <= mConstants.CUR_TRIM_EMPTY_PROCESSES) {
-            if (numCachedAndEmpty <= ProcessList.TRIM_CRITICAL_THRESHOLD) {
-                memFactor = ProcessStats.ADJ_MEM_FACTOR_CRITICAL;
-            } else if (numCachedAndEmpty <= ProcessList.TRIM_LOW_THRESHOLD) {
-                memFactor = ProcessStats.ADJ_MEM_FACTOR_LOW;
-            } else {
-                memFactor = ProcessStats.ADJ_MEM_FACTOR_MODERATE;
-            }
+        if (mLowMemDetector != null && mLowMemDetector.isAvailable()) {
+            memFactor = mLowMemDetector.getMemFactor();
         } else {
-            memFactor = ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+            // Now determine the memory trimming level of background processes.
+            // Unfortunately we need to start at the back of the list to do this
+            // properly.  We only do this if the number of background apps we
+            // are managing to keep around is less than half the maximum we desire;
+            // if we are keeping a good number around, we'll let them use whatever
+            // memory they want.
+            if (numCached <= mConstants.CUR_TRIM_CACHED_PROCESSES
+                && numEmpty <= mConstants.CUR_TRIM_EMPTY_PROCESSES) {
+                final int numCachedAndEmpty = numCached + numEmpty;
+                if (numCachedAndEmpty <= ProcessList.TRIM_CRITICAL_THRESHOLD) {
+                    memFactor = ProcessStats.ADJ_MEM_FACTOR_CRITICAL;
+                } else if (numCachedAndEmpty <= ProcessList.TRIM_LOW_THRESHOLD) {
+                    memFactor = ProcessStats.ADJ_MEM_FACTOR_LOW;
+                } else {
+                    memFactor = ProcessStats.ADJ_MEM_FACTOR_MODERATE;
+                }
+            } else {
+                memFactor = ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+            }
         }
         // We always allow the memory level to go up (better).  We only allow it to go
         // down if we are in a state where that is allowed, *and* the total number of processes
@@ -17599,6 +17615,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
+        public int startActivityAsUserEmpty(Bundle options) {
+            return ActivityManagerService.this.startActivityAsUserEmpty(options);
+        }
+
+        @Override
         public void killForegroundAppsForUser(int userHandle) {
             synchronized (ActivityManagerService.this) {
                 final ArrayList<ProcessRecord> procs = new ArrayList<>();
@@ -17649,6 +17670,19 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             synchronized (ActivityManagerService.this) {
                 ((PendingIntentRecord) target).setAllowBgActivityStarts(whitelistToken, flags);
+            }
+        }
+
+        @Override
+        public void clearPendingIntentAllowBgActivityStarts(IIntentSender target,
+                IBinder whitelistToken) {
+            if (!(target instanceof PendingIntentRecord)) {
+                Slog.w(TAG, "clearPendingIntentAllowBgActivityStarts():"
+                        + " not a PendingIntentRecord: " + target);
+                return;
+            }
+            synchronized (ActivityManagerService.this) {
+                ((PendingIntentRecord) target).clearAllowBgActivityStarts(whitelistToken);
             }
         }
 
@@ -17885,8 +17919,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (ActivityManagerService.this) {
                 final ProcessRecord proc = getProcessRecordLocked(processName, uid,
                         true /* keepIfLarge */);
-                mProcessList.removeProcessLocked(proc, false /* callerWillRestart */,
-                        true /* allowRestart */, reason);
+                if (proc != null) {
+                    mProcessList.removeProcessLocked(proc, false /* callerWillRestart */,
+                            true /* allowRestart */, reason);
+                }
             }
         }
 

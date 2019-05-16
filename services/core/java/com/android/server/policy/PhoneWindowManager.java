@@ -256,6 +256,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Whether to allow devices placed in vr headset viewers to have an alternative Home intent.
     static final boolean ENABLE_VR_HEADSET_HOME_CAPTURE = true;
 
+    // must match: config_shortPressOnPowerBehavior in config.xml
     static final int SHORT_PRESS_POWER_NOTHING = 0;
     static final int SHORT_PRESS_POWER_GO_TO_SLEEP = 1;
     static final int SHORT_PRESS_POWER_REALLY_GO_TO_SLEEP = 2;
@@ -263,29 +264,34 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final int SHORT_PRESS_POWER_GO_HOME = 4;
     static final int SHORT_PRESS_POWER_CLOSE_IME_OR_GO_HOME = 5;
 
+    // must match: config_LongPressOnPowerBehavior in config.xml
     static final int LONG_PRESS_POWER_NOTHING = 0;
     static final int LONG_PRESS_POWER_GLOBAL_ACTIONS = 1;
     static final int LONG_PRESS_POWER_SHUT_OFF = 2;
     static final int LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM = 3;
     static final int LONG_PRESS_POWER_GO_TO_VOICE_ASSIST = 4;
+    static final int LONG_PRESS_POWER_ASSISTANT = 5; // Settings.Secure.ASSISTANT
 
+    // must match: config_veryLongPresOnPowerBehavior in config.xml
     static final int VERY_LONG_PRESS_POWER_NOTHING = 0;
     static final int VERY_LONG_PRESS_POWER_GLOBAL_ACTIONS = 1;
 
+    // must match: config_doublePressOnPowerBehavior in config.xml
     static final int MULTI_PRESS_POWER_NOTHING = 0;
     static final int MULTI_PRESS_POWER_THEATER_MODE = 1;
     static final int MULTI_PRESS_POWER_BRIGHTNESS_BOOST = 2;
 
+    // must match: config_longPressOnBackBehavior in config.xml
     static final int LONG_PRESS_BACK_NOTHING = 0;
     static final int LONG_PRESS_BACK_GO_TO_VOICE_ASSIST = 1;
 
-    // These need to match the documentation/constant in
-    // core/res/res/values/config.xml
+    // must match: config_longPressOnHomeBehavior in config.xml
     static final int LONG_PRESS_HOME_NOTHING = 0;
     static final int LONG_PRESS_HOME_ALL_APPS = 1;
     static final int LONG_PRESS_HOME_ASSIST = 2;
     static final int LAST_LONG_PRESS_HOME_BEHAVIOR = LONG_PRESS_HOME_ASSIST;
 
+    // must match: config_doubleTapOnHomeBehavior in config.xml
     static final int DOUBLE_TAP_HOME_NOTHING = 0;
     static final int DOUBLE_TAP_HOME_RECENT_SYSTEM_UI = 1;
 
@@ -304,6 +310,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static public final String SYSTEM_DIALOG_REASON_ASSIST = "assist";
     static public final String SYSTEM_DIALOG_REASON_SCREENSHOT = "screenshot";
 
+    private static final int POWER_BUTTON_SUPPRESSION_DELAY_DEFAULT_MILLIS = 800;
     private static final AudioAttributes VIBRATION_ATTRIBUTES = new AudioAttributes.Builder()
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
@@ -609,6 +616,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mPerDisplayFocusEnabled = false;
     private volatile int mTopFocusedDisplayId = INVALID_DISPLAY;
 
+    private int mPowerButtonSuppressionDelayMillis = POWER_BUTTON_SUPPRESSION_DELAY_DEFAULT_MILLIS;
+
     private static final int MSG_DISPATCH_MEDIA_KEY_WITH_WAKE_LOCK = 3;
     private static final int MSG_DISPATCH_MEDIA_KEY_REPEAT_WITH_WAKE_LOCK = 4;
     private static final int MSG_KEYGUARD_DRAWN_COMPLETE = 5;
@@ -769,6 +778,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Secure.getUriFor(
                     Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.POWER_BUTTON_LONG_PRESS), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.POWER_BUTTON_VERY_LONG_PRESS), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
         }
@@ -1093,16 +1111,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case SHORT_PRESS_POWER_NOTHING:
                     break;
                 case SHORT_PRESS_POWER_GO_TO_SLEEP:
-                    goToSleep(eventTime, PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0);
+                    goToSleepFromPowerButton(eventTime, 0);
                     break;
                 case SHORT_PRESS_POWER_REALLY_GO_TO_SLEEP:
-                    goToSleep(eventTime, PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON,
-                            PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
+                    goToSleepFromPowerButton(eventTime, PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
                     break;
                 case SHORT_PRESS_POWER_REALLY_GO_TO_SLEEP_AND_GO_HOME:
-                    goToSleep(eventTime, PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON,
-                            PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
-                    launchHomeFromHotKey(DEFAULT_DISPLAY);
+                    if (goToSleepFromPowerButton(eventTime,
+                            PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE)) {
+                        launchHomeFromHotKey(DEFAULT_DISPLAY);
+                    }
                     break;
                 case SHORT_PRESS_POWER_GO_HOME:
                     shortPressPowerGoHome();
@@ -1123,6 +1141,35 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
             }
         }
+    }
+
+    /**
+     * Sends the device to sleep as a result of a power button press.
+     *
+     * @return True if the was device was sent to sleep, false if sleep was suppressed.
+     */
+    private boolean goToSleepFromPowerButton(long eventTime, int flags) {
+        // Before we actually go to sleep, we check the last wakeup reason.
+        // If the device very recently woke up from a gesture (like user lifting their device)
+        // then ignore the sleep instruction. This is because users have developed
+        // a tendency to hit the power button immediately when they pick up their device, and we
+        // don't want to put the device back to sleep in those cases.
+        final PowerManager.WakeData lastWakeUp = mPowerManagerInternal.getLastWakeup();
+        if (lastWakeUp != null && lastWakeUp.wakeReason == PowerManager.WAKE_REASON_GESTURE) {
+            final int gestureDelayMillis = Settings.Global.getInt(mContext.getContentResolver(),
+                    Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE,
+                    POWER_BUTTON_SUPPRESSION_DELAY_DEFAULT_MILLIS);
+            final long now = SystemClock.uptimeMillis();
+            if (mPowerButtonSuppressionDelayMillis > 0
+                    && (now < lastWakeUp.wakeTime + mPowerButtonSuppressionDelayMillis)) {
+                Slog.i(TAG, "Sleep from power button suppressed. Time since gesture: "
+                        + (now - lastWakeUp.wakeTime) + "ms");
+                return false;
+            }
+        }
+
+        goToSleep(eventTime, PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, flags);
+        return true;
     }
 
     private void goToSleep(long eventTime, int reason, int flags) {
@@ -1195,38 +1242,38 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private void powerLongPress() {
         final int behavior = getResolvedLongPressOnPowerBehavior();
         switch (behavior) {
-        case LONG_PRESS_POWER_NOTHING:
-            break;
-        case LONG_PRESS_POWER_GLOBAL_ACTIONS:
-            mPowerKeyHandled = true;
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
-                    "Power - Long Press - Global Actions");
-            showGlobalActionsInternal();
-            break;
-        case LONG_PRESS_POWER_SHUT_OFF:
-        case LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM:
-            mPowerKeyHandled = true;
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
-                    "Power - Long Press - Shut Off");
-            sendCloseSystemWindows(SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS);
-            mWindowManagerFuncs.shutdown(behavior == LONG_PRESS_POWER_SHUT_OFF);
-            break;
-        case LONG_PRESS_POWER_GO_TO_VOICE_ASSIST:
-            mPowerKeyHandled = true;
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
-                    "Power - Long Press - Go To Voice Assist");
-            final boolean keyguardActive = mKeyguardDelegate == null
-                    ? false
-                    : mKeyguardDelegate.isShowing();
-            if (!keyguardActive) {
-                Intent intent = new Intent(Intent.ACTION_VOICE_ASSIST);
-                if (mAllowStartActivityForLongPressOnPowerDuringSetup) {
-                    mContext.startActivityAsUser(intent, UserHandle.CURRENT_OR_SELF);
-                } else {
-                    startActivityAsUser(intent, UserHandle.CURRENT_OR_SELF);
-                }
-            }
-            break;
+            case LONG_PRESS_POWER_NOTHING:
+                break;
+            case LONG_PRESS_POWER_GLOBAL_ACTIONS:
+                mPowerKeyHandled = true;
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
+                        "Power - Long Press - Global Actions");
+                showGlobalActionsInternal();
+                break;
+            case LONG_PRESS_POWER_SHUT_OFF:
+            case LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM:
+                mPowerKeyHandled = true;
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
+                        "Power - Long Press - Shut Off");
+                sendCloseSystemWindows(SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS);
+                mWindowManagerFuncs.shutdown(behavior == LONG_PRESS_POWER_SHUT_OFF);
+                break;
+            case LONG_PRESS_POWER_GO_TO_VOICE_ASSIST:
+                mPowerKeyHandled = true;
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
+                        "Power - Long Press - Go To Voice Assist");
+                // Some devices allow the voice assistant intent during setup (and use that intent
+                // to launch something else, like Settings). So we explicitly allow that via the
+                // config_allowStartActivityForLongPressOnPowerInSetup resource in config.xml.
+                launchVoiceAssist(mAllowStartActivityForLongPressOnPowerDuringSetup);
+                break;
+            case LONG_PRESS_POWER_ASSISTANT:
+                mPowerKeyHandled = true;
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
+                        "Power - Long Press - Go To Assistant");
+                final int powerKeyDeviceId = Integer.MIN_VALUE;
+                launchAssistAction(null, powerKeyDeviceId);
+                break;
         }
     }
 
@@ -1250,13 +1297,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case LONG_PRESS_BACK_NOTHING:
                 break;
             case LONG_PRESS_BACK_GO_TO_VOICE_ASSIST:
-                final boolean keyguardActive = mKeyguardDelegate == null
-                        ? false
-                        : mKeyguardDelegate.isShowing();
-                if (!keyguardActive) {
-                    Intent intent = new Intent(Intent.ACTION_VOICE_ASSIST);
-                    startActivityAsUser(intent, UserHandle.CURRENT_OR_SELF);
-                }
+                launchVoiceAssist(false /* allowDuringSetup */);
                 break;
         }
     }
@@ -1975,6 +2016,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mRingerToggleChord = Settings.Secure.getIntForUser(resolver,
                     Settings.Secure.VOLUME_HUSH_GESTURE, VOLUME_HUSH_OFF,
                     UserHandle.USER_CURRENT);
+            mPowerButtonSuppressionDelayMillis = Settings.Global.getInt(resolver,
+                    Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE,
+                    POWER_BUTTON_SUPPRESSION_DELAY_DEFAULT_MILLIS);
             if (!mContext.getResources()
                     .getBoolean(com.android.internal.R.bool.config_volumeHushGestureEnabled)) {
                 mRingerToggleChord = Settings.Secure.VOLUME_HUSH_OFF;
@@ -1999,6 +2043,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mHasSoftInput = hasSoftInput;
                 updateRotation = true;
             }
+
+            mLongPressOnPowerBehavior = Settings.Global.getInt(resolver,
+                    Settings.Global.POWER_BUTTON_LONG_PRESS,
+                    mContext.getResources().getInteger(
+                            com.android.internal.R.integer.config_longPressOnPowerBehavior));
+            mVeryLongPressOnPowerBehavior = Settings.Global.getInt(resolver,
+                    Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
+                    mContext.getResources().getInteger(
+                            com.android.internal.R.integer.config_veryLongPressOnPowerBehavior));
         }
         if (updateRotation) {
             updateRotation(true);
@@ -3225,6 +3278,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return 0;
     }
 
+    // There are several different flavors of "assistant" that can be launched from
+    // various parts of the UI.
+
+    /** starts ACTION_SEARCH_LONG_PRESS, usually a voice search prompt */
     private void launchAssistLongPressAction() {
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                 "Assist - Long Press");
@@ -3246,6 +3303,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    /** Asks the status bar to startAssist(), usually a full "assistant" interface */
     private void launchAssistAction(String hint, int deviceId) {
         sendCloseSystemWindows(SYSTEM_DIALOG_REASON_ASSIST);
         if (!isUserSetupComplete()) {
@@ -3276,12 +3334,30 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    /** Launches ACTION_VOICE_ASSIST. Does nothing on keyguard. */
+    private void launchVoiceAssist(boolean allowDuringSetup) {
+        final boolean keyguardActive = mKeyguardDelegate == null
+                ? false
+                : mKeyguardDelegate.isShowing();
+        if (!keyguardActive) {
+            Intent intent = new Intent(Intent.ACTION_VOICE_ASSIST);
+            startActivityAsUser(intent, null, UserHandle.CURRENT_OR_SELF,
+                    allowDuringSetup);
+        }
+
+    }
+
     private void startActivityAsUser(Intent intent, UserHandle handle) {
         startActivityAsUser(intent, null, handle);
     }
 
     private void startActivityAsUser(Intent intent, Bundle bundle, UserHandle handle) {
-        if (isUserSetupComplete()) {
+        startActivityAsUser(intent, bundle, handle, false /* allowDuringSetup */);
+    }
+
+    private void startActivityAsUser(Intent intent, Bundle bundle, UserHandle handle,
+            boolean allowDuringSetup) {
+        if (allowDuringSetup || isUserSetupComplete()) {
             mContext.startActivityAsUser(intent, bundle, handle);
         } else {
             Slog.i(TAG, "Not starting activity because user setup is in progress: " + intent);
@@ -3556,11 +3632,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
             }
-        } else if (ExtconUEventObserver.extconExists()) {
+        } else if (ExtconUEventObserver.extconExists()
+                && ExtconUEventObserver.namedExtconDirExists(HdmiVideoExtconUEventObserver.NAME)) {
             HdmiVideoExtconUEventObserver observer = new HdmiVideoExtconUEventObserver();
             plugged = observer.init();
             mHDMIObserver = observer;
+        } else if (localLOGV) {
+            Slog.v(TAG, "Not observing HDMI plug state because HDMI was not found.");
         }
+
         // This dance forces the code in setHdmiPlugged to run.
         // Always do this so the sticky intent is stuck (to false) if there is no hdmi.
         mDefaultDisplayPolicy.setHdmiPlugged(plugged, true /* force */);
@@ -5541,6 +5621,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return "LONG_PRESS_POWER_SHUT_OFF";
             case LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM:
                 return "LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM";
+            case LONG_PRESS_POWER_GO_TO_VOICE_ASSIST:
+                return "LONG_PRESS_POWER_GO_TO_VOICE_ASSIST";
+            case LONG_PRESS_POWER_ASSISTANT:
+                return "LONG_PRESS_POWER_ASSISTANT";
             default:
                 return Integer.toString(behavior);
         }
@@ -5616,7 +5700,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private class HdmiVideoExtconUEventObserver extends ExtconStateObserver<Boolean> {
         private static final String HDMI_EXIST = "HDMI=1";
-        private final ExtconInfo mHdmi = new ExtconInfo("hdmi");
+        private static final String NAME = "hdmi";
+        private final ExtconInfo mHdmi = new ExtconInfo(NAME);
 
         private boolean init() {
             boolean plugged = false;

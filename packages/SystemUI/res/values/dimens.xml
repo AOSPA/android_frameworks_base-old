@@ -41,10 +41,16 @@
 
     <!-- Size of the nav bar edge panels, should be greater to the
          edge sensitivity + the drag threshold -->
-    <dimen name="navigation_edge_panel_width">52dp</dimen>
-    <dimen name="navigation_edge_panel_height">52dp</dimen>
+    <dimen name="navigation_edge_panel_width">76dp</dimen>
+    <!-- Padding at the end of the navigation panel to allow the arrow not to be clipped off -->
+    <dimen name="navigation_edge_panel_padding">24dp</dimen>
+    <dimen name="navigation_edge_panel_height">84dp</dimen>
     <!-- The threshold to drag to trigger the edge action -->
     <dimen name="navigation_edge_action_drag_threshold">16dp</dimen>
+    <!-- The minimum display position of the arrow on the screen -->
+    <dimen name="navigation_edge_arrow_min_y">64dp</dimen>
+    <!-- The amount by which the arrow is shifted to avoid the finger-->
+    <dimen name="navigation_edge_finger_offset">48dp</dimen>
 
     <!-- Luminance threshold to determine black/white contrast for the navigation affordances -->
     <item name="navigation_luminance_threshold" type="dimen" format="float">0.5</item>
@@ -206,10 +212,27 @@
     <dimen name="notification_guts_option_horizontal_padding">15dp</dimen>
 
     <!-- The vertical space between items in the alert selections in the inline settings -->
-    <dimen name="notification_guts_option_vertical_padding">15dp</dimen>
+    <dimen name="notification_guts_option_vertical_padding">20dp</dimen>
 
     <!-- The vertical space between the alert selections in the inline settings -->
     <dimen name="notification_guts_option_vertical_margin">6dp</dimen>
+
+    <dimen name="notification_importance_toggle_size">48dp</dimen>
+    <dimen name="notification_importance_toggle_marginTop">28dp</dimen>
+    <dimen name="notification_importance_toggle_marginBottom">28dp</dimen>
+    <dimen name="notification_importance_text_marginTop">20dp</dimen>
+    <dimen name="notification_importance_button_separation">16dp</dimen>
+    <dimen name="notification_importance_button_width">178dp</dimen>
+    <dimen name="notification_importance_button_horiz_padding">28dp</dimen>
+    <dimen name="notification_importance_drawable_padding">8dp</dimen>
+    <dimen name="notification_importance_description_padding">20dp</dimen>
+    <dimen name="notification_importance_header_text">12sp</dimen>
+    <dimen name="notification_importance_description_text">14sp</dimen>
+    <dimen name="notification_importance_channel_text">16sp</dimen>
+    <dimen name="notification_importance_channel_group_text">14sp</dimen>
+    <dimen name="notification_importance_button_text">16sp</dimen>
+    <dimen name="notification_importance_button_padding">14dp</dimen>
+    <dimen name="rect_button_radius">8dp</dimen>
 
     <!-- The minimum height for the snackbar shown after the snooze option has been chosen. -->
     <dimen name="snooze_snackbar_min_height">56dp</dimen>
@@ -418,8 +441,6 @@
     <dimen name="qs_tile_margin_top">18dp</dimen>
     <dimen name="qs_tile_background_size">44dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
-    <!-- Maximum width of quick quick settings panel. Defaults to MATCH_PARENT-->
-    <dimen name="qs_quick_layout_width">-1px</dimen>
     <dimen name="qs_quick_tile_padding">12dp</dimen>
     <dimen name="qs_header_gear_translation">16dp</dimen>
     <dimen name="qs_header_tile_margin_horizontal">4dp</dimen>
@@ -437,7 +458,7 @@
     <dimen name="qs_tile_padding_bottom">16dp</dimen>
     <dimen name="qs_tile_spacing">4dp</dimen>
     <dimen name="qs_panel_padding_bottom">0dp</dimen>
-    <dimen name="qs_panel_padding_top">30dp</dimen>
+    <dimen name="qs_panel_padding_top">@dimen/qs_header_tooltip_height</dimen>
     <dimen name="qs_detail_header_height">56dp</dimen>
     <dimen name="qs_detail_header_padding">0dp</dimen>
     <dimen name="qs_detail_image_width">56dp</dimen>
@@ -461,8 +482,8 @@
     <dimen name="qs_detail_item_icon_width">32dp</dimen>
     <dimen name="qs_detail_item_icon_marginStart">0dp</dimen>
     <dimen name="qs_detail_item_icon_marginEnd">20dp</dimen>
-    <dimen name="qs_header_tooltip_height">18dp</dimen>
-    <dimen name="qs_header_alarm_icon_size">18dp</dimen>
+    <dimen name="qs_header_tooltip_height">48dp</dimen>
+    <dimen name="qs_header_alarm_icon_size">@dimen/status_bar_icon_drawing_size</dimen>
     <dimen name="qs_header_mobile_icon_size">@dimen/status_bar_icon_drawing_size</dimen>
     <dimen name="qs_header_alarm_text_margin_start">6dp</dimen>
     <dimen name="qs_header_separator_width">8dp</dimen>
@@ -473,7 +494,8 @@
     <dimen name="qs_footer_padding_end">16dp</dimen>
     <dimen name="qs_footer_icon_size">16dp</dimen>
     <dimen name="qs_paged_tile_layout_padding_bottom">0dp</dimen>
-    <dimen name="qs_header_top_margin">12dp</dimen>
+    <dimen name="qs_header_top_padding">15dp</dimen>
+    <dimen name="qs_header_bottom_padding">14dp</dimen>
 
     <dimen name="qs_notif_collapsed_space">64dp</dimen>
 
@@ -717,7 +739,7 @@
     <!-- The width/height of the unlock icon view on keyguard. -->
     <dimen name="keyguard_lock_height">42dp</dimen>
     <dimen name="keyguard_lock_width">42dp</dimen>
-    <dimen name="keyguard_lock_padding">19dp</dimen>
+    <dimen name="keyguard_lock_padding">20dp</dimen>
 
     <dimen name="keyguard_indication_margin_bottom">125dp</dimen>
 
@@ -1031,8 +1053,6 @@
     <dimen name="ongoing_appops_dialog_title_size">20sp</dimen>
     <!-- Text size for Ongoing App Ops dialog items -->
     <dimen name="ongoing_appops_dialog_item_size">16sp</dimen>
-    <!-- Side margins around the Ongoing App Ops chip-->
-    <dimen name="ongoing_appops_chip_margin">0dp</dimen>
     <!-- Height of the Ongoing App Ops chip -->
     <dimen name="ongoing_appops_chip_height">32dp</dimen>
     <!-- Padding between background of Ongoing App Ops chip and content -->
@@ -1053,16 +1073,20 @@
     <dimen name="bubble_elevation">1dp</dimen>
     <!-- How much the bubble flyout text container is elevated. -->
     <dimen name="bubble_flyout_elevation">4dp</dimen>
-    <!-- How much padding is around the flyout text. -->
-    <dimen name="bubble_flyout_padding">16dp</dimen>
-    <!-- The maximum width of a bubble flyout. -->
-    <dimen name="bubble_flyout_maxwidth">200dp</dimen>
+    <!-- How much padding is around the left and right sides of the flyout text. -->
+    <dimen name="bubble_flyout_padding_x">16dp</dimen>
+    <!-- How much padding is around the top and bottom of the flyout text. -->
+    <dimen name="bubble_flyout_padding_y">8dp</dimen>
+    <!-- Size of the triangle that points from the flyout to the bubble stack. -->
+    <dimen name="bubble_flyout_pointer_size">6dp</dimen>
+    <!-- How much space to leave between the flyout (tip of the arrow) and the bubble stack. -->
+    <dimen name="bubble_flyout_space_from_bubble">8dp</dimen>
     <!-- Padding around a collapsed bubble -->
     <dimen name="bubble_view_padding">0dp</dimen>
     <!-- Padding between bubbles when displayed in expanded state -->
     <dimen name="bubble_padding">8dp</dimen>
     <!-- Size of individual bubbles. -->
-    <dimen name="individual_bubble_size">56dp</dimen>
+    <dimen name="individual_bubble_size">52dp</dimen>
     <!-- How much to inset the icon in the circle -->
     <dimen name="bubble_icon_inset">16dp</dimen>
     <!-- Padding around the view displayed when the bubble is expanded -->
