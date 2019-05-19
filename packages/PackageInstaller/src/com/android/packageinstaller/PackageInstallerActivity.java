@@ -26,6 +26,7 @@ import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.Dialog;
 import android.app.DialogFragment;
+import android.app.admin.DevicePolicyManager;
 import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -42,7 +43,6 @@ import android.content.pm.PackageUserState;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Process;
-import android.os.RemoteException;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Log;
@@ -427,7 +427,7 @@ public class PackageInstallerActivity extends AlertActivity {
         if (mAllowUnknownSources || !isInstallRequestFromUnknownSource(getIntent())) {
             initiateInstall();
         } else {
-            // Check for unknown sources restriction
+            // Check for unknown sources restrictions.
             final int unknownSourcesRestrictionSource = mUserManager.getUserRestrictionSource(
                     UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES, Process.myUserHandle());
             final int unknownSourcesGlobalRestrictionSource = mUserManager.getUserRestrictionSource(
@@ -436,14 +436,26 @@ public class PackageInstallerActivity extends AlertActivity {
                     & (unknownSourcesRestrictionSource | unknownSourcesGlobalRestrictionSource);
             if (systemRestriction != 0) {
                 showDialogInner(DLG_UNKNOWN_SOURCES_RESTRICTED_FOR_USER);
-            } else if (unknownSourcesRestrictionSource != UserManager.RESTRICTION_NOT_SET
-                    || unknownSourcesGlobalRestrictionSource != UserManager.RESTRICTION_NOT_SET) {
-                startActivity(new Intent(Settings.ACTION_SHOW_ADMIN_SUPPORT_DETAILS));
-                finish();
+            } else if (unknownSourcesRestrictionSource != UserManager.RESTRICTION_NOT_SET) {
+                startAdminSupportDetailsActivity(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES);
+            } else if (unknownSourcesGlobalRestrictionSource != UserManager.RESTRICTION_NOT_SET) {
+                startAdminSupportDetailsActivity(
+                        UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY);
             } else {
                 handleUnknownSources();
             }
         }
+    }
+
+    private void startAdminSupportDetailsActivity(String restriction) {
+        // If the given restriction is set by an admin, display information about the
+        // admin enforcing the restriction for the affected user.
+        final DevicePolicyManager dpm = getSystemService(DevicePolicyManager.class);
+        final Intent showAdminSupportDetailsIntent = dpm.createAdminSupportIntent(restriction);
+        if (showAdminSupportDetailsIntent != null) {
+            startActivity(showAdminSupportDetailsIntent);
+        }
+        finish();
     }
 
     private void handleUnknownSources() {
@@ -459,16 +471,6 @@ public class PackageInstallerActivity extends AlertActivity {
                 mOriginatingUid, mOriginatingPackage);
         switch (appOpMode) {
             case AppOpsManager.MODE_DEFAULT:
-                try {
-                    int result = mIpm.checkUidPermission(
-                            Manifest.permission.REQUEST_INSTALL_PACKAGES, mOriginatingUid);
-                    if (result == PackageManager.PERMISSION_GRANTED) {
-                        initiateInstall();
-                        break;
-                    }
-                } catch (RemoteException exc) {
-                    Log.e(TAG, "Unable to talk to package manager");
-                }
                 mAppOpsManager.setMode(appOpCode, mOriginatingUid,
                         mOriginatingPackage, AppOpsManager.MODE_ERRORED);
                 // fall through

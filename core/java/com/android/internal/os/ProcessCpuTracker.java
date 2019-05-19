@@ -18,10 +18,11 @@ package com.android.internal.os;
 
 import static android.os.Process.*;
 
-import android.os.FileUtils;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Process;
 import android.os.StrictMode;
 import android.os.SystemClock;
+import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
 import android.util.Slog;
@@ -191,6 +192,7 @@ public class ProcessCpuTracker {
         public boolean interesting;
 
         public String baseName;
+        @UnsupportedAppUsage
         public String name;
         public int nameWidth;
 
@@ -206,6 +208,7 @@ public class ProcessCpuTracker {
         /**
          * Time in milliseconds.
          */
+        @UnsupportedAppUsage
         public long rel_uptime;
 
         /**
@@ -221,11 +224,13 @@ public class ProcessCpuTracker {
         /**
          * Time in milliseconds.
          */
+        @UnsupportedAppUsage
         public int rel_utime;
 
         /**
          * Time in milliseconds.
          */
+        @UnsupportedAppUsage
         public int rel_stime;
 
         public long base_minfaults;
@@ -242,6 +247,7 @@ public class ProcessCpuTracker {
             pid = _pid;
             if (parentPid < 0) {
                 final File procDir = new File("/proc", Integer.toString(pid));
+                uid = getUid(procDir.toString());
                 statFile = new File(procDir, "stat").toString();
                 cmdlineFile = new File(procDir, "cmdline").toString();
                 threadsDir = (new File(procDir, "task")).toString();
@@ -257,13 +263,22 @@ public class ProcessCpuTracker {
                         parentPid));
                 final File taskDir = new File(
                         new File(procDir, "task"), Integer.toString(pid));
+                uid = getUid(taskDir.toString());
                 statFile = new File(taskDir, "stat").toString();
                 cmdlineFile = null;
                 threadsDir = null;
                 threadStats = null;
                 workingThreads = null;
             }
-            uid = FileUtils.getUid(statFile.toString());
+        }
+
+        private static int getUid(String path) {
+            try {
+                return Os.stat(path).st_uid;
+            } catch (ErrnoException e) {
+                Slog.w(TAG, "Failed to stat(" + path + "): " + e);
+                return -1;
+            }
         }
     }
 
@@ -286,6 +301,7 @@ public class ProcessCpuTracker {
     };
 
 
+    @UnsupportedAppUsage
     public ProcessCpuTracker(boolean includeThreads) {
         mIncludeThreads = includeThreads;
         long jiffyHz = Os.sysconf(OsConstants._SC_CLK_TCK);
@@ -305,6 +321,7 @@ public class ProcessCpuTracker {
         update();
     }
 
+    @UnsupportedAppUsage
     public void update() {
         if (DEBUG) Slog.v(TAG, "Update: " + this);
 
@@ -707,11 +724,13 @@ public class ProcessCpuTracker {
         return statses;
     }
 
+    @UnsupportedAppUsage
     final public int countWorkingStats() {
         buildWorkingProcs();
         return mWorkingProcs.size();
     }
 
+    @UnsupportedAppUsage
     final public Stats getWorkingStats(int index) {
         return mWorkingProcs.get(index);
     }

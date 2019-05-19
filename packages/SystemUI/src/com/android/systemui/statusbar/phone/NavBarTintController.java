@@ -16,203 +16,188 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
+
 import android.content.Context;
 import android.content.res.Resources;
-import android.graphics.Bitmap;
-import android.graphics.Bitmap.Config;
-import android.graphics.Color;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Handler;
-import android.os.HandlerThread;
-import android.os.Looper;
-import android.provider.Settings;
-import android.util.DisplayMetrics;
-import android.view.SurfaceControl;
+import android.view.CompositionSamplingListener;
 import android.view.View;
 
 import com.android.systemui.R;
+import com.android.systemui.shared.system.QuickStepContract;
 
-public class NavBarTintController {
+import java.io.PrintWriter;
+
+/**
+ * Updates the nav bar tint based on the color of the content behind the nav bar.
+ */
+public class NavBarTintController implements View.OnAttachStateChangeListener,
+        View.OnLayoutChangeListener {
+
     public static final int MIN_COLOR_ADAPT_TRANSITION_TIME = 400;
     public static final int DEFAULT_COLOR_ADAPT_TRANSITION_TIME = 1700;
 
-    private final HandlerThread mColorAdaptHandlerThread = new HandlerThread("ColorExtractThread");
-    private Handler mColorAdaptionHandler;
-
-    // Poll time for each iteration to color sample
-    private static final int COLOR_ADAPTION_TIMEOUT = 300;
-
-    // Passing the threshold of this luminance value will make the button black otherwise white
-    private static final float LUMINANCE_THRESHOLD = 0.3f;
-
-    // The margin from the bounds of the view to color sample around
-    private static final int COLOR_SAMPLE_MARGIN = 10;
-
-    private boolean mRunning;
-
+    private final Handler mHandler = new Handler();
     private final NavigationBarView mNavigationBarView;
     private final LightBarTransitionsController mLightBarController;
-    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
-    private final int mBarRadius;
-    private final int mBarBottom;
+    private int mNavBarMode = NAV_BAR_MODE_3BUTTON;
+
+    private final CompositionSamplingListener mSamplingListener;
+    private final Runnable mUpdateSamplingListener = this::updateSamplingListener;
+    private final Rect mSamplingBounds = new Rect();
+    private boolean mSamplingEnabled = false;
+    private boolean mSamplingListenerRegistered = false;
+
+    private float mLastMedianLuma;
+    private float mCurrentMedianLuma;
+    private boolean mUpdateOnNextDraw;
+
+    private final int mNavBarHeight;
+    private final int mNavColorSampleMargin;
+
+    // Passing the threshold of this luminance value will make the button black otherwise white
+    private final float mLuminanceThreshold;
+    private final float mLuminanceChangeThreshold;
 
     public NavBarTintController(NavigationBarView navigationBarView,
             LightBarTransitionsController lightBarController) {
+        mSamplingListener = new CompositionSamplingListener(
+                navigationBarView.getContext().getMainExecutor()) {
+            @Override
+            public void onSampleCollected(float medianLuma) {
+                updateTint(medianLuma);
+            }
+        };
         mNavigationBarView = navigationBarView;
+        mNavigationBarView.addOnAttachStateChangeListener(this);
+        mNavigationBarView.addOnLayoutChangeListener(this);
         mLightBarController = lightBarController;
 
         final Resources res = navigationBarView.getResources();
-        mBarRadius = res.getDimensionPixelSize(R.dimen.navigation_handle_radius);
-        mBarBottom = res.getDimensionPixelSize(R.dimen.navigation_handle_bottom);
+        mNavBarHeight = res.getDimensionPixelSize(R.dimen.navigation_bar_height);
+        mNavColorSampleMargin =
+                res.getDimensionPixelSize(R.dimen.navigation_handle_sample_horizontal_margin);
+        mLuminanceThreshold = res.getFloat(R.dimen.navigation_luminance_threshold);
+        mLuminanceChangeThreshold = res.getFloat(R.dimen.navigation_luminance_change_threshold);
     }
 
-    public void start() {
-        if (!isEnabled(mNavigationBarView.getContext())) {
+    void onDraw() {
+        if (mUpdateOnNextDraw) {
+            mUpdateOnNextDraw = false;
+            requestUpdateSamplingListener();
+        }
+    }
+
+    void start() {
+        if (!isEnabled(mNavigationBarView.getContext(), mNavBarMode)) {
             return;
         }
-        if (mColorAdaptionHandler == null) {
-            mColorAdaptHandlerThread.start();
-            mColorAdaptionHandler = new Handler(mColorAdaptHandlerThread.getLooper());
-        }
-        mColorAdaptionHandler.removeCallbacksAndMessages(null);
-        mColorAdaptionHandler.post(this::updateTint);
-        mRunning = true;
+        mSamplingEnabled = true;
+        // Defer calling updateSamplingListener since we may have just reinflated prior to this
+        requestUpdateSamplingListener();
     }
 
-    public void end() {
-        if (mColorAdaptionHandler != null) {
-            mColorAdaptionHandler.removeCallbacksAndMessages(null);
-        }
-        mRunning = false;
+    void stop() {
+        mSamplingEnabled = false;
+        requestUpdateSamplingListener();
     }
 
-    public void stop() {
-        end();
-        if (mColorAdaptionHandler != null) {
-            mColorAdaptHandlerThread.quitSafely();
-        }
+    @Override
+    public void onViewAttachedToWindow(View view) {
+        requestUpdateSamplingListener();
     }
 
-    private void updateTint() {
-        int[] navPos = new int[2];
-        int[] butPos = new int[2];
+    @Override
+    public void onViewDetachedFromWindow(View view) {
+        // Defer calling updateSamplingListener the attach info has not yet been reset
+        requestUpdateSamplingListener();
+    }
+
+    @Override
+    public void onLayoutChange(View v, int left, int top, int right, int bottom,
+            int oldLeft, int oldTop, int oldRight, int oldBottom) {
+        mSamplingBounds.setEmpty();
+        // TODO: Extend this to 2/3 button layout as well
         View view = mNavigationBarView.getHomeHandle().getCurrentView();
-        if (view == null) {
-            return;
+        if (view != null) {
+            int[] pos = new int[2];
+            view.getLocationOnScreen(pos);
+            Point displaySize = new Point();
+            view.getContext().getDisplay().getRealSize(displaySize);
+            final Rect samplingBounds = new Rect(pos[0] - mNavColorSampleMargin,
+                    displaySize.y - mNavBarHeight, pos[0] + view.getWidth() + mNavColorSampleMargin,
+                    displaySize.y);
+            if (!samplingBounds.equals(mSamplingBounds)) {
+                mSamplingBounds.set(samplingBounds);
+                requestUpdateSamplingListener();
+            }
         }
+    }
 
-        // Determine the area of the icon within its view bounds
-        view.getLocationInSurface(butPos);
-        final int navWidth = view.getWidth();
-        final int navHeight = view.getHeight();
-        int viewBottom = butPos[1] + navHeight - mBarBottom;
-        final Rect viewIconRect = new Rect(butPos[0], viewBottom - mBarRadius * 2,
-                butPos[0] + navWidth, viewBottom);
+    private void requestUpdateSamplingListener() {
+        mHandler.removeCallbacks(mUpdateSamplingListener);
+        mHandler.post(mUpdateSamplingListener);
+    }
 
-        if (mNavigationBarView.getCurrentView() == null || viewIconRect.isEmpty()) {
-            scheduleColorAdaption();
-            return;
+    private void updateSamplingListener() {
+        if (mSamplingListenerRegistered) {
+            mSamplingListenerRegistered = false;
+            CompositionSamplingListener.unregister(mSamplingListener);
         }
-        mNavigationBarView.getCurrentView().getLocationOnScreen(navPos);
-        viewIconRect.offset(navPos[0], navPos[1]);
-
-        // Apply a margin area around the button region to sample the colors, crop from screenshot
-        final Rect cropRect = new Rect(viewIconRect);
-        cropRect.inset(-COLOR_SAMPLE_MARGIN, -COLOR_SAMPLE_MARGIN);
-        if (cropRect.isEmpty()) {
-            scheduleColorAdaption();
-            return;
+        if (mSamplingEnabled && !mSamplingBounds.isEmpty()
+                && mNavigationBarView.isAttachedToWindow()) {
+            if (!mNavigationBarView.getViewRootImpl().getSurfaceControl().isValid()) {
+                // The view may still be attached, but the surface backing the window can be
+                // destroyed, so wait until the next draw to update the listener again
+                mUpdateOnNextDraw = true;
+                return;
+            }
+            mSamplingListenerRegistered = true;
+            CompositionSamplingListener.register(mSamplingListener, DEFAULT_DISPLAY,
+                    mNavigationBarView.getViewRootImpl().getSurfaceControl().getHandle(),
+                    mSamplingBounds);
         }
+    }
 
-        // Determine the size of the home area
-        Rect homeArea = new Rect(COLOR_SAMPLE_MARGIN, COLOR_SAMPLE_MARGIN,
-                viewIconRect.width() + COLOR_SAMPLE_MARGIN,
-                viewIconRect.height() + COLOR_SAMPLE_MARGIN);
+    private void updateTint(float medianLuma) {
+        mLastMedianLuma = medianLuma;
 
-        // Get the screenshot around the home button icon to determine the color
-        DisplayMetrics mDisplayMetrics = new DisplayMetrics();
-        mNavigationBarView.getContext().getDisplay().getRealMetrics(mDisplayMetrics);
-        final Bitmap hardBitmap = SurfaceControl
-                .screenshot(new Rect(), mDisplayMetrics.widthPixels, mDisplayMetrics.heightPixels,
-                        mNavigationBarView.getContext().getDisplay().getRotation());
-        if (hardBitmap != null && cropRect.bottom <= hardBitmap.getHeight()
-                && cropRect.left + cropRect.width() <= hardBitmap.getWidth()) {
-            final Bitmap cropBitmap = Bitmap.createBitmap(hardBitmap, cropRect.left, cropRect.top,
-                    cropRect.width(), cropRect.height());
-            final Bitmap softBitmap = cropBitmap.copy(Config.ARGB_8888, false);
-
-            // Get the luminance value to determine if the home button should be black or white
-            final int[] pixels = new int[softBitmap.getByteCount() / 4];
-            softBitmap.getPixels(pixels, 0, softBitmap.getWidth(), 0, 0, softBitmap.getWidth(),
-                    softBitmap.getHeight());
-            float r = 0, g = 0, blue = 0;
-
-            int width = cropRect.width();
-            int total = 0;
-            for (int i = 0; i < pixels.length; i += 4) {
-                int x = i % width;
-                int y = i / width;
-                if (!homeArea.contains(x, y)) {
-                    r += Color.red(pixels[i]);
-                    g += Color.green(pixels[i]);
-                    blue += Color.blue(pixels[i]);
-                    total++;
-                }
-            }
-
-            r /= total;
-            g /= total;
-            blue /= total;
-
-            r = Math.max(Math.min(r / 255f, 1), 0);
-            g = Math.max(Math.min(g / 255f, 1), 0);
-            blue = Math.max(Math.min(blue / 255f, 1), 0);
-
-            if (r <= 0.03928) {
-                r /= 12.92;
-            } else {
-                r = (float) Math.pow((r + 0.055) / 1.055, 2.4);
-            }
-            if (g <= 0.03928) {
-                g /= 12.92;
-            } else {
-                g = (float) Math.pow((g + 0.055) / 1.055, 2.4);
-            }
-            if (blue <= 0.03928) {
-                blue /= 12.92;
-            } else {
-                blue = (float) Math.pow((blue + 0.055) / 1.055, 2.4);
-            }
-
-            if (r * 0.2126 + g * 0.7152 + blue * 0.0722 > LUMINANCE_THRESHOLD) {
+        // If the difference between the new luma and the current luma is larger than threshold
+        // then apply the current luma, this is to prevent small changes causing colors to flicker
+        if (Math.abs(mCurrentMedianLuma - mLastMedianLuma) > mLuminanceChangeThreshold) {
+            if (medianLuma > mLuminanceThreshold) {
                 // Black
-                mMainHandler.post(
-                        () -> mLightBarController
-                                .setIconsDark(true /* dark */, true /* animate */));
+                mLightBarController.setIconsDark(true /* dark */, true /* animate */);
             } else {
                 // White
-                mMainHandler.post(
-                        () -> mLightBarController
-                                .setIconsDark(false /* dark */, true /* animate */));
+                mLightBarController.setIconsDark(false /* dark */, true /* animate */);
             }
-            cropBitmap.recycle();
-            hardBitmap.recycle();
+            mCurrentMedianLuma = medianLuma;
         }
-        scheduleColorAdaption();
     }
 
-    private void scheduleColorAdaption() {
-        mColorAdaptionHandler.removeCallbacksAndMessages(null);
-        if (!mRunning || !isEnabled(mNavigationBarView.getContext())) {
-            return;
-        }
-        mColorAdaptionHandler.postDelayed(this::updateTint, COLOR_ADAPTION_TIMEOUT);
+    public void onNavigationModeChanged(int mode) {
+        mNavBarMode = mode;
     }
 
-    public static boolean isEnabled(Context context) {
-        return Settings.Global.getInt(context.getContentResolver(),
-                NavigationPrototypeController.NAV_COLOR_ADAPT_ENABLE_SETTING, 0) == 1
-            && Settings.Global.getInt(context.getContentResolver(),
-                NavigationPrototypeController.SHOW_HOME_HANDLE_SETTING, 0) == 1;
+    void dump(PrintWriter pw) {
+        pw.println("NavBarTintController:");
+        pw.println("  navBar isAttached: " + mNavigationBarView.isAttachedToWindow());
+        pw.println("  navBar isScValid: " + (mNavigationBarView.isAttachedToWindow()
+                ? mNavigationBarView.getViewRootImpl().getSurfaceControl().isValid()
+                : "false"));
+        pw.println("  mSamplingListenerRegistered: " + mSamplingListenerRegistered);
+        pw.println("  mSamplingBounds: " + mSamplingBounds);
+        pw.println("  mLastMedianLuma: " + mLastMedianLuma);
+        pw.println("  mCurrentMedianLuma: " + mCurrentMedianLuma);
+    }
+
+    public static boolean isEnabled(Context context, int navBarMode) {
+        return context.getDisplayId() == DEFAULT_DISPLAY
+                && QuickStepContract.isGesturalMode(navBarMode);
     }
 }

@@ -22,8 +22,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verifyZeroInteractions;
 
-import static junit.framework.Assert.assertFalse;
-import static junit.framework.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.platform.test.annotations.Presubmit;
 
@@ -43,7 +43,6 @@ import org.mockito.MockitoAnnotations;
  */
 @SmallTest
 @Presubmit
-@FlakyTest(detail = "Promote once confirmed non-flaky")
 public class AnimatingAppWindowTokenRegistryTest extends WindowTestsBase {
 
     @Mock
@@ -82,6 +81,7 @@ public class AnimatingAppWindowTokenRegistryTest extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testContainerRemoved() {
         final AppWindowToken window1 = createAppWindowToken(mDisplayContent,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);

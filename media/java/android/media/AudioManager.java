@@ -17,6 +17,7 @@
 package android.media;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -25,6 +26,7 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -36,14 +38,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.media.audiopolicy.AudioPolicy;
 import android.media.audiopolicy.AudioPolicy.AudioPolicyFocusListener;
-import android.media.audiopolicy.AudioProductStrategies;
+import android.media.audiopolicy.AudioProductStrategy;
+import android.media.audiopolicy.AudioVolumeGroup;
 import android.media.audiopolicy.AudioVolumeGroupChangeHandler;
-import android.media.audiopolicy.AudioVolumeGroups;
 import android.media.projection.MediaProjection;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.MediaSessionLegacyHelper;
 import android.media.session.MediaSessionManager;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -553,8 +556,7 @@ public class AudioManager {
      * request is from a hardware key press. (e.g. {@link MediaController}).
      * @hide
      */
-    @SystemApi
-    public static final int FLAG_FROM_KEY = 1 << 16;
+    public static final int FLAG_FROM_KEY = 1 << 12;
 
     // The iterator of TreeMap#entrySet() returns the entries in ascending key order.
     private static final TreeMap<Integer, String> FLAG_NAMES = new TreeMap<>();
@@ -1204,6 +1206,7 @@ public class AudioManager {
      * @hide
      */
     @SystemApi
+    @IntRange(from = 0)
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public int getVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
         Preconditions.checkNotNull(attr, "attr must not be null");
@@ -1224,6 +1227,7 @@ public class AudioManager {
      * @hide
      */
     @SystemApi
+    @IntRange(from = 0)
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public int getMaxVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
         Preconditions.checkNotNull(attr, "attr must not be null");
@@ -1244,6 +1248,7 @@ public class AudioManager {
      * @hide
      */
     @SystemApi
+    @IntRange(from = 0)
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public int getMinVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
         Preconditions.checkNotNull(attr, "attr must not be null");
@@ -1482,6 +1487,54 @@ public class AudioManager {
         }
      }
 
+    /**
+     * Specifies wheather the audio played by this app may or may not be captured by other apps or
+     * the system.
+     *
+     * The default is {@link AudioAttributes#ALLOW_CAPTURE_BY_ALL}.
+     *
+     * There are multiple ways to set this policy:
+     *  - for each tracks independently, see
+     *    {@link AudioAttributes.Builder#setAllowedCapturePolicy(int)}
+     *  - application wide at runtime, with this method
+     *  - application wide at build time, see {@code allowAudioPlaybackCapture} in the application
+     *  manifest.
+     * The most restrictive policy is always applied.
+     *
+     * See {@link AudioPlaybackCaptureConfiguration} for more details on the restrictions
+     * which audio signals can be captured.
+     *
+     * @param capturePolicy one of
+     *     {@link AudioAttributes#ALLOW_CAPTURE_BY_ALL},
+     *     {@link AudioAttributes#ALLOW_CAPTURE_BY_SYSTEM},
+     *     {@link AudioAttributes#ALLOW_CAPTURE_BY_NONE}.
+     * @throws IllegalArgumentException if the argument is not a valid value.
+     */
+    public void setAllowedCapturePolicy(@AudioAttributes.CapturePolicy int capturePolicy) {
+        int flags = AudioAttributes.capturePolicyToFlags(capturePolicy, 0x0);
+        // TODO: got trough AudioService and save a cache to restore in case of AP crash
+        // TODO: also pass the package in case multiple packages have the same UID
+        int result = AudioSystem.setAllowedCapturePolicy(Process.myUid(), flags);
+        if (result != AudioSystem.AUDIO_STATUS_OK) {
+            Log.e(TAG, "Could not setAllowedCapturePolicy: " + result);
+            return;
+        }
+        mCapturePolicy = capturePolicy;
+    }
+
+    @AudioAttributes.CapturePolicy
+    private int mCapturePolicy = AudioAttributes.ALLOW_CAPTURE_BY_ALL;
+
+    /**
+     * Return the capture policy.
+     * @return the capture policy set by {@link #setAllowedCapturePolicy(int)} or
+     *         the default if it was not called.
+     */
+    @AudioAttributes.CapturePolicy
+    public int getAllowedCapturePolicy() {
+        return mCapturePolicy;
+    }
+
     //====================================================================
     // Offload query
     /**
@@ -1493,13 +1546,18 @@ public class AudioManager {
      * it does not indicate whether the resources necessary for the offloaded playback are
      * available at that instant.
      * @param format the audio format (codec, sample rate, channels) being checked.
+     * @param attributes the {@link AudioAttributes} to be used for playback
      * @return true if the given audio format can be offloaded.
      */
-    public static boolean isOffloadedPlaybackSupported(@NonNull AudioFormat format) {
+    public static boolean isOffloadedPlaybackSupported(@NonNull AudioFormat format,
+            @NonNull AudioAttributes attributes) {
         if (format == null) {
-            throw new IllegalArgumentException("Illegal null AudioFormat");
+            throw new NullPointerException("Illegal null AudioFormat");
         }
-        return AudioSystem.isOffloadSupported(format);
+        if (attributes == null) {
+            throw new NullPointerException("Illegal null AudioAttributes");
+        }
+        return AudioSystem.isOffloadSupported(format, attributes);
     }
 
     //====================================================================
@@ -1837,6 +1895,21 @@ public class AudioManager {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_MICROPHONE_MUTE_CHANGED =
             "android.media.action.MICROPHONE_MUTE_CHANGED";
+
+    /**
+     * Broadcast Action: speakerphone state changed.
+     *
+     * You <em>cannot</em> receive this through components declared
+     * in manifests, only by explicitly registering for it with
+     * {@link Context#registerReceiver(BroadcastReceiver, IntentFilter)
+     * Context.registerReceiver()}.
+     *
+     * <p>The intent has no extra values, use {@link #isSpeakerphoneOn} to check whether the
+     * speakerphone functionality is enabled or not.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SPEAKERPHONE_STATE_CHANGED =
+            "android.media.action.SPEAKERPHONE_STATE_CHANGED";
 
     /**
      * Sets the audio mode.
@@ -2996,6 +3069,7 @@ public class AudioManager {
      * @param requestResult the result to the focus request to be passed to the requester
      * @param ap a valid registered {@link AudioPolicy} configured as a focus policy.
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public void setFocusRequestResult(@NonNull AudioFocusInfo afi,
@@ -3035,6 +3109,7 @@ public class AudioManager {
      *     if there was an error sending the request.
      * @throws NullPointerException if the {@link AudioFocusInfo} or {@link AudioPolicy} are null.
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public int dispatchAudioFocusChange(@NonNull AudioFocusInfo afi, int focusChange,
@@ -3297,6 +3372,7 @@ public class AudioManager {
      *    {@link android.Manifest.permission#MODIFY_AUDIO_ROUTING} permission,
      *    {@link #SUCCESS} otherwise.
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public int registerAudioPolicy(@NonNull AudioPolicy policy) {
@@ -3311,7 +3387,8 @@ public class AudioManager {
         try {
             MediaProjection projection = policy.getMediaProjection();
             String regId = service.registerAudioPolicy(policy.getConfig(), policy.cb(),
-                    policy.hasFocusListener(), policy.isFocusPolicy(), policy.isVolumeController(),
+                    policy.hasFocusListener(), policy.isFocusPolicy(), policy.isTestFocusPolicy(),
+                    policy.isVolumeController(),
                     projection == null ? null : projection.getProjection());
             if (regId == null) {
                 return ERROR;
@@ -3327,8 +3404,10 @@ public class AudioManager {
 
     /**
      * @hide
+     * Unregisters an {@link AudioPolicy} asynchronously.
      * @param policy the non-null {@link AudioPolicy} to unregister.
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     public void unregisterAudioPolicyAsync(@NonNull AudioPolicy policy) {
@@ -3343,6 +3422,42 @@ public class AudioManager {
         try {
             service.unregisterAudioPolicyAsync(policy.cb());
             policy.setRegistration(null);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Unregisters an {@link AudioPolicy} synchronously.
+     * This method also invalidates all {@link AudioRecord} and {@link AudioTrack} objects
+     * associated with mixes of this policy.
+     * @param policy the non-null {@link AudioPolicy} to unregister.
+     */
+    @TestApi
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void unregisterAudioPolicy(@NonNull AudioPolicy policy) {
+        Preconditions.checkNotNull(policy, "Illegal null AudioPolicy argument");
+        final IAudioService service = getService();
+        try {
+            policy.invalidateCaptorsAndInjectors();
+            service.unregisterAudioPolicy(policy.cb());
+            policy.setRegistration(null);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * @return true if an AudioPolicy was previously registered
+     */
+    @TestApi
+    public boolean hasRegisteredDynamicPolicy() {
+        final IAudioService service = getService();
+        try {
+            return service.hasRegisteredDynamicPolicy();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3669,9 +3784,24 @@ public class AudioManager {
      * with frameworks/av/include/media/AudioPolicy.h
      */
     /** @hide */
-    public final static int RECORD_CONFIG_EVENT_START = 1;
+    public static final int RECORD_CONFIG_EVENT_NONE = -1;
     /** @hide */
-    public final static int RECORD_CONFIG_EVENT_STOP = 0;
+    public static final int RECORD_CONFIG_EVENT_START = 0;
+    /** @hide */
+    public static final int RECORD_CONFIG_EVENT_STOP = 1;
+    /** @hide */
+    public static final int RECORD_CONFIG_EVENT_UPDATE = 2;
+    /** @hide */
+    public static final int RECORD_CONFIG_EVENT_DEATH = 3;
+    /**
+     * keep in sync with frameworks/native/include/audiomanager/AudioManager.h
+     */
+    /** @hide */
+    public static final int RECORD_RIID_INVALID = -1;
+    /** @hide */
+    public static final int RECORDER_STATE_STARTED = 0;
+    /** @hide */
+    public static final int RECORDER_STATE_STOPPED = 1;
 
     /**
      * All operations on this list are sync'd on mRecordCallbackLock.
@@ -4086,6 +4216,10 @@ public class AudioManager {
      /**
      * Indicate Hearing Aid connection state change and eventually suppress
      * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to {@link #setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
+     * * BluetoothDevice, int, int, boolean, int)} and
+     * and {@link #handleBluetoothA2dpDeviceConfigChange(BluetoothDevice)}.
      * @param device Bluetooth device connected/disconnected
      * @param state new connection state (BluetoothProfile.STATE_xxx)
      * @param musicDevice Default get system volume for the connecting device.
@@ -4093,27 +4227,27 @@ public class AudioManager {
      * {@link android.bluetooth.BluetoothProfile.HEARING_AID})
      * @param suppressNoisyIntent if true the
      * {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent will not be sent.
-     * @return a delay in ms that the caller should wait before broadcasting
-     * BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED intent.
      * {@hide}
      */
-    public int setBluetoothHearingAidDeviceConnectionState(
+    public void setBluetoothHearingAidDeviceConnectionState(
                 BluetoothDevice device, int state, boolean suppressNoisyIntent,
                 int musicDevice) {
         final IAudioService service = getService();
-        int delay = 0;
         try {
-            delay = service.setBluetoothHearingAidDeviceConnectionState(device,
+            service.setBluetoothHearingAidDeviceConnectionState(device,
                 state, suppressNoisyIntent, musicDevice);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return delay;
     }
 
      /**
      * Indicate A2DP source or sink connection state change and eventually suppress
      * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to {@link #setBluetoothHearingAidDeviceConnectionState(BluetoothDevice,
+     * int, boolean, int)} and
+     * {@link #handleBluetoothA2dpDeviceConfigChange(BluetoothDevice)}.
      * @param device Bluetooth device connected/disconnected
      * @param state  new connection state, {@link BluetoothProfile#STATE_CONNECTED}
      *     or {@link BluetoothProfile#STATE_DISCONNECTED}
@@ -4123,26 +4257,27 @@ public class AudioManager {
      * {@link android.bluetooth.BluetoothProfile.A2DP_SINK})
      * @param suppressNoisyIntent if true the
      * {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent will not be sent.
-     * @return a delay in ms that the caller should wait before broadcasting
-     * BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED intent.
      * {@hide}
      */
-    public int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
+    public void setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
             BluetoothDevice device, int state,
             int profile, boolean suppressNoisyIntent, int a2dpVolume) {
         final IAudioService service = getService();
-        int delay = 0;
         try {
-            delay = service.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device,
+            service.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device,
                 state, profile, suppressNoisyIntent, a2dpVolume);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return delay;
     }
 
      /**
      * Indicate A2DP device configuration has changed.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to
+     * {@link #setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(BluetoothDevice, int, int,
+     * boolean, int)} and
+     * {@link #setBluetoothHearingAidDeviceConnectionState(BluetoothDevice, int, boolean, int)}
      * @param device Bluetooth device whose configuration has changed.
      * {@hide}
      */
@@ -4158,6 +4293,10 @@ public class AudioManager {
      /**
      * Indicate A2DP source or sink active device change and eventually suppress
      * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+     * This operation is asynchronous but its execution will still be sequentially scheduled
+     * relative to calls to {@link #setBluetoothHearingAidDeviceConnectionState(BluetoothDevice,
+     * int, boolean, int)} and
+     * {@link #handleBluetoothA2dpDeviceConfigChange(BluetoothDevice)}.
      * @param device Bluetooth device connected/disconnected
      * @param state  new connection state (BluetoothProfile.STATE_xxx)
      * @param profile profile for the A2DP device
@@ -4171,18 +4310,16 @@ public class AudioManager {
      * BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED intent.
      * {@hide}
      */
-    public int handleBluetoothA2dpActiveDeviceChange(
+    public void handleBluetoothA2dpActiveDeviceChange(
                 BluetoothDevice device, int state, int profile,
                 boolean suppressNoisyIntent, int a2dpVolume) {
         final IAudioService service = getService();
-        int delay = 0;
         try {
-            delay = service.handleBluetoothA2dpActiveDeviceChange(device,
+            service.handleBluetoothA2dpActiveDeviceChange(device,
                 state, profile, suppressNoisyIntent, a2dpVolume);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return delay;
     }
 
     /** {@hide} */
@@ -4419,6 +4556,7 @@ public class AudioManager {
      */
 
     /** @hide */
+    @TestApi
     @SystemApi
     public static final int SUCCESS = AudioSystem.SUCCESS;
     /**
@@ -5346,8 +5484,9 @@ public class AudioManager {
      *         {@see android.media.audiopolicy.AudioProductStrategy} objects.
      */
     @SystemApi
+    @NonNull
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
-    public @NonNull AudioProductStrategies getAudioProductStrategies() {
+    public static List<AudioProductStrategy> getAudioProductStrategies() {
         final IAudioService service = getService();
         try {
             return service.getAudioProductStrategies();
@@ -5361,15 +5500,16 @@ public class AudioManager {
      * Introspection API to retrieve audio volume groups.
      * When implementing {Car|Oem}AudioManager, use this method  to retrieve the collection of
      * audio volume groups.
-     * @return a (possibly zero-length) array of
-     *         {@see android.media.audiopolicy.AudioVolumeGroups} objects.
+     * @return a (possibly zero-length) List of
+     *         {@see android.media.audiopolicy.AudioVolumeGroup} objects.
      */
     @SystemApi
+    @NonNull
     @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
-    public @NonNull AudioVolumeGroups getAudioVolumeGroups() {
+    public static List<AudioVolumeGroup> getAudioVolumeGroups() {
         final IAudioService service = getService();
         try {
-            return service.listAudioVolumeGroups();
+            return service.getAudioVolumeGroups();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5414,6 +5554,20 @@ public class AudioManager {
             @NonNull VolumeGroupCallback callback) {
         Preconditions.checkNotNull(callback, "volume group change cb must not be null");
         sAudioAudioVolumeGroupChangedHandler.unregisterListener(callback);
+    }
+
+    /**
+     * Return if an asset contains haptic channels or not.
+     * @param uri the {@link Uri} of the asset.
+     * @return true if the assert contains haptic channels.
+     * @hide
+     */
+    public static boolean hasHapticChannels(Uri uri) {
+        try {
+            return getService().hasHapticChannels(uri);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     //---------------------------------------------------------

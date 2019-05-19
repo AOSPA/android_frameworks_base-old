@@ -60,8 +60,10 @@ oneway interface IApplicationThread {
             in CompatibilityInfo compatInfo,
             int resultCode, in String data, in Bundle extras, boolean sync,
             int sendingUser, int processState);
+    @UnsupportedAppUsage
     void scheduleCreateService(IBinder token, in ServiceInfo info,
             in CompatibilityInfo compatInfo, int processState);
+    @UnsupportedAppUsage
     void scheduleStopService(IBinder token);
     void bindApplication(in String packageName, in ApplicationInfo info,
             in List<ProviderInfo> providers, in ComponentName testName,
@@ -77,8 +79,10 @@ oneway interface IApplicationThread {
     void scheduleServiceArgs(IBinder token, in ParceledListSlice args);
     void updateTimeZone();
     void processInBackground();
+    @UnsupportedAppUsage
     void scheduleBindService(IBinder token,
             in Intent intent, boolean rebind, int processState);
+    @UnsupportedAppUsage
     void scheduleUnbindService(IBinder token,
             in Intent intent);
     void dumpService(in ParcelFileDescriptor fd, IBinder servicetoken,
@@ -106,6 +110,7 @@ oneway interface IApplicationThread {
     void updateHttpProxy();
     void setCoreSettings(in Bundle coreSettings);
     void updatePackageCompatibilityInfo(in String pkg, in CompatibilityInfo info);
+    @UnsupportedAppUsage
     void scheduleTrimMemory(int level);
     void dumpMemInfo(in ParcelFileDescriptor fd, in Debug.MemoryInfo mem, boolean checkin,
             boolean dumpInfo, boolean dumpDalvik, boolean dumpSummaryOnly, boolean dumpUnreachable,
@@ -135,4 +140,9 @@ oneway interface IApplicationThread {
     void scheduleApplicationInfoChanged(in ApplicationInfo ai);
     void setNetworkBlockSeq(long procStateSeq);
     void scheduleTransaction(in ClientTransaction transaction);
+    void requestDirectActions(IBinder activityToken, IVoiceInteractor intractor,
+            in RemoteCallback cancellationCallback, in RemoteCallback callback);
+    void performDirectAction(IBinder activityToken, String actionId,
+            in Bundle arguments, in RemoteCallback cancellationCallback,
+            in RemoteCallback resultCallback);
 }

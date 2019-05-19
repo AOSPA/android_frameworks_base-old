@@ -41,7 +41,7 @@ class Dimmer {
     private static final int DEFAULT_DIM_ANIM_DURATION = 200;
 
     private class DimAnimatable implements SurfaceAnimator.Animatable {
-        private final SurfaceControl mDimLayer;
+        private SurfaceControl mDimLayer;
 
         private DimAnimatable(SurfaceControl dimLayer) {
             mDimLayer = dimLayer;
@@ -100,6 +100,13 @@ class Dimmer {
             // See getSurfaceWidth() above for explanation.
             return mHost.getSurfaceHeight();
         }
+
+        void removeSurface() {
+            if (mDimLayer != null && mDimLayer.isValid()) {
+                getPendingTransaction().remove(mDimLayer);
+            }
+            mDimLayer = null;
+        }
     }
 
     @VisibleForTesting
@@ -129,7 +136,7 @@ class Dimmer {
             final DimAnimatable dimAnimatable = new DimAnimatable(dimLayer);
             mSurfaceAnimator = new SurfaceAnimator(dimAnimatable, () -> {
                 if (!mDimming) {
-                    dimAnimatable.getPendingTransaction().remove(mDimLayer);
+                    dimAnimatable.removeSurface();
                 }
             }, mHost.mWmService);
         }
@@ -300,7 +307,9 @@ class Dimmer {
 
         if (!mDimState.mDimming) {
             if (!mDimState.mAnimateExit) {
-                t.remove(mDimState.mDimLayer);
+                if (mDimState.mDimLayer.isValid()) {
+                    t.remove(mDimState.mDimLayer);
+                }
             } else {
                 startDimExit(mLastRequestedDimContainer, mDimState.mSurfaceAnimator, t);
             }

@@ -16,66 +16,39 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
-
 import android.app.ActivityManager;
-import android.app.ActivityManager.StackInfo;
 import android.app.ActivityTaskManager;
 import android.app.AlarmManager;
 import android.app.AlarmManager.AlarmClockInfo;
-import android.app.AppGlobals;
-import android.app.Notification;
-import android.app.Notification.Action;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.SynchronousUserSwitchObserver;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.IPackageManager;
-import android.content.pm.PackageManager;
-import android.graphics.drawable.Icon;
 import android.media.AudioManager;
-import android.net.Uri;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.provider.Settings;
 import android.provider.Settings.Global;
-import android.service.notification.StatusBarNotification;
 import android.service.notification.ZenModeConfig;
 import android.telecom.TelecomManager;
 import android.text.format.DateFormat;
-import android.util.ArraySet;
 import android.util.Log;
-import android.util.Pair;
 
-import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.systemui.Dependency;
-import com.android.systemui.DockedStackExistsListener;
 import com.android.systemui.R;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.UiOffloadThread;
 import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
+import com.android.systemui.privacy.PrivacyType;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
-import com.android.systemui.shared.system.ActivityManagerWrapper;
-import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.CommandQueue.Callbacks;
 import com.android.systemui.statusbar.policy.BluetoothController;
-import com.android.systemui.statusbar.policy.BluetoothController.Callback;
 import com.android.systemui.statusbar.policy.CastController;
 import com.android.systemui.statusbar.policy.CastController.CastDevice;
 import com.android.systemui.statusbar.policy.DataSaverController;
@@ -88,9 +61,9 @@ import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.RotationLockController;
 import com.android.systemui.statusbar.policy.RotationLockController.RotationLockControllerCallback;
+import com.android.systemui.statusbar.policy.SensorPrivacyController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.ZenModeController;
-import com.android.systemui.util.NotificationChannels;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -98,18 +71,22 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * This class contains all of the policy about which icons are installed in the status
- * bar at boot time.  It goes through the normal API for icons, even though it probably
- * strictly doesn't need to.
+ * This class contains all of the policy about which icons are installed in the status bar at boot
+ * time. It goes through the normal API for icons, even though it probably strictly doesn't need to.
  */
-public class PhoneStatusBarPolicy implements Callback, Callbacks,
-        RotationLockControllerCallback, Listener, ZenModeController.Callback,
-        DeviceProvisionedListener, KeyguardMonitor.Callback, PrivacyItemController.Callback {
+public class PhoneStatusBarPolicy
+        implements BluetoothController.Callback,
+                CommandQueue.Callbacks,
+                RotationLockControllerCallback,
+                Listener,
+                ZenModeController.Callback,
+                DeviceProvisionedListener,
+                KeyguardMonitor.Callback,
+                PrivacyItemController.Callback {
     private static final String TAG = "PhoneStatusBarPolicy";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     public static final int LOCATION_STATUS_ICON_ID = R.drawable.stat_sys_location;
-    public static final int NUM_TASKS_FOR_INSTANT_APP_INFO = 5;
 
     private final String mSlotCast;
     private final String mSlotHotspot;
@@ -125,6 +102,7 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
     private final String mSlotLocation;
     private final String mSlotMicrophone;
     private final String mSlotCamera;
+    private final String mSlotSensorsOff;
 
     private final Context mContext;
     private final Handler mHandler = new Handler();
@@ -142,8 +120,8 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
     private final KeyguardMonitor mKeyguardMonitor;
     private final LocationController mLocationController;
     private final PrivacyItemController mPrivacyItemController;
-    private final ArraySet<Pair<String, Integer>> mCurrentNotifs = new ArraySet<>();
     private final UiOffloadThread mUiOffloadThread = Dependency.get(UiOffloadThread.class);
+    private final SensorPrivacyController mSensorPrivacyController;
 
     // Assume it's all good unless we hear otherwise.  We don't always seem
     // to get broadcasts that it *is* there.
@@ -152,7 +130,6 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
     private boolean mZenVisible;
     private boolean mVolumeVisible;
     private boolean mCurrentUserSetup;
-    private boolean mDockedStackExists;
 
     private boolean mManagedProfileIconVisible = false;
 
@@ -176,6 +153,7 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
         mLocationController = Dependency.get(LocationController.class);
         mPrivacyItemController = Dependency.get(PrivacyItemController.class);
+        mSensorPrivacyController = Dependency.get(SensorPrivacyController.class);
 
         mSlotCast = context.getString(com.android.internal.R.string.status_bar_cast);
         mSlotHotspot = context.getString(com.android.internal.R.string.status_bar_hotspot);
@@ -192,6 +170,7 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mSlotLocation = context.getString(com.android.internal.R.string.status_bar_location);
         mSlotMicrophone = context.getString(com.android.internal.R.string.status_bar_microphone);
         mSlotCamera = context.getString(com.android.internal.R.string.status_bar_camera);
+        mSlotSensorsOff = context.getString(com.android.internal.R.string.status_bar_sensors_off);
 
         // listen for broadcasts
         IntentFilter filter = new IntentFilter();
@@ -204,6 +183,11 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
+
+        boolean isIeee80211acSupported =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ac_supported);
+        boolean isIeee80211axSupported =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ax_supported);
 
         // listen for user / profile change.
         try {
@@ -223,7 +207,7 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mIconController.setIconVisibility(mSlotAlarmClock, false);
 
         // zen
-        mIconController.setIcon(mSlotZen, R.drawable.stat_sys_zen_important, null);
+        mIconController.setIcon(mSlotZen, R.drawable.stat_sys_dnd, null);
         mIconController.setIconVisibility(mSlotZen, false);
 
         // volume
@@ -236,8 +220,16 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mIconController.setIconVisibility(mSlotCast, false);
 
         // hotspot
-        mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+        if (isIeee80211axSupported) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
                 mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else if (isIeee80211acSupported) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        }
         mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
 
         // managed profile
@@ -251,13 +243,21 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mIconController.setIconVisibility(mSlotDataSaver, false);
 
         // privacy items
-        mIconController.setIcon(mSlotMicrophone, R.drawable.stat_sys_mic_none, null);
+        mIconController.setIcon(mSlotMicrophone, R.drawable.stat_sys_mic_none,
+                PrivacyType.TYPE_MICROPHONE.getName(mContext));
         mIconController.setIconVisibility(mSlotMicrophone, false);
-        mIconController.setIcon(mSlotCamera, R.drawable.stat_sys_camera, null);
+        mIconController.setIcon(mSlotCamera, R.drawable.stat_sys_camera,
+                PrivacyType.TYPE_CAMERA.getName(mContext));
         mIconController.setIconVisibility(mSlotCamera, false);
         mIconController.setIcon(mSlotLocation, LOCATION_STATUS_ICON_ID,
                 mContext.getString(R.string.accessibility_location_active));
         mIconController.setIconVisibility(mSlotLocation, false);
+
+        // sensors off
+        mIconController.setIcon(mSlotSensorsOff, R.drawable.stat_sys_sensors_off,
+                mContext.getString(R.string.accessibility_sensors_off_active));
+        mIconController.setIconVisibility(mSlotSensorsOff,
+                mSensorPrivacyController.isSensorPrivacyEnabled());
 
         mRotationLockController.addCallback(this);
         mBluetooth.addCallback(this);
@@ -269,21 +269,9 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mDataSaver.addCallback(this);
         mKeyguardMonitor.addCallback(this);
         mPrivacyItemController.addCallback(this);
+        mSensorPrivacyController.addCallback(mSensorPrivacyListener);
 
         SysUiServiceProvider.getComponent(mContext, CommandQueue.class).addCallback(this);
-        ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskListener);
-
-        // Clear out all old notifications on startup (only present in the case where sysui dies)
-        NotificationManager noMan = mContext.getSystemService(NotificationManager.class);
-        for (StatusBarNotification notification : noMan.getActiveNotifications()) {
-            if (notification.getId() == SystemMessage.NOTE_INSTANT_APPS) {
-                noMan.cancel(notification.getTag(), notification.getId());
-            }
-        }
-        DockedStackExistsListener.register(exists -> {
-            mDockedStackExists = exists;
-            updateForegroundInstantApps();
-        });
     }
 
     @Override
@@ -368,11 +356,11 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
             zenDescription = mContext.getString(R.string.quick_settings_dnd_label);
         } else if (zen == Global.ZEN_MODE_NO_INTERRUPTIONS) {
             zenVisible = true;
-            zenIconId = R.drawable.stat_sys_zen_none;
+            zenIconId = R.drawable.stat_sys_dnd;
             zenDescription = mContext.getString(R.string.interruption_level_none);
         } else if (zen == Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS) {
             zenVisible = true;
-            zenIconId = R.drawable.stat_sys_zen_important;
+            zenIconId = R.drawable.stat_sys_dnd;
             zenDescription = mContext.getString(R.string.interruption_level_priority);
         }
 
@@ -417,13 +405,12 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
     }
 
     private final void updateBluetooth() {
-        int iconId = R.drawable.stat_sys_data_bluetooth;
+        int iconId = R.drawable.stat_sys_data_bluetooth_connected;
         String contentDescription =
                 mContext.getString(R.string.accessibility_quick_settings_bluetooth_on);
         boolean bluetoothVisible = false;
         if (mBluetooth != null) {
             if (mBluetooth.isBluetoothConnected()) {
-                iconId = R.drawable.stat_sys_data_bluetooth_connected;
                 contentDescription = mContext.getString(R.string.accessibility_bluetooth_connected);
                 bluetoothVisible = mBluetooth.isBluetoothEnabled();
             }
@@ -515,169 +502,6 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         });
     }
 
-    private void updateForegroundInstantApps() {
-        NotificationManager noMan = mContext.getSystemService(NotificationManager.class);
-        ArraySet<Pair<String, Integer>> notifs = new ArraySet<>(mCurrentNotifs);
-        IPackageManager pm = AppGlobals.getPackageManager();
-        mCurrentNotifs.clear();
-        mUiOffloadThread.submit(() -> {
-            try {
-                final StackInfo focusedStack =
-                        ActivityTaskManager.getService().getFocusedStackInfo();
-                if (focusedStack != null) {
-                    final int windowingMode =
-                            focusedStack.configuration.windowConfiguration.getWindowingMode();
-                    if (windowingMode == WINDOWING_MODE_FULLSCREEN
-                            || windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) {
-                        checkStack(focusedStack, notifs, noMan, pm);
-                    }
-                }
-                if (mDockedStackExists) {
-                    checkStack(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_UNDEFINED,
-                            notifs, noMan, pm);
-                }
-            } catch (RemoteException e) {
-                e.rethrowFromSystemServer();
-            }
-            // Cancel all the leftover notifications that don't have a foreground process anymore.
-            notifs.forEach(v -> noMan.cancelAsUser(v.first, SystemMessage.NOTE_INSTANT_APPS,
-                    new UserHandle(v.second)));
-        });
-    }
-
-    private void checkStack(int windowingMode, int activityType,
-            ArraySet<Pair<String, Integer>> notifs, NotificationManager noMan, IPackageManager pm) {
-        try {
-            final StackInfo info =
-                    ActivityTaskManager.getService().getStackInfo(windowingMode, activityType);
-            checkStack(info, notifs, noMan, pm);
-        } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
-        }
-    }
-    private void checkStack(StackInfo info, ArraySet<Pair<String, Integer>> notifs,
-            NotificationManager noMan, IPackageManager pm) {
-        try {
-            if (info == null || info.topActivity == null) return;
-            String pkg = info.topActivity.getPackageName();
-            if (!hasNotif(notifs, pkg, info.userId)) {
-                // TODO: Optimize by not always needing to get application info.
-                // Maybe cache non-ephemeral packages?
-                ApplicationInfo appInfo = pm.getApplicationInfo(pkg,
-                        PackageManager.MATCH_UNINSTALLED_PACKAGES, info.userId);
-                if (appInfo.isInstantApp()) {
-                    postEphemeralNotif(pkg, info.userId, appInfo, noMan, info.taskIds[info.taskIds.length - 1]);
-                }
-            }
-        } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
-        }
-    }
-
-    private void postEphemeralNotif(String pkg, int userId, ApplicationInfo appInfo,
-            NotificationManager noMan, int taskId) {
-        final Bundle extras = new Bundle();
-        extras.putString(Notification.EXTRA_SUBSTITUTE_APP_NAME,
-                mContext.getString(R.string.instant_apps));
-        mCurrentNotifs.add(new Pair<>(pkg, userId));
-
-        String helpUrl = mContext.getString(R.string.instant_apps_help_url);
-        boolean hasHelpUrl = !helpUrl.isEmpty();
-        String message = mContext.getString(hasHelpUrl
-                ? R.string.instant_apps_message_with_help
-                : R.string.instant_apps_message);
-
-        UserHandle user = UserHandle.of(userId);
-        PendingIntent appInfoAction = PendingIntent.getActivityAsUser(mContext, 0,
-                new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                        .setData(Uri.fromParts("package", pkg, null)), 0, null, user);
-        Action action = new Notification.Action.Builder(null, mContext.getString(R.string.app_info),
-                appInfoAction).build();
-        PendingIntent helpCenterIntent = hasHelpUrl
-                ? PendingIntent.getActivityAsUser(mContext, 0,
-                new Intent(Intent.ACTION_VIEW).setData(Uri.parse(
-                        helpUrl)),
-                0, null, user)
-                : null;
-
-        Intent browserIntent = getTaskIntent(taskId, userId);
-        Notification.Builder builder = new Notification.Builder(mContext,
-                NotificationChannels.GENERAL);
-        if (browserIntent != null && browserIntent.isWebIntent()) {
-            // Make sure that this doesn't resolve back to an instant app
-            browserIntent.setComponent(null)
-                    .setPackage(null)
-                    .addFlags(Intent.FLAG_IGNORE_EPHEMERAL)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-            PendingIntent pendingIntent = PendingIntent.getActivityAsUser(mContext,
-                    0 /* requestCode */, browserIntent, 0 /* flags */, null, user);
-            ComponentName aiaComponent = null;
-            try {
-                aiaComponent = AppGlobals.getPackageManager().getInstantAppInstallerComponent();
-            } catch (RemoteException e) {
-                e.rethrowFromSystemServer();
-            }
-            Intent goToWebIntent = new Intent()
-                    .setComponent(aiaComponent)
-                    .setAction(Intent.ACTION_VIEW)
-                    .addCategory(Intent.CATEGORY_BROWSABLE)
-                    .addCategory("unique:" + System.currentTimeMillis())
-                    .putExtra(Intent.EXTRA_PACKAGE_NAME, appInfo.packageName)
-                    .putExtra(Intent.EXTRA_VERSION_CODE, (int) (appInfo.versionCode & 0x7fffffff))
-                    .putExtra(Intent.EXTRA_LONG_VERSION_CODE, appInfo.versionCode)
-                    .putExtra(Intent.EXTRA_INSTANT_APP_FAILURE, pendingIntent);
-
-            PendingIntent webPendingIntent = PendingIntent.getActivityAsUser(mContext, 0,
-                    goToWebIntent, 0, null, user);
-            Action webAction = new Notification.Action.Builder(null,
-                    mContext.getString(R.string.go_to_web),
-                    webPendingIntent).build();
-            builder.addAction(webAction);
-        }
-
-        noMan.notifyAsUser(pkg, SystemMessage.NOTE_INSTANT_APPS, builder
-                        .addExtras(extras)
-                        .addAction(action)
-                        .setContentIntent(helpCenterIntent)
-                        .setColor(mContext.getColor(R.color.instant_apps_color))
-                        .setContentTitle(mContext.getString(R.string.instant_apps_title,
-                                appInfo.loadLabel(mContext.getPackageManager())))
-                        .setLargeIcon(Icon.createWithResource(pkg, appInfo.icon))
-                        .setSmallIcon(Icon.createWithResource(mContext.getPackageName(),
-                                R.drawable.instant_icon))
-                        .setContentText(message)
-                        .setStyle(new Notification.BigTextStyle().bigText(message))
-                        .setOngoing(true)
-                        .build(),
-                new UserHandle(userId));
-    }
-
-    private Intent getTaskIntent(int taskId, int userId) {
-        try {
-            final List<ActivityManager.RecentTaskInfo> tasks =
-                    ActivityTaskManager.getService().getRecentTasks(
-                            NUM_TASKS_FOR_INSTANT_APP_INFO, 0, userId).getList();
-            for (int i = 0; i < tasks.size(); i++) {
-                if (tasks.get(i).id == taskId) {
-                    return tasks.get(i).baseIntent;
-                }
-            }
-        } catch (RemoteException e) {
-            // Fall through
-        }
-        return null;
-    }
-
-    private boolean hasNotif(ArraySet<Pair<String, Integer>> notifs, String pkg, int userId) {
-        Pair<String, Integer> key = new Pair<>(pkg, userId);
-        if (notifs.remove(key)) {
-            mCurrentNotifs.add(key);
-            return true;
-        }
-        return false;
-    }
-
     private final SynchronousUserSwitchObserver mUserSwitchListener =
             new SynchronousUserSwitchObserver() {
                 @Override
@@ -690,7 +514,6 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
                     mHandler.post(() -> {
                         updateAlarm();
                         updateManagedProfile();
-                        updateForegroundInstantApps();
                     });
                 }
             };
@@ -718,19 +541,27 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
                 }
             };
 
+    private final SensorPrivacyController.OnSensorPrivacyChangedListener mSensorPrivacyListener =
+            new SensorPrivacyController.OnSensorPrivacyChangedListener() {
+                @Override
+                public void onSensorPrivacyChanged(boolean enabled) {
+                    mHandler.post(() -> {
+                        mIconController.setIconVisibility(mSlotSensorsOff, enabled);
+                    });
+                }
+            };
+
     @Override
     public void appTransitionStarting(int displayId, long startTime, long duration,
             boolean forced) {
         if (mContext.getDisplayId() == displayId) {
             updateManagedProfile();
-            updateForegroundInstantApps();
         }
     }
 
     @Override
     public void onKeyguardShowingChanged() {
         updateManagedProfile();
-        updateForegroundInstantApps();
     }
 
     @Override
@@ -740,11 +571,6 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         if (mCurrentUserSetup == userSetup) return;
         mCurrentUserSetup = userSetup;
         updateAlarm();
-    }
-
-    @Override
-    public void preloadRecentApps() {
-        updateForegroundInstantApps();
     }
 
     @Override
@@ -772,8 +598,8 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
             String contentDescription = mContext.getString(hasMic
                     ? R.string.accessibility_status_bar_headset
                     : R.string.accessibility_status_bar_headphones);
-            mIconController.setIcon(mSlotHeadset, hasMic ? R.drawable.ic_headset_mic
-                    : R.drawable.ic_headset, contentDescription);
+            mIconController.setIcon(mSlotHeadset, hasMic ? R.drawable.stat_sys_headset_mic
+                    : R.drawable.stat_sys_headset, contentDescription);
             mIconController.setIconVisibility(mSlotHeadset, true);
         } else {
             mIconController.setIconVisibility(mSlotHeadset, false);
@@ -821,14 +647,6 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mIconController.setIconVisibility(mSlotMicrophone, showMicrophone);
         mIconController.setIconVisibility(mSlotLocation, showLocation);
     }
-
-    private final TaskStackChangeListener mTaskListener = new TaskStackChangeListener() {
-        @Override
-        public void onTaskStackChanged() {
-            // Listen for changes to stacks and then check which instant apps are foreground.
-            updateForegroundInstantApps();
-        }
-    };
 
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override

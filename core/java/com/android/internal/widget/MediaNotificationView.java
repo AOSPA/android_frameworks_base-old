@@ -19,6 +19,7 @@ package com.android.internal.widget;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.util.AttributeSet;
+import android.view.NotificationHeaderView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -37,7 +38,7 @@ public class MediaNotificationView extends FrameLayout {
     private final int mNotificationContentImageMarginEnd;
     private ImageView mRightIcon;
     private View mActions;
-    private View mHeader;
+    private NotificationHeaderView mHeader;
     private View mMainColumn;
     private View mMediaContent;
     private int mImagePushIn;
@@ -94,7 +95,14 @@ public class MediaNotificationView extends FrameLayout {
                 mMainColumn.setLayoutParams(params);
                 reMeasure = true;
             }
-            int headerMarginEnd = size + imageEndMargin;
+            // margin for the entire header line
+            int headerMarginEnd = imageEndMargin;
+            // margin for the header text (not including the expand button and other icons)
+            int headerTextMarginEnd = size + imageEndMargin;
+            if (headerTextMarginEnd != mHeader.getHeaderTextMarginEnd()) {
+                mHeader.setHeaderTextMarginEnd(headerTextMarginEnd);
+                reMeasure = true;
+            }
             params = (MarginLayoutParams) mHeader.getLayoutParams();
             if (params.getMarginEnd() != headerMarginEnd) {
                 params.setMarginEnd(headerMarginEnd);
@@ -118,6 +126,9 @@ public class MediaNotificationView extends FrameLayout {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         if (mImagePushIn > 0) {
+            if (this.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) {
+                mImagePushIn *= -1;
+            }
             mRightIcon.layout(mRightIcon.getLeft() + mImagePushIn, mRightIcon.getTop(),
                     mRightIcon.getRight()  + mImagePushIn, mRightIcon.getBottom());
         }

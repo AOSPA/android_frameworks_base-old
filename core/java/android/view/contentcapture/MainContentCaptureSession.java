@@ -28,6 +28,7 @@ import static android.view.contentcapture.ContentCaptureEvent.TYPE_VIEW_TREE_APP
 import static android.view.contentcapture.ContentCaptureHelper.getSanitizedString;
 import static android.view.contentcapture.ContentCaptureHelper.sDebug;
 import static android.view.contentcapture.ContentCaptureHelper.sVerbose;
+import static android.view.contentcapture.ContentCaptureManager.RESULT_CODE_FALSE;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -80,6 +81,12 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
      */
     public static final String EXTRA_BINDER = "binder";
 
+    /**
+     * Name of the {@link IResultReceiver} extra used to pass the content capture enabled state.
+     * @hide
+     */
+    public static final String EXTRA_ENABLED_STATE = "enabled";
+
     @NonNull
     private final AtomicBoolean mDisabled = new AtomicBoolean(false);
 
@@ -125,8 +132,19 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
     // Used just for debugging purposes (on dump)
     private long mNextFlush;
 
+    /**
+     * Whether the next buffer flush is queued by a text changed event.
+     */
+    private boolean mNextFlushForTextChanged = false;
+
     @Nullable
     private final LocalLog mFlushHistory;
+
+    /**
+     * Binder object used to update the session state.
+     */
+    @NonNull
+    private final IResultReceiver.Stub mSessionStateReceiver;
 
     protected MainContentCaptureSession(@NonNull Context context,
             @NonNull ContentCaptureManager manager, @NonNull Handler handler,
@@ -138,6 +156,33 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
 
         final int logHistorySize = mManager.mOptions.logHistorySize;
         mFlushHistory = logHistorySize > 0 ? new LocalLog(logHistorySize) : null;
+
+        mSessionStateReceiver = new IResultReceiver.Stub() {
+            @Override
+            public void send(int resultCode, Bundle resultData) {
+                final IBinder binder;
+                if (resultData != null) {
+                    // Change in content capture enabled.
+                    final boolean hasEnabled = resultData.getBoolean(EXTRA_ENABLED_STATE);
+                    if (hasEnabled) {
+                        final boolean disabled = (resultCode == RESULT_CODE_FALSE);
+                        mDisabled.set(disabled);
+                        return;
+                    }
+                    binder = resultData.getBinder(EXTRA_BINDER);
+                    if (binder == null) {
+                        Log.wtf(TAG, "No " + EXTRA_BINDER + " extra result");
+                        mHandler.post(() -> resetSession(
+                                STATE_DISABLED | STATE_INTERNAL_ERROR));
+                        return;
+                    }
+                } else {
+                    binder = null;
+                }
+                mHandler.post(() -> onSessionStarted(resultCode, binder));
+            }
+        };
+
     }
 
     @Override
@@ -185,24 +230,7 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
 
         try {
             mSystemServerInterface.startSession(mApplicationToken, component, mId, flags,
-                    new IResultReceiver.Stub() {
-                        @Override
-                        public void send(int resultCode, Bundle resultData) {
-                            final IBinder binder;
-                            if (resultData != null) {
-                                binder = resultData.getBinder(EXTRA_BINDER);
-                                if (binder == null) {
-                                    Log.wtf(TAG, "No " + EXTRA_BINDER + " extra result");
-                                    mHandler.post(() -> resetSession(
-                                            STATE_DISABLED | STATE_INTERNAL_ERROR));
-                                    return;
-                                }
-                            } else {
-                                binder = null;
-                            }
-                            mHandler.post(() -> onSessionStarted(resultCode, binder));
-                        }
-                    });
+                    mSessionStateReceiver);
         } catch (RemoteException e) {
             Log.w(TAG, "Error starting session for " + component.flattenToShortString() + ": " + e);
         }
@@ -217,7 +245,7 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
     /**
      * Callback from {@code system_server} after call to
      * {@link IContentCaptureManager#startSession(IBinder, ComponentName, String, int,
-     * IResultReceiver)}
+     * IResultReceiver)}.
      *
      * @param resultCode session state
      * @param binder handle to {@code IContentCaptureDirectManager}
@@ -227,8 +255,9 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
         if (binder != null) {
             mDirectServiceInterface = IContentCaptureDirectManager.Stub.asInterface(binder);
             mDirectServiceVulture = () -> {
-                Log.w(TAG, "Destroying session " + mId + " because service died");
-                destroy();
+                Log.w(TAG, "Keeping session " + mId + " when service died");
+                mState = STATE_SERVICE_DIED;
+                mDisabled.set(true);
             };
             try {
                 binder.linkToDeath(mDirectServiceVulture, 0);
@@ -295,8 +324,7 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
                     Log.v(TAG, "Buffering VIEW_TEXT_CHANGED event, updated text="
                             + getSanitizedString(event.getText()));
                 }
-                // TODO(b/124107816): should call lastEvent.merge(event) instead
-                lastEvent.setText(event.getText());
+                lastEvent.mergeEvent(event);
                 addEvent = false;
             }
         }
@@ -304,12 +332,12 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
         if (!mEvents.isEmpty() && eventType == TYPE_VIEW_DISAPPEARED) {
             final ContentCaptureEvent lastEvent = mEvents.get(mEvents.size() - 1);
             if (lastEvent.getType() == TYPE_VIEW_DISAPPEARED
-                    && event.getSessionId().equals(lastEvent.getSessionId())) {
+                    && event.getSessionId() == lastEvent.getSessionId()) {
                 if (sVerbose) {
                     Log.v(TAG, "Buffering TYPE_VIEW_DISAPPEARED events for session "
                             + lastEvent.getSessionId());
                 }
-                mergeViewsDisappearedEvent(lastEvent, event);
+                lastEvent.mergeEvent(event);
                 addEvent = false;
             }
         }
@@ -323,7 +351,21 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
         final boolean bufferEvent = numberEvents < maxBufferSize;
 
         if (bufferEvent && !forceFlush) {
-            scheduleFlush(FLUSH_REASON_IDLE_TIMEOUT, /* checkExisting= */ true);
+            final int flushReason;
+            if (eventType == TYPE_VIEW_TEXT_CHANGED) {
+                mNextFlushForTextChanged = true;
+                flushReason = FLUSH_REASON_TEXT_CHANGE_TIMEOUT;
+            } else {
+                if (mNextFlushForTextChanged) {
+                    if (sVerbose) {
+                        Log.i(TAG, "Not scheduling flush because next flush is for text changed");
+                    }
+                    return;
+                }
+
+                flushReason = FLUSH_REASON_IDLE_TIMEOUT;
+            }
+            scheduleFlush(flushReason, /* checkExisting= */ true);
             return;
         }
 
@@ -357,30 +399,6 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
         flush(flushReason);
     }
 
-    // TODO(b/124107816): should be ContentCaptureEvent Event.merge(event) instead (which would
-    // replace the addAutofillId() method - we would also need unit tests on ContentCaptureEventTest
-    // to check these scenarios)
-    private void mergeViewsDisappearedEvent(@NonNull ContentCaptureEvent lastEvent,
-            @NonNull ContentCaptureEvent event) {
-        final List<AutofillId> ids = event.getIds();
-        final AutofillId id = event.getId();
-        if (ids != null) {
-            if (id != null) {
-                Log.w(TAG, "got TYPE_VIEW_DISAPPEARED event with both id and ids: " + event);
-            }
-            for (int i = 0; i < ids.size(); i++) {
-                lastEvent.addAutofillId(ids.get(i));
-            }
-            return;
-        }
-        if (id != null) {
-            lastEvent.addAutofillId(id);
-            return;
-        }
-        throw new IllegalArgumentException(
-                "got TYPE_VIEW_DISAPPEARED event with neither id or ids: " + event);
-    }
-
     @UiThread
     private boolean hasStarted() {
         return mState != UNKNOWN_STATE;
@@ -408,14 +426,25 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
             // "Renew" the flush message by removing the previous one
             mHandler.removeMessages(MSG_FLUSH);
         }
-        final int idleFlushingFrequencyMs = mManager.mOptions.idleFlushingFrequencyMs;
-        mNextFlush = System.currentTimeMillis() + idleFlushingFrequencyMs;
+
+        final int flushFrequencyMs;
+        if (reason == FLUSH_REASON_IDLE_TIMEOUT) {
+            flushFrequencyMs = mManager.mOptions.idleFlushingFrequencyMs;
+        } else if (reason == FLUSH_REASON_TEXT_CHANGE_TIMEOUT) {
+            flushFrequencyMs = mManager.mOptions.textChangeFlushingFrequencyMs;
+        } else {
+            Log.e(TAG, "handleScheduleFlush(" + getDebugState(reason) + "): not called with a "
+                    + "timeout reason.");
+            return;
+        }
+
+        mNextFlush = System.currentTimeMillis() + flushFrequencyMs;
         if (sVerbose) {
             Log.v(TAG, "handleScheduleFlush(): scheduled to flush in "
-                    + idleFlushingFrequencyMs + "ms: " + TimeUtils.logTimeOfDay(mNextFlush));
+                    + flushFrequencyMs + "ms: " + TimeUtils.logTimeOfDay(mNextFlush));
         }
         // Post using a Runnable directly to trim a few μs from PooledLambda.obtainMessage()
-        mHandler.postDelayed(() -> flushIfNeeded(reason), MSG_FLUSH, idleFlushingFrequencyMs);
+        mHandler.postDelayed(() -> flushIfNeeded(reason), MSG_FLUSH, flushFrequencyMs);
     }
 
     @UiThread
@@ -463,6 +492,10 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
         }
         try {
             mHandler.removeMessages(MSG_FLUSH);
+
+            if (reason == FLUSH_REASON_TEXT_CHANGE_TIMEOUT) {
+                mNextFlushForTextChanged = false;
+            }
 
             final ParceledListSlice<ContentCaptureEvent> events = clearEvents();
             mDirectServiceInterface.sendEvents(events);
@@ -559,40 +592,47 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
         return mDisabled.get();
     }
 
+    /**
+     * Called by ContentCaptureManager.setContentCaptureEnabled
+     *
+     * @return whether disabled state was changed.
+     */
+    boolean setDisabled(boolean disabled) {
+        return mDisabled.compareAndSet(!disabled, disabled);
+    }
+
     // TODO(b/122454205): refactor "notifyXXXX" methods below to a common "Buffer" object that is
     // shared between ActivityContentCaptureSession and ChildContentCaptureSession objects. Such
     // change should also get get rid of the "internalNotifyXXXX" methods above
-    void notifyChildSessionStarted(@NonNull String parentSessionId,
-            @NonNull String childSessionId, @NonNull ContentCaptureContext clientContext) {
+    void notifyChildSessionStarted(int parentSessionId, int childSessionId,
+            @NonNull ContentCaptureContext clientContext) {
         sendEvent(new ContentCaptureEvent(childSessionId, TYPE_SESSION_STARTED)
                 .setParentSessionId(parentSessionId).setClientContext(clientContext),
                 FORCE_FLUSH);
     }
 
-    void notifyChildSessionFinished(@NonNull String parentSessionId,
-            @NonNull String childSessionId) {
+    void notifyChildSessionFinished(int parentSessionId, int childSessionId) {
         sendEvent(new ContentCaptureEvent(childSessionId, TYPE_SESSION_FINISHED)
                 .setParentSessionId(parentSessionId), FORCE_FLUSH);
     }
 
-    void notifyViewAppeared(@NonNull String sessionId, @NonNull ViewStructureImpl node) {
+    void notifyViewAppeared(int sessionId, @NonNull ViewStructureImpl node) {
         sendEvent(new ContentCaptureEvent(sessionId, TYPE_VIEW_APPEARED)
                 .setViewNode(node.mNode));
     }
 
     /** Public because is also used by ViewRootImpl */
-    public void notifyViewDisappeared(@NonNull String sessionId, @NonNull AutofillId id) {
+    public void notifyViewDisappeared(int sessionId, @NonNull AutofillId id) {
         sendEvent(new ContentCaptureEvent(sessionId, TYPE_VIEW_DISAPPEARED).setAutofillId(id));
     }
 
-    void notifyViewTextChanged(@NonNull String sessionId, @NonNull AutofillId id,
-            @Nullable CharSequence text) {
+    void notifyViewTextChanged(int sessionId, @NonNull AutofillId id, @Nullable CharSequence text) {
         sendEvent(new ContentCaptureEvent(sessionId, TYPE_VIEW_TEXT_CHANGED).setAutofillId(id)
                 .setText(text));
     }
 
     /** Public because is also used by ViewRootImpl */
-    public void notifyViewTreeEvent(@NonNull String sessionId, boolean started) {
+    public void notifyViewTreeEvent(int sessionId, boolean started) {
         final int type = started ? TYPE_VIEW_TREE_APPEARING : TYPE_VIEW_TREE_APPEARED;
         sendEvent(new ContentCaptureEvent(sessionId, type), FORCE_FLUSH);
     }
@@ -603,8 +643,7 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
         sendEvent(new ContentCaptureEvent(mId, type), FORCE_FLUSH);
     }
 
-    void notifyContextUpdated(@NonNull String sessionId,
-            @Nullable ContentCaptureContext context) {
+    void notifyContextUpdated(int sessionId, @Nullable ContentCaptureContext context) {
         sendEvent(new ContentCaptureEvent(sessionId, TYPE_CONTEXT_UPDATED)
                 .setClientContext(context));
     }
@@ -641,8 +680,14 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
                     pw.println();
                 }
             }
+            pw.print(prefix); pw.print("mNextFlushForTextChanged: ");
+            pw.println(mNextFlushForTextChanged);
             pw.print(prefix); pw.print("flush frequency: ");
-            pw.println(mManager.mOptions.idleFlushingFrequencyMs);
+            if (mNextFlushForTextChanged) {
+                pw.println(mManager.mOptions.textChangeFlushingFrequencyMs);
+            } else {
+                pw.println(mManager.mOptions.idleFlushingFrequencyMs);
+            }
             pw.print(prefix); pw.print("next flush: ");
             TimeUtils.formatDuration(mNextFlush - System.currentTimeMillis(), pw);
             pw.print(" ("); pw.print(TimeUtils.logTimeOfDay(mNextFlush)); pw.println(")");

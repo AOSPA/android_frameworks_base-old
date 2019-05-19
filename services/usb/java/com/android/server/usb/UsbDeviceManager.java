@@ -845,7 +845,7 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                             && status.isRoleCombinationSupported(POWER_ROLE_SINK, DATA_ROLE_HOST)
                             && status.isRoleCombinationSupported(POWER_ROLE_SOURCE,
                             DATA_ROLE_DEVICE)
-                            && status.isRoleCombinationSupported(POWER_ROLE_SINK, DATA_ROLE_HOST);
+                            && status.isRoleCombinationSupported(POWER_ROLE_SINK, DATA_ROLE_DEVICE);
 
                     args.recycle();
                     updateUsbNotification(false);
@@ -1098,6 +1098,14 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                     Slog.d(TAG, "Clear notification");
                     mUsbNotificationId = 0;
                 }
+                // Not relevant for automotive.
+                if (mContext.getPackageManager().hasSystemFeature(
+                        PackageManager.FEATURE_AUTOMOTIVE)
+                        && id == SystemMessage.NOTE_USB_CHARGING) {
+                    mUsbNotificationId = 0;
+                    return;
+                }
+
                 if (id != 0) {
                     CharSequence title = r.getText(titleRes);
                     PendingIntent pi;

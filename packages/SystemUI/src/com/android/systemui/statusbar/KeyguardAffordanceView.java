@@ -149,6 +149,13 @@ public class KeyguardAffordanceView extends ImageView {
         updateIconColor();
     }
 
+    /**
+     * If current drawable should be tinted.
+     */
+    public boolean shouldTint() {
+        return mShouldTint;
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
@@ -168,6 +175,9 @@ public class KeyguardAffordanceView extends ImageView {
     }
 
     public void setPreviewView(View v) {
+        if (mPreviewView == v) {
+            return;
+        }
         View oldPreviewView = mPreviewView;
         mPreviewView = v;
         if (mPreviewView != null) {
@@ -492,13 +502,10 @@ public class KeyguardAffordanceView extends ImageView {
             int currentAlpha = getImageAlpha();
             ValueAnimator animator = ValueAnimator.ofInt(currentAlpha, endAlpha);
             mAlphaAnimator = animator;
-            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                @Override
-                public void onAnimationUpdate(ValueAnimator animation) {
-                    int alpha = (int) animation.getAnimatedValue();
-                    if (background != null) background.mutate().setAlpha(alpha);
-                    setImageAlpha(alpha);
-                }
+            animator.addUpdateListener(animation -> {
+                int alpha1 = (int) animation.getAnimatedValue();
+                if (background != null) background.mutate().setAlpha(alpha1);
+                setImageAlpha(alpha1);
             });
             animator.addListener(mAlphaEndListener);
             if (interpolator == null) {
@@ -518,6 +525,10 @@ public class KeyguardAffordanceView extends ImageView {
             }
             animator.start();
         }
+    }
+
+    public boolean isAnimatingAlpha() {
+        return mAlphaAnimator != null;
     }
 
     private Animator.AnimatorListener getEndListener(final Runnable runnable) {

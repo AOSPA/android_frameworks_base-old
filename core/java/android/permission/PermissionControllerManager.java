@@ -39,6 +39,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
+import android.app.ActivityThread;
 import android.app.admin.DevicePolicyManager.PermissionGrantState;
 import android.content.ComponentName;
 import android.content.Context;
@@ -56,7 +57,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.Log;
-import android.util.SparseArray;
+import android.util.Pair;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.infra.AbstractMultiplePendingRequestsRemoteService;
@@ -95,7 +96,8 @@ public final class PermissionControllerManager {
      * Global remote services (per user) used by all {@link PermissionControllerManager managers}
      */
     @GuardedBy("sLock")
-    private static SparseArray<RemoteService> sRemoteServices = new SparseArray<>(1);
+    private static ArrayMap<Pair<Integer, Thread>, RemoteService> sRemoteServices
+            = new ArrayMap<>(1);
 
     /**
      * The key for retrieving the result from the returned bundle.
@@ -217,20 +219,24 @@ public final class PermissionControllerManager {
      * Create a new {@link PermissionControllerManager}.
      *
      * @param context to create the manager for
+     * @param handler handler to schedule work
      *
      * @hide
      */
-    public PermissionControllerManager(@NonNull Context context) {
+    public PermissionControllerManager(@NonNull Context context, @NonNull Handler handler) {
         synchronized (sLock) {
-            RemoteService remoteService = sRemoteServices.get(context.getUserId(), null);
+            Pair<Integer, Thread> key = new Pair<>(context.getUserId(),
+                    handler.getLooper().getThread());
+            RemoteService remoteService = sRemoteServices.get(key);
             if (remoteService == null) {
                 Intent intent = new Intent(SERVICE_INTERFACE);
                 intent.setPackage(context.getPackageManager().getPermissionControllerPackageName());
                 ResolveInfo serviceInfo = context.getPackageManager().resolveService(intent, 0);
 
-                remoteService = new RemoteService(context.getApplicationContext(),
-                        serviceInfo.getComponentInfo().getComponentName(), context.getUser());
-                sRemoteServices.put(context.getUserId(), remoteService);
+                remoteService = new RemoteService(ActivityThread.currentApplication(),
+                        serviceInfo.getComponentInfo().getComponentName(), handler,
+                        context.getUser());
+                sRemoteServices.put(key, remoteService);
             }
 
             mRemoteService = remoteService;
@@ -454,25 +460,20 @@ public final class PermissionControllerManager {
     }
 
     /**
-     * Check whether an application is qualified for a role.
+     * Grant or upgrade runtime permissions. The upgrade could be performed
+     * based on whether the device upgraded, whether the permission database
+     * version is old, or because the permission policy changed.
      *
-     * @param roleName name of the role to check for
-     * @param packageName package name of the application to check for
      * @param executor Executor on which to invoke the callback
      * @param callback Callback to receive the result
      *
      * @hide
      */
-    @RequiresPermission(Manifest.permission.MANAGE_ROLE_HOLDERS)
-    public void isApplicationQualifiedForRole(@NonNull String roleName, @NonNull String packageName,
+    @RequiresPermission(Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY)
+    public void grantOrUpgradeDefaultRuntimePermissions(
             @NonNull @CallbackExecutor Executor executor, @NonNull Consumer<Boolean> callback) {
-        checkStringNotEmpty(roleName);
-        checkStringNotEmpty(packageName);
-        checkNotNull(executor);
-        checkNotNull(callback);
-
-        mRemoteService.scheduleRequest(new PendingIsApplicationQualifiedForRoleRequest(
-                mRemoteService, roleName, packageName, executor, callback));
+        mRemoteService.scheduleRequest(new PendingGrantOrUpgradeDefaultRuntimePermissionsRequest(
+                mRemoteService, executor, callback));
     }
 
     /**
@@ -491,9 +492,10 @@ public final class PermissionControllerManager {
          * @param user User the remote service should be connected as
          */
         RemoteService(@NonNull Context context, @NonNull ComponentName componentName,
-                @NonNull UserHandle user) {
+                @NonNull Handler handler, @NonNull UserHandle user) {
             super(context, SERVICE_INTERFACE, componentName, user.getIdentifier(),
-                    service -> Log.e(TAG, "RemoteService " + service + " died"), false, false, 1);
+                    service -> Log.e(TAG, "RemoteService " + service + " died"),
+                    handler, 0, false, 1);
         }
 
         /**
@@ -1170,36 +1172,24 @@ public final class PermissionControllerManager {
     }
 
     /**
-     * Request for {@link #isApplicationQualifiedForRole}.
+     * Request for {@link #grantOrUpgradeDefaultRuntimePermissions(Executor, Consumer)}
      */
-    private static final class PendingIsApplicationQualifiedForRoleRequest extends
+    private static final class PendingGrantOrUpgradeDefaultRuntimePermissionsRequest extends
             AbstractRemoteService.PendingRequest<RemoteService, IPermissionController> {
-
-        private final @NonNull String mRoleName;
-        private final @NonNull String mPackageName;
         private final @NonNull Consumer<Boolean> mCallback;
 
         private final @NonNull RemoteCallback mRemoteCallback;
 
-        private PendingIsApplicationQualifiedForRoleRequest(@NonNull RemoteService service,
-                @NonNull String roleName, @NonNull String packageName,
-                @NonNull @CallbackExecutor Executor executor, @NonNull Consumer<Boolean> callback) {
+        private PendingGrantOrUpgradeDefaultRuntimePermissionsRequest(
+                @NonNull RemoteService service,  @NonNull @CallbackExecutor Executor executor,
+                @NonNull Consumer<Boolean> callback) {
             super(service);
-
-            mRoleName = roleName;
-            mPackageName = packageName;
             mCallback = callback;
 
             mRemoteCallback = new RemoteCallback(result -> executor.execute(() -> {
                 long token = Binder.clearCallingIdentity();
                 try {
-                    boolean qualified;
-                    if (result != null) {
-                        qualified = result.getBoolean(KEY_RESULT);
-                    } else {
-                        qualified = false;
-                    }
-                    callback.accept(qualified);
+                    callback.accept(result != null);
                 } finally {
                     Binder.restoreCallingIdentity(token);
                     finish();
@@ -1209,16 +1199,21 @@ public final class PermissionControllerManager {
 
         @Override
         protected void onTimeout(RemoteService remoteService) {
-            mCallback.accept(false);
+            long token = Binder.clearCallingIdentity();
+            try {
+                mCallback.accept(false);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         @Override
         public void run() {
             try {
-                getService().getServiceInterface().isApplicationQualifiedForRole(mRoleName,
-                        mPackageName, mRemoteCallback);
+                getService().getServiceInterface().grantOrUpgradeDefaultRuntimePermissions(
+                        mRemoteCallback);
             } catch (RemoteException e) {
-                Log.e(TAG, "Error checking whether application qualifies for role", e);
+                Log.e(TAG, "Error granting or upgrading runtime permissions", e);
             }
         }
     }

@@ -19,12 +19,13 @@
 #include <gtest/gtest_prod.h>
 #include <utils/threads.h>
 #include <list>
-#include "../anomaly/AnomalyTracker.h"
-#include "../condition/ConditionTracker.h"
-#include "../external/PullDataReceiver.h"
-#include "../external/StatsPullerManager.h"
-#include "../matchers/EventMatcherWizard.h"
-#include "../stats_log_util.h"
+#include "anomaly/AnomalyTracker.h"
+#include "condition/ConditionTimer.h"
+#include "condition/ConditionTracker.h"
+#include "external/PullDataReceiver.h"
+#include "external/StatsPullerManager.h"
+#include "matchers/EventMatcherWizard.h"
+#include "stats_log_util.h"
 #include "MetricProducer.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 
@@ -37,6 +38,9 @@ struct ValueBucket {
     int64_t mBucketEndNs;
     std::vector<int> valueIndex;
     std::vector<Value> values;
+    // If the metric has no condition, then this field is just wasted.
+    // When we tune statsd memory usage in the future, this is a candidate to optimize.
+    int64_t mConditionTrueNs;
 };
 
 
@@ -109,6 +113,8 @@ private:
     void flushCurrentBucketLocked(const int64_t& eventTimeNs,
                                   const int64_t& nextBucketStartTimeNs) override;
 
+    void prepareFistBucketLocked() override;
+
     void dropDataLocked(const int64_t dropTimeNs) override;
 
     // Calculate previous bucket end time based on current time.
@@ -178,7 +184,7 @@ private:
 
     void pullAndMatchEventsLocked(const int64_t timestampNs, ConditionState condition);
 
-    void accumulateEvents(const std::vector<std::shared_ptr<LogEvent>>& allData, 
+    void accumulateEvents(const std::vector<std::shared_ptr<LogEvent>>& allData,
                           int64_t originalPullTimeNs, int64_t eventElapsedTimeNs,
                           ConditionState condition);
 
@@ -228,6 +234,8 @@ private:
 
     const bool mSplitBucketForAppUpgrade;
 
+    ConditionTimer mConditionTimer;
+
     FRIEND_TEST(ValueMetricProducerTest, TestAnomalyDetection);
     FRIEND_TEST(ValueMetricProducerTest, TestBaseSetOnConditionChange);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundariesOnAppUpgrade);
@@ -244,6 +252,7 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestEmptyDataResetsBase_onDataPulled);
     FRIEND_TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestFirstBucket);
+    FRIEND_TEST(ValueMetricProducerTest, TestFullBucketResetWhenLastBucketInvalid);
     FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenGuardRailHit);
     FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenInitialPullFailed);
     FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenLastPullFailed);
@@ -252,6 +261,11 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestLateOnDataPulledWithoutDiff);
     FRIEND_TEST(ValueMetricProducerTest, TestPartialBucketCreated);
     FRIEND_TEST(ValueMetricProducerTest, TestPartialResetOnBucketBoundaries);
+    FRIEND_TEST(ValueMetricProducerTest, TestPulledData_noDiff_bucketBoundaryFalse);
+    FRIEND_TEST(ValueMetricProducerTest, TestPulledData_noDiff_bucketBoundaryTrue);
+    FRIEND_TEST(ValueMetricProducerTest, TestPulledData_noDiff_withFailure);
+    FRIEND_TEST(ValueMetricProducerTest, TestPulledData_noDiff_withMultipleConditionChanges);
+    FRIEND_TEST(ValueMetricProducerTest, TestPulledData_noDiff_withoutCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsNoCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsTakeAbsoluteValueOnReset);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsTakeZeroOnReset);

@@ -191,9 +191,9 @@ public class Resources {
 
     /**
      * Return a global shared Resources object that provides access to only
-     * system resources (no application resources), and is not configured for
-     * the current screen (can not use dimension units, does not change based
-     * on orientation, etc).
+     * system resources (no application resources), is not configured for the
+     * current screen (can not use dimension units, does not change based on
+     * orientation, etc), and is not affected by Runtime Resource Overlay.
      */
     public static Resources getSystem() {
         synchronized (sSync) {
@@ -1396,9 +1396,11 @@ public class Resources {
 
 
     /**
+     * Returns the resource ID of the resource that was used to create this AttributeSet.
+     *
      * @param set AttributeSet for which we want to find the source.
-     * @return The resource id for the source that is backing the given AttributeSet
-     * @hide
+     * @return The resource ID for the source that is backing the given AttributeSet or
+     * {@link Resources#ID_NULL} if the AttributeSet is {@code null}.
      */
     @AnyRes
     public static int getAttributeSetSourceResId(@Nullable AttributeSet set) {
@@ -1719,8 +1721,6 @@ public class Resources {
          * Rebases the theme against the parent Resource object's current
          * configuration by re-applying the styles passed to
          * {@link #applyStyle(int, boolean)}.
-         *
-         * @hide
          */
         public void rebase() {
             mThemeImpl.rebase();
@@ -1782,10 +1782,16 @@ public class Resources {
          * @param explicitStyleRes A resource identifier of an explicit style resource.
          * @return ordered list of resource ID that are considered when resolving attribute values.
          */
+        @NonNull
         public int[] getAttributeResolutionStack(@AttrRes int defStyleAttr,
                 @StyleRes int defStyleRes, @StyleRes int explicitStyleRes) {
-            return mThemeImpl.getAttributeResolutionStack(
+            int[] stack = mThemeImpl.getAttributeResolutionStack(
                     defStyleAttr, defStyleRes, explicitStyleRes);
+            if (stack == null) {
+                return new int[0];
+            } else {
+                return stack;
+            }
         }
     }
 

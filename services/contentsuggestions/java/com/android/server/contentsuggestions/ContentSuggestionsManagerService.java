@@ -16,7 +16,9 @@
 
 package com.android.server.contentsuggestions;
 
+import static android.Manifest.permission.BIND_CONTENT_SUGGESTIONS_SERVICE;
 import static android.Manifest.permission.MANAGE_CONTENT_SUGGESTIONS;
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -32,8 +34,10 @@ import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.util.Slog;
 
+import com.android.internal.os.IResultReceiver;
 import com.android.server.LocalServices;
 import com.android.server.infra.AbstractMasterSystemService;
 import com.android.server.infra.FrameworkResourcesServiceNameResolver;
@@ -63,7 +67,8 @@ public class ContentSuggestionsManagerService extends
 
     public ContentSuggestionsManagerService(Context context) {
         super(context, new FrameworkResourcesServiceNameResolver(context,
-                com.android.internal.R.string.config_defaultContentSuggestionsService), null);
+                com.android.internal.R.string.config_defaultContentSuggestionsService),
+                UserManager.DISALLOW_CONTENT_SUGGESTIONS);
         mActivityTaskManagerInternal = LocalServices.getService(ActivityTaskManagerInternal.class);
     }
 
@@ -89,16 +94,11 @@ public class ContentSuggestionsManagerService extends
         return MAX_TEMP_SERVICE_DURATION_MS;
     }
 
-    private boolean isCallerRecents(int userId) {
-        if (mServiceNameResolver.isTemporary(userId)) {
-            // If a temporary service is set then skip the recents check
-            return true;
-        }
-        return mActivityTaskManagerInternal.isCallerRecents(Binder.getCallingUid());
-    }
-
-    private void enforceCallerIsRecents(int userId, String func) {
-        if (isCallerRecents(userId)) {
+    private void enforceCaller(int userId, String func) {
+        Context ctx = getContext();
+        if (ctx.checkCallingPermission(BIND_CONTENT_SUGGESTIONS_SERVICE) == PERMISSION_GRANTED
+                || mServiceNameResolver.isTemporary(userId)
+                || mActivityTaskManagerInternal.isCallerRecents(Binder.getCallingUid())) {
             return;
         }
 
@@ -112,13 +112,14 @@ public class ContentSuggestionsManagerService extends
 
     private class ContentSuggestionsManagerStub extends IContentSuggestionsManager.Stub {
         @Override
-        public void provideContextImage(int taskId, @NonNull Bundle imageContextRequestExtras) {
+        public void provideContextImage(
+                int userId,
+                int taskId,
+                @NonNull Bundle imageContextRequestExtras) {
             if (imageContextRequestExtras == null) {
                 throw new IllegalArgumentException("Expected non-null imageContextRequestExtras");
             }
-
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "provideContextImage");
+            enforceCaller(UserHandle.getCallingUserId(), "provideContextImage");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -134,10 +135,10 @@ public class ContentSuggestionsManagerService extends
 
         @Override
         public void suggestContentSelections(
+                int userId,
                 @NonNull SelectionsRequest selectionsRequest,
                 @NonNull ISelectionsCallback selectionsCallback) {
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "suggestContentSelections");
+            enforceCaller(UserHandle.getCallingUserId(), "suggestContentSelections");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -153,10 +154,10 @@ public class ContentSuggestionsManagerService extends
 
         @Override
         public void classifyContentSelections(
+                int userId,
                 @NonNull ClassificationsRequest classificationsRequest,
                 @NonNull IClassificationsCallback callback) {
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "classifyContentSelections");
+            enforceCaller(UserHandle.getCallingUserId(), "classifyContentSelections");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -171,9 +172,9 @@ public class ContentSuggestionsManagerService extends
         }
 
         @Override
-        public void notifyInteraction(@NonNull String requestId, @NonNull Bundle bundle) {
-            final int userId = UserHandle.getCallingUserId();
-            enforceCallerIsRecents(userId, "notifyInteraction");
+        public void notifyInteraction(
+                int userId, @NonNull String requestId, @NonNull Bundle bundle) {
+            enforceCaller(UserHandle.getCallingUserId(), "notifyInteraction");
 
             synchronized (mLock) {
                 final ContentSuggestionsPerUserService service = getServiceForUserLocked(userId);
@@ -185,6 +186,18 @@ public class ContentSuggestionsManagerService extends
                     }
                 }
             }
+        }
+
+        @Override
+        public void isEnabled(int userId, @NonNull IResultReceiver receiver)
+                throws RemoteException {
+            enforceCaller(UserHandle.getCallingUserId(), "isEnabled");
+
+            boolean isDisabled;
+            synchronized (mLock) {
+                isDisabled = isDisabledLocked(userId);
+            }
+            receiver.send(isDisabled ? 0 : 1, null);
         }
 
         public void onShellCommand(@Nullable FileDescriptor in, @Nullable FileDescriptor out,

@@ -34,16 +34,13 @@
 #include <string>
 #include <vector>
 
+#include "TestHelpers.h"
+#include "androidfw/PosixUtils.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-#include "androidfw/PosixUtils.h"
-#include "private/android_filesystem_config.h"
-
 #include "idmap2/FileUtils.h"
 #include "idmap2/Idmap.h"
-
-#include "TestHelpers.h"
+#include "private/android_filesystem_config.h"
 
 using ::android::util::ExecuteBinary;
 using ::testing::NotNull;
@@ -100,13 +97,12 @@ TEST_F(Idmap2BinaryTests, Create) {
   struct stat st;
   ASSERT_EQ(stat(GetIdmapPath().c_str(), &st), 0);
 
-  std::stringstream error;
   std::ifstream fin(GetIdmapPath());
-  std::unique_ptr<const Idmap> idmap = Idmap::FromBinaryStream(fin, error);
+  const auto idmap = Idmap::FromBinaryStream(fin);
   fin.close();
 
-  ASSERT_THAT(idmap, NotNull());
-  ASSERT_IDMAP(*idmap, GetTargetApkPath(), GetOverlayApkPath());
+  ASSERT_TRUE(idmap);
+  ASSERT_IDMAP(**idmap, GetTargetApkPath(), GetOverlayApkPath());
 
   unlink(GetIdmapPath().c_str());
 }
@@ -132,9 +128,9 @@ TEST_F(Idmap2BinaryTests, Dump) {
   ASSERT_THAT(result, NotNull());
   ASSERT_EQ(result->status, EXIT_SUCCESS) << result->stderr;
   ASSERT_NE(result->stdout.find("0x7f010000 -> 0x7f010000 integer/int1"), std::string::npos);
-  ASSERT_NE(result->stdout.find("0x7f02000a -> 0x7f020000 string/str1"), std::string::npos);
-  ASSERT_NE(result->stdout.find("0x7f02000c -> 0x7f020001 string/str3"), std::string::npos);
-  ASSERT_NE(result->stdout.find("0x7f02000d -> 0x7f020002 string/str4"), std::string::npos);
+  ASSERT_NE(result->stdout.find("0x7f02000c -> 0x7f020000 string/str1"), std::string::npos);
+  ASSERT_NE(result->stdout.find("0x7f02000e -> 0x7f020001 string/str3"), std::string::npos);
+  ASSERT_NE(result->stdout.find("0x7f02000f -> 0x7f020002 string/str4"), std::string::npos);
   ASSERT_EQ(result->stdout.find("00000210:     007f  target package id"), std::string::npos);
 
   // clang-format off
@@ -193,24 +189,23 @@ TEST_F(Idmap2BinaryTests, Scan) {
   expected << idmap_static_2_path << std::endl;
   ASSERT_EQ(result->stdout, expected.str());
 
-  std::stringstream error;
   auto idmap_static_no_name_raw_string = utils::ReadFile(idmap_static_no_name_path);
   auto idmap_static_no_name_raw_stream = std::istringstream(*idmap_static_no_name_raw_string);
-  auto idmap_static_no_name = Idmap::FromBinaryStream(idmap_static_no_name_raw_stream, error);
-  ASSERT_THAT(idmap_static_no_name, NotNull());
-  ASSERT_IDMAP(*idmap_static_no_name, GetTargetApkPath(), overlay_static_no_name_apk_path);
+  auto idmap_static_no_name = Idmap::FromBinaryStream(idmap_static_no_name_raw_stream);
+  ASSERT_TRUE(idmap_static_no_name);
+  ASSERT_IDMAP(**idmap_static_no_name, GetTargetApkPath(), overlay_static_no_name_apk_path);
 
   auto idmap_static_1_raw_string = utils::ReadFile(idmap_static_1_path);
   auto idmap_static_1_raw_stream = std::istringstream(*idmap_static_1_raw_string);
-  auto idmap_static_1 = Idmap::FromBinaryStream(idmap_static_1_raw_stream, error);
-  ASSERT_THAT(idmap_static_1, NotNull());
-  ASSERT_IDMAP(*idmap_static_1, GetTargetApkPath(), overlay_static_1_apk_path);
+  auto idmap_static_1 = Idmap::FromBinaryStream(idmap_static_1_raw_stream);
+  ASSERT_TRUE(idmap_static_1);
+  ASSERT_IDMAP(**idmap_static_1, GetTargetApkPath(), overlay_static_1_apk_path);
 
   auto idmap_static_2_raw_string = utils::ReadFile(idmap_static_2_path);
   auto idmap_static_2_raw_stream = std::istringstream(*idmap_static_2_raw_string);
-  auto idmap_static_2 = Idmap::FromBinaryStream(idmap_static_2_raw_stream, error);
-  ASSERT_THAT(idmap_static_2, NotNull());
-  ASSERT_IDMAP(*idmap_static_2, GetTargetApkPath(), overlay_static_2_apk_path);
+  auto idmap_static_2 = Idmap::FromBinaryStream(idmap_static_2_raw_stream);
+  ASSERT_TRUE(idmap_static_2);
+  ASSERT_IDMAP(**idmap_static_2, GetTargetApkPath(), overlay_static_2_apk_path);
 
   unlink(idmap_static_no_name_path.c_str());
   unlink(idmap_static_2_path.c_str());
@@ -266,6 +261,24 @@ TEST_F(Idmap2BinaryTests, Scan) {
   ASSERT_THAT(result, NotNull());
   ASSERT_EQ(result->status, EXIT_SUCCESS) << result->stderr;
   ASSERT_EQ(result->stdout, "");
+
+  // the signature idmap failing to generate should not cause scanning to fail
+  // clang-format off
+  result = ExecuteBinary({"idmap2",
+                          "scan",
+                          "--input-directory", GetTestDataPath(),
+                          "--recursive",
+                          "--target-package-name", "test.target",
+                          "--target-apk-path", GetTargetApkPath(),
+                          "--output-directory", GetTempDirPath(),
+                          "--override-policy", "public"});
+  // clang-format on
+  ASSERT_THAT(result, NotNull());
+  ASSERT_EQ(result->status, EXIT_SUCCESS) << result->stderr;
+  ASSERT_EQ(result->stdout, expected.str());
+  unlink(idmap_static_no_name_path.c_str());
+  unlink(idmap_static_2_path.c_str());
+  unlink(idmap_static_1_path.c_str());
 }
 
 TEST_F(Idmap2BinaryTests, Lookup) {
@@ -286,7 +299,7 @@ TEST_F(Idmap2BinaryTests, Lookup) {
                           "lookup",
                           "--idmap-path", GetIdmapPath(),
                           "--config", "",
-                          "--resid", "0x7f02000a"});  // string/str1
+                          "--resid", "0x7f02000c"});  // string/str1
   // clang-format on
   ASSERT_THAT(result, NotNull());
   ASSERT_EQ(result->status, EXIT_SUCCESS) << result->stderr;

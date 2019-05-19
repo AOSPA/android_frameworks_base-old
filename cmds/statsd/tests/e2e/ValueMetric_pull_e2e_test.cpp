@@ -28,7 +28,9 @@ namespace statsd {
 
 namespace {
 
-StatsdConfig CreateStatsdConfig() {
+const int64_t metricId = 123456;
+
+StatsdConfig CreateStatsdConfig(bool useCondition = true) {
     StatsdConfig config;
     config.add_allowed_log_source("AID_ROOT"); // LogEvent defaults to UID of root.
     auto pulledAtomMatcher =
@@ -41,9 +43,11 @@ StatsdConfig CreateStatsdConfig() {
     *config.add_predicate() = screenIsOffPredicate;
 
     auto valueMetric = config.add_value_metric();
-    valueMetric->set_id(123456);
+    valueMetric->set_id(metricId);
     valueMetric->set_what(pulledAtomMatcher.id());
-    valueMetric->set_condition(screenIsOffPredicate.id());
+    if (useCondition) {
+        valueMetric->set_condition(screenIsOffPredicate.id());
+    }
     *valueMetric->mutable_value_field() =
             CreateDimensions(android::util::SUBSYSTEM_SLEEP_STATE, {4 /* time sleeping field */});
     *valueMetric->mutable_dimensions_in_what() =
@@ -75,7 +79,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
             mAllMetricProducers[0]->getCurrentBucketNum();
     EXPECT_GT(startBucketNum, (int64_t)0);
 
-    // When creating the config, the gauge metric producer should register the alarm at the
+    // When creating the config, the value metric producer should register the alarm at the
     // end of the current bucket.
     EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
     EXPECT_EQ(bucketSizeNs,
@@ -140,32 +144,30 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
     EXPECT_EQ(1 /* subsystem name field */,
               data.dimensions_in_what().value_tuple().dimensions_value(0).field());
     EXPECT_FALSE(data.dimensions_in_what().value_tuple().dimensions_value(0).value_str().empty());
-    EXPECT_EQ(5, data.bucket_info_size());
+    // We have 4 buckets, the first one was incomplete since the condition was unknown.
+    EXPECT_EQ(4, data.bucket_info_size());
 
-    EXPECT_EQ(baseTimeNs + 2 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
-    EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
     EXPECT_EQ(1, data.bucket_info(0).values_size());
 
-    EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
-    EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
     EXPECT_EQ(1, data.bucket_info(1).values_size());
 
-    EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
-    EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 6 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
     EXPECT_EQ(1, data.bucket_info(2).values_size());
 
-    EXPECT_EQ(baseTimeNs + 6 * bucketSizeNs, data.bucket_info(3).start_bucket_elapsed_nanos());
-    EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(3).end_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(3).start_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(3).end_bucket_elapsed_nanos());
     EXPECT_EQ(1, data.bucket_info(3).values_size());
-
-    EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(4).start_bucket_elapsed_nanos());
-    EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(4).end_bucket_elapsed_nanos());
-    EXPECT_EQ(1, data.bucket_info(4).values_size());
 }
 
 TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
     auto config = CreateStatsdConfig();
     int64_t baseTimeNs = getElapsedRealtimeNs();
+    // 10 mins == 2 bucket durations.
     int64_t configAddedTimeNs = 10 * 60 * NS_PER_SEC + baseTimeNs;
     int64_t bucketSizeNs =
         TimeUnitToBucketSizeInMillis(config.value_metric(0).bucket()) * 1000000;
@@ -181,7 +183,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
             mAllMetricProducers[0]->getCurrentBucketNum();
     EXPECT_GT(startBucketNum, (int64_t)0);
 
-    // When creating the config, the gauge metric producer should register the alarm at the
+    // When creating the config, the value metric producer should register the alarm at the
     // end of the current bucket.
     EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
     EXPECT_EQ(bucketSizeNs,
@@ -203,15 +205,18 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
                                                    configAddedTimeNs + 75);
     processor->OnLogEvent(screenOffEvent.get());
 
-    // Pulling alarm arrives late by 2 buckets and 1 ns.
+    // Pulling alarm arrives late by 2 buckets and 1 ns. 2 buckets late is too far away in the
+    // future, data will be skipped.
     processor->informPullAlarmFired(expectedPullTimeNs + 2 * bucketSizeNs + 1);
     EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + 4 * bucketSizeNs, expectedPullTimeNs);
 
+    // This screen state change will start a new bucket.
     screenOnEvent = CreateScreenStateChangedEvent(android::view::DISPLAY_STATE_ON,
                                                        configAddedTimeNs + 4 * bucketSizeNs + 65);
     processor->OnLogEvent(screenOnEvent.get());
 
-    // Pulling alarm arrives late by one bucket size + 21ns.
+    // The alarm is delayed but we already created a bucket thanks to the screen state condition.
+    // This bucket does not have to be skipped since the alarm arrives in time for the next bucket.
     processor->informPullAlarmFired(expectedPullTimeNs + bucketSizeNs + 21);
     EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + 6 * bucketSizeNs, expectedPullTimeNs);
 
@@ -249,8 +254,8 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
     EXPECT_FALSE(data.dimensions_in_what().value_tuple().dimensions_value(0).value_str().empty());
     EXPECT_EQ(3, data.bucket_info_size());
 
-    EXPECT_EQ(baseTimeNs + 2 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
-    EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 6 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
     EXPECT_EQ(1, data.bucket_info(0).values_size());
 
     EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
@@ -260,6 +265,99 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
     EXPECT_EQ(baseTimeNs + 9 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 10 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
     EXPECT_EQ(1, data.bucket_info(2).values_size());
+}
+
+TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation) {
+    auto config = CreateStatsdConfig(false);
+    int64_t baseTimeNs = getElapsedRealtimeNs();
+    int64_t configAddedTimeNs = 10 * 60 * NS_PER_SEC + baseTimeNs;
+    int64_t bucketSizeNs =
+        TimeUnitToBucketSizeInMillis(config.value_metric(0).bucket()) * 1000000;
+
+    auto batterySaverStartMatcher = CreateBatterySaverModeStartAtomMatcher();
+    *config.add_atom_matcher() = batterySaverStartMatcher;
+    const int64_t ttlNs = 2 * bucketSizeNs; // Two buckets.
+    auto metric_activation = config.add_metric_activation();
+    metric_activation->set_metric_id(metricId);
+    metric_activation->set_activation_type(ACTIVATE_IMMEDIATELY);
+    auto event_activation = metric_activation->add_event_activation();
+    event_activation->set_atom_matcher_id(batterySaverStartMatcher.id());
+    event_activation->set_ttl_seconds(ttlNs / 1000000000);
+
+    ConfigKey cfgKey;
+    auto processor = CreateStatsLogProcessor(
+        baseTimeNs, configAddedTimeNs, config, cfgKey);
+    EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
+    EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
+    processor->mPullerManager->ForceClearPullerCache();
+
+    int startBucketNum = processor->mMetricsManagers.begin()->second->
+            mAllMetricProducers[0]->getCurrentBucketNum();
+    EXPECT_GT(startBucketNum, (int64_t)0);
+    EXPECT_FALSE(processor->mMetricsManagers.begin()->second->mAllMetricProducers[0]->isActive());
+
+    // When creating the config, the value metric producer should register the alarm at the
+    // end of the current bucket.
+    EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
+    EXPECT_EQ(bucketSizeNs,
+              processor->mPullerManager->mReceivers.begin()->second.front().intervalNs);
+    int64_t& expectedPullTimeNs =
+            processor->mPullerManager->mReceivers.begin()->second.front().nextPullTimeNs;
+    EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + bucketSizeNs, expectedPullTimeNs);
+
+    // Pulling alarm arrives on time and reset the sequential pulling alarm.
+    processor->informPullAlarmFired(expectedPullTimeNs + 1);
+    EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + 2 * bucketSizeNs, expectedPullTimeNs);
+
+    const int64_t activationNs = configAddedTimeNs + bucketSizeNs + (2 * 1000 * 1000); // 2 millis.
+    auto batterySaverOnEvent = CreateBatterySaverOnEvent(activationNs);
+    processor->OnLogEvent(batterySaverOnEvent.get());
+    EXPECT_TRUE(processor->mMetricsManagers.begin()->second->mAllMetricProducers[0]->isActive());
+
+    processor->informPullAlarmFired(expectedPullTimeNs + 1);
+    EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + 3 * bucketSizeNs, expectedPullTimeNs);
+
+    processor->informPullAlarmFired(expectedPullTimeNs + 1);
+    EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + 4 * bucketSizeNs, expectedPullTimeNs);
+
+    // Create random event to deactivate metric.
+    auto deactivationEvent = CreateScreenBrightnessChangedEvent(50, activationNs + ttlNs + 1);
+    processor->OnLogEvent(deactivationEvent.get());
+    EXPECT_FALSE(processor->mMetricsManagers.begin()->second->mAllMetricProducers[0]->isActive());
+
+    processor->informPullAlarmFired(expectedPullTimeNs + 1);
+    EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + 5 * bucketSizeNs, expectedPullTimeNs);
+
+    processor->informPullAlarmFired(expectedPullTimeNs + 1);
+
+    ConfigMetricsReportList reports;
+    vector<uint8_t> buffer;
+    processor->onDumpReport(cfgKey, configAddedTimeNs + 7 * bucketSizeNs + 10, false, true,
+                            ADB_DUMP, FAST, &buffer);
+    EXPECT_TRUE(buffer.size() > 0);
+    EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
+    backfillDimensionPath(&reports);
+    backfillStringInReport(&reports);
+    backfillStartEndTimestamp(&reports);
+    EXPECT_EQ(1, reports.reports_size());
+    EXPECT_EQ(1, reports.reports(0).metrics_size());
+    StatsLogReport::ValueMetricDataWrapper valueMetrics;
+    sortMetricDataByDimensionsValue(
+            reports.reports(0).metrics(0).value_metrics(), &valueMetrics);
+    EXPECT_GT((int)valueMetrics.data_size(), 0);
+
+    auto data = valueMetrics.data(0);
+    EXPECT_EQ(android::util::SUBSYSTEM_SLEEP_STATE, data.dimensions_in_what().field());
+    EXPECT_EQ(1, data.dimensions_in_what().value_tuple().dimensions_value_size());
+    EXPECT_EQ(1 /* subsystem name field */,
+              data.dimensions_in_what().value_tuple().dimensions_value(0).field());
+    EXPECT_FALSE(data.dimensions_in_what().value_tuple().dimensions_value(0).value_str().empty());
+    // We have 1 full bucket, the two surrounding the activation are dropped.
+    EXPECT_EQ(1, data.bucket_info_size());
+
+    EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
+    EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
+    EXPECT_EQ(1, data.bucket_info(0).values_size());
 }
 
 #else

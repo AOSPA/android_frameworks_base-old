@@ -16,17 +16,41 @@
 
 package com.android.systemui.statusbar.car;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
+import android.car.Car;
 import android.car.drivingstate.CarDrivingStateEvent;
+import android.car.drivingstate.CarUxRestrictionsManager;
+import android.content.Context;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
+import android.view.GestureDetector;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.android.car.notification.CarHeadsUpNotificationManager;
+import com.android.car.notification.CarNotificationListener;
+import com.android.car.notification.CarNotificationView;
+import com.android.car.notification.CarUxRestrictionManagerWrapper;
+import com.android.car.notification.HeadsUpEntry;
+import com.android.car.notification.NotificationClickHandlerFactory;
+import com.android.car.notification.NotificationDataManager;
+import com.android.car.notification.NotificationViewController;
+import com.android.car.notification.PreprocessingManager;
+import com.android.internal.statusbar.RegisterStatusBarResult;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.BatteryMeterView;
 import com.android.systemui.CarSystemUIFactory;
@@ -37,11 +61,11 @@ import com.android.systemui.SystemUIFactory;
 import com.android.systemui.classifier.FalsingLog;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.fragments.FragmentHostManager;
-import com.android.systemui.notifications.NotificationsUI;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.qs.car.CarQSFragment;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListener;
+import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.car.hvac.HvacController;
 import com.android.systemui.statusbar.car.hvac.TemperatureView;
@@ -61,6 +85,15 @@ import java.util.Map;
 public class CarStatusBar extends StatusBar implements
         CarBatteryController.BatteryViewHandler {
     private static final String TAG = "CarStatusBar";
+    // used to calculate how fast to open or close the window
+    private static final float DEFAULT_FLING_VELOCITY = 0;
+    // max time a fling animation takes
+    private static final float FLING_ANIMATION_MAX_TIME = 0.5f;
+    // acceleration rate for the fling animation
+    private static final float FLING_SPEED_UP_FACTOR = 0.6f;
+
+    private float mOpeningVelocity = DEFAULT_FLING_VELOCITY;
+    private float mClosingVelocity = DEFAULT_FLING_VELOCITY;
 
     private TaskStackListenerImpl mTaskStackListener;
 
@@ -70,7 +103,6 @@ public class CarStatusBar extends StatusBar implements
     private BatteryMeterView mBatteryMeterView;
     private Drawable mNotificationPanelBackground;
 
-    private ConnectedDeviceSignalController mConnectedDeviceSignalController;
     private ViewGroup mNavigationBarWindow;
     private ViewGroup mLeftNavigationBarWindow;
     private ViewGroup mRightNavigationBarWindow;
@@ -88,16 +120,59 @@ public class CarStatusBar extends StatusBar implements
     private boolean mDeviceIsProvisioned = true;
     private HvacController mHvacController;
     private DrivingStateHelper mDrivingStateHelper;
+    private static FlingAnimationUtils sFlingAnimationUtils;
     private SwitchToGuestTimer mSwitchToGuestTimer;
+
+    // The container for the notifications.
+    private CarNotificationView mNotificationView;
+    private RecyclerView mNotificationList;
+    // The state of if the notification list is currently showing the bottom.
+    private boolean mNotificationListAtBottom;
+    // Was the notification list at the bottom when the user first touched the screen
+    private boolean mNotificationListAtBottomAtTimeOfTouch;
+    // To be attached to the navigation bars such that they can close the notification panel if
+    // it's open.
+    private View.OnTouchListener mNavBarNotificationTouchListener;
+
+    // Percentage from top of the screen after which the notification shade will open. This value
+    // will be used while opening the notification shade.
+    private int mSettleOpenPercentage;
+    // Percentage from top of the screen below which the notification shade will close. This
+    // value will be used while closing the notification shade.
+    private int mSettleClosePercentage;
+    // Percentage of notification shade open from top of the screen.
+    private int mPercentageFromBottom;
+    // If notification shade is animation to close or to open.
+    private boolean mIsNotificationAnimating;
+
+    // Tracks when the notification shade is being scrolled. This refers to the glass pane being
+    // scrolled not the recycler view.
+    private boolean mIsTracking;
+    private float mFirstTouchDownOnGlassPane;
+
+    // If the notification card inside the recycler view is being swiped.
+    private boolean mIsNotificationCardSwiping;
+    // If notification shade is being swiped vertically to close.
+    private boolean mIsSwipingVerticallyToClose;
 
     @Override
     public void start() {
+        // get the provisioned state before calling the parent class since it's that flow that
+        // builds the nav bar
+        mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
+        mDeviceIsProvisioned = mDeviceProvisionedController.isDeviceProvisioned();
         super.start();
         mTaskStackListener = new TaskStackListenerImpl();
         mActivityManagerWrapper = ActivityManagerWrapper.getInstance();
         mActivityManagerWrapper.registerTaskStackListener(mTaskStackListener);
 
         mNotificationPanel.setScrollingEnabled(true);
+        mSettleOpenPercentage = mContext.getResources().getInteger(
+                R.integer.notification_settle_open_percentage);
+        mSettleClosePercentage = mContext.getResources().getInteger(
+                R.integer.notification_settle_close_percentage);
+        sFlingAnimationUtils = new FlingAnimationUtils(mContext,
+                FLING_ANIMATION_MAX_TIME, FLING_SPEED_UP_FACTOR);
 
         createBatteryController();
         mCarBatteryController.startListening();
@@ -105,8 +180,6 @@ public class CarStatusBar extends StatusBar implements
         mHvacController.connectToCarService();
 
         CarSystemUIFactory factory = SystemUIFactory.getInstance();
-        mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
-        mDeviceIsProvisioned = mDeviceProvisionedController.isDeviceProvisioned();
         if (!mDeviceIsProvisioned) {
             mDeviceProvisionedController.addCallback(
                     new DeviceProvisionedController.DeviceProvisionedListener() {
@@ -159,11 +232,18 @@ public class CarStatusBar extends StatusBar implements
         }
 
         buildNavBarContent();
+        // If the UI was rebuilt (day/night change) while the keyguard was up we need to
+        // correctly respect that state.
+        if (mIsKeyguard) {
+            updateNavBarForKeyguardContent();
+        }
+        // CarFacetButtonController was reset therefore we need to re-add the status bar elements
+        // to the controller.
+        mCarFacetButtonController.addAllFacetButtons(mStatusBarWindow);
     }
 
     private void addTemperatureViewToController(View v) {
         if (v instanceof TemperatureView) {
-            Log.d(TAG, "addTemperatureViewToController: found ");
             mHvacController.addHvacTextView((TemperatureView) v);
         } else if (v instanceof ViewGroup) {
             ViewGroup viewGroup = (ViewGroup) v;
@@ -209,7 +289,13 @@ public class CarStatusBar extends StatusBar implements
     @Override
     public void showKeyguard() {
         super.showKeyguard();
-        getComponent(NotificationsUI.class).closeCarNotifications(0);
+        updateNavBarForKeyguardContent();
+    }
+
+    /**
+     * Switch to the keyguard applicable content contained in the nav bars
+     */
+    private void updateNavBarForKeyguardContent() {
         if (mNavigationBarView != null) {
             mNavigationBarView.showKeyguardButtons();
         }
@@ -223,8 +309,8 @@ public class CarStatusBar extends StatusBar implements
 
 
     @Override
-    protected void makeStatusBarView() {
-        super.makeStatusBarView();
+    protected void makeStatusBarView(@Nullable RegisterStatusBarResult result) {
+        super.makeStatusBarView(result);
         mHvacController = new HvacController(mContext);
 
         CarSystemUIFactory factory = SystemUIFactory.getInstance();
@@ -241,13 +327,291 @@ public class CarStatusBar extends StatusBar implements
             // when a device has connected by bluetooth.
             mBatteryMeterView.setVisibility(View.GONE);
         });
-        addTemperatureViewToController(mStatusBarWindow);
+
+        connectNotificationsUI();
+    }
+
+    /**
+     * Attach the notification listeners and controllers to the UI as well as build all the
+     * touch listeners needed for opening and closing the notification panel
+     */
+    private void connectNotificationsUI() {
+        // Attached to the status bar to detect pull down of the notification shade.
+        GestureDetector openGestureDetector = new GestureDetector(mContext,
+                new OpenNotificationGestureListener() {
+                    @Override
+                    protected void openNotification() {
+                        animateExpandNotificationsPanel();
+                    }
+                });
+        // Attached to the notification ui to detect close request of the notification shade.
+        GestureDetector closeGestureDetector = new GestureDetector(mContext,
+                new CloseNotificationGestureListener() {
+                    @Override
+                    protected void close() {
+                        if (mPanelExpanded) {
+                            animateCollapsePanels();
+                        }
+                    }
+                });
+        // Attached to the NavBars to close the notification shade
+        GestureDetector navBarCloseNotificationGestureDetector = new GestureDetector(mContext,
+                new NavBarCloseNotificationGestureListener() {
+                    @Override
+                    protected void close() {
+                        if (mPanelExpanded) {
+                            animateCollapsePanels();
+                        }
+                    }
+                });
+        mNavBarNotificationTouchListener =
+                (v, event) -> {
+                    boolean consumed = navBarCloseNotificationGestureDetector.onTouchEvent(event);
+                    if (consumed) {
+                        return true;
+                    }
+                    if (event.getActionMasked() == MotionEvent.ACTION_UP
+                            && mNotificationView.getVisibility() == View.VISIBLE) {
+                        if (mSettleClosePercentage < mPercentageFromBottom) {
+                            animateNotificationPanel(
+                                    DEFAULT_FLING_VELOCITY, false);
+                        } else {
+                            animateNotificationPanel(DEFAULT_FLING_VELOCITY,
+                                    true);
+                        }
+                    }
+                    return true;
+                };
+
         // The following are the ui elements that the user would call the status bar.
         // This will set the status bar so it they can make call backs.
         CarNavigationBarView topBar = mStatusBarWindow.findViewById(R.id.car_top_bar);
         topBar.setStatusBar(this);
-        CarNavigationBarView qsTopBar = mStatusBarWindow.findViewById(R.id.qs_car_top_bar);
-        qsTopBar.setStatusBar(this);
+        topBar.setStatusBarWindowTouchListener((v1, event1) -> {
+
+                    boolean consumed = openGestureDetector.onTouchEvent(event1);
+                    if (consumed) {
+                        return true;
+                    }
+                    if (event1.getActionMasked() == MotionEvent.ACTION_UP
+                            && mNotificationView.getVisibility() == View.VISIBLE) {
+                        if (mSettleOpenPercentage > mPercentageFromBottom) {
+                            animateNotificationPanel(DEFAULT_FLING_VELOCITY, true);
+                        } else {
+                            animateNotificationPanel(
+                                    DEFAULT_FLING_VELOCITY, false);
+                        }
+                    }
+                    return true;
+                }
+        );
+
+        NotificationClickHandlerFactory clickHandlerFactory = new NotificationClickHandlerFactory(
+                mBarService,
+                launchResult -> {
+                    if (launchResult == ActivityManager.START_TASK_TO_FRONT
+                            || launchResult == ActivityManager.START_SUCCESS) {
+                        animateCollapsePanels();
+                    }
+                });
+        Car car = Car.createCar(mContext);
+        CarUxRestrictionsManager carUxRestrictionsManager = (CarUxRestrictionsManager)
+                car.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE);
+        CarNotificationListener carNotificationListener = new CarNotificationListener();
+        CarUxRestrictionManagerWrapper carUxRestrictionManagerWrapper =
+                new CarUxRestrictionManagerWrapper();
+        carUxRestrictionManagerWrapper.setCarUxRestrictionsManager(carUxRestrictionsManager);
+        NotificationDataManager notificationDataManager = new NotificationDataManager();
+        CarHeadsUpNotificationManager carHeadsUpNotificationManager =
+                new CarSystemUIHeadsUpNotificationManager(mContext, clickHandlerFactory,
+                        notificationDataManager);
+
+        carNotificationListener.registerAsSystemService(mContext, carUxRestrictionManagerWrapper,
+                carHeadsUpNotificationManager, notificationDataManager);
+
+        mNotificationView = mStatusBarWindow.findViewById(R.id.notification_view);
+        View glassPane = mStatusBarWindow.findViewById(R.id.glass_pane);
+        mNotificationView.setClickHandlerFactory(clickHandlerFactory);
+
+        // The glass pane is used to view touch events before passed to the notification list.
+        // This allows us to initialize gesture listeners and detect when to close the notifications
+        glassPane.setOnTouchListener((v, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                mNotificationListAtBottomAtTimeOfTouch = false;
+            }
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                mFirstTouchDownOnGlassPane = event.getRawX();
+                mNotificationListAtBottomAtTimeOfTouch = mNotificationListAtBottom;
+                // Reset the tracker when there is a touch down on the glass pane.
+                mIsTracking = false;
+                // Pass the down event to gesture detector so that it knows where the touch event
+                // started.
+                closeGestureDetector.onTouchEvent(event);
+            }
+            return false;
+        });
+        mNotificationList = mNotificationView.findViewById(R.id.notifications);
+        mNotificationList.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if (!mNotificationList.canScrollVertically(1)) {
+                    mNotificationListAtBottom = true;
+                    return;
+                }
+                mNotificationListAtBottom = false;
+                mIsSwipingVerticallyToClose = false;
+                mNotificationListAtBottomAtTimeOfTouch = false;
+            }
+        });
+        mNotificationList.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                mIsNotificationCardSwiping = Math.abs(mFirstTouchDownOnGlassPane - event.getRawX())
+                        > SWIPE_MAX_OFF_PATH;
+                if (mNotificationListAtBottomAtTimeOfTouch && mNotificationListAtBottom) {
+                    // We need to save the state here as if notification card is swiping we will
+                    // change the mNotificationListAtBottomAtTimeOfTouch. This is to protect
+                    // closing the notification shade while the notification card is being swiped.
+                    mIsSwipingVerticallyToClose = true;
+                }
+
+                // If the card is swiping we should not allow the notification shade to close.
+                // Hence setting mNotificationListAtBottomAtTimeOfTouch to false will stop that
+                // for us. We are also checking for mIsTracking because while swiping the
+                // notification shade to close if the user goes a bit horizontal while swiping
+                // upwards then also this should close.
+                if (mIsNotificationCardSwiping && !mIsTracking) {
+                    mNotificationListAtBottomAtTimeOfTouch = false;
+                }
+
+                boolean handled = closeGestureDetector.onTouchEvent(event);
+                boolean isTracking = mIsTracking;
+                Rect rect = mNotificationList.getClipBounds();
+                float clippedHeight = 0;
+                if (rect != null) {
+                    clippedHeight = rect.bottom;
+                }
+                if (!handled && event.getActionMasked() == MotionEvent.ACTION_UP
+                        && mIsSwipingVerticallyToClose) {
+                    if (mSettleClosePercentage < mPercentageFromBottom && isTracking) {
+                        animateNotificationPanel(DEFAULT_FLING_VELOCITY, false);
+                    } else if (clippedHeight != mNotificationView.getHeight() && isTracking) {
+                        // this can be caused when user is at the end of the list and trying to
+                        // fling to top of the list by scrolling down.
+                        animateNotificationPanel(DEFAULT_FLING_VELOCITY, true);
+                    }
+                }
+
+                // Updating the mNotificationListAtBottomAtTimeOfTouch state has to be done after
+                // the event has been passed to the closeGestureDetector above, such that the
+                // closeGestureDetector sees the up event before the state has changed.
+                if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                    mNotificationListAtBottomAtTimeOfTouch = false;
+                }
+                return handled || isTracking;
+            }
+        });
+
+        NotificationViewController mNotificationViewController = new NotificationViewController(
+                mNotificationView,
+                PreprocessingManager.getInstance(mContext),
+                carNotificationListener,
+                carUxRestrictionManagerWrapper);
+        mNotificationViewController.enable();
+    }
+
+    /**
+     * @return true if the notification panel is currently visible
+     */
+    boolean isNotificationPanelOpen() {
+        return mPanelExpanded;
+    }
+
+    @Override
+    public void animateExpandNotificationsPanel() {
+        if (!mCommandQueue.panelsEnabled() || !mUserSetup) {
+            return;
+        }
+        // scroll to top
+        mNotificationList.scrollToPosition(0);
+        mStatusBarWindowController.setPanelVisible(true);
+        mNotificationView.setVisibility(View.VISIBLE);
+
+        animateNotificationPanel(mOpeningVelocity, false);
+
+        setPanelExpanded(true);
+    }
+
+    @Override
+    public void animateCollapsePanels(int flags, boolean force, boolean delayed,
+            float speedUpFactor) {
+        super.animateCollapsePanels(flags, force, delayed, speedUpFactor);
+        if (!mPanelExpanded || mNotificationView.getVisibility() == View.INVISIBLE) {
+            return;
+        }
+        mStatusBarWindowController.setStatusBarFocusable(false);
+        mStatusBarWindow.cancelExpandHelper();
+        mStatusBarView.collapsePanel(true /* animate */, delayed, speedUpFactor);
+
+        animateNotificationPanel(mClosingVelocity, true);
+
+        if (!mIsTracking) {
+            mStatusBarWindowController.setPanelVisible(false);
+            mNotificationView.setVisibility(View.INVISIBLE);
+        }
+
+        setPanelExpanded(false);
+    }
+
+    /**
+     * Animates the notification shade from one position to other. This is used to either open or
+     * close the notification shade completely with a velocity. If the animation is to close the
+     * notification shade this method also makes the view invisible after animation ends.
+     */
+    private void animateNotificationPanel(float velocity, boolean isClosing) {
+        Rect rect = mNotificationList.getClipBounds();
+        if (rect == null) {
+            return;
+        }
+        float from = rect.bottom;
+        float to = 0;
+        if (!isClosing) {
+            to = mNotificationView.getHeight();
+        }
+        if (mIsNotificationAnimating) {
+            return;
+        }
+        mIsNotificationAnimating = true;
+        mIsTracking = true;
+        ValueAnimator animator = ValueAnimator.ofFloat(from, to);
+        animator.addUpdateListener(
+                animation -> {
+                    float animatedValue = (Float) animation.getAnimatedValue();
+                    setNotificationViewClipBounds((int) animatedValue);
+                });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                super.onAnimationEnd(animation);
+                mIsNotificationAnimating = false;
+                mIsTracking = false;
+                mOpeningVelocity = DEFAULT_FLING_VELOCITY;
+                mClosingVelocity = DEFAULT_FLING_VELOCITY;
+                if (isClosing) {
+                    mStatusBarWindowController.setPanelVisible(false);
+                    mNotificationView.setVisibility(View.INVISIBLE);
+                    mNotificationList.setClipBounds(null);
+                    // let the status bar know that the panel is closed
+                    setPanelExpanded(false);
+                } else {
+                    // let the status bar know that the panel is open
+                    setPanelExpanded(true);
+                }
+            }
+        });
+        sFlingAnimationUtils.apply(animator, from, to, Math.abs(velocity));
+        animator.start();
     }
 
     @Override
@@ -262,7 +626,7 @@ public class CarStatusBar extends StatusBar implements
     }
 
     @Override
-    protected void createNavigationBar() {
+    protected void createNavigationBar(@Nullable RegisterStatusBarResult result) {
         mShowBottom = mContext.getResources().getBoolean(R.bool.config_enableBottomNavigationBar);
         mShowLeft = mContext.getResources().getBoolean(R.bool.config_enableLeftNavigationBar);
         mShowRight = mContext.getResources().getBoolean(R.bool.config_enableRightNavigationBar);
@@ -273,7 +637,7 @@ public class CarStatusBar extends StatusBar implements
 
         // There has been a car customized nav bar on the default display, so just create nav bars
         // on external displays.
-        mNavigationBarController.createNavigationBars(false /* includeDefaultDisplay */);
+        mNavigationBarController.createNavigationBars(false /* includeDefaultDisplay */, result);
     }
 
     private void buildNavBarContent() {
@@ -323,8 +687,8 @@ public class CarStatusBar extends StatusBar implements
             lp.setTitle("CarNavigationBar");
             lp.windowAnimations = 0;
             mWindowManager.addView(mNavigationBarWindow, lp);
-            mNavigationBarWindow.setOnTouchListener(getStatusBarWindowTouchListener());
         }
+
         if (mShowLeft) {
             int width = mContext.getResources().getDimensionPixelSize(
                     R.dimen.car_left_navigation_bar_width);
@@ -374,6 +738,7 @@ public class CarStatusBar extends StatusBar implements
         }
         mNavigationBarView.setStatusBar(this);
         addTemperatureViewToController(mNavigationBarView);
+        mNavigationBarView.setStatusBarWindowTouchListener(mNavBarNotificationTouchListener);
     }
 
     private void buildLeft(int layout) {
@@ -385,6 +750,7 @@ public class CarStatusBar extends StatusBar implements
         }
         mLeftNavigationBarView.setStatusBar(this);
         addTemperatureViewToController(mLeftNavigationBarView);
+        mLeftNavigationBarView.setStatusBarWindowTouchListener(mNavBarNotificationTouchListener);
     }
 
 
@@ -397,11 +763,12 @@ public class CarStatusBar extends StatusBar implements
         }
         mRightNavigationBarView.setStatusBar(this);
         addTemperatureViewToController(mRightNavigationBarView);
+        mRightNavigationBarView.setStatusBarWindowTouchListener(mNavBarNotificationTouchListener);
     }
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        //When executing dump() funciton simultaneously, we need to serialize them
+        //When executing dump() function simultaneously, we need to serialize them
         //to get mStackScroller's position correctly.
         synchronized (mQueueLock) {
             pw.println("  mStackScroller: " + viewInfo(mStackScroller));
@@ -420,8 +787,6 @@ public class CarStatusBar extends StatusBar implements
         pw.println(mCarBatteryController);
         pw.print("  mBatteryMeterView=");
         pw.println(mBatteryMeterView);
-        pw.print("  mConnectedDeviceSignalController=");
-        pw.println(mConnectedDeviceSignalController);
         pw.print("  mNavigationBarView=");
         pw.println(mNavigationBarView);
 
@@ -441,11 +806,6 @@ public class CarStatusBar extends StatusBar implements
         }
     }
 
-    @Override
-    protected View.OnTouchListener getStatusBarWindowTouchListener() {
-        // Gets the car specific notification touch listener
-        return getComponent(NotificationsUI.class).getDragDownListener();
-    }
 
     @Override
     public void showBatteryView() {
@@ -570,15 +930,6 @@ public class CarStatusBar extends StatusBar implements
                 true /* dismissShade */, true /* afterKeyguardGone */, true /* deferred */);
     }
 
-    @Override
-    public void animateExpandNotificationsPanel() {
-        // Because space is usually constrained in the auto use-case, there should not be a
-        // pinned notification when the shade has been expanded. Ensure this by removing all heads-
-        // up notifications.
-        mHeadsUpManager.releaseAllImmediately();
-        super.animateExpandNotificationsPanel();
-    }
-
     /**
      * Ensures that relevant child views are appropriately recreated when the device's density
      * changes.
@@ -600,8 +951,225 @@ public class CarStatusBar extends StatusBar implements
         return mContext.getDrawable(com.android.internal.R.drawable.default_wallpaper);
     }
 
-    public void toggleCarNotifications() {
-        getComponent(NotificationsUI.class).toggleShowingCarNotifications();
+    /** Returns true if the current user makes it through the setup wizard, false otherwise. */
+    private boolean getIsUserSetup() {
+        return mUserSetup;
     }
 
+    private void setNotificationViewClipBounds(int height) {
+        Rect clipBounds = new Rect();
+        clipBounds.set(0, 0, mNotificationView.getWidth(), height);
+        // Sets the clip region on the notification list view.
+        mNotificationList.setClipBounds(clipBounds);
+
+        if (mNotificationView.getHeight() > 0) {
+            // Calculates the alpha value for the background based on how much of the notification
+            // shade is visible to the user. When the notification shade is completely open then
+            // alpha value will be 1.
+            float alpha = (float) height / mNotificationView.getHeight();
+            Drawable background = mNotificationView.getBackground();
+
+            background.setAlpha((int) (alpha * 255));
+        }
+    }
+
+    private void calculatePercentageFromBottom(float height) {
+        if (mNotificationView.getHeight() > 0) {
+            mPercentageFromBottom = (int) Math.abs(
+                    height / mNotificationView.getHeight() * 100);
+        }
+    }
+
+    private static final int SWIPE_UP_MIN_DISTANCE = 75;
+    private static final int SWIPE_DOWN_MIN_DISTANCE = 25;
+    private static final int SWIPE_MAX_OFF_PATH = 75;
+    private static final int SWIPE_THRESHOLD_VELOCITY = 200;
+
+    // Only responsible for open hooks. Since once the panel opens it covers all elements
+    // there is no need to merge with close.
+    private abstract class OpenNotificationGestureListener extends
+            GestureDetector.SimpleOnGestureListener {
+
+        @Override
+        public boolean onScroll(MotionEvent event1, MotionEvent event2, float distanceX,
+                float distanceY) {
+
+            if (mNotificationView.getVisibility() == View.INVISIBLE) {
+                // when the on-scroll is called for the first time to open.
+                mNotificationList.scrollToPosition(0);
+            }
+            mStatusBarWindowController.setPanelVisible(true);
+            mNotificationView.setVisibility(View.VISIBLE);
+
+            // clips the view for the notification shade when the user scrolls to open.
+            setNotificationViewClipBounds((int) event2.getRawY());
+
+            // Initially the scroll starts with height being zero. This checks protects from divide
+            // by zero error.
+            calculatePercentageFromBottom(event2.getRawY());
+
+            mIsTracking = true;
+            return true;
+        }
+
+
+        @Override
+        public boolean onFling(MotionEvent event1, MotionEvent event2,
+                float velocityX, float velocityY) {
+            if (velocityY > SWIPE_THRESHOLD_VELOCITY) {
+                mOpeningVelocity = velocityY;
+                openNotification();
+                return true;
+            }
+            animateNotificationPanel(DEFAULT_FLING_VELOCITY, true);
+
+            return false;
+        }
+
+        protected abstract void openNotification();
+    }
+
+    // to be installed on the open panel notification panel
+    private abstract class CloseNotificationGestureListener extends
+            GestureDetector.SimpleOnGestureListener {
+
+        @Override
+        public boolean onSingleTapUp(MotionEvent motionEvent) {
+            animateNotificationPanel(DEFAULT_FLING_VELOCITY, true);
+            return false;
+        }
+
+        @Override
+        public boolean onScroll(MotionEvent event1, MotionEvent event2, float distanceX,
+                float distanceY) {
+            if (!mNotificationListAtBottomAtTimeOfTouch && !mNotificationListAtBottom) {
+                return false;
+            }
+            // should not clip while scroll to the bottom of the list.
+            if (!mNotificationListAtBottomAtTimeOfTouch) {
+                return false;
+            }
+            float actualNotificationHeight =
+                    mNotificationView.getHeight() - (event1.getRawY() - event2.getRawY());
+            if (actualNotificationHeight > mNotificationView.getHeight()) {
+                actualNotificationHeight = mNotificationView.getHeight();
+            }
+            if (mNotificationView.getHeight() > 0) {
+                mPercentageFromBottom = (int) Math.abs(
+                        actualNotificationHeight / mNotificationView.getHeight() * 100);
+                boolean isUp = distanceY > 0;
+
+                // This check is to figure out if onScroll was called while swiping the card at
+                // bottom of the list. At that time we should not allow notification shade to
+                // close. We are also checking for the upwards swipe gesture here because it is
+                // possible if a user is closing the notification shade and while swiping starts
+                // to open again but does not fling. At that time we should allow the
+                // notification shade to close fully or else it would stuck in between.
+                if (Math.abs(mNotificationView.getHeight() - actualNotificationHeight)
+                        > SWIPE_DOWN_MIN_DISTANCE && isUp) {
+                    setNotificationViewClipBounds((int) actualNotificationHeight);
+                    mIsTracking = true;
+                } else if (!isUp) {
+                    setNotificationViewClipBounds((int) actualNotificationHeight);
+                }
+            }
+            // if we return true the the items in RV won't be scrollable.
+            return false;
+        }
+
+
+        @Override
+        public boolean onFling(MotionEvent event1, MotionEvent event2,
+                float velocityX, float velocityY) {
+            if (!mNotificationListAtBottomAtTimeOfTouch && !mNotificationListAtBottom) {
+                return false;
+            }
+            if (Math.abs(event1.getX() - event2.getX()) > SWIPE_MAX_OFF_PATH
+                    || Math.abs(velocityY) < SWIPE_THRESHOLD_VELOCITY) {
+                // swipe was not vertical or was not fast enough
+                return false;
+            }
+            boolean isUp = velocityY < 0;
+            if (isUp) {
+                close();
+                return true;
+            } else {
+                // we should close the shade
+                animateNotificationPanel(velocityY, false);
+            }
+            return false;
+        }
+
+        protected abstract void close();
+    }
+
+    // To be installed on the nav bars.
+    private abstract class NavBarCloseNotificationGestureListener extends
+            CloseNotificationGestureListener {
+        @Override
+        public boolean onSingleTapUp(MotionEvent e) {
+            mClosingVelocity = DEFAULT_FLING_VELOCITY;
+            close();
+            return super.onSingleTapUp(e);
+        }
+
+        @Override
+        public boolean onScroll(MotionEvent event1, MotionEvent event2, float distanceX,
+                float distanceY) {
+            calculatePercentageFromBottom(event2.getRawY());
+            setNotificationViewClipBounds((int) event2.getRawY());
+            return true;
+        }
+
+        @Override
+        public void onLongPress(MotionEvent e) {
+            mClosingVelocity = DEFAULT_FLING_VELOCITY;
+            close();
+            super.onLongPress(e);
+        }
+    }
+
+    /**
+     * SystemUi version onf the notification manager that overrides methods such that the
+     * notifications end up in the status bar layouts instead of a standalone window.
+     */
+    private class CarSystemUIHeadsUpNotificationManager extends CarHeadsUpNotificationManager {
+
+        CarSystemUIHeadsUpNotificationManager(Context context,
+                NotificationClickHandlerFactory clickHandlerFactory,
+                NotificationDataManager notificationDataManager) {
+            super(context, clickHandlerFactory, notificationDataManager);
+        }
+
+        @Override
+        protected View createHeadsUpPanel() {
+            // In SystemUi the view is already in the window so just return a reference.
+            return mStatusBarWindow.findViewById(R.id.notification_headsup);
+        }
+
+        @Override
+        protected void addHeadsUpPanelToDisplay() {
+            // Set the panel initial state to invisible
+            mHeadsUpPanel.setVisibility(View.INVISIBLE);
+        }
+
+        @Override
+        protected void setHeadsUpVisible() {
+            super.setHeadsUpVisible();
+            if (mHeadsUpPanel.getVisibility() == View.VISIBLE) {
+                mStatusBarWindowController.setHeadsUpShowing(true);
+                mStatusBarWindowController.setForceStatusBarVisible(true);
+            }
+        }
+
+        @Override
+        protected void removeNotificationFromPanel(HeadsUpEntry currentHeadsUpNotification) {
+            super.removeNotificationFromPanel(currentHeadsUpNotification);
+            // If the panel ended up empty and hidden we can remove it from SystemUi
+            if (mHeadsUpPanel.getVisibility() != View.VISIBLE) {
+                mStatusBarWindowController.setHeadsUpShowing(false);
+                mStatusBarWindowController.setForceStatusBarVisible(false);
+            }
+        }
+    }
 }

@@ -28,6 +28,7 @@ import android.view.IWindowManager;
 import android.view.MotionEvent;
 import android.view.View;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dependency;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.statusbar.CommandQueue;
@@ -48,8 +49,10 @@ public class AutoHideController implements CommandQueue.Callbacks {
     private StatusBar mStatusBar;
     private NavigationBarFragment mNavigationBar;
 
-    private int mDisplayId;
-    private int mSystemUiVisibility;
+    @VisibleForTesting
+    int mDisplayId;
+    @VisibleForTesting
+    int mSystemUiVisibility;
     // last value sent to window manager
     private int mLastDispatchedSystemUiVisibility = ~View.SYSTEM_UI_FLAG_VISIBLE;
 
@@ -75,6 +78,13 @@ public class AutoHideController implements CommandQueue.Callbacks {
         mDisplayId = context.getDisplayId();
     }
 
+    @Override
+    public void onDisplayRemoved(int displayId) {
+        if (displayId == mDisplayId) {
+            mCommandQueue.removeCallback(this);
+        }
+    }
+
     void setStatusBar(StatusBar statusBar) {
         mStatusBar = statusBar;
     }
@@ -85,7 +95,8 @@ public class AutoHideController implements CommandQueue.Callbacks {
 
     @Override
     public void setSystemUiVisibility(int displayId, int vis, int fullscreenStackVis,
-            int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds) {
+            int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds,
+            boolean navbarColorManagedByIme) {
         if (displayId != mDisplayId) {
             return;
         }
@@ -109,14 +120,15 @@ public class AutoHideController implements CommandQueue.Callbacks {
             if (mSystemUiVisibility != newVal) {
                 mCommandQueue.setSystemUiVisibility(mDisplayId, mSystemUiVisibility,
                         fullscreenStackVis, dockedStackVis, mask, fullscreenStackBounds,
-                        dockedStackBounds);
+                        dockedStackBounds, navbarColorManagedByIme);
             }
 
             notifySystemUiVisibilityChanged(mSystemUiVisibility);
         }
     }
 
-    private void notifySystemUiVisibilityChanged(int vis) {
+    @VisibleForTesting
+    void notifySystemUiVisibilityChanged(int vis) {
         try {
             if (mLastDispatchedSystemUiVisibility != vis) {
                 mWindowManagerService.statusBarVisibilityChanged(mDisplayId, vis);
@@ -206,11 +218,12 @@ public class AutoHideController implements CommandQueue.Callbacks {
         return mask;
     }
 
-    private boolean hasNavigationBar() {
+    boolean hasNavigationBar() {
         return mNavigationBar != null;
     }
 
-    private boolean hasStatusBar() {
+    @VisibleForTesting
+    boolean hasStatusBar() {
         return mStatusBar != null;
     }
 }

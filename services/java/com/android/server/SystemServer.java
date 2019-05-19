@@ -88,6 +88,7 @@ import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.connectivity.IpConnectivityMetrics;
+import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.coverage.CoverageService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
 import com.android.server.display.DisplayManagerService;
@@ -108,7 +109,6 @@ import com.android.server.media.MediaSessionService;
 import com.android.server.media.projection.MediaProjectionManagerService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
-import com.android.server.net.ipmemorystore.IpMemoryStoreService;
 import com.android.server.net.watchlist.NetworkWatchlistService;
 import com.android.server.notification.NotificationManagerService;
 import com.android.server.oemlock.OemLockService;
@@ -116,6 +116,7 @@ import com.android.server.om.OverlayManagerService;
 import com.android.server.os.BugreportManagerService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
+import com.android.server.pm.ApexManager;
 import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.CrossProfileAppsService;
 import com.android.server.pm.DynamicCodeLoggingService;
@@ -125,6 +126,7 @@ import com.android.server.pm.OtaDexoptService;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.ShortcutService;
 import com.android.server.pm.UserManagerService;
+import com.android.server.policy.PermissionPolicyService;
 import com.android.server.policy.PhoneWindowManager;
 import com.android.server.policy.role.LegacyRoleResolutionPolicy;
 import com.android.server.power.PowerManagerService;
@@ -160,8 +162,6 @@ import dalvik.system.VMRuntime;
 import dalvik.system.PathClassLoader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-
-import com.google.android.startop.iorap.IorapForwardingService;
 
 import java.io.File;
 import java.io.IOException;
@@ -258,6 +258,8 @@ public final class SystemServer {
             "com.android.server.autofill.AutofillManagerService";
     private static final String CONTENT_CAPTURE_MANAGER_SERVICE_CLASS =
             "com.android.server.contentcapture.ContentCaptureManagerService";
+    private static final String SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS =
+            "com.android.server.systemcaptions.SystemCaptionsManagerService";
     private static final String TIME_ZONE_RULES_MANAGER_SERVICE_CLASS =
             "com.android.server.timezone.RulesManagerService$Lifecycle";
     private static final String IOT_SERVICE_CLASS =
@@ -545,7 +547,7 @@ public final class SystemServer {
     }
 
     private boolean isFirstBootOrUpgrade() {
-        return mPackageManagerService.isFirstBoot() || mPackageManagerService.isUpgrade();
+        return mPackageManagerService.isFirstBoot() || mPackageManagerService.isDeviceUpgrading();
     }
 
     private void reportWtf(String msg, Throwable e) {
@@ -623,6 +625,19 @@ public final class SystemServer {
      * initialized in one of the other functions.
      */
     private void startBootstrapServices() {
+        // Start the watchdog as early as possible so we can crash the system server
+        // if we deadlock during early boot
+        traceBeginAndSlog("StartWatchdog");
+        final Watchdog watchdog = Watchdog.getInstance();
+        watchdog.start();
+        traceEnd();
+
+        // Start ApexManager as early as we can to give it enough time to call apexd and populate
+        // cache of known apex packages. Note that calling apexd will happen asynchronously.
+        traceBeginAndSlog("StartApexManager");
+        mSystemServiceManager.startService(ApexManager.class);
+        traceEnd();
+
         Slog.i(TAG, "Reading configuration...");
         final String TAG_SYSTEM_CONFIG = "ReadingSystemConfig";
         traceBeginAndSlog(TAG_SYSTEM_CONFIG);
@@ -767,6 +782,12 @@ public final class SystemServer {
         mActivityManagerService.setSystemProcess();
         traceEnd();
 
+        // Complete the watchdog setup with an ActivityManager instance and listen for reboots
+        // Do this only after the ActivityManagerService is properly started as a system process
+        traceBeginAndSlog("InitWatchdog");
+        watchdog.init(mSystemContext, mActivityManagerService);
+        traceEnd();
+
         // DisplayManagerService needs to setup android.display scheduling related policies
         // since setSystemProcess() would have overridden policies due to setProcessGroup
         mDisplayManagerService.setupSchedulerPolicies();
@@ -853,7 +874,7 @@ public final class SystemServer {
     private void startOtherServices() {
         final Context context = mSystemContext;
         VibratorService vibrator = null;
-        DynamicAndroidService dynamicAndroid = null;
+        DynamicSystemService dynamicSystem = null;
         IStorageManager storageManager = null;
         NetworkManagementService networkManagement = null;
         IpSecService ipSecService = null;
@@ -975,9 +996,9 @@ public final class SystemServer {
             ServiceManager.addService("vibrator", vibrator);
             traceEnd();
 
-            traceBeginAndSlog("StartDynamicAndroidService");
-            dynamicAndroid = new DynamicAndroidService(context);
-            ServiceManager.addService("dynamic_android", dynamicAndroid);
+            traceBeginAndSlog("StartDynamicSystemService");
+            dynamicSystem = new DynamicSystemService(context);
+            ServiceManager.addService("dynamic_system", dynamicSystem);
             traceEnd();
 
             if (!isWatch) {
@@ -989,12 +1010,6 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartAlarmManagerService");
             mSystemServiceManager.startService(new AlarmManagerService(context));
-
-            traceEnd();
-
-            traceBeginAndSlog("InitWatchdog");
-            final Watchdog watchdog = Watchdog.getInstance();
-            watchdog.init(context, mActivityManagerService);
             traceEnd();
 
             traceBeginAndSlog("StartInputManagerService");
@@ -1074,10 +1089,6 @@ public final class SystemServer {
 
             traceBeginAndSlog("PinnerService");
             mSystemServiceManager.startService(PinnerService.class);
-            traceEnd();
-
-            traceBeginAndSlog("IorapForwardingService");
-            mSystemServiceManager.startService(IorapForwardingService.class);
             traceEnd();
 
             traceBeginAndSlog("SignedConfigService");
@@ -1237,6 +1248,9 @@ public final class SystemServer {
             }
 
             startContentCaptureService(context);
+            startAttentionService(context);
+
+            startSystemCaptionsManagerService(context);
 
             // App prediction manager service
             traceBeginAndSlog("StartAppPredictionService");
@@ -1248,9 +1262,12 @@ public final class SystemServer {
             mSystemServiceManager.startService(CONTENT_SUGGESTIONS_SERVICE_CLASS);
             traceEnd();
 
-            // NOTE: ClipboardService indirectly depends on IntelligenceService
-            traceBeginAndSlog("StartClipboardService");
-            mSystemServiceManager.startService(ClipboardService.class);
+            traceBeginAndSlog("InitNetworkStackClient");
+            try {
+                NetworkStackClient.getInstance().init();
+            } catch (Throwable e) {
+                reportWtf("initializing NetworkStackClient", e);
+            }
             traceEnd();
 
             traceBeginAndSlog("StartNetworkManagementService");
@@ -1262,14 +1279,6 @@ public final class SystemServer {
             }
             traceEnd();
 
-            traceBeginAndSlog("StartIpMemoryStoreService");
-            try {
-                ServiceManager.addService(Context.IP_MEMORY_STORE_SERVICE,
-                        new IpMemoryStoreService(context));
-            } catch (Throwable e) {
-                reportWtf("starting IP Memory Store Service", e);
-            }
-            traceEnd();
 
             traceBeginAndSlog("StartIpSecService");
             try {
@@ -1290,10 +1299,6 @@ public final class SystemServer {
                         .startService(TextClassificationManagerService.Lifecycle.class);
                 traceEnd();
             }
-
-            traceBeginAndSlog("StartAttentionManagerService");
-            mSystemServiceManager.startService(AttentionManagerService.class);
-            traceEnd();
 
             traceBeginAndSlog("StartNetworkScoreService");
             mSystemServiceManager.startService(NetworkScoreService.Lifecycle.class);
@@ -1359,13 +1364,34 @@ public final class SystemServer {
                 traceEnd();
             }
 
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_ETHERNET) ||
+                    mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
+                traceBeginAndSlog("StartEthernet");
+                mSystemServiceManager.startService(ETHERNET_SERVICE_CLASS);
+                traceEnd();
+            }
+
+            traceBeginAndSlog("StartConnectivityService");
+            try {
+                connectivity = new ConnectivityService(
+                        context, networkManagement, networkStats, networkPolicy);
+                ServiceManager.addService(Context.CONNECTIVITY_SERVICE, connectivity,
+                        /* allowIsolated= */ false,
+                        DUMP_FLAG_PRIORITY_HIGH | DUMP_FLAG_PRIORITY_NORMAL);
+                networkPolicy.bindConnectivityManager(connectivity);
+            } catch (Throwable e) {
+                reportWtf("starting Connectivity Service", e);
+            }
+            traceEnd();
+
             if (enableWigig) {
                 try {
                     Slog.i(TAG, "Wigig Service");
                     String wigigClassPath =
                         "/system/framework/wigig-service.jar" + ":" +
-                        "/system/framework/vendor.qti.hardware.wigig.supptunnel-V1.0-java.jar" + ":" +
-                        "/system/framework/vendor.qti.hardware.wigig.netperftuner-V1.0-java.jar";
+                        "/system/product/framework/vendor.qti.hardware.wigig.supptunnel-V1.0-java.jar" + ":" +
+                        "/system/product/framework/vendor.qti.hardware.wigig.netperftuner-V1.0-java.jar" + ":" +
+                        "/system/product/framework/vendor.qti.hardware.capabilityconfigstore-V1.0-java.jar";
                     PathClassLoader wigigClassLoader =
                             new PathClassLoader(wigigClassPath, getClass().getClassLoader());
                     Class wigigP2pClass = wigigClassLoader.loadClass(
@@ -1385,35 +1411,6 @@ public final class SystemServer {
                     reportWtf("starting WigigService", e);
                 }
             }
-
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_ETHERNET) ||
-                    mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
-                traceBeginAndSlog("StartEthernet");
-                mSystemServiceManager.startService(ETHERNET_SERVICE_CLASS);
-                traceEnd();
-            }
-
-            traceBeginAndSlog("StartConnectivityService");
-            try {
-                connectivity = new ConnectivityService(
-                        context, networkManagement, networkStats, networkPolicy);
-                ServiceManager.addService(Context.CONNECTIVITY_SERVICE, connectivity,
-                        /* allowIsolated= */ false,
-                        DUMP_FLAG_PRIORITY_HIGH | DUMP_FLAG_PRIORITY_NORMAL);
-                networkStats.bindConnectivityManager(connectivity);
-                networkPolicy.bindConnectivityManager(connectivity);
-            } catch (Throwable e) {
-                reportWtf("starting Connectivity Service", e);
-            }
-            traceEnd();
-
-            traceBeginAndSlog("StartNetworkStack");
-            try {
-                NetworkStackClient.getInstance().start(context);
-            } catch (Throwable e) {
-                reportWtf("starting Network Stack", e);
-            }
-            traceEnd();
 
             traceBeginAndSlog("StartNsdService");
             try {
@@ -1916,19 +1913,6 @@ public final class SystemServer {
         mSystemServiceManager.startService(IncidentCompanionService.class);
         traceEnd();
 
-        if (safeMode) {
-            traceBeginAndSlog("EnterSafeModeAndDisableJitCompilation");
-            mActivityManagerService.enterSafeMode();
-            // Disable the JIT for the system_server process
-            VMRuntime.getRuntime().disableJitCompilation();
-            traceEnd();
-        } else {
-            // Enable the JIT for the system_server process
-            traceBeginAndSlog("StartJitCompilation");
-            VMRuntime.getRuntime().startJitCompilation();
-            traceEnd();
-        }
-
         // MMS service broker
         traceBeginAndSlog("StartMmsService");
         mmsService = mSystemServiceManager.startService(MmsServiceBroker.class);
@@ -1939,6 +1923,11 @@ public final class SystemServer {
             mSystemServiceManager.startService(AUTO_FILL_MANAGER_SERVICE_CLASS);
             traceEnd();
         }
+
+        // NOTE: ClipboardService depends on ContentCapture and Autofill
+        traceBeginAndSlog("StartClipboardService");
+        mSystemServiceManager.startService(ClipboardService.class);
+        traceEnd();
 
         traceBeginAndSlog("AppServiceManager");
         mSystemServiceManager.startService(AppBindingService.Lifecycle.class);
@@ -2061,6 +2050,11 @@ public final class SystemServer {
 
         traceBeginAndSlog("StartBootPhaseDeviceSpecificServicesReady");
         mSystemServiceManager.startBootPhase(SystemService.PHASE_DEVICE_SPECIFIC_SERVICES_READY);
+        traceEnd();
+
+        // Permission policy service
+        traceBeginAndSlog("StartPermissionPolicyService");
+        mSystemServiceManager.startService(PermissionPolicyService.class);
         traceEnd();
 
         // These are needed to propagate to the runnable below.
@@ -2192,10 +2186,6 @@ public final class SystemServer {
             }
             traceEnd();
 
-            traceBeginAndSlog("StartWatchdog");
-            Watchdog.getInstance().start();
-            traceEnd();
-
             // Wait for all packages to be prepared
             mPackageManagerService.waitForAppDataPrepared();
 
@@ -2208,6 +2198,19 @@ public final class SystemServer {
             }
             mSystemServiceManager.startBootPhase(
                     SystemService.PHASE_THIRD_PARTY_APPS_CAN_START);
+            traceEnd();
+
+            traceBeginAndSlog("StartNetworkStack");
+            try {
+                // Note : the network stack is creating on-demand objects that need to send
+                // broadcasts, which means it currently depends on being started after
+                // ActivityManagerService.mSystemReady and ActivityManagerService.mProcessesReady
+                // are set to true. Be careful if moving this to a different place in the
+                // startup sequence.
+                NetworkStackClient.getInstance().start(context);
+            } catch (Throwable e) {
+                reportWtf("starting Network Stack", e);
+            }
             traceEnd();
 
             traceBeginAndSlog("MakeLocationServiceReady");
@@ -2291,6 +2294,19 @@ public final class SystemServer {
         }, BOOT_TIMINGS_TRACE_LOG);
     }
 
+    private void startSystemCaptionsManagerService(@NonNull Context context) {
+        String serviceName = context.getString(
+                com.android.internal.R.string.config_defaultSystemCaptionsManagerService);
+        if (TextUtils.isEmpty(serviceName)) {
+            Slog.d(TAG, "SystemCaptionsManagerService disabled because resource is not overlaid");
+            return;
+        }
+
+        traceBeginAndSlog("StartSystemCaptionsManagerService");
+        mSystemServiceManager.startService(SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS);
+        traceEnd();
+    }
+
     private void startContentCaptureService(@NonNull Context context) {
         // First check if it was explicitly enabled by DeviceConfig
         boolean explicitlyEnabled = false;
@@ -2318,10 +2334,28 @@ public final class SystemServer {
 
         traceBeginAndSlog("StartContentCaptureService");
         mSystemServiceManager.startService(CONTENT_CAPTURE_MANAGER_SERVICE_CLASS);
+
+        ContentCaptureManagerInternal ccmi =
+                LocalServices.getService(ContentCaptureManagerInternal.class);
+        if (ccmi != null && mActivityManagerService != null) {
+            mActivityManagerService.setContentCaptureManager(ccmi);
+        }
+
         traceEnd();
     }
 
-    static final void startSystemUi(Context context, WindowManagerService windowManager) {
+    private void startAttentionService(@NonNull Context context) {
+        if (!AttentionManagerService.isServiceConfigured(context)) {
+            Slog.d(TAG, "AttentionService is not configured on this device");
+            return;
+        }
+
+        traceBeginAndSlog("StartAttentionManagerService");
+        mSystemServiceManager.startService(AttentionManagerService.class);
+        traceEnd();
+    }
+
+    private static void startSystemUi(Context context, WindowManagerService windowManager) {
         Intent intent = new Intent();
         intent.setComponent(new ComponentName("com.android.systemui",
                 "com.android.systemui.SystemUIService"));

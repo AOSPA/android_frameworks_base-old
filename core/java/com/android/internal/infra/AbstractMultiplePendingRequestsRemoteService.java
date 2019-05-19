@@ -19,6 +19,7 @@ package com.android.internal.infra;
 import android.annotation.NonNull;
 import android.content.ComponentName;
 import android.content.Context;
+import android.os.Handler;
 import android.os.IInterface;
 import android.util.Slog;
 
@@ -31,7 +32,6 @@ import java.util.ArrayList;
  *
  * @param <S> the concrete remote service class
  * @param <I> the interface of the binder service
- * @hide
  */
 public abstract class AbstractMultiplePendingRequestsRemoteService<S
         extends AbstractMultiplePendingRequestsRemoteService<S, I>, I extends IInterface>
@@ -43,9 +43,9 @@ public abstract class AbstractMultiplePendingRequestsRemoteService<S
 
     public AbstractMultiplePendingRequestsRemoteService(@NonNull Context context,
             @NonNull String serviceInterface, @NonNull ComponentName componentName, int userId,
-            @NonNull VultureCallback<S> callback, boolean bindInstantServiceAllowed,
-            boolean verbose, int initialCapacity) {
-        super(context, serviceInterface, componentName, userId, callback, bindInstantServiceAllowed,
+            @NonNull VultureCallback<S> callback, @NonNull Handler handler,
+            int bindingFlags, boolean verbose, int initialCapacity) {
+        super(context, serviceInterface, componentName, userId, callback, handler, bindingFlags,
                 verbose);
         mInitialCapacity = initialCapacity;
     }
@@ -69,6 +69,20 @@ public abstract class AbstractMultiplePendingRequestsRemoteService<S
             if (mVerbose) Slog.v(mTag, "Canceling " + size + " pending requests");
             for (int i = 0; i < size; i++) {
                 mPendingRequests.get(i).cancel();
+            }
+            mPendingRequests = null;
+        }
+    }
+
+    @Override // from AbstractRemoteService
+    final void handleBindFailure() {
+        if (mPendingRequests != null) {
+            final int size = mPendingRequests.size();
+            if (mVerbose) Slog.v(mTag, "Sending failure to " + size + " pending requests");
+            for (int i = 0; i < size; i++) {
+                final BasePendingRequest<S, I> request = mPendingRequests.get(i);
+                request.onFailed();
+                request.finish();
             }
             mPendingRequests = null;
         }

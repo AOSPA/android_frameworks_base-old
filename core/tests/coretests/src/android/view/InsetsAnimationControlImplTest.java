@@ -18,18 +18,15 @@ package android.view;
 
 import static android.view.InsetsState.TYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.TYPE_TOP_BAR;
-
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.WindowInsets.Type.sideBars;
 import static android.view.WindowInsets.Type.systemBars;
-import static android.view.WindowInsets.Type.topBar;
-import static junit.framework.Assert.assertEquals;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,11 +39,13 @@ import android.platform.test.annotations.Presubmit;
 import android.util.SparseArray;
 import android.view.SurfaceControl.Transaction;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
+import android.view.test.InsetsModeSession;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -55,8 +54,16 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.List;
 
+/**
+ * Tests for {@link InsetsAnimationControlImpl}.
+ *
+ * <p>Build/Install/Run:
+ *  atest FrameworksCoreTests:InsetsAnimationControlImplTest
+ *
+ * <p>This test class is a part of Window Manager Service tests and specified in
+ * {@link com.android.server.wm.test.filters.FrameworksTestsFilter}.
+ */
 @Presubmit
-@FlakyTest(detail = "Promote once confirmed non-flaky")
 @RunWith(AndroidJUnit4.class)
 public class InsetsAnimationControlImplTest {
 
@@ -66,15 +73,25 @@ public class InsetsAnimationControlImplTest {
     private SurfaceControl mTopLeash;
     private SurfaceControl mNavLeash;
     private InsetsState mInsetsState;
+    private static InsetsModeSession sInsetsModeSession;
 
     @Mock Transaction mMockTransaction;
     @Mock InsetsController mMockController;
     @Mock WindowInsetsAnimationControlListener mMockListener;
     @Mock SyncRtSurfaceTransactionApplier mMockTransactionApplier;
 
+    @BeforeClass
+    public static void setupOnce() {
+        sInsetsModeSession = new InsetsModeSession(NEW_INSETS_MODE_FULL);
+    }
+
+    @AfterClass
+    public static void tearDownOnce() throws Exception {
+        sInsetsModeSession.close();
+    }
+
     @Before
     public void setup() {
-        ViewRootImpl.sNewInsetsMode = NEW_INSETS_MODE_FULL;
         MockitoAnnotations.initMocks(this);
         mTopLeash = new SurfaceControl.Builder(mSession)
                 .setName("testSurface")

@@ -81,5 +81,30 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String SSIN_MAX_NUM_ACTIONS = "ssin_max_num_actions";
 
+    /**
+     * (int) The amount of time (ms) before smart suggestions are clickable, since the suggestions
+     * were added.
+     */
+    public static final String SSIN_ONCLICK_INIT_DELAY = "ssin_onclick_init_delay";
+
+    /**
+     * The default component of
+     * {@link android.service.notification.NotificationAssistantService}.
+     */
+    public static final String NAS_DEFAULT_SERVICE = "nas_default_service";
+
+    // Flags related to media notifications
+
+    /**
+     * (boolean) If {@code true}, enables the seekbar in compact media notifications.
+     */
+    public static final String COMPACT_MEDIA_SEEKBAR_ENABLED =
+            "compact_media_notification_seekbar_enabled";
+
+    /**
+     * (int) Maximum number of days to retain the salt for hashing direct share targets in logging
+     */
+    public static final String HASH_SALT_MAX_DAYS = "hash_salt_max_days";
+
     private SystemUiDeviceConfigFlags() { }
 }

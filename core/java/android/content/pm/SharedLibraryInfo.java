@@ -307,9 +307,9 @@ public final class SharedLibraryInfo implements Parcelable {
 
     @Override
     public String toString() {
-        return "SharedLibraryInfo[name:" + mName + ", type:" + typeToString(mType)
+        return "SharedLibraryInfo{name:" + mName + ", type:" + typeToString(mType)
                 + ", version:" + mVersion + (!getDependentPackages().isEmpty()
-                ? " has dependents" : "");
+                ? " has dependents" : "") + "}";
     }
 
     @Override
@@ -342,7 +342,7 @@ public final class SharedLibraryInfo implements Parcelable {
         }
     }
 
-    public static final Parcelable.Creator<SharedLibraryInfo> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<SharedLibraryInfo> CREATOR =
             new Parcelable.Creator<SharedLibraryInfo>() {
         public SharedLibraryInfo createFromParcel(Parcel source) {
             return new SharedLibraryInfo(source);

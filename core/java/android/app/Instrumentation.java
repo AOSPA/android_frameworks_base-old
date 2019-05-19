@@ -52,6 +52,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 import android.view.Window;
+import android.view.WindowManagerGlobal;
 
 import com.android.internal.content.ReferrerIntent;
 
@@ -1103,8 +1104,11 @@ public class Instrumentation {
         if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) == 0) {
             event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
         }
-        InputManager.getInstance().injectInputEvent(event,
-                InputManager.INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH);
+        try {
+            WindowManagerGlobal.getWindowManagerService().injectInputAfterTransactionsApplied(event,
+                    InputManager.INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH);
+        } catch (RemoteException e) {
+        }
     }
 
     /**
@@ -1203,7 +1207,7 @@ public class Instrumentation {
     public Activity newActivity(Class<?> clazz, Context context, 
             IBinder token, Application application, Intent intent, ActivityInfo info, 
             CharSequence title, Activity parent, String id,
-            Object lastNonConfigurationInstance) throws InstantiationException, 
+            Object lastNonConfigurationInstance) throws InstantiationException,
             IllegalAccessException {
         Activity activity = (Activity)clazz.newInstance();
         ActivityThread aThread = null;
@@ -1215,7 +1219,7 @@ public class Instrumentation {
                 info, title, parent, id,
                 (Activity.NonConfigurationInstances)lastNonConfigurationInstance,
                 new Configuration(), null /* referrer */, null /* voiceInteractor */,
-                null /* window */, null /* activityConfigCallback */);
+                null /* window */, null /* activityConfigCallback */, null /*assistToken*/);
         return activity;
     }
 

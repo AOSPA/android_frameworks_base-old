@@ -17,6 +17,7 @@
 package com.android.internal.telephony;
 
 import android.telephony.SubscriptionInfo;
+import android.os.ParcelUuid;
 import com.android.internal.telephony.ISetOpportunisticDataCallback;
 
 interface ISub {
@@ -144,21 +145,13 @@ interface ISub {
     int setIconTint(int tint, int subId);
 
     /**
-     * Set display name by simInfo index
-     * @param displayName the display name of SIM card
-     * @param subId the unique SubscriptionInfo index in database
-     * @return the number of records updated
-     */
-    int setDisplayName(String displayName, int subId);
-
-    /**
      * Set display name by simInfo index with name source
      * @param displayName the display name of SIM card
      * @param subId the unique SubscriptionInfo index in database
      * @param nameSource, 0: DEFAULT_SOURCE, 1: SIM_SOURCE, 2: USER_INPUT
      * @return the number of records updated
      */
-    int setDisplayNameUsingSrc(String displayName, int subId, long nameSource);
+    int setDisplayNameUsingSrc(String displayName, int subId, int nameSource);
 
     /**
      * Set phone number by subId
@@ -202,16 +195,7 @@ interface ISub {
      * null if fails.
      *
      */
-    String setSubscriptionGroup(in int[] subIdList, String callingPackage);
-
-    /**
-     * Set whether a subscription is metered
-     *
-     * @param isMetered whether it’s a metered subscription.
-     * @param subId the unique SubscriptionInfo index in database
-     * @return the number of records updated
-     */
-    int setMetered(boolean isMetered, int subId, String callingPackage);
+    ParcelUuid createSubscriptionGroup(in int[] subIdList, String callingPackage);
 
     /**
      * Set which subscription is preferred for cellular data. It's
@@ -243,9 +227,13 @@ interface ISub {
      */
     List<SubscriptionInfo> getOpportunisticSubscriptions(String callingPackage);
 
-    boolean removeSubscriptionsFromGroup(in int[] subIdList, String callingPackage);
+    void removeSubscriptionsFromGroup(in int[] subIdList, in ParcelUuid groupUuid,
+        String callingPackage);
 
-    List<SubscriptionInfo> getSubscriptionsInGroup(int subId, String callingPackage);
+    void addSubscriptionsIntoGroup(in int[] subIdList, in ParcelUuid groupUuid,
+        String callingPackage);
+
+    List<SubscriptionInfo> getSubscriptionsInGroup(in ParcelUuid groupUuid, String callingPackage);
 
     int getSlotIndex(int subId);
 
@@ -273,8 +261,6 @@ interface ISub {
 
     void setDefaultSmsSubId(int subId);
 
-    void clearDefaultsForInactiveSubIds();
-
     int[] getActiveSubIdList(boolean visibleOnly);
 
     int setSubscriptionProperty(int subId, String propKey, String propValue);
@@ -293,4 +279,6 @@ interface ISub {
     int getSimStateForSlotIndex(int slotIndex);
 
     boolean isActiveSubId(int subId, String callingPackage);
+
+    boolean setAlwaysAllowMmsData(int subId, boolean alwaysAllow);
 }

@@ -25,6 +25,7 @@
 #include <SkPictureRecorder.h>
 #include "TreeInfo.h"
 #include "VectorDrawable.h"
+#include "thread/CommonPool.h"
 #include "utils/TraceUtils.h"
 
 #include <unistd.h>
@@ -47,10 +48,6 @@ SkiaPipeline::SkiaPipeline(RenderThread& thread) : mRenderThread(thread) {
 
 SkiaPipeline::~SkiaPipeline() {
     unpinImages();
-}
-
-TaskManager* SkiaPipeline::getTaskManager() {
-    return mRenderThread.cacheManager().getTaskManager();
 }
 
 void SkiaPipeline::onDestroyHardwareResources() {
@@ -225,42 +222,21 @@ void SkiaPipeline::renderVectorDrawableCache() {
     }
 }
 
-class SkiaPipeline::SavePictureProcessor : public TaskProcessor<bool> {
-public:
-    explicit SavePictureProcessor(TaskManager* taskManager) : TaskProcessor<bool>(taskManager) {}
-
-    struct SavePictureTask : public Task<bool> {
-        sk_sp<SkData> data;
-        std::string filename;
-    };
-
-    void savePicture(const sk_sp<SkData>& data, const std::string& filename) {
-        sp<SavePictureTask> task(new SavePictureTask());
-        task->data = data;
-        task->filename = filename;
-        TaskProcessor<bool>::add(task);
-    }
-
-    virtual void onProcess(const sp<Task<bool>>& task) override {
-        ATRACE_NAME("SavePictureTask");
-        SavePictureTask* t = static_cast<SavePictureTask*>(task.get());
-
-        if (0 == access(t->filename.c_str(), F_OK)) {
-            task->setResult(false);
+static void savePictureAsync(const sk_sp<SkData>& data, const std::string& filename) {
+    CommonPool::post([data, filename] {
+        if (0 == access(filename.c_str(), F_OK)) {
             return;
         }
 
-        SkFILEWStream stream(t->filename.c_str());
+        SkFILEWStream stream(filename.c_str());
         if (stream.isValid()) {
-            stream.write(t->data->data(), t->data->size());
+            stream.write(data->data(), data->size());
             stream.flush();
             SkDebugf("SKP Captured Drawing Output (%d bytes) for frame. %s", stream.bytesWritten(),
-                     t->filename.c_str());
+                     filename.c_str());
         }
-
-        task->setResult(true);
-    }
-};
+    });
+}
 
 SkCanvas* SkiaPipeline::tryCapture(SkSurface* surface) {
     if (CC_UNLIKELY(Properties::skpCaptureEnabled)) {
@@ -274,8 +250,9 @@ SkCanvas* SkiaPipeline::tryCapture(SkSurface* surface) {
         }
         if (mCaptureSequence > 0 || mPictureCapturedCallback) {
             mRecorder.reset(new SkPictureRecorder());
-            SkCanvas* pictureCanvas = mRecorder->beginRecording(surface->width(), surface->height(), nullptr,
-                                                                SkPictureRecorder::kPlaybackDrawPicture_RecordFlag);
+            SkCanvas* pictureCanvas =
+                    mRecorder->beginRecording(surface->width(), surface->height(), nullptr,
+                                              SkPictureRecorder::kPlaybackDrawPicture_RecordFlag);
             mNwayCanvas = std::make_unique<SkNWayCanvas>(surface->width(), surface->height());
             mNwayCanvas->addCanvas(surface->getCanvas());
             mNwayCanvas->addCanvas(pictureCanvas);
@@ -297,17 +274,10 @@ void SkiaPipeline::endCapture(SkSurface* surface) {
                 ATRACE_END();
 
                 // offload saving to file in a different thread
-                if (!mSavePictureProcessor.get()) {
-                    TaskManager* taskManager = getTaskManager();
-                    mSavePictureProcessor = new SavePictureProcessor(
-                            taskManager->canRunTasks() ? taskManager : nullptr);
-                }
                 if (1 == mCaptureSequence) {
-                    mSavePictureProcessor->savePicture(data, mCapturedFile);
+                    savePictureAsync(data, mCapturedFile);
                 } else {
-                    mSavePictureProcessor->savePicture(
-                            data,
-                            mCapturedFile + "_" + std::to_string(mCaptureSequence));
+                    savePictureAsync(data, mCapturedFile + "_" + std::to_string(mCaptureSequence));
                 }
                 mCaptureSequence--;
             }
@@ -357,7 +327,7 @@ static Rect nodeBounds(RenderNode& node) {
     auto& props = node.properties();
     return Rect(props.getLeft(), props.getTop(), props.getRight(), props.getBottom());
 }
-}
+}  // namespace
 
 void SkiaPipeline::renderFrameImpl(const LayerUpdateQueue& layers, const SkRect& clip,
                                    const std::vector<sp<RenderNode>>& nodes, bool opaque,
@@ -494,10 +464,20 @@ void SkiaPipeline::setSurfaceColorProperties(ColorMode colorMode) {
 // (3) Requires RGBA colors (instead of BGRA).
 static const uint32_t kOverdrawColors[2][6] = {
         {
-                0x00000000, 0x00000000, 0x2f2f0000, 0x2f002f00, 0x3f00003f, 0x7f00007f,
+                0x00000000,
+                0x00000000,
+                0x2f2f0000,
+                0x2f002f00,
+                0x3f00003f,
+                0x7f00007f,
         },
         {
-                0x00000000, 0x00000000, 0x2f2f0000, 0x4f004f4f, 0x5f50335f, 0x7f00007f,
+                0x00000000,
+                0x00000000,
+                0x2f2f0000,
+                0x4f004f4f,
+                0x5f50335f,
+                0x7f00007f,
         },
 };
 

@@ -22,8 +22,9 @@
 #include "../JankTracker.h"
 #include "CacheManager.h"
 #include "TimeLord.h"
-#include "thread/ThreadBase.h"
 #include "WebViewFunctorManager.h"
+#include "thread/ThreadBase.h"
+#include "utils/TimeUtils.h"
 
 #include <GrContext.h>
 #include <SkBitmap.h>
@@ -40,6 +41,7 @@
 namespace android {
 
 class Bitmap;
+class AutoBackendTextureRelease;
 
 namespace uirenderer {
 
@@ -100,8 +102,6 @@ public:
     ProfileDataContainer& globalProfileData() { return mGlobalProfileData; }
     Readback& readback();
 
-    const DisplayInfo& mainDisplayInfo() { return mDisplayInfo; }
-
     GrContext* getGrContext() const { return mGrContext.get(); }
     void setGrContext(sk_sp<GrContext> cxt);
 
@@ -134,6 +134,7 @@ private:
     friend class DispatchFrameCallbacks;
     friend class RenderProxy;
     friend class DummyVsyncSource;
+    friend class android::AutoBackendTextureRelease;
     friend class android::uirenderer::TestUtils;
     friend class android::uirenderer::WebViewFunctor;
     friend class android::uirenderer::skiapipeline::VkFunctorDrawHandler;
@@ -146,12 +147,11 @@ private:
 
     void initThreadLocals();
     void initializeDisplayEventReceiver();
+    void setupFrameInterval();
     static int displayEventReceiverCallback(int fd, int events, void* data);
     void drainDisplayEventQueue();
     void dispatchFrameCallbacks();
     void requestVsync();
-
-    DisplayInfo mDisplayInfo;
 
     VsyncSource* mVsyncSource;
     bool mVsyncRequested;
@@ -164,6 +164,7 @@ private:
     bool mFrameCallbackTaskPending;
 
     TimeLord mTimeLord;
+    nsecs_t mDispatchFrameDelay = 4_ms;
     RenderState* mRenderState;
     EglManager* mEglManager;
     WebViewFunctorManager& mFunctorManager;

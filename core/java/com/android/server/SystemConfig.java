@@ -206,6 +206,8 @@ public class SystemConfig {
     // associate with any other apps, but does not limit what apps B can associate with.
     final ArrayMap<String, ArraySet<String>> mAllowedAssociations = new ArrayMap<>();
 
+    private final ArraySet<String> mBugreportWhitelistedPackages = new ArraySet<>();
+
     public static SystemConfig getInstance() {
         synchronized (SystemConfig.class) {
             if (sInstance == null) {
@@ -337,6 +339,10 @@ public class SystemConfig {
 
     public ArrayMap<String, ArraySet<String>> getAllowedAssociations() {
         return mAllowedAssociations;
+    }
+
+    public ArraySet<String> getBugreportWhitelistedPackages() {
+        return mBugreportWhitelistedPackages;
     }
 
     SystemConfig() {
@@ -924,6 +930,16 @@ public class SystemConfig {
                         }
                         XmlUtils.skipCurrentTag(parser);
                     } break;
+                    case "bugreport-whitelisted": {
+                        String pkgname = parser.getAttributeValue(null, "package");
+                        if (pkgname == null) {
+                            Slog.w(TAG, "<" + name + "> without package in " + permFile
+                                    + " at " + parser.getPositionDescription());
+                        } else {
+                            mBugreportWhitelistedPackages.add(pkgname);
+                        }
+                        XmlUtils.skipCurrentTag(parser);
+                    } break;
                     default: {
                         Slog.w(TAG, "Tag " + name + " is unknown in "
                                 + permFile + " at " + parser.getPositionDescription());
@@ -1132,16 +1148,6 @@ public class SystemConfig {
                 newPermissions.add(newName);
             } else {
                 XmlUtils.skipCurrentTag(parser);
-            }
-        }
-        // If the storage model feature flag is disabled, we need to fiddle
-        // around with permission definitions to return us to pre-Q behavior.
-        // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (!StorageManager.hasIsolatedStorage()) {
-            if (newPermissions.contains(android.Manifest.permission.READ_MEDIA_AUDIO) ||
-                    newPermissions.contains(android.Manifest.permission.READ_MEDIA_VIDEO) ||
-                    newPermissions.contains(android.Manifest.permission.READ_MEDIA_IMAGES)) {
-                return;
             }
         }
         if (!newPermissions.isEmpty()) {

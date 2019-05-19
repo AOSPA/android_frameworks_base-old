@@ -155,7 +155,8 @@ public final class FrameworkResourcesServiceNameResolver implements ServiceNameR
             }
             mTemporaryServiceExpiration = SystemClock.elapsedRealtime() + durationMs;
             mTemporaryHandler.sendEmptyMessageDelayed(MSG_RESET_TEMPORARY_SERVICE, durationMs);
-            notifyTemporaryServiceNameChangedLocked(userId, componentName);
+            notifyTemporaryServiceNameChangedLocked(userId, componentName,
+                    /* isTemporary= */ true);
         }
     }
 
@@ -169,26 +170,39 @@ public final class FrameworkResourcesServiceNameResolver implements ServiceNameR
                 mTemporaryHandler.removeMessages(MSG_RESET_TEMPORARY_SERVICE);
                 mTemporaryHandler = null;
             }
-            notifyTemporaryServiceNameChangedLocked(userId, /* newTemporaryName= */ null);
+            notifyTemporaryServiceNameChangedLocked(userId, /* newTemporaryName= */ null,
+                    /* isTemporary= */ false);
         }
     }
 
     @Override
-    public void setDefaultServiceEnabled(int userId, boolean enabled) {
+    public boolean setDefaultServiceEnabled(int userId, boolean enabled) {
         synchronized (mLock) {
+            final boolean currentlyEnabled = isDefaultServiceEnabledLocked(userId);
+            if (currentlyEnabled == enabled) {
+                Slog.i(TAG, "setDefaultServiceEnabled(" + userId + "): already " + enabled);
+                return false;
+            }
             if (enabled) {
+                Slog.i(TAG, "disabling default service for user " + userId);
                 mDefaultServicesDisabled.removeAt(userId);
             } else {
+                Slog.i(TAG, "enabling default service for user " + userId);
                 mDefaultServicesDisabled.put(userId, true);
             }
         }
+        return true;
     }
 
     @Override
     public boolean isDefaultServiceEnabled(int userId) {
         synchronized (mLock) {
-            return !mDefaultServicesDisabled.get(userId);
+            return isDefaultServiceEnabledLocked(userId);
         }
+    }
+
+    private boolean isDefaultServiceEnabledLocked(int userId) {
+        return !mDefaultServicesDisabled.get(userId);
     }
 
     @Override
@@ -223,9 +237,9 @@ public final class FrameworkResourcesServiceNameResolver implements ServiceNameR
     }
 
     private void notifyTemporaryServiceNameChangedLocked(@UserIdInt int userId,
-            @Nullable String newTemporaryName) {
+            @Nullable String newTemporaryName, boolean isTemporary) {
         if (mOnSetCallback != null) {
-            mOnSetCallback.onNameResolved(userId, newTemporaryName);
+            mOnSetCallback.onNameResolved(userId, newTemporaryName, isTemporary);
         }
     }
 }

@@ -163,7 +163,7 @@ static void NativeVerifySystemIdmaps(JNIEnv* /*env*/, jclass /*clazz*/) {
       }
 
       // Generic idmap parameters
-      const char* argv[8];
+      const char* argv[10];
       int argc = 0;
       struct stat st;
 
@@ -197,6 +197,14 @@ static void NativeVerifySystemIdmaps(JNIEnv* /*env*/, jclass /*clazz*/) {
 
       if (stat(AssetManager::PRODUCT_SERVICES_OVERLAY_DIR, &st) == 0) {
         argv[argc++] = AssetManager::PRODUCT_SERVICES_OVERLAY_DIR;
+      }
+
+      if (stat(AssetManager::ODM_OVERLAY_DIR, &st) == 0) {
+        argv[argc++] = AssetManager::ODM_OVERLAY_DIR;
+      }
+
+      if (stat(AssetManager::OEM_OVERLAY_DIR, &st) == 0) {
+        argv[argc++] = AssetManager::OEM_OVERLAY_DIR;
       }
 
       // Finally, invoke idmap (if any overlay directory exists)
@@ -233,9 +241,22 @@ static jobjectArray NativeCreateIdmapsForStaticOverlaysTargetingAndroid(JNIEnv* 
     input_dirs.push_back(AssetManager::PRODUCT_SERVICES_OVERLAY_DIR);
   }
 
+  if (stat(AssetManager::ODM_OVERLAY_DIR, &st) == 0) {
+    input_dirs.push_back(AssetManager::ODM_OVERLAY_DIR);
+  }
+
+  if (stat(AssetManager::OEM_OVERLAY_DIR, &st) == 0) {
+    input_dirs.push_back(AssetManager::OEM_OVERLAY_DIR);
+  }
+
   if (input_dirs.empty()) {
     LOG(WARNING) << "no directories for idmap2 to scan";
     return env->NewObjectArray(0, g_stringClass, nullptr);
+  }
+
+  if (access("/system/bin/idmap2", X_OK) == -1) {
+    PLOG(WARNING) << "unable to execute idmap2";
+    return nullptr;
   }
 
   std::vector<std::string> argv{"/system/bin/idmap2",

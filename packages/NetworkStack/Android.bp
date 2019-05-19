@@ -14,34 +14,114 @@
 // limitations under the License.
 //
 
-// Library including the network stack, used to compile the network stack app, or linked into the
-// system server on devices that run the stack there
 java_library {
-    name: "NetworkStackLib",
+    name: "captiveportal-lib",
+    srcs: ["common/**/*.java"],
+    libs: [
+        "androidx.annotation_annotation",
+    ],
     sdk_version: "system_current",
-    installable: true,
+}
+
+java_defaults {
+    name: "NetworkStackCommon",
+    sdk_version: "system_current",
+    min_sdk_version: "28",
+}
+
+// Library including the network stack, used to compile both variants of the network stack
+android_library {
+    name: "NetworkStackBase",
+    defaults: ["NetworkStackCommon"],
     srcs: [
         "src/**/*.java",
         ":framework-networkstack-shared-srcs",
         ":services-networkstack-shared-srcs",
+        ":statslog-networkstack-java-gen",
     ],
     static_libs: [
+        "androidx.annotation_annotation",
+        "ipmemorystore-client",
         "netd_aidl_interface-java",
         "networkstack-aidl-interfaces-java",
         "datastallprotosnano",
-    ]
+        "networkstackprotosnano",
+        "captiveportal-lib",
+    ],
+    manifest: "AndroidManifestBase.xml",
+}
+
+cc_library_shared {
+    name: "libnetworkstackutilsjni",
+    srcs: [
+        "jni/network_stack_utils_jni.cpp"
+    ],
+    sdk_version: "current",
+    shared_libs: [
+        "liblog",
+        "libnativehelper_compat_libc++",
+    ],
+
+    // We cannot use plain "libc++" here to link libc++ dynamically because it results in:
+    //   java.lang.UnsatisfiedLinkError: dlopen failed: library "libc++_shared.so" not found
+    // even if "libc++" is added into jni_libs below. Adding "libc++_shared" into jni_libs doesn't
+    // build because soong complains of:
+    //   module NetworkStack missing dependencies: libc++_shared
+    //
+    // So, link libc++ statically. This means that we also need to ensure that all the C++ libraries
+    // we depend on do not dynamically link libc++. This is currently the case, because liblog is
+    // C-only and libnativehelper_compat_libc also uses stl: "c++_static".
+    //
+    // TODO: find a better solution for this in R.
+    stl: "c++_static",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+    ],
+}
+
+java_defaults {
+    name: "NetworkStackAppCommon",
+    defaults: ["NetworkStackCommon"],
+    privileged: true,
+    static_libs: [
+        "NetworkStackBase",
+    ],
+    jni_libs: [
+        "libnativehelper_compat_libc++",
+        "libnetworkstackutilsjni",
+    ],
+    // Resources already included in NetworkStackBase
+    resource_dirs: [],
+    jarjar_rules: "jarjar-rules-shared.txt",
+    optimize: {
+        proguard_flags_files: ["proguard.flags"],
+    },
+    // The permission configuration *must* be included to ensure security of the device
+    required: ["NetworkPermissionConfig"],
+}
+
+// Non-updatable network stack running in the system server process for devices not using the module
+android_app {
+    name: "InProcessNetworkStack",
+    defaults: ["NetworkStackAppCommon"],
+    certificate: "platform",
+    manifest: "AndroidManifest_InProcess.xml",
 }
 
 // Updatable network stack packaged as an application
 android_app {
     name: "NetworkStack",
-    sdk_version: "system_current",
+    defaults: ["NetworkStackAppCommon"],
     certificate: "networkstack",
-    privileged: true,
-    static_libs: [
-        "NetworkStackLib"
-    ],
-    jarjar_rules: "jarjar-rules-shared.txt",
     manifest: "AndroidManifest.xml",
-    required: ["NetworkStackPermissionStub"],
+}
+
+genrule {
+    name: "statslog-networkstack-java-gen",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --java $(out) --module network_stack" +
+         " --javaPackage com.android.networkstack.metrics --javaClass NetworkStackStatsLog",
+    out: ["com/android/networkstack/metrics/NetworkStackStatsLog.java"],
 }

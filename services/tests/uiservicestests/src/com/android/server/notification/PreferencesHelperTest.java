@@ -59,11 +59,11 @@ import android.os.Build;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Settings.Secure;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.TestableContentResolver;
 import android.util.ArrayMap;
+import android.util.ArraySet;
+import android.util.Pair;
 import android.util.Xml;
 
 import com.android.internal.util.FastXmlSerializer;
@@ -89,6 +89,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.runner.AndroidJUnit4;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -938,12 +941,12 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     @Test
     public void testClearLockedFields() {
         final NotificationChannel channel = getChannel();
-        mHelper.clearLockedFields(channel);
+        mHelper.clearLockedFieldsLocked(channel);
         assertEquals(0, channel.getUserLockedFields());
 
         channel.lockFields(NotificationChannel.USER_LOCKED_PRIORITY
                 | NotificationChannel.USER_LOCKED_IMPORTANCE);
-        mHelper.clearLockedFields(channel);
+        mHelper.clearLockedFieldsLocked(channel);
         assertEquals(0, channel.getUserLockedFields());
     }
 
@@ -1642,6 +1645,40 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testClearData() {
+        ArraySet<String> pkg = new ArraySet<>();
+        pkg.add(PKG_O);
+        ArraySet<Pair<String, Integer>> pkgPair = new ArraySet<>();
+        pkgPair.add(new Pair(PKG_O, UID_O));
+        mHelper.createNotificationChannel(PKG_O, UID_O, getChannel(), true, false);
+        mHelper.createNotificationChannelGroup(
+                PKG_O, UID_O, new NotificationChannelGroup("1", "bye"), true);
+        mHelper.lockChannelsForOEM(pkg.toArray(new String[]{}));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, pkgPair);
+        mHelper.setNotificationDelegate(PKG_O, UID_O, "", 1);
+        mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_NONE);
+        mHelper.setBubblesAllowed(PKG_O, UID_O, false);
+        mHelper.setShowBadge(PKG_O, UID_O, false);
+        mHelper.setAppImportanceLocked(PKG_O, UID_O);
+
+        mHelper.clearData(PKG_O, UID_O);
+
+        assertEquals(IMPORTANCE_UNSPECIFIED, mHelper.getImportance(PKG_O, UID_O));
+        assertTrue(mHelper.areBubblesAllowed(PKG_O, UID_O));
+        assertTrue(mHelper.canShowBadge(PKG_O, UID_O));
+        assertNull(mHelper.getNotificationDelegate(PKG_O, UID_O));
+        assertEquals(0, mHelper.getAppLockedFields(PKG_O, UID_O));
+        assertEquals(0, mHelper.getNotificationChannels(PKG_O, UID_O, true).getList().size());
+        assertEquals(0, mHelper.getNotificationChannelGroups(PKG_O, UID_O).size());
+
+        NotificationChannel channel = getChannel();
+        mHelper.createNotificationChannel(PKG_O, UID_O, channel, true, false);
+
+        assertTrue(channel.isImportanceLockedByCriticalDeviceFunction());
+        assertTrue(channel.isImportanceLockedByOEM());
+    }
+
+    @Test
     public void testRecordDefaults() throws Exception {
         assertEquals(NotificationManager.IMPORTANCE_UNSPECIFIED, mHelper.getImportance(PKG_N_MR1,
                 UID_N_MR1));
@@ -2122,9 +2159,16 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
     @Test
     public void testXml_statusBarIcons_default() throws Exception {
-        ByteArrayOutputStream baos = writeXmlAndPurge(PKG_O, UID_O, false, UserHandle.USER_ALL);
+        String preQXml = "<ranking version=\"1\">\n"
+                + "<package name=\"" + PKG_N_MR1 + "\" show_badge=\"true\">\n"
+                + "<channel id=\"something\" name=\"name\" importance=\"2\" "
+                + "show_badge=\"true\" />\n"
+                + "<channel id=\"miscellaneous\" name=\"Uncategorized\" usage=\"5\" "
+                + "content_type=\"4\" flags=\"0\" show_badge=\"true\" />\n"
+                + "</package>\n"
+                + "</ranking>\n";
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper);
-        loadStreamXml(baos, false, UserHandle.USER_ALL);
+        loadByteArrayXml(preQXml.getBytes(), true, UserHandle.USER_SYSTEM);
 
         assertEquals(PreferencesHelper.DEFAULT_HIDE_SILENT_STATUS_BAR_ICONS,
                 mHelper.shouldHideSilentStatusIcons());
@@ -2440,5 +2484,193 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         assertEquals(IMPORTANCE_HIGH,
                 mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false).getImportance());
+    }
+
+    @Test
+    public void testUpdateDefaultApps_add_multiUser() {
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        NotificationChannel b = new NotificationChannel("b", "b", IMPORTANCE_LOW);
+        NotificationChannel c = new NotificationChannel("c", "c", IMPORTANCE_DEFAULT);
+        // different uids, same package
+        mHelper.createNotificationChannel(PKG_O, UID_O, a, true, false);
+        mHelper.createNotificationChannel(PKG_O, UID_O, b, false, false);
+        mHelper.createNotificationChannel(PKG_O, UserHandle.PER_USER_RANGE + 1, c, true, true);
+
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, b.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+        assertFalse(mHelper.getNotificationChannel(
+                PKG_O, UserHandle.PER_USER_RANGE + 1, c.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+    }
+
+    @Test
+    public void testUpdateDefaultApps_add_onlyGivenPkg() {
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        NotificationChannel b = new NotificationChannel("b", "b", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, UID_O, a, true, false);
+        mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, b, false, false);
+
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+        assertFalse(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, b.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+    }
+
+    @Test
+    public void testUpdateDefaultApps_remove() {
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        NotificationChannel b = new NotificationChannel("b", "b", IMPORTANCE_LOW);
+        // different uids, same package
+        mHelper.createNotificationChannel(PKG_O, UID_O, a, true, false);
+        mHelper.createNotificationChannel(PKG_O, UID_O, b, false, false);
+
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, b.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+
+        ArraySet<String> toRemove = new ArraySet<>();
+        toRemove.add(PKG_O);
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), toRemove, null);
+
+        assertFalse(mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+        assertFalse(mHelper.getNotificationChannel(PKG_O, UID_O, b.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+    }
+
+    @Test
+    public void testUpdateDefaultApps_addAndRemove() {
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        NotificationChannel b = new NotificationChannel("b", "b", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, UID_O, a, true, false);
+        mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, b, false, false);
+
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+        assertFalse(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, b.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+
+        // now the default is PKG_N_MR1
+        ArraySet<String> toRemove = new ArraySet<>();
+        toRemove.add(PKG_O);
+        toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_N_MR1, UID_N_MR1));
+        mHelper.updateDefaultApps(USER.getIdentifier(), toRemove, toAdd);
+
+        assertFalse(mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+        assertTrue(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, b.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+    }
+
+    @Test
+    public void testUpdateDefaultApps_appDoesNotExist_noCrash() {
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        ArraySet<String> toRemove = new ArraySet<>();
+        toRemove.add(PKG_N_MR1);
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), toRemove, toAdd);
+    }
+
+    @Test
+    public void testUpdateDefaultApps_channelDoesNotExistYet() {
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        NotificationChannel b = new NotificationChannel("b", "b", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG_O, UID_O, a, true, false);
+
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+
+        mHelper.createNotificationChannel(PKG_O, UID_O, b, true, false);
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, b.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
+    }
+
+    @Test
+    public void testUpdateNotificationChannel_defaultAppLockedImportance() {
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        mHelper.createNotificationChannel(PKG_O, UID_O, a, true, false);
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+        NotificationChannel update = new NotificationChannel("a", "a", IMPORTANCE_NONE);
+        update.setAllowBubbles(false);
+
+        mHelper.updateNotificationChannel(PKG_O, UID_O, update, true);
+
+        assertEquals(IMPORTANCE_HIGH,
+                mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false).getImportance());
+        assertEquals(false,
+                mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false).canBubble());
+
+        mHelper.updateNotificationChannel(PKG_O, UID_O, update, false);
+
+        assertEquals(IMPORTANCE_HIGH,
+                mHelper.getNotificationChannel(PKG_O, UID_O, a.getId(), false).getImportance());
+    }
+
+    @Test
+    public void testDefaultApp_appHasNoSettingsYet() {
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+        NotificationChannel a = new NotificationChannel("a", "a", IMPORTANCE_HIGH);
+        mHelper.createNotificationChannel(PKG_O, UID_O, a, true, false);
+
+        assertTrue(a.isImportanceLockedByCriticalDeviceFunction());
+    }
+
+    @Test
+    public void testChannelXml_backupDefaultApp() throws Exception {
+        NotificationChannel channel1 =
+                new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
+
+        mHelper.createNotificationChannel(PKG_O, UID_O, channel1, true, false);
+
+        // clear data
+        ByteArrayOutputStream baos = writeXmlAndPurge(PKG_O, UID_O, true,
+                UserHandle.USER_SYSTEM, channel1.getId(), NotificationChannel.DEFAULT_CHANNEL_ID);
+        mHelper.onPackagesChanged(true, UserHandle.myUserId(), new String[]{PKG_O}, new int[]{
+                UID_O});
+
+        ArraySet<Pair<String, Integer>> toAdd = new ArraySet<>();
+        toAdd.add(new Pair(PKG_O, UID_O));
+        mHelper.updateDefaultApps(UserHandle.getUserId(UID_O), null, toAdd);
+
+        XmlPullParser parser = Xml.newPullParser();
+        parser.setInput(new BufferedInputStream(new ByteArrayInputStream(baos.toByteArray())),
+                null);
+        parser.nextTag();
+        mHelper.readXml(parser, true, UserHandle.USER_SYSTEM);
+
+        assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, channel1.getId(), false)
+                .isImportanceLockedByCriticalDeviceFunction());
     }
 }

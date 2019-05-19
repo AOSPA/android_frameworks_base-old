@@ -93,7 +93,7 @@ cc_library_shared {
 
     shared_libs: [
         "liblog",
-        "libmedia_omx",
+        "libgui",
         "libnativewindow",
         "libui",
         "libutils",
@@ -129,16 +129,12 @@ cc_library_shared {
         // NDK or LLNDK or NDK-compliant
         "libandroid",
         "libbinder_ndk",
+        "libcgrouprc",
         "libmediandk",
         "libmediametrics",
         "libnativehelper_compat_libc++",
         "liblog",
         "libvndksupport",
-
-        "libmedia",
-        "libmedia_omx",
-        "libstagefright",
-        "libmediaplayerservice",
     ],
 
     header_libs: [

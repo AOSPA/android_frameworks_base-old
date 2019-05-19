@@ -173,7 +173,7 @@ public final class ImsSsInfo implements Parcelable {
     /**
      * Builds {@link ImsSsInfo} instances, which may include optional parameters.
      */
-    public static class Builder {
+    public static final class Builder {
 
         private final ImsSsInfo mImsSsInfo;
 
@@ -275,7 +275,7 @@ public final class ImsSsInfo implements Parcelable {
         mProvisionStatus = in.readInt();
     }
 
-    public static final Creator<ImsSsInfo> CREATOR =
+    public static final @android.annotation.NonNull Creator<ImsSsInfo> CREATOR =
             new Creator<ImsSsInfo>() {
         @Override
         public ImsSsInfo createFromParcel(Parcel in) {
@@ -304,7 +304,7 @@ public final class ImsSsInfo implements Parcelable {
     /**
      * @return The Incoming Communication Barring (ICB) number.
      */
-    public String getIncomingCommunicationBarringNumber() {
+    public @Nullable String getIncomingCommunicationBarringNumber() {
         return mIcbNum;
     }
 

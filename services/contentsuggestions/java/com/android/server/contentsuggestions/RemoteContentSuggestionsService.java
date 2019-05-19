@@ -47,7 +47,9 @@ public class RemoteContentSuggestionsService extends
             int userId, Callbacks callbacks,
             boolean bindInstantServiceAllowed, boolean verbose) {
         super(context, ContentSuggestionsService.SERVICE_INTERFACE, serviceName, userId, callbacks,
-                bindInstantServiceAllowed, verbose, /* initialCapacity= */ 1);
+                context.getMainThreadHandler(),
+                bindInstantServiceAllowed ? Context.BIND_ALLOW_INSTANT : 0, verbose,
+                /* initialCapacity= */ 1);
     }
 
     @Override

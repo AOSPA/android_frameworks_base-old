@@ -802,6 +802,8 @@ easier.
         <item name="textAppearanceListItemSmall">@style/TextAppearance.DeviceDefault.ListItem</item>
         <item name="textAppearanceListItemSecondary">@style/TextAppearance.DeviceDefault.ListItemSecondary</item>
 
+        <item name="backgroundDimAmount">0.7</item>
+
         <!-- Button styles -->
         <item name="buttonCornerRadius">@dimen/config_buttonCornerRadius</item>
         <item name="buttonStyle">@style/Widget.DeviceDefault.Light.Button</item>
@@ -1390,6 +1392,8 @@ easier.
         <item name="toolbarStyle">@style/Widget.DeviceDefault.Toolbar</item>
     </style>
 
+    <style name="Theme.DeviceDefault.Dialog.Alert.DayNight" parent="Theme.DeviceDefault.Light.Dialog.Alert" />
+
     <style name="Theme.DeviceDefault.Light.SearchBar" parent="Theme.Material.Light.SearchBar">
         <!-- Color palette -->
         <item name="colorPrimary">@color/primary_device_default_light</item>
@@ -1468,7 +1472,7 @@ easier.
         <item name="colorEdgeEffect">@android:color/black</item>
 
         <!-- Add white nav bar with divider that matches material -->
-        <item name="navigationBarDividerColor">#1f000000</item>
+        <item name="navigationBarDividerColor">@color/navigation_bar_divider_device_default_settings</item>
         <item name="navigationBarColor">@android:color/white</item>
         <item name="windowLightNavigationBar">true</item>
 
@@ -1560,10 +1564,7 @@ easier.
         <item name="toolbarStyle">@style/Widget.DeviceDefault.Toolbar</item>
     </style>
 
-    <style name="Theme.DeviceDefault.Settings.Dialog" parent="Theme.Material.Settings.Dialog">
-        <item name="windowTitleStyle">@style/DialogWindowTitle.DeviceDefault</item>
-        <item name="windowAnimationStyle">@style/Animation.DeviceDefault.Dialog</item>
-
+    <style name="Theme.DeviceDefault.Settings.DialogBase" parent="Theme.Material.Light.BaseDialog">
         <!-- Color palette -->
         <item name="colorPrimary">@color/primary_device_default_settings</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings</item>
@@ -1572,8 +1573,15 @@ easier.
         <item name="colorError">@color/error_color_device_default_light</item>
 
         <!-- Dialog attributes -->
-        <item name="dialogCornerRadius">@dimen/config_dialogCornerRadius</item>
         <item name="alertDialogTheme">@style/Theme.DeviceDefault.Light.Dialog.Alert</item>
+    </style>
+
+    <style name="Theme.DeviceDefault.Settings.Dialog" parent="Theme.DeviceDefault.Settings.DialogBase">
+        <item name="windowTitleStyle">@style/DialogWindowTitle.DeviceDefault</item>
+        <item name="windowAnimationStyle">@style/Animation.DeviceDefault.Dialog</item>
+
+        <!-- Dialog attributes -->
+        <item name="dialogCornerRadius">@dimen/config_dialogCornerRadius</item>
 
         <!-- Text styles -->
         <item name="textAppearanceButton">@style/TextAppearance.DeviceDefault.Widget.Button</item>
@@ -1656,7 +1664,7 @@ easier.
     <style name="Theme.DeviceDefault.DayNight" parent="Theme.DeviceDefault.Light" />
 
     <!-- Theme used for the intent picker activity. -->
-    <style name="Theme.DeviceDefault.Resolver" parent="Theme.DeviceDefault.DayNight">
+    <style name="Theme.DeviceDefault.ResolverCommon" parent="Theme.DeviceDefault.DayNight">
         <item name="windowEnterTransition">@empty</item>
         <item name="windowExitTransition">@empty</item>
         <item name="windowIsTranslucent">true</item>
@@ -1668,6 +1676,12 @@ easier.
         <item name="colorControlActivated">?attr/colorControlHighlight</item>
         <item name="listPreferredItemPaddingStart">?attr/dialogPreferredPadding</item>
         <item name="listPreferredItemPaddingEnd">?attr/dialogPreferredPadding</item>
+        <item name="navigationBarColor">?attr/colorBackgroundFloating</item>
+        <item name="navigationBarDividerColor">@color/chooser_row_divider</item>
+    </style>
+
+    <style name="Theme.DeviceDefault.Resolver" parent="Theme.DeviceDefault.ResolverCommon">
+        <item name="windowLightNavigationBar">true</item>
     </style>
 
     <!-- @hide DeviceDefault themes for the autofill FillUi -->
@@ -1717,5 +1731,7 @@ easier.
     </style>
 
     <!-- @hide DeviceDefault theme for the DocumentsUI app.  -->
-    <style name="Theme.DeviceDefault.DocumentsUI" parent="Theme.DeviceDefault.DayNight" />
+    <style name="Theme.DeviceDefault.DocumentsUI" parent="Theme.DeviceDefault.DayNight">
+        <item name="actionModeCloseDrawable">@drawable/ic_clear_material</item>
+    </style>
 </resources>

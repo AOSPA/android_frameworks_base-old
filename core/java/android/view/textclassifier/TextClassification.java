@@ -25,8 +25,6 @@ import android.app.PendingIntent;
 import android.app.RemoteAction;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.AdaptiveIconDrawable;
@@ -45,6 +43,8 @@ import android.view.textclassifier.TextClassifier.Utils;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
+
+import com.google.android.textclassifier.AnnotatorModel;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -139,7 +139,7 @@ public final class TextClassification implements Parcelable {
             @Nullable Intent legacyIntent,
             @Nullable OnClickListener legacyOnClickListener,
             @NonNull List<RemoteAction> actions,
-            @NonNull Map<String, Float> entityConfidence,
+            @NonNull EntityConfidence entityConfidence,
             @Nullable String id,
             @NonNull Bundle extras) {
         mText = text;
@@ -148,7 +148,7 @@ public final class TextClassification implements Parcelable {
         mLegacyIntent = legacyIntent;
         mLegacyOnClickListener = legacyOnClickListener;
         mActions = Collections.unmodifiableList(actions);
-        mEntityConfidence = new EntityConfidence(entityConfidence);
+        mEntityConfidence = Preconditions.checkNotNull(entityConfidence);
         mId = id;
         mExtras = extras;
     }
@@ -265,13 +265,11 @@ public final class TextClassification implements Parcelable {
     /**
      * Returns the extended data.
      *
-     * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-     * prefer to hold a reference to the returned bundle rather than frequently calling this
-     * method.
+     * <p><b>NOTE: </b>Do not modify this bundle.
      */
     @NonNull
     public Bundle getExtras() {
-        return mExtras.deepCopy();
+        return mExtras;
     }
 
     @Override
@@ -304,53 +302,10 @@ public final class TextClassification implements Parcelable {
      * @throws IllegalArgumentException if context or intent is null
      * @hide
      */
-    @Nullable
     public static PendingIntent createPendingIntent(
             @NonNull final Context context, @NonNull final Intent intent, int requestCode) {
-        final int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        switch (getIntentType(intent, context)) {
-            case IntentType.ACTIVITY:
-                return PendingIntent.getActivity(context, requestCode, intent, flags);
-            case IntentType.SERVICE:
-                return PendingIntent.getService(context, requestCode, intent, flags);
-            default:
-                return null;
-        }
-    }
-
-    @IntentType
-    private static int getIntentType(@NonNull Intent intent, @NonNull Context context) {
-        Preconditions.checkArgument(context != null);
-        Preconditions.checkArgument(intent != null);
-
-        final ResolveInfo activityRI = context.getPackageManager().resolveActivity(intent, 0);
-        if (activityRI != null) {
-            if (context.getPackageName().equals(activityRI.activityInfo.packageName)) {
-                return IntentType.ACTIVITY;
-            }
-            final boolean exported = activityRI.activityInfo.exported;
-            if (exported && hasPermission(context, activityRI.activityInfo.permission)) {
-                return IntentType.ACTIVITY;
-            }
-        }
-
-        final ResolveInfo serviceRI = context.getPackageManager().resolveService(intent, 0);
-        if (serviceRI != null) {
-            if (context.getPackageName().equals(serviceRI.serviceInfo.packageName)) {
-                return IntentType.SERVICE;
-            }
-            final boolean exported = serviceRI.serviceInfo.exported;
-            if (exported && hasPermission(context, serviceRI.serviceInfo.permission)) {
-                return IntentType.SERVICE;
-            }
-        }
-
-        return IntentType.UNSUPPORTED;
-    }
-
-    private static boolean hasPermission(@NonNull Context context, @NonNull String permission) {
-        return permission == null
-                || context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
+        return PendingIntent.getActivity(
+                context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     /**
@@ -371,7 +326,10 @@ public final class TextClassification implements Parcelable {
     public static final class Builder {
 
         @NonNull private List<RemoteAction> mActions = new ArrayList<>();
-        @NonNull private final Map<String, Float> mEntityConfidence = new ArrayMap<>();
+        @NonNull private final Map<String, Float> mTypeScoreMap = new ArrayMap<>();
+        @NonNull
+        private final Map<String, AnnotatorModel.ClassificationResult> mClassificationResults =
+                new ArrayMap<>();
         @Nullable private String mText;
         @Nullable private Drawable mLegacyIcon;
         @Nullable private String mLegacyLabel;
@@ -404,7 +362,36 @@ public final class TextClassification implements Parcelable {
         public Builder setEntityType(
                 @NonNull @EntityType String type,
                 @FloatRange(from = 0.0, to = 1.0) float confidenceScore) {
-            mEntityConfidence.put(type, confidenceScore);
+            setEntityType(type, confidenceScore, null);
+            return this;
+        }
+
+        /**
+         * @see #setEntityType(String, float)
+         *
+         * @hide
+         */
+        @NonNull
+        public Builder setEntityType(AnnotatorModel.ClassificationResult classificationResult) {
+            setEntityType(
+                    classificationResult.getCollection(),
+                    classificationResult.getScore(),
+                    classificationResult);
+            return this;
+        }
+
+        /**
+         * @see #setEntityType(String, float)
+         *
+         * @hide
+         */
+        @NonNull
+        private Builder setEntityType(
+                @NonNull @EntityType String type,
+                @FloatRange(from = 0.0, to = 1.0) float confidenceScore,
+                @Nullable AnnotatorModel.ClassificationResult classificationResult) {
+            mTypeScoreMap.put(type, confidenceScore);
+            mClassificationResults.put(type, classificationResult);
             return this;
         }
 
@@ -527,18 +514,27 @@ public final class TextClassification implements Parcelable {
          */
         @NonNull
         public TextClassification build() {
+            EntityConfidence entityConfidence = new EntityConfidence(mTypeScoreMap);
             return new TextClassification(mText, mLegacyIcon, mLegacyLabel, mLegacyIntent,
-                    mLegacyOnClickListener, mActions, mEntityConfidence, mId, buildExtras());
+                    mLegacyOnClickListener, mActions, entityConfidence, mId,
+                    buildExtras(entityConfidence));
         }
 
-        private Bundle buildExtras() {
-            final Bundle extras = mExtras == null ? new Bundle() : mExtras.deepCopy();
+        private Bundle buildExtras(EntityConfidence entityConfidence) {
+            final Bundle extras = mExtras == null ? new Bundle() : mExtras;
             if (mActionIntents.stream().anyMatch(Objects::nonNull)) {
                 ExtrasUtils.putActionsIntents(extras, mActionIntents);
             }
             if (mForeignLanguageExtra != null) {
                 ExtrasUtils.putForeignLanguageExtra(extras, mForeignLanguageExtra);
             }
+            List<String> sortedTypes = entityConfidence.getEntities();
+            ArrayList<AnnotatorModel.ClassificationResult> sortedEntities = new ArrayList<>();
+            for (String type : sortedTypes) {
+                sortedEntities.add(mClassificationResults.get(type));
+            }
+            ExtrasUtils.putEntities(
+                    extras, sortedEntities.toArray(new AnnotatorModel.ClassificationResult[0]));
             return extras.isEmpty() ? Bundle.EMPTY : extras;
         }
     }
@@ -637,13 +633,11 @@ public final class TextClassification implements Parcelable {
         /**
          * Returns the extended data.
          *
-         * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-         * prefer to hold a reference to the returned bundle rather than frequently calling this
-         * method.
+         * <p><b>NOTE: </b>Do not modify this bundle.
          */
         @NonNull
         public Bundle getExtras() {
-            return mExtras.deepCopy();
+            return mExtras;
         }
 
         /**
@@ -719,7 +713,7 @@ public final class TextClassification implements Parcelable {
             public Request build() {
                 return new Request(new SpannedString(mText), mStartIndex, mEndIndex,
                         mDefaultLocales, mReferenceTime,
-                        mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
+                        mExtras == null ? Bundle.EMPTY : mExtras);
             }
         }
 
@@ -756,7 +750,7 @@ public final class TextClassification implements Parcelable {
             return request;
         }
 
-        public static final Parcelable.Creator<Request> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<Request> CREATOR =
                 new Parcelable.Creator<Request>() {
                     @Override
                     public Request createFromParcel(Parcel in) {
@@ -785,7 +779,7 @@ public final class TextClassification implements Parcelable {
         dest.writeBundle(mExtras);
     }
 
-    public static final Parcelable.Creator<TextClassification> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<TextClassification> CREATOR =
             new Parcelable.Creator<TextClassification>() {
                 @Override
                 public TextClassification createFromParcel(Parcel in) {

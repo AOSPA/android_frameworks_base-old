@@ -17,17 +17,15 @@
 #include <memory>
 #include <sstream>
 #include <string>
-
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
-
-#include "androidfw/ApkAssets.h"
-#include "androidfw/Idmap.h"
-
-#include "idmap2/BinaryStreamVisitor.h"
-#include "idmap2/Idmap.h"
+#include <utility>
 
 #include "TestHelpers.h"
+#include "androidfw/ApkAssets.h"
+#include "androidfw/Idmap.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "idmap2/BinaryStreamVisitor.h"
+#include "idmap2/Idmap.h"
 
 using ::testing::NotNull;
 
@@ -37,16 +35,17 @@ TEST(BinaryStreamVisitorTests, CreateBinaryStreamViaBinaryStreamVisitor) {
   std::string raw(reinterpret_cast<const char*>(idmap_raw_data), idmap_raw_data_len);
   std::istringstream raw_stream(raw);
 
-  std::stringstream error;
-  std::unique_ptr<const Idmap> idmap1 = Idmap::FromBinaryStream(raw_stream, error);
-  ASSERT_THAT(idmap1, NotNull());
+  auto result1 = Idmap::FromBinaryStream(raw_stream);
+  ASSERT_TRUE(result1);
+  const auto idmap1 = std::move(*result1);
 
   std::stringstream stream;
   BinaryStreamVisitor visitor(stream);
   idmap1->accept(&visitor);
 
-  std::unique_ptr<const Idmap> idmap2 = Idmap::FromBinaryStream(stream, error);
-  ASSERT_THAT(idmap2, NotNull());
+  auto result2 = Idmap::FromBinaryStream(stream);
+  ASSERT_TRUE(result2);
+  const auto idmap2 = std::move(*result2);
 
   ASSERT_EQ(idmap1->GetHeader()->GetTargetCrc(), idmap2->GetHeader()->GetTargetCrc());
   ASSERT_EQ(idmap1->GetHeader()->GetTargetPath(), idmap2->GetHeader()->GetTargetPath());
@@ -76,15 +75,14 @@ TEST(BinaryStreamVisitorTests, CreateIdmapFromApkAssetsInteropWithLoadedIdmap) {
   std::unique_ptr<const ApkAssets> overlay_apk = ApkAssets::Load(overlay_apk_path);
   ASSERT_THAT(overlay_apk, NotNull());
 
-  std::stringstream error;
-  std::unique_ptr<const Idmap> idmap =
+  const auto idmap =
       Idmap::FromApkAssets(target_apk_path, *target_apk, overlay_apk_path, *overlay_apk,
-                           PolicyFlags::POLICY_PUBLIC, /* enforce_overlayable */ true, error);
-  ASSERT_THAT(idmap, NotNull());
+                           PolicyFlags::POLICY_PUBLIC, /* enforce_overlayable */ true);
+  ASSERT_TRUE(idmap);
 
   std::stringstream stream;
   BinaryStreamVisitor visitor(stream);
-  idmap->accept(&visitor);
+  (*idmap)->accept(&visitor);
   const std::string str = stream.str();
   const StringPiece data(str);
   std::unique_ptr<const LoadedIdmap> loaded_idmap = LoadedIdmap::Load(data);
@@ -111,49 +109,55 @@ TEST(BinaryStreamVisitorTests, CreateIdmapFromApkAssetsInteropWithLoadedIdmap) {
   success = LoadedIdmap::Lookup(header, 0x0002, &entry);  // string/c
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0003, &entry);  // string/other
+  success = LoadedIdmap::Lookup(header, 0x0003, &entry);  // string/policy_odm
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0004, &entry);  // string/not_overlayable
+  success = LoadedIdmap::Lookup(header, 0x0004, &entry);  // string/policy_oem
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0005, &entry);  // string/policy_product
+  success = LoadedIdmap::Lookup(header, 0x0005, &entry);  // string/other
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0006, &entry);  // string/policy_public
+  success = LoadedIdmap::Lookup(header, 0x0006, &entry);  // string/not_overlayable
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0007, &entry);  // string/policy_system
+  success = LoadedIdmap::Lookup(header, 0x0007, &entry);  // string/policy_product
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0008, &entry);  // string/policy_system_vendor
+  success = LoadedIdmap::Lookup(header, 0x0008, &entry);  // string/policy_public
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0009, &entry);  // string/policy_signature
+  success = LoadedIdmap::Lookup(header, 0x0009, &entry);  // string/policy_system
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x000a, &entry);  // string/str1
+  success = LoadedIdmap::Lookup(header, 0x000a, &entry);  // string/policy_system_vendor
+  ASSERT_FALSE(success);
+
+  success = LoadedIdmap::Lookup(header, 0x000b, &entry);  // string/policy_signature
+  ASSERT_FALSE(success);
+
+  success = LoadedIdmap::Lookup(header, 0x000c, &entry);  // string/str1
   ASSERT_TRUE(success);
   ASSERT_EQ(entry, 0x0000);
 
-  success = LoadedIdmap::Lookup(header, 0x000b, &entry);  // string/str2
+  success = LoadedIdmap::Lookup(header, 0x000d, &entry);  // string/str2
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x000c, &entry);  // string/str3
+  success = LoadedIdmap::Lookup(header, 0x000e, &entry);  // string/str3
   ASSERT_TRUE(success);
   ASSERT_EQ(entry, 0x0001);
 
-  success = LoadedIdmap::Lookup(header, 0x000d, &entry);  // string/str4
+  success = LoadedIdmap::Lookup(header, 0x000f, &entry);  // string/str4
   ASSERT_TRUE(success);
   ASSERT_EQ(entry, 0x0002);
 
-  success = LoadedIdmap::Lookup(header, 0x000e, &entry);  // string/x
+  success = LoadedIdmap::Lookup(header, 0x0010, &entry);  // string/x
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x000f, &entry);  // string/y
+  success = LoadedIdmap::Lookup(header, 0x0011, &entry);  // string/y
   ASSERT_FALSE(success);
 
-  success = LoadedIdmap::Lookup(header, 0x0010, &entry);  // string/z
+  success = LoadedIdmap::Lookup(header, 0x0012, &entry);  // string/z
   ASSERT_FALSE(success);
 }
 

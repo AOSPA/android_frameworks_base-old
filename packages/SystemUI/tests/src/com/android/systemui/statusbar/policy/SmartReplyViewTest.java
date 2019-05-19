@@ -24,6 +24,7 @@ import static junit.framework.Assert.fail;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,13 +38,14 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.service.notification.StatusBarNotification;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.R;
@@ -113,12 +115,14 @@ public class SmartReplyViewTest extends SysuiTestCase {
         mDependency.injectTestDependency(SmartReplyConstants.class, mConstants);
 
         mContainer = new View(mContext, null);
-        mView = SmartReplyView.inflate(mContext, null);
+        mView = SmartReplyView.inflate(mContext);
 
         // Any number of replies are fine.
         when(mConstants.getMinNumSystemGeneratedReplies()).thenReturn(0);
         when(mConstants.getMaxSqueezeRemeasureAttempts()).thenReturn(3);
         when(mConstants.getMaxNumActions()).thenReturn(-1);
+        // Ensure there's no delay before we can click smart suggestions.
+        when(mConstants.getOnClickInitDelay()).thenReturn(0L);
 
         final Resources res = mContext.getResources();
         mSingleLinePaddingHorizontal = res.getDimensionPixelSize(
@@ -163,7 +167,7 @@ public class SmartReplyViewTest extends SysuiTestCase {
 
         mView.getChildAt(2).performClick();
 
-        assertNull(mReceiver.waitForIntent());
+        assertNull(mReceiver.waitForIntentShortDelay());
     }
 
     @Test
@@ -175,7 +179,7 @@ public class SmartReplyViewTest extends SysuiTestCase {
         mView.getChildAt(2).performClick();
 
         // No intent until the screen is unlocked.
-        assertNull(mReceiver.waitForIntent());
+        assertNull(mReceiver.waitForIntentShortDelay());
 
         actionRef.get().onDismiss();
 
@@ -200,6 +204,48 @@ public class SmartReplyViewTest extends SysuiTestCase {
         setSmartReplies(TEST_CHOICES);
         mView.getChildAt(0).performClick();
         assertEquals(View.GONE, mContainer.getVisibility());
+    }
+
+    @Test
+    public void testTapSmartReply_beforeInitDelay_blocked() throws InterruptedException {
+        // 100 seconds is easily enough for our click to always be blocked.
+        when(mConstants.getOnClickInitDelay()).thenReturn(100L * 1000L);
+        setSmartReplies(TEST_CHOICES);
+
+        mView.getChildAt(2).performClick();
+
+        assertNull(mReceiver.waitForIntentShortDelay());
+    }
+
+    @Test
+    public void testTapSmartReply_afterInitDelay_clickReceived() throws InterruptedException {
+        final long delayMs = 50L; // Using a small delay to not delay the test suite too much.
+        when(mConstants.getOnClickInitDelay()).thenReturn(delayMs);
+        setSmartReplies(TEST_CHOICES);
+
+        Thread.sleep(delayMs);
+        mView.getChildAt(2).performClick();
+
+        // Now the intent should arrive.
+        Intent resultIntent = mReceiver.waitForIntent();
+        assertEquals(TEST_CHOICES[2],
+                RemoteInput.getResultsFromIntent(resultIntent).get(TEST_RESULT_KEY));
+        assertEquals(RemoteInput.SOURCE_CHOICE, RemoteInput.getResultsSource(resultIntent));
+    }
+
+    @Test
+    public void testTapSmartReply_withoutDelayedOnClickListener_bypassesDelay()
+            throws InterruptedException {
+        // 100 seconds is easily enough for our click to always be blocked.
+        when(mConstants.getOnClickInitDelay()).thenReturn(100L * 1000L);
+        setSmartReplies(TEST_CHOICES, false /* useDelayedOnClickListener */);
+
+        mView.getChildAt(2).performClick();
+
+        Intent resultIntent = mReceiver.waitForIntent();
+        assertEquals(TEST_CHOICES[2],
+                RemoteInput.getResultsFromIntent(resultIntent).get(TEST_RESULT_KEY));
+        assertEquals(RemoteInput.SOURCE_CHOICE, RemoteInput.getResultsSource(resultIntent));
     }
 
     @Test
@@ -402,17 +448,25 @@ public class SmartReplyViewTest extends SysuiTestCase {
     }
 
     private void setSmartReplies(CharSequence[] choices) {
-        setSmartReplies(choices, false /* fromAssistant */);
+        setSmartReplies(choices, true /* useDelayedOnClickListener */);
     }
 
-    private void setSmartReplies(CharSequence[] choices, boolean fromAssistant) {
+    private void setSmartReplies(CharSequence[] choices, boolean useDelayedOnClickListener) {
+        mView.resetSmartSuggestions(mContainer);
+        List<Button> replyButtons = inflateSmartReplies(choices, false /* fromAssistant */,
+                useDelayedOnClickListener);
+        mView.addPreInflatedButtons(replyButtons);
+    }
+
+    private List<Button> inflateSmartReplies(CharSequence[] choices, boolean fromAssistant,
+            boolean useDelayedOnClickListener) {
         PendingIntent pendingIntent = PendingIntent.getBroadcast(mContext, 0,
                 new Intent(TEST_ACTION), 0);
         RemoteInput input = new RemoteInput.Builder(TEST_RESULT_KEY).setChoices(choices).build();
         SmartReplyView.SmartReplies smartReplies =
                 new SmartReplyView.SmartReplies(choices, input, pendingIntent, fromAssistant);
-        mView.resetSmartSuggestions(mContainer);
-        mView.addRepliesFromRemoteInput(smartReplies, mLogger, mEntry);
+        return mView.inflateRepliesFromRemoteInput(smartReplies, mLogger, mEntry,
+                useDelayedOnClickListener);
     }
 
     private Notification.Action createAction(String actionTitle) {
@@ -430,26 +484,38 @@ public class SmartReplyViewTest extends SysuiTestCase {
     }
 
     private void setSmartActions(String[] actionTitles) {
+        setSmartActions(actionTitles, true /* useDelayedOnClickListener */);
+    }
+
+    private void setSmartActions(String[] actionTitles, boolean useDelayedOnClickListener) {
         mView.resetSmartSuggestions(mContainer);
-        mView.addSmartActions(
+        List<Button> actions = mView.inflateSmartActions(
                 new SmartReplyView.SmartActions(createActions(actionTitles), false),
                 mLogger,
                 mEntry,
-                mHeadsUpManager);
+                mHeadsUpManager,
+                useDelayedOnClickListener);
+        mView.addPreInflatedButtons(actions);
     }
 
     private void setSmartRepliesAndActions(CharSequence[] choices, String[] actionTitles) {
-        setSmartRepliesAndActions(choices, actionTitles, false /* fromAssistant */);
+        setSmartRepliesAndActions(choices, actionTitles, false /* fromAssistant */,
+                true /* useDelayedOnClickListener */);
     }
 
     private void setSmartRepliesAndActions(
-            CharSequence[] choices, String[] actionTitles, boolean fromAssistant) {
-        setSmartReplies(choices, fromAssistant);
-        mView.addSmartActions(
+            CharSequence[] choices, String[] actionTitles, boolean fromAssistant,
+            boolean useDelayedOnClickListener) {
+        mView.resetSmartSuggestions(mContainer);
+        List<Button> smartSuggestions = inflateSmartReplies(choices, fromAssistant,
+                useDelayedOnClickListener);
+        smartSuggestions.addAll(mView.inflateSmartActions(
                 new SmartReplyView.SmartActions(createActions(actionTitles), fromAssistant),
                 mLogger,
                 mEntry,
-                mHeadsUpManager);
+                mHeadsUpManager,
+                useDelayedOnClickListener));
+        mView.addPreInflatedButtons(smartSuggestions);
     }
 
     private ViewGroup buildExpectedView(CharSequence[] choices, int lineCount) {
@@ -485,8 +551,9 @@ public class SmartReplyViewTest extends SysuiTestCase {
         SmartReplyView.SmartReplies smartReplies =
                 new SmartReplyView.SmartReplies(choices, null, null, false);
         for (int i = 0; i < choices.length; ++i) {
-            Button current = mView.inflateReplyButton(mContext, mView, i, smartReplies,
-                    null, null);
+            Button current = SmartReplyView.inflateReplyButton(mView, mContext, i, smartReplies,
+                    null /* SmartReplyController */, null /* NotificationEntry */,
+                    true /* useDelayedOnClickListener */);
             current.setPadding(paddingHorizontal, current.getPaddingTop(), paddingHorizontal,
                     current.getPaddingBottom());
             if (previous != null) {
@@ -567,7 +634,44 @@ public class SmartReplyViewTest extends SysuiTestCase {
 
         mView.getChildAt(2).performClick();
 
-        verify(mActivityStarter, times(1)).startPendingIntentDismissingKeyguard(any(), any());
+        verify(mActivityStarter, times(1)).startPendingIntentDismissingKeyguard(any(), any(),
+                any());
+    }
+
+    @Test
+    public void testTapSmartAction_beforeInitDelay_blocked() throws InterruptedException {
+        // 100 seconds is easily enough for our click to always be blocked.
+        when(mConstants.getOnClickInitDelay()).thenReturn(100L * 1000L);
+        setSmartActions(TEST_ACTION_TITLES);
+
+        mView.getChildAt(2).performClick();
+
+        verify(mActivityStarter, never()).startPendingIntentDismissingKeyguard(any(), any(), any());
+    }
+
+    @Test
+    public void testTapSmartAction_afterInitDelay_clickReceived() throws InterruptedException {
+        final long delayMs = 50L; // Using a small delay to not delay the test suite too much.
+        when(mConstants.getOnClickInitDelay()).thenReturn(delayMs);
+        setSmartActions(TEST_ACTION_TITLES);
+
+        Thread.sleep(delayMs);
+        mView.getChildAt(2).performClick();
+
+        verify(mActivityStarter, times(1)).startPendingIntentDismissingKeyguard(any(), any(),
+                any());
+    }
+
+    @Test
+    public void testTapSmartAction_withoutDelayedOnClickListener_bypassesDelay() {
+        // 100 seconds is easily enough for our click to always be blocked.
+        when(mConstants.getOnClickInitDelay()).thenReturn(100L * 1000L);
+        setSmartActions(TEST_ACTION_TITLES, false /* useDelayedOnClickListener */);
+
+        mView.getChildAt(2).performClick();
+
+        verify(mActivityStarter, times(1)).startPendingIntentDismissingKeyguard(any(), any(),
+                any());
     }
 
     @Test
@@ -752,9 +856,9 @@ public class SmartReplyViewTest extends SysuiTestCase {
     }
 
     private Button inflateActionButton(Notification.Action action) {
-        return mView.inflateActionButton(getContext(), mView, 0,
+        return SmartReplyView.inflateActionButton(mView, getContext(), 0,
                 new SmartReplyView.SmartActions(Collections.singletonList(action), false),
-                mLogger, mEntry, mHeadsUpManager);
+                mLogger, mEntry, mHeadsUpManager, true /* useDelayedOnClickListener */);
     }
 
     @Test
@@ -960,7 +1064,8 @@ public class SmartReplyViewTest extends SysuiTestCase {
                 createActions(new String[] {"action1"}));
         expectedView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
 
-        setSmartRepliesAndActions(choices, actions, true /* fromAssistant */);
+        setSmartRepliesAndActions(
+                choices, actions, true /* fromAssistant */, true /* useDelayedOnClickListener */);
         mView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
 
         assertEqualMeasures(expectedView, mView);
@@ -983,7 +1088,8 @@ public class SmartReplyViewTest extends SysuiTestCase {
                 createActions(new String[] {"action1"}));
         expectedView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
 
-        setSmartRepliesAndActions(choices, actions, true /* fromAssistant */);
+        setSmartRepliesAndActions(
+                choices, actions, true /* fromAssistant */, true /* useDelayedOnClickListener */);
         mView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
 
         assertEqualMeasures(expectedView, mView);
@@ -1012,7 +1118,8 @@ public class SmartReplyViewTest extends SysuiTestCase {
                 createActions(new String[] {"Short action"}));
         expectedView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
 
-        setSmartRepliesAndActions(choices, actions, true /* fromAssistant */);
+        setSmartRepliesAndActions(
+                choices, actions, true /* fromAssistant */, true /* useDelayedOnClickListener */);
         mView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
 
         assertEqualMeasures(expectedView, mView);

@@ -19,18 +19,6 @@ package com.android.systemui.statusbar.policy;
 import com.android.systemui.R;
 
 public class WifiIcons {
-    static final int[][] WIFI_SIGNAL_STRENGTH = {
-            { R.drawable.stat_sys_wifi_signal_0,
-              R.drawable.stat_sys_wifi_signal_1,
-              R.drawable.stat_sys_wifi_signal_2,
-              R.drawable.stat_sys_wifi_signal_3,
-              R.drawable.stat_sys_wifi_signal_4 },
-            { R.drawable.stat_sys_wifi_signal_0_fully,
-              R.drawable.stat_sys_wifi_signal_1_fully,
-              R.drawable.stat_sys_wifi_signal_2_fully,
-              R.drawable.stat_sys_wifi_signal_3_fully,
-              R.drawable.stat_sys_wifi_signal_4_fully }
-        };
 
     static final int[] WIFI_FULL_ICONS = {
             com.android.internal.R.drawable.ic_wifi_signal_0,
@@ -40,18 +28,103 @@ public class WifiIcons {
             com.android.internal.R.drawable.ic_wifi_signal_4
     };
 
+    private static final int[] WIFI_NO_INTERNET_ICONS = {
+            R.drawable.ic_qs_wifi_0,
+            R.drawable.ic_qs_wifi_1,
+            R.drawable.ic_qs_wifi_2,
+            R.drawable.ic_qs_wifi_3,
+            R.drawable.ic_qs_wifi_4
+    };
+
     public static final int[][] QS_WIFI_SIGNAL_STRENGTH = {
-            { R.drawable.ic_qs_wifi_0,
-              R.drawable.ic_qs_wifi_1,
-              R.drawable.ic_qs_wifi_2,
-              R.drawable.ic_qs_wifi_3,
-              R.drawable.ic_qs_wifi_4 },
+            WIFI_NO_INTERNET_ICONS,
             WIFI_FULL_ICONS
+    };
+    static final int[][] WIFI_SIGNAL_STRENGTH = QS_WIFI_SIGNAL_STRENGTH;
+
+    static final int[][] WIFI_4_SIGNAL_STRENGTH = {
+            { R.drawable.stat_sys_wifi_4_signal_0,
+              R.drawable.stat_sys_wifi_4_signal_1,
+              R.drawable.stat_sys_wifi_4_signal_2,
+              R.drawable.stat_sys_wifi_4_signal_3,
+              R.drawable.stat_sys_wifi_4_signal_4 },
+            { R.drawable.stat_sys_wifi_4_signal_0_fully,
+              R.drawable.stat_sys_wifi_4_signal_1_fully,
+              R.drawable.stat_sys_wifi_4_signal_2_fully,
+              R.drawable.stat_sys_wifi_4_signal_3_fully,
+              R.drawable.stat_sys_wifi_4_signal_4_fully }
+        };
+
+    public static final int[][] QS_WIFI_4_SIGNAL_STRENGTH = {
+            { R.drawable.ic_qs_wifi_4_0,
+              R.drawable.ic_qs_wifi_4_1,
+              R.drawable.ic_qs_wifi_4_2,
+              R.drawable.ic_qs_wifi_4_3,
+              R.drawable.ic_qs_wifi_4_4 },
+            { R.drawable.ic_qs_wifi_4_full_0,
+              R.drawable.ic_qs_wifi_4_full_1,
+              R.drawable.ic_qs_wifi_4_full_2,
+              R.drawable.ic_qs_wifi_4_full_3,
+              R.drawable.ic_qs_wifi_4_full_4 }
+        };
+
+    static final int[][] WIFI_5_SIGNAL_STRENGTH = {
+            { R.drawable.stat_sys_wifi_5_signal_0,
+              R.drawable.stat_sys_wifi_5_signal_1,
+              R.drawable.stat_sys_wifi_5_signal_2,
+              R.drawable.stat_sys_wifi_5_signal_3,
+              R.drawable.stat_sys_wifi_5_signal_4 },
+            { R.drawable.stat_sys_wifi_5_signal_0_fully,
+              R.drawable.stat_sys_wifi_5_signal_1_fully,
+              R.drawable.stat_sys_wifi_5_signal_2_fully,
+              R.drawable.stat_sys_wifi_5_signal_3_fully,
+              R.drawable.stat_sys_wifi_5_signal_4_fully }
+
+        };
+
+    public static final int[][] QS_WIFI_5_SIGNAL_STRENGTH = {
+            { R.drawable.ic_qs_wifi_5_0,
+              R.drawable.ic_qs_wifi_5_1,
+              R.drawable.ic_qs_wifi_5_2,
+              R.drawable.ic_qs_wifi_5_3,
+              R.drawable.ic_qs_wifi_5_4 },
+            { R.drawable.ic_qs_wifi_5_full_0,
+              R.drawable.ic_qs_wifi_5_full_1,
+              R.drawable.ic_qs_wifi_5_full_2,
+              R.drawable.ic_qs_wifi_5_full_3,
+              R.drawable.ic_qs_wifi_5_full_4 }
+        };
+
+    static final int[][] WIFI_6_SIGNAL_STRENGTH = {
+            { R.drawable.stat_sys_wifi_6_signal_0,
+              R.drawable.stat_sys_wifi_6_signal_1,
+              R.drawable.stat_sys_wifi_6_signal_2,
+              R.drawable.stat_sys_wifi_6_signal_3,
+              R.drawable.stat_sys_wifi_6_signal_4 },
+            { R.drawable.stat_sys_wifi_6_signal_0_fully,
+              R.drawable.stat_sys_wifi_6_signal_1_fully,
+              R.drawable.stat_sys_wifi_6_signal_2_fully,
+              R.drawable.stat_sys_wifi_6_signal_3_fully,
+              R.drawable.stat_sys_wifi_6_signal_4_fully }
+
+        };
+
+    public static final int[][] QS_WIFI_6_SIGNAL_STRENGTH = {
+            { R.drawable.ic_qs_wifi_6_0,
+              R.drawable.ic_qs_wifi_6_1,
+              R.drawable.ic_qs_wifi_6_2,
+              R.drawable.ic_qs_wifi_6_3,
+              R.drawable.ic_qs_wifi_6_4 },
+            { R.drawable.ic_qs_wifi_6_full_0,
+              R.drawable.ic_qs_wifi_6_full_1,
+              R.drawable.ic_qs_wifi_6_full_2,
+              R.drawable.ic_qs_wifi_6_full_3,
+              R.drawable.ic_qs_wifi_6_full_4 }
         };
 
     public static final int QS_WIFI_DISABLED = com.android.internal.R.drawable.ic_wifi_signal_0;
-    static final int QS_WIFI_NO_NETWORK = R.drawable.ic_qs_wifi_no_network;
-    static final int WIFI_NO_NETWORK = R.drawable.stat_sys_wifi_signal_null;
+    public static final int QS_WIFI_NO_NETWORK = com.android.internal.R.drawable.ic_wifi_signal_0;
+    static final int WIFI_NO_NETWORK = QS_WIFI_NO_NETWORK;
 
     static final int WIFI_LEVEL_COUNT = WIFI_SIGNAL_STRENGTH[0].length;
 }

@@ -104,6 +104,9 @@ public final class JobStatus {
             | CONSTRAINT_TIMING_DELAY
             | CONSTRAINT_WITHIN_QUOTA;
 
+    // TODO(b/129954980)
+    private static final boolean STATS_LOG_ENABLED = false;
+
     // Soft override: ignore constraints like time that don't affect API availability
     public static final int OVERRIDE_SOFT = 1;
     // Full override: ignore all constraints including API-affecting like connectivity
@@ -157,6 +160,12 @@ public final class JobStatus {
      * indicates there is no deadline constraint. See {@link #hasDeadlineConstraint()}.
      */
     private final long latestRunTimeElapsedMillis;
+
+    /**
+     * Valid only for periodic jobs. The original latest point in the future at which this
+     * job was expected to run.
+     */
+    private long mOriginalLatestRunTimeElapsedMillis;
 
     /** How many times this job has failed, used to compute back-off. */
     private final int numFailures;
@@ -391,6 +400,7 @@ public final class JobStatus {
 
         this.earliestRunTimeElapsedMillis = earliestRunTimeElapsedMillis;
         this.latestRunTimeElapsedMillis = latestRunTimeElapsedMillis;
+        this.mOriginalLatestRunTimeElapsedMillis = latestRunTimeElapsedMillis;
         this.numFailures = numFailures;
 
         int requiredConstraints = job.getConstraintFlags();
@@ -868,6 +878,14 @@ public final class JobStatus {
         return latestRunTimeElapsedMillis;
     }
 
+    public long getOriginalLatestRunTimeElapsed() {
+        return mOriginalLatestRunTimeElapsedMillis;
+    }
+
+    public void setOriginalLatestRunTimeElapsed(long latestRunTimeElapsed) {
+        mOriginalLatestRunTimeElapsedMillis = latestRunTimeElapsed;
+    }
+
     /**
      * Return the fractional position of "now" within the "run time" window of
      * this job.
@@ -1000,7 +1018,7 @@ public final class JobStatus {
         }
         satisfiedConstraints = (satisfiedConstraints&~constraint) | (state ? constraint : 0);
         mSatisfiedConstraintsOfInterest = satisfiedConstraints & CONSTRAINTS_OF_INTEREST;
-        if ((STATSD_CONSTRAINTS_TO_LOG & constraint) != 0) {
+        if (STATS_LOG_ENABLED && (STATSD_CONSTRAINTS_TO_LOG & constraint) != 0) {
             StatsLog.write_non_chained(StatsLog.SCHEDULED_JOB_CONSTRAINT_CHANGED,
                     sourceUid, null, getBatteryName(), getProtoConstraint(constraint),
                     state ? StatsLog.SCHEDULED_JOB_CONSTRAINT_CHANGED__STATE__SATISFIED

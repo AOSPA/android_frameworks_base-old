@@ -79,22 +79,28 @@ struct OverlayableItem {
   // Represents the types overlays that are allowed to overlay the resource.
   typedef uint32_t PolicyFlags;
   enum Policy : uint32_t {
-    kNone = 0x00,
+    kNone = 0x00000000,
 
     // The resource can be overlaid by any overlay.
-    kPublic = 0x01,
+    kPublic = 0x00000001,
 
     // The resource can be overlaid by any overlay on the system partition.
-    kSystem = 0x02,
+    kSystem = 0x00000002,
 
     // The resource can be overlaid by any overlay on the vendor partition.
-    kVendor = 0x04,
+    kVendor = 0x00000004,
 
     // The resource can be overlaid by any overlay on the product partition.
-    kProduct = 0x08,
+    kProduct = 0x00000008,
 
     // The resource can be overlaid by any overlay signed with the same signature as its actor.
-    kSignature = 0x010,
+    kSignature = 0x00000010,
+
+    // The resource can be overlaid by any overlay on the odm partition.
+    kOdm = 0x00000020,
+
+    // The resource can be overlaid by any overlay on the oem partition.
+    kOem = 0x00000040,
   };
 
   std::shared_ptr<Overlayable> overlayable;
@@ -222,13 +228,13 @@ class ResourceTable {
 
   enum class CollisionResult { kKeepBoth, kKeepOriginal, kConflict, kTakeNew };
 
-  using CollisionResolverFunc = std::function<CollisionResult(Value*, Value*)>;
+  using CollisionResolverFunc = std::function<CollisionResult(Value*, Value*, bool)>;
 
   // When a collision of resources occurs, this method decides which value to keep.
-  static CollisionResult ResolveValueCollision(Value* existing, Value* incoming);
+  static CollisionResult ResolveValueCollision(Value* existing, Value* incoming, bool overlay);
 
   // When a collision of resources occurs, this method keeps both values
-  static CollisionResult IgnoreCollision(Value* existing, Value* incoming);
+  static CollisionResult IgnoreCollision(Value* existing, Value* incoming, bool overlay);
 
   bool AddResource(const ResourceNameRef& name, const android::ConfigDescription& config,
                    const android::StringPiece& product, std::unique_ptr<Value> value,
@@ -238,13 +244,6 @@ class ResourceTable {
                          const android::ConfigDescription& config,
                          const android::StringPiece& product, std::unique_ptr<Value> value,
                          IDiagnostics* diag);
-
-  bool AddFileReference(const ResourceNameRef& name, const android::ConfigDescription& config,
-                        const Source& source, const android::StringPiece& path, IDiagnostics* diag);
-
-  bool AddFileReferenceMangled(const ResourceNameRef& name, const android::ConfigDescription& config,
-                               const Source& source, const android::StringPiece& path,
-                               io::IFile* file, IDiagnostics* diag);
 
   // Same as AddResource, but doesn't verify the validity of the name. This is used
   // when loading resources from an existing binary resource table that may have mangled names.
@@ -260,8 +259,6 @@ class ResourceTable {
   bool GetValidateResources();
 
   bool SetVisibility(const ResourceNameRef& name, const Visibility& visibility, IDiagnostics* diag);
-  bool SetVisibilityMangled(const ResourceNameRef& name, const Visibility& visibility,
-                            IDiagnostics* diag);
   bool SetVisibilityWithId(const ResourceNameRef& name, const Visibility& visibility,
                            const ResourceId& res_id, IDiagnostics* diag);
   bool SetVisibilityWithIdMangled(const ResourceNameRef& name, const Visibility& visibility,
@@ -269,8 +266,6 @@ class ResourceTable {
 
   bool SetOverlayable(const ResourceNameRef& name, const OverlayableItem& overlayable,
                       IDiagnostics *diag);
-  bool SetOverlayableMangled(const ResourceNameRef& name, const OverlayableItem& overlayable,
-                             IDiagnostics* diag);
 
   bool SetAllowNew(const ResourceNameRef& name, const AllowNew& allow_new, IDiagnostics* diag);
   bool SetAllowNewMangled(const ResourceNameRef& name, const AllowNew& allow_new,
@@ -333,10 +328,6 @@ class ResourceTable {
                        NameValidator name_validator, const CollisionResolverFunc& conflict_resolver,
                        IDiagnostics* diag);
 
-  bool AddFileReferenceImpl(const ResourceNameRef& name, const android::ConfigDescription& config,
-                            const Source& source, const android::StringPiece& path, io::IFile* file,
-                            NameValidator name_validator, IDiagnostics* diag);
-
   bool SetVisibilityImpl(const ResourceNameRef& name, const Visibility& visibility,
                          const ResourceId& res_id, NameValidator name_validator,
                          IDiagnostics* diag);
@@ -346,10 +337,6 @@ class ResourceTable {
 
   bool SetOverlayableImpl(const ResourceNameRef &name, const OverlayableItem& overlayable,
                           NameValidator name_validator, IDiagnostics *diag);
-
-  bool SetSymbolStateImpl(const ResourceNameRef& name, const ResourceId& res_id,
-                          const Visibility& symbol, NameValidator name_validator,
-                          IDiagnostics* diag);
 
   // Controls whether the table validates resource names and prevents duplicate resource names
   bool validate_resources_ = true;

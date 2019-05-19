@@ -87,7 +87,6 @@ import java.util.LinkedList;
  */
 @SmallTest
 @Presubmit
-@FlakyTest(bugId = 124127512)
 public class WindowStateTests extends WindowTestsBase {
     private static int sPreviousNewInsetsMode;
 
@@ -363,7 +362,6 @@ public class WindowStateTests extends WindowTestsBase {
         assertFalse(app.canAffectSystemUiFlags());
     }
 
-    @FlakyTest(detail = "Promote to presubmit when shown to be stable.")
     @Test
     public void testVisibleWithInsetsProvider() throws Exception {
         final WindowState topBar = createWindow(null, TYPE_STATUS_BAR, "topBar");
@@ -399,7 +397,9 @@ public class WindowStateTests extends WindowTestsBase {
         app.mLayoutSeq = 1;
         mDisplayContent.mLayoutSeq = 1;
 
-        app.onDisplayChanged(mDisplayContent);
+        DisplayContent newDisplay = createNewDisplay();
+
+        app.onDisplayChanged(newDisplay);
 
         assertThat(app.mLayoutSeq, not(is(mDisplayContent.mLayoutSeq)));
     }
@@ -475,5 +475,22 @@ public class WindowStateTests extends WindowTestsBase {
 
         root.prepareWindowToDisplayDuringRelayout(wasVisible /*wasVisible*/);
         verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
+    }
+
+    @Test
+    public void testVisibilityChangeSwitchUser() {
+        final WindowState window = createWindow(null, TYPE_APPLICATION, "app");
+        window.mHasSurface = true;
+        window.setShowToOwnerOnlyLocked(true);
+
+        mWm.mCurrentUserId = 1;
+        window.switchUser();
+        assertFalse(window.isVisible());
+        assertFalse(window.isVisibleByPolicy());
+
+        mWm.mCurrentUserId = 0;
+        window.switchUser();
+        assertTrue(window.isVisible());
+        assertTrue(window.isVisibleByPolicy());
     }
 }

@@ -95,7 +95,7 @@ public class SmartReplyConstantsTest extends SysuiTestCase {
         triggerConstantsOnChange();
         assertEquals(false, mConstants.requiresTargetingP());
 
-        overrideSetting(SystemUiDeviceConfigFlags.SSIN_REQUIRES_TARGETING_P, "");
+        overrideSetting(SystemUiDeviceConfigFlags.SSIN_REQUIRES_TARGETING_P, null);
         triggerConstantsOnChange();
         assertEquals(true, mConstants.requiresTargetingP());
     }
@@ -211,33 +211,46 @@ public class SmartReplyConstantsTest extends SysuiTestCase {
         assertEquals(10, mConstants.getMaxNumActions());
     }
 
+    @Test
+    public void testOnClickInitDelayWithNoConfig() {
+        assertEquals(200, mConstants.getOnClickInitDelay());
+    }
+
+    @Test
+    public void testOnClickInitDelaySet() {
+        overrideSetting(SystemUiDeviceConfigFlags.SSIN_ONCLICK_INIT_DELAY, "50");
+        triggerConstantsOnChange();
+        assertEquals(50, mConstants.getOnClickInitDelay());
+    }
+
     private void overrideSetting(String propertyName, String value) {
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
                 propertyName, value, false /* makeDefault */);
     }
 
     private void triggerConstantsOnChange() {
-        mConstants.onDeviceConfigPropertyChanged(DeviceConfig.NAMESPACE_SYSTEMUI,
-                "" /* name */, "" /* value */);
+        mConstants.onDeviceConfigPropertiesChanged(DeviceConfig.NAMESPACE_SYSTEMUI);
     }
 
     private void resetAllDeviceConfigFlags() {
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SSIN_ENABLED, "", false /* makeDefault */);
+                SystemUiDeviceConfigFlags.SSIN_ENABLED, null, false /* makeDefault */);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SSIN_REQUIRES_TARGETING_P, "", false /* makeDefault */);
+                SystemUiDeviceConfigFlags.SSIN_REQUIRES_TARGETING_P, null, false /* makeDefault */);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SSIN_MAX_SQUEEZE_REMEASURE_ATTEMPTS, "",
+                SystemUiDeviceConfigFlags.SSIN_MAX_SQUEEZE_REMEASURE_ATTEMPTS, null,
                 false /* makeDefault */);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SSIN_EDIT_CHOICES_BEFORE_SENDING, "",
+                SystemUiDeviceConfigFlags.SSIN_EDIT_CHOICES_BEFORE_SENDING, null,
                 false /* makeDefault */);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SSIN_SHOW_IN_HEADS_UP, "", false /* makeDefault */);
+                SystemUiDeviceConfigFlags.SSIN_SHOW_IN_HEADS_UP, null, false /* makeDefault */);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SSIN_MIN_NUM_SYSTEM_GENERATED_REPLIES, "",
+                SystemUiDeviceConfigFlags.SSIN_MIN_NUM_SYSTEM_GENERATED_REPLIES, null,
                 false /* makeDefault */);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SSIN_MAX_NUM_ACTIONS, "", false /* makeDefault */);
+                SystemUiDeviceConfigFlags.SSIN_MAX_NUM_ACTIONS, null, false /* makeDefault */);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_SYSTEMUI,
+                SystemUiDeviceConfigFlags.SSIN_ONCLICK_INIT_DELAY, null, false /* makeDefault */);
     }
 }

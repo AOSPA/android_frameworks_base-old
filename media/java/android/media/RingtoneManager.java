@@ -29,7 +29,6 @@ import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.UserInfo;
 import android.content.res.AssetFileDescriptor;
@@ -40,7 +39,6 @@ import android.os.Environment;
 import android.os.FileUtils;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
-import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
@@ -215,17 +213,19 @@ public class RingtoneManager {
     // Make sure the column ordering and then ..._COLUMN_INDEX are in sync
     
     private static final String[] INTERNAL_COLUMNS = new String[] {
-        MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
-        "\"" + MediaStore.Audio.Media.INTERNAL_CONTENT_URI + "\"",
-        MediaStore.Audio.Media.TITLE_KEY
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.TITLE_KEY,
     };
 
     private static final String[] MEDIA_COLUMNS = new String[] {
-        MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
-        "\"" + MediaStore.Audio.Media.EXTERNAL_CONTENT_URI + "\"",
-        MediaStore.Audio.Media.TITLE_KEY
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.TITLE_KEY,
     };
-    
+
     /**
      * The column index (in the cursor returned by {@link #getCursor()} for the
      * row ID.
@@ -459,8 +459,9 @@ public class RingtoneManager {
                 // We don't need to re-add the internal ringtones for the work profile since
                 // they are the same as the personal profile. We just need the external
                 // ringtones.
-                return new ExternalRingtonesCursorWrapper(getMediaRingtones(parentContext),
-                        parentInfo.id);
+                final Cursor res = getMediaRingtones(parentContext);
+                return new ExternalRingtonesCursorWrapper(res, ContentProvider.maybeAddUserId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, parentInfo.id));
             }
         }
         return null;
@@ -494,15 +495,16 @@ public class RingtoneManager {
         if (mCursor == null || !mCursor.moveToPosition(position)) {
             return null;
         }
-        
-        return getUriFromCursor(mCursor);
+
+        return getUriFromCursor(mContext, mCursor);
     }
 
-    private static Uri getUriFromCursor(Cursor cursor) {
-        return ContentUris.withAppendedId(Uri.parse(cursor.getString(URI_COLUMN_INDEX)), cursor
-                .getLong(ID_COLUMN_INDEX));
+    private static Uri getUriFromCursor(Context context, Cursor cursor) {
+        final Uri uri = ContentUris.withAppendedId(Uri.parse(cursor.getString(URI_COLUMN_INDEX)),
+                cursor.getLong(ID_COLUMN_INDEX));
+        return context.getContentResolver().canonicalizeOrElse(uri);
     }
-    
+
     /**
      * Gets the position of a {@link Uri} within this {@link RingtoneManager}.
      * 
@@ -568,7 +570,7 @@ public class RingtoneManager {
             Uri uri = null;
             
             if (cursor.moveToFirst()) {
-                uri = getUriFromCursor(cursor);
+                uri = getUriFromCursor(context, cursor);
             }
             cursor.close();
             
@@ -580,36 +582,28 @@ public class RingtoneManager {
 
     @UnsupportedAppUsage
     private Cursor getInternalRingtones() {
-        return query(
+        final Cursor res = query(
                 MediaStore.Audio.Media.INTERNAL_CONTENT_URI, INTERNAL_COLUMNS,
                 constructBooleanTrueWhereClause(mFilterColumns),
                 null, MediaStore.Audio.Media.DEFAULT_SORT_ORDER);
+        return new ExternalRingtonesCursorWrapper(res, MediaStore.Audio.Media.INTERNAL_CONTENT_URI);
     }
 
     private Cursor getMediaRingtones() {
-        return getMediaRingtones(mContext);
+        final Cursor res = getMediaRingtones(mContext);
+        return new ExternalRingtonesCursorWrapper(res, MediaStore.Audio.Media.EXTERNAL_CONTENT_URI);
     }
 
     @UnsupportedAppUsage
     private Cursor getMediaRingtones(Context context) {
-        if (PackageManager.PERMISSION_GRANTED != context.checkPermission(
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                Process.myPid(), Process.myUid())) {
-            Log.w(TAG, "No READ_EXTERNAL_STORAGE permission, ignoring ringtones on ext storage");
-            return null;
-        }
-         // Get the external media cursor. First check to see if it is mounted.
-        final String status = Environment.getExternalStorageState();
-        
-        return (status.equals(Environment.MEDIA_MOUNTED) ||
-                    status.equals(Environment.MEDIA_MOUNTED_READ_ONLY))
-                ? query(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, MEDIA_COLUMNS,
-                    constructBooleanTrueWhereClause(mFilterColumns), null,
-                    MediaStore.Audio.Media.DEFAULT_SORT_ORDER, context)
-                : null;
+        // MediaStore now returns ringtones on other storage devices, even when
+        // we don't have storage or audio permissions
+        return query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, MEDIA_COLUMNS,
+                constructBooleanTrueWhereClause(mFilterColumns), null,
+                MediaStore.Audio.Media.DEFAULT_SORT_ORDER, context);
     }
-    
+
     private void setFilterColumnsList(int type) {
         List<String> columns = mFilterColumns;
         columns.clear();
@@ -1090,6 +1084,28 @@ public class RingtoneManager {
             afd = resolver.openAssetFileDescriptor(actualUri, "r");
         }
         return afd;
+    }
+
+    /**
+     * Returns if the {@link Ringtone} at the given position in the
+     * {@link Cursor} contains haptic channels.
+     *
+     * @param position The position (in the {@link Cursor}) of the ringtone.
+     * @return true if the ringtone contains haptic channels.
+     */
+    public boolean hasHapticChannels(int position) {
+        return hasHapticChannels(getRingtoneUri(position));
+    }
+
+    /**
+     * Returns if the {@link Ringtone} from a given sound URI contains
+     * haptic channels or not.
+     *
+     * @param ringtoneUri The {@link Uri} of a sound or ringtone.
+     * @return true if the ringtone contains haptic channels.
+     */
+    public static boolean hasHapticChannels(@NonNull Uri ringtoneUri) {
+        return AudioManager.hasHapticChannels(ringtoneUri);
     }
 
     /**

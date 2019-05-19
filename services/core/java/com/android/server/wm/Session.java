@@ -57,6 +57,7 @@ import com.android.server.wm.WindowManagerService.H;
 
 import java.io.PrintWriter;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
@@ -282,10 +283,10 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public void cancelDragAndDrop(IBinder dragToken) {
+    public void cancelDragAndDrop(IBinder dragToken, boolean skipAnimation) {
         final long ident = Binder.clearCallingIdentity();
         try {
-            mDragDropController.cancelDragAndDrop(dragToken);
+            mDragDropController.cancelDragAndDrop(dragToken, skipAnimation);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -309,6 +310,16 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         long ident = Binder.clearCallingIdentity();
         try {
             return mService.mTaskPositioningController.startMovingTask(window, startX, startY);
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    @Override
+    public void reportSystemGestureExclusionChanged(IWindow window, List<Rect> exclusionRects) {
+        long ident = Binder.clearCallingIdentity();
+        try {
+            mService.reportSystemGestureExclusionChanged(this, window, exclusionRects);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -415,11 +426,10 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public void updateTapExcludeRegion(IWindow window, int regionId, int left, int top, int width,
-            int height) {
+    public void updateTapExcludeRegion(IWindow window, int regionId, Region region) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            mService.updateTapExcludeRegion(window, regionId, left, top, width, height);
+            mService.updateTapExcludeRegion(window, regionId, region);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

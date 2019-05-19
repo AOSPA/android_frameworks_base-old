@@ -40,7 +40,6 @@ import java.util.regex.Pattern;
  */
 public final class MemoryStatUtil {
     static final int BYTES_IN_KILOBYTE = 1024;
-    static final int PAGE_SIZE = 4096;
     static final long JIFFY_NANOS = 1_000_000_000 / Os.sysconf(OsConstants._SC_CLK_TCK);
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "MemoryStatUtil" : TAG_AM;
@@ -57,6 +56,8 @@ public final class MemoryStatUtil {
     private static final String PROC_STATUS_FILE_FMT = "/proc/%d/status";
     /** Path to procfs cmdline file. Used with pid: /proc/pid/cmdline. */
     private static final String PROC_CMDLINE_FILE_FMT = "/proc/%d/cmdline";
+    /** Path to debugfs file for the system ion heap. */
+    private static final String DEBUG_SYSTEM_ION_HEAP_FILE = "/sys/kernel/debug/ion/heaps/system";
 
     private static final Pattern PGFAULT = Pattern.compile("total_pgfault (\\d+)");
     private static final Pattern PGMAJFAULT = Pattern.compile("total_pgmajfault (\\d+)");
@@ -64,13 +65,19 @@ public final class MemoryStatUtil {
     private static final Pattern CACHE_IN_BYTES = Pattern.compile("total_cache (\\d+)");
     private static final Pattern SWAP_IN_BYTES = Pattern.compile("total_swap (\\d+)");
 
-    private static final Pattern RSS_HIGH_WATERMARK_IN_BYTES =
+    private static final Pattern RSS_HIGH_WATERMARK_IN_KILOBYTES =
             Pattern.compile("VmHWM:\\s*(\\d+)\\s*kB");
+    private static final Pattern PROCFS_RSS_IN_KILOBYTES =
+            Pattern.compile("VmRSS:\\s*(\\d+)\\s*kB");
+    private static final Pattern PROCFS_SWAP_IN_KILOBYTES =
+            Pattern.compile("VmSwap:\\s*(\\d+)\\s*kB");
+
+    private static final Pattern ION_HEAP_SIZE_IN_BYTES =
+            Pattern.compile("\n\\s*total\\s*(\\d+)\\s*\n");
 
     private static final int PGFAULT_INDEX = 9;
     private static final int PGMAJFAULT_INDEX = 11;
     private static final int START_TIME_INDEX = 21;
-    private static final int RSS_IN_PAGES_INDEX = 23;
 
     private MemoryStatUtil() {}
 
@@ -104,7 +111,8 @@ public final class MemoryStatUtil {
     @Nullable
     public static MemoryStat readMemoryStatFromProcfs(int pid) {
         final String statPath = String.format(Locale.US, PROC_STAT_FILE_FMT, pid);
-        return parseMemoryStatFromProcfs(readFileContents(statPath));
+        final String statusPath = String.format(Locale.US, PROC_STATUS_FILE_FMT, pid);
+        return parseMemoryStatFromProcfs(readFileContents(statPath), readFileContents(statusPath));
     }
 
     /**
@@ -125,6 +133,16 @@ public final class MemoryStatUtil {
     public static String readCmdlineFromProcfs(int pid) {
         final String path = String.format(Locale.US, PROC_CMDLINE_FILE_FMT, pid);
         return parseCmdlineFromProcfs(readFileContents(path));
+    }
+
+    /**
+     * Reads size of the system ion heap from debugfs.
+     *
+     * Returns value of the total size in bytes of the system ion heap from
+     * /sys/kernel/debug/ion/heaps/system.
+     */
+    public static long readSystemIonHeapSizeFromDebugfs() {
+        return parseIonHeapSizeFromDebugfs(readFileContents(DEBUG_SYSTEM_ION_HEAP_FILE));
     }
 
     private static String readFileContents(String path) {
@@ -153,17 +171,11 @@ public final class MemoryStatUtil {
         }
 
         final MemoryStat memoryStat = new MemoryStat();
-        Matcher m;
-        m = PGFAULT.matcher(memoryStatContents);
-        memoryStat.pgfault = m.find() ? Long.parseLong(m.group(1)) : 0;
-        m = PGMAJFAULT.matcher(memoryStatContents);
-        memoryStat.pgmajfault = m.find() ? Long.parseLong(m.group(1)) : 0;
-        m = RSS_IN_BYTES.matcher(memoryStatContents);
-        memoryStat.rssInBytes = m.find() ? Long.parseLong(m.group(1)) : 0;
-        m = CACHE_IN_BYTES.matcher(memoryStatContents);
-        memoryStat.cacheInBytes = m.find() ? Long.parseLong(m.group(1)) : 0;
-        m = SWAP_IN_BYTES.matcher(memoryStatContents);
-        memoryStat.swapInBytes = m.find() ? Long.parseLong(m.group(1)) : 0;
+        memoryStat.pgfault = tryParseLong(PGFAULT, memoryStatContents);
+        memoryStat.pgmajfault = tryParseLong(PGMAJFAULT, memoryStatContents);
+        memoryStat.rssInBytes = tryParseLong(RSS_IN_BYTES, memoryStatContents);
+        memoryStat.cacheInBytes = tryParseLong(CACHE_IN_BYTES, memoryStatContents);
+        memoryStat.swapInBytes = tryParseLong(SWAP_IN_BYTES, memoryStatContents);
         return memoryStat;
     }
 
@@ -172,8 +184,12 @@ public final class MemoryStatUtil {
      */
     @VisibleForTesting
     @Nullable
-    static MemoryStat parseMemoryStatFromProcfs(String procStatContents) {
+    static MemoryStat parseMemoryStatFromProcfs(
+            String procStatContents, String procStatusContents) {
         if (procStatContents == null || procStatContents.isEmpty()) {
+            return null;
+        }
+        if (procStatusContents == null || procStatusContents.isEmpty()) {
             return null;
         }
 
@@ -186,7 +202,10 @@ public final class MemoryStatUtil {
             final MemoryStat memoryStat = new MemoryStat();
             memoryStat.pgfault = Long.parseLong(splits[PGFAULT_INDEX]);
             memoryStat.pgmajfault = Long.parseLong(splits[PGMAJFAULT_INDEX]);
-            memoryStat.rssInBytes = Long.parseLong(splits[RSS_IN_PAGES_INDEX]) * PAGE_SIZE;
+            memoryStat.rssInBytes =
+                tryParseLong(PROCFS_RSS_IN_KILOBYTES, procStatusContents) * BYTES_IN_KILOBYTE;
+            memoryStat.swapInBytes =
+                tryParseLong(PROCFS_SWAP_IN_KILOBYTES, procStatusContents) * BYTES_IN_KILOBYTE;
             memoryStat.startTimeNanos = Long.parseLong(splits[START_TIME_INDEX]) * JIFFY_NANOS;
             return memoryStat;
         } catch (NumberFormatException e) {
@@ -204,9 +223,9 @@ public final class MemoryStatUtil {
         if (procStatusContents == null || procStatusContents.isEmpty()) {
             return 0;
         }
-        Matcher m = RSS_HIGH_WATERMARK_IN_BYTES.matcher(procStatusContents);
         // Convert value read from /proc/pid/status from kilobytes to bytes.
-        return m.find() ? Long.parseLong(m.group(1)) * BYTES_IN_KILOBYTE : 0;
+        return tryParseLong(RSS_HIGH_WATERMARK_IN_KILOBYTES, procStatusContents)
+                * BYTES_IN_KILOBYTE;
     }
 
 
@@ -228,10 +247,36 @@ public final class MemoryStatUtil {
     }
 
     /**
+     * Parses the ion heap size from the contents of a file under /sys/kernel/debug/ion/heaps in
+     * debugfs. The returned value is in bytes.
+     */
+    @VisibleForTesting
+    static long parseIonHeapSizeFromDebugfs(String contents) {
+        if (contents == null || contents.isEmpty()) {
+            return 0;
+        }
+        return tryParseLong(ION_HEAP_SIZE_IN_BYTES, contents);
+    }
+
+    /**
      * Returns whether per-app memcg is available on device.
      */
     static boolean hasMemcg() {
         return DEVICE_HAS_PER_APP_MEMCG;
+    }
+
+    /**
+     * Parses a long from the input using the pattern. Returns 0 if the captured value is not
+     * parsable. The pattern must have a single capturing group.
+     */
+    private static long tryParseLong(Pattern pattern, String input) {
+        final Matcher m = pattern.matcher(input);
+        try {
+            return m.find() ? Long.parseLong(m.group(1)) : 0;
+        } catch (NumberFormatException e) {
+            Slog.e(TAG, "Failed to parse value", e);
+            return 0;
+        }
     }
 
     public static final class MemoryStat {

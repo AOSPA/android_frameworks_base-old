@@ -20,10 +20,13 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.Notification;
 import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -60,7 +63,10 @@ import java.util.List;
  * <p>
  *     All callbacks are called on the main thread.
  * </p>
+ * @hide
  */
+@SystemApi
+@TestApi
 public abstract class NotificationAssistantService extends NotificationListenerService {
     private static final String TAG = "NotificationAssistants";
 
@@ -68,7 +74,14 @@ public abstract class NotificationAssistantService extends NotificationListenerS
     @Retention(SOURCE)
     @IntDef({SOURCE_FROM_APP, SOURCE_FROM_ASSISTANT})
     public @interface Source {}
+
+    /**
+     * To indicate an adjustment is from an app.
+     */
     public static final int SOURCE_FROM_APP = 0;
+    /**
+     * To indicate an adjustment is from a {@link NotificationAssistantService}.
+     */
     public static final int SOURCE_FROM_ASSISTANT = 1;
 
     /**
@@ -90,7 +103,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
     }
 
     @Override
-    public final IBinder onBind(Intent intent) {
+    public final @NonNull IBinder onBind(@Nullable Intent intent) {
         if (mWrapper == null) {
             mWrapper = new NotificationAssistantServiceWrapper();
         }
@@ -105,8 +118,8 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param sbn the notification to snooze
      * @param snoozeCriterionId the {@link SnoozeCriterion#getId()} representing a device context.
      */
-    abstract public void onNotificationSnoozedUntilContext(StatusBarNotification sbn,
-            String snoozeCriterionId);
+    abstract public void onNotificationSnoozedUntilContext(@NonNull StatusBarNotification sbn,
+            @NonNull String snoozeCriterionId);
 
     /**
      * A notification was posted by an app. Called before post.
@@ -117,7 +130,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param sbn the new notification
      * @return an adjustment or null to take no action, within 100ms.
      */
-    abstract public Adjustment onNotificationEnqueued(StatusBarNotification sbn);
+    abstract public @Nullable Adjustment onNotificationEnqueued(@NonNull StatusBarNotification sbn);
 
     /**
      * A notification was posted by an app. Called before post.
@@ -126,11 +139,10 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param channel the channel the notification was posted to
      * @return an adjustment or null to take no action, within 100ms.
      */
-    public Adjustment onNotificationEnqueued(StatusBarNotification sbn,
-            NotificationChannel channel) {
+    public @Nullable Adjustment onNotificationEnqueued(@NonNull StatusBarNotification sbn,
+            @NonNull NotificationChannel channel) {
         return onNotificationEnqueued(sbn);
     }
-
 
     /**
      * Implement this method to learn when notifications are removed, how they were interacted with
@@ -155,8 +167,9 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param reason see {@link #REASON_LISTENER_CANCEL}, etc.
      */
     @Override
-    public void onNotificationRemoved(StatusBarNotification sbn, RankingMap rankingMap,
-            NotificationStats stats, int reason) {
+    public void onNotificationRemoved(@NonNull StatusBarNotification sbn,
+            @NonNull RankingMap rankingMap,
+            @NonNull NotificationStats stats, int reason) {
         onNotificationRemoved(sbn, rankingMap, reason);
     }
 
@@ -164,7 +177,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * Implement this to know when a user has seen notifications, as triggered by
      * {@link #setNotificationsShown(String[])}.
      */
-    public void onNotificationsSeen(List<String> keys) {
+    public void onNotificationsSeen(@NonNull List<String> keys) {
 
     }
 
@@ -205,16 +218,25 @@ public abstract class NotificationAssistantService extends NotificationListenerS
     }
 
     /**
+     * Implement this to know when a user has changed which features of
+     * their notifications the assistant can modify.
+     * <p> Query {@link NotificationManager#getAllowedAssistantAdjustments()} to see what
+     * {@link Adjustment adjustments} you are currently allowed to make.</p>
+     */
+    public void onAllowedAdjustmentsChanged() {
+    }
+
+    /**
      * Updates a notification.  N.B. this won’t cause
      * an existing notification to alert, but might allow a future update to
      * this notification to alert.
      *
      * @param adjustment the adjustment with an explanation
      */
-    public final void adjustNotification(Adjustment adjustment) {
+    public final void adjustNotification(@NonNull Adjustment adjustment) {
         if (!isBound()) return;
         try {
-            getNotificationInterface().applyAdjustmentFromAssistant(mWrapper, adjustment);
+            getNotificationInterface().applyEnqueuedAdjustmentFromAssistant(mWrapper, adjustment);
         } catch (android.os.RemoteException ex) {
             Log.v(TAG, "Unable to contact notification manager", ex);
             throw ex.rethrowFromSystemServer();
@@ -228,7 +250,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      *
      * @param adjustments a list of adjustments with explanations
      */
-    public final void adjustNotifications(List<Adjustment> adjustments) {
+    public final void adjustNotifications(@NonNull List<Adjustment> adjustments) {
         if (!isBound()) return;
         try {
             getNotificationInterface().applyAdjustmentsFromAssistant(mWrapper, adjustments);
@@ -247,7 +269,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * notification.
      * @param key The key of the notification to snooze
      */
-    public final void unsnoozeNotification(String key) {
+    public final void unsnoozeNotification(@NonNull String key) {
         if (!isBound()) return;
         try {
             getNotificationInterface().unsnoozeNotificationFromAssistant(mWrapper, key);
@@ -337,6 +359,11 @@ public abstract class NotificationAssistantService extends NotificationListenerS
             args.argi2 = source;
             mHandler.obtainMessage(MyHandler.MSG_ON_ACTION_INVOKED, args).sendToTarget();
         }
+
+        @Override
+        public void onAllowedAdjustmentsChanged() {
+            mHandler.obtainMessage(MyHandler.MSG_ON_ALLOWED_ADJUSTMENTS_CHANGED).sendToTarget();
+        }
     }
 
     private final class MyHandler extends Handler {
@@ -347,6 +374,7 @@ public abstract class NotificationAssistantService extends NotificationListenerS
         public static final int MSG_ON_NOTIFICATION_DIRECT_REPLY_SENT = 5;
         public static final int MSG_ON_SUGGESTED_REPLY_SENT = 6;
         public static final int MSG_ON_ACTION_INVOKED = 7;
+        public static final int MSG_ON_ALLOWED_ADJUSTMENTS_CHANGED = 8;
 
         public MyHandler(Looper looper) {
             super(looper, null, false);
@@ -362,7 +390,10 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                     args.recycle();
                     Adjustment adjustment = onNotificationEnqueued(sbn, channel);
                     if (adjustment != null) {
-                        if (!isBound()) return;
+                        if (!isBound()) {
+                            Log.w(TAG, "MSG_ON_NOTIFICATION_ENQUEUED: service not bound, skip.");
+                            return;
+                        }
                         try {
                             getNotificationInterface().applyEnqueuedAdjustmentFromAssistant(
                                     mWrapper, adjustment);
@@ -423,6 +454,10 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                     int source = args.argi2;
                     args.recycle();
                     onActionInvoked(key, action, source);
+                    break;
+                }
+                case MSG_ON_ALLOWED_ADJUSTMENTS_CHANGED: {
+                    onAllowedAdjustmentsChanged();
                     break;
                 }
             }

@@ -20,14 +20,18 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemService;
 import android.annotation.UnsupportedAppUsage;
+import android.app.ActivityThread;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.os.ServiceManager;
+import android.provider.DeviceConfig;
+import android.provider.DeviceConfig.Properties;
 import android.provider.Settings;
 import android.service.textclassifier.TextClassifierService;
 import android.view.textclassifier.TextClassifier.TextClassifierType;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 
@@ -195,6 +199,9 @@ public final class TextClassificationManager {
             if (mSettingsObserver != null) {
                 getApplicationContext().getContentResolver()
                         .unregisterContentObserver(mSettingsObserver);
+                if (ConfigParser.ENABLE_DEVICE_CONFIG) {
+                    DeviceConfig.removeOnPropertiesChangedListener(mSettingsObserver);
+                }
             }
         } finally {
             super.finalize();
@@ -242,7 +249,9 @@ public final class TextClassificationManager {
                 && TextClassifierService.getServiceComponentName(mContext) != null;
     }
 
-    private void invalidate() {
+    /** @hide */
+    @VisibleForTesting
+    public void invalidate() {
         synchronized (mLock) {
             mSettings = null;
             mLocalTextClassifier = null;
@@ -277,7 +286,8 @@ public final class TextClassificationManager {
         }
     }
 
-    private static final class SettingsObserver extends ContentObserver {
+    private static final class SettingsObserver extends ContentObserver
+            implements DeviceConfig.OnPropertiesChangedListener {
 
         private final WeakReference<TextClassificationManager> mTcm;
 
@@ -288,10 +298,25 @@ public final class TextClassificationManager {
                     Settings.Global.getUriFor(Settings.Global.TEXT_CLASSIFIER_CONSTANTS),
                     false /* notifyForDescendants */,
                     this);
+            if (ConfigParser.ENABLE_DEVICE_CONFIG) {
+                DeviceConfig.addOnPropertiesChangedListener(
+                        DeviceConfig.NAMESPACE_TEXTCLASSIFIER,
+                        ActivityThread.currentApplication().getMainExecutor(),
+                        this);
+            }
         }
 
         @Override
         public void onChange(boolean selfChange) {
+            invalidateSettings();
+        }
+
+        @Override
+        public void onPropertiesChanged(Properties properties) {
+            invalidateSettings();
+        }
+
+        private void invalidateSettings() {
             final TextClassificationManager tcm = mTcm.get();
             if (tcm != null) {
                 tcm.invalidate();

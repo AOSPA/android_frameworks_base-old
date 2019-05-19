@@ -73,17 +73,6 @@ class DragDropController {
         return mDragState != null && !mDragState.isClosing();
     }
 
-    void showInputSurface(SurfaceControl.Transaction t, int displayId) {
-        mDragState.showInputSurface(t, displayId);
-    }
-
-    void hideInputSurface(SurfaceControl.Transaction t, int displayId) {
-        if (mDragState != null) {
-            // TODO: Are we guaranteed to get here?
-            mDragState.hideInputSurface(t, displayId);
-        }
-    }
-
     void registerCallback(IDragDropCallback callback) {
         Preconditions.checkNotNull(callback);
         mCallback.set(callback);
@@ -247,7 +236,7 @@ class DragDropController {
         }
     }
 
-    void cancelDragAndDrop(IBinder dragToken) {
+    void cancelDragAndDrop(IBinder dragToken, boolean skipAnimation) {
         if (DEBUG_DRAG) {
             Slog.d(TAG_WM, "cancelDragAndDrop");
         }
@@ -268,7 +257,7 @@ class DragDropController {
                 }
 
                 mDragState.mDragResult = false;
-                mDragState.cancelDragLocked();
+                mDragState.cancelDragLocked(skipAnimation);
             }
         } finally {
             mCallback.get().postCancelDragAndDrop();

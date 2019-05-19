@@ -16,6 +16,7 @@
 
 package android.view.inspector;
 
+import android.annotation.AnyRes;
 import android.annotation.ColorInt;
 import android.annotation.ColorLong;
 import android.annotation.NonNull;
@@ -132,10 +133,11 @@ public interface PropertyReader {
     void readColor(int id, @ColorInt int value);
 
     /**
-     * Read a color packed into a {@link ColorLong} as a property.
+     * Read a color packed into a {@code ColorLong} as a property.
      *
      * @param id Identifier of the property from a {@link PropertyMapper}
-     * @param value Value of the property
+     * @param value Value of the property packed as a {@code ColorLong}. See the
+     *              {@link Color} class for details of the packing.
      * @throws PropertyTypeMismatchException If the property ID is not mapped as a color
      */
     void readColor(int id, @ColorLong long value);
@@ -150,7 +152,7 @@ public interface PropertyReader {
     void readColor(int id, @Nullable Color value);
 
     /**
-     * Read {@link android.view.Gravity} packed into an primitive {int}.
+     * Read {@link android.view.Gravity} packed into an primitive {@code int}.
      *
      * @param id Identifier of the property from a {@link PropertyMapper}
      * @param value Value of the property
@@ -159,7 +161,7 @@ public interface PropertyReader {
     void readGravity(int id, int value);
 
     /**
-     * Read an enumeration packed into a primitive {int}.
+     * Read an enumeration packed into a primitive {@code int}.
      *
      * @param id Identifier of the property from a {@link PropertyMapper}
      * @param value Value of the property
@@ -168,13 +170,22 @@ public interface PropertyReader {
     void readIntEnum(int id, int value);
 
     /**
-     * Read a flag packed into a primitive {int}.
+     * Read a flag packed into a primitive {@code int}.
      *
      * @param id Identifier of the property from a {@link PropertyMapper}
      * @param value Value of the property
      * @throws PropertyTypeMismatchException If the property ID is not mapped as an object
      */
     void readIntFlag(int id, int value);
+
+    /**
+     * Read an integer that contains a resource ID.
+     *
+     * @param id Identifier of the property from a {@link PropertyMapper}
+     * @param value Value of the property
+     * @throws PropertyTypeMismatchException If the property ID is not mapped as a resource ID.
+     */
+    void readResourceId(int id, @AnyRes int value);
 
     /**
      * Thrown if a client calls a typed read method for a property of a different type.

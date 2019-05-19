@@ -25,6 +25,7 @@ import android.annotation.Nullable;
 import android.app.Notification;
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -41,7 +42,6 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.AlphaOptimizedImageView;
-import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.row.NotificationGuts.GutsContent;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 
@@ -79,6 +79,7 @@ public class NotificationMenuRow implements NotificationMenuRowPlugin, View.OnCl
     private OnMenuEventListener mMenuListener;
     private boolean mDismissRtl;
     private boolean mIsForeground;
+    private final boolean mIsUsingBidirectionalSwipe;
 
     private ValueAnimator mFadeAnimator;
     private boolean mAnimating;
@@ -111,11 +112,19 @@ public class NotificationMenuRow implements NotificationMenuRowPlugin, View.OnCl
     private boolean mIsUserTouching;
 
     public NotificationMenuRow(Context context) {
+        //TODO: (b/131242807) not using bidirectional swipe for now
+        this(context, false);
+    }
+
+    // Only needed for testing until we want to turn bidirectional swipe back on
+    @VisibleForTesting
+    NotificationMenuRow(Context context, boolean isUsingBidirectionalSwipe) {
         mContext = context;
         mShouldShowMenu = context.getResources().getBoolean(R.bool.config_showNotificationGear);
         mHandler = new Handler(Looper.getMainLooper());
         mLeftMenuItems = new ArrayList<>();
         mRightMenuItems = new ArrayList<>();
+        mIsUsingBidirectionalSwipe = isUsingBidirectionalSwipe;
     }
 
     @Override
@@ -252,13 +261,13 @@ public class NotificationMenuRow implements NotificationMenuRowPlugin, View.OnCl
             mSnoozeItem = createSnoozeItem(mContext);
         }
         mAppOpsItem = createAppOpsItem(mContext);
-        if (NotificationUtils.useNewInterruptionModel(mContext)) {
+        if (mIsUsingBidirectionalSwipe) {
             mInfoItem = createInfoItem(mContext, !mParent.getEntry().isHighPriority());
         } else {
             mInfoItem = createInfoItem(mContext);
         }
 
-        if (!NotificationUtils.useNewInterruptionModel(mContext)) {
+        if (!mIsUsingBidirectionalSwipe) {
             if (!isForeground) {
                 mRightMenuItems.add(mSnoozeItem);
             }
@@ -268,10 +277,6 @@ public class NotificationMenuRow implements NotificationMenuRowPlugin, View.OnCl
         } else {
             ArrayList<MenuItem> menuItems = mDismissRtl ? mLeftMenuItems : mRightMenuItems;
             menuItems.add(mInfoItem);
-            menuItems.add(mAppOpsItem);
-            if (!isForeground) {
-                menuItems.add(mSnoozeItem);
-            }
         }
 
         populateMenuViews();
@@ -615,6 +620,29 @@ public class NotificationMenuRow implements NotificationMenuRowPlugin, View.OnCl
     public void setMenuItems(ArrayList<MenuItem> items) {
         // Do nothing we use our own for now.
         // TODO -- handle / allow custom menu items!
+    }
+
+    @Override
+    public boolean shouldShowGutsOnSnapOpen() {
+        return mIsUsingBidirectionalSwipe;
+    }
+
+    @Override
+    public MenuItem menuItemToExposeOnSnap() {
+        return mIsUsingBidirectionalSwipe ? mInfoItem : null;
+    }
+
+    @Override
+    public Point getRevealAnimationOrigin() {
+        View v = mInfoItem.getMenuView();
+        int menuX = v.getLeft() + v.getPaddingLeft() + (v.getWidth() / 2);
+        int menuY = v.getTop() + v.getPaddingTop() + (v.getHeight() / 2);
+        if (isMenuOnLeft()) {
+            return new Point(menuX, menuY);
+        } else {
+            menuX = mParent.getRight() - menuX;
+            return new Point(menuX, menuY);
+        }
     }
 
     static MenuItem createSnoozeItem(Context context) {

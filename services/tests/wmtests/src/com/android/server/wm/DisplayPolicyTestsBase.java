@@ -38,6 +38,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Matrix;
 import android.graphics.RectF;
+import android.os.Binder;
 import android.os.IBinder;
 import android.testing.TestableResources;
 import android.util.Pair;
@@ -68,15 +69,15 @@ public class DisplayPolicyTestsBase extends WindowTestsBase {
     public void setUpDisplayPolicy() {
         mDisplayPolicy = spy(mDisplayContent.getDisplayPolicy());
 
-        final TestContextWrapper context =
-                new TestContextWrapper(mDisplayPolicy.getSystemUiContext());
+        final TestContextWrapper context = new TestContextWrapper(
+                mDisplayPolicy.getContext(), mDisplayPolicy.getCurrentUserResources());
         final TestableResources resources = context.getResourceMocker();
         resources.addOverride(R.dimen.status_bar_height_portrait, STATUS_BAR_HEIGHT);
         resources.addOverride(R.dimen.status_bar_height_landscape, STATUS_BAR_HEIGHT);
         resources.addOverride(R.dimen.navigation_bar_height, NAV_BAR_HEIGHT);
         resources.addOverride(R.dimen.navigation_bar_height_landscape, NAV_BAR_HEIGHT);
         resources.addOverride(R.dimen.navigation_bar_width, NAV_BAR_HEIGHT);
-        doReturn(context).when(mDisplayPolicy).getSystemUiContext();
+        doReturn(resources.getResources()).when(mDisplayPolicy).getCurrentUserResources();
         doReturn(true).when(mDisplayPolicy).hasNavigationBar();
         doReturn(true).when(mDisplayPolicy).hasStatusBar();
 
@@ -86,7 +87,6 @@ public class DisplayPolicyTestsBase extends WindowTestsBase {
                 Math.min(DISPLAY_WIDTH, DISPLAY_HEIGHT) * DENSITY_DEFAULT / DISPLAY_DENSITY;
         mDisplayContent.getDisplayRotation().configure(
                 DISPLAY_WIDTH, DISPLAY_HEIGHT, shortSizeDp, longSizeDp);
-        mDisplayPolicy.configure(DISPLAY_WIDTH, DISPLAY_HEIGHT, shortSizeDp);
         mDisplayPolicy.onConfigurationChanged();
 
         mStatusBarWindow.mAttrs.gravity = Gravity.TOP;
@@ -99,7 +99,8 @@ public class DisplayPolicyTestsBase extends WindowTestsBase {
     }
 
     void addWindow(WindowState win) {
-        mDisplayPolicy.adjustWindowParamsLw(win, win.mAttrs, true /* hasStatusBarPermission */);
+        mDisplayPolicy.adjustWindowParamsLw(win, win.mAttrs, Binder.getCallingPid(),
+                Binder.getCallingUid());
         assertEquals(WindowManagerGlobal.ADD_OKAY,
                 mDisplayPolicy.prepareAddWindowLw(win, win.mAttrs));
         win.mHasSurface = true;
@@ -156,9 +157,9 @@ public class DisplayPolicyTestsBase extends WindowTestsBase {
     static class TestContextWrapper extends ContextWrapper {
         private final TestableResources mResourceMocker;
 
-        TestContextWrapper(Context targetContext) {
+        TestContextWrapper(Context targetContext, Resources targetResources) {
             super(targetContext);
-            mResourceMocker = new TestableResources(targetContext.getResources());
+            mResourceMocker = new TestableResources(targetResources);
         }
 
         @Override

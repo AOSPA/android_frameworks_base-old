@@ -111,6 +111,9 @@ public class VibratorService extends IVibratorService.Stub
     // intensity level. It's important that we apply the scaling on the delta between the two so
     // that the default intensity level applies no scaling to application provided effects.
     private final SparseArray<ScaleLevel> mScaleLevels;
+    private final LinkedList<VibrationInfo> mPreviousRingVibrations;
+    private final LinkedList<VibrationInfo> mPreviousNotificationVibrations;
+    private final LinkedList<VibrationInfo> mPreviousAlarmVibrations;
     private final LinkedList<VibrationInfo> mPreviousVibrations;
     private final int mPreviousVibrationsLimit;
     private final boolean mAllowPriorityVibrationsInLowPowerMode;
@@ -234,6 +237,7 @@ public class VibratorService extends IVibratorService.Stub
                     case VibrationEffect.EFFECT_CLICK:
                     case VibrationEffect.EFFECT_DOUBLE_CLICK:
                     case VibrationEffect.EFFECT_HEAVY_CLICK:
+                    case VibrationEffect.EFFECT_TEXTURE_TICK:
                     case VibrationEffect.EFFECT_TICK:
                     case VibrationEffect.EFFECT_POP:
                     case VibrationEffect.EFFECT_THUD:
@@ -254,6 +258,10 @@ public class VibratorService extends IVibratorService.Stub
 
         public boolean isRingtone() {
             return VibratorService.this.isRingtone(usageHint);
+        }
+
+        public boolean isAlarm() {
+            return VibratorService.this.isAlarm(usageHint);
         }
 
         public boolean isFromSystem() {
@@ -354,6 +362,9 @@ public class VibratorService extends IVibratorService.Stub
         mAllowPriorityVibrationsInLowPowerMode = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_allowPriorityVibrationsInLowPowerMode);
 
+        mPreviousRingVibrations = new LinkedList<>();
+        mPreviousNotificationVibrations = new LinkedList<>();
+        mPreviousAlarmVibrations = new LinkedList<>();
         mPreviousVibrations = new LinkedList<>();
 
         IntentFilter filter = new IntentFilter();
@@ -374,6 +385,9 @@ public class VibratorService extends IVibratorService.Stub
         mFallbackEffects.put(VibrationEffect.EFFECT_DOUBLE_CLICK, doubleClickEffect);
         mFallbackEffects.put(VibrationEffect.EFFECT_TICK, tickEffect);
         mFallbackEffects.put(VibrationEffect.EFFECT_HEAVY_CLICK, heavyClickEffect);
+
+        mFallbackEffects.put(VibrationEffect.EFFECT_TEXTURE_TICK,
+                VibrationEffect.get(VibrationEffect.EFFECT_TICK, false));
 
         mScaleLevels = new SparseArray<>();
         mScaleLevels.put(SCALE_VERY_LOW,
@@ -593,9 +607,10 @@ public class VibratorService extends IVibratorService.Stub
                 Vibration vib = new Vibration(token, effect, usageHint, uid, opPkg, reason);
                 if (mProcStatesCache.get(uid, ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND)
                         > ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND
-                        && !vib.isNotification() && !vib.isRingtone()) {
-                    Slog.e(TAG, "Ignoring incoming vibration as process with uid = "
-                            + uid + " is background");
+                        && !vib.isNotification() && !vib.isRingtone() && !vib.isAlarm()) {
+                    Slog.e(TAG, "Ignoring incoming vibration as process with"
+                            + " uid = " + uid + " is background,"
+                            + " usage = " + AudioAttributes.usageToString(vib.usageHint));
                     return;
                 }
                 linkVibration(vib);
@@ -619,10 +634,21 @@ public class VibratorService extends IVibratorService.Stub
     }
 
     private void addToPreviousVibrationsLocked(Vibration vib) {
-        if (mPreviousVibrations.size() > mPreviousVibrationsLimit) {
-            mPreviousVibrations.removeFirst();
+        final LinkedList<VibrationInfo> previousVibrations;
+        if (vib.isRingtone()) {
+            previousVibrations = mPreviousRingVibrations;
+        } else if (vib.isNotification()) {
+            previousVibrations = mPreviousNotificationVibrations;
+        } else if (vib.isAlarm()) {
+            previousVibrations = mPreviousAlarmVibrations;
+        } else {
+            previousVibrations = mPreviousVibrations;
         }
-        mPreviousVibrations.addLast(vib.toInfo());
+
+        if (previousVibrations.size() > mPreviousVibrationsLimit) {
+            previousVibrations.removeFirst();
+        }
+        previousVibrations.addLast(vib.toInfo());
     }
 
     @Override // Binder call
@@ -779,6 +805,8 @@ public class VibratorService extends IVibratorService.Stub
             return mNotificationIntensity;
         } else if (vib.isHapticFeedback()) {
             return mHapticFeedbackIntensity;
+        } else if (vib.isAlarm()) {
+            return Vibrator.VIBRATION_INTENSITY_HIGH;
         } else {
             return Vibrator.VIBRATION_INTENSITY_MEDIUM;
         }
@@ -803,6 +831,8 @@ public class VibratorService extends IVibratorService.Stub
             defaultIntensity = mVibrator.getDefaultNotificationVibrationIntensity();
         } else if (vib.isHapticFeedback()) {
             defaultIntensity = mVibrator.getDefaultHapticFeedbackIntensity();
+        } else if (vib.isAlarm()) {
+            defaultIntensity = Vibrator.VIBRATION_INTENSITY_HIGH;
         } else {
             // If we don't know what kind of vibration we're playing then just skip scaling for
             // now.
@@ -1135,6 +1165,10 @@ public class VibratorService extends IVibratorService.Stub
         return usageHint == AudioAttributes.USAGE_ASSISTANCE_SONIFICATION;
     }
 
+    private static boolean isAlarm(int usageHint) {
+        return usageHint == AudioAttributes.USAGE_ALARM;
+    }
+
     private void noteVibratorOnLocked(int uid, long millis) {
         try {
             mBatteryStatsService.noteVibratorOn(uid, millis);
@@ -1354,6 +1388,24 @@ public class VibratorService extends IVibratorService.Stub
             pw.println("  mNotificationIntensity=" + mNotificationIntensity);
             pw.println("  mRingIntensity=" + mRingIntensity);
             pw.println("");
+            pw.println("  Previous ring vibrations:");
+            for (VibrationInfo info : mPreviousRingVibrations) {
+                pw.print("    ");
+                pw.println(info.toString());
+            }
+
+            pw.println("  Previous notification vibrations:");
+            for (VibrationInfo info : mPreviousNotificationVibrations) {
+                pw.print("    ");
+                pw.println(info.toString());
+            }
+
+            pw.println("  Previous alarm vibrations:");
+            for (VibrationInfo info : mPreviousAlarmVibrations) {
+                pw.print("    ");
+                pw.println(info.toString());
+            }
+
             pw.println("  Previous vibrations:");
             for (VibrationInfo info : mPreviousVibrations) {
                 pw.print("    ");
@@ -1419,6 +1471,9 @@ public class VibratorService extends IVibratorService.Stub
                 } else if (isHapticFeedback(usage)) {
                     defaultIntensity = mVibrator.getDefaultHapticFeedbackIntensity();
                     currentIntensity = mHapticFeedbackIntensity;
+                } else if (isAlarm(usage)) {
+                    defaultIntensity = Vibrator.VIBRATION_INTENSITY_HIGH;
+                    currentIntensity = Vibrator.VIBRATION_INTENSITY_HIGH;
                 } else {
                     defaultIntensity = 0;
                     currentIntensity = 0;

@@ -233,6 +233,9 @@ public final class DisplayCutout {
     /**
      * Creates a DisplayCutout instance.
      *
+     * <p>Note that this is only useful for tests. For production code, developers should always
+     * use a {@link DisplayCutout} obtained from the system.</p>
+     *
      * @param safeInsets the insets from each edge which avoid the display cutout as returned by
      *                   {@link #getSafeInsetTop()} etc.
      * @param boundLeft the left bounding rect of the display cutout in pixels. If null is passed,
@@ -252,6 +255,9 @@ public final class DisplayCutout {
 
     /**
      * Creates a DisplayCutout instance.
+     *
+     * <p>Note that this is only useful for tests. For production code, developers should always
+     * use a {@link DisplayCutout} obtained from the system.</p>
      *
      * @param safeInsets the insets from each edge which avoid the display cutout as returned by
      *                   {@link #getSafeInsetTop()} etc.
@@ -506,8 +512,8 @@ public final class DisplayCutout {
      * @hide
      */
     public DisplayCutout inset(int insetLeft, int insetTop, int insetRight, int insetBottom) {
-        if (isBoundsEmpty()
-                || insetLeft == 0 && insetTop == 0 && insetRight == 0 && insetBottom == 0) {
+        if (insetLeft == 0 && insetTop == 0 && insetRight == 0 && insetBottom == 0
+                || isBoundsEmpty()) {
             return this;
         }
 
@@ -526,6 +532,12 @@ public final class DisplayCutout {
         }
         if (insetRight > 0 || safeInsets.right > 0) {
             safeInsets.right = atLeastZero(safeInsets.right - insetRight);
+        }
+
+        // If we are not cutting off part of the cutout by insetting it on bottom/right, and we also
+        // don't move it around, we can avoid the allocation and copy of the instance.
+        if (insetLeft == 0 && insetTop == 0 && mSafeInsets.equals(safeInsets)) {
+            return this;
         }
 
         Rect[] bounds = mBounds.getRects();
@@ -765,7 +777,7 @@ public final class DisplayCutout {
             mInner = readCutoutFromParcel(in);
         }
 
-        public static final Creator<ParcelableWrapper> CREATOR = new Creator<ParcelableWrapper>() {
+        public static final @android.annotation.NonNull Creator<ParcelableWrapper> CREATOR = new Creator<ParcelableWrapper>() {
             @Override
             public ParcelableWrapper createFromParcel(Parcel in) {
                 return new ParcelableWrapper(readCutoutFromParcel(in));

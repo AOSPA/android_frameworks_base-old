@@ -119,6 +119,7 @@ public class PowerWhitelistBackendTest {
         ShadowSmsApplication.setDefaultSmsApplication(new ComponentName(testSms, "receiver"));
 
         assertThat(mPowerWhitelistBackend.isWhitelisted(testSms)).isTrue();
+        assertThat(mPowerWhitelistBackend.isDefaultActiveApp(testSms)).isTrue();
     }
 
     @Test
@@ -127,6 +128,7 @@ public class PowerWhitelistBackendTest {
         ShadowDefaultDialerManager.setDefaultDialerApplication(testDialer);
 
         assertThat(mPowerWhitelistBackend.isWhitelisted(testDialer)).isTrue();
+        assertThat(mPowerWhitelistBackend.isDefaultActiveApp(testDialer)).isTrue();
     }
 
     @Test
@@ -134,6 +136,7 @@ public class PowerWhitelistBackendTest {
         doReturn(true).when(mDevicePolicyManager).packageHasActiveAdmins(PACKAGE_ONE);
 
         assertThat(mPowerWhitelistBackend.isWhitelisted(PACKAGE_ONE)).isTrue();
+        assertThat(mPowerWhitelistBackend.isDefaultActiveApp(PACKAGE_ONE)).isTrue();
     }
 
     @Test

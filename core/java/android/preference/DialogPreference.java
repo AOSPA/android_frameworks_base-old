@@ -19,6 +19,7 @@ package android.preference;
 
 import android.annotation.CallSuper;
 import android.annotation.DrawableRes;
+import android.annotation.Nullable;
 import android.annotation.StringRes;
 import android.annotation.UnsupportedAppUsage;
 import android.app.AlertDialog;
@@ -349,16 +350,32 @@ public abstract class DialogPreference extends Preference implements
         dialog.show();
     }
 
+    /**
+     * Get the DecorView.
+     * @return the DecorView for the current dialog window, if it exists.
+     * If the window does not exist, null is returned.
+     */
+    @Nullable
+    private View getDecorView() {
+        if (mDialog != null && mDialog.getWindow() != null) {
+            return mDialog.getWindow().getDecorView();
+        }
+        return null;
+    }
+
     void postDismiss() {
         removeDismissCallbacks();
-        View decorView = mDialog.getWindow().getDecorView();
-        decorView.post(mDismissRunnable);
+        View decorView = getDecorView();
+        if (decorView != null) {
+            // If decorView is null, dialog was already dismissed
+            decorView.post(mDismissRunnable);
+        }
     }
 
     private void removeDismissCallbacks() {
-        if (mDialog != null && mDialog.getWindow() != null
-                && mDialog.getWindow().getDecorView() != null) {
-            mDialog.getWindow().getDecorView().removeCallbacks(mDismissRunnable);
+        View decorView = getDecorView();
+        if (decorView != null) {
+            decorView.removeCallbacks(mDismissRunnable);
         }
     }
 
@@ -519,7 +536,7 @@ public abstract class DialogPreference extends Preference implements
             super(superState);
         }
 
-        public static final Parcelable.Creator<SavedState> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<SavedState> CREATOR =
                 new Parcelable.Creator<SavedState>() {
             public SavedState createFromParcel(Parcel in) {
                 return new SavedState(in);

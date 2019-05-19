@@ -19,10 +19,10 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.os.RemoteException;
 
 import com.android.internal.os.IResultReceiver;
 
+import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -96,6 +96,28 @@ public final class SyncResultReceiver extends IResultReceiver.Stub {
         return mBundle == null ? null : mBundle.getParcelable(EXTRA);
     }
 
+    /**
+     * Gets the result from an operation that returns a {@code Parcelable} list.
+     */
+    @Nullable
+    public <P extends Parcelable> ArrayList<P> getParcelableListResult() throws TimeoutException {
+        waitResult();
+        return mBundle == null ? null : mBundle.getParcelableArrayList(EXTRA);
+    }
+
+    /**
+     * Gets the optional result from an operation that returns an extra {@code int} (besides the
+     * result code).
+     *
+     * @return value set in the bundle, or {@code defaultValue} when not set.
+     */
+    public int getOptionalExtraIntResult(int defaultValue) throws TimeoutException {
+        waitResult();
+        if (mBundle == null || !mBundle.containsKey(EXTRA)) return defaultValue;
+
+        return mBundle.getInt(EXTRA);
+    }
+
     @Override
     public void send(int resultCode, Bundle resultData) {
         mResult = resultCode;
@@ -136,8 +158,31 @@ public final class SyncResultReceiver extends IResultReceiver.Stub {
         return bundle;
     }
 
+    /**
+     * Creates a bundle for a {@code Parcelable} list so it can be retrieved by
+     * {@link #getParcelableResult()}.
+     */
+    @NonNull
+    public static Bundle bundleFor(@Nullable ArrayList<? extends Parcelable> value) {
+        final Bundle bundle = new Bundle();
+        bundle.putParcelableArrayList(EXTRA, value);
+        return bundle;
+    }
+
+    /**
+     * Creates a bundle for an {@code int} value so it can be retrieved by
+     * {@link #getParcelableResult()} - typically used to return an extra {@code int} (as the 1st
+     * is returned as the result code).
+     */
+    @NonNull
+    public static Bundle bundleFor(int value) {
+        final Bundle bundle = new Bundle();
+        bundle.putInt(EXTRA, value);
+        return bundle;
+    }
+
     /** @hide */
-    public static final class TimeoutException extends RemoteException {
+    public static final class TimeoutException extends RuntimeException {
         private TimeoutException(String msg) {
             super(msg);
         }

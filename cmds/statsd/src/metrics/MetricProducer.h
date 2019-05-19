@@ -19,6 +19,7 @@
 
 #include <shared_mutex>
 
+#include <frameworks/base/cmds/statsd/src/active_config_list.pb.h>
 #include "HashableDimensionKey.h"
 #include "anomaly/AnomalyTracker.h"
 #include "condition/ConditionWizard.h"
@@ -69,7 +70,7 @@ public:
           mTimeBaseNs(timeBaseNs),
           mCurrentBucketStartTimeNs(timeBaseNs),
           mCurrentBucketNum(0),
-          mCondition(conditionIndex >= 0 ? ConditionState::kUnknown : ConditionState::kTrue),
+          mCondition(initialCondition(conditionIndex)),
           mConditionSliced(false),
           mWizard(wizard),
           mConditionTrackerIndex(conditionIndex),
@@ -81,6 +82,10 @@ public:
     }
 
     virtual ~MetricProducer(){};
+
+    ConditionState initialCondition(const int conditionIndex) const {
+        return conditionIndex >= 0 ? ConditionState::kUnknown : ConditionState::kTrue;
+    }
 
     /**
      * Forces this metric to split into a partial bucket right now. If we're past a full bucket, we
@@ -194,15 +199,9 @@ public:
         return mMetricId;
     }
 
-    int64_t getRemainingTtlNs(int64_t currentTimeNs) const {
+    void loadActiveMetric(const ActiveMetric& activeMetric, int64_t currentTimeNs) {
         std::lock_guard<std::mutex> lock(mMutex);
-        return getRemainingTtlNsLocked(currentTimeNs);
-    }
-
-    // Set metric to active for ttlNs.
-    void setActive(int64_t currentTimeNs, int64_t remainingTtlNs) {
-        std::lock_guard<std::mutex> lock(mMutex);
-        setActiveLocked(currentTimeNs, remainingTtlNs);
+        loadActiveMetricLocked(activeMetric, currentTimeNs);
     }
 
     // Let MetricProducer drop in-memory data to save memory.
@@ -224,24 +223,28 @@ public:
         activateLocked(activationTrackerIndex, elapsedTimestampNs);
     }
 
+    void cancelEventActivation(int deactivationTrackerIndex) {
+        std::lock_guard<std::mutex> lock(mMutex);
+        cancelEventActivationLocked(deactivationTrackerIndex);
+    }
+
     bool isActive() const {
         std::lock_guard<std::mutex> lock(mMutex);
         return isActiveLocked();
     }
 
-    void prepActiveForBootIfNecessary(int64_t currentTimeNs) {
+    void addActivation(int activationTrackerIndex, const ActivationType& activationType,
+            int64_t ttl_seconds, int deactivationTrackerIndex = -1);
+
+    void prepareFistBucket() {
         std::lock_guard<std::mutex> lock(mMutex);
-        prepActiveForBootIfNecessaryLocked(currentTimeNs);
-    }
-
-    void addActivation(int activationTrackerIndex, int64_t ttl_seconds);
-
-    inline void setActivationType(const MetricActivation::ActivationType& activationType) {
-        mActivationType = activationType;
+        prepareFistBucketLocked();
     }
 
     void flushIfExpire(int64_t elapsedTimestampNs);
 
+    void writeActiveMetricToProtoOutputStream(
+            int64_t currentTimeNs, ProtoOutputStream* proto);
 protected:
     virtual void onConditionChangedLocked(const bool condition, const int64_t eventTime) = 0;
     virtual void onSlicedConditionMayChangeLocked(bool overallCondition,
@@ -259,6 +262,7 @@ protected:
     bool evaluateActiveStateLocked(int64_t elapsedTimestampNs);
 
     void activateLocked(int activationTrackerIndex, int64_t elapsedTimestampNs);
+    void cancelEventActivationLocked(int deactivationTrackerIndex);
 
     inline bool isActiveLocked() const {
         return mIsActive;
@@ -266,10 +270,9 @@ protected:
 
     void prepActiveForBootIfNecessaryLocked(int64_t currentTimeNs);
 
-    int64_t getRemainingTtlNsLocked(int64_t currentTimeNs) const;
+    void loadActiveMetricLocked(const ActiveMetric& activeMetric, int64_t currentTimeNs);
 
-    void setActiveLocked(int64_t currentTimeNs, int64_t remainingTtlNs);
-
+    virtual void prepareFistBucketLocked() {};
     /**
      * Flushes the current bucket if the eventTime is after the current bucket's end time. This will
        also flush the current partial bucket in memory.
@@ -379,24 +382,36 @@ protected:
     mutable std::mutex mMutex;
 
     struct Activation {
-        Activation() : ttl_ns(0), activation_ns(0), state(ActivationState::kNotActive)  {}
+        Activation(const ActivationType& activationType, const int64_t ttlNs)
+            : ttl_ns(ttlNs),
+              start_ns(0),
+              state(ActivationState::kNotActive),
+              activationType(activationType) {}
 
-        int64_t ttl_ns;
-        int64_t activation_ns;
+        const int64_t ttl_ns;
+        int64_t start_ns;
         ActivationState state;
+        const ActivationType activationType;
     };
     // When the metric producer has multiple activations, these activations are ORed to determine
     // whether the metric producer is ready to generate metrics.
-    std::unordered_map<int, Activation> mEventActivationMap;
+    std::unordered_map<int, std::shared_ptr<Activation>> mEventActivationMap;
+
+    // Maps index of atom matcher for deactivation to Activation struct.
+    std::unordered_map<int, std::shared_ptr<Activation>> mEventDeactivationMap;
 
     bool mIsActive;
 
-    MetricActivation::ActivationType mActivationType;
-
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetric);
+    FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithOneDeactivation);
+    FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoDeactivations);
+    FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoMetricsTwoDeactivations);
 
     FRIEND_TEST(StatsLogProcessorTest, TestActiveConfigMetricDiskWriteRead);
     FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBoot);
+    FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBootMultipleActivations);
+    FRIEND_TEST(StatsLogProcessorTest,
+            TestActivationOnBootMultipleActivationsDifferentActivationTypes);
 };
 
 }  // namespace statsd

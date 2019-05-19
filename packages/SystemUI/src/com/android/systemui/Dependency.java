@@ -35,6 +35,7 @@ import com.android.systemui.appops.AppOpsController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dock.DockManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
@@ -48,6 +49,9 @@ import com.android.systemui.power.PowerUI;
 import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.shared.system.ActivityManagerWrapper;
+import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
+import com.android.systemui.shared.system.PackageManagerWrapper;
 import com.android.systemui.statusbar.AmbientPulseManager;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationListener;
@@ -71,6 +75,7 @@ import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
+import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ShadeController;
@@ -94,6 +99,7 @@ import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
 import com.android.systemui.statusbar.policy.RotationLockController;
 import com.android.systemui.statusbar.policy.SecurityController;
+import com.android.systemui.statusbar.policy.SensorPrivacyController;
 import com.android.systemui.statusbar.policy.SmartReplyConstants;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
@@ -188,7 +194,7 @@ public class Dependency extends SystemUI {
             new DependencyKey<>(LEAK_REPORT_EMAIL_NAME);
 
     private final ArrayMap<Object, Object> mDependencies = new ArrayMap<>();
-    private final ArrayMap<Object, DependencyProvider> mProviders = new ArrayMap<>();
+    private final ArrayMap<Object, LazyDependencyCreator> mProviders = new ArrayMap<>();
 
     @Inject Lazy<ActivityStarter> mActivityStarter;
     @Inject Lazy<ActivityStarterDelegate> mActivityStarterDelegate;
@@ -240,6 +246,7 @@ public class Dependency extends SystemUI {
     @Inject Lazy<LightBarController> mLightBarController;
     @Inject Lazy<IWindowManager> mIWindowManager;
     @Inject Lazy<OverviewProxyService> mOverviewProxyService;
+    @Inject Lazy<NavigationModeController> mNavBarModeController;
     @Inject Lazy<EnhancedEstimates> mEnhancedEstimates;
     @Inject Lazy<VibratorHelper> mVibratorHelper;
     @Inject Lazy<IStatusBarService> mIStatusBarService;
@@ -285,6 +292,12 @@ public class Dependency extends SystemUI {
     @Nullable
     @Inject @Named(LEAK_REPORT_EMAIL_NAME) Lazy<String> mLeakReportEmail;
     @Inject Lazy<ClockManager> mClockManager;
+    @Inject Lazy<ActivityManagerWrapper> mActivityManagerWrapper;
+    @Inject Lazy<DevicePolicyManagerWrapper> mDevicePolicyManagerWrapper;
+    @Inject Lazy<PackageManagerWrapper> mPackageManagerWrapper;
+    @Inject Lazy<SensorPrivacyController> mSensorPrivacyController;
+    @Inject Lazy<DumpController> mDumpController;
+    @Inject Lazy<DockManager> mDockManager;
 
     @Inject
     public Dependency() {
@@ -398,6 +411,8 @@ public class Dependency extends SystemUI {
 
         mProviders.put(OverviewProxyService.class, mOverviewProxyService::get);
 
+        mProviders.put(NavigationModeController.class, mNavBarModeController::get);
+
         mProviders.put(EnhancedEstimates.class, mEnhancedEstimates::get);
 
         mProviders.put(VibratorHelper.class, mVibratorHelper::get);
@@ -452,7 +467,12 @@ public class Dependency extends SystemUI {
                 mForegroundServiceNotificationListener::get);
         mProviders.put(ClockManager.class, mClockManager::get);
         mProviders.put(PrivacyItemController.class, mPrivacyItemController::get);
-
+        mProviders.put(ActivityManagerWrapper.class, mActivityManagerWrapper::get);
+        mProviders.put(DevicePolicyManagerWrapper.class, mDevicePolicyManagerWrapper::get);
+        mProviders.put(PackageManagerWrapper.class, mPackageManagerWrapper::get);
+        mProviders.put(SensorPrivacyController.class, mSensorPrivacyController::get);
+        mProviders.put(DumpController.class, mDumpController::get);
+        mProviders.put(DockManager.class, mDockManager::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add
@@ -466,8 +486,23 @@ public class Dependency extends SystemUI {
     @Override
     public synchronized void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         super.dump(fd, pw, args);
-        pw.println("Dumping existing controllers:");
-        mDependencies.values().stream().filter(obj -> obj instanceof Dumpable)
+
+        // Make sure that the DumpController gets added to mDependencies, as they are only added
+        // with Dependency#get.
+        getDependency(DumpController.class);
+
+        // If an arg is specified, try to dump the dependency
+        String controller = args != null && args.length > 1
+                ? args[1].toLowerCase()
+                : null;
+        if (controller != null) {
+            pw.println("Dumping controller=" + controller + ":");
+        } else {
+            pw.println("Dumping existing controllers:");
+        }
+        mDependencies.values().stream()
+                .filter(obj -> obj instanceof Dumpable && (controller == null
+                        || obj.getClass().getName().toLowerCase().endsWith(controller)))
                 .forEach(o -> ((Dumpable) o).dump(fd, pw, args));
     }
 
@@ -501,7 +536,7 @@ public class Dependency extends SystemUI {
         Preconditions.checkArgument(cls instanceof DependencyKey<?> || cls instanceof Class<?>);
 
         @SuppressWarnings("unchecked")
-        DependencyProvider<T> provider = mProviders.get(cls);
+        LazyDependencyCreator<T> provider = mProviders.get(cls);
         if (provider == null) {
             throw new IllegalArgumentException("Unsupported dependency " + cls
                     + ". " + mProviders.size() + " providers known.");
@@ -511,7 +546,11 @@ public class Dependency extends SystemUI {
 
     private static Dependency sDependency;
 
-    public interface DependencyProvider<T> {
+    /**
+     * Interface for a class that can create a dependency. Used to implement laziness
+     * @param <T> The type of the dependency being created
+     */
+    private interface LazyDependencyCreator<T> {
         T createDependency();
     }
 

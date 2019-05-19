@@ -20,14 +20,11 @@ import static com.android.systemui.statusbar.phone.StatusBarIconController.TAG_P
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.telephony.SubscriptionManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 public class StatusBarIconList {
@@ -187,18 +184,6 @@ public class StatusBarIconList {
 
             // These holders get added to the end. Confused yet?
             mSubSlots.add(holder);
-
-            if (holder.getType() == StatusBarIconHolder.TYPE_MOBILE) {
-                Collections.sort(mSubSlots, new Comparator<StatusBarIconHolder>() {
-                    @Override
-                    public int compare(StatusBarIconHolder lhs, StatusBarIconHolder rhs) {
-                        int indexLhs = SubscriptionManager.getSlotIndex(lhs.getTag());
-                        int indexRhs = SubscriptionManager.getSlotIndex(rhs.getTag());
-                        return  indexRhs - indexLhs;
-                    }
-                });
-            }
-
         }
 
         private int getIndexForTag(int tag) {
@@ -260,6 +245,25 @@ public class StatusBarIconList {
 
             if (mHolder != null) {
                 holders.add(mHolder);
+            }
+
+            return holders;
+        }
+
+        /**
+         * Build a list of the {@link StatusBarIconHolder}s in the same order.
+         * This provides a safe list that can be iterated and inserted into its group.
+         *
+         * @return all holders contained here
+         */
+        public List<StatusBarIconHolder> getHolderList() {
+            ArrayList<StatusBarIconHolder> holders = new ArrayList<>();
+            if (mHolder != null) {
+                holders.add(mHolder);
+            }
+
+            if (mSubSlots != null) {
+                holders.addAll(mSubSlots);
             }
 
             return holders;

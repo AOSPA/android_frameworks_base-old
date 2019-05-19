@@ -28,40 +28,20 @@
     />
 
     <FrameLayout
-        android:id="@+id/header_permission_wrapper"
+        android:id="@+id/permission_or_settings"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:animateLayoutChanges="true">
 
-        <LinearLayout
-            android:id="@+id/header_layout"
-            android:layout_height="@dimen/bubble_expanded_header_height"
-            android:layout_width="match_parent"
-            android:animateLayoutChanges="true"
-            android:gravity="end|center_vertical"
-            android:orientation="horizontal">
-
-            <ImageButton
-                android:id="@+id/deep_link_button"
-                android:layout_width="@dimen/bubble_header_icon_size"
-                android:layout_height="@dimen/bubble_header_icon_size"
-                android:src="@drawable/ic_open_in_new"
-                android:scaleType="center"
-                android:tint="?android:attr/colorForeground"
-                android:background="?android:attr/selectableItemBackground"
-            />
-
-            <ImageButton
-                android:id="@id/settings_button"
-                android:layout_width="@dimen/bubble_header_icon_size"
-                android:layout_height="@dimen/bubble_header_icon_size"
-                android:src="@drawable/ic_settings"
-                android:scaleType="center"
-                android:tint="?android:attr/colorForeground"
-                android:background="?android:attr/selectableItemBackground"
-            />
-
-        </LinearLayout>
+        <com.android.systemui.statusbar.AlphaOptimizedButton
+            style="@android:style/Widget.Material.Button.Borderless"
+            android:id="@+id/settings_button"
+            android:layout_gravity="end"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="@string/manage_bubbles_text"
+            android:textColor="?attr/wallpaperTextColor"/>
 
         <include layout="@layout/bubble_permission_view"
                  android:id="@+id/permission_layout"

@@ -25,6 +25,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.intThat;
 
 import android.platform.test.annotations.Presubmit;
 import android.view.SurfaceControl;
@@ -60,7 +61,7 @@ public class AppWindowTokenAnimationTests extends WindowTestsBase {
         MockitoAnnotations.initMocks(this);
 
         mToken = createTestAppWindowToken(mDisplayContent, WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, false /* skipOnParentChanged */);
+                ACTIVITY_TYPE_STANDARD);
     }
 
     @Test
@@ -72,6 +73,16 @@ public class AppWindowTokenAnimationTests extends WindowTestsBase {
                 eq(mToken.mSurfaceAnimator.mLeash));
         verify(mTransaction).reparent(eq(mToken.mSurfaceAnimator.mLeash),
                 eq(mToken.mAnimationBoundsLayer));
+    }
+
+    @Test
+    public void clipAfterAnim_boundsLayerZBoosted() {
+        mToken.mNeedsAnimationBoundsLayer = true;
+        mToken.mNeedsZBoost = true;
+
+        mToken.mSurfaceAnimator.startAnimation(mTransaction, mSpec, true /* hidden */);
+        verify(mTransaction).setLayer(eq(mToken.mAnimationBoundsLayer),
+                intThat(layer -> layer >= AppWindowToken.Z_BOOST_BASE));
     }
 
     @Test

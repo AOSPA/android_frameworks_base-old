@@ -17,6 +17,7 @@
 package android.view;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.UnsupportedAppUsage;
 import android.content.res.CompatibilityInfo.Translator;
 import android.graphics.Canvas;
@@ -84,7 +85,7 @@ public class Surface implements Parcelable {
     private static native int nativeSetSharedBufferModeEnabled(long nativeObject, boolean enabled);
     private static native int nativeSetAutoRefreshEnabled(long nativeObject, boolean enabled);
 
-    public static final Parcelable.Creator<Surface> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<Surface> CREATOR =
             new Parcelable.Creator<Surface>() {
         @Override
         public Surface createFromParcel(Parcel source) {
@@ -193,7 +194,7 @@ public class Surface implements Parcelable {
      *
      * @param from The SurfaceControl to assosciate this Surface with
      */
-    public Surface(SurfaceControl from) {
+    public Surface(@NonNull SurfaceControl from) {
         copyFrom(from);
     }
 

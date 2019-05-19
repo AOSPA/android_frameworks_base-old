@@ -22,6 +22,7 @@ import static android.Manifest.permission.PACKAGE_USAGE_STATS;
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.app.IActivityManager;
 import android.content.Context;
 import android.os.IStatsManager;
@@ -135,7 +136,13 @@ public final class StatsLog extends StatsLogInternal {
      * @param trainName        name of install train.
      * @param trainVersionCode version code of the train.
      * @param options          optional flags about this install.
-     * @param state            current install state.
+     *                         The last 3 bits indicate options:
+     *                             0x01: FLAG_REQUIRE_STAGING
+     *                             0x02: FLAG_ROLLBACK_ENABLED
+     *                             0x04: FLAG_REQUIRE_LOW_LATENCY_MONITOR
+     * @param state            current install state. Defined as State enums in
+     *                         BinaryPushStateChanged atom in
+     *                         frameworks/base/cmds/statsd/src/atoms.proto
      * @param experimentIds    experiment ids.
      * @return True if the log request was sent to statsd.
      */
@@ -190,8 +197,24 @@ public final class StatsLog extends StatsLogInternal {
             case PERMISSION_GRANT_REQUEST_RESULT_REPORTED:
                 write(id, (long) params[0], (int) params[1], (String) params[2], (String) params[3],
                         (boolean) params[4], (int) params[5]);
+                break;
+            case DATA_STALL_EVENT:
+                // Refer to the defintion in frameworks/base/cmds/statsd/src/atoms.proto.
+                write(id, (int) params[0], (int) params[1], (int) params[2], (byte[]) params[3],
+                        (byte[]) params[4], (byte[]) params[5]);
+                break;
         }
     }
+
+    /**
+     * Write an event to stats log using the raw format.
+     *
+     * @param buffer    The encoded buffer of data to write..
+     * @param size      The number of bytes from the buffer to write.
+     * @hide
+     */
+    @SystemApi
+    public static native void writeRaw(@NonNull byte[] buffer, int size);
 
     private static void enforceDumpCallingPermission(Context context) {
         context.enforceCallingPermission(android.Manifest.permission.DUMP, "Need DUMP permission.");

@@ -17,6 +17,7 @@
 #include "CanvasContext.h"
 #include <GpuMemoryTracker.h>
 
+#include "../Properties.h"
 #include "AnimationContext.h"
 #include "EglManager.h"
 #include "Frame.h"
@@ -27,9 +28,10 @@
 #include "pipeline/skia/SkiaOpenGLPipeline.h"
 #include "pipeline/skia/SkiaPipeline.h"
 #include "pipeline/skia/SkiaVulkanPipeline.h"
+#include "thread/CommonPool.h"
 #include "utils/GLUtils.h"
 #include "utils/TimeUtils.h"
-#include "../Properties.h"
+#include "utils/TraceUtils.h"
 
 #include <cutils/properties.h>
 #include <private/hwui/DrawGlInfo.h>
@@ -39,6 +41,7 @@
 #include <sys/stat.h>
 #include <algorithm>
 
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 
@@ -102,13 +105,14 @@ CanvasContext::CanvasContext(RenderThread& thread, bool translucent, RenderNode*
         , mGenerationID(0)
         , mOpaque(!translucent)
         , mAnimationContext(contextFactory->createAnimationContext(mRenderThread.timeLord()))
-        , mJankTracker(&thread.globalProfileData(), thread.mainDisplayInfo())
-        , mProfiler(mJankTracker.frames())
+        , mJankTracker(&thread.globalProfileData(), DeviceInfo::get()->displayInfo())
+        , mProfiler(mJankTracker.frames(), thread.timeLord().frameIntervalNanos())
         , mContentDrawBounds(0, 0, 0, 0)
         , mRenderPipeline(std::move(renderPipeline)) {
     rootRenderNode->makeRoot();
     mRenderNodes.emplace_back(rootRenderNode);
-    mProfiler.setDensity(mRenderThread.mainDisplayInfo().density);
+    mProfiler.setDensity(DeviceInfo::get()->displayInfo().density);
+    setRenderAheadDepth(Properties::defaultRenderAhead);
 }
 
 CanvasContext::~CanvasContext() {
@@ -149,8 +153,17 @@ void CanvasContext::setSurface(sp<Surface>&& surface) {
         mNativeSurface = nullptr;
     }
 
+    if (mRenderAheadDepth == 0 && DeviceInfo::get()->getMaxRefreshRate() > 66.6f) {
+        mFixedRenderAhead = false;
+        mRenderAheadCapacity = 1;
+    } else {
+        mFixedRenderAhead = true;
+        mRenderAheadCapacity = mRenderAheadDepth;
+    }
+
     ColorMode colorMode = mWideColorGamut ? ColorMode::WideColorGamut : ColorMode::SRGB;
-    bool hasSurface = mRenderPipeline->setSurface(mNativeSurface.get(), mSwapBehavior, colorMode);
+    bool hasSurface = mRenderPipeline->setSurface(mNativeSurface.get(), mSwapBehavior, colorMode,
+                                                  mRenderAheadCapacity);
 
     mFrameNumber = -1;
 
@@ -294,7 +307,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     mAnimationContext->startFrame(info.mode);
     mRenderPipeline->onPrepareTree();
-    for (const sp<RenderNode> &node : mRenderNodes) {
+    for (const sp<RenderNode>& node : mRenderNodes) {
         // Only the primary target node will be drawn full - all other nodes would get drawn in
         // real time mode. In case of a window, the primary node is the window content and the other
         // node(s) are non client / filler nodes.
@@ -318,7 +331,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     if (CC_LIKELY(mSwapHistory.size() && !Properties::forceDrawFrame)) {
         nsecs_t latestVsync = mRenderThread.timeLord().latestVsync();
-        SwapHistory &lastSwap = mSwapHistory.back();
+        SwapHistory& lastSwap = mSwapHistory.back();
         nsecs_t vsyncDelta = std::abs(lastSwap.vsyncTime - latestVsync);
         // The slight fudge-factor is to deal with cases where
         // the vsync was estimated due to being slow handling the signal.
@@ -397,25 +410,42 @@ void CanvasContext::notifyFramePending() {
     mRenderThread.pushBackFrameCallback(this);
 }
 
+void CanvasContext::setPresentTime() {
+    int64_t presentTime = NATIVE_WINDOW_TIMESTAMP_AUTO;
+    int renderAhead = 0;
+    const auto frameIntervalNanos = mRenderThread.timeLord().frameIntervalNanos();
+    if (mFixedRenderAhead) {
+        renderAhead = std::min(mRenderAheadDepth, mRenderAheadCapacity);
+    } else if (frameIntervalNanos < 15_ms) {
+        renderAhead = std::min(1, static_cast<int>(mRenderAheadCapacity));
+    }
+
+    if (renderAhead) {
+        presentTime = mCurrentFrameInfo->get(FrameInfoIndex::Vsync) +
+                (frameIntervalNanos * (renderAhead + 1));
+    }
+    native_window_set_buffers_timestamp(mNativeSurface.get(), presentTime);
+}
+
 void CanvasContext::draw() {
     SkRect dirty;
     mDamageAccumulator.finish(&dirty);
 
-    // TODO: Re-enable after figuring out cause of b/22592975
-    //    if (dirty.isEmpty() && Properties::skipEmptyFrames) {
-    //        mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
-    //        return;
-    //    }
+    if (dirty.isEmpty() && Properties::skipEmptyFrames && !surfaceRequiresRedraw()) {
+        mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
+        return;
+    }
 
     mCurrentFrameInfo->markIssueDrawCommandsStart();
 
     Frame frame = mRenderPipeline->getFrame();
+    setPresentTime();
 
     SkRect windowDirty = computeDirtyRect(frame, &dirty);
 
     bool drew = mRenderPipeline->draw(frame, windowDirty, dirty, mLightGeometry, &mLayerUpdateQueue,
-                                      mContentDrawBounds, mOpaque, mLightInfo,
-                                      mRenderNodes, &(profiler()));
+                                      mContentDrawBounds, mOpaque, mLightInfo, mRenderNodes,
+                                      &(profiler()));
 
     int64_t frameCompleteNr = mFrameCompleteCallbacks.size() ? getFrameNumber() : -1;
 
@@ -498,6 +528,17 @@ void CanvasContext::draw() {
 void CanvasContext::doFrame() {
     if (!mRenderPipeline->isSurfaceReady()) return;
     prepareAndDraw(nullptr);
+}
+
+SkISize CanvasContext::getNextFrameSize() const {
+    ReliableSurface* surface = mNativeSurface.get();
+    if (surface) {
+        SkISize size;
+        surface->query(NATIVE_WINDOW_WIDTH, &size.fWidth);
+        surface->query(NATIVE_WINDOW_HEIGHT, &size.fHeight);
+        return size;
+    }
+    return {INT32_MAX, INT32_MAX};
 }
 
 void CanvasContext::prepareAndDraw(RenderNode* node) {
@@ -603,31 +644,14 @@ void CanvasContext::waitOnFences() {
     if (mFrameFences.size()) {
         ATRACE_CALL();
         for (auto& fence : mFrameFences) {
-            fence->getResult();
+            fence.get();
         }
         mFrameFences.clear();
     }
 }
 
-class CanvasContext::FuncTaskProcessor : public TaskProcessor<bool> {
-public:
-    explicit FuncTaskProcessor(TaskManager* taskManager) : TaskProcessor<bool>(taskManager) {}
-
-    virtual void onProcess(const sp<Task<bool> >& task) override {
-        FuncTask* t = static_cast<FuncTask*>(task.get());
-        t->func();
-        task->setResult(true);
-    }
-};
-
 void CanvasContext::enqueueFrameWork(std::function<void()>&& func) {
-    if (!mFrameWorkProcessor.get()) {
-        mFrameWorkProcessor = new FuncTaskProcessor(mRenderPipeline->getTaskManager());
-    }
-    sp<FuncTask> task(new FuncTask());
-    task->func = func;
-    mFrameFences.push_back(task);
-    mFrameWorkProcessor->add(task);
+    mFrameFences.push_back(CommonPool::async(std::move(func)));
 }
 
 int64_t CanvasContext::getFrameNumber() {
@@ -636,6 +660,27 @@ int64_t CanvasContext::getFrameNumber() {
         mFrameNumber = static_cast<int64_t>(mNativeSurface->getNextFrameNumber());
     }
     return mFrameNumber;
+}
+
+bool CanvasContext::surfaceRequiresRedraw() {
+    if (!mNativeSurface) return false;
+    if (mHaveNewSurface) return true;
+
+    int width = -1;
+    int height = -1;
+    ReliableSurface* surface = mNativeSurface.get();
+    surface->query(NATIVE_WINDOW_WIDTH, &width);
+    surface->query(NATIVE_WINDOW_HEIGHT, &height);
+
+    return width == mLastFrameWidth && height == mLastFrameHeight;
+}
+
+void CanvasContext::setRenderAheadDepth(int renderAhead) {
+    if (renderAhead > 2 || renderAhead < 0 || mNativeSurface) {
+        return;
+    }
+    mFixedRenderAhead = true;
+    mRenderAheadDepth = static_cast<uint32_t>(renderAhead);
 }
 
 SkRect CanvasContext::computeDirtyRect(const Frame& frame, SkRect* dirty) {

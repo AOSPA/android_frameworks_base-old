@@ -18,6 +18,7 @@ package android.os;
 
 import android.annotation.IntDef;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -28,6 +29,7 @@ import java.lang.annotation.RetentionPolicy;
  * @hide
  */
 @SystemApi
+@TestApi
 public final class BugreportParams {
     private final int mMode;
 
@@ -41,6 +43,7 @@ public final class BugreportParams {
 
     /**
      * Defines acceptable types of bugreports.
+     * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = { "BUGREPORT_MODE_" }, value = {

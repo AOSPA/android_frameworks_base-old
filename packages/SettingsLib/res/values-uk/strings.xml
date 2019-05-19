@@ -42,6 +42,7 @@
     <string name="available_via_passpoint" msgid="1617440946846329613">"Доступ через %1$s"</string>
     <string name="tap_to_sign_up" msgid="6449724763052579434">"Торкніться, щоб увійти"</string>
     <string name="wifi_connected_no_internet" msgid="8202906332837777829">"Під’єднано, але немає доступу до Інтернету"</string>
+    <string name="wifi_limited_connection" msgid="7717855024753201527">"Обмежене з’єднання"</string>
     <string name="wifi_status_no_internet" msgid="5784710974669608361">"Немає Інтернету"</string>
     <string name="wifi_status_sign_in_required" msgid="123517180404752756">"Потрібно ввійти в обліковий запис"</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"Точка доступу тимчасово переповнена"</string>
@@ -73,7 +74,9 @@
     <string name="bluetooth_connected_no_a2dp_battery_level" msgid="3908466636369853652">"<xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g> під’єднано (без медіа), заряд акумулятора – <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp_battery_level" msgid="1163440823807659316">"<xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g> під’єднано (без телефона й медіа), заряд акумулятора – <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
     <string name="bluetooth_active_battery_level" msgid="3149689299296462009">"Активовано, <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g> заряду акумулятора"</string>
+    <string name="bluetooth_active_battery_level_untethered" msgid="6662649951391456747">"Активний. Л: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g> заряду акумулятора, П: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g> заряду акумулятора"</string>
     <string name="bluetooth_battery_level" msgid="1447164613319663655">"<xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g> заряду акумулятора"</string>
+    <string name="bluetooth_battery_level_untethered" msgid="5974406100211667177">"Л: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g> заряду акумулятора, П: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g> заряду акумулятора"</string>
     <string name="bluetooth_active_no_battery_level" msgid="8380223546730241956">"Активовано"</string>
     <string name="bluetooth_profile_a2dp" msgid="2031475486179830674">"Звук медіа-файлів"</string>
     <string name="bluetooth_profile_headset" msgid="7815495680863246034">"Телефонні дзвінки"</string>
@@ -276,7 +279,7 @@
     <string name="debug_app_set" msgid="2063077997870280017">"Програма для налагодження: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="select_application" msgid="5156029161289091703">"Вибір додатка"</string>
     <string name="no_application" msgid="2813387563129153880">"Нічого"</string>
-    <string name="wait_for_debugger" msgid="1202370874528893091">"Зачекайте на налагоджувач"</string>
+    <string name="wait_for_debugger" msgid="1202370874528893091">"Очікування налагоджувача"</string>
     <string name="wait_for_debugger_summary" msgid="1766918303462746804">"Додаток очікує підключення налагоджувача"</string>
     <string name="debug_input_category" msgid="1811069939601180246">"Ввід"</string>
     <string name="debug_drawing_category" msgid="6755716469267367852">"Рисування"</string>
@@ -339,7 +342,7 @@
     <string name="loading_injected_setting_summary" msgid="4095178591461231376">"Завантаження…"</string>
   <string-array name="color_mode_names">
     <item msgid="2425514299220523812">"Насичений (за умовчанням)"</item>
-    <item msgid="8446070607501413455">"Природний"</item>
+    <item msgid="8446070607501413455">"Природні"</item>
     <item msgid="6553408765810699025">"Стандартний"</item>
   </string-array>
   <string-array name="color_mode_descriptions">
@@ -351,8 +354,8 @@
     <string name="inactive_app_inactive_summary" msgid="5091363706699855725">"Неактивний додаток. Торкніться, щоб активувати."</string>
     <string name="inactive_app_active_summary" msgid="4174921824958516106">"Активний додаток. Торкніться, щоб дезактивувати."</string>
     <string name="standby_bucket_summary" msgid="6567835350910684727">"Режим очікування: <xliff:g id="BUCKET"> %s</xliff:g>"</string>
-    <string name="runningservices_settings_title" msgid="8097287939865165213">"Запущені служби"</string>
-    <string name="runningservices_settings_summary" msgid="854608995821032748">"Перегляд і керування запущеними службами"</string>
+    <string name="runningservices_settings_title" msgid="8097287939865165213">"Запущені сервіси"</string>
+    <string name="runningservices_settings_summary" msgid="854608995821032748">"Переглянути й налаштувати запущені сервіси"</string>
     <string name="select_webview_provider_title" msgid="4628592979751918907">"Застосування WebView"</string>
     <string name="select_webview_provider_dialog_title" msgid="4370551378720004872">"Налаштувати застосування WebView"</string>
     <string name="select_webview_provider_toast_text" msgid="5466970498308266359">"Ця опція більше не дійсна. Повторіть спробу."</string>
@@ -377,12 +380,14 @@
     <string name="power_discharging_duration" msgid="8848256785736335185">"Залишилося приблизно <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Згідно з даними про використання залишилося приблизно <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
     <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Згідно з даними про використання залишилося приблизно <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"Залишилося <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"На основі даних про використання (<xliff:g id="LEVEL">%2$s</xliff:g>), вистачить приблизно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"На основі даних про використання, вистачить приблизно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Вистачить приблизно до <xliff:g id="TIME">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only" msgid="107616694963545745">"Вистачить приблизно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="1372817269546888804">"До <xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_suggestion_extend_battery" msgid="4401408879069551485">"Подовжити час роботи акумулятора до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration_only" msgid="5996752448813295329">"Залишилося менше ніж <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration" msgid="5751885147712659423">"Залишилося менше ніж <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_more_than_subtext" msgid="3176771815132876675">"Залишилося понад <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
@@ -458,5 +463,5 @@
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"Запитувати щоразу"</string>
     <string name="zen_mode_forever" msgid="2704305038191592967">"Доки ви не вимкнете"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"Щойно"</string>
-    <string name="media_transfer_phone_device_name" msgid="1003823744105758574">"Динамік телефона"</string>
+    <string name="media_transfer_this_device_name" msgid="1636276898262571213">"Цей пристрій"</string>
 </resources>

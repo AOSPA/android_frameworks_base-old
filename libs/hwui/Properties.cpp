@@ -17,8 +17,8 @@
 #include "Properties.h"
 #include "Debug.h"
 #include "DeviceInfo.h"
-#include "SkTraceEventCommon.h"
 #include "HWUIProperties.sysprop.h"
+#include "SkTraceEventCommon.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -58,8 +58,6 @@ bool Properties::forceDrawFrame = false;
 bool Properties::filterOutTestOverhead = false;
 bool Properties::disableVsync = false;
 bool Properties::skpCaptureEnabled = false;
-bool Properties::forceDarkMode = false;
-bool Properties::enableForceDarkSupport = true;
 bool Properties::enableRTAnimations = true;
 
 bool Properties::runningInEmulator = false;
@@ -67,6 +65,7 @@ bool Properties::debuggingEnabled = false;
 bool Properties::isolatedProcess = false;
 
 int Properties::contextPriority = 0;
+int Properties::defaultRenderAhead = -1;
 
 static int property_get_int(const char* key, int defaultValue) {
     char buf[PROPERTY_VALUE_MAX] = {
@@ -125,9 +124,8 @@ bool Properties::load() {
 
     runningInEmulator = property_get_bool(PROPERTY_QEMU_KERNEL, false);
 
-    forceDarkMode = property_get_bool(PROPERTY_FORCE_DARK, false);
-
-    enableForceDarkSupport = property_get_bool(PROPERTY_ENABLE_FORCE_DARK, true);
+    defaultRenderAhead = std::max(-1, std::min(2, property_get_int(PROPERTY_RENDERAHEAD,
+            render_ahead().value_or(0))));
 
     return (prevDebugLayersUpdates != debugLayersUpdates) || (prevDebugOverdraw != debugOverdraw);
 }
@@ -171,24 +169,22 @@ ProfileType Properties::getProfileType() {
     return sProfileType;
 }
 
-RenderPipelineType Properties::getRenderPipelineType() {
+RenderPipelineType Properties::peekRenderPipelineType() {
+    // If sRenderPipelineType has been locked, just return the locked type immediately.
     if (sRenderPipelineType != RenderPipelineType::NotInitialized) {
         return sRenderPipelineType;
     }
     bool useVulkan = use_vulkan().value_or(false);
     char prop[PROPERTY_VALUE_MAX];
-    if (useVulkan) {
-        property_get(PROPERTY_RENDERER, prop, "skiavk");
-    } else {
-        property_get(PROPERTY_RENDERER, prop, "skiagl");
-    }
+    property_get(PROPERTY_RENDERER, prop, useVulkan ? "skiavk" : "skiagl");
     if (!strcmp(prop, "skiavk")) {
-        ALOGD("Skia Vulkan Pipeline");
-        sRenderPipelineType = RenderPipelineType::SkiaVulkan;
-    } else {  //"skiagl"
-        ALOGD("Skia GL Pipeline");
-        sRenderPipelineType = RenderPipelineType::SkiaGL;
+        return RenderPipelineType::SkiaVulkan;
     }
+    return RenderPipelineType::SkiaGL;
+}
+
+RenderPipelineType Properties::getRenderPipelineType() {
+    sRenderPipelineType = peekRenderPipelineType();
     return sRenderPipelineType;
 }
 

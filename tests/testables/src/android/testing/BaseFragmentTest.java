@@ -26,12 +26,13 @@ import android.graphics.PixelFormat;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Parcelable;
-import android.support.test.InstrumentationRegistry;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.widget.FrameLayout;
+
+import androidx.test.InstrumentationRegistry;
 
 import org.junit.After;
 import org.junit.Before;
@@ -51,7 +52,7 @@ public abstract class BaseFragmentTest {
 
     private static final int VIEW_ID = 42;
     private final Class<? extends Fragment> mCls;
-    private Handler mHandler;
+    protected Handler mHandler;
     protected FrameLayout mView;
     protected FragmentController mFragments;
     protected Fragment mFragment;

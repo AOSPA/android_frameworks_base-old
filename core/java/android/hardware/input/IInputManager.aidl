@@ -16,6 +16,7 @@
 
 package android.hardware.input;
 
+import android.graphics.Rect;
 import android.hardware.input.InputDeviceIdentifier;
 import android.hardware.input.KeyboardLayout;
 import android.hardware.input.IInputDevicesChangedListener;
@@ -24,6 +25,7 @@ import android.hardware.input.TouchCalibration;
 import android.os.IBinder;
 import android.view.InputDevice;
 import android.view.InputEvent;
+import android.view.InputMonitor;
 import android.view.PointerIcon;
 
 /** @hide */
@@ -45,6 +47,7 @@ interface IInputManager {
 
     // Injects an input event into the system.  To inject into windows owned by other
     // applications, the caller must have the INJECT_EVENTS permission.
+    @UnsupportedAppUsage
     boolean injectInputEvent(in InputEvent ev, int mode);
 
     // Calibrate input device position
@@ -81,4 +84,7 @@ interface IInputManager {
     void setCustomPointerIcon(in PointerIcon icon);
 
     void requestPointerCapture(IBinder windowToken, boolean enabled);
+
+    /** Create an input monitor for gestures. */
+    InputMonitor monitorGestureInput(String name, int displayId);
 }

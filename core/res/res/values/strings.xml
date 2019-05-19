@@ -280,9 +280,9 @@
     <!-- WFC, summary for Disabled -->
     <string name="wifi_calling_off_summary">Off</string>
     <!-- WFC, summary for Wi-Fi Preferred -->
-    <string name="wfc_mode_wifi_preferred_summary">Wi-Fi preferred</string>
+    <string name="wfc_mode_wifi_preferred_summary">Call over Wi-Fi</string>
     <!-- WFC, summary for Mobile data Preferred -->
-    <string name="wfc_mode_cellular_preferred_summary">Mobile preferred</string>
+    <string name="wfc_mode_cellular_preferred_summary">Call over mobile network</string>
     <!-- WFC, summary for Wi-Fi Only -->
     <string name="wfc_mode_wifi_only_summary">Wi-Fi only</string>
 
@@ -525,8 +525,8 @@
     <!-- label for screenshot item in power menu -->
     <string name="global_action_screenshot">Screenshot</string>
 
-    <!-- Take bug report menu title [CHAR LIMIT=NONE] -->
-    <string name="bugreport_title">Take bug report</string>
+    <!-- Take bug report menu title [CHAR LIMIT=30] -->
+    <string name="bugreport_title">Bug report</string>
     <!-- Message in bugreport dialog describing what it does [CHAR LIMIT=NONE] -->
     <!-- TODO: remove if not used anymore -->
     <string name="bugreport_message">This will collect information about your
@@ -707,12 +707,12 @@
     <string name="permgrouprequest_location">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access this device\'s location?</string>
     <!-- Subtitle of the message shown to the user when the apps requests permission to use the location only while app is in foreground [CHAR LIMIT=150]-->
-    <string name="permgrouprequestdetail_location">The app will only have access to the location while you\u2019re using the app.</string>
+    <string name="permgrouprequestdetail_location">The app will only have access to the location while you\u2019re using the app</string>
     <!-- Message shown to the user when the apps requests permission to use the location while app is in foreground and background. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
-    <string name="permgroupbackgroundrequest_location">Always allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access this device\u2019s location?</string>
+    <string name="permgroupbackgroundrequest_location">Allow
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access this device\u2019s location &lt;b>all the time&lt;/b>?</string>
     <!-- Subtitle of the message shown to the user when the apps requests permission to use the location while app is in foreground and background [CHAR LIMIT=150] -->
-    <string name="permgroupbackgroundrequestdetail_location">The app will always have access to the location, even when you\u2019re not using the app.</string>
+    <string name="permgroupbackgroundrequestdetail_location">App currently can access location only while you\u2019re using the app</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_calendar">Calendar</string>
@@ -747,12 +747,12 @@
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to record audio?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=40]-->
-    <string name="permgrouplab_activityRecognition">Activity recognition</string>
+    <string name="permgrouplab_activityRecognition">Physical activity</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=40]-->
-    <string name="permgroupdesc_activityRecognition">recognize activity</string>
+    <string name="permgroupdesc_activityRecognition">access your physical activity</string>
     <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_activityRecognition">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to recognize your physical activity?</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your physical activity?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_camera">Camera</string>
@@ -785,22 +785,6 @@
     <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_sensors">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access sensor data about your vital signs?</string>
-
-    <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permgrouplab_aural">Music</string>
-    <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permgroupdesc_aural">access your music</string>
-    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
-    <string name="permgrouprequest_aural">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your music?</string>
-
-    <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permgrouplab_visual">Photos &amp; videos</string>
-    <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permgroupdesc_visual">access your photos &amp; videos</string>
-    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
-    <string name="permgrouprequest_visual">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your photos and videos, including tagged locations?</string>
 
     <!-- Title for the capability of an accessibility service to retrieve window content. -->
     <string name="capability_title_canRetrieveWindowContent">Retrieve window content</string>
@@ -1406,9 +1390,9 @@
       re-enables the keylock when the call is finished.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
-    <string name="permlab_requestScreenLockComplexity">request screen lock complexity</string>
+    <string name="permlab_requestPasswordComplexity">request screen lock complexity</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
-    <string name="permdesc_requestScreenLockComplexity">Allows the app to learn the screen
+    <string name="permdesc_requestPasswordComplexity">Allows the app to learn the screen
         lock complexity level (high, medium, low or none), which indicates the possible range of
         length and type of the screen lock. The app can also suggest to users that they update the
         screen lock to a certain level but users can freely ignore and navigate away. Note that the
@@ -1430,27 +1414,15 @@
     <string name="permdesc_useFingerprint">Allows the app to use fingerprint hardware for authentication</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_audioRead">read your music collection</string>
-    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_audioRead">Allows the app to read your music collection.</string>
-    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_audioWrite">modify your music collection</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_audioWrite">Allows the app to modify your music collection.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_videoRead">read your video collection</string>
-    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_videoRead">Allows the app to read your video collection.</string>
-    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_videoWrite">modify your video collection</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_videoWrite">Allows the app to modify your video collection.</string>
 
-    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_imagesRead">read your photo collection</string>
-    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_imagesRead">Allows the app to read your photo collection.</string>
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_imagesWrite">modify your photo collection</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -1462,7 +1434,7 @@
     <string name="permdesc_mediaLocation">Allows the app to read locations from your media collection.</string>
 
     <!-- Title shown when the system-provided biometric dialog is shown, asking the user to authenticate. [CHAR LIMIT=40] -->
-    <string name="biometric_dialog_default_title">Application <xliff:g id="app" example="Gmail">%s</xliff:g> wants to authenticate.</string>
+    <string name="biometric_dialog_default_title">Verify it\u2018s you</string>
     <!-- Message shown when biometric hardware is not available [CHAR LIMIT=50] -->
     <string name="biometric_error_hw_unavailable">Biometric hardware unavailable</string>
     <!-- Message shown when biometric authentication was canceled by the user [CHAR LIMIT=50] -->
@@ -1535,68 +1507,77 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=90] -->
     <string name="permdesc_useFaceAuthentication">Allows the app to use face authentication hardware for authentication</string>
 
+    <!-- Notification name shown when the system requires the user to re-enroll their face. [CHAR LIMIT=NONE] -->
+    <string name="face_recalibrate_notification_name">Face Authentication</string>
+    <!-- Notification title shown when the system requires the user to re-enroll their face. [CHAR LIMIT=NONE] -->
+    <string name="face_recalibrate_notification_title">Re-enroll your face</string>
+    <!-- Notification content shown when the system requires the user to re-enroll their face. [CHAR LIMIT=NONE] -->
+    <string name="face_recalibrate_notification_content">To improve recognition, please re-enroll your face</string>
+
     <!-- Message shown during face acquisition when the face cannot be recognized [CHAR LIMIT=50] -->
-    <string name="face_acquired_insufficient">Couldn\u2019t process face. Please try again.</string>
+    <string name="face_acquired_insufficient">Couldn\u2019t capture accurate face data. Try again.</string>
     <!-- Message shown during face acquisition when the image is too bright [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_bright">Face is too bright. Please try in lower light.</string>
+    <string name="face_acquired_too_bright">Too bright. Try gentler lighting.</string>
     <!-- Message shown during face acquisition when the image is too dark [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_dark">Face is too dark. Please uncover light source.</string>
+    <string name="face_acquired_too_dark">Too dark. Try brighter lighting.</string>
     <!-- Message shown during face acquisition when the user is too close to sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_close">Please move sensor farther from face.</string>
+    <string name="face_acquired_too_close">Move phone farther away.</string>
     <!-- Message shown during face acquisition when the user is too far from sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_far">Please bring sensor closer to face.</string>
+    <string name="face_acquired_too_far">Move phone closer.</string>
     <!-- Message shown during face acquisition when the user is too high relatively to sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_high">Please move sensor higher.</string>
+    <string name="face_acquired_too_high">Move phone higher.</string>
     <!-- Message shown during face acquisition when the user is too low relatively to sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_low">Please move sensor lower.</string>
-    <!-- Message shown during face acquisition when the user is too right relatively to sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_right">Please move sensor to the right.</string>
-    <!-- Message shown during face acquisition when the user is too left relatively to sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_left">Please move sensor to the left.</string>
+    <string name="face_acquired_too_low">Move phone lower.</string>
+    <!-- Message shown during face acquisition when only the right part of the user's face was detected [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_right">Move phone to the left.</string>
+    <!-- Message shown during face acquisition when only the left part of the user's face was detected [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_left">Move phone to the right.</string>
     <!-- Message shown during face acquisition when the user is not front facing the sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_poor_gaze">Please look at the sensor.</string>
+    <string name="face_acquired_poor_gaze">Look at the screen with your eyes open.</string>
     <!-- Message shown during face acquisition when the user is not detected [CHAR LIMIT=50] -->
-    <string name="face_acquired_not_detected">No face detected.</string>
+    <string name="face_acquired_not_detected">Can\u2019t see your face. Look at the phone.</string>
     <!-- Message shown during face acquisition when the device is not steady [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_much_motion">Too much motion.</string>
+    <string name="face_acquired_too_much_motion">Too much motion. Hold phone steady.</string>
     <!-- Message shown during face acquisition when the sensor needs to be recalibrated [CHAR LIMIT=50] -->
     <string name="face_acquired_recalibrate">Please re-enroll your face.</string>
     <!-- Message shown during face enrollment when a different person's face is detected [CHAR LIMIT=50] -->
-    <string name="face_acquired_too_different">Different face detected.</string>
+    <string name="face_acquired_too_different">No longer able to recognize face. Try again.</string>
     <!-- Message shown during face enrollment when the face is too similar to a previous acquisition [CHAR LIMIT=50] -->
     <string name="face_acquired_too_similar">Too similar, please change your pose.</string>
     <!-- Message shown during acqusition when the user's face is turned too far left or right [CHAR LIMIT=50] -->
-    <string name="face_acquired_pan_too_extreme">Please look more directly at the camera.</string>
+    <string name="face_acquired_pan_too_extreme">Please look more directly at the screen.</string>
     <!-- Message shown during acqusition when the user's face is tilted too high or too low [CHAR LIMIT=50] -->
-    <string name="face_acquired_tilt_too_extreme">Please look more directly at the camera.</string>
+    <string name="face_acquired_tilt_too_extreme">Please look more directly at the screen.</string>
     <!-- Message shown during acquisiton when the user's face is tilted too far left or right [CHAR LIMIT=50] -->
     <string name="face_acquired_roll_too_extreme">Please straighten your head vertically.</string>
     <!-- Message shown during acquisition when the user's face is obscured [CHAR LIMIT=50] -->
-    <string name="face_acquired_obscured">Please uncover your face.</string>
+    <string name="face_acquired_obscured">Clear the space between your head and the phone.</string>
+    <!-- Message shown during acquisition when the sensor is dirty [CHAR LIMIT=50] -->
+    <string name="face_acquired_sensor_dirty">Please clean the camera.</string>
     <!-- Array containing custom messages shown during face acquisition from vendor.  Vendor is expected to add and translate these strings -->
     <string-array name="face_acquired_vendor">
     </string-array>
 
-    <!-- Error message shown when the face hardware can't be accessed. [CHAR LIMIT=50] -->
-    <string name="face_error_hw_not_available">Face hardware not available.</string>
+    <!-- Error message shown when the face hardware can't be accessed. [CHAR LIMIT=69] -->
+    <string name="face_error_hw_not_available">Can\u2019t verify face. Hardware not available.</string>
     <!-- Error message shown when the face hardware timer has expired and the user needs to restart the operation. [CHAR LIMIT=50] -->
-    <string name="face_error_timeout">Face time out reached. Try again.</string>
-    <!-- Error message shown when the face hardware has run out of room for storing faces. [CHAR LIMIT=50] -->
-    <string name="face_error_no_space">Face can\u2019t be stored.</string>
+    <string name="face_error_timeout">Face timeout reached. Try again.</string>
+    <!-- Error message shown when the face hardware has run out of room for storing faces. [CHAR LIMIT=69] -->
+    <string name="face_error_no_space">Can\u2019t store new face data. Delete an old one first.</string>
     <!-- Generic error message shown when the face operation (e.g. enrollment or authentication) is canceled. Generally not shown to the user. [CHAR LIMIT=50] -->
-    <string name="face_error_canceled">Face operation canceled.</string>
-    <!-- Generic error message shown when the face authentication operation is canceled due to user input. Generally not shown to the user [CHAR LIMIT=50] -->
-    <string name="face_error_user_canceled">Face authentication canceled by user.</string>
+    <string name="face_error_canceled">Face operation canceled</string>
+    <!-- Generic error message shown when the face authentication operation is canceled due to user input. Generally not shown to the user [CHAR LIMIT=54] -->
+    <string name="face_error_user_canceled">Face authentication canceled by user</string>
     <!-- Generic error message shown when the face operation fails because too many attempts have been made. [CHAR LIMIT=50] -->
     <string name="face_error_lockout">Too many attempts. Try again later.</string>
-    <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=50] -->
-    <string name="face_error_lockout_permanent">Too many attempts. Facial authentication disabled.</string>
+    <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=71] -->
+    <string name="face_error_lockout_permanent">Too many attempts. Face authentication disabled.</string>
     <!-- Generic error message shown when the face hardware can't recognize the face. [CHAR LIMIT=50] -->
-    <string name="face_error_unable_to_process">Try again.</string>
-    <!-- Generic error message shown when the user has no enrolled face. [CHAR LIMIT=50] -->
-    <string name="face_error_not_enrolled">No face enrolled.</string>
-    <!-- Generic error message shown when the app requests face authentication on a device without a sensor. [CHAR LIMIT=60] -->
-    <string name="face_error_hw_not_present">This device does not have a face authentication sensor.</string>
+    <string name="face_error_unable_to_process">Can\u2019t verify face. Try again.</string>
+    <!-- Generic error message shown when the user has no enrolled face. [CHAR LIMIT=52] -->
+    <string name="face_error_not_enrolled">You haven\u2019t set up face authentication</string>
+    <!-- Generic error message shown when the app requests face authentication on a device without a sensor. [CHAR LIMIT=61] -->
+    <string name="face_error_hw_not_present">Face authentication is not supported on this device</string>
 
     <!-- Template to be used to name enrolled faces by default. [CHAR LIMIT=10] -->
     <string name="face_name_template">Face <xliff:g id="faceId" example="1">%d</xliff:g></string>
@@ -3279,17 +3260,35 @@
     <string name="dump_heap_notification"><xliff:g id="proc">%1$s</xliff:g> exceeded memory
         limit</string>
 
+    <!-- Notification text to tell the user that a heap dump that they initiated for a process is ready [CHAR LIMIT=NONE] -->
+    <string name="dump_heap_ready_notification">
+        <xliff:g id="proc" example="com.android.example">%1$s</xliff:g> heap dump ready</string>
+
     <!-- Notification details to tell the user that a process has exceeded its memory limit. -->
     <string name="dump_heap_notification_detail">Heap dump collected. Tap to share.</string>
 
     <!-- Title of dialog prompting the user to share a heap dump. -->
     <string name="dump_heap_title">Share heap dump?</string>
 
-    <!-- Text of dialog prompting the user to share a heap dump. -->
-    <string name="dump_heap_text">The process <xliff:g id="proc">%1$s</xliff:g> has exceeded
-        its process memory limit of <xliff:g id="size">%2$s</xliff:g>.  A heap dump is available
+    <!-- Text of dialog prompting the user to share a heap dump for an application [CHAR LIMIT=NONE] -->
+    <string name="dump_heap_text">The
+        <xliff:g id="proc" example="com.android.example">%1$s</xliff:g> process has exceeded
+        its memory limit of <xliff:g id="size" example="350MB">%2$s</xliff:g>. A heap dump is available
         for you to share with its developer.  Be careful: this heap dump can contain any
         of your personal information that the application has access to.</string>
+
+    <!-- Text of dialog prompting the user to share a heap dump for a system process [CHAR LIMIT=NONE] -->
+    <string name="dump_heap_system_text">The
+        <xliff:g id="proc" example="Android System">%1$s</xliff:g> process has exceeded
+        its memory limit of <xliff:g id="size" example="350MB">%2$s</xliff:g>. A heap dump is available
+        for you to share. Be careful: this heap dump can contain any sensitive personal information
+        that the process has access to, which may include things you\u2019ve typed.</string>
+
+    <!-- Text of dialog prompting the user to share a heap dump that they initiated [CHAR LIMIT=NONE] -->
+    <string name="dump_heap_ready_text">A heap dump of
+        <xliff:g id="proc" example="com.android.example">%1$s</xliff:g>\u2019s process is available
+        for you to share. Be careful: this heap dump may contain any sensitive personal information
+        that the process has access to, which may include things you\u2019ve typed.</string>
 
     <!-- Displayed in the title of the chooser for things to do with text that
          is to be sent to another application. For example, I can send
@@ -3372,9 +3371,9 @@
     <string name="wifi_available_action_all_networks">All networks</string>
 
     <!-- Notification title for a connection to a app suggested wireless network.-->
-    <string name="wifi_suggestion_title">A Wi\u2011Fi network proposed by <xliff:g id="name" example="App123">%s</xliff:g> is available</string>
+    <string name="wifi_suggestion_title">Connect to Wi\u2011Fi networks?</string>
     <!-- Notification content for a connection to a app suggested wireless network.-->
-    <string name="wifi_suggestion_content">Do you want to connect to networks proposed by <xliff:g id="name" example="App123">%s</xliff:g>?</string>
+    <string name="wifi_suggestion_content">Suggested by <xliff:g id="name" example="App123">%s</xliff:g></string>
     <!-- Notification action for allowing app specified in the notification body.-->
     <string name="wifi_suggestion_action_allow_app">Yes</string>
     <!-- Notification action for disallowing app specified in the notification body.-->
@@ -3401,13 +3400,18 @@
     <string name="network_available_sign_in_detailed"><xliff:g id="network_ssid">%1$s</xliff:g></string>
 
     <!-- A notification is shown when the user connects to a Wi-Fi network and the system detects that that network has no Internet access. This is the notification's title. -->
-    <string name="wifi_no_internet">Wi-Fi has no internet access</string>
+    <string name="wifi_no_internet"><xliff:g id="network_ssid" example="GoogleGuest">%1$s</xliff:g> has no internet access</string>
 
     <!-- A notification is shown when the user connects to a Wi-Fi network and the system detects that that network has no Internet access. This is the notification's message. -->
     <string name="wifi_no_internet_detailed">Tap for options</string>
 
     <!-- A notification is shown after the user logs in to a captive portal network, to indicate that the network should now have internet connectivity. This is the message of notification. [CHAR LIMIT=50] -->
     <string name="captive_portal_logged_in_detailed">Connected</string>
+    <!-- A notification is shown when the user connects to a network that doesn't have access to some services (e.g. Push notifications may not work). This is the notification's title. [CHAR LIMIT=50] -->
+    <string name="network_partial_connectivity"><xliff:g id="network_ssid" example="GoogleGuest">%1$s</xliff:g> has limited connectivity</string>
+
+    <!-- A notification is shown when the user connects to a network that doesn't have access to some services (e.g. Push notifications may not work). This is the notification's message. [CHAR LIMIT=50] -->
+    <string name="network_partial_connectivity_detailed">Tap to connect anyway</string>
 
     <!-- A notification is shown when the user's softap config has been changed due to underlying
          hardware restrictions. This is the notifications's title.
@@ -3594,6 +3598,11 @@
     <!-- Message of notification shown when ADB is actively connected to the phone. -->
     <string name="adb_active_notification_message">Tap to turn off USB debugging</string>
     <string name="adb_active_notification_message" product="tv">Select to disable USB debugging.</string>
+
+    <!-- Title of notification shown when Test Harness Mode is enabled. [CHAR LIMIT=NONE] -->
+    <string name="test_harness_mode_notification_title">Test Harness Mode enabled</string>
+    <!-- Message of notification shown when Test Harness Mode is enabled. [CHAR LIMIT=NONE] -->
+    <string name="test_harness_mode_notification_message">Perform a factory reset to disable Test Harness Mode.</string>
 
     <!-- Title of notification shown when contaminant is detected on the USB port. [CHAR LIMIT=NONE] -->
     <string name="usb_contaminant_detected_title">Liquid or debris in USB port</string>
@@ -4293,10 +4302,10 @@
 
     <!-- Activity starter -->
     <!-- Toast message for blocking background activity starts feature running in permissive mode -->
-    <string name="activity_starter_block_bg_activity_starts_permissive">This background activity start from <xliff:g id="packageName" example="com.example">%1$s</xliff:g> will be blocked in future Q builds. See go/q-bg-block.</string>
+    <string name="activity_starter_block_bg_activity_starts_permissive">This background activity start from <xliff:g id="packageName" example="com.example">%1$s</xliff:g> will be blocked in future Q builds. See g.co/dev/bgblock.</string>
 
     <!-- Toast message for blocking background activity starts feature running in enforcing mode -->
-    <string name="activity_starter_block_bg_activity_starts_enforcing">Background activity start from <xliff:g id="packageName" example="com.example">%1$s</xliff:g> blocked. See go/q-bg-block. </string>
+    <string name="activity_starter_block_bg_activity_starts_enforcing">Background activity start from <xliff:g id="packageName" example="com.example">%1$s</xliff:g> blocked. See g.co/dev/bgblock. </string>
 
     <!-- Keyguard strings -->
     <!-- Message shown in pattern unlock after some number of unsuccessful attempts -->
@@ -4802,11 +4811,14 @@
     <!-- Notification shown when device owner silently deletes a package [CHAR LIMIT=NONE] -->
     <string name="package_deleted_device_owner">Deleted by your admin</string>
 
+    <!-- [CHAR LIMIT=25] String for confirmation button to enable a feature gated by the battery saver warning-->
+    <string name="confirm_battery_saver">OK</string>
+
     <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description, with a "learn more" link. -->
-    <string name="battery_saver_description_with_learn_more">To extend your battery life, Battery Saver turns off some device features and restricts apps. <annotation id="url">Learn More</annotation></string>
+    <string name="battery_saver_description_with_learn_more">Battery Saver turns off or restricts background activity, some visual effects \u0026 other high-power features to extend battery life. <annotation id="url">Learn More</annotation></string>
 
     <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description, without a "learn more" link. -->
-    <string name="battery_saver_description">To extend your battery life, Battery Saver turns off some device features and restricts apps.</string>
+    <string name="battery_saver_description">Battery Saver turns off or restricts background activity, some visual effects \u0026 other high-power features to extend battery life.</string>
 
     <!-- [CHAR_LIMIT=NONE] Data saver: Feature description -->
     <string name="data_saver_description">To help reduce data usage, Data Saver prevents some apps from sending or receiving data in the background. An app you’re currently using can access data, but may do so less frequently. This may mean, for example, that images don’t display until you tap them.</string>
@@ -5041,12 +5053,6 @@
     <string name="usb_mtp_launch_notification_description">Tap to view files</string>
 
     <!-- Resolver target actions strings -->
-
-    <!-- Pin (as in to a bulletin board with a pushpin) a resolver
-         target to the front of the list. -->
-    <string name="pin_target">Pin</string>
-    <!-- Unpin a resolver target such that it sorts normally. -->
-    <string name="unpin_target">Unpin</string>
     <!-- View application info for a target. -->
     <string name="app_info">App info</string>
 
@@ -5287,6 +5293,29 @@
     <!-- Summary of notification letting users know why battery saver was turned on automatically [CHAR_LIMIT=NONE]-->
     <string name="dynamic_mode_notification_summary">Battery Saver activated to extend battery life</string>
 
+    <!-- Battery saver strings -->
+    <!-- The user visible name of the notification channel for battery saver notifications [CHAR_LIMIT=80] -->
+    <string name="battery_saver_notification_channel_name">Battery Saver</string>
+    <!-- Title of notification letting users know why battery saver didn't turn back on automatically after the device was unplugged [CHAR_LIMIT=NONE] -->
+    <string name="battery_saver_sticky_disabled_notification_title">Battery Saver won\u2019t reactivate until battery low again</string>
+    <!-- Summary of notification letting users know why battery saver didn't turn back on automatically after the device was unplugged [CHAR_LIMIT=NONE] -->
+    <string name="battery_saver_sticky_disabled_notification_summary">Battery has been charged to a sufficient level. Battery Saver won\u2019t reactivate until the battery is low again.</string>
+    <!-- Title of notification letting users know the battery level at the time the notification was posted [CHAR_LIMIT=80] -->
+    <string name="battery_saver_charged_notification_title" product="default">Phone <xliff:g id="charge level" example="90%">%1$s</xliff:g> charged</string>
+    <!-- Title of notification letting users know the battery level at the time the notification was posted [CHAR_LIMIT=80] -->
+    <string name="battery_saver_charged_notification_title" product="tablet">Tablet <xliff:g id="charge level" example="90%">%1$s</xliff:g> charged</string>
+    <!-- Title of notification letting users know the battery level at the time the notification was posted [CHAR_LIMIT=80] -->
+    <string name="battery_saver_charged_notification_title" product="device">Device <xliff:g id="charge level" example="90%">%1$s</xliff:g> charged</string>
+    <!-- Summary of notification letting users know that battery saver is now off [CHAR_LIMIT=NONE] -->
+    <string name="battery_saver_off_notification_summary">Battery Saver is off. Features no longer restricted.</string>
+    <!-- Alternative summary of notification letting users know that battery saver has been turned off.
+     If it's easy to translate the difference between "Battery Saver turned off. Features no longer restricted."
+     and "Battery Saver is off. Features no longer restricted." into the target language,
+     then translate "Battery Saver turned off. Features no longer restricted."
+     If the translation doesn't make a difference or the difference is hard to capture in the target language,
+     then translate "Battery Saver is off. Features no longer restricted." instead. [CHAR_LIMIT=NONE] -->
+    <string name="battery_saver_off_alternative_notification_summary">Battery Saver turned off. Features no longer restricted.</string>
+
     <!-- Description of media type: folder or directory that contains additional files. [CHAR LIMIT=32] -->
     <string name="mime_type_folder">Folder</string>
     <!-- Description of media type: application file, such as APK. [CHAR LIMIT=32] -->
@@ -5340,4 +5369,11 @@
         <item quantity="one"><xliff:g id="file_name">%s</xliff:g> + <xliff:g id="count">%d</xliff:g> file</item>
         <item quantity="other"><xliff:g id="file_name">%s</xliff:g> + <xliff:g id="count">%d</xliff:g> files</item>
     </plurals>
+
+    <!-- ChooserActivity - No direct share targets are available. [CHAR LIMIT=NONE] -->
+    <string name="chooser_no_direct_share_targets">Direct share not available</string>
+
+    <!-- ChooserActivity - Alphabetically sorted apps list label. [CHAR LIMIT=NONE] -->
+    <string name="chooser_all_apps_button_label">Apps list</string>
+
 </resources>

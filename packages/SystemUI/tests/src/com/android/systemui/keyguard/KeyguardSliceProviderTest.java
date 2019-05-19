@@ -24,13 +24,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.app.AlarmManager;
 import android.content.ContentResolver;
 import android.media.MediaMetadata;
 import android.net.Uri;
 import android.provider.Settings;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
@@ -41,6 +41,7 @@ import androidx.slice.SliceProvider;
 import androidx.slice.SliceSpecs;
 import androidx.slice.builders.ListBuilder;
 import androidx.slice.core.SliceQuery;
+import androidx.test.filters.SmallTest;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
@@ -102,6 +103,7 @@ public class KeyguardSliceProviderTest extends SysuiTestCase {
     @Test
     public void onBindSlice_readsMedia() {
         MediaMetadata metadata = mock(MediaMetadata.class);
+        when(metadata.getText(any())).thenReturn("metadata");
         mProvider.onDozingChanged(true);
         mProvider.onMetadataChanged(metadata);
         mProvider.onBindSlice(mProvider.getUri());

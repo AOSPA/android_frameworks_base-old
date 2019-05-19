@@ -113,15 +113,27 @@ public abstract class EuiccService extends Service {
     public static final String ACTION_PROVISION_EMBEDDED_SUBSCRIPTION =
             "android.service.euicc.action.PROVISION_EMBEDDED_SUBSCRIPTION";
 
-    /** @see android.telephony.euicc.EuiccManager#ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED */
+    /**
+     * @see android.telephony.euicc.EuiccManager#ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED. This is
+     * a protected intent that can only be sent by the system, and requires the
+     * {@link android.Manifest.permission#BIND_EUICC_SERVICE} permission.
+     */
     public static final String ACTION_TOGGLE_SUBSCRIPTION_PRIVILEGED =
             "android.service.euicc.action.TOGGLE_SUBSCRIPTION_PRIVILEGED";
 
-    /** @see android.telephony.euicc.EuiccManager#ACTION_DELETE_SUBSCRIPTION_PRIVILEGED */
+    /**
+     * @see android.telephony.euicc.EuiccManager#ACTION_DELETE_SUBSCRIPTION_PRIVILEGED. This is
+     * a protected intent that can only be sent by the system, and requires the
+     * {@link android.Manifest.permission#BIND_EUICC_SERVICE} permission.
+     */
     public static final String ACTION_DELETE_SUBSCRIPTION_PRIVILEGED =
             "android.service.euicc.action.DELETE_SUBSCRIPTION_PRIVILEGED";
 
-    /** @see android.telephony.euicc.EuiccManager#ACTION_RENAME_SUBSCRIPTION_PRIVILEGED */
+    /**
+     * @see android.telephony.euicc.EuiccManager#ACTION_RENAME_SUBSCRIPTION_PRIVILEGED. This is
+     * a protected intent that can only be sent by the system, and requires the
+     * {@link android.Manifest.permission#BIND_EUICC_SERVICE} permission.
+     */
     public static final String ACTION_RENAME_SUBSCRIPTION_PRIVILEGED =
             "android.service.euicc.action.RENAME_SUBSCRIPTION_PRIVILEGED";
 
@@ -406,12 +418,15 @@ public abstract class EuiccService extends Service {
      *     bit map, and original the card Id. The result code may be one of the predefined
      *     {@code RESULT_} constants or any implementation-specific code starting with
      *     {@link #RESULT_FIRST_USER}. The resolvable error bit map can be either 0 or values
-     *     defined in {@code RESOLVABLE_ERROR_}.
+     *     defined in {@code RESOLVABLE_ERROR_}. A subclass should override this method. Otherwise,
+     *     this method does nothing and returns null by default.
      * @see android.telephony.euicc.EuiccManager#downloadSubscription
      */
-    public abstract DownloadSubscriptionResult onDownloadSubscription(int slotId,
+    public DownloadSubscriptionResult onDownloadSubscription(int slotId,
             @NonNull DownloadableSubscription subscription, boolean switchAfterDownload,
-            boolean forceDeactivateSim, @Nullable Bundle resolvedBundle);
+            boolean forceDeactivateSim, @Nullable Bundle resolvedBundle) {
+        return null;
+    }
 
     /**
      * Download the given subscription.
@@ -427,14 +442,14 @@ public abstract class EuiccService extends Service {
      *     constants or any implementation-specific code starting with {@link #RESULT_FIRST_USER}.
      * @see android.telephony.euicc.EuiccManager#downloadSubscription
      *
-     * @deprecated From Q, please use the above
-     * {@link #onDownloadSubscription(int, DownloadableSubscription, boolean, boolean, Bundle)}.
+     * @deprecated From Q, a subclass should use and override the above
+     * {@link #onDownloadSubscription(int, DownloadableSubscription, boolean, boolean, Bundle)}. The
+     * default return value for this one is Integer.MIN_VALUE.
      */
     @Deprecated public @Result int onDownloadSubscription(int slotId,
             @NonNull DownloadableSubscription subscription, boolean switchAfterDownload,
             boolean forceDeactivateSim) {
-        throw new UnsupportedOperationException("onDownloadSubscription(int, "
-            + "DownloadableSubscription, boolean, boolean) is deprecated.");
+        return Integer.MIN_VALUE;
     }
 
     /**

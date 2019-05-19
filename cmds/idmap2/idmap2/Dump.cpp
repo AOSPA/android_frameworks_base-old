@@ -17,6 +17,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -24,14 +25,18 @@
 #include "idmap2/Idmap.h"
 #include "idmap2/PrettyPrintVisitor.h"
 #include "idmap2/RawPrintVisitor.h"
+#include "idmap2/Result.h"
 #include "idmap2/SysTrace.h"
 
 using android::idmap2::CommandLineOptions;
+using android::idmap2::Error;
 using android::idmap2::Idmap;
 using android::idmap2::PrettyPrintVisitor;
 using android::idmap2::RawPrintVisitor;
+using android::idmap2::Result;
+using android::idmap2::Unit;
 
-bool Dump(const std::vector<std::string>& args, std::ostream& out_error) {
+Result<Unit> Dump(const std::vector<std::string>& args) {
   SYSTRACE << "Dump " << args;
   std::string idmap_path;
   bool verbose;
@@ -40,23 +45,24 @@ bool Dump(const std::vector<std::string>& args, std::ostream& out_error) {
       CommandLineOptions("idmap2 dump")
           .MandatoryOption("--idmap-path", "input: path to idmap file to pretty-print", &idmap_path)
           .OptionalFlag("--verbose", "annotate every byte of the idmap", &verbose);
-  if (!opts.Parse(args, out_error)) {
-    return false;
+  const auto opts_ok = opts.Parse(args);
+  if (!opts_ok) {
+    return opts_ok.GetError();
   }
   std::ifstream fin(idmap_path);
-  const std::unique_ptr<const Idmap> idmap = Idmap::FromBinaryStream(fin, out_error);
+  const auto idmap = Idmap::FromBinaryStream(fin);
   fin.close();
   if (!idmap) {
-    return false;
+    return Error(idmap.GetError(), "failed to load idmap");
   }
 
   if (verbose) {
     RawPrintVisitor visitor(std::cout);
-    idmap->accept(&visitor);
+    (*idmap)->accept(&visitor);
   } else {
     PrettyPrintVisitor visitor(std::cout);
-    idmap->accept(&visitor);
+    (*idmap)->accept(&visitor);
   }
 
-  return true;
+  return Unit{};
 }

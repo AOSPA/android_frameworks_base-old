@@ -20,8 +20,8 @@ java_library {
         ],
     },
 
-    static_libs: [
-        "mediaplayer2-protos",
+    permitted_packages: [
+        "android.media",
     ],
 
     installable: true,
@@ -39,7 +39,6 @@ filegroup {
     name: "updatable-media-srcs",
     srcs: [
         ":mediasession2-srcs",
-        ":mediaplayer2-srcs",
     ],
 }
 
@@ -47,7 +46,6 @@ filegroup {
     name: "updatable-media-srcs-without-aidls",
     srcs : [
         ":mediasession2-srcs-without-aidls",
-        ":mediaplayer2-srcs",
     ],
 }
 
@@ -60,7 +58,6 @@ filegroup {
         "apex/java/android/media/IMediaSession2Service.aidl",
         "apex/java/android/media/MediaConstants.java",
         "apex/java/android/media/MediaController2.java",
-        "apex/java/android/media/MediaItem2.java",
         "apex/java/android/media/MediaSession2.java",
         "apex/java/android/media/MediaSession2Service.java",
         "apex/java/android/media/Session2Command.java",
@@ -90,7 +87,6 @@ filegroup {
         "apex/java/android/media/DataSourceDesc.java",
         "apex/java/android/media/UriDataSourceDesc.java",
         "apex/java/android/media/FileDataSourceDesc.java",
-        "apex/java/android/media/CallbackDataSourceDesc.java",
         "apex/java/android/media/Media2Utils.java",
         "apex/java/android/media/MediaPlayer2Utils.java",
         "apex/java/android/media/MediaPlayer2.java",
@@ -98,6 +94,7 @@ filegroup {
         "apex/java/android/media/Media2HTTPConnection.java",
         "apex/java/android/media/RoutingDelegate.java",
         "apex/java/android/media/BufferingParams.java",
+        "apex/java/android/media/ProxyDataSourceCallback.java",
     ],
 }
 
@@ -106,8 +103,7 @@ metalava_updatable_media_args = " --error UnhiddenSystemApi " +
     "--hide MissingPermission --hide BroadcastBehavior " +
     "--hide HiddenSuperclass --hide DeprecationMismatch --hide UnavailableSymbol " +
     "--hide SdkConstant --hide HiddenTypeParameter --hide Todo --hide Typo " +
-    "--hide HiddenTypedefConstant --show-annotation android.annotation.SystemApi " +
-    " --show-annotation android.annotation.TestApi "
+    "--hide HiddenTypedefConstant --show-annotation android.annotation.SystemApi "
 
 droidstubs {
     name: "updatable-media-stubs",

@@ -52,7 +52,7 @@ import java.util.Objects;
 public final class Session2Token implements Parcelable {
     private static final String TAG = "Session2Token";
 
-    public static final Creator<Session2Token> CREATOR = new Creator<Session2Token>() {
+    public static final @android.annotation.NonNull Creator<Session2Token> CREATOR = new Creator<Session2Token>() {
         @Override
         public Session2Token createFromParcel(Parcel p) {
             return new Session2Token(p);
@@ -216,10 +216,11 @@ public final class Session2Token implements Parcelable {
 
     /**
      * @return extras of the token
+     * @see MediaSession2.Builder#setExtras(Bundle)
      */
-    @Nullable
+    @NonNull
     public Bundle getExtras() {
-        return mExtras;
+        return mExtras == null ? Bundle.EMPTY : mExtras;
     }
 
     Session2Link getSessionLink() {

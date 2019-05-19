@@ -215,6 +215,9 @@
     <!-- Default for Settings.System.VIBRATE_WHEN_RINGING -->
     <bool name="def_vibrate_when_ringing">false</bool>
 
+    <!-- Default for Settings.Global.APPLY_RAMPING_RINGER -->
+    <bool name="def_apply_ramping_ringer">false</bool>
+
     <!-- Default for Settings.Global.NTP_SERVER_2's property name -->
     <string name="def_ntp_server_2" translatable="false">persist.vendor.ntp.svr_2</string>
 
@@ -226,4 +229,7 @@
 
     <!-- Default for Settings.Secure.NOTIFICATION_BUBBLES -->
     <bool name="def_notification_bubbles">true</bool>
+
+    <!-- Default for Settings.Secure.AWARE_ENABLED -->
+    <bool name="def_aware_enabled">false</bool>
 </resources>

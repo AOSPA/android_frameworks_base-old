@@ -66,8 +66,6 @@ import android.view.WindowManagerPolicyConstants;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 
-import com.android.internal.logging.MetricsLogger;
-import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IKeyguardDrawnCallback;
 import com.android.internal.policy.IKeyguardExitCallback;
@@ -90,6 +88,7 @@ import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.NotificationPanelView;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
+import com.android.systemui.util.InjectionInflationController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -361,7 +360,6 @@ public class KeyguardViewMediator extends SystemUI {
 
     private boolean mWakeAndUnlocking;
     private IKeyguardDrawnCallback mDrawnCallback;
-    private boolean mLockWhenSimRemoved;
     private CharSequence mCustomMessage;
 
     KeyguardUpdateMonitorCallback mUpdateCallback = new KeyguardUpdateMonitorCallback() {
@@ -464,7 +462,6 @@ public class KeyguardViewMediator extends SystemUI {
                         if (simState == ABSENT) {
                             // MVNO SIMs can become transiently NOT_READY when switching networks,
                             // so we should only lock when they are ABSENT.
-                            onSimAbsentLocked();
                             if (simWasLocked) {
                                 if (DEBUG_SIM_STATES) Log.d(TAG, "SIM moved to ABSENT when the "
                                         + "previous state was locked. Reset the state.");
@@ -497,7 +494,6 @@ public class KeyguardViewMediator extends SystemUI {
                                   + "show permanently disabled message in lockscreen.");
                             resetStateLocked();
                         }
-                        onSimAbsentLocked();
                     }
                     break;
                 case READY:
@@ -508,24 +504,11 @@ public class KeyguardViewMediator extends SystemUI {
                                     + "previous state was locked. Reset the state.");
                             resetStateLocked();
                         }
-                        mLockWhenSimRemoved = true;
                     }
                     break;
                 default:
                     if (DEBUG_SIM_STATES) Log.v(TAG, "Unspecific state: " + simState);
                     break;
-            }
-        }
-
-        private void onSimAbsentLocked() {
-            if (isSecure() && mLockWhenSimRemoved && !mShuttingDown) {
-                mLockWhenSimRemoved = false;
-                MetricsLogger.action(mContext,
-                        MetricsProto.MetricsEvent.ACTION_LOCK_BECAUSE_SIM_REMOVED, mShowing);
-                if (!mShowing) {
-                    Log.i(TAG, "SIM removed, showing keyguard");
-                    doKeyguardLocked(null);
-                }
             }
         }
 
@@ -656,8 +639,8 @@ public class KeyguardViewMediator extends SystemUI {
         public int getBouncerPromptReason() {
             int currentUser = ActivityManager.getCurrentUser();
             boolean trust = mTrustManager.isTrustUsuallyManaged(currentUser);
-            boolean fingerprint = mUpdateMonitor.isUnlockWithFingerprintPossible(currentUser);
-            boolean any = trust || fingerprint;
+            boolean biometrics = mUpdateMonitor.isUnlockingWithBiometricsPossible(currentUser);
+            boolean any = trust || biometrics;
             KeyguardUpdateMonitor.StrongAuthTracker strongAuthTracker =
                     mUpdateMonitor.getStrongAuthTracker();
             int strongAuth = strongAuthTracker.getStrongAuthForUser(currentUser);
@@ -710,7 +693,10 @@ public class KeyguardViewMediator extends SystemUI {
         mContext.registerReceiver(mDelayedLockBroadcastReceiver, delayedActionFilter,
                 SYSTEMUI_PERMISSION, null /* scheduler */);
 
-        mKeyguardDisplayManager = new KeyguardDisplayManager(mContext);
+        InjectionInflationController injectionInflationController =
+                new InjectionInflationController(SystemUIFactory.getInstance().getRootComponent());
+        mKeyguardDisplayManager = new KeyguardDisplayManager(mContext,
+                injectionInflationController);
 
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
 
@@ -1788,6 +1774,7 @@ public class KeyguardViewMediator extends SystemUI {
             mHideAnimationRun = false;
             adjustStatusBarLocked();
             userActivity();
+            mUpdateMonitor.setKeyguardGoingAway(false /* away */);
             mShowKeyguardWakeLock.release();
         }
         mKeyguardDisplayManager.show();
@@ -1908,7 +1895,6 @@ public class KeyguardViewMediator extends SystemUI {
             mHideAnimationRun = false;
             adjustStatusBarLocked();
             sendUserPresentBroadcast();
-            mUpdateMonitor.setKeyguardGoingAway(false /* goingAway */);
         }
         Trace.endSection();
     }
@@ -2032,7 +2018,6 @@ public class KeyguardViewMediator extends SystemUI {
     private void handleNotifyScreenTurnedOff() {
         synchronized (this) {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurnedOff");
-            mStatusBarKeyguardViewManager.onScreenTurnedOff();
             mDrawnCallback = null;
         }
     }
@@ -2072,9 +2057,9 @@ public class KeyguardViewMediator extends SystemUI {
 
     public StatusBarKeyguardViewManager registerStatusBar(StatusBar statusBar,
             ViewGroup container, NotificationPanelView panelView,
-            BiometricUnlockController biometricUnlockController) {
+            BiometricUnlockController biometricUnlockController, ViewGroup lockIconContainer) {
         mStatusBarKeyguardViewManager.registerStatusBar(statusBar, container, panelView,
-                biometricUnlockController, mDismissCallbackRegistry);
+                biometricUnlockController, mDismissCallbackRegistry, lockIconContainer);
         return mStatusBarKeyguardViewManager;
     }
 

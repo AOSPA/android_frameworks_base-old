@@ -19,8 +19,8 @@ package com.android.server.am;
 import static com.android.server.am.MemoryStatUtil.BYTES_IN_KILOBYTE;
 import static com.android.server.am.MemoryStatUtil.JIFFY_NANOS;
 import static com.android.server.am.MemoryStatUtil.MemoryStat;
-import static com.android.server.am.MemoryStatUtil.PAGE_SIZE;
 import static com.android.server.am.MemoryStatUtil.parseCmdlineFromProcfs;
+import static com.android.server.am.MemoryStatUtil.parseIonHeapSizeFromDebugfs;
 import static com.android.server.am.MemoryStatUtil.parseMemoryStatFromMemcg;
 import static com.android.server.am.MemoryStatUtil.parseMemoryStatFromProcfs;
 import static com.android.server.am.MemoryStatUtil.parseVmHWMFromProcfs;
@@ -101,7 +101,7 @@ public class MemoryStatUtilTest {
             "0",
             "2222", // this in start time (in ticks per second)
             "1257177088",
-            "3", // this is RSS (number of pages)
+            "3",
             "4294967295",
             "2936971264",
             "2936991289",
@@ -146,8 +146,8 @@ public class MemoryStatUtilTest {
             + "VmSize:\t 4542636 kB\n"
             + "VmLck:\t       0 kB\n"
             + "VmPin:\t       0 kB\n"
-            + "VmHWM:\t  137668 kB\n" // RSS high watermark
-            + "VmRSS:\t  126776 kB\n"
+            + "VmHWM:\t  137668 kB\n" // RSS high-water mark
+            + "VmRSS:\t  126776 kB\n" // RSS
             + "RssAnon:\t   37860 kB\n"
             + "RssFile:\t   88764 kB\n"
             + "RssShmem:\t     152 kB\n"
@@ -157,7 +157,7 @@ public class MemoryStatUtilTest {
             + "VmLib:\t  102432 kB\n"
             + "VmPTE:\t    1300 kB\n"
             + "VmPMD:\t      36 kB\n"
-            + "VmSwap:\t       0 kB\n"
+            + "VmSwap:\t      22 kB\n" // Swap
             + "Threads:\t95\n"
             + "SigQ:\t0/13641\n"
             + "SigPnd:\t0000000000000000\n"
@@ -177,6 +177,33 @@ public class MemoryStatUtilTest {
             + "Mems_allowed_list:\t0\n"
             + "voluntary_ctxt_switches:\t903\n"
             + "nonvoluntary_ctxt_switches:\t104\n";
+
+    private static final String DEBUG_SYSTEM_ION_HEAP_CONTENTS = String.join(
+            "          client              pid             size\n",
+            "----------------------------------------------------\n",
+            " audio@2.0-servi              765             4096\n",
+            " audio@2.0-servi              765            61440\n",
+            " audio@2.0-servi              765             4096\n",
+            "     voip_client               96             8192\n",
+            "     voip_client               96             4096\n",
+            "   system_server             1232         16728064\n",
+            "  surfaceflinger              611         50642944\n",
+            "----------------------------------------------------\n",
+            "orphaned allocations (info is from last known client):\n",
+            "----------------------------------------------------\n",
+            "  total orphaned                0\n",
+            "          total          55193600\n",
+            "   deferred free                0\n",
+            "----------------------------------------------------\n",
+            "0 order 4 highmem pages in uncached pool = 0 total\n",
+            "0 order 4 lowmem pages in uncached pool = 0 total\n",
+            "1251 order 4 lowmem pages in cached pool = 81985536 total\n",
+            "VMID 8: 0 order 4 highmem pages in secure pool = 0 total\n",
+            "VMID  8: 0 order 4 lowmem pages in secure pool = 0 total\n",
+            "--------------------------------------------\n",
+            "uncached pool = 4096 cached pool = 83566592 secure pool = 0\n",
+            "pool total (uncached + cached + secure) = 83570688\n",
+            "--------------------------------------------\n");
 
     @Test
     public void testParseMemoryStatFromMemcg_parsesCorrectValues() {
@@ -199,28 +226,34 @@ public class MemoryStatUtilTest {
 
     @Test
     public void testParseMemoryStatFromProcfs_parsesCorrectValues() {
-        MemoryStat stat = parseMemoryStatFromProcfs(PROC_STAT_CONTENTS);
+        MemoryStat stat = parseMemoryStatFromProcfs(PROC_STAT_CONTENTS, PROC_STATUS_CONTENTS);
         assertEquals(1, stat.pgfault);
         assertEquals(2, stat.pgmajfault);
-        assertEquals(3 * PAGE_SIZE, stat.rssInBytes);
+        assertEquals(126776 * BYTES_IN_KILOBYTE, stat.rssInBytes);
         assertEquals(0, stat.cacheInBytes);
-        assertEquals(0, stat.swapInBytes);
+        assertEquals(22 * BYTES_IN_KILOBYTE, stat.swapInBytes);
         assertEquals(2222 * JIFFY_NANOS, stat.startTimeNanos);
     }
 
     @Test
     public void testParseMemoryStatFromProcfs_emptyContents() {
-        MemoryStat stat = parseMemoryStatFromProcfs("");
+        MemoryStat stat = parseMemoryStatFromProcfs("", PROC_STATUS_CONTENTS);
         assertNull(stat);
 
-        stat = parseMemoryStatFromProcfs(null);
+        stat = parseMemoryStatFromProcfs(null, PROC_STATUS_CONTENTS);
+        assertNull(stat);
+
+        stat = parseMemoryStatFromProcfs(PROC_STAT_CONTENTS, "");
+        assertNull(stat);
+
+        stat = parseMemoryStatFromProcfs(PROC_STAT_CONTENTS, null);
         assertNull(stat);
     }
 
     @Test
     public void testParseMemoryStatFromProcfs_invalidValue() {
         String contents = String.join(" ", Collections.nCopies(24, "memory"));
-        assertNull(parseMemoryStatFromProcfs(contents));
+        assertNull(parseMemoryStatFromProcfs(contents, PROC_STATUS_CONTENTS));
     }
 
     @Test
@@ -270,5 +303,24 @@ public class MemoryStatUtilTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         output.write(bytes, 0, bytes.length);
         return output.toString();
+    }
+
+    @Test
+    public void testParseIonHeapSizeFromDebugfs_emptyContents() {
+        assertEquals(0, parseIonHeapSizeFromDebugfs(""));
+
+        assertEquals(0, parseIonHeapSizeFromDebugfs(null));
+    }
+
+    @Test
+    public void testParseIonHeapSizeFromDebugfs_invalidValue() {
+        assertEquals(0, parseIonHeapSizeFromDebugfs("<<no-value>>"));
+
+        assertEquals(0, parseIonHeapSizeFromDebugfs("\ntotal 12345678901234567890\n"));
+    }
+
+    @Test
+    public void testParseIonHeapSizeFromDebugfs_correctValue() {
+        assertEquals(55193600, parseIonHeapSizeFromDebugfs(DEBUG_SYSTEM_ION_HEAP_CONTENTS));
     }
 }

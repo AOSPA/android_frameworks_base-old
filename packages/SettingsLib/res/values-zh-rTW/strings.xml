@@ -42,6 +42,7 @@
     <string name="available_via_passpoint" msgid="1617440946846329613">"可透過 %1$s 使用"</string>
     <string name="tap_to_sign_up" msgid="6449724763052579434">"輕觸即可註冊"</string>
     <string name="wifi_connected_no_internet" msgid="8202906332837777829">"已連線，沒有網際網路"</string>
+    <string name="wifi_limited_connection" msgid="7717855024753201527">"連線能力受限"</string>
     <string name="wifi_status_no_internet" msgid="5784710974669608361">"沒有網際網路連線"</string>
     <string name="wifi_status_sign_in_required" msgid="123517180404752756">"必須登入"</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"存取點暫時滿載"</string>
@@ -73,7 +74,9 @@
     <string name="bluetooth_connected_no_a2dp_battery_level" msgid="3908466636369853652">"已連線 (無媒體音訊)，電量為 <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp_battery_level" msgid="1163440823807659316">"已連線 (無手機或媒體音訊)，電量為 <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_battery_level" msgid="3149689299296462009">"使用中，電量：<xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_active_battery_level_untethered" msgid="6662649951391456747">"已啟用，左：目前電量為 <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>，右：目前電量為 <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>"</string>
     <string name="bluetooth_battery_level" msgid="1447164613319663655">"電量：<xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_battery_level_untethered" msgid="5974406100211667177">"左：目前電量為 <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>，右：目前電量為 <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_no_battery_level" msgid="8380223546730241956">"使用中"</string>
     <string name="bluetooth_profile_a2dp" msgid="2031475486179830674">"媒體音訊"</string>
     <string name="bluetooth_profile_headset" msgid="7815495680863246034">"通話"</string>
@@ -286,7 +289,7 @@
     <string name="strict_mode" msgid="1938795874357830695">"嚴格模式已啟用"</string>
     <string name="strict_mode_summary" msgid="142834318897332338">"當應用程式在主執行緒中進行長時間作業時，讓螢幕閃爍"</string>
     <string name="pointer_location" msgid="6084434787496938001">"指標位置"</string>
-    <string name="pointer_location_summary" msgid="840819275172753713">"觸控時在螢幕上方顯示相關資料"</string>
+    <string name="pointer_location_summary" msgid="840819275172753713">"在螢幕圖層上顯示目前的觸控資料"</string>
     <string name="show_touches" msgid="2642976305235070316">"顯示觸控回應"</string>
     <string name="show_touches_summary" msgid="6101183132903926324">"顯示觸控位置的視覺回應"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"顯示表層更新"</string>
@@ -303,7 +306,7 @@
     <string name="usb_audio_disable_routing" msgid="8114498436003102671">"停用 USB 音訊路由"</string>
     <string name="usb_audio_disable_routing_summary" msgid="980282760277312264">"停用 USB 音訊周邊設備的自動路由功能"</string>
     <string name="debug_layout" msgid="5981361776594526155">"顯示版面配置界限"</string>
-    <string name="debug_layout_summary" msgid="2001775315258637682">"顯示剪輯範圍、邊界等。"</string>
+    <string name="debug_layout_summary" msgid="2001775315258637682">"顯示剪輯範圍、邊界等"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"強制使用從右至左版面配置方向"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"強制將所有語言代碼的畫面配置方向改為從右至左"</string>
     <string name="force_msaa" msgid="7920323238677284387">"強制 4x MSAA"</string>
@@ -377,12 +380,14 @@
     <string name="power_discharging_duration" msgid="8848256785736335185">"目前電量為 <xliff:g id="LEVEL">%2$s</xliff:g>，還能使用約 <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
     <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"根據你的使用情形，還能使用約 <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
     <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"根據你的使用情形，目前電量為 <xliff:g id="LEVEL">%2$s</xliff:g>，還能使用約 <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
-    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"還能使用 <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"根據你的使用情形，目前電量為 <xliff:g id="LEVEL">%2$s</xliff:g>，預估可持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"根據你的使用情形，預估可持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"目前電量 <xliff:g id="LEVEL">%2$s</xliff:g>，預估還能持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only" msgid="107616694963545745">"預估還能持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="1372817269546888804">"還能持續使用到<xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_suggestion_extend_battery" msgid="4401408879069551485">"在 <xliff:g id="TIME">%1$s</xliff:g>後延長電池續航力"</string>
     <string name="power_remaining_less_than_duration_only" msgid="5996752448813295329">"電池可用時間不到 <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration" msgid="5751885147712659423">"電池可用時間不到 <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_more_than_subtext" msgid="3176771815132876675">"電池可用時間超過 <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
@@ -456,5 +461,5 @@
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"每次都詢問"</string>
     <string name="zen_mode_forever" msgid="2704305038191592967">"直到你關閉為止"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"剛剛"</string>
-    <string name="media_transfer_phone_device_name" msgid="1003823744105758574">"手機喇叭"</string>
+    <string name="media_transfer_this_device_name" msgid="1636276898262571213">"這個裝置"</string>
 </resources>

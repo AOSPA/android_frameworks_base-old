@@ -27,7 +27,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_STATUS_BAR_BACKGROUND;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
@@ -50,6 +50,7 @@ import android.view.WindowManager;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Before;
@@ -141,20 +142,20 @@ public class DisplayPolicyLayoutTests extends DisplayPolicyTestsBase {
     }
 
     @Test
-    public void layoutWindowLw_appWontDrawBars_forceStatus() throws Exception {
+    public void layoutWindowLw_appWontDrawBars_forceStatusAndNav() throws Exception {
         synchronized (mWm.mGlobalLock) {
             mWindow.mAttrs.flags &= ~FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
-            mWindow.mAttrs.privateFlags |= PRIVATE_FLAG_FORCE_DRAW_STATUS_BAR_BACKGROUND;
+            mWindow.mAttrs.privateFlags |= PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
             addWindow(mWindow);
 
             mDisplayPolicy.beginLayoutLw(mFrames, 0 /* UI mode */);
             mDisplayPolicy.layoutWindowLw(mWindow, null, mFrames);
 
-            assertInsetByTopBottom(mWindow.getParentFrame(), 0, NAV_BAR_HEIGHT);
+            assertInsetByTopBottom(mWindow.getParentFrame(), 0, 0);
             assertInsetByTopBottom(mWindow.getStableFrameLw(), STATUS_BAR_HEIGHT, NAV_BAR_HEIGHT);
             assertInsetByTopBottom(mWindow.getContentFrameLw(), STATUS_BAR_HEIGHT, NAV_BAR_HEIGHT);
-            assertInsetByTopBottom(mWindow.getDecorFrame(), 0, NAV_BAR_HEIGHT);
-            assertInsetByTopBottom(mWindow.getDisplayFrameLw(), 0, NAV_BAR_HEIGHT);
+            assertInsetByTopBottom(mWindow.getDecorFrame(), 0, 0);
+            assertInsetByTopBottom(mWindow.getDisplayFrameLw(), 0, 0);
         }
     }
 
@@ -473,6 +474,28 @@ public class DisplayPolicyLayoutTests extends DisplayPolicyTestsBase {
             assertThat(outStableInsets, is(new Rect()));
             assertThat(outOutsets, is(new Rect()));
             assertThat(outDisplayCutout, is(new DisplayCutout.ParcelableWrapper()));
+        }
+    }
+
+    @Test
+    public void forceShowSystemBars_clearsSystemUIFlags() {
+        synchronized (mWm.mGlobalLock) {
+            mDisplayPolicy.mLastSystemUiFlags |= SYSTEM_UI_FLAG_FULLSCREEN;
+            mWindow.mAttrs.subtreeSystemUiVisibility |= SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+            mWindow.mAttrs.flags |= FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
+            mWindow.mSystemUiVisibility = SYSTEM_UI_FLAG_FULLSCREEN;
+            mDisplayPolicy.setForceShowSystemBars(true);
+            addWindow(mWindow);
+
+            mDisplayPolicy.beginLayoutLw(mFrames, 0 /* UI mode */);
+            mDisplayPolicy.layoutWindowLw(mWindow, null, mFrames);
+            // triggers updateSystemUiVisibilityLw which will reset the flags as needed
+            int finishPostLayoutPolicyLw = mDisplayPolicy.focusChangedLw(mWindow, mWindow);
+
+            assertEquals(WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT, finishPostLayoutPolicyLw);
+            assertEquals(0, mDisplayPolicy.mLastSystemUiFlags);
+            assertEquals(0, mWindow.mAttrs.systemUiVisibility);
+            assertInsetByTopBottom(mWindow.getContentFrameLw(), STATUS_BAR_HEIGHT, NAV_BAR_HEIGHT);
         }
     }
 

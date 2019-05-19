@@ -72,6 +72,7 @@ const int FIELD_ID_VALUES = 9;
 const int FIELD_ID_BUCKET_NUM = 4;
 const int FIELD_ID_START_BUCKET_ELAPSED_MILLIS = 5;
 const int FIELD_ID_END_BUCKET_ELAPSED_MILLIS = 6;
+const int FIELD_ID_CONDITION_TRUE_NS = 10;
 
 const Value ZERO_LONG((int64_t)0);
 const Value ZERO_DOUBLE((int64_t)0);
@@ -107,7 +108,8 @@ ValueMetricProducer::ValueMetricProducer(
       mCurrentBucketIsInvalid(false),
       mMaxPullDelayNs(metric.max_pull_delay_sec() > 0 ? metric.max_pull_delay_sec() * NS_PER_SEC
                                                       : StatsdStats::kPullMaxDelayNs),
-      mSplitBucketForAppUpgrade(metric.split_bucket_for_app_upgrade()) {
+      mSplitBucketForAppUpgrade(metric.split_bucket_for_app_upgrade()),
+      mConditionTimer(mCondition == ConditionState::kTrue, timeBaseNs) {
     int64_t bucketSizeMills = 0;
     if (metric.has_bucket()) {
         bucketSizeMills = TimeUnitToBucketSizeInMillisGuardrailed(key.GetUid(), metric.bucket());
@@ -142,6 +144,9 @@ ValueMetricProducer::ValueMetricProducer(
     mSliceByPositionALL = HasPositionALL(metric.dimensions_in_what()) ||
                           HasPositionALL(metric.dimensions_in_condition());
 
+    int64_t numBucketsForward = calcBucketsForwardCount(startTimeNs);
+    mCurrentBucketNum += numBucketsForward;
+
     flushIfNeededLocked(startTimeNs);
 
     if (mIsPulled) {
@@ -153,10 +158,7 @@ ValueMetricProducer::ValueMetricProducer(
     // flushIfNeeded to adjust start and end to bucket boundaries.
     // Adjust start for partial bucket
     mCurrentBucketStartTimeNs = startTimeNs;
-    // Kicks off the puller immediately if condition is true and diff based.
-    if (mIsPulled && mCondition == ConditionState::kTrue && mUseDiff) {
-        pullAndMatchEventsLocked(startTimeNs, mCondition);
-    }
+    mConditionTimer.newBucketStart(mCurrentBucketStartTimeNs);
     VLOG("value metric %lld created. bucket size %lld start_time: %lld", (long long)metric.id(),
          (long long)mBucketSizeNs, (long long)mTimeBaseNs);
 }
@@ -165,6 +167,13 @@ ValueMetricProducer::~ValueMetricProducer() {
     VLOG("~ValueMetricProducer() called");
     if (mIsPulled) {
         mPullerManager->UnRegisterReceiver(mPullTagId, this);
+    }
+}
+
+void ValueMetricProducer::prepareFistBucketLocked() {
+    // Kicks off the puller immediately if condition is true and diff based.
+    if (mIsActive && mIsPulled && mCondition == ConditionState::kTrue && mUseDiff) {
+        pullAndMatchEventsLocked(mCurrentBucketStartTimeNs, mCondition);
     }
 }
 
@@ -293,6 +302,11 @@ void ValueMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
                 protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_BUCKET_NUM,
                                    (long long)(getBucketNumFromEndTimeNs(bucket.mBucketEndNs)));
             }
+            // only write the condition timer value if the metric has a condition.
+            if (mConditionTrackerIndex >= 0) {
+                protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_CONDITION_TRUE_NS,
+                                   (long long)bucket.mConditionTrueNs);
+            }
             for (int i = 0; i < (int)bucket.valueIndex.size(); i ++) {
                 int index = bucket.valueIndex[i];
                 const Value& value = bucket.values[i];
@@ -386,19 +400,19 @@ void ValueMetricProducer::onConditionChangedLocked(const bool condition,
             resetBase();
         }
         mCondition = newCondition;
-
     } else {
         VLOG("Skip event due to late arrival: %lld vs %lld", (long long)eventTimeNs,
              (long long)mCurrentBucketStartTimeNs);
         StatsdStats::getInstance().noteConditionChangeInNextBucket(mMetricId);
         invalidateCurrentBucket();
-        // Something weird happened. If we received another event if the future, the condition might
+        // Something weird happened. If we received another event in the future, the condition might
         // be wrong.
-        mCondition = ConditionState::kUnknown;
+        mCondition = initialCondition(mConditionTrackerIndex);
     }
 
     // This part should alway be called.
     flushIfNeededLocked(eventTimeNs);
+    mConditionTimer.onConditionChanged(mCondition, eventTimeNs);
 }
 
 void ValueMetricProducer::pullAndMatchEventsLocked(const int64_t timestampNs, ConditionState condition) {
@@ -625,10 +639,17 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(const size_t matcherIn
         flushIfNeededLocked(eventTimeNs);
     }
 
-    // For pulled data, we already check condition when we decide to pull or
-    // in onDataPulled. So take all of them.
-    // For pushed data, just check condition.
-    if (!(mIsPulled || condition)) {
+    // We should not accumulate the data for pushed metrics when the condition is false.
+    bool shouldSkipForPushMetric = !mIsPulled && !condition;
+    // For pulled metrics, there are two cases:
+    // - to compute diffs, we need to process all the state changes
+    // - for non-diffs metrics, we should ignore the data if the condition wasn't true. If we have a
+    // state change from
+    //     + True -> True: we should process the data, it might be a bucket boundary
+    //     + True -> False: we als need to process the data.
+    bool shouldSkipForPulledMetric = mIsPulled && !mUseDiff
+            && mCondition != ConditionState::kTrue;
+    if (shouldSkipForPushMetric || shouldSkipForPulledMetric) {
         VLOG("ValueMetric skip event because condition is false");
         return;
     }
@@ -787,7 +808,6 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
     }
 
     int64_t numBucketsForward = calcBucketsForwardCount(eventTimeNs);
-    mCurrentBucketNum += numBucketsForward;
     if (numBucketsForward > 1) {
         VLOG("Skipping forward %lld buckets", (long long)numBucketsForward);
         StatsdStats::getInstance().noteSkippedForwardBuckets(mMetricId);
@@ -800,12 +820,14 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
          (int)mCurrentSlicedBucket.size());
     int64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
     int64_t bucketEndTime = eventTimeNs < fullBucketEndTimeNs ? eventTimeNs : fullBucketEndTimeNs;
-
+    // Close the current bucket.
+    int64_t conditionTrueDuration = mConditionTimer.newBucketStart(bucketEndTime);
     bool isBucketLargeEnough = bucketEndTime - mCurrentBucketStartTimeNs >= mMinBucketSizeNs;
     if (isBucketLargeEnough && !mCurrentBucketIsInvalid) {
         // The current bucket is large enough to keep.
         for (const auto& slice : mCurrentSlicedBucket) {
             ValueBucket bucket = buildPartialBucket(bucketEndTime, slice.second);
+            bucket.mConditionTrueNs = conditionTrueDuration;
             // it will auto create new vector of ValuebucketInfo if the key is not found.
             if (bucket.valueIndex.size() > 0) {
                 auto& bucketList = mPastBuckets[slice.first];
@@ -816,10 +838,11 @@ void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs,
         mSkippedBuckets.emplace_back(mCurrentBucketStartTimeNs, bucketEndTime);
     }
 
-    if (!mCurrentBucketIsInvalid) {
-        appendToFullBucket(eventTimeNs, fullBucketEndTimeNs);
-    }
+    appendToFullBucket(eventTimeNs, fullBucketEndTimeNs);
     initCurrentSlicedBucket(nextBucketStartTimeNs);
+    // Update the condition timer again, in case we skipped buckets.
+    mConditionTimer.newBucketStart(nextBucketStartTimeNs);
+    mCurrentBucketNum += numBucketsForward;
 }
 
 ValueBucket ValueMetricProducer::buildPartialBucket(int64_t bucketEndTime,
@@ -879,7 +902,17 @@ void ValueMetricProducer::initCurrentSlicedBucket(int64_t nextBucketStartTimeNs)
 }
 
 void ValueMetricProducer::appendToFullBucket(int64_t eventTimeNs, int64_t fullBucketEndTimeNs) {
-    if (eventTimeNs > fullBucketEndTimeNs) {  // If full bucket, send to anomaly tracker.
+    bool isFullBucketReached = eventTimeNs > fullBucketEndTimeNs;
+    if (mCurrentBucketIsInvalid) {
+        if (isFullBucketReached) {
+            // If the bucket is invalid, we ignore the full bucket since it contains invalid data.
+            mCurrentFullBucket.clear();
+        }
+        // Current bucket is invalid, we do not add it to the full bucket.
+        return;
+    }
+
+    if (isFullBucketReached) {  // If full bucket, send to anomaly tracker.
         // Accumulate partial buckets with current value and then send to anomaly tracker.
         if (mCurrentFullBucket.size() > 0) {
             for (const auto& slice : mCurrentSlicedBucket) {
@@ -887,7 +920,10 @@ void ValueMetricProducer::appendToFullBucket(int64_t eventTimeNs, int64_t fullBu
                     continue;
                 }
                 // TODO: fix this when anomaly can accept double values
-                mCurrentFullBucket[slice.first] += slice.second[0].value.long_value;
+                auto& interval = slice.second[0];
+                if (interval.hasValue) {
+                    mCurrentFullBucket[slice.first] += interval.value.long_value;
+                }
             }
             for (const auto& slice : mCurrentFullBucket) {
                 for (auto& tracker : mAnomalyTrackers) {
@@ -903,8 +939,11 @@ void ValueMetricProducer::appendToFullBucket(int64_t eventTimeNs, int64_t fullBu
                 for (auto& tracker : mAnomalyTrackers) {
                     if (tracker != nullptr) {
                         // TODO: fix this when anomaly can accept double values
-                        tracker->addPastBucket(slice.first, slice.second[0].value.long_value,
-                                               mCurrentBucketNum);
+                        auto& interval = slice.second[0];
+                        if (interval.hasValue) {
+                            tracker->addPastBucket(slice.first, interval.value.long_value,
+                                                   mCurrentBucketNum);
+                        }
                     }
                 }
             }
@@ -913,7 +952,10 @@ void ValueMetricProducer::appendToFullBucket(int64_t eventTimeNs, int64_t fullBu
         // Accumulate partial bucket.
         for (const auto& slice : mCurrentSlicedBucket) {
             // TODO: fix this when anomaly can accept double values
-            mCurrentFullBucket[slice.first] += slice.second[0].value.long_value;
+            auto& interval = slice.second[0];
+            if (interval.hasValue) {
+                mCurrentFullBucket[slice.first] += interval.value.long_value;
+            }
         }
     }
 }

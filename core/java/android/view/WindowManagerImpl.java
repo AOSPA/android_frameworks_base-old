@@ -179,10 +179,28 @@ public final class WindowManagerImpl implements WindowManager {
     }
 
     @Override
+    public boolean shouldShowSystemDecors(int displayId) {
+        try {
+            return WindowManagerGlobal.getWindowManagerService().shouldShowSystemDecors(displayId);
+        } catch (RemoteException e) {
+        }
+        return false;
+    }
+
+    @Override
     public void setShouldShowIme(int displayId, boolean shouldShow) {
         try {
             WindowManagerGlobal.getWindowManagerService().setShouldShowIme(displayId, shouldShow);
         } catch (RemoteException e) {
         }
+    }
+
+    @Override
+    public boolean shouldShowIme(int displayId) {
+        try {
+            return WindowManagerGlobal.getWindowManagerService().shouldShowIme(displayId);
+        } catch (RemoteException e) {
+        }
+        return false;
     }
 }

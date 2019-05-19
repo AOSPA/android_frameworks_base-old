@@ -22,6 +22,7 @@ import android.hardware.radio.V1_4.CellInfo.Info;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.telephony.TelephonyManager.PrefNetworkMode;
 
 import com.android.internal.telephony.RILConstants;
 
@@ -152,7 +153,7 @@ public class RadioAccessFamily implements Parcelable {
     /**
      * Implement the Parcelable interface.
      */
-    public static final Creator<android.telephony.RadioAccessFamily> CREATOR =
+    public static final @android.annotation.NonNull Creator<android.telephony.RadioAccessFamily> CREATOR =
             new Creator<android.telephony.RadioAccessFamily>() {
 
         @Override
@@ -170,7 +171,8 @@ public class RadioAccessFamily implements Parcelable {
     };
 
     @UnsupportedAppUsage
-    public static int getRafFromNetworkType(int type) {
+    @TelephonyManager.NetworkTypeBitMask
+    public static int getRafFromNetworkType(@PrefNetworkMode int type) {
         switch (type) {
             case RILConstants.NETWORK_MODE_WCDMA_PREF:
                 return GSM | WCDMA;
@@ -279,6 +281,7 @@ public class RadioAccessFamily implements Parcelable {
     }
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
+    @PrefNetworkMode
     public static int getNetworkTypeFromRaf(int raf) {
         raf = getAdjustedRaf(raf);
 
@@ -393,82 +396,5 @@ public class RadioAccessFamily implements Parcelable {
             result |= rafType;
         }
         return result;
-    }
-
-    /**
-     * convert RAF from {@link android.hardware.radio.V1_0.RadioAccessFamily} to
-     * {@link TelephonyManager.NetworkTypeBitMask}, the bitmask represented by
-     * {@link TelephonyManager.NetworkType}.
-     *
-     * @param raf {@link android.hardware.radio.V1_0.RadioAccessFamily}
-     * @return {@link TelephonyManager.NetworkTypeBitMask}
-     */
-    public static int convertToNetworkTypeBitMask(int raf) {
-        int networkTypeRaf = 0;
-
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.GSM) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_GSM;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.GPRS) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_GPRS;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.EDGE) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_EDGE;
-        }
-        // convert both IS95A/IS95B to CDMA as network mode doesn't support CDMA
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.IS95A) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_CDMA;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.IS95B) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_CDMA;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.ONE_X_RTT) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_1xRTT;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.EVDO_0) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_EVDO_0;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.EVDO_A) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_EVDO_A;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.EVDO_B) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_EVDO_B;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.EHRPD) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_EHRPD;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.HSUPA) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_HSUPA;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.HSDPA) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_HSDPA;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.HSPA) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_HSPA;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.HSPAP) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_HSPAP;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.UMTS) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_UMTS;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.TD_SCDMA) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_TD_SCDMA;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.LTE) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_LTE;
-        }
-        if ((raf & android.hardware.radio.V1_0.RadioAccessFamily.LTE_CA) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_LTE_CA;
-        }
-        if ((raf & android.hardware.radio.V1_4.RadioAccessFamily.NR) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_NR;
-        }
-        // TODO: need hal definition
-        if ((raf & (1 << ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN)) != 0) {
-            networkTypeRaf |= TelephonyManager.NETWORK_TYPE_BITMASK_IWLAN;
-        }
-
-        return (networkTypeRaf == 0) ? TelephonyManager.NETWORK_TYPE_UNKNOWN : networkTypeRaf;
     }
 }

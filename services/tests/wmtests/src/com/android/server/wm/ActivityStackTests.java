@@ -31,6 +31,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.server.wm.ActivityStack.ActivityState.DESTROYING;
+import static com.android.server.wm.ActivityStack.ActivityState.FINISHING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
@@ -926,6 +927,33 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         assertThat(mTask.mActivities).isEmpty();
         assertThat(mStack.getAllTasks()).isEmpty();
+    }
+
+    @Test
+    public void testAdjustFocusedStackToHomeWhenNoActivity() {
+        final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        mStack.moveToFront("testAdjustFocusedStack");
+
+        final ActivityStack homeStask = mDefaultDisplay.getHomeStack();
+        final TaskRecord homeTask = homeStask.topTask();
+        // Simulate that home activity has not been started or is force-stopped.
+        homeStask.removeTask(homeTask, "testAdjustFocusedStack", REMOVE_TASK_MODE_DESTROYING);
+
+        // Finish the only activity.
+        mStack.finishActivityLocked(topActivity, 0 /* resultCode */, null /* resultData */,
+                "testAdjustFocusedStack", false /* oomAdj */);
+        // Although home stack is empty, it should still be the focused stack.
+        assertEquals(homeStask, mDefaultDisplay.getFocusedStack());
+    }
+
+    @Test
+    public void testWontFinishHomeStackImmediately() {
+        final ActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
+
+        // Home stack should not be destroyed immediately.
+        final ActivityRecord activity1 = finishCurrentActivity(homeStack);
+        assertEquals(FINISHING, activity1.getState());
     }
 
     @Test

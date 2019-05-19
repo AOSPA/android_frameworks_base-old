@@ -62,6 +62,8 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
     private int mLayoutOrientation;
     private int mLayoutDirection;
     private int mHorizontalClipBound;
+    private final Rect mClippingRect;
+    private int mLastMaxHeight = -1;
 
     public PagedTileLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -71,6 +73,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
         setCurrentItem(0, false);
         mLayoutOrientation = getResources().getConfiguration().orientation;
         mLayoutDirection = getLayoutDirection();
+        mClippingRect = new Rect();
     }
 
     public void saveInstanceState(Bundle outState) {
@@ -89,6 +92,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
         if (mLayoutOrientation != newConfig.orientation) {
             mLayoutOrientation = newConfig.orientation;
             setCurrentItem(0, false);
+            mPageToRestore = 0;
         }
     }
 
@@ -99,6 +103,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
             mLayoutDirection = layoutDirection;
             setAdapter(mAdapter);
             setCurrentItem(0, false);
+            mPageToRestore = 0;
         }
     }
 
@@ -108,6 +113,17 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
             item = mPages.size() - 1 - item;
         }
         super.setCurrentItem(item, smoothScroll);
+    }
+
+    /**
+     * Obtains the current page number respecting RTL
+     */
+    private int getCurrentPageNumber() {
+        int page = getCurrentItem();
+        if (mLayoutDirection == LAYOUT_DIRECTION_RTL) {
+            page = mPages.size() - 1 - page;
+        }
+        return page;
     }
 
     @Override
@@ -197,7 +213,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
         // marquee. This will ensure that accessibility doesn't announce the TYPE_VIEW_SELECTED
         // event on any of the children.
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        int currentItem = isLayoutRtl() ? mPages.size() - 1 - getCurrentItem() : getCurrentItem();
+        int currentItem = getCurrentPageNumber();
         for (int i = 0; i < mPages.size(); i++) {
             mPages.get(i).setSelected(i == currentItem ? selected : false);
         }
@@ -280,16 +296,19 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
-        Rect clipBounds = new Rect(mHorizontalClipBound, 0, (r-l) - mHorizontalClipBound, b - t);
-        setClipBounds(clipBounds);
+        mClippingRect.set(mHorizontalClipBound, 0, (r - l) - mHorizontalClipBound, b - t);
+        setClipBounds(mClippingRect);
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
 
         final int nTiles = mTiles.size();
-        if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.AT_MOST) {
+        // If we have no reason to recalculate the number of rows, skip this step. In particular,
+        // if the height passed by its parent is the same as the last time, we try not to remeasure.
+        if (mDistributeTiles || mLastMaxHeight != MeasureSpec.getSize(heightMeasureSpec)) {
 
+            mLastMaxHeight = MeasureSpec.getSize(heightMeasureSpec);
             // Only change the pages if the number of rows or columns (from updateResources) has
             // changed or the tiles have changed
             if (mPages.get(0).updateMaxRows(heightMeasureSpec, nTiles) || mDistributeTiles) {
@@ -326,7 +345,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
 
     public int getNumVisibleTiles() {
         if (mPages.size() == 0) return 0;
-        TilePage currentPage = mPages.get(getCurrentItem());
+        TilePage currentPage = mPages.get(getCurrentPageNumber());
         return currentPage.mRecords.size();
     }
 

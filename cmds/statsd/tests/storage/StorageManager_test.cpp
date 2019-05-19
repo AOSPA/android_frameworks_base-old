@@ -32,16 +32,97 @@ using testing::Contains;
 TEST(StorageManagerTest, TrainInfoReadWriteTest) {
     InstallTrainInfo trainInfo;
     trainInfo.trainVersionCode = 12345;
+    trainInfo.trainName = "This is a train name #)$(&&$";
+    trainInfo.status = 1;
     const char* expIds = "test_ids";
     trainInfo.experimentIds.assign(expIds, expIds + strlen(expIds));
 
-    StorageManager::writeTrainInfo(trainInfo.trainVersionCode, trainInfo.experimentIds);
+    bool result;
 
-    InstallTrainInfo result;
-    StorageManager::readTrainInfo(result);
-    EXPECT_EQ(trainInfo.trainVersionCode, result.trainVersionCode);
-    EXPECT_EQ(trainInfo.experimentIds.size(), result.experimentIds.size());
-    EXPECT_EQ(trainInfo.experimentIds, result.experimentIds);
+    result = StorageManager::writeTrainInfo(trainInfo.trainVersionCode, trainInfo.trainName,
+                                            trainInfo.status, trainInfo.experimentIds);
+
+    EXPECT_TRUE(result);
+
+    InstallTrainInfo trainInfoResult;
+    result = StorageManager::readTrainInfo(trainInfoResult);
+    EXPECT_TRUE(result);
+
+    EXPECT_EQ(trainInfo.trainVersionCode, trainInfoResult.trainVersionCode);
+    EXPECT_EQ(trainInfo.trainName.size(), trainInfoResult.trainName.size());
+    EXPECT_EQ(trainInfo.trainName, trainInfoResult.trainName);
+    EXPECT_EQ(trainInfo.status, trainInfoResult.status);
+    EXPECT_EQ(trainInfo.experimentIds.size(), trainInfoResult.experimentIds.size());
+    EXPECT_EQ(trainInfo.experimentIds, trainInfoResult.experimentIds);
+}
+
+TEST(StorageManagerTest, TrainInfoReadWriteEmptyTrainNameTest) {
+    InstallTrainInfo trainInfo;
+    trainInfo.trainVersionCode = 12345;
+    trainInfo.trainName = "";
+    trainInfo.status = 1;
+    const char* expIds = "test_ids";
+    trainInfo.experimentIds.assign(expIds, expIds + strlen(expIds));
+
+    bool result;
+
+    result = StorageManager::writeTrainInfo(trainInfo.trainVersionCode, trainInfo.trainName,
+                                            trainInfo.status, trainInfo.experimentIds);
+
+    EXPECT_TRUE(result);
+
+    InstallTrainInfo trainInfoResult;
+    result = StorageManager::readTrainInfo(trainInfoResult);
+    EXPECT_TRUE(result);
+
+    EXPECT_EQ(trainInfo.trainVersionCode, trainInfoResult.trainVersionCode);
+    EXPECT_EQ(trainInfo.trainName.size(), trainInfoResult.trainName.size());
+    EXPECT_EQ(trainInfo.trainName, trainInfoResult.trainName);
+    EXPECT_EQ(trainInfo.status, trainInfoResult.status);
+    EXPECT_EQ(trainInfo.experimentIds.size(), trainInfoResult.experimentIds.size());
+    EXPECT_EQ(trainInfo.experimentIds, trainInfoResult.experimentIds);
+}
+
+TEST(StorageManagerTest, TrainInfoReadWriteTrainNameSizeOneTest) {
+    InstallTrainInfo trainInfo;
+    trainInfo.trainVersionCode = 12345;
+    trainInfo.trainName = "{";
+    trainInfo.status = 1;
+    const char* expIds = "test_ids";
+    trainInfo.experimentIds.assign(expIds, expIds + strlen(expIds));
+
+    bool result;
+
+    result = StorageManager::writeTrainInfo(trainInfo.trainVersionCode, trainInfo.trainName,
+                                            trainInfo.status, trainInfo.experimentIds);
+
+    EXPECT_TRUE(result);
+
+    InstallTrainInfo trainInfoResult;
+    result = StorageManager::readTrainInfo(trainInfoResult);
+    EXPECT_TRUE(result);
+
+    EXPECT_EQ(trainInfo.trainVersionCode, trainInfoResult.trainVersionCode);
+    EXPECT_EQ(trainInfo.trainName.size(), trainInfoResult.trainName.size());
+    EXPECT_EQ(trainInfo.trainName, trainInfoResult.trainName);
+    EXPECT_EQ(trainInfo.status, trainInfoResult.status);
+    EXPECT_EQ(trainInfo.experimentIds.size(), trainInfoResult.experimentIds.size());
+    EXPECT_EQ(trainInfo.experimentIds, trainInfoResult.experimentIds);
+}
+
+TEST(StorageManagerTest, SortFileTest) {
+    vector<StorageManager::FileInfo> list;
+    // assume now sec is 500
+    list.emplace_back("200_5000_123454", false, 20, 300);
+    list.emplace_back("300_2000_123454_history", true, 30, 200);
+    list.emplace_back("400_100009_123454_history", true, 40, 100);
+    list.emplace_back("100_2000_123454", false, 50, 400);
+
+    StorageManager::sortFiles(&list);
+    EXPECT_EQ("200_5000_123454", list[0].mFileName);
+    EXPECT_EQ("100_2000_123454", list[1].mFileName);
+    EXPECT_EQ("400_100009_123454_history", list[2].mFileName);
+    EXPECT_EQ("300_2000_123454_history", list[3].mFileName);
 }
 
 }  // namespace statsd

@@ -16,7 +16,10 @@
 
 package android.net.wifi.p2p;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+
+import android.os.Parcel;
 
 import androidx.test.filters.SmallTest;
 
@@ -27,6 +30,8 @@ import org.junit.Test;
  */
 @SmallTest
 public class WifiP2pConfigTest {
+
+    private static final String DEVICE_ADDRESS = "aa:bb:cc:dd:ee:ff";
     /**
      * Check network name setter
      */
@@ -73,4 +78,83 @@ public class WifiP2pConfigTest {
             fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException e) { }
     }
+
+    /**
+     * Check passphrase setter
+     */
+    @Test
+    public void testBuilderInvalidPassphrase() throws Exception {
+        WifiP2pConfig.Builder b = new WifiP2pConfig.Builder();
+
+        // sunny case
+        try {
+            b.setPassphrase("abcd1234");
+        } catch (IllegalArgumentException e) {
+            fail("Unexpected IllegalArgumentException");
+        }
+
+        // null string.
+        try {
+            b.setPassphrase(null);
+            fail("should throw IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            // expected exception.
+        }
+
+        // less than 8 characters.
+        try {
+            b.setPassphrase("12abcde");
+            fail("should throw IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            // expected exception.
+        }
+
+        // more than 63 characters.
+        try {
+            b.setPassphrase(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890+/");
+            fail("should throw IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            // expected exception.
+        }
+    }
+
+    @Test
+    /*
+     * Verify WifiP2pConfig basic operations
+     */
+    public void testWifiP2pConfig() throws Exception {
+        WifiP2pConfig config = new WifiP2pConfig();
+        config.deviceAddress = DEVICE_ADDRESS;
+
+        WifiP2pConfig copiedConfig = new WifiP2pConfig(config);
+        // no equals operator, use toString for comparison.
+        assertEquals(config.toString(), copiedConfig.toString());
+
+        Parcel parcelW = Parcel.obtain();
+        config.writeToParcel(parcelW, 0);
+        byte[] bytes = parcelW.marshall();
+        parcelW.recycle();
+
+        Parcel parcelR = Parcel.obtain();
+        parcelR.unmarshall(bytes, 0, bytes.length);
+        parcelR.setDataPosition(0);
+        WifiP2pConfig configFromParcel = WifiP2pConfig.CREATOR.createFromParcel(parcelR);
+
+        // no equals operator, use toString for comparison.
+        assertEquals(config.toString(), configFromParcel.toString());
+
+    }
+
+    @Test
+    /*
+     * Verify WifiP2pConfig invalidate API
+     */
+    public void testInvalidate() throws Exception {
+        WifiP2pConfig config = new WifiP2pConfig();
+        config.deviceAddress = DEVICE_ADDRESS;
+        config.invalidate();
+        assertEquals("", config.deviceAddress);
+    }
+
 }

@@ -18,7 +18,6 @@ package com.android.server;
 
 import android.app.IActivityController;
 import android.content.BroadcastReceiver;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -42,6 +41,7 @@ import android.system.StructRlimit;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
+import android.util.StatsLog;
 
 import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.server.am.ActivityManagerService;
@@ -101,22 +101,25 @@ public class Watchdog extends Thread {
         "media.extractor", // system/bin/mediaextractor
         "media.metrics", // system/bin/mediametrics
         "media.codec", // vendor/bin/hw/android.hardware.media.omx@1.0-service
+        "media.swcodec", // /apex/com.android.media.swcodec/bin/mediaswcodec
         "com.android.bluetooth",  // Bluetooth service
         "/system/bin/statsd",  // Stats daemon
     };
 
     public static final List<String> HAL_INTERFACES_OF_INTEREST = Arrays.asList(
-        "android.hardware.audio@2.0::IDevicesFactory",
-        "android.hardware.audio@4.0::IDevicesFactory",
-        "android.hardware.bluetooth@1.0::IBluetoothHci",
-        "android.hardware.camera.provider@2.4::ICameraProvider",
-        "android.hardware.graphics.allocator@2.0::IAllocator",
-        "android.hardware.graphics.composer@2.1::IComposer",
-        "android.hardware.health@2.0::IHealth",
-        "android.hardware.media.omx@1.0::IOmx",
-        "android.hardware.media.omx@1.0::IOmxStore",
-        "android.hardware.sensors@1.0::ISensors",
-        "android.hardware.vr@1.0::IVr"
+            "android.hardware.audio@2.0::IDevicesFactory",
+            "android.hardware.audio@4.0::IDevicesFactory",
+            "android.hardware.bluetooth@1.0::IBluetoothHci",
+            "android.hardware.camera.provider@2.4::ICameraProvider",
+            "android.hardware.graphics.allocator@2.0::IAllocator",
+            "android.hardware.graphics.composer@2.1::IComposer",
+            "android.hardware.health@2.0::IHealth",
+            "android.hardware.media.c2@1.0::IComponentStore",
+            "android.hardware.media.omx@1.0::IOmx",
+            "android.hardware.media.omx@1.0::IOmxStore",
+            "android.hardware.sensors@1.0::ISensors",
+            "android.hardware.vr@1.0::IVr",
+            "android.hardware.biometrics.face@1.0::IBiometricsFace"
     );
 
     static Watchdog sWatchdog;
@@ -124,13 +127,12 @@ public class Watchdog extends Thread {
     /* This handler will be used to post message back onto the main thread */
     final ArrayList<HandlerChecker> mHandlerCheckers = new ArrayList<>();
     final HandlerChecker mMonitorChecker;
-    ContentResolver mResolver;
     ActivityManagerService mActivity;
 
     int mPhonePid;
     IActivityController mController;
     boolean mAllowRestart = true;
-    SimpleDateFormat mTraceDateFormat = new SimpleDateFormat("dd_MMM_HH_mm_ss.SSS");
+    SimpleDateFormat mTraceDateFormat = new SimpleDateFormat("dd_MM_HH_mm_ss.SSS");
     final OpenFdMonitor mOpenFdMonitor;
 
     /**
@@ -141,6 +143,7 @@ public class Watchdog extends Thread {
         private final String mName;
         private final long mWaitMax;
         private final ArrayList<Monitor> mMonitors = new ArrayList<Monitor>();
+        private final ArrayList<Monitor> mMonitorQueue = new ArrayList<Monitor>();
         private boolean mCompleted;
         private Monitor mCurrentMonitor;
         private long mStartTime;
@@ -153,10 +156,17 @@ public class Watchdog extends Thread {
         }
 
         void addMonitorLocked(Monitor monitor) {
-            mMonitors.add(monitor);
+            // We don't want to update mMonitors when the Handler is in the middle of checking
+            // all monitors. We will update mMonitors on the next schedule if it is safe
+            mMonitorQueue.add(monitor);
         }
 
         public void scheduleCheckLocked() {
+            if (mCompleted) {
+                // Safe to update monitors in queue, Handler is not in the middle of work
+                mMonitors.addAll(mMonitorQueue);
+                mMonitorQueue.clear();
+            }
             if (mMonitors.size() == 0 && mHandler.getLooper().getQueue().isPolling()) {
                 // If the target looper has recently been polling, then
                 // there is no reason to enqueue our checker on it since that
@@ -216,6 +226,10 @@ public class Watchdog extends Thread {
 
         @Override
         public void run() {
+            // Once we get here, we ensure that mMonitors does not change even if we call
+            // #addMonitorLocked because we first add the new monitors to mMonitorQueue and
+            // move them to mMonitors on the next schedule when mCompleted is true, at which
+            // point we have completed execution of this method.
             final int size = mMonitors.size();
             for (int i = 0 ; i < size ; i++) {
                 synchronized (Watchdog.this) {
@@ -307,10 +321,13 @@ public class Watchdog extends Thread {
                 DEFAULT_TIMEOUT > ZygoteConnectionConstants.WRAPPED_PID_TIMEOUT_MILLIS;
     }
 
+    /**
+     * Registers a {@link BroadcastReceiver} to listen to reboot broadcasts and trigger reboot.
+     * Should be called during boot after the ActivityManagerService is up and registered
+     * as a system service so it can handle registration of a {@link BroadcastReceiver}.
+     */
     public void init(Context context, ActivityManagerService activity) {
-        mResolver = context.getContentResolver();
         mActivity = activity;
-
         context.registerReceiver(new RebootRequestReceiver(),
                 new IntentFilter(Intent.ACTION_REBOOT),
                 android.Manifest.permission.REBOOT, null);
@@ -338,9 +355,6 @@ public class Watchdog extends Thread {
 
     public void addMonitor(Monitor monitor) {
         synchronized (this) {
-            if (isAlive()) {
-                throw new RuntimeException("Monitors can't be added once the Watchdog is running");
-            }
             mMonitorChecker.addMonitorLocked(monitor);
         }
     }
@@ -351,9 +365,6 @@ public class Watchdog extends Thread {
 
     public void addThread(Handler thread, long timeoutMillis) {
         synchronized (this) {
-            if (isAlive()) {
-                throw new RuntimeException("Threads can't be added once the Watchdog is running");
-            }
             final String name = thread.getLooper().getThread().getName();
             mHandlerCheckers.add(new HandlerChecker(thread, name, timeoutMillis));
         }
@@ -402,7 +413,7 @@ public class Watchdog extends Thread {
         return builder.toString();
     }
 
-    private ArrayList<Integer> getInterestingHalPids() {
+    private static ArrayList<Integer> getInterestingHalPids() {
         try {
             IServiceManager serviceManager = IServiceManager.getService();
             ArrayList<IServiceManager.InstanceDebugInfo> dump =
@@ -425,7 +436,7 @@ public class Watchdog extends Thread {
         }
     }
 
-    private ArrayList<Integer> getInterestingNativePids() {
+    static ArrayList<Integer> getInterestingNativePids() {
         ArrayList<Integer> pids = getInterestingHalPids();
 
         int[] nativePids = Process.getPidsForCommands(NATIVE_STACKS_OF_INTEREST);
@@ -472,6 +483,7 @@ public class Watchdog extends Thread {
                     }
                     try {
                         wait(timeout);
+                        // Note: mHandlerCheckers and mMonitorChecker may have changed after waiting
                     } catch (InterruptedException e) {
                         Log.wtf(TAG, e);
                     }
@@ -597,6 +609,7 @@ public class Watchdog extends Thread {
                         mActivity.addErrorToDropBox(
                                 "watchdog", null, "system_server", null, null, null,
                                 subject, null, finalStack, null);
+                        StatsLog.write(StatsLog.SYSTEM_SERVER_WATCHDOG_OCCURRED, subject);
                     }
             };
             dropboxThread.start();

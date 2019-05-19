@@ -18,17 +18,19 @@
 #define VULKANMANAGER_H
 
 #if !defined(VK_USE_PLATFORM_ANDROID_KHR)
-#  define VK_USE_PLATFORM_ANDROID_KHR
+#define VK_USE_PLATFORM_ANDROID_KHR
 #endif
 #include <vulkan/vulkan.h>
 
 #include <GrContextOptions.h>
-#include <vk/GrVkExtensions.h>
 #include <SkSurface.h>
 #include <ui/Fence.h>
 #include <utils/StrongPointer.h>
 #include <vk/GrVkBackendContext.h>
+#include <vk/GrVkExtensions.h>
+#include "Frame.h"
 #include "IRenderPipeline.h"
+#include "VulkanSurface.h"
 
 class GrVkExtensions;
 
@@ -37,66 +39,6 @@ namespace uirenderer {
 namespace renderthread {
 
 class RenderThread;
-
-class VulkanSurface {
-public:
-    VulkanSurface(ColorMode colorMode, ANativeWindow* window, sk_sp<SkColorSpace> colorSpace,
-                  SkColorType colorType, GrContext* grContext)
-            : mColorMode(colorMode), mNativeWindow(window), mColorSpace(colorSpace),
-              mColorType(colorType), mGrContext(grContext) {}
-
-    sk_sp<SkSurface> getBackBufferSurface() { return mBackbuffer; }
-
-    // The width and height are are the logical width and height for when submitting draws to the
-    // surface. In reality if the window is rotated the underlying VkImage may have the width and
-    // height swapped.
-    int windowWidth() const { return mWindowWidth; }
-    int windowHeight() const { return mWindowHeight; }
-
-    SkMatrix& preTransform() { return mPreTransform; }
-
-private:
-    friend class VulkanManager;
-    struct BackbufferInfo {
-        uint32_t mImageIndex;           // image this is associated with
-        VkSemaphore mAcquireSemaphore;  // we signal on this for acquisition of image
-        VkSemaphore mRenderSemaphore;   // we wait on this for rendering to be done
-        VkCommandBuffer
-                mTransitionCmdBuffers[2];  // to transition layout between present and render
-        // We use these fences to make sure the above Command buffers have finished their work
-        // before attempting to reuse them or destroy them.
-        VkFence mUsageFences[2];
-    };
-
-    struct ImageInfo {
-        VkImageLayout mImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        sk_sp<SkSurface> mSurface;
-        uint16_t mLastUsed = 0;
-        bool mInvalid = true;
-    };
-
-    sk_sp<SkSurface> mBackbuffer;
-
-    VkSurfaceKHR mVkSurface = VK_NULL_HANDLE;
-    VkSwapchainKHR mSwapchain = VK_NULL_HANDLE;
-
-    BackbufferInfo* mBackbuffers = nullptr;
-    uint32_t mCurrentBackbufferIndex;
-
-    uint32_t mImageCount;
-    VkImage* mImages = nullptr;
-    ImageInfo* mImageInfos;
-    uint16_t mCurrentTime = 0;
-    ColorMode mColorMode;
-    ANativeWindow* mNativeWindow;
-    int mWindowWidth = 0;
-    int mWindowHeight = 0;
-    sk_sp<SkColorSpace> mColorSpace;
-    SkColorType mColorType;
-    VkSurfaceTransformFlagBitsKHR mTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    SkMatrix mPreTransform;
-    GrContext* mGrContext;
-};
 
 // This class contains the shared global Vulkan objects, such as VkInstance, VkDevice and VkQueue,
 // which are re-used by CanvasContext. This class is created once and should be used by all vulkan
@@ -114,57 +56,40 @@ public:
     // Quick check to see if the VulkanManager has been initialized.
     bool hasVkContext() { return mDevice != VK_NULL_HANDLE; }
 
-    // Given a window this creates a new VkSurfaceKHR and VkSwapchain and stores them inside a new
-    // VulkanSurface object which is returned.
+    // Create and destroy functions for wrapping an ANativeWindow in a VulkanSurface
     VulkanSurface* createSurface(ANativeWindow* window, ColorMode colorMode,
                                  sk_sp<SkColorSpace> surfaceColorSpace,
-                                 SkColorType surfaceColorType,
-                                 GrContext* grContext);
-
-    // Destroy the VulkanSurface and all associated vulkan objects.
+                                 SkColorType surfaceColorType, GrContext* grContext,
+                                 uint32_t extraBuffers);
     void destroySurface(VulkanSurface* surface);
+
+    Frame dequeueNextBuffer(VulkanSurface* surface);
+    void swapBuffers(VulkanSurface* surface, const SkRect& dirtyRect);
 
     // Cleans up all the global state in the VulkanManger.
     void destroy();
 
-    // No work is needed to make a VulkanSurface current, and all functions require that a
-    // VulkanSurface is passed into them so we just return true here.
-    bool isCurrent(VulkanSurface* surface) { return true; }
-
-    int getAge(VulkanSurface* surface);
-
-    // Returns an SkSurface which wraps the next image returned from vkAcquireNextImageKHR. It also
-    // will transition the VkImage from a present layout to color attachment so that it can be used
-    // by the client for drawing.
-    SkSurface* getBackbufferSurface(VulkanSurface** surface);
-
-    // Presents the current VkImage.
-    void swapBuffers(VulkanSurface* surface);
-
     // Inserts a wait on fence command into the Vulkan command buffer.
-    status_t fenceWait(sp<Fence>& fence);
+    status_t fenceWait(sp<Fence>& fence, GrContext* grContext);
 
-    // Creates a fence that is signaled, when all the pending Vulkan commands are flushed.
-    status_t createReleaseFence(sp<Fence>& nativeFence);
+    // Creates a fence that is signaled when all the pending Vulkan commands are finished on the
+    // GPU.
+    status_t createReleaseFence(sp<Fence>& nativeFence, GrContext* grContext);
 
     // Returned pointers are owned by VulkanManager.
+    // An instance of VkFunctorInitParams returned from getVkFunctorInitParams refers to
+    // the internal state of VulkanManager: VulkanManager must be alive to use the returned value.
     VkFunctorInitParams getVkFunctorInitParams() const;
 
     sk_sp<GrContext> createContext(const GrContextOptions& options);
 
+    uint32_t getDriverVersion() const { return mDriverVersion; }
+
 private:
+    friend class VulkanSurface;
     // Sets up the VkInstance and VkDevice objects. Also fills out the passed in
     // VkPhysicalDeviceFeatures struct.
     void setupDevice(GrVkExtensions&, VkPhysicalDeviceFeatures2&);
-
-    void destroyBuffers(VulkanSurface* surface);
-
-    bool createSwapchain(VulkanSurface* surface);
-    void createBuffers(VulkanSurface* surface, VkFormat format, VkExtent2D extent);
-
-    VulkanSurface::BackbufferInfo* getAvailableBackbuffer(VulkanSurface* surface);
-
-    bool setupDummyCommandBuffer();
 
     // simple wrapper class that exists only to initialize a pointer to NULL
     template <typename FNPTR_TYPE>
@@ -190,13 +115,6 @@ private:
     VkPtr<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR> mGetPhysicalDeviceSurfaceFormatsKHR;
     VkPtr<PFN_vkGetPhysicalDeviceSurfacePresentModesKHR> mGetPhysicalDeviceSurfacePresentModesKHR;
 
-    VkPtr<PFN_vkCreateSwapchainKHR> mCreateSwapchainKHR;
-    VkPtr<PFN_vkDestroySwapchainKHR> mDestroySwapchainKHR;
-    VkPtr<PFN_vkGetSwapchainImagesKHR> mGetSwapchainImagesKHR;
-    VkPtr<PFN_vkAcquireNextImageKHR> mAcquireNextImageKHR;
-    VkPtr<PFN_vkQueuePresentKHR> mQueuePresentKHR;
-    VkPtr<PFN_vkCreateSharedSwapchainsKHR> mCreateSharedSwapchainsKHR;
-
     // Instance Functions
     VkPtr<PFN_vkEnumerateInstanceVersion> mEnumerateInstanceVersion;
     VkPtr<PFN_vkEnumerateInstanceExtensionProperties> mEnumerateInstanceExtensionProperties;
@@ -207,6 +125,7 @@ private:
     VkPtr<PFN_vkGetPhysicalDeviceProperties> mGetPhysicalDeviceProperties;
     VkPtr<PFN_vkGetPhysicalDeviceQueueFamilyProperties> mGetPhysicalDeviceQueueFamilyProperties;
     VkPtr<PFN_vkGetPhysicalDeviceFeatures2> mGetPhysicalDeviceFeatures2;
+    VkPtr<PFN_vkGetPhysicalDeviceImageFormatProperties2> mGetPhysicalDeviceImageFormatProperties2;
     VkPtr<PFN_vkCreateDevice> mCreateDevice;
     VkPtr<PFN_vkEnumerateDeviceExtensionProperties> mEnumerateDeviceExtensionProperties;
 
@@ -245,11 +164,11 @@ private:
     VkQueue mPresentQueue = VK_NULL_HANDLE;
     VkCommandPool mCommandPool = VK_NULL_HANDLE;
 
-    VkCommandBuffer mDummyCB = VK_NULL_HANDLE;
-
     // Variables saved to populate VkFunctorInitParams.
     static const uint32_t mAPIVersion = VK_MAKE_VERSION(1, 1, 0);
+    std::vector<VkExtensionProperties> mInstanceExtensionsOwner;
     std::vector<const char*> mInstanceExtensions;
+    std::vector<VkExtensionProperties> mDeviceExtensionsOwner;
     std::vector<const char*> mDeviceExtensions;
     VkPhysicalDeviceFeatures2 mPhysicalDeviceFeatures2{};
 
@@ -259,6 +178,14 @@ private:
     };
     SwapBehavior mSwapBehavior = SwapBehavior::Discard;
     GrVkExtensions mExtensions;
+    uint32_t mDriverVersion = 0;
+
+    // TODO: Remove once fix has landed. Temporaryly needed for workaround for setting up AHB
+    // surfaces on Qualcomm. Currently if you don't use VkSwapchain Qualcomm is not setting
+    // reporting that we need to use one of their private vendor usage bits which greatly effects
+    // performance if it is not used.
+    bool mIsQualcomm = false;
+    bool isQualcomm() const { return mIsQualcomm; }
 };
 
 } /* namespace renderthread */

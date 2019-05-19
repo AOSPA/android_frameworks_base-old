@@ -25,6 +25,8 @@ import static android.content.pm.PackageManager.INTENT_FILTER_DOMAIN_VERIFICATIO
 import android.accounts.IAccountManager;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
+import android.app.role.IRoleManager;
+import android.app.role.RoleManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.IIntentReceiver;
@@ -75,6 +77,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.ParcelFileDescriptor.AutoCloseInputStream;
 import android.os.PersistableBundle;
 import android.os.Process;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ShellCommand;
@@ -115,6 +118,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.WeakHashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -1619,30 +1623,36 @@ class PackageManagerShellCommand extends ShellCommand {
         }
 
         userId = translateUserId(userId, true /*allowAll*/, "runUninstall");
-        if (userId == UserHandle.USER_ALL) {
-            userId = UserHandle.USER_SYSTEM;
-            flags |= PackageManager.DELETE_ALL_USERS;
-        } else {
-            final PackageInfo info = mInterface.getPackageInfo(packageName,
-                    PackageManager.MATCH_STATIC_SHARED_LIBRARIES, userId);
-            if (info == null) {
-                pw.println("Failure [not installed for " + userId + "]");
-                return 1;
-            }
-            final boolean isSystem =
-                    (info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-            // If we are being asked to delete a system app for just one
-            // user set flag so it disables rather than reverting to system
-            // version of the app.
-            if (isSystem) {
-                flags |= PackageManager.DELETE_SYSTEM_APP;
-            }
-        }
-
         final LocalIntentReceiver receiver = new LocalIntentReceiver();
-        mInterface.getPackageInstaller().uninstall(new VersionedPackage(packageName,
-                versionCode), null /*callerPackageName*/, flags,
-                receiver.getIntentSender(), userId);
+        PackageManagerInternal internal = LocalServices.getService(PackageManagerInternal.class);
+
+        if (internal.isApexPackage(packageName)) {
+            internal.uninstallApex(packageName, versionCode, userId, receiver.getIntentSender());
+        } else {
+            if (userId == UserHandle.USER_ALL) {
+                userId = UserHandle.USER_SYSTEM;
+                flags |= PackageManager.DELETE_ALL_USERS;
+            } else {
+                final PackageInfo info = mInterface.getPackageInfo(packageName,
+                        PackageManager.MATCH_STATIC_SHARED_LIBRARIES, userId);
+                if (info == null) {
+                    pw.println("Failure [not installed for " + userId + "]");
+                    return 1;
+                }
+                final boolean isSystem =
+                        (info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                // If we are being asked to delete a system app for just one
+                // user set flag so it disables rather than reverting to system
+                // version of the app.
+                if (isSystem) {
+                    flags |= PackageManager.DELETE_SYSTEM_APP;
+                }
+            }
+
+            mInterface.getPackageInstaller().uninstall(new VersionedPackage(packageName,
+                            versionCode), null /*callerPackageName*/, flags,
+                    receiver.getIntentSender(), userId);
+        }
 
         final Intent result = receiver.getResult();
         final int status = result.getIntExtra(PackageInstaller.EXTRA_STATUS,
@@ -2337,10 +2347,13 @@ class PackageManagerShellCommand extends ShellCommand {
                     sessionParams.installFlags |= PackageManager.INSTALL_INTERNAL;
                     break;
                 case "-d":
-                    sessionParams.installFlags |= PackageManager.INSTALL_ALLOW_DOWNGRADE;
+                    sessionParams.installFlags |= PackageManager.INSTALL_REQUEST_DOWNGRADE;
                     break;
                 case "-g":
                     sessionParams.installFlags |= PackageManager.INSTALL_GRANT_RUNTIME_PERMISSIONS;
+                case "-w":
+                    sessionParams.installFlags |=
+                            PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
                     break;
                 case "--dont-kill":
                     sessionParams.installFlags |= PackageManager.INSTALL_DONT_KILL_APP;
@@ -2414,6 +2427,16 @@ class PackageManagerShellCommand extends ShellCommand {
                     sessionParams.setStaged();
                     break;
                 case "--enable-rollback":
+                    if (params.installerPackageName == null) {
+                        // com.android.shell has the TEST_MANAGE_ROLLBACKS
+                        // permission needed to enable rollback for non-module
+                        // packages, which is likely what the user wants when
+                        // enabling rollback through the shell command. Set
+                        // the installer to com.android.shell if no installer
+                        // has been provided so that the user doesn't have to
+                        // remember to set it themselves.
+                        params.installerPackageName = "com.android.shell";
+                    }
                     sessionParams.installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
                     break;
                 default:
@@ -2441,19 +2464,37 @@ class PackageManagerShellCommand extends ShellCommand {
             }
         }
 
+        String pkgName;
         String component = getNextArg();
-        ComponentName componentName =
-                component != null ? ComponentName.unflattenFromString(component) : null;
-
-        if (componentName == null) {
-            pw.println("Error: component name not specified or invalid");
-            return 1;
+        if (component.indexOf('/') < 0) {
+            // No component specified, so assume it's just a package name.
+            pkgName = component;
+        } else {
+            ComponentName componentName =
+                    component != null ? ComponentName.unflattenFromString(component) : null;
+            if (componentName == null) {
+                pw.println("Error: invalid component name");
+                return 1;
+            }
+            pkgName = componentName.getPackageName();
         }
 
+
+        final CompletableFuture<Boolean> future = new CompletableFuture<>();
+        final RemoteCallback callback = new RemoteCallback(res -> future.complete(res != null));
         try {
-            mInterface.setHomeActivity(componentName, userId);
-            pw.println("Success");
-            return 0;
+            IRoleManager roleManager = android.app.role.IRoleManager.Stub.asInterface(
+                    ServiceManager.getServiceOrThrow(Context.ROLE_SERVICE));
+            roleManager.addRoleHolderAsUser(RoleManager.ROLE_HOME, pkgName,
+                    0, userId, callback);
+            boolean success = future.get();
+            if (success) {
+                pw.println("Success");
+                return 0;
+            } else {
+                pw.println("Error: Failed to set default home.");
+                return 1;
+            }
         } catch (Exception e) {
             pw.println(e.toString());
             return 1;
@@ -2944,7 +2985,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints all broadcast receivers that can handle the given INTENT.");
         pw.println("");
-        pw.println("  install [-lrtsfdg] [-i PACKAGE] [--user USER_ID|all|current]");
+        pw.println("  install [-lrtsfdgw] [-i PACKAGE] [--user USER_ID|all|current]");
         pw.println("       [-p INHERIT_PACKAGE] [--install-location 0/1/2]");
         pw.println("       [--install-reason 0/1/2/3/4] [--originating-uri URI]");
         pw.println("       [--referrer URI] [--abi ABI_NAME] [--force-sdk]");
@@ -2963,6 +3004,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -d: allow version code downgrade (debuggable packages only)");
         pw.println("      -p: partial application install (new split on top of existing pkg)");
         pw.println("      -g: grant all runtime permissions");
+        pw.println("      -w: whitelist all restricted permissions");
         pw.println("      -S: size in bytes of package, required for stdin");
         pw.println("      --user: install under the given user.");
         pw.println("      --dont-kill: installing a new feature split, don't kill running app");
@@ -3141,6 +3183,10 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("");
         pw.println("  set-home-activity [--user USER_ID] TARGET-COMPONENT");
         pw.println("    Set the default home activity (aka launcher).");
+        pw.println("    TARGET-COMPONENT can be a package name (com.package.my) or a full");
+        pw.println("    component (com.package.my/component.name). However, only the package name");
+        pw.println("    matters: the actual component used will be determined automatically from");
+        pw.println("    the package.");
         pw.println("");
         pw.println("  set-installer PACKAGE INSTALLER");
         pw.println("    Set installer package name");

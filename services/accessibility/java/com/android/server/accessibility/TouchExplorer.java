@@ -703,12 +703,17 @@ class TouchExplorer extends BaseEventStreamTransformation
                             final float secondPtrX = event.getX(1);
                             final float secondPtrY = event.getY(1);
 
-                            final float deltaX = firstPtrX - secondPtrX;
-                            final float deltaY = firstPtrY - secondPtrY;
+                            final int pointerIndex = event.findPointerIndex(mDraggingPointerId);
+                            final float deltaX =
+                                    (pointerIndex == 0) ? (secondPtrX - firstPtrX)
+                                            : (firstPtrX - secondPtrX);
+                            final float deltaY =
+                                    (pointerIndex == 0) ? (secondPtrY - firstPtrY)
+                                            : (firstPtrY - secondPtrY);
                             final double distance = Math.hypot(deltaX, deltaY);
 
                             if (distance > mScaledMinPointerDistanceToUseMiddleLocation) {
-                                event.setLocation(deltaX / 2, deltaY / 2);
+                                event.offsetLocation(deltaX / 2, deltaY / 2);
                             }
 
                             // If still dragging send a drag event.
@@ -809,13 +814,9 @@ class TouchExplorer extends BaseEventStreamTransformation
 
         // Announce the end of the gesture recognition.
         sendAccessibilityEvent(AccessibilityEvent.TYPE_GESTURE_DETECTION_END);
+        // Don't announce the end of a the touch interaction if users didn't lift their fingers.
         if (interactionEnd) {
-            // Announce the end of a the touch interaction.
             sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
-        } else {
-            // If gesture detection is end, but user doesn't release the finger, announce the
-            // transition to exploration state.
-            sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_START);
         }
 
         mExitGestureDetectionModeDelayed.cancel();
@@ -1151,10 +1152,7 @@ class TouchExplorer extends BaseEventStreamTransformation
         public void run() {
             // Announce the end of gesture recognition.
             sendAccessibilityEvent(AccessibilityEvent.TYPE_GESTURE_DETECTION_END);
-            // Clearing puts is in touch exploration state with a finger already
-            // down, so announce the transition to exploration state.
             clear();
-            sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_START);
         }
     }
 

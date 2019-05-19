@@ -16,6 +16,7 @@
 
 package android.telephony;
 
+import android.annotation.NonNull;
 import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -64,26 +65,42 @@ public final class CellInfoGsm extends CellInfo implements Parcelable {
     }
 
     /** @hide */
-    public CellInfoGsm(android.hardware.radio.V1_4.CellInfo ci) {
-        super(ci);
+    public CellInfoGsm(android.hardware.radio.V1_4.CellInfo ci, long timeStamp) {
+        super(ci, timeStamp);
         final android.hardware.radio.V1_2.CellInfoGsm cig = ci.info.gsm();
         mCellIdentityGsm = new CellIdentityGsm(cig.cellIdentityGsm);
         mCellSignalStrengthGsm = new CellSignalStrengthGsm(cig.signalStrengthGsm);
     }
 
+    /**
+     * @return a {@link CellIdentityGsm} instance.
+     */
     @Override
-    public CellIdentityGsm getCellIdentity() {
+    public @NonNull CellIdentityGsm getCellIdentity() {
         return mCellIdentityGsm;
     }
+
     /** @hide */
     public void setCellIdentity(CellIdentityGsm cid) {
         mCellIdentityGsm = cid;
     }
 
+    /**
+     * @return a {@link CellSignalStrengthGsm} instance.
+     */
     @Override
-    public CellSignalStrengthGsm getCellSignalStrength() {
+    public @NonNull CellSignalStrengthGsm getCellSignalStrength() {
         return mCellSignalStrengthGsm;
     }
+
+    /** @hide */
+    @Override
+    public CellInfo sanitizeLocationInfo() {
+        CellInfoGsm result = new CellInfoGsm(this);
+        result.mCellIdentityGsm = mCellIdentityGsm.sanitizeLocationInfo();
+        return result;
+    }
+
     /** @hide */
     public void setCellSignalStrength(CellSignalStrengthGsm css) {
         mCellSignalStrengthGsm = css;
@@ -149,7 +166,7 @@ public final class CellInfoGsm extends CellInfo implements Parcelable {
     }
 
     /** Implement the Parcelable interface */
-    public static final Creator<CellInfoGsm> CREATOR = new Creator<CellInfoGsm>() {
+    public static final @android.annotation.NonNull Creator<CellInfoGsm> CREATOR = new Creator<CellInfoGsm>() {
         @Override
         public CellInfoGsm createFromParcel(Parcel in) {
             in.readInt(); // Skip past token, we know what it is

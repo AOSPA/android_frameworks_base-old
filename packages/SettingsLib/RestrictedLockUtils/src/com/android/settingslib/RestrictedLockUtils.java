@@ -20,6 +20,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -47,7 +48,16 @@ public class RestrictedLockUtils {
         if (dpm == null) {
             return null;
         }
-        ComponentName adminComponent = dpm.getProfileOwnerAsUser(user);
+
+        Context userContext;
+        try {
+            userContext = context.createPackageContextAsUser(context.getPackageName(), 0, user);
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
+
+        ComponentName adminComponent = userContext.getSystemService(
+                DevicePolicyManager.class).getProfileOwner();
         if (adminComponent != null) {
             return new EnforcedAdmin(adminComponent, enforcedRestriction, user);
         }
@@ -66,11 +76,13 @@ public class RestrictedLockUtils {
     public static void sendShowAdminSupportDetailsIntent(Context context, EnforcedAdmin admin) {
         final Intent intent = getShowAdminSupportDetailsIntent(context, admin);
         int targetUserId = UserHandle.myUserId();
-        if (admin != null && admin.user != null
-                && isCurrentUserOrProfile(context, admin.user.getIdentifier())) {
-            targetUserId = admin.user.getIdentifier();
+        if (admin != null) {
+            if (admin.user != null
+                    && isCurrentUserOrProfile(context, admin.user.getIdentifier())) {
+                targetUserId = admin.user.getIdentifier();
+            }
+            intent.putExtra(DevicePolicyManager.EXTRA_RESTRICTION, admin.enforcedRestriction);
         }
-        intent.putExtra(DevicePolicyManager.EXTRA_RESTRICTION, admin.enforcedRestriction);
         context.startActivityAsUser(intent, UserHandle.of(targetUserId));
     }
 

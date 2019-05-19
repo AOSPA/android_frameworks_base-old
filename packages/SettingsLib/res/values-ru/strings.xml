@@ -42,6 +42,7 @@
     <string name="available_via_passpoint" msgid="1617440946846329613">"Доступно через %1$s"</string>
     <string name="tap_to_sign_up" msgid="6449724763052579434">"Нажмите, чтобы зарегистрироваться"</string>
     <string name="wifi_connected_no_internet" msgid="8202906332837777829">"Подключено, без доступа к Интернету"</string>
+    <string name="wifi_limited_connection" msgid="7717855024753201527">"Подключение к сети ограничено."</string>
     <string name="wifi_status_no_internet" msgid="5784710974669608361">"Нет подключения к Интернету"</string>
     <string name="wifi_status_sign_in_required" msgid="123517180404752756">"Требуется выполнить вход."</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"К точке доступа подключено слишком много устройств"</string>
@@ -73,7 +74,9 @@
     <string name="bluetooth_connected_no_a2dp_battery_level" msgid="3908466636369853652">"Подключено (кроме аудио), уровень заряда батареи: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp_battery_level" msgid="1163440823807659316">"Подключено (кроме звонков и аудио), уровень заряда батареи: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_battery_level" msgid="3149689299296462009">"Активно. Уровень заряда: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>."</string>
+    <string name="bluetooth_active_battery_level_untethered" msgid="6662649951391456747">"Активно. Л: батарея <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>; П: батарея <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>."</string>
     <string name="bluetooth_battery_level" msgid="1447164613319663655">"Уровень заряда: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_battery_level_untethered" msgid="5974406100211667177">"Л: батарея <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>; П: батарея <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>."</string>
     <string name="bluetooth_active_no_battery_level" msgid="8380223546730241956">"Активно"</string>
     <string name="bluetooth_profile_a2dp" msgid="2031475486179830674">"Профиль A2DP"</string>
     <string name="bluetooth_profile_headset" msgid="7815495680863246034">"Звонки"</string>
@@ -285,9 +288,9 @@
     <string name="debug_monitoring_category" msgid="7640508148375798343">"Мониторинг"</string>
     <string name="strict_mode" msgid="1938795874357830695">"Строгий режим"</string>
     <string name="strict_mode_summary" msgid="142834318897332338">"Подсвечивать экран во время длительных операций"</string>
-    <string name="pointer_location" msgid="6084434787496938001">"Отображать касания"</string>
-    <string name="pointer_location_summary" msgid="840819275172753713">"Визуализировать на экране нажатия и жесты"</string>
-    <string name="show_touches" msgid="2642976305235070316">"Визуальный отклик"</string>
+    <string name="pointer_location" msgid="6084434787496938001">"Место нажатия"</string>
+    <string name="pointer_location_summary" msgid="840819275172753713">"Показывать данные нажатий и жестов"</string>
+    <string name="show_touches" msgid="2642976305235070316">"Показывать нажатия"</string>
     <string name="show_touches_summary" msgid="6101183132903926324">"Показывать места нажатия на экране"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Показ. обнов. поверхности"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Подсвечивать поверхности окон при обновлении"</string>
@@ -377,12 +380,14 @@
     <string name="power_discharging_duration" msgid="8848256785736335185">"Заряда (<xliff:g id="LEVEL">%2$s</xliff:g>) хватит примерно на <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
     <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Заряда хватит примерно на <xliff:g id="TIME_REMAINING">%1$s</xliff:g> при текущем уровне расхода"</string>
     <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Заряда (<xliff:g id="LEVEL">%2$s</xliff:g>) хватит примерно на <xliff:g id="TIME_REMAINING">%1$s</xliff:g> при текущем уровне расхода"</string>
-    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"Заряда хватит на <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"При текущем уровне использования (<xliff:g id="LEVEL">%2$s</xliff:g>) заряда хватит примерно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"При текущем уровне использования заряда хватит примерно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Заряда (<xliff:g id="LEVEL">%2$s</xliff:g>) хватит примерно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only" msgid="107616694963545745">"Заряда хватит примерно до <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="1372817269546888804">"До <xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_suggestion_extend_battery" msgid="4401408879069551485">"Продлите время работы от батареи <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration_only" msgid="5996752448813295329">"Осталось менее <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration" msgid="5751885147712659423">"Уровень заряда батареи: <xliff:g id="LEVEL">%2$s</xliff:g> (хватит менее чем на <xliff:g id="THRESHOLD">%1$s</xliff:g>)"</string>
     <string name="power_remaining_more_than_subtext" msgid="3176771815132876675">"Уровень заряда батареи: <xliff:g id="LEVEL">%2$s</xliff:g> (хватит более чем на <xliff:g id="TIME_REMAINING">%1$s</xliff:g>)"</string>
@@ -409,9 +414,9 @@
     <string name="install_other_apps" msgid="6986686991775883017">"Установка неизвестных приложений"</string>
     <string name="home" msgid="3256884684164448244">"Настройки"</string>
   <string-array name="battery_labels">
-    <item msgid="8494684293649631252">"0%"</item>
-    <item msgid="8934126114226089439">"50%"</item>
-    <item msgid="1286113608943010849">"100%"</item>
+    <item msgid="8494684293649631252">"0 %"</item>
+    <item msgid="8934126114226089439">"50 %"</item>
+    <item msgid="1286113608943010849">"100 %"</item>
   </string-array>
     <string name="charge_length_format" msgid="8978516217024434156">"<xliff:g id="ID_1">%1$s</xliff:g> назад"</string>
     <string name="remaining_length_format" msgid="7886337596669190587">"Осталось <xliff:g id="ID_1">%1$s</xliff:g>"</string>
@@ -458,5 +463,5 @@
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"Всегда спрашивать"</string>
     <string name="zen_mode_forever" msgid="2704305038191592967">"Пока вы не отключите"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"Только что"</string>
-    <string name="media_transfer_phone_device_name" msgid="1003823744105758574">"Встроенный динамик"</string>
+    <string name="media_transfer_this_device_name" msgid="1636276898262571213">"Это устройство"</string>
 </resources>

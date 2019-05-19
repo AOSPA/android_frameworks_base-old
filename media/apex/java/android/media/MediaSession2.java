@@ -17,13 +17,14 @@
 package android.media;
 
 import static android.media.MediaConstants.KEY_ALLOWED_COMMANDS;
+import static android.media.MediaConstants.KEY_CONNECTION_HINTS;
 import static android.media.MediaConstants.KEY_PACKAGE_NAME;
 import static android.media.MediaConstants.KEY_PID;
 import static android.media.MediaConstants.KEY_PLAYBACK_ACTIVE;
 import static android.media.MediaConstants.KEY_SESSION2LINK;
 import static android.media.MediaConstants.KEY_TOKEN_EXTRAS;
-import static android.media.Session2Command.RESULT_ERROR_UNKNOWN_ERROR;
-import static android.media.Session2Command.RESULT_INFO_SKIPPED;
+import static android.media.Session2Command.Result.RESULT_ERROR_UNKNOWN_ERROR;
+import static android.media.Session2Command.Result.RESULT_INFO_SKIPPED;
 import static android.media.Session2Token.TYPE_SESSION;
 
 import android.annotation.NonNull;
@@ -152,7 +153,7 @@ public class MediaSession2 implements AutoCloseable {
      * Returns the session ID
      */
     @NonNull
-    public String getSessionId() {
+    public String getId() {
         return mSessionId;
     }
 
@@ -160,7 +161,7 @@ public class MediaSession2 implements AutoCloseable {
      * Returns the {@link Session2Token} for creating {@link MediaController2}.
      */
     @NonNull
-    public Session2Token getSessionToken() {
+    public Session2Token getToken() {
         return mSessionToken;
     }
 
@@ -308,8 +309,11 @@ public class MediaSession2 implements AutoCloseable {
         String callingPkg = connectionRequest.getString(KEY_PACKAGE_NAME);
 
         RemoteUserInfo remoteUserInfo = new RemoteUserInfo(callingPkg, callingPid, callingUid);
-        final ControllerInfo controllerInfo = new ControllerInfo(remoteUserInfo,
-                mSessionManager.isTrustedForMediaControl(remoteUserInfo), controller);
+        final ControllerInfo controllerInfo = new ControllerInfo(
+                remoteUserInfo,
+                mSessionManager.isTrustedForMediaControl(remoteUserInfo),
+                controller,
+                connectionRequest.getBundle(KEY_CONNECTION_HINTS));
         mCallbackExecutor.execute(() -> {
             boolean connected = false;
             try {
@@ -415,7 +419,7 @@ public class MediaSession2 implements AutoCloseable {
                     MediaSession2.this, controllerInfo, command, args);
             if (resultReceiver != null) {
                 if (result == null) {
-                    resultReceiver.send(Session2Command.RESULT_INFO_SKIPPED, null);
+                    resultReceiver.send(RESULT_INFO_SKIPPED, null);
                 } else {
                     resultReceiver.send(result.getResultCode(), result.getResultData());
                 }
@@ -511,13 +515,17 @@ public class MediaSession2 implements AutoCloseable {
         }
 
         /**
-         * Set extras for the session token.
+         * Set extras for the session token. If null or not set, {@link Session2Token#getExtras()}
+         * will return {@link Bundle#EMPTY}.
          *
          * @return The Builder to allow chaining
          * @see Session2Token#getExtras()
          */
         @NonNull
-        public Builder setExtras(@Nullable Bundle extras) {
+        public Builder setExtras(@NonNull Bundle extras) {
+            if (extras == null) {
+                throw new NullPointerException("extras shouldn't be null");
+            }
             mExtras = extras;
             return this;
         }
@@ -548,7 +556,7 @@ public class MediaSession2 implements AutoCloseable {
             try {
                 MediaSessionManager manager = (MediaSessionManager) mContext.getSystemService(
                         Context.MEDIA_SESSION_SERVICE);
-                manager.notifySession2Created(session2.getSessionToken());
+                manager.notifySession2Created(session2.getToken());
             } catch (Exception e) {
                 session2.close();
                 throw e;
@@ -567,6 +575,7 @@ public class MediaSession2 implements AutoCloseable {
         private final RemoteUserInfo mRemoteUserInfo;
         private final boolean mIsTrusted;
         private final Controller2Link mControllerBinder;
+        private final Bundle mConnectionHints;
         private final Object mLock = new Object();
         //@GuardedBy("mLock")
         private int mNextSeqNumber;
@@ -582,12 +591,16 @@ public class MediaSession2 implements AutoCloseable {
          * @param remoteUserInfo remote user info
          * @param trusted {@code true} if trusted, {@code false} otherwise
          * @param controllerBinder Controller2Link for the connected controller.
+         * @param connectionHints a session-specific argument sent from the controller for the
+         *                        connection. The contents of this bundle may affect the
+         *                        connection result.
          */
         ControllerInfo(@NonNull RemoteUserInfo remoteUserInfo, boolean trusted,
-                @Nullable Controller2Link controllerBinder) {
+                @Nullable Controller2Link controllerBinder, @Nullable Bundle connectionHints) {
             mRemoteUserInfo = remoteUserInfo;
             mIsTrusted = trusted;
             mControllerBinder = controllerBinder;
+            mConnectionHints = connectionHints;
             mPendingCommands = new ArrayMap<>();
             mRequestedCommandSeqNumbers = new ArraySet<>();
         }
@@ -613,6 +626,14 @@ public class MediaSession2 implements AutoCloseable {
          */
         public int getUid() {
             return mRemoteUserInfo.getUid();
+        }
+
+        /**
+         * @return connection hints sent from controller, or {@link Bundle#EMPTY} if none.
+         */
+        @NonNull
+        public Bundle getConnectionHints() {
+            return mConnectionHints == null ? Bundle.EMPTY : new Bundle(mConnectionHints);
         }
 
         /**
@@ -749,6 +770,10 @@ public class MediaSession2 implements AutoCloseable {
          * You can reject the connection by returning {@code null}. In that case, controller
          * receives {@link MediaController2.ControllerCallback#onDisconnected(MediaController2)}
          * and cannot be used.
+         * <p>
+         * The controller hasn't connected yet in this method, so calls to the controller
+         * (e.g. {@link #sendSessionCommand}) would be ignored. Override {@link #onPostConnect} for
+         * the custom initialization for the controller instead.
          *
          * @param session the session for this event
          * @param controller controller information.
@@ -763,6 +788,10 @@ public class MediaSession2 implements AutoCloseable {
         /**
          * Called immediately after a controller is connected. This is a convenient method to add
          * custom initialization between the session and a controller.
+         * <p>
+         * Note that calls to the controller (e.g. {@link #sendSessionCommand}) work here but don't
+         * work in {@link #onConnect} because the controller hasn't connected yet in
+         * {@link #onConnect}.
          *
          * @param session the session for this event
          * @param controller controller information.

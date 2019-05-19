@@ -38,9 +38,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 
 import android.app.AppOpsManager;
-import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
-import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Handler;
@@ -88,12 +86,10 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
     private static final int TEST_UID = 0;
     private static final String TEST_PACKAGE = "";
 
-    private Context mContext;
     private AssistDataRequester mDataRequester;
     private Callbacks mCallbacks;
     private Object mCallbacksLock;
     private Handler mHandler;
-    private IActivityManager mAm;
     private IActivityTaskManager mAtm;
     private IWindowManager mWm;
     private AppOpsManager mAppOpsManager;
@@ -109,7 +105,6 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
 
     @Before
     public void setUp() throws Exception {
-        mAm = mock(IActivityManager.class);
         mAtm = mock(IActivityTaskManager.class);
         mWm = mock(IWindowManager.class);
         mAppOpsManager = mock(AppOpsManager.class);
@@ -118,7 +113,7 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
         mCallbacks = new Callbacks();
         mDataRequester = new AssistDataRequester(mContext, mWm, mAppOpsManager, mCallbacks,
                 mCallbacksLock, OP_ASSIST_STRUCTURE, OP_ASSIST_SCREENSHOT);
-
+        mDataRequester.mActivityTaskManager = mAtm;
         // Gate the continuation of the assist data callbacks until we are ready within the tests
         mGate = new CountDownLatch(1);
         doAnswer(invocation -> {
@@ -155,8 +150,8 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
                 .checkOpNoThrow(eq(OP_ASSIST_SCREENSHOT), anyInt(), anyString());
     }
 
-    @FlakyTest(bugId = 124088319)
     @Test
+    @FlakyTest(bugId = 130388718)
     public void testRequestData() throws Exception {
         setupMocks(CURRENT_ACTIVITY_ASSIST_ALLOWED, CALLER_ASSIST_STRUCTURE_ALLOWED,
                 CALLER_ASSIST_SCREENSHOT_ALLOWED);
@@ -176,7 +171,6 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
         assertReceivedDataCount(0, 0, 0, 0);
     }
 
-    @FlakyTest(bugId = 124088319)
     @Test
     public void testCurrentAppDisallow_expectNullCallbacks() throws Exception {
         setupMocks(!CURRENT_ACTIVITY_ASSIST_ALLOWED, CALLER_ASSIST_STRUCTURE_ALLOWED,
@@ -187,7 +181,6 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
         assertReceivedDataCount(0, 1, 0, 1);
     }
 
-    @FlakyTest(bugId = 124088319)
     @Test
     public void testProcessPendingData() throws Exception {
         setupMocks(CURRENT_ACTIVITY_ASSIST_ALLOWED, CALLER_ASSIST_STRUCTURE_ALLOWED,
@@ -245,7 +238,6 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
         assertReceivedDataCount(0, 1, 0, 1);
     }
 
-    @FlakyTest(bugId = 124088319)
     @Test
     public void testDisallowAssistContextExtras_expectNullDataCallbacks() throws Exception {
         setupMocks(CURRENT_ACTIVITY_ASSIST_ALLOWED, CALLER_ASSIST_STRUCTURE_ALLOWED,
@@ -259,8 +251,8 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
         assertReceivedDataCount(0, 1, 0, 1);
     }
 
-    @FlakyTest(bugId = 124088319)
     @Test
+    @FlakyTest(bugId = 130388718)
     public void testNoFetchScreenshots_expectNoScreenshotCallbacks() throws Exception {
         setupMocks(CURRENT_ACTIVITY_ASSIST_ALLOWED, CALLER_ASSIST_STRUCTURE_ALLOWED,
                 CALLER_ASSIST_SCREENSHOT_ALLOWED);
@@ -270,8 +262,8 @@ public class AssistDataRequesterTest extends ActivityTestsBase {
         assertReceivedDataCount(5, 5, 0, 0);
     }
 
-    @FlakyTest(bugId = 124088319)
     @Test
+    @FlakyTest(bugId = 130388718)
     public void testDisallowAssistScreenshot_expectNullScreenshotCallback() throws Exception {
         setupMocks(CURRENT_ACTIVITY_ASSIST_ALLOWED, CALLER_ASSIST_STRUCTURE_ALLOWED,
                 !CALLER_ASSIST_SCREENSHOT_ALLOWED);

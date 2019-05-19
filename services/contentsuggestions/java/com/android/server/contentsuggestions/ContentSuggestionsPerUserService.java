@@ -16,6 +16,7 @@
 
 package com.android.server.contentsuggestions;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -73,6 +74,13 @@ public final class ContentSuggestionsPerUserService extends
             throw new PackageManager.NameNotFoundException(
                     "Could not get service for " + serviceComponent);
         }
+        if (!Manifest.permission.BIND_CONTENT_SUGGESTIONS_SERVICE.equals(si.permission)) {
+            Slog.w(TAG, "ContentSuggestionsService from '" + si.packageName
+                    + "' does not require permission "
+                    + Manifest.permission.BIND_CONTENT_SUGGESTIONS_SERVICE);
+            throw new SecurityException("Service does not require permission "
+                    + Manifest.permission.BIND_CONTENT_SUGGESTIONS_SERVICE);
+        }
         return si;
     }
 
@@ -80,12 +88,7 @@ public final class ContentSuggestionsPerUserService extends
     @Override // from PerUserSystemService
     protected boolean updateLocked(boolean disabled) {
         final boolean enabledChanged = super.updateLocked(disabled);
-        if (enabledChanged) {
-            if (!isEnabledLocked()) {
-                // Clear the remote service for the next call
-                mRemoteService = null;
-            }
-        }
+        updateRemoteServiceLocked();
         return enabledChanged;
     }
 
@@ -131,6 +134,15 @@ public final class ContentSuggestionsPerUserService extends
             service.notifyInteraction(requestId, bundle);
         }
     }
+
+    @GuardedBy("mLock")
+    private void updateRemoteServiceLocked() {
+        if (mRemoteService != null) {
+            mRemoteService.destroy();
+            mRemoteService = null;
+        }
+    }
+
 
     @GuardedBy("mLock")
     @Nullable

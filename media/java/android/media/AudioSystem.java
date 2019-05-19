@@ -152,6 +152,9 @@ public class AudioSystem
     public static final int AUDIO_FORMAT_APTX           = 0x20000000;
     public static final int AUDIO_FORMAT_APTX_HD        = 0x21000000;
     public static final int AUDIO_FORMAT_LDAC           = 0x23000000;
+    public static final int AUDIO_FORMAT_CELT           = 0x26000000;
+    public static final int AUDIO_FORMAT_APTX_ADAPTIVE  = 0x27000000;
+    public static final int AUDIO_FORMAT_APTX_TWSP      = 0x2A000000;
 
     /**
      * Convert audio format enum values to Bluetooth codec values
@@ -163,6 +166,11 @@ public class AudioSystem
             case AUDIO_FORMAT_APTX: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX;
             case AUDIO_FORMAT_APTX_HD: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_HD;
             case AUDIO_FORMAT_LDAC: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_LDAC;
+            case AUDIO_FORMAT_CELT: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_CELT;
+            case AUDIO_FORMAT_APTX_ADAPTIVE:
+                     return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_ADAPTIVE;
+            case AUDIO_FORMAT_APTX_TWSP:
+                     return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_TWSP;
             default: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_INVALID;
         }
     }
@@ -219,6 +227,11 @@ public class AudioSystem
      * Returns a new unused audio player ID
      */
     public static native int newAudioPlayerId();
+
+    /**
+     * Returns a new unused audio recorder ID
+     */
+    public static native int newAudioRecorderId();
 
 
     /*
@@ -347,6 +360,7 @@ public class AudioSystem
         /**
          * Callback for recording activity notifications events
          * @param event
+         * @param riid recording identifier
          * @param uid uid of the client app performing the recording
          * @param session
          * @param source
@@ -361,7 +375,7 @@ public class AudioSystem
          *          6: patch handle
          * @param packName package name of the client app performing the recording. NOT SUPPORTED
          */
-        void onRecordingConfigurationChanged(int event, int uid, int session, int source,
+        void onRecordingConfigurationChanged(int event, int riid, int uid, int session, int source,
                         int portId, boolean silenced, int[] recordingFormat,
                         AudioEffect.Descriptor[] clienteffects, AudioEffect.Descriptor[] effects,
                         int activeSource, String packName);
@@ -379,16 +393,23 @@ public class AudioSystem
     /**
      * Callback from native for recording configuration updates.
      * @param event
+     * @param riid
+     * @param uid
      * @param session
      * @param source
+     * @param portId
+     * @param silenced
      * @param recordingFormat see
-     *     {@link AudioRecordingCallback#onRecordingConfigurationChanged(int, int, int, int, int,\
-     boolean, int[], AudioEffect.Descriptor[], AudioEffect.Descriptor[], int, String)}
+     *     {@link AudioRecordingCallback#onRecordingConfigurationChanged(int, int, int, int, int, \
+     int, boolean, int[], AudioEffect.Descriptor[], AudioEffect.Descriptor[], int, String)}
      *     for the description of the record format.
+     * @param cleintEffects
+     * @param effects
+     * @param activeSource
      */
     @UnsupportedAppUsage
-    private static void recordingCallbackFromNative(int event, int uid, int session, int source,
-                          int portId, boolean silenced, int[] recordingFormat,
+    private static void recordingCallbackFromNative(int event, int riid, int uid, int session,
+                          int source, int portId, boolean silenced, int[] recordingFormat,
                           AudioEffect.Descriptor[] clientEffects, AudioEffect.Descriptor[] effects,
                           int activeSource) {
         AudioRecordingCallback cb = null;
@@ -401,7 +422,7 @@ public class AudioSystem
 
         if (cb != null) {
             // TODO receive package name from native
-            cb.onRecordingConfigurationChanged(event, uid, session, source, portId, silenced,
+            cb.onRecordingConfigurationChanged(event, riid, uid, session, source, portId, silenced,
                                         recordingFormat, clientEffects, effects, activeSource, "");
         }
     }
@@ -1022,13 +1043,19 @@ public class AudioSystem
 
     public static native float getStreamVolumeDB(int stream, int index, int device);
 
-    static boolean isOffloadSupported(@NonNull AudioFormat format) {
+    /**
+     * @see AudioManager#setAllowedCapturePolicy()
+     */
+    public static native int setAllowedCapturePolicy(int uid, int flags);
+
+    static boolean isOffloadSupported(@NonNull AudioFormat format, @NonNull AudioAttributes attr) {
         return native_is_offload_supported(format.getEncoding(), format.getSampleRate(),
-                format.getChannelMask(), format.getChannelIndexMask());
+                format.getChannelMask(), format.getChannelIndexMask(),
+                attr.getVolumeControlStream());
     }
 
     private static native boolean native_is_offload_supported(int encoding, int sampleRate,
-            int channelMask, int channelIndexMask);
+            int channelMask, int channelIndexMask, int streamType);
 
     public static native int getMicrophones(ArrayList<MicrophoneInfo> microphonesInfo);
 

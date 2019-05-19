@@ -26,7 +26,6 @@ import android.content.pm.ShortcutManager;
 import android.os.Handler;
 import android.os.Process;
 import android.os.UserHandle;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.View;
@@ -35,12 +34,15 @@ import android.view.inputmethod.InputConnection;
 import android.widget.EditText;
 import android.widget.ImageButton;
 
+import androidx.test.filters.SmallTest;
+
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.NotificationTestHelper;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.util.Assert;
 
 import org.junit.After;
@@ -66,6 +68,7 @@ public class RemoteInputViewTest extends SysuiTestCase {
     @Mock private RemoteInputController mController;
     @Mock private ShortcutManager mShortcutManager;
     @Mock private RemoteInputQuickSettingsDisabler mRemoteInputQuickSettingsDisabler;
+    @Mock private LightBarController mLightBarController;
     private BlockingQueueIntentReceiver mReceiver;
     private RemoteInputView mView;
 
@@ -76,6 +79,8 @@ public class RemoteInputViewTest extends SysuiTestCase {
 
         mDependency.injectTestDependency(RemoteInputQuickSettingsDisabler.class,
                 mRemoteInputQuickSettingsDisabler);
+        mDependency.injectTestDependency(LightBarController.class,
+                mLightBarController);
 
         mReceiver = new BlockingQueueIntentReceiver();
         mContext.registerReceiver(mReceiver, new IntentFilter(TEST_ACTION), null,

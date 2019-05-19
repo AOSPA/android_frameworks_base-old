@@ -83,6 +83,10 @@ public abstract class LayoutInflater {
     private static final boolean DEBUG = false;
 
     private static final String COMPILED_VIEW_DEX_FILE_NAME = "/compiled_view.dex";
+    /**
+     * Whether or not we use the precompiled layout.
+     */
+    private static final String USE_PRECOMPILED_LAYOUT = "view.precompiled_layout_enabled";
 
     /** Empty stack trace used to avoid log spam in re-throw exceptions. */
     private static final StackTraceElement[] EMPTY_STACK_TRACE = new StackTraceElement[0];
@@ -412,23 +416,8 @@ public abstract class LayoutInflater {
     }
 
     private void initPrecompiledViews() {
-        // Use the device config if enabled, otherwise default to the system property.
-        String usePrecompiledLayout = null;
-        try {
-            usePrecompiledLayout = DeviceConfig.getProperty(
-                    DeviceConfig.Runtime.NAMESPACE,
-                    DeviceConfig.Runtime.USE_PRECOMPILED_LAYOUT);
-        } catch (Exception e) {
-          // May be caused by permission errors reading the property (i.e. instant apps).
-        }
+        // Precompiled layouts are not supported in this release.
         boolean enabled = false;
-        if (TextUtils.isEmpty(usePrecompiledLayout)) {
-            enabled = SystemProperties.getBoolean(
-                    DeviceConfig.Runtime.USE_PRECOMPILED_LAYOUT,
-                    false);
-        } else {
-            enabled = Boolean.parseBoolean(usePrecompiledLayout);
-        }
         initPrecompiledViews(enabled);
     }
 
@@ -562,7 +551,7 @@ public abstract class LayoutInflater {
         String layout = res.getResourceEntryName(resource);
 
         try {
-            Class clazz = mPrecompiledClassLoader.loadClass("" + pkg + ".CompiledView");
+            Class clazz = Class.forName("" + pkg + ".CompiledView", false, mPrecompiledClassLoader);
             Method inflater = clazz.getMethod(layout, Context.class, int.class);
             View view = (View) inflater.invoke(null, mContext, resource);
 
@@ -714,7 +703,8 @@ public abstract class LayoutInflater {
                 ie.setStackTrace(EMPTY_STACK_TRACE);
                 throw ie;
             } catch (Exception e) {
-                final InflateException ie = new InflateException(parser.getPositionDescription()
+                final InflateException ie = new InflateException(
+                        getParserStateDescription(inflaterContext, attrs)
                         + ": " + e.getMessage(), e);
                 ie.setStackTrace(EMPTY_STACK_TRACE);
                 throw ie;
@@ -727,6 +717,16 @@ public abstract class LayoutInflater {
             }
 
             return result;
+        }
+    }
+
+    private static String getParserStateDescription(Context context, AttributeSet attrs) {
+        int sourceResId = Resources.getAttributeSetSourceResId(attrs);
+        if (sourceResId == Resources.ID_NULL) {
+            return attrs.getPositionDescription();
+        } else {
+            return attrs.getPositionDescription() + " in "
+                    + context.getResources().getResourceName(sourceResId);
         }
     }
 
@@ -812,13 +812,13 @@ public abstract class LayoutInflater {
 
             if (constructor == null) {
                 // Class not found in the cache, see if it's real, and try to add it
-                clazz = mContext.getClassLoader().loadClass(
-                        prefix != null ? (prefix + name) : name).asSubclass(View.class);
+                clazz = Class.forName(prefix != null ? (prefix + name) : name, false,
+                        mContext.getClassLoader()).asSubclass(View.class);
 
                 if (mFilter != null && clazz != null) {
                     boolean allowed = mFilter.onLoadClass(clazz);
                     if (!allowed) {
-                        failNotAllowed(name, prefix, attrs);
+                        failNotAllowed(name, prefix, viewContext, attrs);
                     }
                 }
                 constructor = clazz.getConstructor(mConstructorSignature);
@@ -831,16 +831,16 @@ public abstract class LayoutInflater {
                     Boolean allowedState = mFilterMap.get(name);
                     if (allowedState == null) {
                         // New class -- remember whether it is allowed
-                        clazz = mContext.getClassLoader().loadClass(
-                                prefix != null ? (prefix + name) : name).asSubclass(View.class);
+                        clazz = Class.forName(prefix != null ? (prefix + name) : name, false,
+                                mContext.getClassLoader()).asSubclass(View.class);
 
                         boolean allowed = clazz != null && mFilter.onLoadClass(clazz);
                         mFilterMap.put(name, allowed);
                         if (!allowed) {
-                            failNotAllowed(name, prefix, attrs);
+                            failNotAllowed(name, prefix, viewContext, attrs);
                         }
                     } else if (allowedState.equals(Boolean.FALSE)) {
-                        failNotAllowed(name, prefix, attrs);
+                        failNotAllowed(name, prefix, viewContext, attrs);
                     }
                 }
             }
@@ -862,14 +862,16 @@ public abstract class LayoutInflater {
                 mConstructorArgs[0] = lastContext;
             }
         } catch (NoSuchMethodException e) {
-            final InflateException ie = new InflateException(attrs.getPositionDescription()
+            final InflateException ie = new InflateException(
+                    getParserStateDescription(viewContext, attrs)
                     + ": Error inflating class " + (prefix != null ? (prefix + name) : name), e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
 
         } catch (ClassCastException e) {
             // If loaded class is not a View subclass
-            final InflateException ie = new InflateException(attrs.getPositionDescription()
+            final InflateException ie = new InflateException(
+                    getParserStateDescription(viewContext, attrs)
                     + ": Class is not a View " + (prefix != null ? (prefix + name) : name), e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
@@ -878,7 +880,7 @@ public abstract class LayoutInflater {
             throw e;
         } catch (Exception e) {
             final InflateException ie = new InflateException(
-                    attrs.getPositionDescription() + ": Error inflating class "
+                    getParserStateDescription(viewContext, attrs) + ": Error inflating class "
                             + (clazz == null ? "<unknown>" : clazz.getName()), e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
@@ -890,8 +892,8 @@ public abstract class LayoutInflater {
     /**
      * Throw an exception because the specified class is not allowed to be inflated.
      */
-    private void failNotAllowed(String name, String prefix, AttributeSet attrs) {
-        throw new InflateException(attrs.getPositionDescription()
+    private void failNotAllowed(String name, String prefix, Context context, AttributeSet attrs) {
+        throw new InflateException(getParserStateDescription(context, attrs)
                 + ": Class not allowed to be inflated "+ (prefix != null ? (prefix + name) : name));
     }
 
@@ -1013,13 +1015,15 @@ public abstract class LayoutInflater {
             throw e;
 
         } catch (ClassNotFoundException e) {
-            final InflateException ie = new InflateException(attrs.getPositionDescription()
+            final InflateException ie = new InflateException(
+                    getParserStateDescription(context, attrs)
                     + ": Error inflating class " + name, e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
 
         } catch (Exception e) {
-            final InflateException ie = new InflateException(attrs.getPositionDescription()
+            final InflateException ie = new InflateException(
+                    getParserStateDescription(context, attrs)
                     + ": Error inflating class " + name, e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
@@ -1215,8 +1219,8 @@ public abstract class LayoutInflater {
                 }
 
                 if (type != XmlPullParser.START_TAG) {
-                    throw new InflateException(childParser.getPositionDescription() +
-                        ": No start tag found!");
+                    throw new InflateException(getParserStateDescription(context, childAttrs)
+                            + ": No start tag found!");
                 }
 
                 final String childName = childParser.getName();

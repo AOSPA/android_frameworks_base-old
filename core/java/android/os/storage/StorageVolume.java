@@ -265,8 +265,13 @@ public final class StorageVolume implements Parcelable {
     }
 
     /** {@hide} */
+    public static @Nullable String normalizeUuid(@Nullable String fsUuid) {
+        return fsUuid != null ? fsUuid.toLowerCase(Locale.US) : null;
+    }
+
+    /** {@hide} */
     public @Nullable String getNormalizedUuid() {
-        return mFsUuid != null ? mFsUuid.toLowerCase(Locale.US) : null;
+        return normalizeUuid(mFsUuid);
     }
 
     /**
@@ -431,7 +436,7 @@ public final class StorageVolume implements Parcelable {
         pw.decreaseIndent();
     }
 
-    public static final Creator<StorageVolume> CREATOR = new Creator<StorageVolume>() {
+    public static final @android.annotation.NonNull Creator<StorageVolume> CREATOR = new Creator<StorageVolume>() {
         @Override
         public StorageVolume createFromParcel(Parcel in) {
             return new StorageVolume(in);

@@ -89,6 +89,7 @@ import android.system.OsConstants;
 import android.system.StructStat;
 import android.text.TextUtils;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.IconDrawableFactory;
 import android.util.LauncherIcons;
 import android.util.Log;
@@ -111,6 +112,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** @hide */
 public class ApplicationPackageManager extends PackageManager {
@@ -536,6 +538,19 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
+    @NonNull
+    @Override
+    public List<SharedLibraryInfo> getDeclaredSharedLibraries(@NonNull String packageName,
+            @InstallFlags int flags) {
+        try {
+            ParceledListSlice<SharedLibraryInfo> sharedLibraries = mPM.getDeclaredSharedLibraries(
+                    packageName, flags, mContext.getUserId());
+            return sharedLibraries != null ? sharedLibraries.getList() : Collections.emptyList();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     /** @hide */
     @Override
     public @NonNull String getServicesSystemSharedLibraryPackageName() {
@@ -699,6 +714,43 @@ public class ApplicationPackageManager extends PackageManager {
                     flagValues,
                     mContext.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.Q,
                     user.getIdentifier());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public @NonNull Set<String> getWhitelistedRestrictedPermissions(
+            @NonNull String packageName, @PermissionWhitelistFlags int whitelistFlags) {
+        try {
+            final List<String> whitelist = mPM.getWhitelistedRestrictedPermissions(
+                    packageName, whitelistFlags, getUserId());
+            if (whitelist != null) {
+                return new ArraySet<>(whitelist);
+            }
+            return Collections.emptySet();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public boolean addWhitelistedRestrictedPermission(@NonNull String packageName,
+            @NonNull String permission, @PermissionWhitelistFlags int whitelistFlags) {
+        try {
+            return mPM.addWhitelistedRestrictedPermission(packageName, permission,
+                    whitelistFlags, getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public boolean removeWhitelistedRestrictedPermission(@NonNull String packageName,
+            @NonNull String permission, @PermissionWhitelistFlags int whitelistFlags) {
+        try {
+            return mPM.removeWhitelistedRestrictedPermission(packageName, permission,
+                    whitelistFlags, getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1301,8 +1353,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override public Drawable getDefaultActivityIcon() {
-        return Resources.getSystem().getDrawable(
-            com.android.internal.R.drawable.sym_def_app_icon);
+        return mContext.getDrawable(com.android.internal.R.drawable.sym_def_app_icon);
     }
 
     @Override public Drawable getApplicationIcon(ApplicationInfo info) {
@@ -1440,7 +1491,7 @@ public class ApplicationPackageManager extends PackageManager {
         if (density <= 0) {
             density = mContext.getResources().getDisplayMetrics().densityDpi;
         }
-        return Resources.getSystem().getDrawableForDensity(drawableId, density);
+        return mContext.getResources().getDrawableForDensity(drawableId, density);
     }
 
     private Drawable getManagedProfileIconForDensity(UserHandle user, int drawableId, int density) {
@@ -2469,7 +2520,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public void setAppDetailsActivityEnabled(String packageName, boolean enabled) {
+    public void setSyntheticAppDetailsActivityEnabled(String packageName, boolean enabled) {
         try {
             ComponentName componentName = new ComponentName(packageName,
                     PackageManager.APP_DETAILS_ACTIVITY_CLASS_NAME);
@@ -2483,7 +2534,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public boolean getAppDetailsActivityEnabled(String packageName) {
+    public boolean getSyntheticAppDetailsActivityEnabled(String packageName) {
         try {
             ComponentName componentName = new ComponentName(packageName,
                     PackageManager.APP_DETAILS_ACTIVITY_CLASS_NAME);
@@ -2622,13 +2673,15 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
-    /**
-     * @hide
-     */
     @Override
     public boolean isUpgrade() {
+        return isDeviceUpgrading();
+    }
+
+    @Override
+    public boolean isDeviceUpgrading() {
         try {
-            return mPM.isUpgrade();
+            return mPM.isDeviceUpgrading();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3037,6 +3090,15 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public String getAttentionServicePackageName() {
+        try {
+            return mPM.getAttentionServicePackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
     public String getWellbeingPackageName() {
         try {
             return mPM.getWellbeingPackageName();
@@ -3055,9 +3117,9 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public String getContentCaptureServicePackageName() {
+    public String getSystemCaptionsServicePackageName() {
         try {
-            return mPM.getContentCaptureServicePackageName();
+            return mPM.getSystemCaptionsServicePackageName();
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }

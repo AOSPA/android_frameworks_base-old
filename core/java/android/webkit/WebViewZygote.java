@@ -16,10 +16,7 @@
 
 package android.webkit;
 
-import android.app.LoadedApk;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.ChildZygoteProcess;
 import android.os.Process;
@@ -28,10 +25,6 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
 /** @hide */
 public class WebViewZygote {
@@ -54,13 +47,6 @@ public class WebViewZygote {
      */
     @GuardedBy("sLock")
     private static PackageInfo sPackage;
-
-    /**
-     * Original ApplicationInfo for the selected WebView package before stub fixup. This is set from
-     * #onWebViewProviderChanged().
-     */
-    @GuardedBy("sLock")
-    private static ApplicationInfo sPackageOriginalAppInfo;
 
     /**
      * Flag for whether multi-process WebView is enabled. If this is {@code false}, the zygote
@@ -94,27 +80,17 @@ public class WebViewZygote {
         synchronized (sLock) {
             sMultiprocessEnabled = enabled;
 
-            // When toggling between multi-process being on/off, start or stop the
-            // zygote. If it is enabled and the zygote is not yet started, launch it.
-            // Otherwise, kill it. The name may be null if the package information has
-            // not yet been resolved.
-            if (enabled) {
-                // Run on a background thread as this waits for the zygote to start and we don't
-                // want to block the caller on this. It's okay if this is delayed as anyone trying
-                // to use the zygote will call it first anyway.
-                AsyncTask.THREAD_POOL_EXECUTOR.execute(WebViewZygote::getProcess);
-            } else {
-                // No need to run this in the background, it's very brief.
+            // When multi-process is disabled, kill the zygote. When it is enabled,
+            // the zygote will be started when it is first needed in getProcess().
+            if (!enabled) {
                 stopZygoteLocked();
             }
         }
     }
 
-    public static void onWebViewProviderChanged(PackageInfo packageInfo,
-                                                ApplicationInfo originalAppInfo) {
+    static void onWebViewProviderChanged(PackageInfo packageInfo) {
         synchronized (sLock) {
             sPackage = packageInfo;
-            sPackageOriginalAppInfo = originalAppInfo;
 
             // If multi-process is not enabled, then do not start the zygote service.
             if (!sMultiprocessEnabled) {
@@ -165,34 +141,7 @@ public class WebViewZygote {
                     Process.FIRST_ISOLATED_UID,
                     Integer.MAX_VALUE); // TODO(b/123615476) deal with user-id ranges properly
             ZygoteProcess.waitForConnectionToZygote(sZygote.getPrimarySocketAddress());
-
-            if (sPackageOriginalAppInfo.sourceDir.equals(sPackage.applicationInfo.sourceDir)) {
-                // No stub WebView is involved here, so we can preload the package the "clean" way
-                // using the ApplicationInfo.
-                sZygote.preloadApp(sPackage.applicationInfo, abi);
-            } else {
-                // Legacy path to support the stub WebView.
-                // Reuse the logic from LoadedApk to determine the correct paths and pass them to
-                // the zygote as strings.
-                final List<String> zipPaths = new ArrayList<>(10);
-                final List<String> libPaths = new ArrayList<>(10);
-                LoadedApk.makePaths(null, false, sPackage.applicationInfo, zipPaths, libPaths);
-                final String librarySearchPath = TextUtils.join(File.pathSeparator, libPaths);
-                final String zip = (zipPaths.size() == 1) ? zipPaths.get(0) :
-                        TextUtils.join(File.pathSeparator, zipPaths);
-
-                String libFileName = WebViewFactory.getWebViewLibrary(sPackage.applicationInfo);
-
-                // Use the original ApplicationInfo to determine what the original classpath would
-                // have been to use as a cache key.
-                LoadedApk.makePaths(null, false, sPackageOriginalAppInfo, zipPaths, null);
-                final String cacheKey = (zipPaths.size() == 1) ? zipPaths.get(0) :
-                        TextUtils.join(File.pathSeparator, zipPaths);
-
-                Log.d(LOGTAG, "Preloading package " + zip + " " + librarySearchPath);
-                sZygote.preloadPackageForAbi(zip, librarySearchPath, libFileName, cacheKey,
-                                             Build.SUPPORTED_ABIS[0]);
-            }
+            sZygote.preloadApp(sPackage.applicationInfo, abi);
         } catch (Exception e) {
             Log.e(LOGTAG, "Error connecting to webview zygote", e);
             stopZygoteLocked();

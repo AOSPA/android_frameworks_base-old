@@ -42,6 +42,7 @@
     <string name="available_via_passpoint" msgid="1617440946846329613">"Tersedia melalui %1$s"</string>
     <string name="tap_to_sign_up" msgid="6449724763052579434">"Tap untuk mendaftar"</string>
     <string name="wifi_connected_no_internet" msgid="8202906332837777829">"Tersambung, tidak ada internet"</string>
+    <string name="wifi_limited_connection" msgid="7717855024753201527">"Koneksi terbatas"</string>
     <string name="wifi_status_no_internet" msgid="5784710974669608361">"Tidak ada internet"</string>
     <string name="wifi_status_sign_in_required" msgid="123517180404752756">"Perlu login"</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"Titik akses penuh untuk sementara"</string>
@@ -73,7 +74,9 @@
     <string name="bluetooth_connected_no_a2dp_battery_level" msgid="3908466636369853652">"Terhubung (tanpa media), baterai <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp_battery_level" msgid="1163440823807659316">"Terhubung (tanpa ponsel atau media), baterai <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_battery_level" msgid="3149689299296462009">"Aktif, baterai <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_active_battery_level_untethered" msgid="6662649951391456747">"Aktif, Kr: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g> baterai, Kn: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g> baterai"</string>
     <string name="bluetooth_battery_level" msgid="1447164613319663655">"Baterai <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_battery_level_untethered" msgid="5974406100211667177">"Kr: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g> baterai, Kn: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g> baterai"</string>
     <string name="bluetooth_active_no_battery_level" msgid="8380223546730241956">"Aktif"</string>
     <string name="bluetooth_profile_a2dp" msgid="2031475486179830674">"Audio media"</string>
     <string name="bluetooth_profile_headset" msgid="7815495680863246034">"Panggilan telepon"</string>
@@ -288,13 +291,13 @@
     <string name="pointer_location" msgid="6084434787496938001">"Lokasi penunjuk"</string>
     <string name="pointer_location_summary" msgid="840819275172753713">"Hamparan layar menampilkan data sentuhan saat ini"</string>
     <string name="show_touches" msgid="2642976305235070316">"Tampilkan tap"</string>
-    <string name="show_touches_summary" msgid="6101183132903926324">"Tampilkan masukan visual untuk ketukan"</string>
+    <string name="show_touches_summary" msgid="6101183132903926324">"Tampilkan masukan visual untuk tap"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Lihat pembaruan permukaan"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Sorot seluruh permukaan jendela saat diperbarui"</string>
     <string name="show_hw_screen_updates" msgid="4117270979975470789">"Tampilkan update tampilan"</string>
     <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Tampilan cepat dalam jendela saat digambar"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Tunjukkan update lapisan hardware"</string>
-    <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Lapisan hardware berkedip hijau saat memperbarui"</string>
+    <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Lapisan hardware berkedip hijau saat mengupdate"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Debug overdraw oleh GPU"</string>
     <string name="disable_overlays" msgid="2074488440505934665">"Nonaktifkan lapisan HW"</string>
     <string name="disable_overlays_summary" msgid="3578941133710758592">"Selalu gunakan GPU untuk pengomposisian layar"</string>
@@ -317,8 +320,8 @@
     <string name="animator_duration_scale_title" msgid="3406722410819934083">"Skala durasi animator"</string>
     <string name="overlay_display_devices_title" msgid="5364176287998398539">"Simulasikan tampilan sekunder"</string>
     <string name="debug_applications_category" msgid="4206913653849771549">"Aplikasi"</string>
-    <string name="immediately_destroy_activities" msgid="1579659389568133959">"Jangan simpan kegiatan"</string>
-    <string name="immediately_destroy_activities_summary" msgid="3592221124808773368">"Hancurkan tiap kegiatan setelah ditinggal pengguna"</string>
+    <string name="immediately_destroy_activities" msgid="1579659389568133959">"Jangan simpan aktivitas"</string>
+    <string name="immediately_destroy_activities_summary" msgid="3592221124808773368">"Hancurkan tiap aktivitas setelah ditinggal pengguna"</string>
     <string name="app_process_limit_title" msgid="4280600650253107163">"Batas proses background"</string>
     <string name="show_all_anrs" msgid="4924885492787069007">"Tampilkan ANR background"</string>
     <string name="show_all_anrs_summary" msgid="6636514318275139826">"Tampilkan dialog Aplikasi Tidak Merespons untuk aplikasi yang berjalan di background"</string>
@@ -364,7 +367,7 @@
     <string name="button_convert_fbe" msgid="5152671181309826405">"Hapus dan konversi…"</string>
     <string name="picture_color_mode" msgid="4560755008730283695">"Mode warna gambar"</string>
     <string name="picture_color_mode_desc" msgid="1141891467675548590">"Gunakan sRGB"</string>
-    <string name="daltonizer_mode_disabled" msgid="7482661936053801862">"Nonaktifkan"</string>
+    <string name="daltonizer_mode_disabled" msgid="7482661936053801862">"Dinonaktifkan"</string>
     <string name="daltonizer_mode_monochromacy" msgid="8485709880666106721">"Monokromasi"</string>
     <string name="daltonizer_mode_deuteranomaly" msgid="5475532989673586329">"Deuteromali (merah-hijau)"</string>
     <string name="daltonizer_mode_protanomaly" msgid="8424148009038666065">"Protanomali (merah-hijau)"</string>
@@ -377,12 +380,14 @@
     <string name="power_discharging_duration" msgid="8848256785736335185">"Sekitar <xliff:g id="TIME_REMAINING">%1$s</xliff:g> lagi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Sekitar <xliff:g id="TIME_REMAINING">%1$s</xliff:g> lagi berdasarkan penggunaan Anda"</string>
     <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Sekitar <xliff:g id="TIME_REMAINING">%1$s</xliff:g> lagi berdasarkan penggunaan Anda (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"<xliff:g id="TIME_REMAINING">%1$s</xliff:g> lagi"</string>
+    <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Akan bertahan kira-kira sampai <xliff:g id="TIME">%1$s</xliff:g> berdasarkan penggunaan Anda (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Akan bertahan kira-kira sampai <xliff:g id="TIME">%1$s</xliff:g> berdasarkan penggunaan Anda"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Akan bertahan kira-kira sampai <xliff:g id="TIME">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only" msgid="107616694963545745">"Akan bertahan kira-kira sampai <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="1372817269546888804">"Hingga <xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_suggestion_extend_battery" msgid="4401408879069551485">"Perpanjang masa pakai baterai hingga <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration_only" msgid="5996752448813295329">"Tersisa kurang dari <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration" msgid="5751885147712659423">"Tersisa kurang dari <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_more_than_subtext" msgid="3176771815132876675">"Tersisa lebih dari <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
@@ -456,5 +461,5 @@
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"Selalu tanya"</string>
     <string name="zen_mode_forever" msgid="2704305038191592967">"Sampai Anda menonaktifkannya"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"Baru saja"</string>
-    <string name="media_transfer_phone_device_name" msgid="1003823744105758574">"Speaker ponsel"</string>
+    <string name="media_transfer_this_device_name" msgid="1636276898262571213">"Perangkat ini"</string>
 </resources>

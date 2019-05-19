@@ -21,8 +21,8 @@ import static android.app.servertransaction.TestUtils.mergedConfig;
 import static android.app.servertransaction.TestUtils.referrerIntentList;
 import static android.app.servertransaction.TestUtils.resultInfoList;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.app.IApplicationThread;
 import android.app.IInstrumentationWatcher;
@@ -64,7 +64,15 @@ import org.junit.runner.RunWith;
 import java.util.List;
 import java.util.Map;
 
-/** Test parcelling and unparcelling of transactions and transaction items. */
+/**
+ * Test parcelling and unparcelling of transactions and transaction items.
+ *
+ * <p>Build/Install/Run:
+ *  atest FrameworksCoreTests:TransactionParcelTests
+ *
+ * <p>This test class is a part of Window Manager Service tests and specified in
+ * {@link com.android.server.wm.test.filters.FrameworksTestsFilter}.
+ */
 @RunWith(AndroidJUnit4.class)
 @SmallTest
 @Presubmit
@@ -120,7 +128,7 @@ public class TransactionParcelTests {
     @Test
     public void testNewIntent() {
         // Write to parcel
-        NewIntentItem item = NewIntentItem.obtain(referrerIntentList(), true /* pause */);
+        NewIntentItem item = NewIntentItem.obtain(referrerIntentList());
         writeAndPrepareForReading(item);
 
         // Read from parcel and assert
@@ -234,7 +242,7 @@ public class TransactionParcelTests {
         LaunchActivityItem item = LaunchActivityItem.obtain(intent, ident, activityInfo,
                 config(), overrideConfig, compat, referrer, null /* voiceInteractor */,
                 procState, bundle, persistableBundle, resultInfoList(), referrerIntentList(),
-                true /* isForward */, null /* profilerInfo */);
+                true /* isForward */, null /* profilerInfo */, new Binder());
         writeAndPrepareForReading(item);
 
         // Read from parcel and assert
@@ -617,6 +625,16 @@ public class TransactionParcelTests {
 
         @Override
         public final void runIsolatedEntryPoint(String entryPoint, String[] entryPointArgs) {
+        }
+
+        @Override
+        public void requestDirectActions(IBinder activityToken, IVoiceInteractor interactor,
+                RemoteCallback cancellationCallback, RemoteCallback resultCallback) {
+        }
+
+        @Override
+        public void performDirectAction(IBinder activityToken, String actionId, Bundle arguments,
+                RemoteCallback cancellationCallback, RemoteCallback resultCallback) {
         }
     }
 }

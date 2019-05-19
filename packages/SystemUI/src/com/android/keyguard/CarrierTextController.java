@@ -16,14 +16,23 @@
 
 package com.android.keyguard;
 
+import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
+import static android.telephony.PhoneStateListener.LISTEN_NONE;
+
+import static com.android.internal.telephony.PhoneConstants.MAX_PHONE_COUNT_DUAL_SIM;
+
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
+import android.os.SystemProperties;
+import android.telephony.CarrierConfigManager;
+import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -32,10 +41,14 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.TelephonyIntents;
+import com.android.internal.telephony.TelephonyProperties;
 import com.android.settingslib.WirelessUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.statusbar.policy.FiveGServiceClient;
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -52,13 +65,18 @@ public class CarrierTextController {
     private boolean mTelephonyCapable;
     private boolean mShowMissingSim;
     private boolean mShowAirplaneMode;
-    private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    @VisibleForTesting
+    protected KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private WifiManager mWifiManager;
-    private boolean[] mSimErrorState = new boolean[TelephonyManager.getDefault().getPhoneCount()];
+    private boolean[] mSimErrorState;
+    private final int mSimSlotsNumber;
     private CarrierTextCallback mCarrierTextCallback;
     private Context mContext;
     private CharSequence mSeparator;
     private WakefulnessLifecycle mWakefulnessLifecycle;
+    @VisibleForTesting
+    protected boolean mDisplayOpportunisticSubscriptionCarrierText;
+    private FiveGServiceClient mFiveGServiceClient;
     private final WakefulnessLifecycle.Observer mWakefulnessObserver =
             new WakefulnessLifecycle.Observer() {
                 @Override
@@ -72,7 +90,8 @@ public class CarrierTextController {
                 }
             };
 
-    private final KeyguardUpdateMonitorCallback mCallback = new KeyguardUpdateMonitorCallback() {
+    @VisibleForTesting
+    protected final KeyguardUpdateMonitorCallback mCallback = new KeyguardUpdateMonitorCallback() {
         @Override
         public void onRefreshCarrierInfo() {
             if (DEBUG) {
@@ -93,7 +112,7 @@ public class CarrierTextController {
         }
 
         public void onSimStateChanged(int subId, int slotId, IccCardConstants.State simState) {
-            if (slotId < 0) {
+            if (slotId < 0 || slotId >= mSimSlotsNumber) {
                 Log.d(TAG, "onSimStateChanged() - slotId invalid: " + slotId
                         + " mTelephonyCapable: " + Boolean.toString(mTelephonyCapable));
                 return;
@@ -105,6 +124,17 @@ public class CarrierTextController {
                 updateCarrierText();
             } else if (mSimErrorState[slotId]) {
                 mSimErrorState[slotId] = false;
+                updateCarrierText();
+            }
+        }
+    };
+
+    private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+    private PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
+        @Override
+        public void onActiveDataSubscriptionIdChanged(int subId) {
+            mActiveMobileDataSubscription = subId;
+            if (mKeyguardUpdateMonitor != null) {
                 updateCarrierText();
             }
         }
@@ -144,36 +174,48 @@ public class CarrierTextController {
         mWifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         mSeparator = separator;
         mWakefulnessLifecycle = Dependency.get(WakefulnessLifecycle.class);
+        mSimSlotsNumber = ((TelephonyManager) context.getSystemService(
+                Context.TELEPHONY_SERVICE)).getPhoneCount();
+        mSimErrorState = new boolean[mSimSlotsNumber];
     }
 
     /**
      * Checks if there are faulty cards. Adds the text depending on the slot of the card
      *
      * @param text:   current carrier text based on the sim state
+     * @param carrierNames names order by subscription order
+     * @param subOrderBySlot array containing the sub index for each slot ID
      * @param noSims: whether a valid sim card is inserted
      * @return text
      */
-    private CharSequence updateCarrierTextWithSimIoError(CharSequence text, boolean noSims) {
+    private CharSequence updateCarrierTextWithSimIoError(CharSequence text,
+            CharSequence[] carrierNames, int[] subOrderBySlot, boolean noSims) {
         final CharSequence carrier = "";
         CharSequence carrierTextForSimIOError = getCarrierTextForSimState(
                 IccCardConstants.State.CARD_IO_ERROR, carrier);
+        // mSimErrorState has the state of each sim indexed by slotID.
         for (int index = 0; index < mSimErrorState.length; index++) {
-            if (mSimErrorState[index]) {
-                // In the case when no sim cards are detected but a faulty card is inserted
-                // overwrite the text and only show "Invalid card"
-                if (noSims) {
-                    return concatenate(carrierTextForSimIOError,
-                            getContext().getText(
-                                    com.android.internal.R.string.emergency_calls_only),
-                            mSeparator);
-                } else if (index == 0) {
-                    // prepend "Invalid card" when faulty card is inserted in slot 0
-                    text = concatenate(carrierTextForSimIOError, text, mSeparator);
-                } else {
-                    // concatenate "Invalid card" when faulty card is inserted in slot 1
-                    text = concatenate(text, carrierTextForSimIOError, mSeparator);
-                }
+            if (!mSimErrorState[index]) {
+                continue;
             }
+            // In the case when no sim cards are detected but a faulty card is inserted
+            // overwrite the text and only show "Invalid card"
+            if (noSims) {
+                return concatenate(carrierTextForSimIOError,
+                        getContext().getText(
+                                com.android.internal.R.string.emergency_calls_only),
+                        mSeparator);
+            } else if (subOrderBySlot[index] != -1) {
+                int subIndex = subOrderBySlot[index];
+                // prepend "Invalid card" when faulty card is inserted in slot 0 or 1
+                carrierNames[subIndex] = concatenate(carrierTextForSimIOError,
+                        carrierNames[subIndex],
+                        mSeparator);
+            } else {
+                // concatenate "Invalid card" when faulty card is inserted in other slot
+                text = concatenate(text, carrierTextForSimIOError, mSeparator);
+            }
+
         }
         return text;
     }
@@ -185,6 +227,8 @@ public class CarrierTextController {
      * @param callback Callback to provide text updates
      */
     public void setListening(CarrierTextCallback callback) {
+        TelephonyManager telephonyManager = ((TelephonyManager) mContext
+                .getSystemService(Context.TELEPHONY_SERVICE));
         if (callback != null) {
             mCarrierTextCallback = callback;
             if (ConnectivityManager.from(mContext).isNetworkSupported(
@@ -192,6 +236,8 @@ public class CarrierTextController {
                 mKeyguardUpdateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
                 mKeyguardUpdateMonitor.registerCallback(mCallback);
                 mWakefulnessLifecycle.addObserver(mWakefulnessObserver);
+                telephonyManager.listen(mPhoneStateListener,
+                        LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
             } else {
                 // Don't listen and clear out the text when the device isn't a phone.
                 mKeyguardUpdateMonitor = null;
@@ -203,7 +249,64 @@ public class CarrierTextController {
                 mKeyguardUpdateMonitor.removeCallback(mCallback);
                 mWakefulnessLifecycle.removeObserver(mWakefulnessObserver);
             }
+            telephonyManager.listen(mPhoneStateListener, LISTEN_NONE);
         }
+    }
+
+    /**
+     * @param subscriptions
+     */
+    private void filterMobileSubscriptionInSameGroup(List<SubscriptionInfo> subscriptions) {
+        if (subscriptions.size() == MAX_PHONE_COUNT_DUAL_SIM) {
+            SubscriptionInfo info1 = subscriptions.get(0);
+            SubscriptionInfo info2 = subscriptions.get(1);
+            if (info1.getGroupUuid() != null && info1.getGroupUuid().equals(info2.getGroupUuid())) {
+                // If both subscriptions are primary, show both.
+                if (!info1.isOpportunistic() && !info2.isOpportunistic()) return;
+
+                // If carrier required, always show signal bar of primary subscription.
+                // Otherwise, show whichever subscription is currently active for Internet.
+                boolean alwaysShowPrimary = CarrierConfigManager.getDefaultConfig()
+                        .getBoolean(CarrierConfigManager
+                        .KEY_ALWAYS_SHOW_PRIMARY_SIGNAL_BAR_IN_OPPORTUNISTIC_NETWORK_BOOLEAN);
+                if (alwaysShowPrimary) {
+                    subscriptions.remove(info1.isOpportunistic() ? info1 : info2);
+                } else {
+                    subscriptions.remove(info1.getSubscriptionId() == mActiveMobileDataSubscription
+                            ? info2 : info1);
+                }
+
+            }
+        }
+    }
+
+    /**
+     * updates if opportunistic sub carrier text should be displayed or not
+     *
+     */
+    @VisibleForTesting
+    public void updateDisplayOpportunisticSubscriptionCarrierText() {
+        mDisplayOpportunisticSubscriptionCarrierText = SystemProperties
+            .getBoolean(TelephonyProperties
+                .DISPLAY_OPPORTUNISTIC_SUBSCRIPTION_CARRIER_TEXT_PROPERTY_NAME, false);
+    }
+
+    protected List<SubscriptionInfo> getSubscriptionInfo() {
+        List<SubscriptionInfo> subs;
+        if (mDisplayOpportunisticSubscriptionCarrierText) {
+            SubscriptionManager subscriptionManager = ((SubscriptionManager) mContext
+                    .getSystemService(
+                    Context.TELEPHONY_SUBSCRIPTION_SERVICE));
+            subs = subscriptionManager.getActiveSubscriptionInfoList(false);
+            if (subs == null) {
+                subs = new ArrayList<>();
+            } else {
+                filterMobileSubscriptionInSameGroup(subs);
+            }
+        } else {
+            subs = mKeyguardUpdateMonitor.getSubscriptionInfo(false);
+        }
+        return subs;
     }
 
     protected void updateCarrierText() {
@@ -213,19 +316,29 @@ public class CarrierTextController {
         boolean showCustomizeName = getContext().getResources().getBoolean(
                 com.android.systemui.R.bool.config_show_customize_carrier_name);
         CharSequence displayText = null;
+        List<SubscriptionInfo> subs = getSubscriptionInfo();
 
-        List<SubscriptionInfo> subs = mKeyguardUpdateMonitor.getSubscriptionInfo(false);
-        final int N = subs.size();
-        final int[] subsIds = new int[N];
-        if (DEBUG) Log.d(TAG, "updateCarrierText(): " + N);
-        for (int i = 0; i < N; i++) {
-            CharSequence networkClass = "";
+        final int numSubs = subs.size();
+        final int[] subsIds = new int[numSubs];
+        if (DEBUG) Log.d(TAG, "updateCarrierText(): " + numSubs);
+        // This array will contain in position i, the index of subscription in slot ID i.
+        // -1 if no subscription in that slot
+        final int[] subOrderBySlot = new int[mSimSlotsNumber];
+        for (int i = 0; i < mSimSlotsNumber; i++) {
+            subOrderBySlot[i] = -1;
+        }
+        final CharSequence[] carrierNames = new CharSequence[numSubs];
+        if (DEBUG) Log.d(TAG, "updateCarrierText(): " + numSubs);
+
+        for (int i = 0; i < numSubs; i++) {
             int subId = subs.get(i).getSubscriptionId();
+            carrierNames[i] = "";
             subsIds[i] = subId;
+            subOrderBySlot[subs.get(i).getSimSlotIndex()] = i;
             IccCardConstants.State simState = mKeyguardUpdateMonitor.getSimState(subId);
             CharSequence carrierName = subs.get(i).getCarrierName();
             if ( showCustomizeName ) {
-                carrierName = getCustomizeCarrierName(carrierName, subId);
+                carrierName = getCustomizeCarrierName(carrierName, subs.get(i));
             }
             CharSequence carrierTextForSimState = getCarrierTextForSimState(simState, carrierName);
             if (DEBUG) {
@@ -233,7 +346,7 @@ public class CarrierTextController {
             }
             if (carrierTextForSimState != null) {
                 allSimsMissing = false;
-                displayText = concatenate(displayText, carrierTextForSimState, mSeparator);
+                carrierNames[i] = carrierTextForSimState;
             }
             if (simState == IccCardConstants.State.READY) {
                 ServiceState ss = mKeyguardUpdateMonitor.mServiceStates.get(subId);
@@ -253,7 +366,7 @@ public class CarrierTextController {
             }
         }
         if (allSimsMissing) {
-            if (N != 0) {
+            if (numSubs != 0) {
                 // Shows "No SIM card | Emergency calls only" on devices that are voice-capable.
                 // This depends on mPlmn containing the text "Emergency calls only" when the radio
                 // has some connectivity. Otherwise, it should be null or empty and just show
@@ -262,7 +375,6 @@ public class CarrierTextController {
                 // described above.
                 displayText =  makeCarrierStringOnEmergencyCapable(
                         getMissingSimMessage(), subs.get(0).getCarrierName());
-                missingSimsWithSubs = true;
             } else {
                 // We don't have a SubscriptionInfo to get the emergency calls only from.
                 // Grab it from the old sticky broadcast if possible instead. We can use it
@@ -292,26 +404,35 @@ public class CarrierTextController {
             }
         }
 
-        displayText = updateCarrierTextWithSimIoError(displayText, allSimsMissing);
+        displayText = updateCarrierTextWithSimIoError(displayText, carrierNames, subOrderBySlot,
+                allSimsMissing);
+        boolean airplaneMode = false;
         // APM (airplane mode) != no carrier state. There are carrier services
         // (e.g. WFC = Wi-Fi calling) which may operate in APM.
         if (!anySimReadyAndInService && WirelessUtils.isAirplaneModeOn(mContext)) {
             displayText = getAirplaneModeMessage();
+            airplaneMode = true;
         }
 
-
-
-        Handler handler = Dependency.get(Dependency.MAIN_HANDLER);
+        if (TextUtils.isEmpty(displayText) && !airplaneMode) {
+            displayText = joinNotEmpty(mSeparator, carrierNames);
+        }
         final CarrierTextCallbackInfo info = new CarrierTextCallbackInfo(
                 displayText,
-                displayText.toString().split(mSeparator.toString()),
-                anySimReadyAndInService && !missingSimsWithSubs,
-                subsIds);
+                carrierNames,
+                !allSimsMissing,
+                subsIds,
+                airplaneMode);
+        postToCallback(info);
+    }
+
+    @VisibleForTesting
+    protected void postToCallback(CarrierTextCallbackInfo info) {
+        Handler handler = Dependency.get(Dependency.MAIN_HANDLER);
         final CarrierTextCallback callback = mCarrierTextCallback;
         if (callback != null) {
             handler.post(() -> callback.updateCarrierInfo(info));
         }
-
     }
 
     private Context getContext() {
@@ -457,6 +578,25 @@ public class CarrierTextController {
         }
     }
 
+    /**
+     * Joins the strings in a sequence using a separator. Empty strings are discarded with no extra
+     * separator added so there are no extra separators that are not needed.
+     */
+    private static CharSequence joinNotEmpty(CharSequence separator, CharSequence[] sequences) {
+        int length = sequences.length;
+        if (length == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            if (!TextUtils.isEmpty(sequences[i])) {
+                if (!TextUtils.isEmpty(sb)) {
+                    sb.append(separator);
+                }
+                sb.append(sequences[i]);
+            }
+        }
+        return sb.toString();
+    }
+
     private static List<CharSequence> append(List<CharSequence> list, CharSequence string) {
         if (!TextUtils.isEmpty(string)) {
             list.add(string);
@@ -502,14 +642,22 @@ public class CarrierTextController {
         public final CharSequence[] listOfCarriers;
         public final boolean anySimReady;
         public final int[] subscriptionIds;
+        public boolean airplaneMode;
 
         @VisibleForTesting
         public CarrierTextCallbackInfo(CharSequence carrierText, CharSequence[] listOfCarriers,
                 boolean anySimReady, int[] subscriptionIds) {
+            this(carrierText, listOfCarriers, anySimReady, subscriptionIds, false);
+        }
+
+        @VisibleForTesting
+        public CarrierTextCallbackInfo(CharSequence carrierText, CharSequence[] listOfCarriers,
+                boolean anySimReady, int[] subscriptionIds, boolean airplaneMode) {
             this.carrierText = carrierText;
             this.listOfCarriers = listOfCarriers;
             this.anySimReady = anySimReady;
             this.subscriptionIds = subscriptionIds;
+            this.airplaneMode = airplaneMode;
         }
     }
 
@@ -533,10 +681,22 @@ public class CarrierTextController {
         default void finishedWakingUp() {};
     }
 
-    private String getCustomizeCarrierName(CharSequence originCarrierName, int subId) {
+    private String getCustomizeCarrierName(CharSequence originCarrierName,
+                                           SubscriptionInfo sub) {
         StringBuilder newCarrierName = new StringBuilder();
-        int networkType = getNetworkType(subId);
+        int networkType = getNetworkType(sub.getSubscriptionId());
         String networkClass = networkClassToString(TelephonyManager.getNetworkClass(networkType));
+
+        if ( mFiveGServiceClient == null ) {
+            mFiveGServiceClient = FiveGServiceClient.getInstance(mContext);
+            mFiveGServiceClient.registerCallback(mCallback);
+        }
+        FiveGServiceState fiveGServiceState =
+                mFiveGServiceClient.getCurrentServiceState(sub.getSimSlotIndex());
+        if ( fiveGServiceState.isConnectedOnNsaMode() ) {
+            networkClass =
+                    mContext.getResources().getString(R.string.data_connection_5g);
+        }
 
         if (!TextUtils.isEmpty(originCarrierName)) {
             String[] names = originCarrierName.toString().split(mSeparator.toString(), 2);

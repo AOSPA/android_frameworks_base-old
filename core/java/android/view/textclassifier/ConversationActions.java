@@ -44,7 +44,7 @@ import java.util.List;
  */
 public final class ConversationActions implements Parcelable {
 
-    public static final Creator<ConversationActions> CREATOR =
+    public static final @android.annotation.NonNull Creator<ConversationActions> CREATOR =
             new Creator<ConversationActions>() {
                 @Override
                 public ConversationActions createFromParcel(Parcel in) {
@@ -109,6 +109,7 @@ public final class ConversationActions implements Parcelable {
          *
          * @see Builder#Builder(Person)
          */
+        @NonNull
         public static final Person PERSON_USER_SELF =
                 new Person.Builder()
                         .setKey("text-classifier-conversation-actions-user-self")
@@ -123,6 +124,7 @@ public final class ConversationActions implements Parcelable {
          *
          * @see Builder#Builder(Person)
          */
+        @NonNull
         public static final Person PERSON_USER_OTHERS =
                 new Person.Builder()
                         .setKey("text-classifier-conversation-actions-user-others")
@@ -175,7 +177,7 @@ public final class ConversationActions implements Parcelable {
             return 0;
         }
 
-        public static final Creator<Message> CREATOR =
+        public static final @android.annotation.NonNull Creator<Message> CREATOR =
                 new Creator<Message>() {
                     @Override
                     public Message createFromParcel(Parcel in) {
@@ -212,13 +214,11 @@ public final class ConversationActions implements Parcelable {
         /**
          * Returns the extended data related to this conversation action.
          *
-         * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-         * prefer to hold a reference to the returned bundle rather than frequently calling this
-         * method.
+         * <p><b>NOTE: </b>Do not modify this bundle.
          */
         @NonNull
         public Bundle getExtras() {
-            return mExtras.deepCopy();
+            return mExtras;
         }
 
         /** Builder class to construct a {@link Message} */
@@ -275,7 +275,7 @@ public final class ConversationActions implements Parcelable {
                         mAuthor,
                         mReferenceTime,
                         mText == null ? null : new SpannedString(mText),
-                        mExtras == null ? new Bundle() : mExtras.deepCopy());
+                        mExtras == null ? Bundle.EMPTY : mExtras);
             }
         }
     }
@@ -316,20 +316,20 @@ public final class ConversationActions implements Parcelable {
         private final List<String> mHints;
         @Nullable
         private String mCallingPackageName;
-        @Nullable
-        private final String mConversationId;
+        @NonNull
+        private Bundle mExtras;
 
         private Request(
                 @NonNull List<Message> conversation,
                 @NonNull TextClassifier.EntityConfig typeConfig,
                 int maxSuggestions,
-                String conversationId,
-                @Nullable @Hint List<String> hints) {
+                @Nullable @Hint List<String> hints,
+                @NonNull Bundle extras) {
             mConversation = Preconditions.checkNotNull(conversation);
             mTypeConfig = Preconditions.checkNotNull(typeConfig);
             mMaxSuggestions = maxSuggestions;
-            mConversationId = conversationId;
             mHints = hints;
+            mExtras = extras;
         }
 
         private static Request readFromParcel(Parcel in) {
@@ -337,17 +337,16 @@ public final class ConversationActions implements Parcelable {
             in.readParcelableList(conversation, null);
             TextClassifier.EntityConfig typeConfig = in.readParcelable(null);
             int maxSuggestions = in.readInt();
-            String conversationId = in.readString();
             List<String> hints = new ArrayList<>();
             in.readStringList(hints);
             String callingPackageName = in.readString();
-
+            Bundle extras = in.readBundle();
             Request request = new Request(
                     conversation,
                     typeConfig,
                     maxSuggestions,
-                    conversationId,
-                    hints);
+                    hints,
+                    extras);
             request.setCallingPackageName(callingPackageName);
             return request;
         }
@@ -357,9 +356,9 @@ public final class ConversationActions implements Parcelable {
             parcel.writeParcelableList(mConversation, flags);
             parcel.writeParcelable(mTypeConfig, flags);
             parcel.writeInt(mMaxSuggestions);
-            parcel.writeString(mConversationId);
             parcel.writeStringList(mHints);
             parcel.writeString(mCallingPackageName);
+            parcel.writeBundle(mExtras);
         }
 
         @Override
@@ -367,7 +366,7 @@ public final class ConversationActions implements Parcelable {
             return 0;
         }
 
-        public static final Creator<Request> CREATOR =
+        public static final @android.annotation.NonNull Creator<Request> CREATOR =
                 new Creator<Request>() {
                     @Override
                     public Request createFromParcel(Parcel in) {
@@ -401,18 +400,8 @@ public final class ConversationActions implements Parcelable {
             return mMaxSuggestions;
         }
 
-        /**
-         * Return an unique identifier of the conversation that is generating actions for. This
-         * identifier is unique within the calling package only, so use it with
-         * {@link #getCallingPackageName()}.
-         */
-        @Nullable
-        public String getConversationId() {
-            return mConversationId;
-        }
-
         /** Returns an immutable list of hints */
-        @Nullable
+        @NonNull
         @Hint
         public List<String> getHints() {
             return mHints;
@@ -438,6 +427,16 @@ public final class ConversationActions implements Parcelable {
             return mCallingPackageName;
         }
 
+        /**
+         * Returns the extended data related to this request.
+         *
+         * <p><b>NOTE: </b>Do not modify this bundle.
+         */
+        @NonNull
+        public Bundle getExtras() {
+            return mExtras;
+        }
+
         /** Builder object to construct the {@link Request} object. */
         public static final class Builder {
             @NonNull
@@ -446,10 +445,10 @@ public final class ConversationActions implements Parcelable {
             private TextClassifier.EntityConfig mTypeConfig;
             private int mMaxSuggestions = -1;
             @Nullable
-            private String mConversationId;
-            @Nullable
             @Hint
             private List<String> mHints;
+            @Nullable
+            private Bundle mExtras;
 
             /**
              * Constructs a builder.
@@ -465,6 +464,7 @@ public final class ConversationActions implements Parcelable {
              * Sets the hints to help text classifier to generate actions. It could be used to help
              * text classifier to infer what types of actions the caller may be interested in.
              */
+            @NonNull
             public Builder setHints(@Nullable @Hint List<String> hints) {
                 mHints = hints;
                 return this;
@@ -487,12 +487,10 @@ public final class ConversationActions implements Parcelable {
                 return this;
             }
 
-            /**
-             * Sets an unique identifier of the conversation that is generating actions for.
-             */
+            /** Sets a set of extended data to the request. */
             @NonNull
-            public Builder setConversationId(@Nullable String conversationId) {
-                mConversationId = conversationId;
+            public Builder setExtras(@Nullable Bundle bundle) {
+                mExtras = bundle;
                 return this;
             }
 
@@ -505,10 +503,10 @@ public final class ConversationActions implements Parcelable {
                                 ? new TextClassifier.EntityConfig.Builder().build()
                                 : mTypeConfig,
                         mMaxSuggestions,
-                        mConversationId,
                         mHints == null
                                 ? Collections.emptyList()
-                                : Collections.unmodifiableList(mHints));
+                                : Collections.unmodifiableList(mHints),
+                        mExtras == null ? Bundle.EMPTY : mExtras);
             }
         }
     }

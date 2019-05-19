@@ -24,6 +24,7 @@ import android.service.notification.StatusBarNotification;
 import android.hardware.biometrics.IBiometricServiceReceiverInternal;
 
 import com.android.internal.statusbar.IStatusBar;
+import com.android.internal.statusbar.RegisterStatusBarResult;
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.statusbar.StatusBarIconList;
 import com.android.internal.statusbar.NotificationVisibility;
@@ -31,28 +32,29 @@ import com.android.internal.statusbar.NotificationVisibility;
 /** @hide */
 interface IStatusBarService
 {
+    @UnsupportedAppUsage
     void expandNotificationsPanel();
+    @UnsupportedAppUsage
     void collapsePanels();
     void togglePanel();
+    @UnsupportedAppUsage
     void disable(int what, IBinder token, String pkg);
     void disableForUser(int what, IBinder token, String pkg, int userId);
     void disable2(int what, IBinder token, String pkg);
     void disable2ForUser(int what, IBinder token, String pkg, int userId);
     int[] getDisableFlags(IBinder token, int userId);
     void setIcon(String slot, String iconPackage, int iconId, int iconLevel, String contentDescription);
+    @UnsupportedAppUsage
     void setIconVisibility(String slot, boolean visible);
+    @UnsupportedAppUsage
     void removeIcon(String slot);
-    // TODO(b/117478341): support back button change when IME is showing on a external display.
-    void setImeWindowStatus(in IBinder token, int vis, int backDisposition,
+    void setImeWindowStatus(int displayId, in IBinder token, int vis, int backDisposition,
             boolean showImeSwitcher);
     void expandSettingsPanel(String subPanel);
 
     // ---- Methods below are for use by the status bar policy services ----
     // You need the STATUS_BAR_SERVICE permission
-    void registerStatusBar(IStatusBar callbacks, out List<String> iconSlots,
-            out List<StatusBarIcon> iconList,
-            out int[] switches, out List<IBinder> binders, out Rect fullscreenStackBounds,
-            out Rect dockedStackBounds);
+    RegisterStatusBarResult registerStatusBar(IStatusBar callbacks);
     void onPanelRevealed(boolean clearNotificationEffects, int numItems);
     void onPanelHidden();
     // Mark current notifications as "seen" and stop ringing, vibrating, blinking.
@@ -74,6 +76,7 @@ interface IStatusBarService
             in int notificationLocation, boolean modifiedBeforeSending);
     void onNotificationSettingsViewed(String key);
     void setSystemUiVisibility(int displayId, int vis, int mask, String cause);
+    void onNotificationBubbleChanged(String key, boolean isBubble);
 
     void onGlobalActionsShown();
     void onGlobalActionsHidden();
@@ -87,6 +90,7 @@ interface IStatusBarService
     void addTile(in ComponentName tile);
     void remTile(in ComponentName tile);
     void clickTile(in ComponentName tile);
+    @UnsupportedAppUsage
     void handleSystemKey(in int key);
 
     /**
@@ -99,7 +103,7 @@ interface IStatusBarService
     void showBiometricDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver, int type,
             boolean requireConfirmation, int userId);
     // Used to hide the dialog when a biometric is authenticated
-    void onBiometricAuthenticated(boolean authenticated);
+    void onBiometricAuthenticated(boolean authenticated, String failureReason);
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc
     void onBiometricHelp(String message);
     // Used to set a message - the dialog will dismiss after a certain amount of time

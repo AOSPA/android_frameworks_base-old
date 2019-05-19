@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.WallpaperColors;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.util.Log;
 import android.util.MathUtils;
@@ -51,12 +52,13 @@ public class Tonal implements ExtractionType {
 
     private static final boolean DEBUG = true;
 
-    public static final int MAIN_COLOR_LIGHT = 0xffe0e0e0;
-    public static final int MAIN_COLOR_DARK = 0xff212121;
+    public static final int MAIN_COLOR_LIGHT = 0xffdadce0;
+    public static final int MAIN_COLOR_DARK = 0xff202124;
+    public static final int MAIN_COLOR_REGULAR = 0xff000000;
 
     private final TonalPalette mGreyPalette;
     private final ArrayList<TonalPalette> mTonalPalettes;
-    private final ArrayList<ColorRange> mBlacklistedColors;
+    private final Context mContext;
 
     // Temporary variable to avoid allocations
     private float[] mTmpHSL = new float[3];
@@ -65,7 +67,7 @@ public class Tonal implements ExtractionType {
 
         ConfigParser parser = new ConfigParser(context);
         mTonalPalettes = parser.getTonalPalettes();
-        mBlacklistedColors = parser.getBlacklistedColors();
+        mContext = context;
 
         mGreyPalette = mTonalPalettes.get(0);
         mTonalPalettes.remove(0);
@@ -111,42 +113,20 @@ public class Tonal implements ExtractionType {
         final int mainColorsSize = mainColors.size();
         final int hints = inWallpaperColors.getColorHints();
         final boolean supportsDarkText = (hints & WallpaperColors.HINT_SUPPORTS_DARK_TEXT) != 0;
-        final boolean generatedFromBitmap = (hints & WallpaperColors.HINT_FROM_BITMAP) != 0;
 
         if (mainColorsSize == 0) {
             return false;
         }
 
-        // Decide what's the best color to use.
-        // We have 2 options:
-        // • Just pick the primary color
-        // • Filter out blacklisted colors. This is useful when palette is generated
-        //   automatically from a bitmap.
-        Color bestColor = null;
-        final float[] hsl = new float[3];
-        for (int i = 0; i < mainColorsSize; i++) {
-            final Color color = mainColors.get(i);
-            final int colorValue = color.toArgb();
-            ColorUtils.RGBToHSL(Color.red(colorValue), Color.green(colorValue),
-                    Color.blue(colorValue), hsl);
-
-            // Stop when we find a color that meets our criteria
-            if (!generatedFromBitmap || !isBlacklisted(hsl)) {
-                bestColor = color;
-                break;
-            }
-        }
-
-        // Fail if not found
-        if (bestColor == null) {
-            return false;
-        }
+        // Pick the primary color as the best color to use.
+        final Color bestColor = mainColors.get(0);
 
         // Tonal is not really a sort, it takes a color from the extracted
         // palette and finds a best fit amongst a collection of pre-defined
         // palettes. The best fit is tweaked to be closer to the source color
         // and replaces the original palette.
         int colorValue = bestColor.toArgb();
+        final float[] hsl = new float[3];
         ColorUtils.RGBToHSL(Color.red(colorValue), Color.green(colorValue), Color.blue(colorValue),
                 hsl);
 
@@ -271,7 +251,20 @@ public class Tonal implements ExtractionType {
         boolean light = inWallpaperColors != null
                 && (inWallpaperColors.getColorHints() & WallpaperColors.HINT_SUPPORTS_DARK_TEXT)
                 != 0;
-        final int color = light ? MAIN_COLOR_LIGHT : MAIN_COLOR_DARK;
+        boolean dark = inWallpaperColors != null
+                && (inWallpaperColors.getColorHints() & WallpaperColors.HINT_SUPPORTS_DARK_THEME)
+                != 0;
+        final int color;
+        final boolean inNightMode = (mContext.getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+        if (light) {
+            color = MAIN_COLOR_LIGHT;
+        } else if (dark || inNightMode) {
+            color = MAIN_COLOR_DARK;
+        } else {
+            color = MAIN_COLOR_REGULAR;
+        }
         final float[] hsl = new float[3];
         ColorUtils.colorToHSL(color, hsl);
 
@@ -298,22 +291,6 @@ public class Tonal implements ExtractionType {
 
     private int[] getColorPalette(TonalPalette palette) {
         return getColorPalette(palette.h, palette.s, palette.l);
-    }
-
-
-    /**
-     * Checks if a given color exists in the blacklist
-     * @param hsl float array with 3 components (H 0..360, S 0..1 and L 0..1)
-     * @return true if color should be avoided
-     */
-    private boolean isBlacklisted(float[] hsl) {
-        for (int i = mBlacklistedColors.size() - 1; i >= 0; i--) {
-            ColorRange badRange = mBlacklistedColors.get(i);
-            if (badRange.containsColor(hsl[0], hsl[1], hsl[2])) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -362,11 +339,6 @@ public class Tonal implements ExtractionType {
         }
 
         return minErrorIndex;
-    }
-
-    @VisibleForTesting
-    public List<ColorRange> getBlacklistedColors() {
-        return mBlacklistedColors;
     }
 
     @Nullable
@@ -502,11 +474,9 @@ public class Tonal implements ExtractionType {
     @VisibleForTesting
     public static class ConfigParser {
         private final ArrayList<TonalPalette> mTonalPalettes;
-        private final ArrayList<ColorRange> mBlacklistedColors;
 
         public ConfigParser(Context context) {
             mTonalPalettes = new ArrayList<>();
-            mBlacklistedColors = new ArrayList<>();
 
             // Load all palettes and the blacklist from an XML.
             try {
@@ -520,8 +490,6 @@ public class Tonal implements ExtractionType {
                         String tagName = parser.getName();
                         if (tagName.equals("palettes")) {
                             parsePalettes(parser);
-                        } else if (tagName.equals("blacklist")) {
-                            parseBlacklist(parser);
                         }
                     } else {
                         throw new XmlPullParserException("Invalid XML event " + eventType + " - "
@@ -536,28 +504,6 @@ public class Tonal implements ExtractionType {
 
         public ArrayList<TonalPalette> getTonalPalettes() {
             return mTonalPalettes;
-        }
-
-        public ArrayList<ColorRange> getBlacklistedColors() {
-            return mBlacklistedColors;
-        }
-
-        private void parseBlacklist(XmlPullParser parser)
-                throws XmlPullParserException, IOException {
-            parser.require(XmlPullParser.START_TAG, null, "blacklist");
-            while (parser.next() != XmlPullParser.END_TAG) {
-                if (parser.getEventType() != XmlPullParser.START_TAG) {
-                    continue;
-                }
-                String name = parser.getName();
-                // Starts by looking for the entry tag
-                if (name.equals("range")) {
-                    mBlacklistedColors.add(readRange(parser));
-                    parser.next();
-                } else {
-                    throw new XmlPullParserException("Invalid tag: " + name, parser, null);
-                }
-            }
         }
 
         private ColorRange readRange(XmlPullParser parser)

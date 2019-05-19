@@ -23,12 +23,13 @@ import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
 import android.os.IBinder;
+import android.service.contentcapture.ActivityEvent;
 import android.service.contentcapture.IContentCaptureService;
 import android.service.contentcapture.IContentCaptureServiceCallback;
 import android.service.contentcapture.SnapshotData;
 import android.util.Slog;
 import android.view.contentcapture.ContentCaptureContext;
-import android.view.contentcapture.UserDataRemovalRequest;
+import android.view.contentcapture.DataRemovalRequest;
 
 import com.android.internal.infra.AbstractMultiplePendingRequestsRemoteService;
 import com.android.internal.os.IResultReceiver;
@@ -39,18 +40,22 @@ final class RemoteContentCaptureService
 
     private final IBinder mServerCallback;
     private final int mIdleUnbindTimeoutMs;
+    private final ContentCapturePerUserService mPerUserService;
 
     RemoteContentCaptureService(Context context, String serviceInterface,
             ComponentName serviceComponentName, IContentCaptureServiceCallback callback, int userId,
-            ContentCaptureServiceCallbacks callbacks, boolean bindInstantServiceAllowed,
+            ContentCapturePerUserService perUserService, boolean bindInstantServiceAllowed,
             boolean verbose, int idleUnbindTimeoutMs) {
-        super(context, serviceInterface, serviceComponentName, userId, callbacks,
-                bindInstantServiceAllowed, verbose, /* initialCapacity= */ 2);
+        super(context, serviceInterface, serviceComponentName, userId, perUserService,
+                context.getMainThreadHandler(),
+                bindInstantServiceAllowed ? Context.BIND_ALLOW_INSTANT : 0, verbose,
+                /* initialCapacity= */ 2);
+        mPerUserService = perUserService;
         mServerCallback = callback.asBinder();
         mIdleUnbindTimeoutMs = idleUnbindTimeoutMs;
 
         // Bind right away, which will trigger a onConnected() on service's
-        scheduleBind();
+        ensureBoundLocked();
     }
 
     @Override // from AbstractRemoteService
@@ -63,52 +68,69 @@ final class RemoteContentCaptureService
         return mIdleUnbindTimeoutMs;
     }
 
-    @Override // from RemoteService
-    protected void handleOnConnectedStateChanged(boolean state) {
-        if (state && getTimeoutIdleBindMillis() != PERMANENT_BOUND_TIMEOUT_MS) {
+    @Override // from AbstractRemoteService
+    protected void handleOnConnectedStateChanged(boolean connected) {
+        if (connected && getTimeoutIdleBindMillis() != PERMANENT_BOUND_TIMEOUT_MS) {
             scheduleUnbind();
         }
         try {
-            if (state) {
-                mService.onConnected(mServerCallback, sVerbose, sDebug);
+            if (connected) {
+                try {
+                    mService.onConnected(mServerCallback, sVerbose, sDebug);
+                } finally {
+                    // Update the system-service state, in case the service reconnected after
+                    // dying
+                    mPerUserService.onConnected();
+                }
             } else {
                 mService.onDisconnected();
             }
         } catch (Exception e) {
-            Slog.w(mTag, "Exception calling onConnectedStateChanged(" + state + "): " + e);
+            Slog.w(mTag, "Exception calling onConnectedStateChanged(" + connected + "): " + e);
         }
+    }
+
+    public void ensureBoundLocked() {
+        scheduleBind();
     }
 
     /**
      * Called by {@link ContentCaptureServerSession} to generate a call to the
      * {@link RemoteContentCaptureService} to indicate the session was created.
      */
-    public void onSessionStarted(@Nullable ContentCaptureContext context,
-            @NonNull String sessionId, int uid, @NonNull IResultReceiver clientReceiver) {
-        scheduleAsyncRequest((s) -> s.onSessionStarted(context, sessionId, uid, clientReceiver));
+    public void onSessionStarted(@Nullable ContentCaptureContext context, int sessionId, int uid,
+            @NonNull IResultReceiver clientReceiver, int initialState) {
+        scheduleAsyncRequest(
+                (s) -> s.onSessionStarted(context, sessionId, uid, clientReceiver, initialState));
     }
 
     /**
      * Called by {@link ContentCaptureServerSession} to generate a call to the
      * {@link RemoteContentCaptureService} to indicate the session was finished.
      */
-    public void onSessionFinished(@NonNull String sessionId) {
+    public void onSessionFinished(int sessionId) {
         scheduleAsyncRequest((s) -> s.onSessionFinished(sessionId));
     }
 
     /**
      * Called by {@link ContentCaptureServerSession} to send snapshot data to the service.
      */
-    public void onActivitySnapshotRequest(@NonNull String sessionId,
-            @NonNull SnapshotData snapshotData) {
+    public void onActivitySnapshotRequest(int sessionId, @NonNull SnapshotData snapshotData) {
         scheduleAsyncRequest((s) -> s.onActivitySnapshot(sessionId, snapshotData));
     }
 
     /**
-     * Called by {@link ContentCaptureServerSession} to request removal of user data.
+     * Called by {@link ContentCaptureServerSession} to request removal of content capture data.
      */
-    public void onUserDataRemovalRequest(@NonNull UserDataRemovalRequest request) {
-        scheduleAsyncRequest((s) -> s.onUserDataRemovalRequest(request));
+    public void onDataRemovalRequest(@NonNull DataRemovalRequest request) {
+        scheduleAsyncRequest((s) -> s.onDataRemovalRequest(request));
+    }
+
+    /**
+     * Called by {@link ContentCaptureServerSession} to notify a high-level activity event.
+     */
+    public void onActivityLifecycleEvent(@NonNull ActivityEvent event) {
+        scheduleAsyncRequest((s) -> s.onActivityEvent(event));
     }
 
     public interface ContentCaptureServiceCallbacks

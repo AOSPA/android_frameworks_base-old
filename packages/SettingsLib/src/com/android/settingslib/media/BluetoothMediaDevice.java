@@ -16,9 +16,14 @@
 package com.android.settingslib.media;
 
 import android.bluetooth.BluetoothClass;
+import android.bluetooth.BluetoothDevice;
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.util.Log;
+import android.util.Pair;
 
+import com.android.settingslib.R;
+import com.android.settingslib.bluetooth.BluetoothUtils;
 import com.android.settingslib.bluetooth.CachedBluetoothDevice;
 
 /**
@@ -42,9 +47,17 @@ public class BluetoothMediaDevice extends MediaDevice {
     }
 
     @Override
-    public int getIcon() {
-        //TODO(b/117129183): This is not final icon for bluetooth device, just for demo.
-        return com.android.internal.R.drawable.ic_bt_headphones_a2dp;
+    public String getSummary() {
+        return isConnected() || mCachedDevice.isBusy()
+                ? mCachedDevice.getConnectionSummary()
+                : mContext.getString(R.string.bluetooth_disconnected);
+    }
+
+    @Override
+    public Drawable getIcon() {
+        final Pair<Drawable, String> pair = BluetoothUtils
+                .getBtRainbowDrawableWithDescription(mContext, mCachedDevice);
+        return pair.first;
     }
 
     @Override
@@ -85,5 +98,11 @@ public class BluetoothMediaDevice extends MediaDevice {
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean isConnected() {
+        return mCachedDevice.getBondState() == BluetoothDevice.BOND_BONDED
+                && mCachedDevice.isConnected();
     }
 }

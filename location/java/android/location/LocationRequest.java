@@ -17,6 +17,8 @@
 package android.location;
 
 import android.Manifest;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
@@ -183,14 +185,16 @@ public final class LocationRequest implements Parcelable {
      *
      * @return a new location request
      */
+    @NonNull
     public static LocationRequest create() {
         return new LocationRequest();
     }
 
     /** @hide */
     @SystemApi
-    public static LocationRequest createFromDeprecatedProvider(String provider, long minTime,
-            float minDistance, boolean singleShot) {
+    @NonNull
+    public static LocationRequest createFromDeprecatedProvider(
+            @NonNull String provider, long minTime, float minDistance, boolean singleShot) {
         if (minTime < 0) minTime = 0;
         if (minDistance < 0) minDistance = 0;
 
@@ -215,8 +219,9 @@ public final class LocationRequest implements Parcelable {
 
     /** @hide */
     @SystemApi
-    public static LocationRequest createFromDeprecatedCriteria(Criteria criteria, long minTime,
-            float minDistance, boolean singleShot) {
+    @NonNull
+    public static LocationRequest createFromDeprecatedCriteria(
+            @NonNull Criteria criteria, long minTime, float minDistance, boolean singleShot) {
         if (minTime < 0) minTime = 0;
         if (minDistance < 0) minDistance = 0;
 
@@ -270,7 +275,7 @@ public final class LocationRequest implements Parcelable {
      * Set the quality of the request.
      *
      * <p>Use with a accuracy constant such as {@link #ACCURACY_FINE}, or a power
-     * constant such as {@link #POWER_LOW}. You cannot request both and accuracy and
+     * constant such as {@link #POWER_LOW}. You cannot request both accuracy and
      * power, only one or the other can be specified. The system will then
      * maximize accuracy or minimize power as appropriate.
      *
@@ -287,7 +292,7 @@ public final class LocationRequest implements Parcelable {
      * @return the same object, so that setters can be chained
      * @throws IllegalArgumentException if the quality constant is not valid
      */
-    public LocationRequest setQuality(int quality) {
+    public @NonNull LocationRequest setQuality(int quality) {
         checkQuality(quality);
         mQuality = quality;
         return this;
@@ -330,7 +335,7 @@ public final class LocationRequest implements Parcelable {
      * @return the same object, so that setters can be chained
      * @throws IllegalArgumentException if the interval is less than zero
      */
-    public LocationRequest setInterval(long millis) {
+    public @NonNull LocationRequest setInterval(long millis) {
         checkInterval(millis);
         mInterval = millis;
         if (!mExplicitFastestInterval) {
@@ -362,7 +367,7 @@ public final class LocationRequest implements Parcelable {
      * @hide
      */
     @SystemApi
-    public LocationRequest setLowPowerMode(boolean enabled) {
+    public @NonNull LocationRequest setLowPowerMode(boolean enabled) {
         mLowPowerMode = enabled;
         return this;
     }
@@ -384,21 +389,16 @@ public final class LocationRequest implements Parcelable {
      *
      * @param locationSettingsIgnored Whether to ignore location settings
      * @return the same object, so that setters can be chained
-     * @hide
      */
     @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-    @SystemApi
-    public LocationRequest setLocationSettingsIgnored(boolean locationSettingsIgnored) {
+    public @NonNull LocationRequest setLocationSettingsIgnored(boolean locationSettingsIgnored) {
         mLocationSettingsIgnored = locationSettingsIgnored;
         return this;
     }
 
     /**
      * Returns true if location settings will be ignored in order to satisfy this request.
-     *
-     * @hide
      */
-    @SystemApi
     public boolean isLocationSettingsIgnored() {
         return mLocationSettingsIgnored;
     }
@@ -432,7 +432,7 @@ public final class LocationRequest implements Parcelable {
      * @return the same object, so that setters can be chained
      * @throws IllegalArgumentException if the interval is less than zero
      */
-    public LocationRequest setFastestInterval(long millis) {
+    public @NonNull LocationRequest setFastestInterval(long millis) {
         checkInterval(millis);
         mExplicitFastestInterval = true;
         mFastestInterval = millis;
@@ -468,7 +468,7 @@ public final class LocationRequest implements Parcelable {
      * @param millis duration of request in milliseconds
      * @return the same object, so that setters can be chained
      */
-    public LocationRequest setExpireIn(long millis) {
+    public @NonNull LocationRequest setExpireIn(long millis) {
         long elapsedRealtime = SystemClock.elapsedRealtime();
 
         // Check for > Long.MAX_VALUE overflow (elapsedRealtime > 0):
@@ -496,7 +496,7 @@ public final class LocationRequest implements Parcelable {
      * @param millis expiration time of request, in milliseconds since boot including suspend
      * @return the same object, so that setters can be chained
      */
-    public LocationRequest setExpireAt(long millis) {
+    public @NonNull LocationRequest setExpireAt(long millis) {
         mExpireAt = millis;
         if (mExpireAt < 0) mExpireAt = 0;
         return this;
@@ -527,7 +527,7 @@ public final class LocationRequest implements Parcelable {
      * @return the same object, so that setters can be chained
      * @throws IllegalArgumentException if numUpdates is 0 or less
      */
-    public LocationRequest setNumUpdates(int numUpdates) {
+    public @NonNull LocationRequest setNumUpdates(int numUpdates) {
         if (numUpdates <= 0) {
             throw new IllegalArgumentException(
                     "invalid numUpdates: " + numUpdates);
@@ -558,10 +558,8 @@ public final class LocationRequest implements Parcelable {
         }
     }
 
-
-    /** @hide */
-    @SystemApi
-    public LocationRequest setProvider(String provider) {
+    /** Sets the provider to use for this location request. */
+    public @NonNull LocationRequest setProvider(@NonNull String provider) {
         checkProvider(provider);
         mProvider = provider;
         return this;
@@ -569,13 +567,13 @@ public final class LocationRequest implements Parcelable {
 
     /** @hide */
     @SystemApi
-    public String getProvider() {
+    public @NonNull String getProvider() {
         return mProvider;
     }
 
     /** @hide */
     @SystemApi
-    public LocationRequest setSmallestDisplacement(float meters) {
+    public @NonNull LocationRequest setSmallestDisplacement(float meters) {
         checkDisplacement(meters);
         mSmallestDisplacement = meters;
         return this;
@@ -598,13 +596,13 @@ public final class LocationRequest implements Parcelable {
      * @hide
      */
     @SystemApi
-    public void setWorkSource(WorkSource workSource) {
+    public void setWorkSource(@Nullable WorkSource workSource) {
         mWorkSource = workSource;
     }
 
     /** @hide */
     @SystemApi
-    public WorkSource getWorkSource() {
+    public @Nullable WorkSource getWorkSource() {
         return mWorkSource;
     }
 
@@ -669,7 +667,7 @@ public final class LocationRequest implements Parcelable {
         }
     }
 
-    public static final Parcelable.Creator<LocationRequest> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<LocationRequest> CREATOR =
             new Parcelable.Creator<LocationRequest>() {
                 @Override
                 public LocationRequest createFromParcel(Parcel in) {

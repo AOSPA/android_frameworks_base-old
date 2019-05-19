@@ -16,7 +16,15 @@
 
 package com.android.tests.rollback;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
+
+import android.app.ActivityManager;
+import android.app.AlarmManager;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -27,12 +35,11 @@ import android.content.pm.VersionedPackage;
 import android.content.rollback.PackageRollbackInfo;
 import android.content.rollback.RollbackInfo;
 import android.content.rollback.RollbackManager;
-import android.support.test.InstrumentationRegistry;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.util.Log;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
+import androidx.test.InstrumentationRegistry;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,6 +48,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.SynchronousQueue;
 
 /**
  * Utilities to facilitate testing rollbacks.
@@ -56,6 +64,17 @@ class RollbackTestUtils {
             throw new AssertionError("Failed to get RollbackManager");
         }
         return rm;
+    }
+
+    private static void setTime(long millis) {
+        Context context = InstrumentationRegistry.getContext();
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        am.setTime(millis);
+    }
+
+    static void forwardTimeBy(long offsetMillis) {
+        setTime(System.currentTimeMillis() + offsetMillis);
+        Log.i(TAG, "Forwarded time on device by " + offsetMillis + " millis");
     }
 
     /**
@@ -148,9 +167,7 @@ class RollbackTestUtils {
         PackageInstaller packageInstaller = context.getPackageManager().getPackageInstaller();
         PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
                 PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-        if (enableRollback) {
-            params.setEnableRollback();
-        }
+        params.setEnableRollback(enableRollback);
         int sessionId = packageInstaller.createSession(params);
         session = packageInstaller.openSession(sessionId);
 
@@ -172,7 +189,7 @@ class RollbackTestUtils {
     }
 
     /** Launches {@code packageName} with {@link Intent#ACTION_MAIN}. */
-    static void launchPackage(String packageName)
+    private static void launchPackage(String packageName)
             throws InterruptedException, IOException {
         Context context = InstrumentationRegistry.getContext();
         Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -207,11 +224,9 @@ class RollbackTestUtils {
         if (staged) {
             multiPackageParams.setStaged();
         }
-        if (enableRollback) {
-            // TODO: Do we set this on the parent params, the child params, or
-            // both?
-            multiPackageParams.setEnableRollback();
-        }
+        // TODO: Do we set this on the parent params, the child params, or
+        // both?
+        multiPackageParams.setEnableRollback(enableRollback);
         int multiPackageId = packageInstaller.createSession(multiPackageParams);
         PackageInstaller.Session multiPackage = packageInstaller.openSession(multiPackageId);
 
@@ -225,9 +240,7 @@ class RollbackTestUtils {
             if (resourceName.endsWith(".apex")) {
                 params.setInstallAsApex();
             }
-            if (enableRollback) {
-                params.setEnableRollback();
-            }
+            params.setEnableRollback(enableRollback);
             int sessionId = packageInstaller.createSession(params);
             session = packageInstaller.openSession(sessionId);
 
@@ -329,16 +342,26 @@ class RollbackTestUtils {
     }
 
     /**
-     * Asserts that the given RollbackInfo has a single package with expected
-     * package name and versions.
+     * Asserts that the given RollbackInfo has the given packages with expected
+     * package names and all are rolled to and from the same given versions.
      */
-    static void assertRollbackInfoEquals(String packageName,
+    static void assertRollbackInfoEquals(String[] packageNames,
             long versionRolledBackFrom, long versionRolledBackTo,
             RollbackInfo info, VersionedPackage... causePackages) {
         assertNotNull(info);
-        assertEquals(1, info.getPackages().size());
-        assertPackageRollbackInfoEquals(packageName, versionRolledBackFrom, versionRolledBackTo,
-                info.getPackages().get(0));
+        assertEquals(packageNames.length, info.getPackages().size());
+        int foundPackages = 0;
+        for (String packageName : packageNames) {
+            for (PackageRollbackInfo pkgRollbackInfo : info.getPackages()) {
+                if (packageName.equals(pkgRollbackInfo.getPackageName())) {
+                    foundPackages++;
+                    assertPackageRollbackInfoEquals(packageName, versionRolledBackFrom,
+                            versionRolledBackTo, pkgRollbackInfo);
+                    break;
+                }
+            }
+        }
+        assertEquals(packageNames.length, foundPackages);
         assertEquals(causePackages.length, info.getCausePackages().size());
         for (int i = 0; i < causePackages.length; ++i) {
             assertEquals(causePackages[i].getPackageName(),
@@ -346,6 +369,18 @@ class RollbackTestUtils {
             assertEquals(causePackages[i].getLongVersionCode(),
                     info.getCausePackages().get(i).getLongVersionCode());
         }
+    }
+
+    /**
+     * Asserts that the given RollbackInfo has a single package with expected
+     * package name and versions.
+     */
+    static void assertRollbackInfoEquals(String packageName,
+            long versionRolledBackFrom, long versionRolledBackTo,
+            RollbackInfo info, VersionedPackage... causePackages) {
+        String[] packageNames = {packageName};
+        assertRollbackInfoEquals(packageNames, versionRolledBackFrom, versionRolledBackTo, info,
+                causePackages);
     }
 
     /**
@@ -392,5 +427,102 @@ class RollbackTestUtils {
         } catch (InterruptedException e) {
             throw new AssertionError(e);
         }
+    }
+
+    private static final String NO_RESPONSE = "NO RESPONSE";
+
+    /**
+     * Calls into the test app to process user data.
+     * Asserts if the user data could not be processed or was version
+     * incompatible with the previously processed user data.
+     */
+    static void processUserData(String packageName) {
+        Intent intent = new Intent();
+        intent.setComponent(new ComponentName(packageName,
+                    "com.android.tests.rollback.testapp.ProcessUserData"));
+        Context context = InstrumentationRegistry.getContext();
+
+        HandlerThread handlerThread = new HandlerThread("RollbackTestHandlerThread");
+        handlerThread.start();
+
+        // It can sometimes take a while after rollback before the app will
+        // receive this broadcast, so try a few times in a loop.
+        String result = NO_RESPONSE;
+        for (int i = 0; result.equals(NO_RESPONSE) && i < 5; ++i) {
+            BlockingQueue<String> resultQueue = new LinkedBlockingQueue<>();
+            context.sendOrderedBroadcast(intent, null, new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (getResultCode() == 1) {
+                        resultQueue.add("OK");
+                    } else {
+                        // If the test app doesn't receive the broadcast or
+                        // fails to set the result data, then getResultData
+                        // here returns the initial NO_RESPONSE data passed to
+                        // the sendOrderedBroadcast call.
+                        resultQueue.add(getResultData());
+                    }
+                }
+            }, new Handler(handlerThread.getLooper()), 0, NO_RESPONSE, null);
+
+            try {
+                result = resultQueue.take();
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        }
+
+        handlerThread.quit();
+        if (!"OK".equals(result)) {
+            fail(result);
+        }
+    }
+
+    /**
+     * Return the rollback info for a recently committed rollback, by matching the rollback id, or
+     * return null if no matching rollback is found.
+     */
+    static RollbackInfo getRecentlyCommittedRollbackInfoById(int getRollbackId) {
+        for (RollbackInfo info : getRollbackManager().getRecentlyCommittedRollbacks()) {
+            if (info.getRollbackId() == getRollbackId) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Send broadcast to crash {@code packageName} {@code count} times. If {@code count} is at least
+     * {@link PackageWatchdog#TRIGGER_FAILURE_COUNT}, watchdog crash detection will be triggered.
+     */
+    static BroadcastReceiver sendCrashBroadcast(Context context, String packageName, int count)
+            throws InterruptedException, IOException {
+        BlockingQueue<Integer> crashQueue = new SynchronousQueue<>();
+        IntentFilter crashCountFilter = new IntentFilter();
+        crashCountFilter.addAction("com.android.tests.rollback.CRASH");
+        crashCountFilter.addCategory(Intent.CATEGORY_DEFAULT);
+
+        BroadcastReceiver crashCountReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    try {
+                        // Sleep long enough for packagewatchdog to be notified of crash
+                        Thread.sleep(1000);
+                        // Kill app and close AppErrorDialog
+                        ActivityManager am = context.getSystemService(ActivityManager.class);
+                        am.killBackgroundProcesses(packageName);
+                        // Allow another package launch
+                        crashQueue.put(intent.getIntExtra("count", 0));
+                    } catch (InterruptedException e) {
+                        fail("Failed to communicate with test app");
+                    }
+                }
+            };
+        context.registerReceiver(crashCountReceiver, crashCountFilter);
+
+        do {
+            launchPackage(packageName);
+        } while(crashQueue.take() < count);
+        return crashCountReceiver;
     }
 }

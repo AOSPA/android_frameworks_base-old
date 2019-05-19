@@ -18,6 +18,7 @@ package android.telephony;
 
 import android.annotation.IntDef;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -30,6 +31,7 @@ import java.util.Objects;
  * @hide
  */
 @SystemApi
+@TestApi
 public final class LteVopsSupportInfo implements Parcelable {
 
     /**@hide*/
@@ -117,7 +119,7 @@ public final class LteVopsSupportInfo implements Parcelable {
                 + " mEmcBearerSupport = " + mEmcBearerSupport);
     }
 
-    public static final Creator<LteVopsSupportInfo> CREATOR =
+    public static final @android.annotation.NonNull Creator<LteVopsSupportInfo> CREATOR =
             new Creator<LteVopsSupportInfo>() {
         @Override
         public LteVopsSupportInfo createFromParcel(Parcel in) {

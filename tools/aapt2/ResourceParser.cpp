@@ -206,15 +206,6 @@ class SegmentNode : public Node {
   }
 };
 
-// A chunk of text in the XML string within a CDATA tags.
-class CdataSegmentNode : public SegmentNode {
- public:
-
-  void Build(StringBuilder* builder) const override {
-    builder->AppendText(data, /* preserve_spaces */ true);
-  }
-};
-
 // A tag that will be encoded into the final flattened string. Tags like <b> or <i>.
 class SpanNode : public Node {
  public:
@@ -251,7 +242,6 @@ bool ResourceParser::FlattenXmlSubtree(
   std::vector<Node*> node_stack;
   node_stack.push_back(&root);
 
-  bool cdata_block = false;
   bool saw_span_node = false;
   SegmentNode* first_segment = nullptr;
   SegmentNode* last_segment = nullptr;
@@ -262,12 +252,9 @@ bool ResourceParser::FlattenXmlSubtree(
 
     // First take care of any SegmentNodes that should be created.
     if (event == xml::XmlPullParser::Event::kStartElement
-        || event == xml::XmlPullParser::Event::kEndElement
-        || event == xml::XmlPullParser::Event::kCdataStart
-        || event == xml::XmlPullParser::Event::kCdataEnd) {
+        || event == xml::XmlPullParser::Event::kEndElement) {
       if (!current_text.empty()) {
-        std::unique_ptr<SegmentNode> segment_node = (cdata_block)
-            ? util::make_unique<CdataSegmentNode>() : util::make_unique<SegmentNode>();
+        auto segment_node = util::make_unique<SegmentNode>();
         segment_node->data = std::move(current_text);
 
         last_segment = node_stack.back()->AddChild(std::move(segment_node));
@@ -344,16 +331,6 @@ bool ResourceParser::FlattenXmlSubtree(
           untranslatable_start_depth = {};
         }
       } break;
-
-      case xml::XmlPullParser::Event::kCdataStart: {
-        cdata_block = true;
-        break;
-      }
-
-      case xml::XmlPullParser::Event::kCdataEnd: {
-        cdata_block = false;
-        break;
-      }
 
       default:
         // ignore.
@@ -716,7 +693,7 @@ bool ResourceParser::ParseResource(xml::XmlPullParser* parser,
 
   // If the resource type was not recognized, write the error and return false.
   diag_->Error(DiagMessage(out_resource->source)
-              << "unknown resource type '" << parser->element_name() << "'");
+              << "unknown resource type '" << resource_type << "'");
   return false;
 }
 
@@ -1166,34 +1143,38 @@ bool ResourceParser::ParseOverlayable(xml::XmlPullParser* parser, ParsedResource
       } else if (Maybe<StringPiece> maybe_type = xml::FindNonEmptyAttribute(parser, "type")) {
         // Parse the polices separated by vertical bar characters to allow for specifying multiple
         // policies. Items within the policy tag will have the specified policy.
-        for (StringPiece part : util::Tokenize(maybe_type.value(), '|')) {
+        static const auto kPolicyMap =
+            ImmutableMap<StringPiece, OverlayableItem::Policy>::CreatePreSorted({
+                {"odm", OverlayableItem::Policy::kOdm},
+                {"oem", OverlayableItem::Policy::kOem},
+                {"product", OverlayableItem::Policy::kProduct},
+                {"public", OverlayableItem::Policy::kPublic},
+                {"signature", OverlayableItem::Policy::kSignature},
+                {"system", OverlayableItem::Policy::kSystem},
+                {"vendor", OverlayableItem::Policy::kVendor},
+            });
+
+        for (const StringPiece& part : util::Tokenize(maybe_type.value(), '|')) {
           StringPiece trimmed_part = util::TrimWhitespace(part);
-          if (trimmed_part == "public") {
-            current_policies |= OverlayableItem::Policy::kPublic;
-          } else if (trimmed_part == "product") {
-            current_policies |= OverlayableItem::Policy::kProduct;
-          } else if (trimmed_part == "system") {
-            current_policies |= OverlayableItem::Policy::kSystem;
-          } else if (trimmed_part == "vendor") {
-            current_policies |= OverlayableItem::Policy::kVendor;
-          } else if (trimmed_part == "signature") {
-            current_policies |= OverlayableItem::Policy::kSignature;
-          } else {
+          const auto policy = kPolicyMap.find(trimmed_part);
+          if (policy == kPolicyMap.end()) {
             diag_->Error(DiagMessage(element_source)
                          << "<policy> has unsupported type '" << trimmed_part << "'");
             error = true;
             continue;
           }
+
+          current_policies |= policy->second;
         }
       } else {
         diag_->Error(DiagMessage(element_source)
-                         << "<policy> must have a 'type' attribute");
+                     << "<policy> must have a 'type' attribute");
         error = true;
         continue;
       }
     } else if (!ShouldIgnoreElement(element_namespace, element_name)) {
       diag_->Error(DiagMessage(element_source) << "invalid element <" << element_name << "> "
-                                            << " in <overlayable>");
+                                               << " in <overlayable>");
       error = true;
       break;
     }
@@ -1731,7 +1712,14 @@ bool ResourceParser::ParseDeclareStyleable(xml::XmlPullParser* parser,
       child_ref.SetSource(item_source);
       styleable->entries.push_back(std::move(child_ref));
 
-      out_resource->child_resources.push_back(std::move(child_resource));
+      // Do not add referenced attributes that do not define a format to the table.
+      CHECK(child_resource.value != nullptr);
+      Attribute* attr = ValueCast<Attribute>(child_resource.value.get());
+
+      CHECK(attr != nullptr);
+      if (attr->type_mask != android::ResTable_map::TYPE_ANY) {
+        out_resource->child_resources.push_back(std::move(child_resource));
+      }
 
     } else if (!ShouldIgnoreElement(element_namespace, element_name)) {
       diag_->Error(DiagMessage(item_source) << "unknown tag <"

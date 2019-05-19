@@ -34,6 +34,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.service.voice.IVoiceInteractionSession;
+import android.util.Pair;
 import android.util.SparseIntArray;
 import android.util.proto.ProtoOutputStream;
 
@@ -87,6 +88,16 @@ public abstract class ActivityTaskManagerInternal {
      */
     public static final int APP_TRANSITION_RECENTS_ANIM =
             AppProtoEnums.APP_TRANSITION_RECENTS_ANIM; // 5
+
+    /**
+     * The id of the task source of assist state.
+     */
+    public static final String ASSIST_TASK_ID = "taskId";
+
+    /**
+     * The id of the activity source of assist state.
+     */
+    public static final String ASSIST_ACTIVITY_ID = "activityId";
 
     /**
      * The bundle key to extract the assist data.
@@ -328,6 +339,40 @@ public abstract class ActivityTaskManagerInternal {
 
     public abstract CompatibilityInfo compatibilityInfoForPackage(ApplicationInfo ai);
 
+    public final class ActivityTokens {
+        private final @NonNull IBinder mActivityToken;
+        private final @NonNull IBinder mAssistToken;
+        private final @NonNull IApplicationThread mAppThread;
+
+        public ActivityTokens(@NonNull IBinder activityToken,
+                @NonNull IBinder assistToken, @NonNull IApplicationThread appThread) {
+            mActivityToken = activityToken;
+            mAssistToken = assistToken;
+            mAppThread = appThread;
+        }
+
+        /**
+         * @return The activity token.
+         */
+        public @NonNull IBinder getActivityToken() {
+            return mActivityToken;
+        }
+
+        /**
+         * @return The assist token.
+         */
+        public @NonNull IBinder getAssistToken() {
+            return mAssistToken;
+        }
+
+        /**
+         * @return The assist token.
+         */
+        public @NonNull IApplicationThread getApplicationThread() {
+            return mAppThread;
+        }
+    }
+
     /**
      * Set the corresponding display information for the process global configuration. To be called
      * when we need to show IME on a different display.
@@ -341,6 +386,14 @@ public abstract class ActivityTaskManagerInternal {
             String resultWho, int requestCode, int resultCode, Intent data);
     public abstract void clearPendingResultForActivity(
             IBinder activityToken, WeakReference<PendingIntentRecord> pir);
+
+    /**
+     * @return the activity token and IApplicationThread for the top activity in the task or null
+     * if there isn't a top activity with a valid process.
+     */
+    @Nullable
+    public abstract ActivityTokens getTopActivityForTask(int taskId);
+
     public abstract IIntentSender getIntentSender(int type, String packageName,
             int callingUid, int userId, IBinder token, String resultWho,
             int requestCode, Intent[] intents, String[] resolvedTypes, int flags,
@@ -352,6 +405,19 @@ public abstract class ActivityTaskManagerInternal {
     /** @return The intent used to launch the home activity. */
     public abstract Intent getHomeIntent();
     public abstract boolean startHomeActivity(int userId, String reason);
+    /**
+     * This starts home activity on displays that can have system decorations based on displayId -
+     * Default display always use primary home component.
+     * For Secondary displays, the home activity must have category SECONDARY_HOME and then resolves
+     * according to the priorities listed below.
+     *  - If default home is not set, always use the secondary home defined in the config.
+     *  - Use currently selected primary home activity.
+     *  - Use the activity in the same package as currently selected primary home activity.
+     *    If there are multiple activities matched, use first one.
+     *  - Use the secondary home defined in the config.
+     */
+    public abstract boolean startHomeOnDisplay(int userId, String reason, int displayId,
+            boolean allowInstrumenting, boolean fromHomeKey);
     /** Start home activities on all displays that support system decorations. */
     public abstract boolean startHomeOnAllDisplays(int userId, String reason);
     /** @return true if the given process is the factory test process. */
@@ -490,11 +556,14 @@ public abstract class ActivityTaskManagerInternal {
     public abstract ActivityManager.TaskSnapshot getTaskSnapshot(int taskId,
             boolean reducedResolution);
 
-    /** Returns true if uid has a visible window or its process is in a top state. */
+    /** Returns true if uid is considered foreground for activity start purposes. */
     public abstract boolean isUidForeground(int uid);
 
     /**
-     * Called by DevicePolicyManagerService to set the package name of the device owner.
+     * Called by DevicePolicyManagerService to set the uid of the device owner.
      */
-    public abstract void setDeviceOwnerPackageName(String deviceOwnerPkg);
+    public abstract void setDeviceOwnerUid(int uid);
+
+    /** Set all associated companion app that belongs to an userId. */
+    public abstract void setCompanionAppPackages(int userId, Set<String> companionAppPackages);
 }
